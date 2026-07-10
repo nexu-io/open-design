@@ -31,17 +31,17 @@ import type {
   FinalizeArtifactRef,
   FinalizeProviderProtocol,
 } from '@open-design/contracts/api/finalize';
-import { getProject } from './db.js';
-import { readDesignSystem } from './design-systems/index.js';
+import { getProject } from '../db.js';
+import { readDesignSystem } from '../design-systems/index.js';
 import {
   listFiles,
   readProjectFile,
   reconcileHtmlArtifactManifest,
   resolveProjectDir,
   validateProjectPath,
-} from './projects.js';
-import { exportProjectTranscript } from './transcript-export.js';
-import { googleGenerateContentUrl } from './integrations/google-models.js';
+} from '../projects.js';
+import { exportProjectTranscript } from '../transcript-export.js';
+import { googleGenerateContentUrl } from '../integrations/google-models.js';
 
 // Re-export the request/response types so existing daemon-internal
 // imports (and the route handler) keep their referenced names. The

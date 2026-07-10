@@ -55,7 +55,7 @@ export const PROJECT_CONTINUE_PROMPT =
   'Continue from the stopped or incomplete turn. Read the conversation, current project files, and any visible errors, then take the next concrete step. If a primary artifact already exists, update it in place; otherwise create the missing primary artifact and summarize what changed.';
 
 export const PROJECT_GENERATE_ARTIFACT_PROMPT =
-  'Generate the missing project artifact now. Use the current conversation and project context to create the primary previewable deliverable, usually index.html unless another file type is clearly requested. Save it into this project and include a concise summary of the files created.';
+  'Generate the missing project artifact now. Use the current conversation and project context to create the primary previewable deliverable. Save it with a short semantic filename derived from the request, such as investor-pitch-deck.html, refund-dashboard.html, or pricing-page.html; use index.html only for a fixed runtime convention or a launcher/overview. Save it into this project and include a concise summary of the files created.';
 
 export const PROJECT_INCOMPLETE_NEXT_STEP_ACTIONS = [
   {
@@ -303,7 +303,7 @@ function promptActionPrompt(action: PromptNextStepAction, locale: string): strin
     case 'project-continue':
       return '从已停止或未完成的回合继续处理。先阅读当前对话、项目文件和可见错误，再执行下一个具体步骤。如果主产物已经存在，就在原文件上更新；否则创建缺失的主产物，并简要总结改了什么。';
     case 'project-generate-artifact':
-      return '现在生成缺失的项目产物。基于当前对话和项目上下文创建主要的可预览交付物；除非明确要求其他文件类型，通常保存为 index.html。把文件保存到当前项目中，并简要说明创建了哪些文件。';
+      return '现在生成缺失的项目产物。基于当前对话和项目上下文创建主要的可预览交付物；根据需求保存成简短的语义化文件名，例如 investor-pitch-deck.html、refund-dashboard.html 或 pricing-page.html。只有固定运行时约定或入口概览页才使用 index.html。把文件保存到当前项目中，并简要说明创建了哪些文件。';
     case 'design-system-ai-refine':
       return '使用 AI 提取继续原地优化这个设计系统。读取当前 DESIGN.md、brand.json、source context、tokens、字体、色板、资产和组件套件预览；如果有链接的网站或源文件，请重新测量。保持同一个设计系统 id，不要创建重复系统。重点强化 token 角色、品牌语气、组件指导、明暗主题套件质量和可复用实现说明。最后总结改动和更新的文件。';
     case 'design-system-audit-kit':

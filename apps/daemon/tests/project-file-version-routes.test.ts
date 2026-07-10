@@ -144,6 +144,63 @@ describe('project file version routes', () => {
     expect(listed.versions.filter((version) => version.current)).toHaveLength(1);
   });
 
+  it('creates an initial version when listing an existing HTML file with no history', async () => {
+    const projectId = await createProject();
+    await fs.mkdir(path.join(projectsRoot(), projectId), { recursive: true });
+    await fs.writeFile(
+      path.join(projectsRoot(), projectId, 'legacy.html'),
+      '<html><body>initial legacy file</body></html>',
+    );
+
+    const initialListResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files/legacy.html/versions`);
+    expect(initialListResponse.status).toBe(200);
+    const initialList = (await initialListResponse.json()) as {
+      versions: Array<{ id: string; version: number; source: string; current: boolean }>;
+    };
+    expect(initialList.versions).toHaveLength(1);
+    expect(initialList.versions[0]).toMatchObject({
+      version: 1,
+      source: 'manual',
+      current: true,
+    });
+
+    await writeProjectFile(projectId, 'legacy.html', '<html><body>edited legacy file</body></html>');
+    const editedListResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files/legacy.html/versions`);
+    expect(editedListResponse.status).toBe(200);
+    const editedList = (await editedListResponse.json()) as {
+      versions: Array<{ id: string; version: number; current: boolean }>;
+    };
+    expect(editedList.versions).toHaveLength(2);
+    expect(editedList.versions.filter((version) => version.current)).toHaveLength(1);
+  });
+
+  it('captures initial HTML versions for batch project uploads', async () => {
+    const projectId = await createProject();
+    const form = new FormData();
+    form.append('files', new Blob(['<html><body>batch uploaded</body></html>'], { type: 'text/html' }), 'batch.html');
+
+    const uploadResponse = await fetch(`${baseUrl}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: form,
+    });
+    expect(uploadResponse.status).toBe(200);
+    await expect(uploadResponse.json()).resolves.toMatchObject({
+      files: [expect.objectContaining({ name: 'batch.html', path: 'batch.html' })],
+    });
+
+    const listResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files/batch.html/versions`);
+    expect(listResponse.status).toBe(200);
+    const listed = (await listResponse.json()) as {
+      versions: Array<{ version: number; source: string; current: boolean }>;
+    };
+    expect(listed.versions).toHaveLength(1);
+    expect(listed.versions[0]).toMatchObject({
+      version: 1,
+      source: 'manual',
+      current: true,
+    });
+  });
+
   it('returns a typed warning when JSON HTML write succeeds but version capture fails', async () => {
     const projectId = await createProject();
     await blockVersionRoot(projectId);

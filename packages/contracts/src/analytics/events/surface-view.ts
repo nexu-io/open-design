@@ -138,6 +138,16 @@ export interface UpdatePromptSurfaceViewProps {
   app_version_after?: string;
 }
 
+// Post-update "what's new" card on the home surface; fires once per version
+// when the card becomes visible after an update.
+export interface WhatsNewPopupSurfaceViewProps {
+  page_name: 'home';
+  area: 'whats_new_popup';
+  app_version: string;
+  /** True when release-configured highlights were shown, false for the generic fallback copy. */
+  has_release_notes: boolean;
+}
+
 // Impression of the HTML file version history modal. Fires once per open so
 // the versions funnel has a denominator (toolbar clicks → exposures →
 // version_item browsing → restore result). `entry_from` mirrors the opening
@@ -148,6 +158,20 @@ export interface FileVersionModalSurfaceViewProps {
   entry_from: 'toolbar' | 'more_menu';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+}
+
+// Fires once when an HTML artifact is recognized as a slide deck and the
+// slide-specific viewing chrome (thumbnail rail, slide navigation, speaker
+// notes panel) mounts in the file viewer. This is the entry/denominator for
+// the deck experience funnel: how many opened artifacts actually reach the
+// slides surface vs. plain HTML preview. `slide_count` is the deck's detected
+// slide total at mount (0 when not yet resolved).
+export interface DeckViewerSurfaceViewProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  slide_count?: number;
 }
 
 // Impression of the personalized first-run recommendation card on Home. Fires
@@ -190,5 +214,6 @@ export type SurfaceViewProps =
   | UpdateIndicatorSurfaceViewProps
   | ReferenceBoardSurfaceViewProps
   | UpdatePromptSurfaceViewProps
-  | FileVersionModalSurfaceViewProps;
-
+  | WhatsNewPopupSurfaceViewProps
+  | FileVersionModalSurfaceViewProps
+  | DeckViewerSurfaceViewProps;

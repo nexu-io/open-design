@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-capsule
+en_name: "Write a Year-End Self-Review like a Promotion-Committee Insider"
+zh_name: "像晋升委员会内部人一样写年终述职"
 description: |
-  Capsule — Modular pill-shaped cards on warm bone with a full pastel-pop palette. Anything that should feel modular, modern, and a little Y2K: lifestyle brands, creator portfolios, DTC launches, beauty / wellness, agency credentials.
+  A year-end self-review for a product manager — the role, the outcomes, the learning, and the ask, all evidence-backed. Built as a decision-grade career deck for manager, review committee.
+en_description: |
+  A year-end self-review for a product manager — the role, the outcomes, the learning, and the ask, all evidence-backed. Built as a decision-grade career deck for manager, review committee.
+zh_description: |
+  像晋升委员会内部人一样写年终述职——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "career"
+  - "year-end-self-review-deck"
+  - "personal"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-capsule"
 triggers:
-  - "capsule"
-  - "zhangzara-capsule"
-  - "playful"
-  - "modern"
-  - "upbeat"
-  - "graphic"
-  - "lifestyle brand"
-  - "creator portfolio"
+  - "year-end-self-review-deck"
+  - "career"
+  - "Write a Year-End Self-Review like a Promotion-Committee Insider"
+  - "像晋升委员会内部人一样写年终述职"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/capsule"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "career"
+  scenario: "personal"
+  example_prompt: "Create \"Write a Year-End Self-Review like a Promotion-Committee Insider\" as a decision-grade Career deck in this template's own visual system. Subject: A year-end self-review for a product manager — the role, the outcomes, the learning, and the ask, all evidence-backed. Audience: manager, review committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned."
 ---
 
 # Capsule

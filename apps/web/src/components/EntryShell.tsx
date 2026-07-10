@@ -97,6 +97,7 @@ import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
+import { WhatsNewPopup } from './WhatsNewPopup';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
@@ -1066,7 +1067,13 @@ export function EntryShell({
                 </span>
               </button>
             </div>
-            <UpdaterPopup />
+            <UpdaterPopup
+              allowSilentUpdates={config.allowSilentUpdates}
+              onAllowSilentUpdatesChange={(allowSilentUpdates) =>
+                onConfigPersist({ ...config, allowSilentUpdates })
+              }
+            />
+            <WhatsNewPopup active={view === 'home'} />
             {avatarMenu}
             {amrBalanceGateBlock ? (
               <AmrBalanceDialog
@@ -1238,6 +1245,7 @@ export function EntryShell({
         open={newProjectOpen}
         initialTab={newProjectInitialTab}
         skills={skills}
+        designTemplates={designTemplates}
         designSystems={designSystems}
         defaultDesignSystemId={defaultDesignSystemId}
         templates={templates}
@@ -3552,7 +3560,7 @@ function formatModelToken(token: string): string {
 
 function onboardingModelCapabilityLabel(
   t: ReturnType<typeof useT>,
-  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'label'>,
+  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'metadata'>,
 ): { label: string; kind: ModelCapabilityTag } | undefined {
   const tag = getModelCapabilityTag(model);
   return tag ? { label: t(MODEL_CAPABILITY_TAG_LABEL_KEYS[tag]), kind: tag } : undefined;
@@ -3560,7 +3568,7 @@ function onboardingModelCapabilityLabel(
 
 function onboardingModelCostLabel(
   t: ReturnType<typeof useT>,
-  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'label'>,
+  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'metadata'>,
 ): { label: string } | undefined {
   const tier = getModelCostTier(model);
   return tier ? { label: t(MODEL_COST_TIER_LABEL_KEYS[tier]) } : undefined;

@@ -3675,7 +3675,11 @@ function extractSwatches(raw: string): string[] {
   // bold markers (`**Name:**`) or outside them (`**Name**:`). Both variants
   // are common in hand-authored DESIGN.md files, so we allow the colon in
   // either position around the closing `**`.
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
+  // The leading class `[\s>*-]` already covers whitespace, `>`, `*` and `-`, so
+  // the old `[\s>*-]*\**\s*` prefix had three overlapping star-consumers whose
+  // ambiguous split made a long run of `*` at a line start O(n^2). A single
+  // `[\s>*-]*` matches the same prefixes without the backtracking blowup.
+  const reA = /^[\s>*-]*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
   while ((m = reA.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
   // Form B: "**Stripe Purple** (`#533afd`)"

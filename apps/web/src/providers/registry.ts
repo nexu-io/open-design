@@ -28,6 +28,7 @@ import type {
   AgentInfo,
   AppVersionInfo,
   AppVersionResponse,
+  WhatsNewResponse,
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
@@ -1229,6 +1230,24 @@ export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleas
       tagName: json.tag_name,
       htmlUrl: json.html_url,
       stale: json.stale === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchWhatsNew(): Promise<WhatsNewResponse | null> {
+  try {
+    const resp = await fetch('/api/whats-new');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<WhatsNewResponse>;
+    if (typeof json.version !== 'string') {
+      return null;
+    }
+    return {
+      version: json.version,
+      id: typeof json.id === 'string' ? json.id : null,
+      content: json.content ?? null,
     };
   } catch {
     return null;

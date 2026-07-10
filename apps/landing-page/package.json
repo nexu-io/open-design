@@ -1,6 +1,6 @@
 {
   "name": "@open-design/landing-page",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "private": true,
   "type": "module",
   "scripts": {

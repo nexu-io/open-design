@@ -84,12 +84,14 @@ import {
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
   deriveActivationMilestones,
-  didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
+import {
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
+} from '../runtimes/run-lifecycle-analytics.js';
 
 type SqliteDb = Database.Database;
 type JsonRecord = Record<string, unknown>;
@@ -1103,11 +1105,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
           events: run.events,
         });
-        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
+        const toolStreamArtifactCount = (): number => runArtifactCountForRun(run);
         const toolStreamDesignSystemCreated = (): boolean =>
-          didRunCreateDesignSystemFile(run.events);
+          runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
-          countDesignSystemPreviewModules(run.events);
+          runPreviewModuleCountForRun(run);
         const artifactBaseline = runArtifactBaselines.take(run.id);
         let artifactCount: number;
         let artifactsCreated: number | undefined;

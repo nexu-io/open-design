@@ -97,6 +97,7 @@ type AmrEnvironmentProfile = (typeof AMR_ENVIRONMENT_PROFILES)[number];
 type DesktopAppConfigPrefs = {
   agentModels?: Record<string, { model?: string; reasoning?: string }>;
   agentCliEnv?: Record<string, Record<string, string>>;
+  allowSilentUpdates?: boolean;
   [key: string]: unknown;
 };
 
@@ -886,11 +887,20 @@ export async function runDesktopMain(
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
   });
+  const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,
     backoffMaxMs: updater.config.checkBackoffMaxMs,
     initialDelayMs: updater.config.checkInitialDelayMs,
     intervalMs: updater.config.checkIntervalMs,
+    startupSilentPayloadUpdate: {
+      isEnabled: async () => {
+        const baseUrl = await discoverUpdaterAppConfigBaseUrl();
+        const config = await readAppConfigFromDaemon(baseUrl);
+        return config.allowSilentUpdates === true;
+      },
+      requestQuit: shutdownAndExit,
+    },
   });
   if (updater.shouldAutoCheck()) updateScheduler.start();
 

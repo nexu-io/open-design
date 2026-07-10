@@ -2094,6 +2094,157 @@ describe("desktop updater", () => {
     }
   });
 
+  it("silently applies a ready launcher payload during the startup poll when enabled", async () => {
+    vi.useFakeTimers();
+    const requestQuit = vi.fn();
+    const readSilentPreference = vi.fn(async () => true);
+    const payloadStatus = {
+      arch: "arm64",
+      artifact: {
+        name: "open-design-1.0.1-mac-arm64-payload.zip",
+        platformKey: "mac",
+        size: 1024,
+        type: "payload",
+        url: "https://example.invalid/payload.zip",
+      },
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      channel: DESKTOP_UPDATE_CHANNELS.BETA,
+      currentVersion: "1.0.0",
+      downloadPath: "/tmp/open-design-updates/payload.zip",
+      enabled: true,
+      mode: "package-launcher" as const,
+      platform: "darwin",
+      state: DESKTOP_UPDATE_STATES.DOWNLOADED,
+      supported: true,
+    };
+    const installedStatus = {
+      ...payloadStatus,
+      installResult: {
+        activeVersion: "1.0.1",
+        dryRun: false,
+        openedAt: "2026-05-19T00:00:00.000Z",
+        path: "/tmp/open-design-updates/payload.zip",
+      },
+    };
+    const updater = {
+      checkForUpdates: vi.fn(async () => payloadStatus),
+      config: {},
+      downloadUpdate: vi.fn(),
+      handle: vi.fn(),
+      installUpdate: vi.fn(async () => installedStatus),
+      shouldAutoCheck: vi.fn(() => true),
+      snapshot: vi.fn(() => ({ ...payloadStatus, installResult: undefined })),
+      status: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+    try {
+      const scheduler = createDesktopUpdaterScheduler(updater as any, {
+        backoffInitialMs: 100,
+        backoffMaxMs: 1000,
+        initialDelayMs: 10,
+        intervalMs: 100,
+        startupSilentPayloadUpdate: {
+          isEnabled: readSilentPreference,
+          requestQuit,
+        },
+      });
+
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(readSilentPreference).toHaveBeenCalledTimes(1);
+      expect(updater.installUpdate).toHaveBeenCalledTimes(1);
+      expect(requestQuit).toHaveBeenCalledTimes(1);
+      expect(scheduler.isRunning()).toBe(false);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not silently apply payload updates from periodic polls after startup", async () => {
+    vi.useFakeTimers();
+    const requestQuit = vi.fn();
+    const readSilentPreference = vi.fn(async () => true);
+    const baseStatus = {
+      arch: "arm64",
+      capabilities: {
+        canApplyInPlace: false,
+        canDownload: true,
+        canOpenInstaller: true,
+        requiresManualInstall: true,
+      },
+      channel: DESKTOP_UPDATE_CHANNELS.BETA,
+      currentVersion: "1.0.0",
+      enabled: true,
+      mode: "package-launcher" as const,
+      platform: "darwin",
+      state: DESKTOP_UPDATE_STATES.NOT_AVAILABLE,
+      supported: true,
+    };
+    const payloadStatus = {
+      ...baseStatus,
+      artifact: {
+        name: "open-design-1.0.1-mac-arm64-payload.zip",
+        platformKey: "mac",
+        size: 1024,
+        type: "payload",
+        url: "https://example.invalid/payload.zip",
+      },
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      downloadPath: "/tmp/open-design-updates/payload.zip",
+      state: DESKTOP_UPDATE_STATES.DOWNLOADED,
+    };
+    const updater = {
+      checkForUpdates: vi.fn()
+        .mockResolvedValueOnce(baseStatus)
+        .mockResolvedValue(payloadStatus),
+      config: {},
+      downloadUpdate: vi.fn(),
+      handle: vi.fn(),
+      installUpdate: vi.fn(),
+      shouldAutoCheck: vi.fn(() => true),
+      snapshot: vi.fn(() => ({ ...baseStatus, installResult: undefined })),
+      status: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+    try {
+      const scheduler = createDesktopUpdaterScheduler(updater as any, {
+        backoffInitialMs: 100,
+        backoffMaxMs: 1000,
+        initialDelayMs: 10,
+        intervalMs: 100,
+        startupSilentPayloadUpdate: {
+          isEnabled: readSilentPreference,
+          requestQuit,
+        },
+      });
+
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+      expect(readSilentPreference).not.toHaveBeenCalled();
+      expect(updater.installUpdate).not.toHaveBeenCalled();
+      expect(requestQuit).not.toHaveBeenCalled();
+      scheduler.stop("test");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not re-enter polling while a scheduled check is still running", async () => {
     const root = makeRoot();
     const requests: Array<{ resolve: (response: Response) => void }> = [];

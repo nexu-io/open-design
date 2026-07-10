@@ -134,6 +134,35 @@
   bottom: auto;
   z-index: 1200;
 }
+.project-actions-toast-anchor {
+  position: relative;
+  z-index: 60;
+  flex: 0 0 auto;
+  width: min(420px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  margin: 0 auto 12px;
+  pointer-events: none;
+}
+.chat-log-wrap.has-chat-log-tray {
+  flex-direction: column;
+}
+.project-actions-toast-anchor .od-toast {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: 100%;
+  transform: none;
+  animation: none;
+  pointer-events: auto;
+}
+.project-actions-toast-anchor .od-toast.placement-top {
+  top: auto;
+  bottom: auto;
+  z-index: 1000;
+}
+.project-actions-toast-anchor .od-toast.leaving {
+  animation: none;
+}
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
   background: color-mix(in srgb, var(--success, #2da44e) 14%, var(--bg));
@@ -2271,7 +2300,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   border-top: 0;
 }
 .app .df-section-label {
-  padding: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
 }
 .app .df-cell-name,

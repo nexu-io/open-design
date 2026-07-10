@@ -1,26 +1,35 @@
 ---
 name: kami-deck
-description: >
-  Produce a print-grade slide deck in the kami (紙 / 纸) design system —
-  warm parchment background (or ink-blue for cover / chapter slides),
-  serif at one weight, ink-blue accent ≤ 5% per slide, no italic.
-  Horizontal magazine swipe pagination (←/→ · wheel · swipe · ESC
-  overview). One self-contained HTML file, zero dependencies beyond
-  Google Fonts.
+en_name: "Turn a Study into a Lab Meeting Deck like a Senior Postdoc"
+zh_name: "像资深博士后一样做组会研究汇报"
+description: |
+  A lab-meeting deck on gut-microbiome links to sleep quality — the design, the results, the caveats, and the next experiment. Built as a decision-grade academic research deck for lab group, PI.
+en_description: |
+  A lab-meeting deck on gut-microbiome links to sleep quality — the design, the results, the caveats, and the next experiment. Built as a decision-grade academic research deck for lab group, PI.
+zh_description: |
+  像资深博士后一样做组会研究汇报——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "academic-research"
+  - "academic-review-deck"
+  - "research"
+  - "grant"
+  - "review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "kami-deck"
 triggers:
-  - kami deck
-  - 紙 deck
-  - 纸 deck
-  - paper slides
-  - white paper deck
-  - editorial deck
-  - print-style slides
-  - kami slides
+  - "academic-review-deck"
+  - "academic-research"
+  - "Turn a Study into a Lab Meeting Deck like a Senior Postdoc"
+  - "像资深博士后一样做组会研究汇报"
+  - "research"
+  - "grant"
+  - "review"
+  - "html deck"
+  - "html slides"
 od:
-  category: brand-deck
   surface: web
   mode: deck
-  scenario: marketing
   featured: 4
   audience: founders, researchers, design studios, conference talks
   tone: editorial, restrained, print-first
@@ -34,6 +43,9 @@ od:
     requires:
       - typographic-rhythm
       - pixel-discipline
+  category: "academic-research"
+  scenario: "research"
+  example_prompt: "Create \"Turn a Study into a Lab Meeting Deck like a Senior Postdoc\" as a decision-grade Academic research deck in this template's own visual system. Subject: A lab-meeting deck on gut-microbiome links to sleep quality — the design, the results, the caveats, and the next experiment. Audience: lab group, PI. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming."
 inputs:
   - id: brand
     label: Brand identity (shared across slides)

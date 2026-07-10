@@ -232,6 +232,24 @@ type WebviewFaviconEvent = Event & {
   favicons?: string[];
 };
 
+function isPromiseLike<T = unknown>(value: unknown): value is PromiseLike<T> {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+function isBenignWebviewLoadAbort(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /\bERR_ABORTED\b|loading ['"][^'"]+['"] was aborted/i.test(message);
+}
+
 interface DesignBrowserPanelProps {
   initialIconUrl?: string;
   initialTitle?: string;
@@ -1105,9 +1123,15 @@ export function DesignBrowserPanel({
     }
     try {
       const result = webviewNode.loadURL?.(url);
-      if (result instanceof Promise) void result.catch(() => setLoadUrl(url));
+      if (isPromiseLike(result)) {
+        void result.catch((error) => {
+          if (isBenignWebviewLoadAbort(error)) return;
+          setLoadUrl(url);
+        });
+      }
       else if (!webviewNode.loadURL) setLoadUrl(url);
-    } catch {
+    } catch (error) {
+      if (isBenignWebviewLoadAbort(error)) return;
       setLoadUrl(url);
     }
   }, [loadUrl, webviewNode]);

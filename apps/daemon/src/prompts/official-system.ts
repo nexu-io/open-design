@@ -39,7 +39,7 @@ You can read Markdown, HTML, and other plaintext formats natively. You can read 
 PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.) when the binary is available; if not, ask the user to convert.
 
 ## Design output guidelines
-- Give files descriptive names (\`landing-page.html\`, \`pricing.html\`).
+- Give files descriptive names derived from the user's brief (\`landing-page.html\`, \`pricing.html\`, \`investor-pitch-deck.html\`). Do not default a new user-facing deliverable to \`index.html\` unless a fixed runtime convention requires that path.
 - For significant revisions, copy the file to a versioned name (\`landing.html\` → \`landing-v2.html\`) so the previous version stays browsable.
 - Keep individual files under ~1000 lines. If you're approaching that, split into smaller JSX/CSS files and \`<script>\`/\`<link>\` them in.
 - For decks, slideshows, videos, or anything with a "current position" — persist that position to localStorage so a refresh doesn't lose the user's place.
@@ -128,14 +128,14 @@ const FILESYSTEM_WORKFLOW_HANDOFF = `4. **Build the project files.** Write your 
 When you ship a fresh deliverable in a filesystem run, write the canonical project file instead of emitting its source in chat:
 
 \`\`\`
-index.html
+investor-pitch-deck.html
 styles.css
 app.jsx
 \`\`\`
 
 Rules:
 - The main HTML file must be **complete and standalone** unless the user explicitly asked for a multi-file project. Inline CSS/JS by default; use supporting files only when the task genuinely benefits from them.
-- If you've written multiple files to the project, make \`index.html\` the canonical entry point whenever possible. Reference supporting files by project-relative paths.
+- If you've written multiple files to the project, make the semantic main HTML file the canonical entry point. Use \`index.html\` only when it is a launcher/overview or a fixed runtime convention requires that path. Reference supporting files by project-relative paths.
 - Do not emit a source-code \`<artifact>\` block. The file panel and preview already reflect written project files.
 - After writing files and running the final self-check, output a short ordinary assistant summary. Name the files, describe the result, and stop.
 

@@ -12,6 +12,22 @@ const deckHtml = `<!doctype html>
   </body>
 </html>`;
 
+const brokenDeckStageHtml = `<!doctype html>
+<html>
+  <body>
+    <deck-stage width="1920" height="1080">
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+    </deck-stage>
+    <script>
+    /**
+     * Original runtime was truncated while documenting a speaker notes tag.
+     * Example marker: <script type="application/json" id="speaker-notes">
+    []
+    </script>
+  </body>
+</html>`;
+
 describe('buildSrcdoc', () => {
   it('injects an initial slide index for deck previews', () => {
     const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: 2 });
@@ -25,6 +41,19 @@ describe('buildSrcdoc', () => {
     const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: -4 });
 
     expect(doc).toContain('var initialSlideIndex = 0;');
+  });
+
+  it('injects the motion-freeze style only when freezeMotion is set', () => {
+    const frozen = buildSrcdoc(deckHtml, { deck: true, freezeMotion: true });
+    expect(frozen).toContain('data-od-motion-freeze');
+    // End-state, not paused-at-t0: entry animations with fill-mode both must
+    // land on their final keyframe or thumbnails render as blank frames.
+    expect(frozen).toContain('animation-duration: 0.001s !important');
+    expect(frozen).toContain('animation-iteration-count: 1 !important');
+    expect(frozen).toContain('transition-duration: 0.001s !important');
+
+    const normal = buildSrcdoc(deckHtml, { deck: true });
+    expect(normal).not.toContain('data-od-motion-freeze');
   });
 
   it('injects the snapshot bridge used by draw annotations', () => {
@@ -96,6 +125,60 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain("computed.display === 'none'");
     expect(srcdoc).toContain("computed.visibility === 'hidden'");
     expect(srcdoc).toContain('pruneHiddenSnapshotNodes(document.documentElement, clone)');
+  });
+
+  it('injects a deck-stage fallback before the deck bridge for broken runtime decks', () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true });
+
+    expect(srcdoc).toContain('data-od-deck-stage-fallback');
+    expect(srcdoc).toContain("window.customElements.define('deck-stage'");
+    expect(srcdoc).toContain(
+      "document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide')",
+    );
+    expect(srcdoc.indexOf('data-od-deck-stage-fallback')).toBeLessThan(
+      srcdoc.indexOf('data-od-deck-bridge'),
+    );
+  });
+
+  it('hides deck-stage shadow navigation when deck chrome is hidden', () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true, hideDeckChrome: true });
+
+    expect(srcdoc).toContain('data-od-deck-chrome-hidden');
+    expect(srcdoc).toContain('data-od-deck-stage-shadow-chrome-hidden');
+    expect(srcdoc).toContain('stage.shadowRoot');
+    expect(srcdoc).toContain('.overlay,.tapzones{display:none!important');
+  });
+
+  it('lets modified reset keys pass through the framework deck bridge', () => {
+    const srcdoc = buildSrcdoc(
+      '<!doctype html><html><body><div id="deck-stage"><section class="slide">One</section></div></body></html>',
+      { deck: true },
+    );
+    const modifierGuard = 'if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;';
+
+    expect(srcdoc).toContain(modifierGuard);
+    expect(srcdoc.indexOf(modifierGuard)).toBeLessThan(
+      srcdoc.indexOf("String(key).toLowerCase() !== 'r'"),
+    );
+  });
+
+  it('activates the first slide when the original deck-stage runtime is broken', async () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true, initialSlideIndex: 0 });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'https://example.test/deck.html',
+    });
+
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 80));
+
+    const slides = dom.window.document.querySelectorAll('deck-stage > .slide');
+    expect(slides).toHaveLength(2);
+    expect(slides[0]?.hasAttribute('data-od-deck-active')).toBe(true);
+    expect(slides[0]?.classList.contains('active')).toBe(true);
+    expect(slides[1]?.hasAttribute('data-od-deck-active')).toBe(false);
+
+    dom.window.close();
   });
 
   it('can guard preview iframes against load-time focus stealing', () => {

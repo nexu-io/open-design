@@ -337,7 +337,7 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
-2.  Copy the canonical skeleton below as index.html (nothing else first)
+2.  Copy the canonical skeleton below as a semantically named deck HTML file, such as \`investor-pitch-deck.html\` (nothing else first)
 3.  Plan the slide arc and theme rhythm (state aloud before writing)
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
@@ -349,7 +349,7 @@ If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stag
 
 ## The contract
 
-When you start a new deck, your output is a single HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`.
+When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
 
 You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: deck title\` — the \`<title>\` element.

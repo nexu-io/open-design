@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-cobalt-grid
+en_name: "Write a Renewal & Expansion Business Case like an Account Director"
+zh_name: "像客户总监一样写续约与扩容论证"
 description: |
-  Cobalt Grid — Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules. Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report.
+  Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.
+en_description: |
+  Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.
+zh_description: |
+  像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "b2b-sales"
+  - "b2b-saas-sales-proposal"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-cobalt-grid"
 triggers:
-  - "cobalt-grid"
-  - "zhangzara-cobalt-grid"
-  - "Cobalt Grid"
-  - "editorial"
-  - "design-research"
-  - "considered"
-  - "literary"
-  - "design trend or research report"
-  - "studio annual or seasonal bulletin"
+  - "b2b-saas-sales-proposal"
+  - "b2b-sales"
+  - "Write a Renewal & Expansion Business Case like an Account Director"
+  - "像客户总监一样写续约与扩容论证"
+  - "sales"
+  - "renewal"
+  - "customer"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/cobalt-grid"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "b2b-sales"
+  scenario: "sales"
+  example_prompt: "Create \"Write a Renewal & Expansion Business Case like an Account Director\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Audience: champion, finance approver. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Cobalt Grid

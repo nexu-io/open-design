@@ -1,16 +1,34 @@
 ---
 name: html-ppt-obsidian-claude-gradient
-description: GitHub 暗紫渐变 deck — GitHub-dark #0d1117 + 紫蓝 radial 环境光 + 60px 网格 mask、居中布局、紫色 pill 标签、三色渐变标题（#a855f7→#60a5fa→#34d399）、GitHub 风代码 palette、紫色左边框高亮块。适合开发者工作流 / MCP / Agent / dev tool 教程，类似 GitHub Blog / Linear Changelog。
+en_name: "Write an Enterprise AI Adoption Brief like a Transformation Lead"
+zh_name: "像企业 AI 转型负责人一样写落地简报"
+description: |
+  Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Built as a decision-grade AI literacy deck for leadership, IT, security.
+en_description: |
+  Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Built as a decision-grade AI literacy deck for leadership, IT, security.
+zh_description: |
+  像企业 AI 转型负责人一样写落地简报——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "ai-literacy"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-obsidian-claude-gradient"
 triggers:
-  - "github dark"
-  - "developer tutorial"
-  - "mcp tutorial"
-  - "agent tutorial"
-  - "dev workflow"
-  - "changelog deck"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai-literacy"
+  - "Write an Enterprise AI Adoption Brief like a Transformation Lead"
+  - "像企业 AI 转型负责人一样写落地简报"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-obsidian-claude-gradient 模板做一份开发者教程 PPT。GitHub 暗紫渐变 + 居中布局 + 紫色 pill + 三色渐变标题 + 配置/步骤代码块。先确认：教什么、目标受众、要不要 MCP/Agent 配置示例。"
+  category: "ai-literacy"
+  scenario: "ai"
+  example_prompt: "Create \"Write an Enterprise AI Adoption Brief like a Transformation Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Audience: leadership, IT, security. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · GitHub 暗紫渐变
 
