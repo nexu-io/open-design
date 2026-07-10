@@ -29,14 +29,12 @@ import type {
   WorkspaceCollabContext,
   WorkspaceTeamBillingPlanId,
 } from '@open-design/contracts';
-import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { InviteDialog } from './InviteDialog';
 import { CreditsPanel } from './CreditsPanel';
 import { InsufficientCreditsDialog } from './InsufficientCreditsDialog';
 import { useI18n } from '../i18n';
 import type { EntryHomeView } from '../router';
-import styles from './EntryNavRail.module.css';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -69,6 +67,10 @@ interface Props {
   onInvite?: () => void;
   /** Start the cloud sign-in / team flow from the local-state callout. */
   onSignInCloud?: () => void;
+  /** Extra controls pinned to the bottom-left of the rail. */
+  footerExtra?: ReactNode;
+  /** Optional notice shown above the footer controls. */
+  footerNotice?: ReactNode;
 }
 
 interface NavButtonProps {
@@ -141,6 +143,8 @@ export function EntryNavRail({
   billing,
   onOpenSettings,
   onToggleTheme,
+  footerExtra,
+  footerNotice,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const brandLabel = t('app.brand');
@@ -643,22 +647,10 @@ export function EntryNavRail({
         )}
       </div>
       <div className="entry-nav-rail__footer">
-        {onOpenSettings ? (
-          <div className={styles.social}>
-            <button
-              type="button"
-              className={styles.socialLink}
-              onClick={() => onOpenSettings()}
-              aria-label={t('entry.openSettingsAria')}
-              data-tooltip={t('entry.openSettingsTitle')}
-              data-testid="entry-nav-settings"
-            >
-              <Icon name="settings" size={15} />
-            </button>
-          </div>
-        ) : null}
-        <div className="entry-nav-rail__divider" role="separator" />
-        <EntryHelpMenu />
+        {footerNotice}
+        <div className="entry-rail-actions">
+          {footerExtra}
+        </div>
       </div>
 
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />

@@ -190,6 +190,8 @@ function writeStoredRailOpen(open: boolean): void {
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
+const CONTACT_EMAIL = 'contact@open.design';
+const CONTACT_EMAIL_URL = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Open Design 反馈')}&body=${encodeURIComponent('你好 Open Design 团队，\n\n我想反馈：\n\n')}`;
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
@@ -834,6 +836,69 @@ export function EntryShell({
     />
   );
 
+  const railFooterActions = (
+    <>
+      <GithubStarBadge />
+      <a
+        className="entry-discord-badge od-tooltip"
+        href={DISCORD_URL}
+        aria-label={discordAriaLabel}
+        data-tooltip={discordAriaLabel}
+        data-tooltip-placement="right"
+        data-testid="entry-discord-badge"
+      >
+        <Icon name="discord" size={14} className="entry-discord-badge__icon" />
+        <span className="entry-discord-badge__label">{t('entry.discordLabel')}</span>
+        {discordOnlineLabel ? (
+          <>
+            <span className="entry-discord-badge__sep" aria-hidden>·</span>
+            <span className="entry-discord-badge__online">{discordOnlineLabel}</span>
+          </>
+        ) : null}
+      </a>
+      <a
+        className="entry-x-badge od-tooltip"
+        href={X_URL}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-label="在 X 上关注 Open Design"
+        data-tooltip="在 X 上关注 Open Design"
+        data-tooltip-placement="right"
+        data-testid="entry-x-badge"
+      >
+        <span className="entry-x-badge__icon" aria-hidden>X</span>
+        <span className="entry-x-badge__label">@OpenDesignHQ</span>
+      </a>
+      <a
+        className="entry-mail-badge od-tooltip"
+        href={CONTACT_EMAIL_URL}
+        aria-label="给 Open Design 发邮件"
+        data-tooltip="给 Open Design 发邮件"
+        data-tooltip-placement="right"
+        data-testid="entry-mail-badge"
+      >
+        <span className="entry-mail-badge__icon" aria-hidden>
+          <Icon name="comment" size={13} />
+        </span>
+        <span className="entry-mail-badge__label">邮件</span>
+      </a>
+      <button
+        type="button"
+        className="entry-settings-chip od-tooltip"
+        onClick={() => onOpenSettings()}
+        data-tooltip={t('entry.openSettingsTitle')}
+        data-tooltip-placement="right"
+        aria-label={t('entry.openSettingsAria')}
+        data-testid="entry-settings-button"
+      >
+        <span className="entry-settings-chip__icon" aria-hidden>
+          <Icon name="settings" size={13} />
+        </span>
+        <span className="entry-settings-chip__label">{t('settings.title')}</span>
+      </button>
+    </>
+  );
+
 
   if (view === 'onboarding') {
     return (
@@ -925,6 +990,7 @@ export function EntryShell({
           onToggleTheme={() => onThemeChange(resolvedDark ? 'light' : 'dark')}
           onInvite={() => changeView('members')}
           onSignInCloud={() => navigate({ kind: 'home', view: 'onboarding' })}
+          footerExtra={railFooterActions}
         />
         <main className="entry-main entry-main--scroll" ref={entryMainScrollRef}>
           <div className="entry-main__topbar">
