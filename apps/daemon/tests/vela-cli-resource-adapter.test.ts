@@ -100,9 +100,11 @@ describe('createVelaCliResourceAdapter', () => {
 });
 
 describe('transport selection', () => {
-  it('opts into the CLI transport only for OD_RESOURCE_TRANSPORT=vela-cli', () => {
+  it('opts into the CLI transport for explicit or Vela-backed team modes', () => {
     expect(shouldUseVelaCliResourceTransport({ OD_RESOURCE_TRANSPORT: 'vela-cli' })).toBe(true);
     expect(shouldUseVelaCliResourceTransport({ OD_RESOURCE_TRANSPORT: 'sdk' })).toBe(false);
+    expect(shouldUseVelaCliResourceTransport({ OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli' })).toBe(true);
+    expect(shouldUseVelaCliResourceTransport({ OD_COLLAB_TRANSPORT: 'vela-cli' })).toBe(true);
     expect(shouldUseVelaCliResourceTransport({})).toBe(false);
   });
 

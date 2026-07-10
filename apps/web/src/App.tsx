@@ -14,7 +14,12 @@ import {
   projectKindFromMetadataToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
-import type { AmrModelsResponse, ChatSessionMode, RunContextSelection } from '@open-design/contracts';
+import type {
+  AmrModelsResponse,
+  ChatSessionMode,
+  RunContextSelection,
+  WorkspaceTeamProjectsResponse,
+} from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
@@ -352,6 +357,22 @@ function isAbortError(err: unknown): boolean {
     'name' in err &&
     (err as { name?: unknown }).name === 'AbortError'
   );
+}
+
+async function pullTeamSharedProjectIfAvailable(projectId: string): Promise<boolean> {
+  try {
+    const listResponse = await fetch('/api/workspace/projects/team');
+    if (!listResponse.ok) return false;
+    const body = (await listResponse.json()) as WorkspaceTeamProjectsResponse;
+    const isTeamShared = (body.projects ?? []).some((project) => project.projectId === projectId);
+    if (!isTeamShared) return false;
+    const pullResponse = await fetch(`/api/projects/${encodeURIComponent(projectId)}/collab/pull`, {
+      method: 'POST',
+    });
+    return pullResponse.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function App() {
@@ -1796,6 +1817,15 @@ function AppInner() {
         navigate({ kind: 'project', projectId: id, fileName: routeFileName });
         return true;
       }
+      const pulled = await pullTeamSharedProjectIfAvailable(id);
+      if (pulled) {
+        const pulledProject = await getProject(id);
+        if (pulledProject) {
+          setProjects((curr) => [pulledProject, ...curr.filter((candidate) => candidate.id !== pulledProject.id)]);
+          navigate({ kind: 'project', projectId: id, fileName: routeFileName });
+          return true;
+        }
+      }
       const request = beginProjectListRequest();
       const list = await listProjects();
       reconcileFetchedProjects(list, request);
@@ -2012,6 +2042,22 @@ function AppInner() {
           return curr.map((candidate) => (candidate.id === project.id ? project : candidate));
         });
         return;
+      }
+      const pulled = await pullTeamSharedProjectIfAvailable(route.projectId);
+      if (cancelled) return;
+      if (pulled) {
+        const pulledProject = await getProject(route.projectId).catch(() => null);
+        if (cancelled) return;
+        if (pulledProject) {
+          setProjects((curr) => {
+            const existingIndex = curr.findIndex((candidate) => candidate.id === pulledProject.id);
+            if (existingIndex < 0) {
+              return [...curr, pulledProject];
+            }
+            return curr.map((candidate) => (candidate.id === pulledProject.id ? pulledProject : candidate));
+          });
+          return;
+        }
       }
       const request = beginProjectListRequest();
       const list = await listProjects().catch(() => []);

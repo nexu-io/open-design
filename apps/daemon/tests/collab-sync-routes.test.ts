@@ -309,6 +309,16 @@ describe('collab sync routes', () => {
     expect(after.body.version).toBe(1);
   });
 
+  it('does not register a placeholder project when there is no published version to pull', async () => {
+    const store = fakeProjectStore();
+    const api = await startSyncServer(undefined, { projectStore: store });
+
+    const pull = await api.json('/api/projects/unpublished-shared/collab/pull', { method: 'POST' });
+    expect(pull.status).toBe(200);
+    expect(pull.body.version).toBeNull();
+    expect(store.has('unpublished-shared')).toBe(false);
+  });
+
   it('registers a pulled shared project locally so it appears in the project store', async () => {
     const store = fakeProjectStore();
     const api = await startSyncServer(undefined, {
@@ -317,6 +327,8 @@ describe('collab sync routes', () => {
     });
 
     expect(store.has('shared-1')).toBe(false);
+    await api.json('/api/projects/shared-1/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-1/collab/status', null);
     const pull = await api.json('/api/projects/shared-1/collab/pull', { method: 'POST' });
     expect(pull.status).toBe(200);
 
@@ -344,6 +356,8 @@ describe('collab sync routes', () => {
       }),
     });
 
+    await api.json('/api/projects/shared-from-hub/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-from-hub/collab/status', null);
     const pull = await api.json('/api/projects/shared-from-hub/collab/pull', { method: 'POST' });
     expect(pull.status).toBe(200);
 
@@ -377,6 +391,8 @@ describe('collab sync routes', () => {
       resolvePullDir: () => dir,
     });
 
+    await api.json('/api/projects/shared-2/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-2/collab/status', null);
     await api.json('/api/projects/shared-2/collab/pull', { method: 'POST' });
     const registered = store.projects.get('shared-2');
     expect(registered?.name).toBe('Team Roadmap');
@@ -401,6 +417,8 @@ describe('collab sync routes', () => {
       resolvePullDir: () => dir,
     });
 
+    await api.json('/api/projects/shared-skill/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-skill/collab/status', null);
     await api.json('/api/projects/shared-skill/collab/pull', { method: 'POST' });
     expect(store.projects.get('shared-skill')?.name).toBe('Emerald Editorial');
   });
@@ -429,6 +447,8 @@ describe('collab sync routes', () => {
       resolvePullDir: () => dir,
     });
 
+    await api.json('/api/projects/shared-placeholder/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-placeholder/collab/status', null);
     await api.json('/api/projects/shared-placeholder/collab/pull', { method: 'POST' });
     expect(store.registerCalls).toBe(1);
     expect(store.projects.get('shared-placeholder')?.name).toBe('Emerald Editorial');

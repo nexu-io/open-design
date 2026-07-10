@@ -134,6 +134,16 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 
 async function projectIsSharedWithWorkspace(projectId: string): Promise<boolean> {
   try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/collab/status`);
+    if (response.ok) {
+      const body = (await response.json()) as { syncState?: unknown; ownerMemberId?: unknown };
+      if (typeof body.ownerMemberId === 'string' && body.ownerMemberId.trim()) return true;
+      if (typeof body.syncState === 'string' && body.syncState !== 'local_only') return true;
+    }
+  } catch {
+    // Fall through to the team-project directory below.
+  }
+  try {
     const response = await fetch('/api/workspace/projects/team');
     if (!response.ok) return false;
     const body = (await response.json()) as WorkspaceTeamProjectsResponse;
@@ -2755,14 +2765,17 @@ export function FileWorkspace({
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
         <div className="ws-tabs-actions">
-          {presenceSlot ? (
-            <div className="ws-tabs-file-actions-before">{presenceSlot}</div>
-          ) : null}
           <div
             id={APP_CHROME_FILE_ACTIONS_ID}
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
           >
+            {presenceSlot ? (
+              <>
+                {presenceSlot}
+                <span className="ws-presence-action-divider" aria-hidden="true" />
+              </>
+            ) : null}
             {!activeFile ? (
               <>
                 {!viewerOnly ? (

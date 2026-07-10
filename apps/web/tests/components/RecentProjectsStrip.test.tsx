@@ -211,6 +211,27 @@ describe('RecentProjectsStrip', () => {
     });
   });
 
+  it('marks owner-shared projects with the shared card state and badge', () => {
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-shared',
+            name: 'Shared Prototype',
+            updatedAt: 4,
+          }),
+        ]}
+        sharedProjectIds={new Set(['project-shared'])}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    const card = container.querySelector('.recent-projects__card');
+    expect(card?.classList.contains('is-shared')).toBe(true);
+    expect(screen.getByText('Shared')).toBeTruthy();
+  });
+
   it('uses non-favicon design-system logo alternates when no cover exists', async () => {
     const { container } = render(
       <RecentProjectsStrip

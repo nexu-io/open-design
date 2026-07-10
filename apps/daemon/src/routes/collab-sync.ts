@@ -327,10 +327,12 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     const result = await pullLatest(projectId);
     // Register the pulled project locally so it opens like any other project.
     // Best-effort: a registration failure must not fail the pull itself.
-    try {
-      await registerPulledProject(projectId);
-    } catch {
-      /* registration is best-effort; leave the pull result standing */
+    if (result.version !== null) {
+      try {
+        await registerPulledProject(projectId);
+      } catch {
+        /* registration is best-effort; leave the pull result standing */
+      }
     }
     res.json({ ok: true, version: result.version });
   });

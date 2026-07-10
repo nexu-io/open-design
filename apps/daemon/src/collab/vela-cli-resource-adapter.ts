@@ -139,11 +139,16 @@ export function buildVelaResourceEnv(
 
 /**
  * Whether this run should drive resource sharing through the `vela resource` CLI
- * transport instead of the in-process SDK. Opt-in (`OD_RESOURCE_TRANSPORT=vela-cli`)
- * so the收口 rolls out only where the CLI is present; the default stays the SDK.
+ * transport instead of the in-process SDK. An explicit `OD_RESOURCE_TRANSPORT`
+ * wins; otherwise the Vela-backed team/collab modes imply the same CLI identity
+ * for bytes so the daemon does not publish catalog rows through Vela while
+ * leaving project content on the local stub.
  */
 export function shouldUseVelaCliResourceTransport(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.OD_RESOURCE_TRANSPORT?.trim() === 'vela-cli';
+  const explicitTransport = env.OD_RESOURCE_TRANSPORT?.trim();
+  if (explicitTransport) return explicitTransport === 'vela-cli';
+  return env.OD_TEAM_PROJECTS_TRANSPORT?.trim() === 'vela-cli' ||
+    env.OD_COLLAB_TRANSPORT?.trim() === 'vela-cli';
 }
 
 /** Derive the team-identity gate from the one workspace context (team + live). */

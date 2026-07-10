@@ -1416,7 +1416,6 @@
      never compressed by long/numerous file tabs. */
   margin-inline-start: auto;
 }
-.ws-tabs-file-actions-before,
 .ws-tabs-file-actions,
 .ws-tabs-project-actions {
   display: inline-flex;
@@ -1431,11 +1430,17 @@
   display: inline-flex;
   align-items: center;
 }
-.ws-tabs-file-actions-before:not(:empty) + .ws-tabs-file-actions:not(:empty),
 .ws-tabs-file-actions:not(:empty) + .ws-tabs-project-actions {
   margin-inline-start: 2px;
   padding-inline-start: 8px;
   border-inline-start: 1px solid var(--border);
+}
+.ws-presence-action-divider {
+  display: inline-flex;
+  width: 1px;
+  height: 22px;
+  margin-inline: 2px 4px;
+  background: var(--border);
 }
 /* The Design Files row is 38px tall, so shrink the action cluster's buttons
    (present / share / handoff / avatar) to sit comfortably within it without

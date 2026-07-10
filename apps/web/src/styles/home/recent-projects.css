@@ -10,14 +10,16 @@
 }
 .recent-projects__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .recent-projects__title-block {
   display: grid;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 220px;
 }
 .recent-projects__heading {
   margin: 0;
@@ -87,6 +89,8 @@
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  flex: 1 1 560px;
+  min-width: min(100%, 420px);
 }
 .recent-projects__invite,
 .recent-projects__select-toggle,
@@ -263,8 +267,15 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-tint), var(--shadow-sm);
 }
-.recent-projects__card.is-readonly-shared {
+.recent-projects__card.is-shared {
   border-color: color-mix(in srgb, var(--border-strong) 72%, var(--accent) 28%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.recent-projects__card.is-shared:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 52%, var(--accent) 48%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    var(--shadow-sm);
 }
 .recent-projects__card.is-readonly-shared .recent-projects__card-thumb {
   filter: saturate(0.82);
