@@ -170,9 +170,10 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','position','left','top','right','bottom','transform','zIndex','boxShadow'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius','position','left','top','right','bottom','transform','zIndex','boxShadow'];
   var dragState = null; // { el, startX, startY, startLeft, startTop, startWidth, startHeight, handle, id }
-  var handles = []; // live handle elements
+  var handles = []; // live handle elements (8 resize)
+  var cornerHandles = []; // live corner-radius handles (4)
   var selectedElForHandles = null; // which element currently has handles shown
   var selectedIds = {}; // map of id → true for multi-selected elements
   var rubberband = null; // { el, startX, startY } for drag-to-select rectangle
@@ -751,7 +752,11 @@ export function buildManualEditBridge(enabled: boolean): string {
     for (var i = 0; i < handles.length; i++) {
       if (handles[i] && handles[i].parentNode) handles[i].parentNode.removeChild(handles[i]);
     }
+    for (var j = 0; j < cornerHandles.length; j++) {
+      if (cornerHandles[j] && cornerHandles[j].parentNode) cornerHandles[j].parentNode.removeChild(cornerHandles[j]);
+    }
     handles = [];
+    cornerHandles = [];
     selectedElForHandles = null;
   }
 
@@ -795,6 +800,39 @@ export function buildManualEditBridge(enabled: boolean): string {
       ].join(';');
       containerEl.appendChild(handle);
       handles.push(handle);
+    }
+    // Corner radius handles (small gray diamonds at each corner)
+    var r = parseFloat(el.style.borderRadius || '0') || 0;
+    if (r > 0 || true) {
+      var CH = 6;
+      var cornerPositions = [
+        { c: 'tl', left: -CH/2, top: -CH/2, cursor: 'nesw-resize', prop: 'borderTopLeftRadius' },
+        { c: 'tr', left: rect.width - CH/2, top: -CH/2, cursor: 'nwse-resize', prop: 'borderTopRightRadius' },
+        { c: 'br', left: rect.width - CH/2, top: rect.height - CH/2, cursor: 'nesw-resize', prop: 'borderBottomRightRadius' },
+        { c: 'bl', left: -CH/2, top: rect.height - CH/2, cursor: 'nwse-resize', prop: 'borderBottomLeftRadius' },
+      ];
+      for (var cj = 0; cj < cornerPositions.length; cj++) {
+        var cp2 = cornerPositions[cj];
+        var ch = document.createElement('div');
+        ch.setAttribute('data-od-corner-handle', cp2.c);
+        ch.setAttribute('data-od-corner-prop', cp2.prop);
+        ch.style.cssText = [
+          'position:absolute',
+          'left:' + Math.round(rect.left - containerRect.left + cp2.left) + 'px',
+          'top:' + Math.round(rect.top - containerRect.top + cp2.top) + 'px',
+          'width:' + CH + 'px',
+          'height:' + CH + 'px',
+          'background:#94a3b8',
+          'border:1.5px solid #fff',
+          'border-radius:50%',
+          'z-index:2147483647',
+          'pointer-events:auto',
+          'cursor:' + cp2.cursor,
+          'box-sizing:border-box',
+        ].join(';');
+        containerEl.appendChild(ch);
+        cornerHandles.push(ch);
+      }
     }
   }
 
@@ -894,6 +932,17 @@ export function buildManualEditBridge(enabled: boolean): string {
       dragState = { el: rotationHandle.targetEl, startX: ev.clientX, startY: ev.clientY, handle: 'rotate', id: stableId(rotationHandle.targetEl), moved: false,
         startLeft: rotationHandle.cx, startTop: rotationHandle.cy, startWidth: 0, startHeight: 0, rotationStart: parseRotation(rotationHandle.targetEl) };
       rotationHandle.targetEl.setPointerCapture(ev.pointerId);
+      return;
+    }
+    // Check corner radius handles
+    var cornerEl2 = ev.target && ev.target.closest ? ev.target.closest('[data-od-corner-handle]') : null;
+    if (cornerEl2 && selectedElForHandles){
+      ev.preventDefault(); ev.stopPropagation();
+      var cornerProp2 = cornerEl2.getAttribute('data-od-corner-prop') || 'borderRadius';
+      var curR = parseFloat(selectedElForHandles.style[cornerProp2] || selectedElForHandles.style.borderRadius || '0') || 0;
+      dragState = { el: selectedElForHandles, startX: ev.clientX, startY: ev.clientY, handle: 'corner', id: stableId(selectedElForHandles), moved: false,
+        startLeft: curR, startTop: 0, startWidth: 0, startHeight: 0, cornerProp: cornerProp2 };
+      selectedElForHandles.setPointerCapture(ev.pointerId);
       return;
     }
     // Check handle hit first
@@ -1001,6 +1050,18 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
+    // Corner
+    if (dragState.handle === 'corner'){
+      var newR = Math.max(0, dragState.startLeft + Math.max(Math.abs(ev.clientX - dragState.startX), Math.abs(ev.clientY - dragState.startY)));
+      if (dragState.cornerProp.indexOf('Left') >= 0 || dragState.cornerProp.indexOf('Right') >= 0){
+        newR = Math.max(0, dragState.startLeft + (Math.abs(ev.clientX - dragState.startX) + Math.abs(ev.clientY - dragState.startY)) / 2);
+      }
+      dragState.el.style[dragState.cornerProp] = Math.round(newR) + 'px';
+      dragState.moved = true;
+      updateHandlePositions(dragState.el);
+      updateRotationHandlePos(dragState.el);
+      return;
+    }
     // Rotation
     if (dragState.handle === 'rotate'){
       var angle = Math.atan2(ev.clientY - dragState.cy, ev.clientX - dragState.cx) * 180 / Math.PI + 90;
@@ -1077,6 +1138,17 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = dragState.el;
     var id = dragState.id;
     try { el.releasePointerCapture(ev.pointerId); } catch(e) {}
+    if (dragState.handle === 'corner'){
+      if (dragState.moved){
+        var cv = dragState.el.style[dragState.cornerProp] || '';
+        commitStyle(dragState.el, dragState.cornerProp, cv);
+        dragEndedJustNow = true;
+      }
+      dragState = null;
+      updateHandlePositions(el);
+      updateRotationHandlePos(el);
+      return;
+    }
     if (dragState.handle === 'rotate'){
       if (dragState.moved){
         commitPosition(el, id);

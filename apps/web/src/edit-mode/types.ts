@@ -49,6 +49,10 @@ export interface ManualEditStyles {
   borderStyle: string;
   borderColor: string;
   borderRadius: string;
+  borderTopLeftRadius: string;
+  borderTopRightRadius: string;
+  borderBottomRightRadius: string;
+  borderBottomLeftRadius: string;
   position: string;
   left: string;
   top: string;
@@ -242,6 +246,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
+  'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius',
   'position', 'left', 'top', 'right', 'bottom',
   'transform', 'zIndex', 'boxShadow',
 ];
