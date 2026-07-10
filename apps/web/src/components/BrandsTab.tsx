@@ -1,14 +1,16 @@
 /**
- * Role: 브랜드 목록 페이지 — 헤더 + 2열 리치 카드 그리드 (읽기 전용)
- * Key Features: fetchBrands 로드, 이니셜 타일·subtitle·tagline·채널 배지·프로젝트수/톤 메타, 카드 클릭 → 상세
- * Dependencies: providers/registry.fetchBrands, i18n
- * Notes: 생성/편집(+새 브랜드·⋯메뉴)은 서브프로젝트 B — 여기 없음.
+ * Role: 브랜드 목록 페이지 — 헤더 + 2열 리치 카드 그리드 + 생성 진입점
+ * Key Features: fetchBrands 로드, 이니셜 타일·subtitle·tagline·채널 배지·프로젝트수/톤 메타, 카드 클릭 → 상세, "+ 새 브랜드" → BrandCreateModal
+ * Dependencies: providers/registry.fetchBrands, BrandCreateModal, @marketing-ax/components Button, i18n
+ * Notes: 상세 편집(presentation·문서·채널·에셋·삭제)은 BrandDetailView 담당.
  */
 import { useEffect, useState } from 'react';
 import type { BrandSummary } from '@marketing-ax/contracts';
+import { Button } from '@marketing-ax/components';
 import { useI18n } from '../i18n';
 import { fetchBrands } from '../providers/registry';
 import { brandAccentFallback } from './brand-accent';
+import { BrandCreateModal } from './BrandCreateModal';
 import styles from './BrandsTab.module.css';
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
 export function BrandsTab({ onOpenBrand }: Props) {
   const { t } = useI18n();
   const [brands, setBrands] = useState<BrandSummary[] | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   useEffect(() => {
     let alive = true;
     fetchBrands()
@@ -31,8 +34,13 @@ export function BrandsTab({ onOpenBrand }: Props) {
   return (
     <div className={styles.page} data-testid="brands-tab">
       <div className={styles.head}>
-        <h1 className={styles.title}>{t('brands.pageTitle')}</h1>
-        <p className={styles.subtitle}>{t('brands.pageSubtitle')}</p>
+        <div>
+          <h1 className={styles.title}>{t('brands.pageTitle')}</h1>
+          <p className={styles.subtitle}>{t('brands.pageSubtitle')}</p>
+        </div>
+        <Button variant="primary" onClick={() => setShowCreate(true)}>
+          {t('brands.newButton')}
+        </Button>
       </div>
       {brands.length === 0 ? (
         <p className={styles.empty}>{t('brands.empty')}</p>
@@ -91,6 +99,15 @@ export function BrandsTab({ onOpenBrand }: Props) {
             );
           })}
         </div>
+      )}
+      {showCreate && (
+        <BrandCreateModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(brandId) => {
+            setShowCreate(false);
+            onOpenBrand(brandId);
+          }}
+        />
       )}
     </div>
   );

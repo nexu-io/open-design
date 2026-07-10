@@ -1,0 +1,29 @@
+/* Role: 브랜드 생성 모달 스타일 — 필드 스택·라벨·힌트·에러 (모달 크롬은 components Dialog 소유) */
+.modal {
+  width: min(440px, calc(100vw - 48px));
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, #1d2024);
+}
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg2, #7d8085);
+}
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger, #d64545);
+}

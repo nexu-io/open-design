@@ -1,6 +1,11 @@
 import type {
+  BrandAssetUploadResult,
+  BrandCreateInput,
+  BrandDeliverableInput,
   BrandDetail,
+  BrandDocInput,
   BrandSummary,
+  BrandUpdateInput,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
@@ -459,7 +464,8 @@ export async function fetchDesignSystems(): Promise<DesignSystemSummary[]> {
 }
 
 // Brands registry — separate from design systems (Task 1 contract split).
-// Read-only web surface (Task 10); write/edit affordances stay CLI-only.
+// Read fetchers below; write fetchers (create/update/doc/deliverable/
+// asset/delete) live in the "Brand write fetchers" block further down.
 export async function fetchBrands(): Promise<BrandSummary[]> {
   const res = await fetch('/api/brands');
   if (!res.ok) throw new Error(`brands fetch failed: ${res.status}`);
@@ -472,6 +478,176 @@ export async function fetchBrand(id: string, deliverable?: string): Promise<Bran
   const res = await fetch(`/api/brands/${encodeURIComponent(id)}${qs}`);
   if (!res.ok) throw new Error(`brand fetch failed: ${res.status}`);
   return (await res.json()) as BrandDetail;
+}
+
+// Brand write fetchers — every daemon write route from spec §3
+// (docs/superpowers/specs/2026-07-10-brand-page-subproject-b-design.md).
+// Errors surface HTTP status + daemon error code so the UI can branch
+// on 409 (duplicate id / delete blocked by bound projects), 413 (asset
+// too large), and 400 (validation) instead of a collapsed boolean.
+export interface BrandWriteError {
+  status: number;
+  code?: string;
+  message: string;
+  /** DELETE /api/brands/:id 409 응답의 바인딩 프로젝트 수 — 차단 사유 문구용 */
+  projectCount?: number;
+}
+
+async function readBrandWriteError(resp: Response): Promise<BrandWriteError> {
+  const payload = (await resp.json().catch(() => null)) as
+    | {
+        error?: { code?: string; message?: string } | string;
+        message?: string;
+        projectCount?: number;
+      }
+    | null;
+  const error = payload?.error;
+  const errorObject = typeof error === 'object' && error !== null ? error : undefined;
+  const message =
+    errorObject?.message ??
+    (typeof error === 'string' ? error : undefined) ??
+    payload?.message ??
+    `Brand request failed (${resp.status}).`;
+  return {
+    status: resp.status,
+    ...(errorObject?.code !== undefined ? { code: errorObject.code } : {}),
+    message,
+    ...(typeof payload?.projectCount === 'number'
+      ? { projectCount: payload.projectCount }
+      : {}),
+  };
+}
+
+function brandWriteNetworkError(err: unknown): BrandWriteError {
+  return {
+    status: 0,
+    message: err instanceof Error ? err.message : 'Brand request failed.',
+  };
+}
+
+export async function createBrand(
+  input: BrandCreateInput,
+): Promise<{ brand: BrandDetail } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch('/api/brands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { brand: (await resp.json()) as BrandDetail };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+// 저장 성공 후 상세는 fetchBrand 재호출로 갱신하는 컨벤션(스펙 §5 — 낙관
+// 갱신 없음)이라 update 계열은 갱신본 대신 { ok } 만 반환한다.
+export async function updateBrand(
+  id: string,
+  input: BrandUpdateInput,
+): Promise<{ ok: true } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { ok: true };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+// key는 'core'(brand.md) 또는 manifest 등재 deliverable 키.
+export async function saveBrandDoc(
+  id: string,
+  key: string,
+  body: string,
+): Promise<{ ok: true } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch(
+      `/api/brands/${encodeURIComponent(id)}/docs/${encodeURIComponent(key)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body } satisfies BrandDocInput),
+      },
+    );
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { ok: true };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+export async function addBrandDeliverable(
+  id: string,
+  input: BrandDeliverableInput,
+): Promise<{ ok: true } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(id)}/deliverables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { ok: true };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+export async function removeBrandDeliverable(
+  id: string,
+  key: string,
+): Promise<{ ok: true } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch(
+      `/api/brands/${encodeURIComponent(id)}/deliverables/${encodeURIComponent(key)}`,
+      { method: 'DELETE' },
+    );
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { ok: true };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+// role 지정 시 daemon이 presentation.icon/logo까지 갱신한다 (스펙 §3).
+export async function uploadBrandAsset(
+  id: string,
+  file: File,
+  role?: 'icon' | 'logo',
+): Promise<{ asset: BrandAssetUploadResult } | { error: BrandWriteError }> {
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const query = role ? `?role=${encodeURIComponent(role)}` : '';
+    const resp = await fetch(`/api/brands/${encodeURIComponent(id)}/assets${query}`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { asset: (await resp.json()) as BrandAssetUploadResult };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
+}
+
+export async function deleteBrand(
+  id: string,
+): Promise<{ ok: true } | { error: BrandWriteError }> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) return { error: await readBrandWriteError(resp) };
+    return { ok: true };
+  } catch (err) {
+    return { error: brandWriteNetworkError(err) };
+  }
 }
 
 // Discriminated-union variant: surfaces the fetch outcome instead of
