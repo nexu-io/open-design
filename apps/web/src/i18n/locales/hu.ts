@@ -3411,6 +3411,7 @@ export const hu: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Az újraközzétételek megtartják a meglévő display.dev hozzáférési beállításokat, hacsak itt nem módosítod őket.',
   'fileViewer.displayDevArtifactName': 'Név',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Hagyd üresen a fájlnév használatához',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Hagyd üresen az aktuális név megtartásához',
   'fileViewer.displayDevVisibility': 'Láthatóság',
   'fileViewer.displayDevVisibilityPublic': 'Nyilvános',
   'fileViewer.displayDevVisibilityCompany': 'Cég',

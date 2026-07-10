@@ -3411,6 +3411,7 @@ export const pl: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Ponowne publikacje zachowują istniejące ustawienia dostępu display.dev, chyba że zmienisz je tutaj.',
   'fileViewer.displayDevArtifactName': 'Nazwa',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Zostaw puste, aby użyć nazwy pliku',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Zostaw puste, aby zachować bieżącą nazwę',
   'fileViewer.displayDevVisibility': 'Widoczność',
   'fileViewer.displayDevVisibilityPublic': 'Publiczne',
   'fileViewer.displayDevVisibilityCompany': 'Firma',

@@ -3411,6 +3411,7 @@ export const id: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Publikasi ulang mempertahankan pengaturan akses display.dev yang ada kecuali Anda mengubahnya di sini.',
   'fileViewer.displayDevArtifactName': 'Nama',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Biarkan kosong untuk memakai nama file',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Biarkan kosong untuk mempertahankan nama saat ini',
   'fileViewer.displayDevVisibility': 'Visibilitas',
   'fileViewer.displayDevVisibilityPublic': 'Publik',
   'fileViewer.displayDevVisibilityCompany': 'Perusahaan',

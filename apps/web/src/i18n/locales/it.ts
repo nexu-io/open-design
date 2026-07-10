@@ -3411,6 +3411,7 @@ export const it: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Le ridistribuzioni mantengono le impostazioni di accesso display.dev esistenti, a meno che tu non le modifichi qui.',
   'fileViewer.displayDevArtifactName': 'Nome',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Lascia vuoto per usare il nome del file',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Lascia vuoto per mantenere il nome attuale',
   'fileViewer.displayDevVisibility': 'Visibilità',
   'fileViewer.displayDevVisibilityPublic': 'Pubblico',
   'fileViewer.displayDevVisibilityCompany': 'Azienda',

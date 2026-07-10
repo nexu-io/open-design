@@ -4270,6 +4270,7 @@ export interface Dict {
   'fileViewer.displayDevDeployOwnedHint': string;
   'fileViewer.displayDevArtifactName': string;
   'fileViewer.displayDevArtifactNamePlaceholder': string;
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': string;
   'fileViewer.displayDevVisibility': string;
   'fileViewer.displayDevVisibilityPublic': string;
   'fileViewer.displayDevVisibilityCompany': string;

@@ -3411,6 +3411,7 @@ export const ru: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Повторные публикации сохраняют текущие настройки доступа display.dev, если вы не измените их здесь.',
   'fileViewer.displayDevArtifactName': 'Название',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Оставьте пустым, чтобы использовать имя файла',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Оставьте пустым, чтобы сохранить текущее название',
   'fileViewer.displayDevVisibility': 'Видимость',
   'fileViewer.displayDevVisibilityPublic': 'Публично',
   'fileViewer.displayDevVisibilityCompany': 'Компания',

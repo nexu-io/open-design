@@ -5846,7 +5846,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('surfaces deployment load failures in the display.dev modal', async () => {
+  it('keeps display.dev deploy available when deployment history fails to load', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -5895,9 +5895,9 @@ describe('FileViewer SVG artifacts', () => {
     await screen.findByRole('dialog');
     expect(await screen.findByText('temporary display.dev outage')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
-    expect(screen.queryByLabelText('Name')).toBeNull();
-    expect(screen.queryByLabelText('Visibility')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Visibility')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it('ignores a stale passive display.dev deployment-load failure after the modal loads successfully', async () => {
@@ -6187,7 +6187,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText('https://app.display.dev/incomplete-demo')).toBeNull();
   });
 
-  it('keeps display.dev deploy blocked without clearing other provider state when saving config does not reload deployments', async () => {
+  it('keeps display.dev deploy available without clearing other provider state when saving config does not reload deployments', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -6283,15 +6283,15 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => expect(saveCalls).toBe(1));
     expect(await screen.findByText('temporary display.dev outage')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Name')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
     fireEvent.keyDown(window, { key: 'Escape' });
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     expect(await screen.findByRole('menuitem', { name: /Copy share link/i })).toBeInTheDocument();
   });
 
-  it('keeps display.dev deploy blocked when save reload returns incomplete authenticated metadata', async () => {
+  it('keeps display.dev deploy available when save reload returns incomplete authenticated metadata', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -6387,7 +6387,8 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => expect(saveCalls).toBe(1));
     expect(await screen.findByText('Could not load deployments. Retry before publishing.')).toBeInTheDocument();
     expect(screen.queryByText('https://app.display.dev/private-demo')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it.each([
@@ -6990,9 +6991,12 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => expect(deployRequests).toHaveLength(1));
-    expect((await screen.findAllByText('Could not load deployments. Retry before publishing.')).length).toBeGreaterThan(0);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Could not load deployments. Retry before publishing.');
+    expect(within(dialog).queryByRole('alert')).toBeNull();
     expect(screen.queryByText('https://app.display.dev/old-ready-demo')).toBeNull();
     expect(screen.queryByText('https://app.display.dev/incomplete-demo')).toBeNull();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it('clears stale display.dev state when an authenticated redeploy fails during access hydration', async () => {
@@ -7078,7 +7082,7 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => expect(deployRequests).toHaveLength(1));
     expect((await screen.findAllByText('display.dev access settings unavailable')).length).toBeGreaterThan(0);
     expect(screen.queryByText('https://app.display.dev/old-ready-demo')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it('persists changed display.dev defaults when deploying from the modal', async () => {
@@ -7532,6 +7536,7 @@ describe('FileViewer SVG artifacts', () => {
     const displayDevItems = await screen.findAllByRole('menuitem', { name: /Deploy to display.dev/i });
     fireEvent.click(displayDevItems[0]!);
     await screen.findByRole('dialog');
+    expect(screen.getByLabelText('Name')).toHaveAttribute('placeholder', 'Leave blank to keep the current name');
     expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('private');
     expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('live@example.com');
     expect((screen.getByLabelText('Show branding') as HTMLSelectElement).value).toBe('hide');
@@ -7661,7 +7666,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('blocks display.dev redeploy when an authenticated deployment has no current access settings', async () => {
+  it('keeps display.dev deploy available when an authenticated deployment has no current access settings', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -7731,17 +7736,17 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(await screen.findByText('Could not load deployments. Retry before publishing.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
-    expect(screen.queryByLabelText('Visibility')).toBeNull();
-    expect(screen.queryByLabelText('Share with')).toBeNull();
-    expect(screen.queryByLabelText('Show branding')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByLabelText('Visibility')).toBeInTheDocument();
+    expect(screen.getByLabelText('Share with')).toHaveValue('stale@example.com');
+    expect(screen.getByLabelText('Show branding')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/projects/project-1/deploy',
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
-  it('blocks display.dev after a link retry returns incomplete authenticated metadata', async () => {
+  it('keeps display.dev available after a link retry returns incomplete authenticated metadata', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -7832,7 +7837,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(await screen.findByText('Could not load deployments. Retry before publishing.')).toBeInTheDocument();
     expect(screen.queryByText('https://app.display.dev/private-demo')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it('clears stale display.dev state when link retry fails during access hydration', async () => {
@@ -7915,7 +7920,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect((await screen.findAllByText('display.dev access settings unavailable')).length).toBeGreaterThan(0);
     expect(screen.queryByText('https://app.display.dev/private-demo')).toBeNull();
-    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Deploy to display.dev/i })).toBeEnabled();
   });
 
   it('sends touched display.dev access settings on an owned redeploy', async () => {

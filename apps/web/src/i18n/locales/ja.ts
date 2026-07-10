@@ -3411,6 +3411,7 @@ export const ja: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'ここで変更しない限り、再デプロイでは既存の display.dev アクセス設定を保持します。',
   'fileViewer.displayDevArtifactName': '名前',
   'fileViewer.displayDevArtifactNamePlaceholder': '空のままにするとファイル名を使用',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': '空のままにすると現在の名前を保持',
   'fileViewer.displayDevVisibility': '公開範囲',
   'fileViewer.displayDevVisibilityPublic': '公開',
   'fileViewer.displayDevVisibilityCompany': '会社',

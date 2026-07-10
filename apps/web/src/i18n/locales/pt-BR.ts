@@ -3411,6 +3411,7 @@ export const ptBR: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Publicações seguintes mantêm as configurações de acesso existentes do display.dev, a menos que você as altere aqui.',
   'fileViewer.displayDevArtifactName': 'Nome',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Deixe em branco para usar o nome do arquivo',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Deixe em branco para manter o nome atual',
   'fileViewer.displayDevVisibility': 'Visibilidade',
   'fileViewer.displayDevVisibilityPublic': 'Público',
   'fileViewer.displayDevVisibilityCompany': 'Empresa',

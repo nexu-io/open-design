@@ -3411,6 +3411,7 @@ export const th: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'การเผยแพร่ซ้ำจะคงการตั้งค่าการเข้าถึง display.dev เดิมไว้ เว้นแต่คุณจะเปลี่ยนที่นี่',
   'fileViewer.displayDevArtifactName': 'ชื่อ',
   'fileViewer.displayDevArtifactNamePlaceholder': 'เว้นว่างเพื่อใช้ชื่อไฟล์',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'เว้นว่างเพื่อคงชื่อปัจจุบัน',
   'fileViewer.displayDevVisibility': 'การมองเห็น',
   'fileViewer.displayDevVisibilityPublic': 'สาธารณะ',
   'fileViewer.displayDevVisibilityCompany': 'บริษัท',

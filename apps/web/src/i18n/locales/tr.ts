@@ -3411,6 +3411,7 @@ export const tr: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Burada değiştirmediğiniz sürece yeniden yayınlamalar mevcut display.dev erişim ayarlarını korur.',
   'fileViewer.displayDevArtifactName': 'Ad',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Dosya adını kullanmak için boş bırakın',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Geçerli adı korumak için boş bırakın',
   'fileViewer.displayDevVisibility': 'Görünürlük',
   'fileViewer.displayDevVisibilityPublic': 'Herkese açık',
   'fileViewer.displayDevVisibilityCompany': 'Şirket',

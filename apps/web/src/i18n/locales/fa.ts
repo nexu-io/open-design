@@ -3410,6 +3410,7 @@ export const fa: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'انتشارهای دوباره تنظیمات دسترسی فعلی display.dev را حفظ می‌کنند، مگر اینکه آن‌ها را اینجا تغییر دهید.',
   'fileViewer.displayDevArtifactName': 'نام',
   'fileViewer.displayDevArtifactNamePlaceholder': 'برای استفاده از نام فایل خالی بگذارید',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'برای حفظ نام فعلی خالی بگذارید',
   'fileViewer.displayDevVisibility': 'نمایانی',
   'fileViewer.displayDevVisibilityPublic': 'عمومی',
   'fileViewer.displayDevVisibilityCompany': 'شرکت',

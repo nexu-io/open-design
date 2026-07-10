@@ -3411,6 +3411,7 @@ export const ar: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'تحتفظ عمليات إعادة النشر بإعدادات وصول display.dev الحالية ما لم تغيرها هنا.',
   'fileViewer.displayDevArtifactName': 'الاسم',
   'fileViewer.displayDevArtifactNamePlaceholder': 'اتركه فارغًا لاستخدام اسم الملف',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'اتركه فارغًا للاحتفاظ بالاسم الحالي',
   'fileViewer.displayDevVisibility': 'الرؤية',
   'fileViewer.displayDevVisibilityPublic': 'عام',
   'fileViewer.displayDevVisibilityCompany': 'الشركة',

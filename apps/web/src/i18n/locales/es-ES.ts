@@ -3411,6 +3411,7 @@ export const esES: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Los redeploys mantienen los ajustes de acceso existentes de display.dev salvo que los cambies aquí.',
   'fileViewer.displayDevArtifactName': 'Nombre',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Déjalo vacío para usar el nombre del archivo',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Déjalo vacío para conservar el nombre actual',
   'fileViewer.displayDevVisibility': 'Visibilidad',
   'fileViewer.displayDevVisibilityPublic': 'Pública',
   'fileViewer.displayDevVisibilityCompany': 'Empresa',

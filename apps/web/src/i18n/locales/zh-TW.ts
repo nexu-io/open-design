@@ -3618,6 +3618,7 @@ export const zhTW: Dict = {
     "重新部署會保留現有 display.dev 存取設定，除非你在此處更改。",
   "fileViewer.displayDevArtifactName": "名稱",
   "fileViewer.displayDevArtifactNamePlaceholder": "留空則使用檔名",
+  "fileViewer.displayDevArtifactNameAuthenticatedPlaceholder": "留空則保留目前名稱",
   "fileViewer.displayDevVisibility": "可見性",
   "fileViewer.displayDevVisibilityPublic": "公開",
   "fileViewer.displayDevVisibilityCompany": "公司",

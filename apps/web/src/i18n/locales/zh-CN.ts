@@ -3607,6 +3607,7 @@ export const zhCN: Dict = {
     "重新部署会保留现有 display.dev 访问设置，除非你在此处更改。",
   "fileViewer.displayDevArtifactName": "名称",
   "fileViewer.displayDevArtifactNamePlaceholder": "留空则使用文件名",
+  "fileViewer.displayDevArtifactNameAuthenticatedPlaceholder": "留空则保留当前名称",
   "fileViewer.displayDevVisibility": "可见性",
   "fileViewer.displayDevVisibilityPublic": "公开",
   "fileViewer.displayDevVisibilityCompany": "公司",

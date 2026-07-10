@@ -3411,6 +3411,7 @@ export const ko: Dict = {
   'fileViewer.displayDevDeployOwnedHint': '여기에서 변경하지 않는 한 재배포는 기존 display.dev 접근 설정을 유지합니다.',
   'fileViewer.displayDevArtifactName': '이름',
   'fileViewer.displayDevArtifactNamePlaceholder': '비워 두면 파일 이름 사용',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': '비워 두면 현재 이름 유지',
   'fileViewer.displayDevVisibility': '공개 범위',
   'fileViewer.displayDevVisibilityPublic': '공개',
   'fileViewer.displayDevVisibilityCompany': '회사',

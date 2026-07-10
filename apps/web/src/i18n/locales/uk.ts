@@ -3411,6 +3411,7 @@ export const uk: Dict = {
   'fileViewer.displayDevDeployOwnedHint': 'Повторні публікації зберігають поточні налаштування доступу display.dev, якщо ви не зміните їх тут.',
   'fileViewer.displayDevArtifactName': 'Назва',
   'fileViewer.displayDevArtifactNamePlaceholder': 'Залиште порожнім, щоб використати ім’я файлу',
+  'fileViewer.displayDevArtifactNameAuthenticatedPlaceholder': 'Залиште порожнім, щоб зберегти поточну назву',
   'fileViewer.displayDevVisibility': 'Видимість',
   'fileViewer.displayDevVisibilityPublic': 'Публічно',
   'fileViewer.displayDevVisibilityCompany': 'Компанія',
