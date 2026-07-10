@@ -766,6 +766,19 @@ function AssistantMessageImpl({
     ? "thinking"
     : "preparing";
 
+  // Thinking blocks use the same in-project routing as prose blocks so file
+  // links keep the user in the current project preview instead of falling
+  // through to Electron's default new-window behavior.
+  const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
+    if (!onRequestOpenFile) return undefined;
+    return (href, event) => {
+      const path = asInProjectFilePath(href, projectFileNames, projectId);
+      if (!path) return;
+      event.preventDefault();
+      onRequestOpenFile(path);
+    };
+  }, [onRequestOpenFile, projectFileNames, projectId]);
+
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
   let lastTextBlockIndex = -1;
@@ -814,6 +827,7 @@ function AssistantMessageImpl({
                 key={i}
                 text={b.text}
                 streaming={streaming && i === blocks.length - 1}
+                onLinkClick={onLinkClick}
               />
             );
           if (b.kind === "tool-group") {
@@ -2600,7 +2614,15 @@ function SystemReminderBlock({
   );
 }
 
-function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+function ThinkingBlock({
+  text,
+  streaming,
+  onLinkClick,
+}: {
+  text: string;
+  streaming?: boolean;
+  onLinkClick?: MarkdownLinkClickHandler;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const isThinking = streaming === true;
@@ -2642,7 +2664,7 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="thinking-body">{renderMarkdown(text)}</div>
+          <div className="thinking-body">{renderMarkdown(text, { onLinkClick })}</div>
         </div>
       </div>
     </div>

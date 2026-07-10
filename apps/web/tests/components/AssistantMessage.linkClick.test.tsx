@@ -31,6 +31,18 @@ function messageWithText(text: string): ChatMessage {
   };
 }
 
+function messageWithThinkingLink(thinkingText: string, visibleText: string): ChatMessage {
+  return {
+    id: 'assistant-thinking-1',
+    role: 'assistant',
+    content: `${thinkingText}\n\n${visibleText}`,
+    events: [{ kind: 'thinking', text: thinkingText }, { kind: 'text', text: visibleText }],
+    startedAt: 1_000,
+    endedAt: 3_000,
+    runStatus: 'succeeded',
+  };
+}
+
 describe('AssistantMessage — chat file-link routing (#1239)', () => {
   it('routes a relative file-link click through onRequestOpenFile and suppresses the default new-window behavior', () => {
     const onRequestOpenFile = vi.fn();
@@ -158,6 +170,36 @@ describe('AssistantMessage — chat file-link routing (#1239)', () => {
     );
 
     const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).toHaveBeenCalledTimes(1);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
+    expect(clickEvent.defaultPrevented).toBe(true);
+  });
+
+  it('routes file links inside thinking blocks through onRequestOpenFile', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithThinkingLink(
+          'I should inspect [index.html](/Users/mac/open-design/open-design-preview-0.10.0/projects/Web%20Prototype/index.html) first.',
+          '已完成单文件原型：',
+        )}
+        streaming={false}
+        projectId="project-1"
+        projectFileNames={new Set(['index.html'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const toggle = container.querySelector('.thinking-toggle');
+    expect(toggle).not.toBeNull();
+    fireEvent.click(toggle!);
+
+    const anchor = container.querySelector('.thinking-body a.md-link');
     expect(anchor).not.toBeNull();
 
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
