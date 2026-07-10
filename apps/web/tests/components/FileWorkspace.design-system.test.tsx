@@ -356,6 +356,12 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      if (url === '/api/projects/ds-acme/collab/status') {
+        return new Response(JSON.stringify({ syncState: 'local_only' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       events.push(url);
       return new Response(JSON.stringify({ id: 'brand-acme' }), {
         status: 200,
@@ -469,6 +475,12 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      if (url === '/api/projects/ds-acme/collab/status') {
+        return new Response(JSON.stringify({ syncState: 'local_only' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       events.push(url);
       return new Response(JSON.stringify({ id: 'brand-acme' }), {
         status: 200,
@@ -547,6 +559,12 @@ describe('FileWorkspace design-system project surface', () => {
       }
       if (url === '/api/workspace/projects/team') {
         return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/ds-acme/collab/status') {
+        return new Response(JSON.stringify({ syncState: 'local_only' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
