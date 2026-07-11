@@ -124,6 +124,10 @@ export {
 // Pure live-artifact key rules.
 export { exportReadyNudgeKey } from './rules';
 
+// Pure file-URL builder (structurally identical to providers/registry's
+// projectFileUrl, duplicated because it is pure with no transport/DOM).
+export { fileRawUrl } from './rules';
+
 // Pure display formatters.
 export {
   formatJsonFileTextForDisplay,
@@ -158,3 +162,22 @@ export {
   MARKDOWN_CODE_BLOCK_ATTR,
   MARKDOWN_CODE_LANGUAGE_ATTR,
 } from './constants';
+
+// Document-kind meta-label formatter.
+export { documentMetaLabel } from './formatters';
+
+// Dumb, read-only file-kind viewers (no local state).
+export { FileActions } from './components/FileActions';
+export { ImageViewer } from './components/ImageViewer';
+export { SketchViewer } from './components/SketchViewer';
+export { VideoViewer } from './components/VideoViewer';
+export { AudioViewer } from './components/AudioViewer';
+export { BinaryViewer } from './components/BinaryViewer';
+export { CodeWithLines } from './components/CodeWithLines';
+export { JsonPanel } from './components/JsonPanel';
+
+// Read-only file-kind viewers with feature-local hooks (fetch-on-mount).
+export { DocumentPreviewViewer } from './components/DocumentPreviewViewer';
+export { SvgViewer, type SvgViewerProps } from './components/SvgViewer';
+export { TextViewer } from './components/TextViewer';
+export type { SvgViewerMode, DocumentPreview, DocumentPreviewSection } from './types';

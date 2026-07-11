@@ -1058,6 +1058,20 @@ export function humanSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// Pure URL-path builder for a project's raw file bytes. Structurally identical
+// to `providers/registry`'s `projectFileUrl`/`projectRawUrl` — duplicated here
+// (rather than imported) because it is pure string-building with no transport
+// or DOM dependency, so it belongs in the slice per ADR 0002 (the guard treats
+// any `providers/` import as a transport reach regardless of the export's own
+// purity).
+export function fileRawUrl(projectId: string, filePath: string): string {
+  const safePath = filePath
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
+}
+
 // ---------------------------------------------------------------------------
 // HTML preview asset-path rules. Pure path resolution for the same-project
 // relative asset references (`<link>`/`<script src>`) an HTML artifact can

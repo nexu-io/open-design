@@ -37,6 +37,7 @@ import {
   markdownImageAlt,
   humanSize,
   exportReadyNudgeKey,
+  fileRawUrl,
 } from '../../../src/features/file-viewer/rules';
 import type { PreviewComment } from '../../../src/types';
 import type { PreviewCommentSnapshot } from '../../../src/comments';
@@ -381,6 +382,18 @@ describe('exportReadyNudgeKey', () => {
   it('builds a stable per-project-and-file storage key', () => {
     expect(exportReadyNudgeKey('proj-1', 'index.html')).toBe(
       'open-design:export-ready-nudge:proj-1:index.html',
+    );
+  });
+});
+
+describe('fileRawUrl', () => {
+  it('builds a project-scoped raw-file URL', () => {
+    expect(fileRawUrl('proj-1', 'index.html')).toBe('/api/projects/proj-1/raw/index.html');
+  });
+
+  it('encodes each path segment individually, preserving slashes as separators', () => {
+    expect(fileRawUrl('proj 1', 'assets/logo #1.png')).toBe(
+      '/api/projects/proj%201/raw/assets/logo%20%231.png',
     );
   });
 });

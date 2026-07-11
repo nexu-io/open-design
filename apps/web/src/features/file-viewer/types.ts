@@ -121,3 +121,23 @@ export type ManualEditPendingStyleSave = {
   label: string;
   version: number;
 };
+
+/**
+ * Result shape of the document-preview port, defined in-slice per ADR 0002
+ * (a port's result type must not be imported from `providers/`, even as a
+ * type-only import — the boundary guard is AST-level, not type-aware).
+ * Structurally identical to `providers/registry`'s `ProjectFilePreview`.
+ */
+export type DocumentPreviewSection = {
+  title: string;
+  lines: string[];
+};
+
+export type DocumentPreview = {
+  kind: 'pdf' | 'document' | 'presentation' | 'spreadsheet';
+  title: string;
+  sections: DocumentPreviewSection[];
+};
+
+/** Which pane the SVG viewer's preview/source toggle shows. */
+export type SvgViewerMode = 'preview' | 'source';
