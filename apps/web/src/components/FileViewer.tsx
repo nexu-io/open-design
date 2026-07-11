@@ -274,6 +274,7 @@ import {
   FileVersionViewportControls,
   useWiredTemplateSave,
   useWiredShareLinkCopy,
+  useWiredDeployLinkCopy,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -2922,7 +2923,7 @@ function HtmlViewer({
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
-  const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
+  const deployLinkCopy = useWiredDeployLinkCopy(t);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
@@ -3614,7 +3615,7 @@ function HtmlViewer({
     let cancelled = false;
     setDeployResult(null);
     setDeployError(null);
-    setCopiedDeployLink(null);
+    deployLinkCopy.resetCopiedDeployLink();
     setDeployPhase('idle');
     void fetchProjectDeployments(projectId).then((items) => {
       if (cancelled) return;
@@ -5535,7 +5536,7 @@ function HtmlViewer({
     setDeployModalIntent(intent);
     setDeployError(null);
     setDeployActionToast(null);
-    setCopiedDeployLink(null);
+    deployLinkCopy.resetCopiedDeployLink();
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
   }
@@ -5609,7 +5610,7 @@ function HtmlViewer({
     setDeployPhase('deploying');
     setDeployError(null);
     setDeployActionToast(null);
-    setCopiedDeployLink(null);
+    deployLinkCopy.resetCopiedDeployLink();
     // Real-deploy analytics: report success only after the provider actually
     // accepts the publish, failed on any hard error / missing config. This is
     // distinct from the share-popover "opened" signal (artifact_export_result).
@@ -5729,28 +5730,6 @@ function HtmlViewer({
     } finally {
       setDeployPhase('idle');
     }
-  }
-
-  async function copyDeployLink(url: string) {
-    const safeUrl = url.trim();
-    if (!safeUrl) return;
-    try {
-      await navigator.clipboard.writeText(safeUrl);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = safeUrl;
-      textarea.setAttribute('readonly', 'true');
-      textarea.style.position = 'fixed';
-      textarea.style.top = '-1000px';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    setCopiedDeployLink(safeUrl);
-    window.setTimeout(() => {
-      setCopiedDeployLink((current) => (current === safeUrl ? null : current));
-    }, 1800);
   }
 
   function presentInThisTab() {
@@ -6769,10 +6748,6 @@ function HtmlViewer({
         : isSocialShareDeployModal
           ? t('socialShare.publishPageTitle')
           : deployMenuLabel;
-  const copyDeployLabel = (url: string) =>
-    copiedDeployLink === url.trim()
-      ? t('fileViewer.copied')
-      : t('fileViewer.copyDeployLink');
   const statusLabelFor = (state: ReturnType<typeof deployResultState>) => {
     if (state === 'ready') return t('fileViewer.deployLinkReady');
     if (state === 'protected') return t('fileViewer.deployLinkProtectedLabel');
@@ -8502,11 +8477,11 @@ function HtmlViewer({
                         type="button"
                         className="viewer-action"
                         onClick={() => {
-                          void copyDeployLink(socialShareBlockedDeployment.url);
+                          void deployLinkCopy.copyDeployLink(socialShareBlockedDeployment.url);
                         }}
                       >
                         <Icon name="copy" size={14} />
-                        <span>{copyDeployLabel(socialShareBlockedDeployment.url)}</span>
+                        <span>{deployLinkCopy.copyDeployLabel(socialShareBlockedDeployment.url)}</span>
                       </button>
                       {activeDeployment?.id === socialShareBlockedDeployment.id ? (
                         <button
@@ -8734,11 +8709,11 @@ function HtmlViewer({
                                 type="button"
                                 className="viewer-action"
                                 onClick={() => {
-                                  void copyDeployLink(card.url);
+                                  void deployLinkCopy.copyDeployLink(card.url);
                                 }}
                               >
                                 <Icon name="copy" size={14} />
-                                <span>{copyDeployLabel(card.url)}</span>
+                                <span>{deployLinkCopy.copyDeployLabel(card.url)}</span>
                               </button>
                               <a
                                 className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
