@@ -145,10 +145,11 @@ export function useProjectCollab(
   // (`useProjectFileEvents` in ProjectView, gated on `daemonLive`), so the
   // FileViewer refreshes on its own — no extra reload wiring is needed here.
   //
-  // Only members (`viewerOnly`) pull. The owner is the single writer; their
-  // local copy is already the newest, and pulling could clobber unpublished
-  // edits, so the owner path stays out. `viewerOnly` resolves to false for the
-  // owner in the same status poll that resolves `syncState`, so the gate holds.
+  // Only non-owner members of a shared project pull. The owner is the single
+  // writer; their local copy is already the newest, and pulling could clobber
+  // unpublished edits. A workspace-level read-only freeze also must not make the
+  // owner auto-pull over their own working tree, so this gate keys off explicit
+  // project ownership instead of the broader `viewerOnly` flag.
   //
   // The cursor starts at 0 (not the first observed `publishedVersion`), so
   // entering a shared project pulls once to guarantee the member lands on the
@@ -167,8 +168,9 @@ export function useProjectCollab(
   }, [projectId]);
   const { publishedVersion } = collab;
   const pull = collab.pull;
+  const shouldAutoPull = decision.enabled && shared && !isOwner;
   useEffect(() => {
-    if (!viewerOnly) return;
+    if (!shouldAutoPull) return;
     if (publishedVersion == null) return;
     if (publishedVersion <= pulledVersionRef.current) return;
     if (pullInFlightRef.current) return;
@@ -190,7 +192,7 @@ export function useProjectCollab(
       }
       if (advanced) setPullTick((n) => n + 1);
     })();
-  }, [viewerOnly, publishedVersion, pull, pullTick]);
+  }, [shouldAutoPull, publishedVersion, pull, pullTick]);
 
   return {
     enabled: collabEnabled,

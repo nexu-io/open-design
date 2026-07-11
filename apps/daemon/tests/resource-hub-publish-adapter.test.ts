@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -78,5 +78,40 @@ describe('createResourceHubPublishAdapter', () => {
     await expect(adapter.publish({ projectId: 'p1', reason: 'change' })).resolves.toEqual({ version: 2 });
     expect(createResource).not.toHaveBeenCalled();
     expect(publishVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces the pulled mirror so files deleted upstream disappear', async () => {
+    const parent = mkdtempSync(path.join(tmpdir(), 'resource-hub-pull-'));
+    const pullDir = path.join(parent, 'p1');
+    mkdirSync(pullDir);
+    writeFileSync(path.join(pullDir, 'stale.txt'), 'old');
+    const bytes = Buffer.from('<h1>current</h1>');
+    const digest = `sha256:${'a'.repeat(64)}`;
+    const adapter = createResourceHubPublishAdapter({
+      client: {
+        getRef: vi.fn(async () => ({ resourceId: 'project-p1', ref: 'published', versionId: 'v1' })),
+        listVersions: vi.fn(async () => [{
+          id: 'v1',
+          resourceId: 'project-p1',
+          version: 1,
+          manifestDigest: 'manifest-1',
+          createdByMemberId: principal.memberId,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }]),
+        getManifest: vi.fn(async () => ({
+          digest: 'manifest-1',
+          entries: [{ path: 'index.html', type: 'file', blobDigest: digest }],
+        })),
+        pullBlob: vi.fn(async () => bytes),
+      } as any,
+      getPrincipal: () => principal,
+      resolveProjectDir: () => '/project',
+      resolvePullDir: () => pullDir,
+    });
+
+    await expect(adapter.pull!({ projectId: 'p1' })).resolves.toBeUndefined();
+
+    expect(existsSync(path.join(pullDir, 'stale.txt'))).toBe(false);
+    expect(readFileSync(path.join(pullDir, 'index.html'), 'utf8')).toBe('<h1>current</h1>');
   });
 });

@@ -100,10 +100,10 @@ export function InviteDialog({ open, onClose, freePlan = false, onSubmit, canAss
         | { results?: Array<{ ok?: boolean }> }
         | null;
       const results = body?.results ?? [];
-      // Treat "every invite failed" as an overall failure; a partial success
-      // still closes with the success state.
-      if (results.length > 0 && results.every((r) => r.ok === false)) {
-        throw new Error('all_failed');
+      // Any failed row means the invite batch needs user attention; keep the
+      // dialog open instead of closing with a misleading success state.
+      if (results.some((r) => r.ok === false)) {
+        throw new Error('invite_failed');
       }
       setSuccess(true);
       onSubmit?.(valid);

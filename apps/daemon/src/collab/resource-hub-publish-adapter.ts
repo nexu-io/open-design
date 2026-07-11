@@ -1,4 +1,6 @@
 import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { mkdtemp, mkdir, rename, rm } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import {
   createResourceHubClient,
   readResourceHubConfig,
@@ -134,7 +136,18 @@ export function createResourceHubPublishAdapter(
     async pull({ projectId, principal: inputPrincipal }) {
       const principal = inputPrincipal ?? await getPrincipal(projectId);
       if (!principal) return; // no team identity → nothing to pull
-      await materializeRef(client, principal, resourceIdFor(projectId, principal), PUBLISHED_REF, await resolvePullDir(projectId));
+      const pullDir = await resolvePullDir(projectId);
+      const parentDir = dirname(pullDir);
+      await mkdir(parentDir, { recursive: true });
+      const tempDir = await mkdtemp(join(parentDir, `.${basename(pullDir)}-pull-`));
+      try {
+        await materializeRef(client, principal, resourceIdFor(projectId, principal), PUBLISHED_REF, tempDir);
+        await rm(pullDir, { recursive: true, force: true });
+        await rename(tempDir, pullDir);
+      } catch (error) {
+        await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+        throw error;
+      }
     },
   };
 }

@@ -240,7 +240,7 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     const authorization = Array.isArray(req.headers.authorization)
       ? req.headers.authorization[0]
       : req.headers.authorization;
-    return (await workspaceContext.current({ authorization }))?.permissions.canShareProjects ?? true;
+    return (await workspaceContext.current({ authorization }))?.permissions.canShareProjects ?? false;
   }
 
   async function registerPulledProject(projectId: string): Promise<void> {
@@ -362,6 +362,12 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
       if (!(await canShareProjectsForRequest(req))) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
+      const callerMemberId = principal?.memberId ?? context?.workspaceMemberId;
+      const sharedProject = await resolveSharedProject?.(projectId) ?? null;
+      const ownerMemberId = sharedProject?.ownerMemberId ?? projectOwnerMemberId(projectId, principal);
+      if (ownerMemberId && ownerMemberId !== callerMemberId) {
+        return res.status(403).json({ error: 'WORKSPACE_PROJECT_UNSHARE_DENIED' });
+      }
       try {
         await teamProjectCatalog?.remove(projectId, principal);
       } catch (error) {
@@ -381,8 +387,9 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     if (result.version !== null) {
       try {
         await registerPulledProject(projectId);
-      } catch {
-        /* registration is best-effort; leave the pull result standing */
+      } catch (error) {
+        console.warn('[od] failed to register pulled team project:', error);
+        return res.status(502).json({ error: 'TEAM_PROJECT_PULL_REGISTER_UNAVAILABLE' });
       }
     }
     res.json({ ok: true, version: result.version });

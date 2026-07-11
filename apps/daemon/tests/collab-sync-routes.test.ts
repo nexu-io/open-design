@@ -380,7 +380,7 @@ describe('collab sync routes', () => {
   });
 
   it('drives the visibility-to-sync team-share intent through to synced', async () => {
-    const api = await startSyncServer();
+    const api = await startSyncServer(fixedShareContextProvider(true));
     const intent = await api.json('/api/projects/p1/collab/sync-intent', {
       method: 'POST',
       body: { event: 'project_team_share_requested', projectId: 'p1' },
@@ -394,7 +394,7 @@ describe('collab sync routes', () => {
   });
 
   it('moves a team-shared project back to local_only on unshare intent', async () => {
-    const api = await startSyncServer();
+    const api = await startSyncServer(fixedShareContextProvider(true));
     await api.json('/api/projects/p1/collab/sync-intent', {
       method: 'POST',
       body: { event: 'project_team_share_requested', projectId: 'p1' },
@@ -437,6 +437,17 @@ describe('collab sync routes', () => {
     // client — a member whose context lacks canShareProjects is refused (403),
     // and the project stays local_only (no publish is triggered).
     const api = await startSyncServer(fixedShareContextProvider(false));
+    const res = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('WORKSPACE_PROJECT_SHARE_DENIED');
+    expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('local_only');
+  });
+
+  it('refuses a team-share intent when no workspace context is available', async () => {
+    const api = await startSyncServer({ current: async () => null });
     const res = await api.json('/api/projects/p1/collab/sync-intent', {
       method: 'POST',
       body: { event: 'project_team_share_requested', projectId: 'p1' },
@@ -496,6 +507,33 @@ describe('collab sync routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.syncState).toBe('synced');
     expect(publishCalls).toBe(0);
+  });
+
+  it('refuses to unshare a project owned by another member', async () => {
+    const removes: string[] = [];
+    const api = await startSyncServer(fixedShareContextProvider(true), {
+      resolveSharedProject: async () => ({
+        projectId: 'p1',
+        ownerMemberId: 'wm-owner',
+        sharedAt: new Date(1).toISOString(),
+        name: 'Owner Project',
+      }),
+      teamProjectCatalog: {
+        upsert: async () => {},
+        remove: async (projectId) => {
+          removes.push(projectId);
+        },
+      },
+    });
+
+    const res = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_unshare_requested', projectId: 'p1' },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('WORKSPACE_PROJECT_UNSHARE_DENIED');
+    expect(removes).toEqual([]);
   });
 
   it('writes and removes the Vela team-project catalog around share intents', async () => {
@@ -653,6 +691,25 @@ describe('collab sync routes', () => {
     expect(pull.status).toBe(200);
     expect(pull.body.version).toBeNull();
     expect(store.has('unpublished-shared')).toBe(false);
+  });
+
+  it('fails the pull route when a pulled shared project cannot be registered locally', async () => {
+    const api = await startSyncServer(undefined, {
+      projectStore: {
+        get: () => null,
+        has: () => false,
+        register: () => {
+          throw new Error('project store unavailable');
+        },
+      },
+      resolvePullDir: (projectId) => `/does/not/exist/${projectId}`,
+    });
+
+    await api.json('/api/projects/shared-register-fail/collab/publish', { method: 'POST' });
+    await api.awaitPublishedVersion('/api/projects/shared-register-fail/collab/status', null);
+    const pull = await api.json('/api/projects/shared-register-fail/collab/pull', { method: 'POST' });
+    expect(pull.status).toBe(502);
+    expect(pull.body.error).toBe('TEAM_PROJECT_PULL_REGISTER_UNAVAILABLE');
   });
 
   it('registers a pulled shared project locally so it appears in the project store', async () => {

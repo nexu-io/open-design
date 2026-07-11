@@ -58,11 +58,9 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
   /**
    * Server-authoritative permission gate for status change + delete. Both are
    * allowed for the comment's author and the project owner (owner drives
-   * send-to-agent and may delete any comment). Degrades open when there is no
-   * caller identity (personal / off-team) or the comment has no author, so the
-   * single-user flow is never gated. Body EDITS need no gate here: the POST
-   * upsert stamps the author server-side and matches the caller's own row, so a
-   * non-author can only ever touch their own comment.
+   * send-to-agent and may delete any comment). Degrades open only when the
+   * comment itself has no author (legacy/personal comments). Authored shared
+   * comments fail closed if the current caller cannot be resolved.
    */
   async function callerMayMutate(
     req: Request,
@@ -72,7 +70,7 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     const author = comment.authorMemberId;
     if (!author) return true;
     const me = await resolveCaller(req);
-    if (!me) return true;
+    if (!me) return false;
     if (me === author) return true;
     if (ctx.resolveProjectOwnerMemberId) {
       const owner = await ctx.resolveProjectOwnerMemberId(projectId);
@@ -117,11 +115,17 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
           return res.status(404).json({ error: 'comment not found' });
         }
         const existingAuthor = existing.authorMemberId ?? null;
-        if (authorMemberId && existingAuthor && existingAuthor !== authorMemberId) {
-          return res.status(403).json({ error: 'not permitted' });
+        if (existingAuthor) {
+          if (!authorMemberId || existingAuthor !== authorMemberId) {
+            return res.status(403).json({ error: 'not permitted' });
+          }
+          body.authorMemberId = existingAuthor;
+        } else if (authorMemberId) {
+          body.authorMemberId = authorMemberId;
         }
+      } else if (authorMemberId) {
+        body.authorMemberId = authorMemberId;
       }
-      if (authorMemberId) body.authorMemberId = authorMemberId;
       const comment = upsertPreviewComment(db, req.params.id, req.params.cid, body);
       updateProject(db, req.params.id, {});
       // Best-effort cross-daemon push; never fails the local save.

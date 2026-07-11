@@ -1339,6 +1339,7 @@ export function FileViewer({
         projectId={projectId}
         file={file}
         onFileSaved={onFileSaved}
+        viewerOnly={viewerOnly}
       />
     );
   }
@@ -5271,6 +5272,7 @@ function ReactComponentViewer({
   artifactKind: handoffArtifactKind,
   metricsConsent = false,
   installationId,
+  viewerOnly = false,
 }: {
   projectId: string;
   file: ProjectFile;
@@ -5282,6 +5284,7 @@ function ReactComponentViewer({
   artifactKind?: TrackingArtifactKind;
   metricsConsent?: boolean;
   installationId?: string | null;
+  viewerOnly?: boolean;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -5301,6 +5304,7 @@ function ReactComponentViewer({
   // multi-file React prototype, which has no standalone preview. Issue #2744.
   const [moduleEntries, setModuleEntries] = useState<string[] | null>(null);
   const isModule = (moduleEntries?.length ?? 0) > 0;
+  const viewerOnlyDisabledTitle = t('fileViewer.readonlySharedNoExport');
 
   useEffect(() => {
     setSource(null);
@@ -5389,6 +5393,12 @@ function ReactComponentViewer({
     if (!shareMenuOpen) setShareAccessMenuOpen(false);
   }, [shareMenuOpen]);
 
+  useEffect(() => {
+    if (!viewerOnly) return;
+    setShareMenuOpen(false);
+    setShareAccessMenuOpen(false);
+  }, [viewerOnly]);
+
   // Published-file link. The demo mints a dedicated share URL; this viewer has
   // no publish backend, so we fall back to the current page URL (no invented
   // backend) and copy it to the clipboard with the same transient feedback.
@@ -5412,7 +5422,7 @@ function ReactComponentViewer({
 
   async function setWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setShareAccessMenuOpen(false);
-    if (nextAccess === shareAccess || shareAccessBusy) return;
+    if (nextAccess === shareAccess || shareAccessBusy || viewerOnly) return;
 
     setShareAccessBusy(true);
     try {
@@ -5511,8 +5521,9 @@ function ReactComponentViewer({
                   className="viewer-action primary viewer-action-export od-tooltip"
                   aria-haspopup="menu"
                   aria-expanded={shareMenuOpen}
-                  title={t('fileViewer.shareLabel')}
-                  data-tooltip={t('fileViewer.shareLabel')}
+                  disabled={viewerOnly}
+                  title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.shareLabel')}
+                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.shareLabel')}
                   data-tooltip-placement="bottom"
                   onClick={() => setShareMenuOpen((v) => !v)}
                 >
@@ -5560,7 +5571,7 @@ function ReactComponentViewer({
                               className="chrome-access-trigger"
                               aria-haspopup="listbox"
                               aria-expanded={shareAccessMenuOpen}
-                              disabled={shareAccessBusy}
+                              disabled={shareAccessBusy || viewerOnly}
                               onClick={() => setShareAccessMenuOpen((v) => !v)}
                             >
                               <span className="share-menu-icon">
@@ -5592,7 +5603,7 @@ function ReactComponentViewer({
                                     role="option"
                                     aria-selected={shareAccess === value}
                                     className={shareAccess === value ? 'is-active' : undefined}
-                                    disabled={shareAccessBusy}
+                                    disabled={shareAccessBusy || viewerOnly}
                                     onClick={() => void setWorkspaceShareAccess(value)}
                                   >
                                     <span className="share-menu-icon"><RemixIcon name={icon} size={16} /></span>
@@ -5645,6 +5656,8 @@ function ReactComponentViewer({
                             <button
                               type="button"
                               className="chrome-publish-primary"
+                              disabled={viewerOnly}
+                              title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                               onClick={() => setFilePublished(true)}
                             >
                               <RemixIcon name="upload-cloud-2-line" size={15} />
@@ -5660,7 +5673,10 @@ function ReactComponentViewer({
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
+                          disabled={viewerOnly}
+                          title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                           onClick={() => {
+                            if (viewerOnly) return;
                             setShareMenuOpen(false);
                             exportAsJsx(source, exportTitle, sourceExtension);
                           }}
@@ -5672,7 +5688,10 @@ function ReactComponentViewer({
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
+                          disabled={viewerOnly}
+                          title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                           onClick={() => {
+                            if (viewerOnly) return;
                             setShareMenuOpen(false);
                             exportReactComponentAsHtml(source, exportTitle);
                           }}
@@ -5685,7 +5704,10 @@ function ReactComponentViewer({
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
+                          disabled={viewerOnly}
+                          title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                           onClick={() => {
+                            if (viewerOnly) return;
                             setShareMenuOpen(false);
                             exportReactComponentAsZip(source, exportTitle, sourceExtension);
                           }}
@@ -5697,17 +5719,30 @@ function ReactComponentViewer({
                     ) : null}
                     {unifiedActionTab === 'send' ? (
                       <div className="chrome-unified-panel chrome-unified-panel--handoff">
-                        <HandoffButton
-                          projectId={projectId}
-                          projectName={projectName}
-                          projectDir={projectDir}
-                          agents={agents}
-                          artifactId={artifactId}
-                          artifactKind={handoffArtifactKind}
-                          metricsConsent={metricsConsent}
-                          installationId={installationId}
-                          embedded
-                        />
+                        {viewerOnly ? (
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            disabled
+                            title={viewerOnlyDisabledTitle}
+                          >
+                            <span className="share-menu-icon"><RemixIcon name="send-plane-line" size={15} /></span>
+                            <span>{viewerOnlyDisabledTitle}</span>
+                          </button>
+                        ) : (
+                          <HandoffButton
+                            projectId={projectId}
+                            projectName={projectName}
+                            projectDir={projectDir}
+                            agents={agents}
+                            artifactId={artifactId}
+                            artifactKind={handoffArtifactKind}
+                            metricsConsent={metricsConsent}
+                            installationId={installationId}
+                            embedded
+                          />
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -12978,16 +13013,18 @@ function MarkdownViewer({
   projectId,
   file,
   onFileSaved,
+  viewerOnly = false,
 }: {
   projectId: string;
   file: ProjectFile;
   onFileSaved?: () => Promise<void> | void;
+  viewerOnly?: boolean;
 }) {
   const { t, locale } = useI18n();
   const [text, setText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [mode, setMode] = useState<MarkdownViewerMode>('split');
+  const [mode, setMode] = useState<MarkdownViewerMode>(viewerOnly ? 'preview' : 'split');
   const [saveState, setSaveState] = useState<MarkdownSaveState>('idle');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [highlightedHtml, setHighlightedHtml] = useState<{ source: string; html: string; themeRevision: number } | null>(null);
@@ -13005,7 +13042,7 @@ function MarkdownViewer({
   const programmaticScrollRef = useRef<{ pane: MarkdownScrollPane; top: number } | null>(null);
   const activeMarkdownScrollPaneRef = useRef<MarkdownScrollPane>('editor');
   const editorBlockOffsetsRef = useRef<{ width: number; offsets: number[] } | null>(null);
-  const previousModeRef = useRef<MarkdownViewerMode>('split');
+  const previousModeRef = useRef<MarkdownViewerMode>(viewerOnly ? 'preview' : 'split');
   const saveInFlightRef = useRef(false);
   const pendingSaveAfterFlightRef = useRef<MarkdownSaveOptions | null>(null);
   const textRef = useRef('');
@@ -13016,6 +13053,13 @@ function MarkdownViewer({
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
   const exportTitle = file.name.replace(/\.mdx?$/i, '') || file.name;
+  const viewerOnlyDisabledTitle = t('fileViewer.readonlySharedNoExport');
+
+  useEffect(() => {
+    if (!viewerOnly) return;
+    setMode('preview');
+    setDownloadMenuOpen(false);
+  }, [viewerOnly]);
 
   useEffect(() => {
     const sameLoadedFile = loadedFileKeyRef.current === markdownFileKey;
@@ -13091,6 +13135,7 @@ function MarkdownViewer({
 
   const saveMarkdownText = useCallback(
     (value: string, options: MarkdownSaveOptions = {}) => {
+      if (viewerOnly) return;
       const run = async (nextValue: string, saveOptions: MarkdownSaveOptions): Promise<void> => {
         if (lastSavedTextRef.current === nextValue) {
           const showSaving = saveOptions.showSaving !== false;
@@ -13141,10 +13186,11 @@ function MarkdownViewer({
       };
       void run(value, options);
     },
-    [file.name, onFileSaved, projectId],
+    [file.name, onFileSaved, projectId, viewerOnly],
   );
 
   const flushPendingMarkdownSave = useCallback(() => {
+    if (viewerOnly) return;
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -13153,7 +13199,7 @@ function MarkdownViewer({
     if (lastSavedTextRef.current !== null && latest !== lastSavedTextRef.current) {
       saveMarkdownText(latest, { refreshFiles: false, showSaving: false });
     }
-  }, [saveMarkdownText]);
+  }, [saveMarkdownText, viewerOnly]);
 
   useEffect(() => {
     return () => {
@@ -13164,6 +13210,7 @@ function MarkdownViewer({
   useEffect(() => {
     if (text === null) return undefined;
     textRef.current = text;
+    if (viewerOnly) return undefined;
     if (text === lastSavedTextRef.current) return undefined;
     setSaveState((current) => current === 'saved' ? 'idle' : current);
     if (saveTimerRef.current) {
@@ -13179,7 +13226,7 @@ function MarkdownViewer({
         saveTimerRef.current = null;
       }
     };
-  }, [saveMarkdownText, text]);
+  }, [saveMarkdownText, text, viewerOnly]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -13205,6 +13252,7 @@ function MarkdownViewer({
 
   const insertTextAtSelection = useCallback((insert: string) => {
     setText((current) => {
+      if (viewerOnly) return current;
       if (current === null) return current;
       const editor = editorRef.current;
       if (!editor) return `${current}${insert}`;
@@ -13218,10 +13266,11 @@ function MarkdownViewer({
       });
       return next;
     });
-  }, []);
+  }, [viewerOnly]);
 
   const insertImageFiles = useCallback(
     async (files: File[]): Promise<boolean> => {
+      if (viewerOnly) return false;
       const images = files.filter((item) => isMarkdownImageFile(item));
       if (images.length === 0) return false;
       const targetDir = markdownDirectory(file.name);
@@ -13239,10 +13288,11 @@ function MarkdownViewer({
       }
       return true;
     },
-    [file.name, insertTextAtSelection, onFileSaved, projectId],
+    [file.name, insertTextAtSelection, onFileSaved, projectId, viewerOnly],
   );
 
   function handleEditorPaste(event: ReactClipboardEvent<HTMLTextAreaElement>) {
+    if (viewerOnly) return;
     const files = Array.from(event.clipboardData.files ?? []);
     if (!files.some(isMarkdownImageFile)) return;
     event.preventDefault();
@@ -13250,6 +13300,7 @@ function MarkdownViewer({
   }
 
   function handleEditorDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
+    if (viewerOnly) return;
     const files = Array.from(event.dataTransfer.files ?? []);
     if (!files.some(isMarkdownImageFile)) return;
     event.preventDefault();
@@ -13505,6 +13556,8 @@ function MarkdownViewer({
                 role="tab"
                 aria-selected={mode === item}
                 className={`viewer-tab ${mode === item ? 'active' : ''}`}
+                disabled={viewerOnly && item !== 'preview'}
+                title={viewerOnly && item !== 'preview' ? viewerOnlyDisabledTitle : undefined}
                 onClick={() => setMode(item)}
               >
                 {item === 'edit'
@@ -13517,7 +13570,11 @@ function MarkdownViewer({
           </div>
         </div>
         <div className="viewer-toolbar-actions">
-          {autoSaveStatus === 'error' ? (
+          {viewerOnly ? (
+            <span className="viewer-meta markdown-autosave markdown-autosave-idle">
+              {viewerOnlyDisabledTitle}
+            </span>
+          ) : autoSaveStatus === 'error' ? (
             <button
               type="button"
               className="viewer-action markdown-autosave markdown-autosave-error"
@@ -13557,6 +13614,8 @@ function MarkdownViewer({
                 className="viewer-action"
                 aria-haspopup="menu"
                 aria-expanded={downloadMenuOpen}
+                disabled={viewerOnly}
+                title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                 onClick={() => setDownloadMenuOpen((v) => !v)}
               >
                 <Icon name="download" size={13} />
@@ -13568,7 +13627,10 @@ function MarkdownViewer({
                     type="button"
                     className="share-menu-item"
                     role="menuitem"
+                    disabled={viewerOnly}
+                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                     onClick={() => {
+                      if (viewerOnly) return;
                       setDownloadMenuOpen(false);
                       exportAsMd(text, exportTitle);
                     }}

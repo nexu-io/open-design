@@ -577,11 +577,11 @@ export function EntryShell({
       return;
     }
     try {
-      await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, { method: 'POST' });
+      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, { method: 'POST' });
+      if (!response.ok) return;
       await Promise.resolve(onProjectsRefresh?.());
     } catch {
-      // Best-effort: still try to open — the open handler surfaces a missing state
-      // if the pull did not land.
+      return;
     }
     await Promise.resolve(onOpenProject(id));
   }

@@ -156,6 +156,27 @@ describe('preview comment permission gating', () => {
     expect(api.deleted).toEqual([]);
   });
 
+  it('an authored shared comment cannot be changed or deleted without caller identity', async () => {
+    const api = await startServer();
+    const comment = await api.createComment('m-author');
+
+    const patch = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments/${comment.id}`,
+      { method: 'PATCH', body: { status: 'applying' } },
+    );
+    expect(patch.status).toBe(403);
+
+    const del = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments/${comment.id}`,
+      { method: 'DELETE' },
+    );
+    expect(del.status).toBe(403);
+
+    expect(api.listComments()).toHaveLength(1);
+    expect(api.updated).toEqual([]);
+    expect(api.deleted).toEqual([]);
+  });
+
   it('the author can change status on their own comment', async () => {
     const api = await startServer();
     const comment = await api.createComment('m-author');
@@ -234,6 +255,22 @@ describe('preview comment permission gating', () => {
         method: 'POST',
         member: 'm-other',
         body: { id: first.id, target: api.commentTarget, note: 'stolen edit' },
+      },
+    );
+
+    expect(edit.status).toBe(403);
+    expect(api.listComments()).toHaveLength(1);
+    expect(api.listComments()[0]?.note).toBe('author note');
+  });
+
+  it('POST cannot edit an authored shared comment when caller identity is missing', async () => {
+    const api = await startServer();
+    const first = await api.createComment('m-author', 'author note');
+    const edit = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        body: { id: first.id, target: api.commentTarget, note: 'anonymous edit' },
       },
     );
 
