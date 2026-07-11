@@ -169,7 +169,72 @@ cluster (`useWorkspaceKeyboardShortcuts`).
 - **Risk**: high — central hub, largest blast radius if a param is
   threaded wrong (e.g. a stale `tabsStateRef` read). Budget a dedicated pass
   with careful before/after behavior diffing, not a rushed single commit.
-- **Status**: pending.
+- **Status**: split in progress. Once actually inside this cluster, a real
+  hook-ordering constraint (of the same class cluster 2 and cluster 4 hit)
+  forces it apart into sub-clusters rather than one hook — recorded here so
+  future passes don't have to rediscover it:
+  - `workspaceTabsState`/`commitTabsState`/`setPersistedActive`/
+    `activatePending`/`openFile`/`openFileReplacing`/`closeTab`/
+    `focusWorkspaceTab`/`activateWorkspaceTab*`/`closeActiveWorkspaceTab`/
+    `tabsStateRef`/`lastTabsStatePropRef`/`terminalLiveSessionsRef`+
+    `handleTerminalSessionChange` **must stay inline** (or be threaded via
+    the `openFileRef`-style ref trick, not a plain hook call): `openFile`,
+    `commitTabsState`, and `workspaceTabsState` are needed by
+    `useWiredSketches`, `useWiredFileOperations`, and `useBrowserTabs` —
+    all called EARLY in the render — via the same hoisted-`function`-
+    declaration trick the file already leans on throughout (a `function`
+    declaration's body can reference bindings not yet assigned at its
+    *textual* position, because the body only actually runs later, from an
+    event handler — not during this render). A real custom hook call does
+    NOT get this: its params are evaluated eagerly, synchronously, at the
+    hook's call site. Moving these into a hook would mean calling that hook
+    before `useWiredSketches`, at which point `browserTabs` (needed by
+    `commitTabsState`/`workspaceTabsState`) and `orderedWorkspaceTabs`
+    (needed by `openFile`) don't exist yet — the exact cycle
+    `orderedWorkspaceTabsRef`/`openFileRef` already exist to solve, just
+    one layer further out. Do not attempt this half without a ref-threading
+    design (extra `commitTabsStateRef`/`workspaceTabsStateRef`-style refs
+    threaded into `useWiredSketches`/`useWiredFileOperations`/
+    `useBrowserTabs`, mirroring `openFileRef`) — this is the highest-risk
+    remaining half of cluster 3 and deserves its own dedicated pass.
+  - **Sub-cluster 3a — external-tab-request sync (DONE)**: the
+    reactive-only effects that *consume* (never produce) the tab-state
+    primitives above — persisted-tab fallback, `designSystemEditRequest`,
+    `openRequest`, `shareRequest`, `downloadRequest`, `slideNavRequest` (+
+    `slideNavDeliverableNonce` state), `focusQuestionsRequest`,
+    `questionFormSubmittedAnswers`-close (+
+    `previousQuestionFormSubmittedAnswersRef`), and the `showQuestionsTab`
+    fallback. These don't have the ordering problem above: they only need
+    `orderedWorkspaceTabs`/`workspaceTabIds` as plain values (not refs),
+    which is fine as long as the hook is called AFTER
+    `useWorkspaceContextTracking` — a real position change from before
+    (these effects used to sit BEFORE `useBrowserTabs`/context-tracking in
+    the file, relying on the same hoisting trick). Verified safe: none of
+    the hooks between the old and new call sites
+    (`useWorkspaceContextTracking`'s own two effects) touch `activeTab`, so
+    this doesn't reorder these effects relative to the two mount-time
+    effects that DO call `setActiveTab` unconditionally/conditionally
+    (the inline "pull persisted active tab" effect and `useBrowserTabs`'
+    `browserOpenRequest` effect) — both still register strictly before this
+    cluster, exactly as before extraction. Landed as
+    `hooks/useWorkspaceTabRequests.hooks.ts` (`useWorkspaceTabRequests`, no
+    port — pure state/dispatch), called right after
+    `orderedWorkspaceTabsRef.current = orderedWorkspaceTabs;`. Returns only
+    `{ slideNavDeliverableNonce }` (still consumed by the `FileViewer`
+    `slideNavRequest` prop in the orchestrator's JSX). 19 new hook tests
+    (`useWorkspaceTabRequests.test.tsx`). FileWorkspace.tsx: 1620 → 1513
+    lines.
+  - **Remaining (pending)**: the tab-state-primitive half described above
+    (`openFile`/`closeTab`/`focusWorkspaceTab`/`activateWorkspaceTab*`/
+    `closeActiveWorkspaceTab`/`openFileReplacing`/`commitTabsState`/
+    `workspaceTabsState`/`setPersistedActive`/`activatePending`/
+    `tabsStateRef`/`terminalLiveSessionsRef`+`handleTerminalSessionChange`),
+    plus `activeTab` state itself and the two effects that must stay inline
+    ahead of `useBrowserTabs` (the "pull persisted active tab" effect and
+    the launcher-close-on-`projectId`-change effect — note the latter's
+    inline comment claiming "cluster 5 isn't extracted yet" is now STALE,
+    cluster 5 (`useWorkspaceLauncher`) IS extracted; flag this for the
+    Phase 8.5 audit rather than fixing it opportunistically here).
 
 ## Cluster 4 — Embedded browser tabs
 

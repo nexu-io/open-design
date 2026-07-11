@@ -66,6 +66,11 @@ export {
   type TabReorderDndController,
   type UseTabReorderDndParams,
 } from './hooks/useTabReorderDnd.hooks';
+export {
+  useWorkspaceTabRequests,
+  type WorkspaceTabRequestsController,
+  type WorkspaceTabRequestsParams,
+} from './hooks/useWorkspaceTabRequests.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
