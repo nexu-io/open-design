@@ -219,3 +219,8 @@ export type { TemplateSaveController, TemplateSaveDeps } from './hooks/useTempla
 // state and its auto-clear timeout.
 export { useWiredShareLinkCopy } from './hooks/useShareLinkCopy.hooks';
 export type { ShareLinkCopyController, ShareLinkCopyDeps } from './hooks/useShareLinkCopy.hooks';
+
+// Deploy modal per-link copy feedback: feature-local hook owning the
+// copied-link pill (keyed by url) and its auto-clear timeout.
+export { useWiredDeployLinkCopy } from './hooks/useDeployLinkCopy.hooks';
+export type { DeployLinkCopyController } from './hooks/useDeployLinkCopy.hooks';
