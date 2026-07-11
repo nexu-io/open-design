@@ -4,11 +4,15 @@
 // swapping the adapter (or a fake in tests) touches only this file.
 import {
   deleteDesignSystemDraft,
+  deleteProjectFile,
   fetchProjectFileText,
+  fetchProjectFolders,
   projectFileUrl,
   projectRawUrl,
+  renameProjectFile,
   startDesignSystemTokenContractRebuildJob,
   updateDesignSystemDraft,
+  uploadProjectFiles,
   writeProjectBase64File,
   writeProjectTextFile,
 } from '../../providers/registry';
@@ -28,6 +32,8 @@ import { deleteBrandImage, deleteBrandLogo, readDesignMd, updateBrandColor } fro
 import type {
   DesignSystemKitActionsPort,
   DesignSystemPreviewPort,
+  FileOperationsPort,
+  ProjectFoldersPort,
   SketchesPort,
   WorkspaceKeyboardShortcutsPort,
   WorkspaceTabBarDomPort,
@@ -81,4 +87,18 @@ export const workspaceTabBarDomPort: WorkspaceTabBarDomPort = {
   subscribeTabBarWheelScroll,
   scrollActiveTabIntoView,
   subscribeTabBarOverflowMeasure,
+};
+
+/** Default binding: the real project-folders-listing transport. */
+export const projectFoldersPort: ProjectFoldersPort = {
+  fetchProjectFolders,
+};
+
+/** Default binding: the real project-file CRUD transport (delete/rename/
+ *  upload/write). */
+export const fileOperationsPort: FileOperationsPort = {
+  deleteProjectFile,
+  renameProjectFile,
+  uploadProjectFiles,
+  writeProjectTextFile,
 };

@@ -12,24 +12,16 @@ import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
-  trackFileUploadResult,
   trackPageView,
   trackTabLauncherClick,
   trackSketchSaveResult,
   trackSketchExportResult,
 } from '../analytics/events';
-import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
 import {
-  deleteProjectFile,
-  fetchProjectFolders,
   applyLibraryAsset,
   createProjectFolder,
   deleteProjectFolder,
-  renameProjectFile,
-  type UploadProjectFilesResult,
-  uploadProjectFiles,
-  writeProjectTextFile,
 } from '../providers/registry';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { navigate } from '../router';
@@ -58,7 +50,6 @@ import {
   type DesignSystemSummary,
   type ProjectMetadata,
   type ProjectFile,
-  type ProjectFolder,
 } from '../types';
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
@@ -103,7 +94,6 @@ import {
   DESIGN_SYSTEM_TAB,
   designSystemBasename,
   designSystemFallbackReviewSections,
-  EMPTY_PROJECT_FOLDERS,
   designSystemFileOpBelongsToSection,
   designSystemGuidanceSort,
   designSystemHasSourceContext,
@@ -125,7 +115,6 @@ import {
   formatBrowserTabUrl,
   formatWorkspaceSnapshotElapsed,
   inferDesignSystemReviewCategory,
-  initialMarkdownDocument,
   isBrowserTabId,
   isDesignSystemAssetFile,
   isDesignSystemEvidenceFile,
@@ -142,17 +131,17 @@ import {
   joinProjectFilePath,
   lastWorkspaceTabId,
   maxBrowserTabSequence,
-  nextMarkdownDocumentPath,
   normalizeProjectFilePath,
   optionalDesignSystemManifestString,
   preferPreviewArtifactsOverRawAssets,
   QUESTIONS_TAB,
   reanchorBrowserTabsToCurrentOrder,
-  sameFileName,
   scrollWorkspaceTabsWithWheel,
   Tab,
   tabDropEdgeFromEvent,
   truncateDesignSystemActivityText,
+  useWiredFileOperations,
+  useWiredProjectFolders,
   useWiredSketches,
   useWiredWorkspaceKeyboardShortcuts,
   useWiredWorkspaceTabBarDom,
@@ -447,24 +436,6 @@ export function FileWorkspace({
 
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // The folder the Design Files panel is currently viewing (synced via
-  // onCurrentDirChange). New files — uploads, pastes, sketches, dropped files —
-  // are created under this folder instead of the project root.
-  const [uploadDir, setUploadDir] = useState<string>('');
-  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
-  // Reset the folder list during render — NOT in an effect — when the project
-  // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
-  // would let the new panel mount once with the previous project's folders and
-  // briefly suppress the new project's empty state (the exact regression this
-  // fix removes). Adjusting state during render discards this render before the
-  // child commits, so the new panel never sees stale folders. Mirrors the
-  // designFilesNav ref reset above. The stable empty constant keeps this
-  // idempotent (no re-entrant render loop).
-  const projectFoldersProjectIdRef = useRef(projectId);
-  if (projectFoldersProjectIdRef.current !== projectId) {
-    projectFoldersProjectIdRef.current = projectId;
-    setProjectFolders(EMPTY_PROJECT_FOLDERS);
-  }
   const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
     () => browserTabsFromState(tabsState.browserTabs),
   );
@@ -545,11 +516,9 @@ export function FileWorkspace({
     [liveArtifacts],
   );
 
-  const refreshProjectFolders = useCallback(async (): Promise<ProjectFolder[]> => {
-    const next = await fetchProjectFolders(projectId);
-    setProjectFolders(next);
-    return next;
-  }, [projectId]);
+  const { uploadDir, setUploadDir, projectFolders, refreshProjectFolders } = useWiredProjectFolders({
+    projectId,
+  });
 
   // Tab-state coordination is threaded through as params (deps-bag) rather
   // than reimplemented here: `commitTabsState`/`workspaceTabsState` below are
@@ -581,17 +550,39 @@ export function FileWorkspace({
     commitTabs: (nextTabs, nextActive) => commitTabsState(workspaceTabsState(nextTabs, nextActive)),
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    // The synchronous clear happens during render (see projectFoldersProjectIdRef
-    // above); here we only fetch the new project's folders.
-    void fetchProjectFolders(projectId).then((next) => {
-      if (!cancelled) setProjectFolders(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
+  // File-operations cluster (upload/delete/rename/new-document) is threaded
+  // through as params too: `openFile`/`workspaceTabsState`/`commitTabsState`
+  // are hoisted function declarations further down this render, still owned
+  // by the not-yet-extracted tab-activation cluster.
+  const {
+    handleFilePicked,
+    uploadFiles,
+    handleDelete,
+    handleDeleteMany,
+    handleRename,
+    createMarkdownDocument,
+  } = useWiredFileOperations({
+    projectId,
+    projectKind,
+    files,
+    uploadDir,
+    sketches,
+    activeTab,
+    persistedTabs,
+    tabsStateActive: tabsState.active,
+    t,
+    analyticsTrack: analytics.track,
+    openFile,
+    onRefreshFiles,
+    refreshProjectFolders,
+    onUploadError: setUploadError,
+    onTabsStateChange,
+    setActiveTab,
+    workspaceTabsState,
+    removeSketchEntry,
+    removeSketchEntries,
+    renameSketchEntry,
+  });
 
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
@@ -1144,160 +1135,6 @@ export function FileWorkspace({
     draggedTabNameRef.current = null;
     setDraggedTabName(null);
     setDragOverTab(null);
-  }
-
-  async function handleFilePicked(ev: React.ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(ev.target.files ?? []);
-    ev.target.value = '';
-    await uploadFiles(picked);
-  }
-
-  async function uploadFiles(picked: File[]) {
-    if (picked.length === 0) return;
-
-    setUploadError(null);
-    // Cohort math is shared across all three upload surfaces; see
-    // `analytics/upload-tracking.ts` for the per-file → batch reduction.
-    const cohort = deriveUploadCohort(picked);
-    let result: UploadProjectFilesResult;
-    try {
-      result = await uploadProjectFiles(projectId, picked, uploadDir);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
-      trackFileUploadResult(analytics.track, {
-        page_name: 'file_manager',
-        area: 'file_manager',
-        project_id: projectId,
-        ...cohort,
-        result: 'failed',
-        error_code: detail,
-      });
-      return;
-    }
-    if (result.uploaded.length > 0) {
-      await onRefreshFiles();
-      const lastUploaded = result.uploaded[result.uploaded.length - 1];
-      if (lastUploaded?.path) openFile(lastUploaded.path);
-    }
-
-    if (result.failed.length > 0) {
-      const failedCount = result.failed.length;
-      const uploadedCount = result.uploaded.length;
-      const detail = result.error ? ` (${result.error})` : '';
-      setUploadError(
-        uploadedCount > 0
-          ? `Uploaded ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
-          : `Upload failed for ${failedCount} file(s)${detail}.`,
-      );
-      console.warn('Project upload had failures', result.failed);
-      trackFileUploadResult(analytics.track, {
-        page_name: 'file_manager',
-        area: 'file_manager',
-        project_id: projectId,
-        ...cohort,
-        result: 'failed',
-        ...(result.error ? { error_code: result.error } : {}),
-      });
-    } else if (result.uploaded.length > 0) {
-      trackFileUploadResult(analytics.track, {
-        page_name: 'file_manager',
-        area: 'file_manager',
-        project_id: projectId,
-        ...cohort,
-        result: 'success',
-      });
-    }
-  }
-
-  async function handleDelete(name: string) {
-    if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
-    const ok = await deleteProjectFile(projectId, name);
-    if (ok) {
-      await onRefreshFiles();
-      const nextTabs = persistedTabs.filter((n) => n !== name);
-      if (activeTab === name) {
-        // User is viewing the file being deleted: fall back to another
-        // open tab (or the Design Files panel if none remain).
-        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
-      } else {
-        // Deletion was triggered from the Design Files panel (or another
-        // tab). We preserve `activeTab` because the user is viewing a
-        // different context (Design Files or another tab) and shouldn't
-        // be navigated away. Only clear the persisted active reference
-        // when it points at the deleted file so we don't leave a dangling
-        // pointer behind.
-        const nextActive = tabsState.active === name ? null : tabsState.active;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-      }
-      removeSketchEntry(name);
-    }
-  }
-
-  async function handleDeleteMany(names: string[]) {
-    if (names.length === 0) return;
-    if (!confirm(t('workspace.deleteSelectedFilesConfirm', { n: names.length }))) return;
-    const deleted: string[] = [];
-    const failed: string[] = [];
-    for (const name of names) {
-      const ok = await deleteProjectFile(projectId, name);
-      if (ok) deleted.push(name);
-      else failed.push(name);
-    }
-    if (deleted.length > 0) {
-      await onRefreshFiles();
-      const deletedSet = new Set(deleted);
-      const nextTabs = persistedTabs.filter((n) => !deletedSet.has(n));
-      if (activeTab && deletedSet.has(activeTab)) {
-        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
-      } else {
-        const nextActive =
-          tabsState.active && deletedSet.has(tabsState.active) ? null : tabsState.active;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-      }
-      removeSketchEntries(deleted);
-    }
-    if (failed.length > 0) {
-      alert(t('workspace.deleteSelectedFilesPartial', { n: failed.length }));
-    }
-  }
-
-  async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
-    const hasPendingSketchConflict = Object.entries(sketches).some(
-      ([name, sketch]) => !sketch.persisted && sameFileName(name, nextName),
-    );
-    if (nextName !== oldName && hasPendingSketchConflict) {
-      throw new Error(
-        `A pending sketch named "${nextName}" is already open. Save or close it before renaming.`,
-      );
-    }
-
-    const result = await renameProjectFile(projectId, oldName, nextName);
-    const renamed = result.file;
-    await onRefreshFiles();
-    await refreshProjectFolders();
-
-    const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
-    const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
-    onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-    if (activeTab === oldName) setActiveTab(renamed.name);
-
-    renameSketchEntry(oldName, renamed);
-
-    return renamed;
-  }
-
-  async function createMarkdownDocument() {
-    const target = nextMarkdownDocumentPath(files, uploadDir);
-    const file = await writeProjectTextFile(projectId, target, initialMarkdownDocument(target, projectKind, t));
-    if (!file) return;
-    await onRefreshFiles();
-    await refreshProjectFolders();
-    openFile(file.name);
   }
 
   const activeFile = useMemo<ProjectFile | null>(() => {

@@ -90,7 +90,47 @@ cluster (`useWorkspaceKeyboardShortcuts`).
   is already self-contained and behavior-preserving; the main hazard is
   correctly threading `tabsStateRef`-vs-`persistedTabs` freshness (mirror
   existing ref-read patterns exactly, don't "clean up" them).
-- **Status**: pending.
+- **Status**: done, split into two hooks once inside it (real ordering
+  constraint the plan didn't anticipate: `refreshProjectFolders`/`uploadDir`
+  must exist BEFORE `useWiredSketches` is called, since sketches takes them
+  as params — but the CRUD handlers need `removeSketchEntry`/
+  `renameSketchEntry` etc. FROM `useWiredSketches`, so one hook can't own
+  both halves without a call-order contradiction):
+  - `hooks/useProjectFolders.hooks.ts` (`ProjectFoldersPort` +
+    `useWiredProjectFolders`) owns `uploadDir`/`projectFolders`/
+    `refreshProjectFolders` + the render-time-reset-on-projectId-change
+    pattern + the fetch-on-projectId-change effect. Called BEFORE
+    `useWiredSketches`, exactly where the old inline state used to sit.
+  - `hooks/useFileOperations.hooks.ts` (`FileOperationsPort` +
+    `useWiredFileOperations`) owns `handleFilePicked`/`uploadFiles`/
+    `handleDelete`/`handleDeleteMany`/`handleRename`/
+    `createMarkdownDocument`. Called AFTER `useWiredSketches` so it can take
+    `removeSketchEntry`/`removeSketchEntries`/`renameSketchEntry` as params;
+    also takes the still-inline `openFile`/`workspaceTabsState` (hoisted
+    `function` declarations further down the same render — hoisting makes
+    referencing them before their textual declaration point safe) plus
+    `onTabsStateChange`/`setActiveTab`/`onUploadError`/`analyticsTrack`/`t`.
+  - `uploadError` state stayed in the orchestrator (corrected from the
+    original plan): it's genuinely cross-cutting, touched by ~10+ call
+    sites across the not-yet-extracted tab-activation/browser-tab/launcher
+    clusters (3/4/5), not just this cluster's CRUD ops. `useFileOperations`
+    takes `onUploadError` as a param (mirrors the existing
+    `onUploadError: setUploadError` binding already passed to
+    `useWiredSketches`).
+  - Port result types (`UploadProjectFilesResult`, `ProjectUploadFailure`)
+    added to `types.ts` in-slice per the guard's import-type rule, bound
+    structurally in `dependencies.ts` against `providers/registry`'s
+    real types.
+  - Analytics tracking (`trackFileUploadResult`, `deriveUploadCohort`)
+    moved INTO the hook rather than staying orchestrator-side (unlike the
+    sketch-save/export tracking, which stays in the orchestrator) — the
+    branching that decides which tracking call fires is inseparable from
+    `uploadFiles`' control flow; splitting it out would have meant either
+    duplicating that branching in the orchestrator or exposing much more
+    granular result data, both worse than importing the (non-`providers/`,
+    non-DOM) tracking helpers directly into the hook.
+  - 17 new hook tests (`useProjectFolders.test.tsx` +
+    `useFileOperations.test.tsx`). FileWorkspace.tsx: 2063 → 1900 lines.
 
 ## Cluster 3 — Tab activation / lifecycle (the central orchestration cluster)
 

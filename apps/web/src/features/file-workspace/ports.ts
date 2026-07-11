@@ -3,7 +3,8 @@
 // directly; a provider is bound to it in `dependencies.ts`. Tests supply a
 // hand-written fake — no global `fetch` mocking, no module-path mocks.
 import type { ExtractBrandFromHtmlOutcome } from '../../runtime/brands';
-import type { ProjectFile } from '../../types';
+import type { ProjectFile, ProjectFolder, RenameProjectFileResponse } from '../../types';
+import type { UploadProjectFilesResult } from './types';
 
 /** Transport the design-system inline-preview cluster needs: reading a
  *  project file's text (HTML/CSS/JS) and building stable raw/file URLs for
@@ -78,4 +79,33 @@ export interface WorkspaceTabBarDomPort {
   ): () => void;
   scrollActiveTabIntoView(tabBar: HTMLElement): void;
   subscribeTabBarOverflowMeasure(tabBar: HTMLElement, onMeasure: () => void): () => void;
+}
+
+/** Transport the project-folders cluster needs: listing a project's folder
+ *  tree. Seeds the Design Files panel's create-under-folder behavior and the
+ *  design-files-empty check. */
+export interface ProjectFoldersPort {
+  fetchProjectFolders(projectId: string): Promise<ProjectFolder[]>;
+}
+
+/** Transport the file-operations cluster needs: the CRUD primitives for
+ *  project files (delete/rename/upload/write) reached through
+ *  `providers/registry`, never re-implemented in the slice. */
+export interface FileOperationsPort {
+  deleteProjectFile(projectId: string, name: string): Promise<boolean>;
+  renameProjectFile(
+    projectId: string,
+    oldName: string,
+    nextName: string,
+  ): Promise<RenameProjectFileResponse>;
+  uploadProjectFiles(
+    projectId: string,
+    files: File[],
+    dir?: string,
+  ): Promise<UploadProjectFilesResult>;
+  writeProjectTextFile(
+    projectId: string,
+    name: string,
+    content: string,
+  ): Promise<ProjectFile | null>;
 }

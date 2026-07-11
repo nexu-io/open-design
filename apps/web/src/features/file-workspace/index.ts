@@ -36,6 +36,16 @@ export {
   type WorkspaceTabBarDomController,
   type WorkspaceTabBarDomParams,
 } from './hooks/useWorkspaceTabBarDom.hooks';
+export {
+  useWiredProjectFolders,
+  type ProjectFoldersController,
+  type UseProjectFoldersParams,
+} from './hooks/useProjectFolders.hooks';
+export {
+  useWiredFileOperations,
+  type FileOperationsController,
+  type UseFileOperationsParams,
+} from './hooks/useFileOperations.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
