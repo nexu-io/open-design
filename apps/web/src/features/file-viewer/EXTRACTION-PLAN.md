@@ -110,7 +110,47 @@ File shape at plan time (8773 lines total):
 
 ## Cluster Q — MarkdownViewer
 
-- **Status:** pending
+- **Status:** done. Landed as `hooks/useMarkdownViewer.hooks.ts` (mode, debounced
+  autosave, toolbar copy, image paste/drop), `hooks/useMarkdownHighlight.hooks.ts`
+  (shiki highlighting + theme-watch + the code-block copy-button cluster,
+  since both revolve around the same rendered article DOM), and
+  `hooks/useMarkdownScrollSync.hooks.ts` (the anchor-based scroll sync),
+  composed by the wired `components/MarkdownViewer.tsx` + dumb
+  `components/MarkdownViewerView.tsx`. `rewriteMarkdownImageSources`/
+  `markdownImageSourceUrl`/`markdownBaseHtml` moved into `rules.ts` (the URL
+  resolver now uses the in-slice `fileRawUrl` instead of the provider's
+  `projectFileUrl`, per ADR 0002). The sibling `apps/web/src/components/
+  markdown-scroll-sync.ts` module (`extractMarkdownBlockLines`/
+  `buildScrollAnchors`/`mapScrollPosition`/`measurePreviewBlockOffsets`, all
+  pure or scoped to a caller-supplied element) folded into `rules.ts` too;
+  its one bare-`document`/`window` function, `measureEditorBlockOffsets`,
+  became `providers/file-viewer/markdown-editor-measure.ts` behind a new
+  `MarkdownEditorMeasurePort`. Two more new provider bridges:
+  `providers/file-viewer/markdown-code-blocks.ts` (shiki highlight + copy-button
+  DOM injection, `MarkdownCodeBlocksPort`) and `providers/file-viewer/
+  theme-watch.ts` (`MutationObserver`+`matchMedia`, `ThemeWatchPort`). The
+  toolbar "Copy" and per-code-block copy both reuse the existing
+  `ShareLinkClipboardPort`/`shareLinkClipboardPort` binding (structurally
+  identical to the old local `copyTextToClipboard`) instead of adding a
+  fourth clipboard adapter. New `MarkdownFilePort` bundles read/write/upload
+  transport (`writeProjectTextFile` collapsed to the boolean the caller
+  branches on; `uploadProjectFiles` narrowed to `Pick<ChatAttachment, 'name'
+  | 'path'>[]`). Guard gotcha hit and fixed: `window.setTimeout`/
+  `window.clearTimeout`/`window.requestAnimationFrame`/
+  `window.cancelAnimationFrame` (bare `window.` trips the guard) became bare
+  `setTimeout`/`clearTimeout`/`requestAnimationFrame`/`cancelAnimationFrame`;
+  the two timer refs assigned from `setTimeout` had to change from
+  `useRef<number | null>` to `useRef<ReturnType<typeof setTimeout> | null>`
+  since bare `setTimeout` resolves to `NodeJS.Timeout` in this tsconfig, not
+  the DOM `number` overload `window.setTimeout` forces. Old test
+  `apps/web/tests/components/markdown-scroll-sync.test.ts` migrated to
+  `apps/web/tests/features/file-viewer/markdown-scroll-rules.test.ts` with
+  updated imports; existing `apps/web/tests/components/
+  file-viewer-markdown-copy.test.tsx` (the real end-to-end behavior proof —
+  autosave debounce/flush/stale-refresh, code-block copy, focus/selection
+  preservation, `markdownImageSourceUrl`) kept green unmodified via a
+  `markdownImageSourceUrl` re-export from `FileViewer.tsx`. FileViewer.tsx
+  7235 → 6431 lines (post Cluster C).
 - **Lines:** 8104–8773 (plus module-level helpers it uses: `rewriteMarkdownImageSources`,
   `markdownImageSourceUrl` at 428–446, `setMarkdownCodeBlockCopiedState` at
   448–472, `ensureMarkdownCodeBlockControls` at 490–503, and

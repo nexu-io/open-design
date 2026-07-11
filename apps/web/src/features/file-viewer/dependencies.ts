@@ -14,6 +14,8 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact as refreshLiveArtifactTransport,
   restoreProjectFileVersion,
+  uploadProjectFiles,
+  writeProjectTextFile,
 } from '../../providers/registry';
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
 import {
@@ -26,6 +28,13 @@ import { observeElementSize } from '../../providers/file-viewer/element-size';
 import { documentBodyPortalRoot } from '../../providers/file-viewer/portal-root';
 import { resolveChromeActionsHost } from '../../providers/file-viewer/chrome-actions-host';
 import { openInNewTab } from '../../providers/file-viewer/window-open';
+import {
+  ensureMarkdownCodeBlockControls,
+  highlightMarkdownCodeBlocks,
+  setMarkdownCodeBlockCopiedState,
+} from '../../providers/file-viewer/markdown-code-blocks';
+import { measureEditorBlockOffsets } from '../../providers/file-viewer/markdown-editor-measure';
+import { subscribeThemeChange } from '../../providers/file-viewer/theme-watch';
 import { saveTemplate } from '../../providers/templates';
 import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import { LiveArtifactRefreshFailure } from './types';
@@ -38,10 +47,14 @@ import type {
   FileTextPort,
   FileVersionsPort,
   LiveArtifactPort,
+  MarkdownCodeBlocksPort,
+  MarkdownEditorMeasurePort,
+  MarkdownFilePort,
   PortalPort,
   ProjectFilesPort,
   ShareLinkClipboardPort,
   TemplateSavePort,
+  ThemeWatchPort,
   WindowOpenPort,
 } from './ports';
 
@@ -131,4 +144,39 @@ export const chromeActionsHostPort: ChromeActionsHostPort = {
 /** Default binding: the real `window.open` new-tab bridge. */
 export const windowOpenPort: WindowOpenPort = {
   openInNewTab,
+};
+
+/**
+ * Default binding: the real project-file-text read/write + multi-file-upload
+ * transport the markdown viewer needs. `writeProjectTextFile` collapses the
+ * provider's `ProjectFile | null` result to the boolean the caller actually
+ * branches on; `uploadProjectFiles` narrows `ChatAttachment` to the
+ * `name`/`path` fields the slice needs (port result types stay in-slice).
+ */
+export const markdownFilePort: MarkdownFilePort = {
+  fetchProjectFileText,
+  async writeProjectTextFile(projectId, name, content) {
+    return (await writeProjectTextFile(projectId, name, content)) != null;
+  },
+  async uploadProjectFiles(projectId, files, dir) {
+    const result = await uploadProjectFiles(projectId, files, dir);
+    return { uploaded: result.uploaded.map(({ name, path }) => ({ name, path })) };
+  },
+};
+
+/** Default binding: the real shiki-highlight + code-block-copy-button DOM adapters. */
+export const markdownCodeBlocksPort: MarkdownCodeBlocksPort = {
+  highlightCodeBlocks: highlightMarkdownCodeBlocks,
+  ensureCodeBlockControls: ensureMarkdownCodeBlockControls,
+  setCodeBlockCopiedState: setMarkdownCodeBlockCopiedState,
+};
+
+/** Default binding: the real `data-theme` MutationObserver + `matchMedia` bridge. */
+export const themeWatchPort: ThemeWatchPort = {
+  subscribeThemeChange,
+};
+
+/** Default binding: the real hidden-mirror textarea block-offset measurement. */
+export const markdownEditorMeasurePort: MarkdownEditorMeasurePort = {
+  measureEditorBlockOffsets,
 };
