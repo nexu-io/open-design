@@ -402,6 +402,44 @@ describe('TasksView page shell', () => {
     expect(screen.queryByRole('button', { name: 'Advance' })).toBeNull();
   });
 
+  it('shows a blocker note on a blocked creator task', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-blocked-note-1', name: '阻塞任务', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    }];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData: {
+      'project-blocked-note-1': { tasks: [{
+        id: 'creator-task:blocked-note-1', projectId: 'project-blocked-note-1', title: '补拍夜景',
+        stage: 'material', status: 'blocked', priority: 'high', blockerNote: '缺少夜景素材',
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }], activities: [] },
+    } });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    expect(screen.getByText('阻塞：缺少夜景素材')).toBeTruthy();
+  });
+
+  it('hides blocker notes for a task that is not blocked', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-ready-note-1', name: '就绪任务', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    }];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData: {
+      'project-ready-note-1': { tasks: [{
+        id: 'creator-task:ready-note-1', projectId: 'project-ready-note-1', title: '整理镜头',
+        stage: 'material', status: 'ready', priority: 'medium', blockerNote: '旧原因不应显示',
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }], activities: [] },
+    } });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    expect(screen.queryByText(/^阻塞：/)).toBeNull();
+  });
+
   it('renders the creator workbench empty focus state when no projects exist', async () => {
     mockTasksViewFetch({ creatorProjects: [], creatorRuns: [] });
 

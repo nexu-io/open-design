@@ -1020,6 +1020,9 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           <span className="creator-chip">{task.priorityLabel}</span>
                         {task.sourceLabel ? <span className="creator-chip">{task.sourceLabel}</span> : null}
                       </div>
+                      {task.status === 'blocked' && task.blockerNote ? (
+                        <p className="creator-list__blocker">阻塞：{task.blockerNote}</p>
+                      ) : null}
                       {isEditing ? (
                         <div className="creator-task-edit">
                           <input aria-label="Edit task title" value={creatorTaskEdit.title} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, title: event.target.value })} />

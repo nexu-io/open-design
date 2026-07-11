@@ -461,6 +461,14 @@
   line-height: 1.45;
 }
 
+.creator-list__blocker {
+  margin: 7px 0 0;
+  color: #a16207;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .creator-list__chips {
   display: flex;
   flex-wrap: wrap;
