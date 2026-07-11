@@ -22,7 +22,7 @@ import { useT } from '../i18n';
 import type { SkillSummary } from '../types';
 import {
   buildCreatorDashboardDataFromOpenDesign,
-  CREATOR_FOCUS_ACTIONS,
+  resolveCreatorFocusActionPolicy,
 } from '../creator-adapters';
 import type { ChatRunStatusResponse, Project } from '@open-design/contracts';
 
@@ -544,21 +544,21 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const triggerCreatorFocusAction = useCallback(async () => {
     const focus = creatorDashboard.focus;
     if (!focus?.projectId) return;
+    const policy = resolveCreatorFocusActionPolicy(focus.recommendedActionKey);
 
-    if (
-      focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.monitorRun ||
-      focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.reviewOutput
-    ) {
+    if (policy.kind === 'open-project') {
       navigate({
         kind: 'project',
         projectId: focus.projectId,
-        conversationId: focus.conversationId ?? null,
+        conversationId: policy.conversation === 'focus'
+          ? focus.conversationId ?? null
+          : null,
         fileName: null,
       });
       return;
     }
 
-    if (focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.retryRun) {
+    if (policy.kind === 'retry') {
       if (focus.assistantMessageId) {
         try {
           window.sessionStorage.setItem(
@@ -578,7 +578,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       return;
     }
 
-    if (focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.startFirstRun) {
+    if (policy.kind === 'start-first-run') {
       const project = entryProjects.find((candidate) => candidate.id === focus.projectId);
       const pendingPrompt = project?.pendingPrompt?.trim();
       if (pendingPrompt) {
@@ -597,13 +597,6 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       });
       return;
     }
-
-    navigate({
-      kind: 'project',
-      projectId: focus.projectId,
-      conversationId: null,
-      fileName: null,
-    });
   }, [creatorDashboard.focus, entryProjects]);
 
   // Sort routines by creation time, newest first

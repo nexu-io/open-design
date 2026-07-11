@@ -5,6 +5,7 @@ import {
   CREATOR_FOCUS_ACTIONS,
   CREATOR_FOCUS_REASONS,
   creatorMockData,
+  resolveCreatorFocusActionPolicy,
   type CreatorDashboardData,
 } from "../../src/creator-adapters/index.js";
 import type { ChatRunStatusResponse, Project, ProjectMetadata } from "@open-design/contracts";
@@ -15,6 +16,20 @@ import type { WorkflowDefinition } from "@open-design/creator-workflows";
 // ---------------------------------------------------------------------------
 // buildCreatorDashboardData
 // ---------------------------------------------------------------------------
+
+describe("resolveCreatorFocusActionPolicy", () => {
+  it("defines one policy for every creator focus action key", () => {
+    expect(Object.values(CREATOR_FOCUS_ACTIONS).map(resolveCreatorFocusActionPolicy)).toEqual([
+      { kind: "retry" },
+      { kind: "open-project", conversation: "focus" },
+      { kind: "open-project", conversation: "focus" },
+      { kind: "start-first-run" },
+      { kind: "open-project", conversation: "root" },
+      { kind: "open-project", conversation: "root" },
+      { kind: "open-project", conversation: "root" },
+    ]);
+  });
+});
 
 describe("buildCreatorDashboardData", () => {
   it("returns empty arrays when no input provided", () => {

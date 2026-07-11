@@ -104,6 +104,29 @@ export type CreatorFocusReasonKey =
 export type CreatorFocusActionKey =
   (typeof CREATOR_FOCUS_ACTIONS)[keyof typeof CREATOR_FOCUS_ACTIONS];
 
+export type CreatorFocusActionPolicy =
+  | { kind: "open-project"; conversation: "focus" | "root" }
+  | { kind: "retry" }
+  | { kind: "start-first-run" };
+
+export function resolveCreatorFocusActionPolicy(
+  actionKey: CreatorFocusActionKey,
+): CreatorFocusActionPolicy {
+  switch (actionKey) {
+    case CREATOR_FOCUS_ACTIONS.retryRun:
+      return { kind: "retry" };
+    case CREATOR_FOCUS_ACTIONS.monitorRun:
+    case CREATOR_FOCUS_ACTIONS.reviewOutput:
+      return { kind: "open-project", conversation: "focus" };
+    case CREATOR_FOCUS_ACTIONS.startFirstRun:
+      return { kind: "start-first-run" };
+    case CREATOR_FOCUS_ACTIONS.unblockProject:
+    case CREATOR_FOCUS_ACTIONS.continueEditing:
+    case CREATOR_FOCUS_ACTIONS.continueTask:
+      return { kind: "open-project", conversation: "root" };
+  }
+}
+
 export interface CreatorFocusCard {
   projectId?: string;
   conversationId?: string | null;
