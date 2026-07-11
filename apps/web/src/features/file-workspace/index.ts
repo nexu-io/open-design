@@ -26,6 +26,11 @@ export {
   type WorkspaceContextTrackingController,
   type WorkspaceContextTrackingParams,
 } from './hooks/useWorkspaceContextTracking.hooks';
+export {
+  useWiredWorkspaceKeyboardShortcuts,
+  type WorkspaceKeyboardShortcutsController,
+  type WorkspaceKeyboardShortcutsParams,
+} from './hooks/useWorkspaceKeyboardShortcuts.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';

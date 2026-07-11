@@ -55,3 +55,11 @@ export interface SketchesPort {
   writeProjectBase64File(projectId: string, name: string, base64: string): Promise<ProjectFile | null>;
   subscribePageUnload(onUnload: () => void): () => void;
 }
+
+/** The two DOM bridges the workspace keyboard-shortcuts cluster needs: a
+ *  capture-phase `keydown` subscription and a `document.body` class toggle
+ *  for the quick-switcher overlay. */
+export interface WorkspaceKeyboardShortcutsPort {
+  subscribeCaptureKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
+  toggleDocumentBodyClass(className: string, active: boolean): () => void;
+}
