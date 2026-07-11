@@ -466,7 +466,16 @@ cluster (`useWorkspaceKeyboardShortcuts`).
   Phase 8.5 audit time; do not spend a dedicated commit on this alone —
   batch it with whichever neighboring cluster's commit touches this region.
 - **Risk**: negligible.
-- **Status**: pending (defer to Phase 8.5 audit).
+- **Status**: done (resolved at Phase 8.5 audit time, per this entry's own
+  deferred decision). Left inline in the orchestrator, unchanged: it is a
+  single-line-body `useEffect` with no branching, gated only by a ref
+  comparison against `projectId` — exactly the "accumulating-subscription
+  effect" Phase 8's own completion bar explicitly allows to remain
+  orchestrator-level (see AGENTS.md end-state target: "the accumulating-
+  subscription `useEffect`s that must stay per the effect-placement rule").
+  Extracting it into a one-line `usePageViewOnce` hook would add a file and
+  an indirection for zero behavioral or readability benefit. No orchestrator
+  line-count change from this decision.
 
 ## Suggested execution order
 
