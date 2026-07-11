@@ -11,6 +11,7 @@ export interface CreatorTaskRecord {
   status: CreatorTaskStatus;
   priority: CreatorTaskPriority;
   sourceType?: string;
+  blockerNote?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,7 @@ export interface CreateCreatorTaskRequest {
   status?: CreatorTaskStatus;
   priority?: CreatorTaskPriority;
   sourceType?: string;
+  blockerNote?: string;
 }
 
 export interface UpdateCreatorTaskRequest {
@@ -45,6 +47,7 @@ export interface UpdateCreatorTaskRequest {
   stage?: CreatorTaskStage;
   status?: CreatorTaskStatus;
   priority?: CreatorTaskPriority;
+  blockerNote?: string;
 }
 
 export interface CreateCreatorActivityRequest {

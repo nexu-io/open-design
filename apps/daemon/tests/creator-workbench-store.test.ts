@@ -74,6 +74,30 @@ describe('creator workbench store', () => {
     expect((await getCreatorWorkbenchProjectData(dataDir, 'project-2')).tasks[0]).toEqual(updated);
   });
 
+  it('requires a blocker note when a task becomes blocked', async () => {
+    const task = await createCreatorTask(dataDir, 'project-blocked', { title: '补拍夜景' });
+
+    await expect(updateCreatorTask(dataDir, 'project-blocked', task.id, {
+      status: 'blocked',
+    })).rejects.toThrow('blocker note is required');
+  });
+
+  it('stores a blocker note and clears it when the task is unblocked', async () => {
+    const task = await createCreatorTask(dataDir, 'project-blocked', { title: '补拍夜景' });
+
+    const blocked = await updateCreatorTask(dataDir, 'project-blocked', task.id, {
+      status: 'blocked',
+      blockerNote: '缺少夜景素材',
+    });
+    const resumed = await updateCreatorTask(dataDir, 'project-blocked', task.id, {
+      status: 'ready',
+    });
+
+    expect(blocked).toMatchObject({ status: 'blocked', blockerNote: '缺少夜景素材' });
+    expect(resumed).toMatchObject({ status: 'ready' });
+    expect(resumed).not.toHaveProperty('blockerNote');
+  });
+
   it('rejects invalid workflow values and activities for missing tasks', async () => {
     await expect(createCreatorTask(dataDir, 'project-3', {
       title: '非法阶段',

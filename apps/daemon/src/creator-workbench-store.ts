@@ -36,7 +36,8 @@ function validTask(value: unknown): value is CreatorTaskRecord {
   return isString(value.id) && isString(value.projectId) && isString(value.title)
     && isString(value.createdAt) && isString(value.updatedAt)
     && STAGES.has(String(value.stage)) && STATUSES.has(String(value.status))
-    && PRIORITIES.has(String(value.priority));
+    && PRIORITIES.has(String(value.priority))
+    && (value.blockerNote === undefined || isString(value.blockerNote));
 }
 
 function validActivity(value: unknown): value is CreatorActivityRecord {
@@ -79,6 +80,10 @@ function optionalText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function parseBlockerNote(value: unknown): string | undefined {
+  return optionalText(value);
+}
+
 function parseStage(value: unknown, fallback: CreatorTaskStage): CreatorTaskStage {
   if (value === undefined) return fallback;
   if (!STAGES.has(String(value))) throw new Error('invalid task stage');
@@ -115,6 +120,8 @@ export async function createCreatorTask(
   const priority = parsePriority(input.priority, 'medium');
   const description = optionalText(input.description);
   const sourceType = optionalText(input.sourceType);
+  const blockerNote = parseBlockerNote(input.blockerNote);
+  if (status === 'blocked' && !blockerNote) throw new Error('blocker note is required');
   const data = await readProjectData(dataDir, projectId);
   const now = new Date().toISOString();
   const task: CreatorTaskRecord = {
@@ -126,6 +133,7 @@ export async function createCreatorTask(
     status,
     priority,
     ...(sourceType === undefined ? {} : { sourceType }),
+    ...(status === 'blocked' ? { blockerNote: blockerNote! } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -141,22 +149,28 @@ export async function updateCreatorTask(
   patch: UpdateCreatorTaskRequest,
 ): Promise<CreatorTaskRecord | null> {
   if (!isRecord(patch)) throw new Error('task patch is required');
-  const title = patch.title === undefined ? undefined : requireTitle(patch.title, 'task title');
-  const stage = patch.stage === undefined ? undefined : parseStage(patch.stage, 'topic');
-  const status = patch.status === undefined ? undefined : parseStatus(patch.status, 'todo');
-  const priority = patch.priority === undefined ? undefined : parsePriority(patch.priority, 'medium');
-  const description = patch.description === undefined ? undefined : optionalText(patch.description);
   const data = await readProjectData(dataDir, projectId);
   const index = data.tasks.findIndex((task) => task.id === taskId);
   if (index < 0) return null;
   const current = data.tasks[index]!;
+  const title = patch.title === undefined ? undefined : requireTitle(patch.title, 'task title');
+  const stage = patch.stage === undefined ? undefined : parseStage(patch.stage, 'topic');
+  const status = patch.status === undefined ? current.status : parseStatus(patch.status, current.status);
+  const priority = patch.priority === undefined ? undefined : parsePriority(patch.priority, 'medium');
+  const description = patch.description === undefined ? undefined : optionalText(patch.description);
+  const blockerNote = patch.blockerNote === undefined
+    ? current.blockerNote
+    : parseBlockerNote(patch.blockerNote);
+  if (status === 'blocked' && !blockerNote) throw new Error('blocker note is required');
+  const { blockerNote: _currentBlockerNote, ...taskWithoutBlockerNote } = current;
   const next: CreatorTaskRecord = {
-    ...current,
+    ...taskWithoutBlockerNote,
     ...(title === undefined ? {} : { title }),
     ...(description === undefined ? {} : { description }),
     ...(stage === undefined ? {} : { stage }),
-    ...(status === undefined ? {} : { status }),
+    status,
     ...(priority === undefined ? {} : { priority }),
+    ...(status === 'blocked' ? { blockerNote: blockerNote! } : {}),
     updatedAt: new Date().toISOString(),
   };
   data.tasks[index] = next;
