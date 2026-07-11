@@ -40,10 +40,24 @@ describe('formatters: timezone helpers', () => {
     spy.mockRestore();
   });
 
+  it('detectLocalTimezone falls back to UTC when resolvedOptions has no timeZone', () => {
+    const spy = vi.spyOn(Intl, 'DateTimeFormat').mockReturnValue({
+      resolvedOptions: () => ({ timeZone: '' }),
+    } as unknown as Intl.DateTimeFormat);
+    expect(detectLocalTimezone()).toBe('UTC');
+    spy.mockRestore();
+  });
+
   it('listSupportedTimezones prepends UTC to the supported list when missing', () => {
     const list = listSupportedTimezones();
     expect(list).toContain('UTC');
     expect(list.length).toBeGreaterThan(1);
+  });
+
+  it('listSupportedTimezones does not duplicate UTC when the platform list already includes it', () => {
+    const spy = vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['UTC', 'America/New_York']);
+    expect(listSupportedTimezones()).toEqual(['UTC', 'America/New_York']);
+    spy.mockRestore();
   });
 
   it('listSupportedTimezones falls back to the fixed list when supportedValuesOf is unavailable', () => {
@@ -74,6 +88,7 @@ describe('formatters: timezone helpers', () => {
     expect(tzCityLabel('UTC')).toBe('UTC');
     expect(tzCityLabel('America/New_York')).toBe('New York');
     expect(tzCityLabel('Etc')).toBe('Etc');
+    expect(tzCityLabel('')).toBe('');
   });
 });
 
@@ -100,6 +115,46 @@ describe('formatters: schedule descriptions', () => {
     if (parts.kind === 'daily' || parts.kind === 'weekdays') {
       expect(parts.tz).toMatch(/New York \(GMT/);
     }
+  });
+
+  it('falls back to a bare "GMT" label when the platform omits a timeZoneName part', () => {
+    // `mockReturnValue` throws when the spied function is invoked with `new`
+    // (gmtLabel calls `new Intl.DateTimeFormat(...)`) — a constructor-style
+    // `mockImplementation` is required instead.
+    const formatToParts = vi.fn(() => [{ type: 'literal', value: 'x' }]);
+    class FakeDateTimeFormat {
+      formatToParts = formatToParts;
+    }
+    const spy = vi
+      .spyOn(Intl, 'DateTimeFormat')
+      .mockImplementation(FakeDateTimeFormat as unknown as typeof Intl.DateTimeFormat);
+    const parts = describeRoutineScheduleParts(
+      { kind: 'daily', time: '09:00', timezone: 'America/New_York' },
+      t,
+      Date.UTC(2026, 0, 1),
+    );
+    // Assert the fake constructor was actually reached (not the outer catch,
+    // which would produce an indistinguishable "(GMT)" string on its own).
+    expect(formatToParts).toHaveBeenCalled();
+    if (parts.kind === 'daily' || parts.kind === 'weekdays') {
+      expect(parts.tz).toBe('New York (GMT)');
+    }
+    spy.mockRestore();
+  });
+
+  it('falls back to a bare "GMT" label when Intl.DateTimeFormat throws', () => {
+    const spy = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const parts = describeRoutineScheduleParts(
+      { kind: 'daily', time: '09:00', timezone: 'America/New_York' },
+      t,
+      Date.UTC(2026, 0, 1),
+    );
+    if (parts.kind === 'daily' || parts.kind === 'weekdays') {
+      expect(parts.tz).toContain('(GMT)');
+    }
+    spy.mockRestore();
   });
 
   it('describeRoutineScheduleParts leaves an unparsable time string unchanged', () => {

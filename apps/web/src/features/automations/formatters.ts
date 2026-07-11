@@ -39,7 +39,10 @@ export function listSupportedTimezones(): string[] {
 
 export function tzCityLabel(timezone: string): string {
   if (timezone === 'UTC') return 'UTC';
-  const last = timezone.split('/').pop() ?? timezone;
+  // `split('/')` on a string always yields at least one element, so `pop()`
+  // is guaranteed non-undefined here — the `| undefined` in its type is
+  // Array.prototype's general signature, not a real runtime path.
+  const last = timezone.split('/').pop()!;
   return last.replace(/_/g, ' ');
 }
 
@@ -59,8 +62,12 @@ function gmtLabel(timezone: string, at: Date): string {
       timeZone: timezone,
       timeZoneName: 'shortOffset',
     });
-    const part = dtf.formatToParts(at).find((p) => p.type === 'timeZoneName');
-    return part?.value ?? 'GMT';
+    const parts = dtf.formatToParts(at);
+    const part = parts.find((p) => p.type === 'timeZoneName');
+    if (part === undefined) {
+      return 'GMT';
+    }
+    return part.value;
   } catch {
     return 'GMT';
   }

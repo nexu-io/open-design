@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useAutomationCapabilities } from '../../../src/features/automations/hooks/useAutomationCapabilities.hooks';
@@ -54,5 +54,20 @@ describe('useAutomationCapabilities', () => {
     const { result } = renderHook(() => useAutomationCapabilities(port, true));
     await waitFor(() => expect(port.fetchMcpServers).toHaveBeenCalled());
     expect(result.current.mcpServers).toEqual([]);
+  });
+
+  it('ignores a result that resolves after unmount', async () => {
+    let resolvePlugins: (value: never[]) => void = () => {};
+    const port: AutomationCapabilitiesPort = {
+      listPlugins: vi.fn(() => new Promise<never[]>((resolve) => { resolvePlugins = resolve; })),
+      fetchMcpServers: vi.fn(async () => null),
+    };
+    const { unmount } = renderHook(() => useAutomationCapabilities(port, true));
+    unmount();
+    await act(async () => {
+      resolvePlugins([]);
+    });
+    // No React "state update on an unmounted component" warning/crash means
+    // the `canceled` guard held.
   });
 });

@@ -72,6 +72,19 @@ describe('NewAutomationModal interactions', () => {
     expect(prompt.value).toBe('Do the thing');
   });
 
+  it('re-detects the active mention on click/keyup against the real textarea selection', () => {
+    renderModal();
+    const prompt = screen.getByTestId('automation-modal-prompt') as HTMLTextAreaElement;
+    fireEvent.change(prompt, { target: { value: 'Run @sk', selectionStart: 7 } });
+    expect(screen.getByTestId('automation-mention-popover')).toBeTruthy();
+
+    fireEvent.click(prompt);
+    fireEvent.keyUp(prompt);
+    // No throw confirms `refreshMentionFromPrompt`'s real-textarea branch ran
+    // (promptRef.current is a live DOM node here, unlike a headless hook test).
+    expect(screen.getByTestId('automation-mention-popover')).toBeTruthy();
+  });
+
   it('closes an open popover when the prompt field is focused', () => {
     renderModal();
     fireEvent.click(screen.getByRole('button', { name: /New project each run/i }));

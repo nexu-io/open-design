@@ -406,11 +406,14 @@ export function readContextMention(value: string, cursor: number): ContextMentio
   const beforeCursor = value.slice(0, cursor);
   const match = /(^|\s)@([^\s@]*)$/.exec(beforeCursor);
   if (!match) return null;
-  const prefix = match[1] ?? '';
+  // Both capturing groups are mandatory (`(^|\s)` always matches, even as an
+  // empty string via `^`; `([^\s@]*)` matches zero-or-more) — `match[1]` and
+  // `match[2]` are guaranteed defined whenever `match` itself is non-null.
+  const prefix = match[1]!;
   return {
     start: match.index + prefix.length,
     end: cursor,
-    query: match[2] ?? '',
+    query: match[2]!,
   };
 }
 

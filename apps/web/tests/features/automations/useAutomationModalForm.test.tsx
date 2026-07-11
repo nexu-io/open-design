@@ -193,6 +193,20 @@ describe('useAutomationModalForm: hydration effect', () => {
     expect(result.current.selectedTemplateId).toBe('tpl-1');
   });
 
+  it('falls back to the template title when it has no defaultName', () => {
+    const template: AutomationTemplate = {
+      id: 'tpl-2',
+      category: 'memory',
+      kind: 'routine',
+      icon: 'history',
+      title: 'Template title only',
+      description: '',
+      prompt: 'Template prompt',
+    };
+    const { result } = renderForm(makeSubmitPort(), makeDomPort(), baseOptions({ initial: { template } }));
+    expect(result.current.form.name).toBe('Template title only');
+  });
+
   it('does not hydrate while closed', () => {
     const { result } = renderForm(
       makeSubmitPort(),
@@ -200,6 +214,31 @@ describe('useAutomationModalForm: hydration effect', () => {
       baseOptions({ open: false, initial: { routine } }),
     );
     expect(result.current.form.name).toBe('');
+  });
+});
+
+describe('useAutomationModalForm: mention filtering fallbacks', () => {
+  it('indexes an MCP server and a connector with missing optional fields', () => {
+    const bareServer: McpServerConfig = { id: 'mcp-bare', label: '', transport: 'stdio', enabled: true };
+    const bareConnector: ConnectorDetail = {
+      id: 'conn-2',
+      name: 'Bare Connector',
+      provider: 'composio',
+      category: 'work',
+      description: undefined,
+      status: 'connected',
+      accountLabel: undefined,
+      auth: { provider: 'composio', configured: true },
+      tools: [],
+    };
+    const { result } = renderForm(
+      makeSubmitPort(),
+      makeDomPort(),
+      baseOptions({ mcpServers: [bareServer], connectors: [bareConnector] }),
+    );
+    act(() => result.current.updatePrompt('@bare', 5));
+    expect(result.current.filteredMcp).toHaveLength(1);
+    expect(result.current.filteredConnectors).toHaveLength(1);
   });
 });
 
@@ -222,11 +261,23 @@ describe('useAutomationModalForm: capability picking', () => {
     expect(result.current.selectedContextItems).toHaveLength(4);
   });
 
-  it('does not duplicate an already-selected capability', () => {
+  it('does not duplicate an already-selected capability, for every capability kind', () => {
     const { result } = renderForm(makeSubmitPort(), makeDomPort(), baseOptions());
     act(() => result.current.pickSkill(skill));
     act(() => result.current.pickSkill(skill));
-    expect(result.current.selectedContextItems.filter((item) => item.kind === 'skills')).toHaveLength(1);
+    act(() => result.current.pickPlugin(plugin));
+    act(() => result.current.pickPlugin(plugin));
+    act(() => result.current.pickMcp(mcpServer));
+    act(() => result.current.pickMcp(mcpServer));
+    act(() => result.current.pickConnector(connector));
+    act(() => result.current.pickConnector(connector));
+    expect(result.current.selectedContextItems).toHaveLength(4);
+  });
+
+  it('falls back to the server id as the mention label when it has no label', () => {
+    const { result } = renderForm(makeSubmitPort(), makeDomPort(), baseOptions());
+    act(() => result.current.pickMcp({ ...mcpServer, label: '' }));
+    expect(result.current.form.prompt).toContain(`@${mcpServer.id}`);
   });
 
   it('removes a selected capability by kind + id', () => {
@@ -243,6 +294,15 @@ describe('useAutomationModalForm: capability picking', () => {
     expect(result.current.mention).toMatchObject({ query: 'sk' });
     act(() => result.current.pickSkill(skill));
     expect(result.current.form.prompt).toBe('Run @Skill One ');
+    expect(result.current.mention).toBeNull();
+  });
+
+  it('refreshMentionFromPrompt is a no-op without a mounted textarea', () => {
+    // In a headless renderHook test `promptRef.current` is never attached to
+    // a real element (no JSX is rendered) — the real-DOM path is covered by
+    // NewAutomationModal.interactions.test.tsx.
+    const { result } = renderForm(makeSubmitPort(), makeDomPort(), baseOptions());
+    act(() => result.current.refreshMentionFromPrompt());
     expect(result.current.mention).toBeNull();
   });
 });

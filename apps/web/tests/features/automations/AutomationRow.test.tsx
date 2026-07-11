@@ -53,6 +53,32 @@ function renderRow(routine: Routine, overrides: Partial<Parameters<typeof Automa
 }
 
 describe('AutomationRow', () => {
+  it('uses the sparkles icon for a skill-backed routine', () => {
+    const { container } = render(
+      <I18nProvider initial="en">
+        <AutomationRow
+          routine={makeRoutine({ skillId: 'skill-1' })}
+          targetLabel="Target"
+          isBusy={false}
+          isExpanded={false}
+          isFocused={false}
+          historyTick={0}
+          crystallizingRunId={null}
+          fireClick={vi.fn()}
+          onSetRowRef={vi.fn()}
+          onRun={vi.fn()}
+          onToggleHistory={vi.fn()}
+          onEdit={vi.fn()}
+          onTogglePaused={vi.fn()}
+          onDelete={vi.fn()}
+          onCrystallizeRun={vi.fn()}
+          t={(k) => k as string}
+        />
+      </I18nProvider>,
+    );
+    expect(container.querySelector('.automation-row__icon svg')).toBeTruthy();
+  });
+
   it('omits the prompt line for a routine with an empty prompt', () => {
     renderRow(makeRoutine({ prompt: '' }));
     expect(screen.queryByText('Do the thing.')).toBeNull();

@@ -90,6 +90,26 @@ describe('useAutomationsDashboard: refresh', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.projects).toEqual([]);
   });
+
+  it('populates projectsById from a successful snapshot', async () => {
+    const port = makePort({
+      fetchAutomationsSnapshot: vi.fn(async () => emptySnapshot({ projects: [{ id: 'p1', name: 'Proj One' }] })),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.projectsById.get('p1')).toBe('Proj One');
+  });
+
+  it('surfaces the error message when the snapshot fetch throws', async () => {
+    const port = makePort({
+      fetchAutomationsSnapshot: vi.fn(async () => {
+        throw new Error('snapshot boom');
+      }),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('snapshot boom');
+  });
 });
 
 describe('useAutomationsDashboard: reviewProposal', () => {
@@ -102,6 +122,21 @@ describe('useAutomationsDashboard: reviewProposal', () => {
       await result.current.reviewProposal('p1', 'reject');
     });
     expect(port.reviewAutomationProposal).toHaveBeenCalledWith('p1', 'reject', expect.any(String));
+  });
+
+  it('surfaces the error message when the review transport rejects', async () => {
+    const port = makePort({
+      reviewAutomationProposal: vi.fn(async () => {
+        throw new Error('review boom');
+      }),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.reviewProposal('p1', 'apply');
+    });
+    expect(result.current.error).toBe('review boom');
   });
 });
 
@@ -127,6 +162,59 @@ describe('useAutomationsDashboard: runNow', () => {
     });
     // No throw / crash confirms the `?? null` fallback ran; the actual
     // navigation is exercised end-to-end by TasksView.page.test.tsx.
+  });
+
+  it('surfaces the error message when the run transport rejects', async () => {
+    const port = makePort({
+      runRoutineNow: vi.fn(async () => {
+        throw new Error('run boom');
+      }),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.runNow('r1');
+    });
+    expect(result.current.error).toBe('run boom');
+  });
+});
+
+describe('useAutomationsDashboard: onSaved', () => {
+  it('refreshes, expands, and focuses the saved routine, scheduling the focus-clear timer', async () => {
+    const port = makePort();
+    const domPort = makeDomPort();
+    const { result } = renderDashboard(port, domPort);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      result.current.onSaved(routine);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.focusRoutineId).toBe('r1'));
+    expect(domPort.scheduleTimeout).toHaveBeenCalledWith(expect.any(Function), 4000);
+
+    // Invoke the scheduled callback directly (as the real timer would) to
+    // cover the focus-clear effect's own callback body.
+    const scheduled = vi.mocked(domPort.scheduleTimeout).mock.calls.at(-1)?.[0];
+    act(() => scheduled?.());
+    expect(result.current.focusRoutineId).toBeNull();
+  });
+});
+
+describe('useAutomationsDashboard: closeModal', () => {
+  it('clears the open modal', async () => {
+    const port = makePort();
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.openCreateModal());
+    expect(result.current.modal).not.toBeNull();
+
+    act(() => result.current.closeModal());
+    expect(result.current.modal).toBeNull();
   });
 });
 
@@ -174,6 +262,28 @@ describe('useAutomationsDashboard: crystallizeRun', () => {
     );
   });
 
+  it('reports the refresh-failed message when no proposals were created and the refresh also failed', async () => {
+    const port = makePort({
+      fetchAutomationsSnapshot: vi.fn(async () => emptySnapshot({ proposalRefreshFailed: true })),
+      crystallizeRoutineRun: vi.fn(async () => ({
+        routineId: 'r1',
+        runId: 'run1',
+        packet: {} as never,
+        compressionReport: {} as never,
+        proposals: [],
+      })),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.crystallizeRun('r1', 'run1');
+    });
+    expect(result.current.error).toBe(
+      'Crystallize finished, but Automations could not refresh proposals. Try refreshing before running it again.',
+    );
+  });
+
   it('surfaces the crystallize-failed message when the transport rejects', async () => {
     const port = makePort({
       crystallizeRoutineRun: vi.fn(async () => {
@@ -217,6 +327,21 @@ describe('useAutomationsDashboard: remove', () => {
       await result.current.remove('r1');
     });
     expect(result.current.expandedId).toBeNull();
+  });
+
+  it('surfaces the error message when the delete transport rejects', async () => {
+    const port = makePort({
+      deleteRoutine: vi.fn(async () => {
+        throw new Error('delete boom');
+      }),
+    });
+    const { result } = renderDashboard(port, makeDomPort());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.remove('r1');
+    });
+    expect(result.current.error).toBe('delete boom');
   });
 });
 

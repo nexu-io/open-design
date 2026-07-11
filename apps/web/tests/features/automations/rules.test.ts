@@ -184,6 +184,7 @@ describe('rules: templates', () => {
     [{ outputSinks: ['memory'] }, 'memory'],
     [{ outputSinks: ['memory'], tags: ['memory'] }, 'memory'],
     [{ outputSinks: [], sourceKinds: [] }, 'routine'],
+    [{ outputSinks: [], sourceKinds: [], tags: undefined }, 'routine'],
   ];
 
   it.each(categoryCases)('automationTemplateCategory classifies %j as %s', (overrides, expected) => {
@@ -280,6 +281,8 @@ describe('rules: routines', () => {
     const missing = makeRoutine({ id: 'missing', createdAt: undefined as unknown as number });
     const present = makeRoutine({ id: 'present', createdAt: 5 });
     expect(sortRoutinesNewestFirst([missing, present]).map((r) => r.id)).toEqual(['present', 'missing']);
+    // Cover both operands of the `createdAt ?? 0` comparator, not just one.
+    expect(sortRoutinesNewestFirst([present, missing]).map((r) => r.id)).toEqual(['present', 'missing']);
   });
 
   it('scheduleStatusLabel reports paused when disabled, else the schedule description', () => {
@@ -359,6 +362,12 @@ describe('rules: evolution proposals', () => {
     const current = [makeProposal({ id: 'a', createdAt: 'not-a-date' })];
     const incoming = [makeProposal({ id: 'b', createdAt: '2026-01-01T00:00:00.000Z' })];
     expect(mergeAutomationProposals(current, incoming).map((p) => p.id)).toEqual(['b', 'a']);
+  });
+
+  it('mergeAutomationProposals treats an unparsable createdAt as epoch 0 on either side', () => {
+    const current = [makeProposal({ id: 'a', createdAt: '2026-01-01T00:00:00.000Z' })];
+    const incoming = [makeProposal({ id: 'b', createdAt: 'also-not-a-date' })];
+    expect(mergeAutomationProposals(current, incoming).map((p) => p.id)).toEqual(['a', 'b']);
   });
 });
 
