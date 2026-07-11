@@ -20,7 +20,6 @@ import {
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
-import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFolders,
@@ -96,7 +95,6 @@ import {
   BROWSER_TAB_PREFIX,
   colorHexFromBrandJson,
   colorHexFromDesignMd,
-  consumeFileWorkspaceTabShortcut,
   createDefaultDesignFilesNavState,
   DESIGN_FILES_TAB,
   DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
@@ -149,7 +147,6 @@ import {
   optionalDesignSystemManifestString,
   preferPreviewArtifactsOverRawAssets,
   QUESTIONS_TAB,
-  QUICK_SWITCHER_DOCUMENT_CLASS,
   reanchorBrowserTabsToCurrentOrder,
   sameFileName,
   scrollWorkspaceTabsWithWheel,
@@ -157,6 +154,7 @@ import {
   tabDropEdgeFromEvent,
   truncateDesignSystemActivityText,
   useWiredSketches,
+  useWiredWorkspaceKeyboardShortcuts,
   useWorkspaceContextTracking,
   type BrowserAttentionRequest,
   type BrowserOpenRequest,
@@ -452,7 +450,6 @@ export function FileWorkspace({
   // onCurrentDirChange). New files — uploads, pastes, sketches, dropped files —
   // are created under this folder instead of the project root.
   const [uploadDir, setUploadDir] = useState<string>('');
-  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
   // Reset the folder list during render — NOT in an effect — when the project
   // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
@@ -1278,93 +1275,6 @@ export function FileWorkspace({
     }
   }, [activeTab]);
 
-  // Browser-style shortcuts for the high-frequency Design Files workspace
-  // tabs. Capture phase prevents the host browser/Electron shell from opening
-  // or closing its own top-level tab before the workspace handles the command.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
-      const key = e.key;
-      const lowerKey = key.toLowerCase();
-      const primaryModifier = (e.metaKey || e.ctrlKey) && !e.altKey;
-      const ctrlWithoutPlatformModifiers = e.ctrlKey && !e.metaKey && !e.altKey;
-      const commandOption = e.metaKey && e.altKey && !e.ctrlKey;
-
-      if (primaryModifier && !e.shiftKey && lowerKey === 't') {
-        consumeFileWorkspaceTabShortcut(e);
-        openWorkspaceTabLauncher();
-        return;
-      }
-
-      if (primaryModifier && !e.shiftKey && lowerKey === 'w') {
-        consumeFileWorkspaceTabShortcut(e);
-        closeActiveWorkspaceTab();
-        return;
-      }
-
-      if (ctrlWithoutPlatformModifiers && key === 'Tab') {
-        consumeFileWorkspaceTabShortcut(e);
-        activateWorkspaceTabByOffset(e.shiftKey ? -1 : 1);
-        return;
-      }
-
-      if (
-        (ctrlWithoutPlatformModifiers && !e.shiftKey && key === 'PageDown')
-        || (commandOption && !e.shiftKey && key === 'ArrowRight')
-      ) {
-        consumeFileWorkspaceTabShortcut(e);
-        activateWorkspaceTabByOffset(1);
-        return;
-      }
-
-      if (
-        (ctrlWithoutPlatformModifiers && !e.shiftKey && key === 'PageUp')
-        || (commandOption && !e.shiftKey && key === 'ArrowLeft')
-      ) {
-        consumeFileWorkspaceTabShortcut(e);
-        activateWorkspaceTabByOffset(-1);
-        return;
-      }
-
-      if (primaryModifier && !e.shiftKey && /^[1-9]$/u.test(key)) {
-        consumeFileWorkspaceTabShortcut(e);
-        const index = key === '9' ? workspaceTabIds.length - 1 : Number(key) - 1;
-        activateWorkspaceTabByIndex(index);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  });
-
-  // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
-  // so we beat the browser's default print dialog. Platform-gated so on
-  // macOS we don't steal Ctrl+P from native readline ("previous line") in
-  // text fields, and on win/linux we don't steal Cmd+P (rare but possible
-  // on remapped keyboards).
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (primary && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
-        if (e.isComposing) return;
-        e.preventDefault();
-        setQuickSwitcherOpen((open) => !open);
-      } else if (e.key === 'Escape' && quickSwitcherOpen) {
-        // The palette handles Esc itself, but also catch it here for the
-        // case where focus has drifted off the palette input.
-        setQuickSwitcherOpen(false);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [quickSwitcherOpen]);
-
-  useEffect(() => {
-    document.body.classList.toggle(QUICK_SWITCHER_DOCUMENT_CLASS, quickSwitcherOpen);
-    return () => {
-      document.body.classList.remove(QUICK_SWITCHER_DOCUMENT_CLASS);
-    };
-  }, [quickSwitcherOpen]);
-
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
     const ok = await deleteProjectFile(projectId, name);
@@ -1513,6 +1423,14 @@ export function FileWorkspace({
     liveArtifactEntries,
     onActiveContextChange,
     onWorkspaceContextsChange,
+  });
+
+  const { quickSwitcherOpen, setQuickSwitcherOpen } = useWiredWorkspaceKeyboardShortcuts({
+    workspaceTabIds,
+    openWorkspaceTabLauncher,
+    closeActiveWorkspaceTab,
+    activateWorkspaceTabByOffset,
+    activateWorkspaceTabByIndex,
   });
 
   useEffect(() => {

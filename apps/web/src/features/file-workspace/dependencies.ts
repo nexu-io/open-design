@@ -12,11 +12,21 @@ import {
   writeProjectBase64File,
   writeProjectTextFile,
 } from '../../providers/registry';
-import { confirmDialog, subscribePageUnload } from '../../providers/dom';
+import {
+  confirmDialog,
+  subscribeCaptureKeyDown,
+  subscribePageUnload,
+  toggleDocumentBodyClass,
+} from '../../providers/dom';
 import { finalizeBrandProject } from '../../runtime/brands';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../../runtime/exports';
 import { deleteBrandImage, deleteBrandLogo, readDesignMd, updateBrandColor } from '../../runtime/kit-edit';
-import type { DesignSystemKitActionsPort, DesignSystemPreviewPort, SketchesPort } from './ports';
+import type {
+  DesignSystemKitActionsPort,
+  DesignSystemPreviewPort,
+  SketchesPort,
+  WorkspaceKeyboardShortcutsPort,
+} from './ports';
 
 /** Default binding: the real project-file-text + raw/file URL transport. */
 export const designSystemPreviewPort: DesignSystemPreviewPort = {
@@ -50,4 +60,11 @@ export const sketchesPort: SketchesPort = {
   writeProjectTextFile,
   writeProjectBase64File,
   subscribePageUnload,
+};
+
+/** Default binding: the real capture-phase keydown + document.body class
+ *  DOM bridges. */
+export const workspaceKeyboardShortcutsPort: WorkspaceKeyboardShortcutsPort = {
+  subscribeCaptureKeyDown,
+  toggleDocumentBodyClass,
 };

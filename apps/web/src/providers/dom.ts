@@ -21,3 +21,27 @@ export function subscribePageUnload(onUnload: () => void): () => void {
     window.removeEventListener('beforeunload', onUnload);
   };
 }
+
+/**
+ * Subscribe a capture-phase `keydown` listener. Capture phase lets a slice's
+ * shortcut handling beat the host browser/Electron shell's own top-level
+ * shortcut (e.g. Cmd+T/W) before it acts on the event.
+ */
+export function subscribeCaptureKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('keydown', onKeyDown, { capture: true });
+  return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+}
+
+/**
+ * Toggle a class on `document.body` and return a cleanup that removes it.
+ * Mirrors the shape of a `useEffect` body + its cleanup so a slice hook can
+ * call this directly from an effect without touching `document` itself.
+ */
+export function toggleDocumentBodyClass(className: string, active: boolean): () => void {
+  if (typeof document === 'undefined') return () => {};
+  document.body.classList.toggle(className, active);
+  return () => {
+    document.body.classList.remove(className);
+  };
+}
