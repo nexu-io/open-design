@@ -72,6 +72,7 @@ function makeHarness(savedWidth = 460): Harness {
       }),
       copyTextToClipboard: vi.fn(async () => true),
       subscribeCapturedKeyDown: vi.fn(() => () => {}),
+      patchProjectMetadata: vi.fn(async () => {}),
     },
   };
   return harness;

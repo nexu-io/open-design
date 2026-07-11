@@ -29,3 +29,4 @@ export {
 } from './plugin-context';
 export { copyTextToClipboard } from './clipboard';
 export { subscribeCapturedKeyDown } from './keyboard-shortcuts';
+export { patchProjectMetadata } from './patch-project-metadata';

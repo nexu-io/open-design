@@ -37,6 +37,7 @@ function makePort(
     }),
     copyTextToClipboard: vi.fn(async () => true),
     subscribeCapturedKeyDown: vi.fn(() => () => {}),
+    patchProjectMetadata: vi.fn(async () => {}),
     ...overrides,
   };
 }

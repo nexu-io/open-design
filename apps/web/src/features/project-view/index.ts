@@ -23,6 +23,9 @@ export type {
   RetryTarget,
   ProjectChatSendMeta,
   QueuedChatSend,
+  DesignSystemReviewEntry,
+  DesignSystemReviewAgentTask,
+  DesignSystemReviewDetails,
 } from './types';
 
 // Pure decision rules.
@@ -155,3 +158,10 @@ export type {
   ProjectActionsToast,
 } from './hooks/useProjectActions.hooks';
 export { useProjectActions } from './hooks/useProjectActions.hooks';
+export type { ShareToOpenDesignController } from './hooks/useShareToOpenDesign.hooks';
+export { useShareToOpenDesign } from './hooks/useShareToOpenDesign.hooks';
+export type { DesignSystemReviewController } from './hooks/useDesignSystemReview.hooks';
+export {
+  useDesignSystemReview,
+  useWiredDesignSystemReview,
+} from './hooks/useDesignSystemReview.hooks';

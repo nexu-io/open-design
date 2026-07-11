@@ -25,6 +25,7 @@ import {
   duplicatePluginAsProject,
   copyTextToClipboard,
   subscribeCapturedKeyDown,
+  patchProjectMetadata,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -52,4 +53,5 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   duplicatePluginAsProject,
   copyTextToClipboard,
   subscribeCapturedKeyDown,
+  patchProjectMetadata,
 };

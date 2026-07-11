@@ -171,7 +171,6 @@ import type {
   DesignSystemSummary,
   OpenTabsState,
   Project,
-  ProjectMetadata,
   PreviewComment,
   PreviewCommentAttachment,
   PreviewCommentTarget,
@@ -218,7 +217,6 @@ import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './Fil
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
-import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
@@ -262,6 +260,8 @@ import {
   useWiredPluginContextDetails,
   useWiredProjectFinalizeActions,
   useProjectActions,
+  useShareToOpenDesign,
+  useWiredDesignSystemReview,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -272,7 +272,6 @@ import {
   isGenericDaemonDisconnect,
   hasGenericDisconnectFailureEvent,
   appendLiveArtifactEventItem,
-  designSystemFeedbackAttachments,
   buildBrandAgentExtractionContinuationPrompt,
   designSystemNameForSourceProject,
   buildCreateDesignSystemFromProjectPrompt,
@@ -281,7 +280,6 @@ import {
   historyWithWorkspaceContext,
   commentTaskQuery,
   commentTaskContextAttachment,
-  designSystemNeedsWorkPrompt,
   fallbackDesignSystemSummaryForProject,
   projectViewTransportPort,
   artifactExtensionFor,
@@ -452,13 +450,6 @@ const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
 const TAB_PERSIST_DEBOUNCE_MS = 400;
-type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
-type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
-interface DesignSystemReviewDetails {
-  feedback?: string;
-  files?: string[];
-  agentTask?: DesignSystemReviewAgentTask;
-}
 
 function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): string {
   return (
@@ -5892,141 +5883,21 @@ export function ProjectView({
     ],
   );
 
-  // "Share to Open Design" — kicks off the bundled `od-share-to-community`
-  // scenario in the active conversation. We just inject the trigger prompt
-  // through the standard chat-send path; the agent then loads SKILL.md and
-  // drives the rest. Keep this preparing state alive for the resulting chat
-  // run so the action reads as async packaging instead of instant sharing.
-  const [shareToOpenDesignBusyMessageId, setShareToOpenDesignBusyMessageId] = useState<string | null>(null);
-  const shareToOpenDesignBusyMessageIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!shareToOpenDesignBusyMessageIdRef.current || currentConversationBusy) return;
-    shareToOpenDesignBusyMessageIdRef.current = null;
-    setShareToOpenDesignBusyMessageId(null);
-  }, [currentConversationBusy]);
-  const handleShareToOpenDesign = useCallback((assistantMessageId: string) => {
-    if (currentConversationActionDisabled || shareToOpenDesignBusyMessageIdRef.current) return;
-    shareToOpenDesignBusyMessageIdRef.current = assistantMessageId;
-    setShareToOpenDesignBusyMessageId(assistantMessageId);
-    void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
-      .then((started) => {
-        if (started) return;
-        shareToOpenDesignBusyMessageIdRef.current = null;
-        setShareToOpenDesignBusyMessageId(null);
-      })
-      .catch(() => {
-        shareToOpenDesignBusyMessageIdRef.current = null;
-        setShareToOpenDesignBusyMessageId(null);
-      });
-  }, [currentConversationActionDisabled, handleSend]);
-
-  const sentDesignSystemReviewTaskKeysRef = useRef<Set<string>>(new Set());
-  const persistDesignSystemReviewEntry = useCallback((
-    sectionTitle: string,
-    entry: DesignSystemReviewEntry,
-  ) => {
-    const baseMetadata: ProjectMetadata = {
-      kind: project.metadata?.kind ?? 'other',
-      ...project.metadata,
-    };
-    const metadata: ProjectMetadata = {
-      ...baseMetadata,
-      designSystemReview: {
-        ...(baseMetadata.designSystemReview ?? {}),
-        [sectionTitle]: entry,
-      },
-    };
-    onProjectChange({ ...project, metadata });
-    void patchProject(project.id, { metadata });
-  }, [onProjectChange, project]);
-
-  const sendDesignSystemFeedback = useCallback((
-    sectionTitle: string,
-    feedback: string,
-    sectionFiles: string[],
-  ): DesignSystemReviewAgentTask | void => {
-    const cleanFeedback = feedback.trim();
-    if (!cleanFeedback) return;
-    const prompt = designSystemNeedsWorkPrompt(sectionTitle, cleanFeedback, sectionFiles);
-    const queuedAt = new Date().toISOString();
-    if (!activeConversationId || !messagesInitialized || currentConversationActionDisabled) {
-      return {
-        status: 'queued',
-        prompt,
-        queuedAt,
-      };
-    }
-    const task: DesignSystemReviewAgentTask = {
-      status: 'sent',
-      prompt,
-      queuedAt,
-      sentAt: queuedAt,
-    };
-    sentDesignSystemReviewTaskKeysRef.current.add(`${sectionTitle}:${queuedAt}`);
-    void handleSend(prompt, designSystemFeedbackAttachments(projectFiles, sectionFiles), []);
-    return task;
-  }, [
-    activeConversationId,
+  const { shareToOpenDesignBusyMessageId, handleShareToOpenDesign } = useShareToOpenDesign(
     currentConversationActionDisabled,
+    currentConversationBusy,
     handleSend,
-    messagesInitialized,
+  );
+
+  const { sendDesignSystemFeedback, persistDesignSystemReviewDecision } = useWiredDesignSystemReview(
+    project,
     projectFiles,
-  ]);
-  const persistDesignSystemReviewDecision = useCallback((
-    sectionTitle: string,
-    decision: DesignSystemReviewEntry['decision'],
-    details?: DesignSystemReviewDetails,
-  ) => {
-    const entry: DesignSystemReviewEntry = {
-      decision,
-      updatedAt: new Date().toISOString(),
-    };
-    if (details?.feedback) entry.feedback = details.feedback;
-    if (details?.files) entry.files = details.files;
-    if (details?.agentTask) entry.agentTask = details.agentTask;
-    persistDesignSystemReviewEntry(sectionTitle, entry);
-  }, [persistDesignSystemReviewEntry]);
-  useEffect(() => {
-    if (!activeConversationId || !messagesInitialized || currentConversationActionDisabled) return;
-    const queued = Object.entries(project.metadata?.designSystemReview ?? {}).find(
-      ([, entry]) =>
-        entry.decision === 'needs-work'
-        && Boolean(entry.feedback?.trim())
-        && entry.agentTask?.status === 'queued',
-    );
-    if (!queued) return;
-    const [sectionTitle, entry] = queued;
-    const task = entry.agentTask;
-    if (!task) return;
-    const taskKey = `${sectionTitle}:${task.queuedAt}`;
-    if (sentDesignSystemReviewTaskKeysRef.current.has(taskKey)) return;
-    sentDesignSystemReviewTaskKeysRef.current.add(taskKey);
-    const sectionFiles = entry.files ?? [];
-    const prompt = task.prompt || designSystemNeedsWorkPrompt(
-      sectionTitle,
-      entry.feedback ?? '',
-      sectionFiles,
-    );
-    const sentAt = new Date().toISOString();
-    persistDesignSystemReviewEntry(sectionTitle, {
-      ...entry,
-      agentTask: {
-        ...task,
-        status: 'sent',
-        prompt,
-        sentAt,
-      },
-    });
-    void handleSend(prompt, designSystemFeedbackAttachments(projectFiles, sectionFiles), []);
-  }, [
     activeConversationId,
-    currentConversationActionDisabled,
-    handleSend,
     messagesInitialized,
-    persistDesignSystemReviewEntry,
-    project.metadata?.designSystemReview,
-    projectFiles,
-  ]);
+    currentConversationActionDisabled,
+    onProjectChange,
+    handleSend,
+  );
 
   const handleNewConversation = useCallback(async () => {
     if (creatingConversationRef.current) return;

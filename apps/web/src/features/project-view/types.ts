@@ -2,7 +2,7 @@
 // `@open-design/contracts`; these are small local shapes the slice's pure
 // helpers produce or consume.
 import type { CSSProperties } from 'react';
-import type { ChatAttachment, ChatCommentAttachment, ChatMessage } from '../../types';
+import type { ChatAttachment, ChatCommentAttachment, ChatMessage, ProjectMetadata } from '../../types';
 import type { ChatAnalyticsEntryFrom, ChatSessionMode } from '@open-design/contracts';
 import type { ChatSendMeta } from '../../components/ChatComposer';
 
@@ -74,4 +74,18 @@ export interface ChatPanelPointerDragHandlers {
   onMove: (clientX: number) => void;
   onEnd: () => void;
   onCancel: () => void;
+}
+
+/** One design-system section's review entry, persisted on
+ *  `project.metadata.designSystemReview`. */
+export type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
+
+/** The agent task queued/sent for a "needs work" review decision. */
+export type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
+
+/** Optional detail fields carried by a design-system-review decision. */
+export interface DesignSystemReviewDetails {
+  feedback?: string;
+  files?: string[];
+  agentTask?: DesignSystemReviewAgentTask;
 }

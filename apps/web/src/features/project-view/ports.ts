@@ -7,6 +7,7 @@ import type {
   ExtractMemoryRequest,
   InstalledPluginRecord,
   PluginDuplicateProjectResponse,
+  ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
 import type { ChatAttachment } from '../../types';
@@ -68,4 +69,6 @@ export interface ProjectViewTransportPort {
   copyTextToClipboard(text: string): Promise<boolean>;
   /** Subscribe to capture-phase keydown events on window; returns an unsubscribe. */
   subscribeCapturedKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
+  /** Persist a project's `metadata` field. Best-effort: never rejects. */
+  patchProjectMetadata(projectId: string, metadata: ProjectMetadata): Promise<void>;
 }

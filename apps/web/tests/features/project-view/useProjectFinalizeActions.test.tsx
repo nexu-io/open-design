@@ -46,6 +46,7 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     }),
     copyTextToClipboard: vi.fn(async () => true),
     subscribeCapturedKeyDown: vi.fn(() => () => {}),
+    patchProjectMetadata: vi.fn(async () => {}),
     ...overrides,
   };
 }
