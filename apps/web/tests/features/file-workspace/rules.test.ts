@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { OpenTabsState, ProjectFile } from '../../../src/types';
 import { emptySketchScene } from '../../../src/components/sketch-model';
 import {
+  activeFileForTab,
+  activeLiveArtifactForTab,
   arraysEqual,
   browserTabIndex,
   browserTabsFromState,
@@ -27,11 +29,13 @@ import {
   sketchFileSourceKey,
   tabDropEdgeFromEvent,
 } from '../../../src/features/file-workspace/rules';
+import { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB, QUESTIONS_TAB } from '../../../src/features/file-workspace/constants';
 import type {
   BrowserWorkspaceTab,
   SketchState,
   WorkspaceOrderedTab,
 } from '../../../src/features/file-workspace/types';
+import type { LiveArtifactWorkspaceEntry } from '../../../src/types';
 
 function browserTab(id: string, over: Partial<BrowserWorkspaceTab> = {}): BrowserWorkspaceTab {
   return { id, label: 'Browser', ...over };
@@ -177,6 +181,74 @@ describe('isSketchName / parentDirForProjectFile / sameFileName / isLiveArtifact
     expect(isLiveArtifactImplementationPath('.live-artifacts')).toBe(true);
     expect(isLiveArtifactImplementationPath('.live-artifacts/snapshot.json')).toBe(true);
     expect(isLiveArtifactImplementationPath('design.md')).toBe(false);
+  });
+});
+
+describe('activeFileForTab', () => {
+  const visibleFiles: ProjectFile[] = [
+    { name: 'a.md', path: 'a.md', type: 'file', size: 1, mtime: 0, kind: 'text', mime: 'text/markdown' },
+  ];
+
+  it('returns null for the reserved tabs', () => {
+    expect(activeFileForTab(DESIGN_FILES_TAB, visibleFiles, {})).toBeNull();
+    expect(activeFileForTab(DESIGN_SYSTEM_TAB, visibleFiles, {})).toBeNull();
+    expect(activeFileForTab(QUESTIONS_TAB, visibleFiles, {})).toBeNull();
+    expect(activeFileForTab('__browser__:1', visibleFiles, {})).toBeNull();
+  });
+
+  it('finds the on-disk file matching the active tab', () => {
+    expect(activeFileForTab('a.md', visibleFiles, {})).toBe(visibleFiles[0]);
+  });
+
+  it('synthesizes a stand-in ProjectFile for a never-saved sketch', () => {
+    const sketches: Record<string, SketchState> = {
+      'sketch-1.sketch.json': defaultSketchState('sketch-1.sketch.json', emptySketchScene('sketch-1.sketch.json')),
+    };
+    const result = activeFileForTab('sketch-1.sketch.json', [], sketches);
+    expect(result).toEqual({
+      name: 'sketch-1.sketch.json',
+      path: 'sketch-1.sketch.json',
+      type: 'file',
+      size: 0,
+      mtime: expect.any(Number),
+      kind: 'sketch',
+      mime: 'application/json',
+    });
+  });
+
+  it('returns null for a persisted sketch name with no on-disk file', () => {
+    const sketches: Record<string, SketchState> = {
+      'sketch-1.sketch.json': {
+        ...defaultSketchState('sketch-1.sketch.json', emptySketchScene('sketch-1.sketch.json')),
+        persisted: true,
+      },
+    };
+    expect(activeFileForTab('sketch-1.sketch.json', [], sketches)).toBeNull();
+  });
+
+  it('returns null when nothing matches', () => {
+    expect(activeFileForTab('missing.md', visibleFiles, {})).toBeNull();
+  });
+});
+
+describe('activeLiveArtifactForTab', () => {
+  const entries: LiveArtifactWorkspaceEntry[] = [
+    { tabId: 'artifact-1', title: 'Artifact 1' } as LiveArtifactWorkspaceEntry,
+  ];
+
+  it('returns null for the reserved tabs', () => {
+    expect(activeLiveArtifactForTab(DESIGN_FILES_TAB, entries)).toBeNull();
+    expect(activeLiveArtifactForTab(DESIGN_SYSTEM_TAB, entries)).toBeNull();
+    expect(activeLiveArtifactForTab(QUESTIONS_TAB, entries)).toBeNull();
+    expect(activeLiveArtifactForTab('__browser__:1', entries)).toBeNull();
+  });
+
+  it('finds the entry matching the active tab id', () => {
+    expect(activeLiveArtifactForTab('artifact-1', entries)).toBe(entries[0]);
+  });
+
+  it('returns null when no entry matches', () => {
+    expect(activeLiveArtifactForTab('artifact-2', entries)).toBeNull();
   });
 });
 

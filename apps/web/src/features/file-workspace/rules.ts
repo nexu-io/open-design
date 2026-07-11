@@ -251,6 +251,52 @@ export function isLiveArtifactImplementationPath(name: string): boolean {
   return true;
 }
 
+// The active-tab's on-disk file (or, for a never-saved sketch, a synthetic
+// stand-in ProjectFile) — null for the reserved tabs (Design Files/Design
+// System/Questions/a browser tab), which have no backing file.
+export function activeFileForTab(
+  activeTab: string,
+  visibleFiles: ProjectFile[],
+  sketches: Record<string, SketchState>,
+): ProjectFile | null {
+  if (
+    activeTab === DESIGN_FILES_TAB
+    || activeTab === DESIGN_SYSTEM_TAB
+    || activeTab === QUESTIONS_TAB
+    || isBrowserTabId(activeTab)
+  ) return null;
+  const onDisk = visibleFiles.find((f) => f.name === activeTab);
+  if (onDisk) return onDisk;
+  const activeSketch = sketches[activeTab];
+  if (isSketchName(activeTab) && activeSketch && !activeSketch.persisted) {
+    return {
+      name: activeTab,
+      path: activeTab,
+      type: 'file',
+      size: 0,
+      mtime: Date.now(),
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+  }
+  return null;
+}
+
+// The active-tab's live artifact entry, if the active tab is one — null for
+// the reserved tabs (same set as `activeFileForTab`).
+export function activeLiveArtifactForTab(
+  activeTab: string,
+  liveArtifactEntries: LiveArtifactWorkspaceEntry[],
+): LiveArtifactWorkspaceEntry | null {
+  if (
+    activeTab === DESIGN_FILES_TAB
+    || activeTab === DESIGN_SYSTEM_TAB
+    || activeTab === QUESTIONS_TAB
+    || isBrowserTabId(activeTab)
+  ) return null;
+  return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
+}
+
 // --- Design-system project: pure section/status/manifest/color/todo helpers ---
 // Moved out of components/FileWorkspace.tsx (DesignSystemProjectPanel's module-
 // scope helpers) as part of the ADR-0002 vertical-slice decomposition.

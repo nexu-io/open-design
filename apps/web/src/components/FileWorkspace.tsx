@@ -41,7 +41,6 @@ import {
   liveArtifactSummaryToWorkspaceEntry,
   type LiveArtifactSummary,
   type LiveArtifactEventItem,
-  type LiveArtifactWorkspaceEntry,
   type OpenTabsState,
   type ProjectBrowserWorkspaceTab,
   type PreviewComment,
@@ -70,6 +69,8 @@ import { SketchEnginePrewarm } from './SketchEnginePrewarm';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
 import {
+  activeFileForTab,
+  activeLiveArtifactForTab,
   colorHexFromBrandJson,
   colorHexFromDesignMd,
   DESIGN_FILES_TAB,
@@ -598,39 +599,15 @@ export function FileWorkspace({
     t,
   });
 
-  const activeFile = useMemo<ProjectFile | null>(() => {
-    if (
-      activeTab === DESIGN_FILES_TAB
-      || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
-      || isBrowserTabId(activeTab)
-    ) return null;
-    const onDisk = visibleFiles.find((f) => f.name === activeTab);
-    if (onDisk) return onDisk;
-    const activeSketch = sketches[activeTab];
-    if (isSketchName(activeTab) && activeSketch && !activeSketch.persisted) {
-      return {
-        name: activeTab,
-        path: activeTab,
-        type: 'file',
-        size: 0,
-        mtime: Date.now(),
-        kind: 'sketch',
-        mime: 'application/json',
-      };
-    }
-    return null;
-  }, [activeTab, visibleFiles, sketches]);
+  const activeFile = useMemo(
+    () => activeFileForTab(activeTab, visibleFiles, sketches),
+    [activeTab, visibleFiles, sketches],
+  );
 
-  const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
-    if (
-      activeTab === DESIGN_FILES_TAB
-      || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
-      || isBrowserTabId(activeTab)
-    ) return null;
-    return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
-  }, [activeTab, liveArtifactEntries]);
+  const activeLiveArtifact = useMemo(
+    () => activeLiveArtifactForTab(activeTab, liveArtifactEntries),
+    [activeTab, liveArtifactEntries],
+  );
 
   const {
     tabNames,
