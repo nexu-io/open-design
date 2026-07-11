@@ -5047,6 +5047,7 @@
   text-decoration: none;
 }
 .entry-nav-rail__menu-item:hover { background: var(--bg-subtle); }
+.entry-nav-rail__menu-item.is-open { background: var(--bg-subtle); }
 .entry-nav-rail__menu-item svg { color: var(--text-soft); flex: 0 0 auto; }
 .entry-nav-rail__menu-item.is-primary { background: var(--selected); color: #fff; }
 .entry-nav-rail__menu-item.is-primary svg { color: #fff; }
@@ -5065,6 +5066,57 @@
   letter-spacing: 0.03em;
 }
 .entry-nav-rail__menu-divider { height: 1px; background: var(--border-soft); margin: 5px 4px; }
+
+.entry-nav-rail__language-wrap { position: relative; }
+
+.entry-nav-rail__language-menu {
+  margin: 4px 0 5px;
+  padding: 4px;
+  max-height: min(270px, calc(100vh - 260px));
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.entry-nav-rail__language-option {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+}
+
+.entry-nav-rail__language-option:hover,
+.entry-nav-rail__language-option.is-active {
+  background: var(--bg-elevated);
+}
+
+.entry-nav-rail__language-option.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.entry-nav-rail__language-code {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.entry-nav-rail__language-option svg {
+  color: var(--accent);
+}
 
 /* ---- Team switcher button + menu ---- */
 .entry-nav-rail__team-wrap { position: relative; }

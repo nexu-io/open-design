@@ -6,8 +6,8 @@
 // demo's hardcoded 琼羽 / Refly / 800 placeholders:
 //
 //   • Account section (top) — real `context.displayName` + an account menu
-//     (theme / language / settings / GitHub help / feature request / add account
-//     / sign out). Falls back to the brand logo when there is no cloud identity
+//     (theme / language / settings / GitHub help / feature request / sign out).
+//     Falls back to the brand logo when there is no cloud identity
 //     (context === null).
 //   • Credits chip — real plan tier + balance when A's vela CLI billing summary
 //     is available, with upgrade linking out to Vela Web.
@@ -27,7 +27,7 @@ import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-desi
 import { Icon } from './Icon';
 import { InviteDialog } from './InviteDialog';
 import { CreditsPanel } from './CreditsPanel';
-import { useI18n } from '../i18n';
+import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import { notifyWorkspaceBillingRefresh } from '../collab/useWorkspaceContext';
 import type { EntryHomeView } from '../router';
 
@@ -177,6 +177,7 @@ export function EntryNavRail({
   const creditsBalance = billing ? billing.totalAvailableCredits : null;
 
   const [accountOpen, setAccountOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
@@ -187,6 +188,7 @@ export function EntryNavRail({
   // client opens that billing surface, then refreshes `/api/workspace/billing`
   // when focus returns so direct web upgrades sync back into the credits chip.
   const canUpgrade = Boolean(billingUpgradeUrl && permissions?.canManageBilling);
+  const currentLanguageLabel = LOCALE_LABEL[locale];
 
   function openBillingUpgrade() {
     if (!billingUpgradeUrl) return;
@@ -211,6 +213,10 @@ export function EntryNavRail({
       node.setAttribute('inert', '');
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!accountOpen) setLanguageOpen(false);
+  }, [accountOpen]);
 
   return (
     <nav
@@ -287,19 +293,52 @@ export function EntryNavRail({
                       <span className="entry-nav-rail__menu-chevron"><Icon name="chevron-right" size={13} /></span>
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN');
-                    }}
-                  >
-                    <Icon name="languages" size={15} />
-                    {t('entry.accountSwitchLanguage')}
-                    <span className="entry-nav-rail__menu-meta">{t('entry.accountLanguageMeta')}</span>
-                  </button>
+                  <div className="entry-nav-rail__language-wrap">
+                    <button
+                      type="button"
+                      className={`entry-nav-rail__menu-item${languageOpen ? ' is-open' : ''}`}
+                      role="menuitem"
+                      aria-haspopup="menu"
+                      aria-expanded={languageOpen}
+                      onClick={() => setLanguageOpen((value) => !value)}
+                    >
+                      <Icon name="languages" size={15} />
+                      {t('entry.accountSwitchLanguage')}
+                      <span className="entry-nav-rail__menu-meta">{currentLanguageLabel}</span>
+                      <span className="entry-nav-rail__menu-chevron">
+                        <Icon name="chevron-right" size={13} />
+                      </span>
+                    </button>
+                    {languageOpen ? (
+                      <div
+                        className="entry-nav-rail__language-menu"
+                        role="menu"
+                        aria-label={t('entry.accountSwitchLanguage')}
+                      >
+                        {LOCALES.map((code) => {
+                          const active = locale === code;
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              className={`entry-nav-rail__language-option${active ? ' is-active' : ''}`}
+                              role="menuitemradio"
+                              aria-checked={active}
+                              onClick={() => {
+                                setLocale(code);
+                                setLanguageOpen(false);
+                                setAccountOpen(false);
+                              }}
+                            >
+                              <span>{LOCALE_LABEL[code]}</span>
+                              <span className="entry-nav-rail__language-code">{code}</span>
+                              {active ? <Icon name="check" size={13} /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                   <button
                     type="button"
                     className="entry-nav-rail__menu-item"
@@ -331,17 +370,6 @@ export function EntryNavRail({
                     <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
                   </a>
                   <div className="entry-nav-rail__menu-divider" />
-                  <button
-                    type="button"
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      // TODO(collab): add-account (multi-identity) via vela CLI 收口
-                      setAccountOpen(false);
-                    }}
-                  >
-                    <Icon name="plus" size={15} /> {t('entry.accountAddAccount')}
-                  </button>
                   <button
                     type="button"
                     className="entry-nav-rail__menu-item"
