@@ -136,3 +136,8 @@ export type { ByokModelOverridesController } from './hooks/useByokModelOverrides
 export { useByokModelOverrides } from './hooks/useByokModelOverrides.hooks';
 export type { GithubConnectRepoController } from './hooks/useGithubConnectRepo.hooks';
 export { useGithubConnectRepo, useWiredGithubConnectRepo } from './hooks/useGithubConnectRepo.hooks';
+export type { PluginContextDetailsController } from './hooks/usePluginContextDetails.hooks';
+export {
+  usePluginContextDetails,
+  useWiredPluginContextDetails,
+} from './hooks/usePluginContextDetails.hooks';

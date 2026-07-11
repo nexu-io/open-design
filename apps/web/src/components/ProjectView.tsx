@@ -139,8 +139,6 @@ import {
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
-  duplicatePluginAsProject,
-  fetchAppliedPluginSnapshot,
   installGeneratedPluginFolder,
   listConversations,
   listMessages,
@@ -151,12 +149,10 @@ import {
   startGeneratedPluginShareTask,
   cacheTabsLocally,
   persistTabsToDaemonNow,
-  listPlugins,
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
 import type {
-  AppliedPluginSnapshot,
   BrandStatus,
   ChatSessionMode,
   InstalledPluginRecord,
@@ -271,6 +267,7 @@ import {
   useWiredChatPanelResize,
   useByokModelOverrides,
   useWiredGithubConnectRepo,
+  useWiredPluginContextDetails,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -7141,58 +7138,44 @@ export function ProjectView({
   // context chip on user messages instead of re-rendering the inline
   // plugin rail. Re-fetches when the pinned id changes; cancelled if
   // the project switches away mid-flight to avoid setState-on-unmount.
-  const [activePluginSnapshot, setActivePluginSnapshot] =
-    useState<AppliedPluginSnapshot | null>(null);
-  const [contextPluginDetails, setContextPluginDetails] =
-    useState<InstalledPluginRecord | null>(null);
-  const [contextDesignSystemDetails, setContextDesignSystemDetails] =
-    useState<DesignSystemSummary | null>(null);
-  useEffect(() => {
-    const snapshotId = project.appliedPluginSnapshotId;
-    if (!snapshotId) {
-      setActivePluginSnapshot(null);
-      return;
-    }
-    let cancelled = false;
-    void fetchAppliedPluginSnapshot(snapshotId).then((snap) => {
-      if (cancelled) return;
-      setActivePluginSnapshot(snap);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [project.appliedPluginSnapshotId]);
-  const handleOpenContextPluginDetails = useCallback(async (pluginId: string) => {
-    const normalizedId = pluginId.trim();
-    if (!normalizedId) return;
-    const plugins = await listPlugins({ includeHidden: true });
-    const record = plugins.find((plugin) => plugin.id === normalizedId);
-    if (record) setContextPluginDetails(record);
-  }, []);
-  const handleDuplicateContextPlugin = useCallback(async (record: InstalledPluginRecord) => {
-    try {
-      const result = await duplicatePluginAsProject(record.id, {
-        name: localizePluginTitle(locale, record),
-      });
-      setContextPluginDetails(null);
+  const buildDuplicatePluginName = useCallback(
+    (record: InstalledPluginRecord) => localizePluginTitle(locale, record),
+    [locale],
+  );
+  const handleNavigateToDuplicatedProject = useCallback(
+    (result: { projectId: string; conversationId: string; fileName: string }) => {
       navigate({
         kind: 'project',
         projectId: result.projectId,
         conversationId: result.conversationId,
-        fileName: result.relPath,
+        fileName: result.fileName,
       });
-    } catch {
-      setProjectActionsToast({
-        message: t('pluginCard.duplicateFailed'),
-        details: null,
-        tone: 'error',
-        ttlMs: 3000,
-      });
-    }
-  }, [locale, t]);
-  const handleOpenContextDesignSystemDetails = useCallback((system: DesignSystemSummary) => {
-    setContextDesignSystemDetails(system);
-  }, []);
+    },
+    [],
+  );
+  const handleDuplicateContextPluginFailed = useCallback(() => {
+    setProjectActionsToast({
+      message: t('pluginCard.duplicateFailed'),
+      details: null,
+      tone: 'error',
+      ttlMs: 3000,
+    });
+  }, [t]);
+  const {
+    activePluginSnapshot,
+    contextPluginDetails,
+    contextDesignSystemDetails,
+    handleOpenContextPluginDetails,
+    handleDuplicateContextPlugin,
+    handleOpenContextDesignSystemDetails,
+    closeContextPluginDetails,
+    closeContextDesignSystemDetails,
+  } = useWiredPluginContextDetails(
+    project.appliedPluginSnapshotId,
+    buildDuplicatePluginName,
+    handleNavigateToDuplicatedProject,
+    handleDuplicateContextPluginFailed,
+  );
   const chatDesignSystemSummary = useMemo(() => {
     if (activeDesignSystemSummary) return activeDesignSystemSummary;
     const designSystemName = activePluginSnapshot?.inputs?.designSystem;
@@ -7730,8 +7713,8 @@ export function ProjectView({
       {contextPluginDetails ? (
         <PluginDetailsModal
           record={contextPluginDetails}
-          onClose={() => setContextPluginDetails(null)}
-          onUse={() => setContextPluginDetails(null)}
+          onClose={closeContextPluginDetails}
+          onUse={closeContextPluginDetails}
           onDuplicate={(record) => void handleDuplicateContextPlugin(record)}
           isApplying={false}
           hideUseAction
@@ -7741,7 +7724,7 @@ export function ProjectView({
         <DesignSystemPreviewModal
           system={contextDesignSystemDetails}
           initialViewId="kit"
-          onClose={() => setContextDesignSystemDetails(null)}
+          onClose={closeContextDesignSystemDetails}
         />
       ) : null}
       {/* One-time first-generation hint (spec §8.3) is scoped to the new-user

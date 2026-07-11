@@ -22,3 +22,8 @@ export {
   fetchGithubConnectorConnected,
   subscribeGithubConnectRefreshTriggers,
 } from './github-connect';
+export {
+  fetchAppliedPluginSnapshot,
+  listPlugins,
+  duplicatePluginAsProject,
+} from './plugin-context';

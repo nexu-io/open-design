@@ -2,7 +2,13 @@
 // owns. The slice depends on this port, never on `providers/` directly; a
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks (ADR 0002).
-import type { ExtractMemoryRequest, RunContextSelection } from '@open-design/contracts';
+import type {
+  AppliedPluginSnapshot,
+  ExtractMemoryRequest,
+  InstalledPluginRecord,
+  PluginDuplicateProjectResponse,
+  RunContextSelection,
+} from '@open-design/contracts';
 import type { ChatAttachment } from '../../types';
 import type { ChatPanelPointerDragHandlers, QueuedChatSend } from './types';
 
@@ -49,4 +55,13 @@ export interface ProjectViewTransportPort {
   checkGithubConnected(options?: { signal?: AbortSignal }): Promise<boolean>;
   /** Subscribe to browser signals (focus/tab visibility) that should re-check GitHub connection status. */
   subscribeGithubConnectRefreshTriggers(onTrigger: () => void): () => void;
+  /** Fetch an applied-plugin snapshot by id. Best-effort: resolves `null` on failure. */
+  fetchAppliedPluginSnapshot(snapshotId: string): Promise<AppliedPluginSnapshot | null>;
+  /** List installed plugins, optionally including hidden ones. */
+  listPlugins(options?: { includeHidden?: boolean }): Promise<InstalledPluginRecord[]>;
+  /** Duplicate an installed plugin as a new project. Throws on a non-ok response. */
+  duplicatePluginAsProject(
+    pluginId: string,
+    input?: { name?: string },
+  ): Promise<PluginDuplicateProjectResponse>;
 }

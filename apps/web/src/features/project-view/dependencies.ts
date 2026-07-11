@@ -20,6 +20,9 @@ import {
   subscribeChatPanelPointerDrag,
   fetchGithubConnectorConnected,
   subscribeGithubConnectRefreshTriggers,
+  fetchAppliedPluginSnapshot,
+  listPlugins,
+  duplicatePluginAsProject,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -42,4 +45,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   subscribeChatPanelPointerDrag,
   checkGithubConnected: fetchGithubConnectorConnected,
   subscribeGithubConnectRefreshTriggers,
+  fetchAppliedPluginSnapshot,
+  listPlugins,
+  duplicatePluginAsProject,
 };

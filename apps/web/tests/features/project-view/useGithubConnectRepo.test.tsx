@@ -30,6 +30,11 @@ function makePort(
     subscribeChatPanelPointerDrag: vi.fn(() => () => {}),
     checkGithubConnected: vi.fn(async () => false),
     subscribeGithubConnectRefreshTriggers: vi.fn(() => () => {}),
+    fetchAppliedPluginSnapshot: vi.fn(async () => null),
+    listPlugins: vi.fn(async () => []),
+    duplicatePluginAsProject: vi.fn(async () => {
+      throw new Error('not implemented in this fake');
+    }),
     ...overrides,
   };
 }
