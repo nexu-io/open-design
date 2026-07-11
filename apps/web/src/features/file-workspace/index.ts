@@ -51,6 +51,16 @@ export {
   type FileOperationsController,
   type UseFileOperationsParams,
 } from './hooks/useFileOperations.hooks';
+export {
+  useWorkspaceLauncher,
+  type UseWorkspaceLauncherParams,
+  type WorkspaceLauncherController,
+} from './hooks/useWorkspaceLauncher.hooks';
+export {
+  useTabReorderDnd,
+  type TabReorderDndController,
+  type UseTabReorderDndParams,
+} from './hooks/useTabReorderDnd.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';

@@ -285,7 +285,47 @@ cluster (`useWorkspaceKeyboardShortcuts`).
   main hazard is `launcherContext` closing over fresh `browserTabs` (per
   the existing "Built fresh each render" comment) — preserve that, don't
   memoize it.
-- **Status**: pending.
+- **Status**: done, split into two hooks exactly as the plan anticipated:
+  - `hooks/useWorkspaceLauncher.hooks.ts` (`useWorkspaceLauncher`, no port)
+    owns `launcherOpen`/`launcherToast`/`launcherBtnRef`/
+    `openWorkspaceTabLauncher`/`launcherContext`/`launcherActions`.
+    `launcherContext` stayed a plain object literal rebuilt every call (not
+    memoized), preserving the "Built fresh each render" behavior the
+    original comment called out. `createTerminal` (from `state/projects`)
+    is called directly, not wrapped in a slice port — confirmed against the
+    guard: rule 2 (only `dependencies.ts` may import `providers/`) only
+    matches paths under `apps/web/src/providers/`, and `state/projects` is
+    outside that, so a direct import here is not a boundary violation; the
+    forbidden-globals check also only flags literal `fetch`/`window`/etc.
+    identifiers written IN the slice file itself, not transitive calls
+    inside an imported helper.
+  - `hooks/useTabReorderDnd.hooks.ts` (`useTabReorderDnd`, no port) owns
+    `draggedTabName`/`dragOverTab`/`draggedTabNameRef` and turns the
+    previously-inline JSX drag arrow functions into named handlers
+    (`handleTabDragStart`/`handleTabDragOver`/`handleTabDragLeave`/
+    `handleTabDrop`/`handleTabDragEnd`/`handleTabBarDragLeave`/
+    `handleTabBarDrop`) taking `(name, event)` — mirrors the
+    `updateBrowserTabInfo(browserTab.id, info)` call-shape cluster 4 already
+    established, rather than exposing raw setters/refs to JSX.
+  - **Gotcha**: `RefObject<T | null>` vs `RefObject<T>` in a hook's return
+    type. `launcherBtnRef` was first typed `RefObject<HTMLButtonElement |
+    null>` in the controller interface (mirroring how `tabsBarRef` is typed
+    as a hook PARAM elsewhere) — but typecheck failed assigning it to JSX
+    `ref={launcherBtnRef}`. This repo's `@types/react@18` already defines
+    `RefObject<T>.current` as `T | null`, so doubling the null
+    (`RefObject<T | null>`) makes TS infer `T` itself as `HTMLButtonElement |
+    null` and fails the JSX `Ref<HTMLButtonElement>` check because null
+    isn't assignable to the target's bare `HTMLButtonElement` type
+    parameter. This only bites when a ref is OWNED and RETURNED by a hook
+    (not just threaded through as a param, where the orchestrator's own
+    JSX still binds to its own un-reinterpreted local ref) — the fix is
+    `RefObject<HTMLButtonElement>` (no explicit `| null`) on any hook-owned
+    ref that JSX will bind `ref={...}` to directly.
+  - No effect-ordering hazard here (unlike cluster 4) since neither hook has
+    a `useEffect` — both are pure state/dispatch, so hook CALL POSITION in
+    the orchestrator didn't need special placement.
+  - 18 new hook tests (`useWorkspaceLauncher.test.tsx` +
+    `useTabReorderDnd.test.tsx`). FileWorkspace.tsx: 1701 → 1634 lines.
 
 ## Cluster 6 — Design-files-panel nav-state ref + upload-picker plumbing
 
