@@ -43,13 +43,10 @@ import {
   type ResearchOptions,
 } from '@open-design/contracts';
 import {
-  anonymizeArtifactId,
-  artifactKindToTracking,
   projectKindFromMetadataToTracking,
   projectKindToTracking,
 } from '@open-design/contracts/analytics';
 import type {
-  TrackingArtifactKind,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
@@ -68,7 +65,6 @@ import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
 } from '../analytics/onboarding-session';
-import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import {
   canAutoRenameProjectFromPrompt,
@@ -115,7 +111,7 @@ import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
-import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import { liveArtifactTabId } from '../types';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
   isDesignSystemWorkspacePrompt,
@@ -125,13 +121,10 @@ import {
   installGeneratedPluginFolder,
   listConversations,
   listMessages,
-  loadTabs,
   patchConversation,
   patchProject,
   saveMessage,
   startGeneratedPluginShareTask,
-  cacheTabsLocally,
-  persistTabsToDaemonNow,
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
@@ -140,7 +133,6 @@ import type {
   ChatSessionMode,
   InstalledPluginRecord,
   RunContextSelection,
-  WorkspaceContextItem,
 } from '@open-design/contracts';
 import type {
   AgentEvent,
@@ -153,7 +145,6 @@ import type {
   ChatMessageFeedbackChange,
   Conversation,
   DesignSystemSummary,
-  OpenTabsState,
   Project,
   PreviewComment,
   ProjectFile,
@@ -227,7 +218,6 @@ import {
   COMMENT_INSPECTOR_PANEL_WIDTH,
   BYOK_OPENCODE_UNAVAILABLE_MESSAGE,
   BEDROCK_BYOK_UNSUPPORTED_MESSAGE,
-  TAB_PERSIST_DEBOUNCE_MS,
   projectSplitClassName,
   projectSplitStyle,
   useWiredChatPanelResize,
@@ -244,11 +234,10 @@ import {
   useQuestionFormPanel,
   useWiredConversationMessages,
   useWiredPreviewComments,
+  useWiredOpenTabsSync,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
-  workspaceContextItemEqual,
-  workspaceContextItemsEqual,
   isDesignSystemWorkspaceMetadata,
   isBrandStatusValue,
   brandExtractionAllowsEditing,
@@ -276,7 +265,6 @@ import {
   findExistingArtifactProjectFile,
   findSameTurnNonHtmlWriteForRecoveredArtifact,
   findSameTurnWriteForRecoveredArtifact,
-  selectPrimaryProjectFile,
   isTerminalRunStatus,
   isActiveRunStatus,
   isProgrammaticBrandExtractionStatusMessage,
@@ -742,40 +730,6 @@ export function ProjectView({
     handleChatResizeBlur,
     handleChatResizeKeyDown,
   } = useWiredChatPanelResize();
-  // The persisted set of open tabs + active tab. Persisted via PUT on every
-  // change; loaded once when the project mounts.
-  const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
-    tabs: [],
-    active: null,
-  });
-  // Artifact context for the header actions (settings gear, handoff) that live
-  // in this workspace's header alongside FileViewer's present/share/download.
-  // Mirrors the artifact_id / artifact_kind that FileViewer attaches, derived
-  // from the currently-active file tab, so all artifact_header analytics carry
-  // the same dimensions. Undefined on non-file tabs (e.g. the file list).
-  const headerArtifact = useMemo<{
-    artifact_id?: string;
-    artifact_kind?: TrackingArtifactKind;
-  }>(() => {
-    const activeName = openTabsState.active;
-    const file = activeName
-      ? projectFiles.find((entry) => entry.name === activeName) ?? null
-      : null;
-    if (!file) return {};
-    return {
-      artifact_id: anonymizeArtifactId({ projectId: project.id, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-    };
-  }, [openTabsState.active, projectFiles, project.id]);
-  const routeFileNameRef = useRef(routeFileName);
-  routeFileNameRef.current = routeFileName;
-  const [activeWorkspaceContext, setActiveWorkspaceContext] =
-    useState<WorkspaceContextItem | null>(null);
-  const [workspaceContexts, setWorkspaceContexts] = useState<WorkspaceContextItem[]>([]);
-  const tabsLoadedRef = useRef(false);
-  const tabsHydratedFromSavedStateRef = useRef(false);
-  const [tabsHydrationVersion, setTabsHydrationVersion] = useState(0);
-  const hasAppliedInitialPrimaryOpenRef = useRef(false);
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
@@ -1065,96 +1019,6 @@ export function ProjectView({
     () => setDesignMdRefreshKey((n) => n + 1),
   );
 
-  // Hydrate the open-tabs state once per project. After this initial
-  // load, every mutation flows through saveTabsState() which keeps DB +
-  // local state coherent.
-  useEffect(() => {
-    let cancelled = false;
-    tabsLoadedRef.current = false;
-    tabsHydratedFromSavedStateRef.current = false;
-    hasAppliedInitialPrimaryOpenRef.current = false;
-    setOpenTabsState({ tabs: [], active: null });
-    (async () => {
-      const state = await loadTabs(project.id);
-      if (cancelled) return;
-      const routeActive = routeFileNameRef.current;
-      let nextState = routeActive
-        ? {
-            ...state,
-            tabs: state.tabs.includes(routeActive)
-              ? state.tabs
-              : [...state.tabs, routeActive],
-            active: routeActive,
-          }
-        : state;
-      if (routeActive) {
-        nextState = cacheTabsLocally(project.id, nextState);
-        void persistTabsToDaemonNow(project.id, nextState);
-      }
-      tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
-      setOpenTabsState(nextState);
-      tabsLoadedRef.current = true;
-      setTabsHydrationVersion((version) => version + 1);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id]);
-
-  // Debounce the canonical (daemon + SQLite) tab-state write. The embedded
-  // browser fans out url/title/favicon updates in bursts on a single page load
-  // (did-navigate, did-navigate-in-page, page-title-updated, favicon), and each
-  // used to be a localStorage write + HTTP PUT + SQLite UPDATE + re-render.
-  // We keep React state and the local cache IMMEDIATE (so the UI and a reload
-  // are never stale) and coalesce only the daemon PUT.
-  const tabsDaemonSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDaemonTabsRef = useRef<OpenTabsState | null>(null);
-  const flushTabsDaemonSave = useCallback(() => {
-    if (tabsDaemonSaveTimerRef.current != null) {
-      clearTimeout(tabsDaemonSaveTimerRef.current);
-      tabsDaemonSaveTimerRef.current = null;
-    }
-    const pending = pendingDaemonTabsRef.current;
-    pendingDaemonTabsRef.current = null;
-    if (pending) void persistTabsToDaemonNow(project.id, pending);
-  }, [project.id]);
-
-  const persistTabsState = useCallback(
-    (next: OpenTabsState) => {
-      setOpenTabsState(next);
-      if (!tabsLoadedRef.current) return;
-      // Immediate, cheap, synchronous — keeps the cache canonical for reload.
-      const stamped = cacheTabsLocally(project.id, next);
-      pendingDaemonTabsRef.current = stamped;
-      if (tabsDaemonSaveTimerRef.current != null) {
-        clearTimeout(tabsDaemonSaveTimerRef.current);
-      }
-      tabsDaemonSaveTimerRef.current = setTimeout(() => {
-        tabsDaemonSaveTimerRef.current = null;
-        const pending = pendingDaemonTabsRef.current;
-        pendingDaemonTabsRef.current = null;
-        if (pending) void persistTabsToDaemonNow(project.id, pending);
-      }, TAB_PERSIST_DEBOUNCE_MS);
-    },
-    [project.id],
-  );
-
-  // Flush any pending tab write when the project changes or the view unmounts,
-  // so a fast project switch / close doesn't leave the daemon a debounce behind.
-  useEffect(() => flushTabsDaemonSave, [flushTabsDaemonSave]);
-
-  const handleActiveWorkspaceContextChange = useCallback((next: WorkspaceContextItem | null) => {
-    setActiveWorkspaceContext((current) =>
-      workspaceContextItemEqual(current, next) ? current : next,
-    );
-  }, []);
-
-  const handleWorkspaceContextsChange = useCallback((next: WorkspaceContextItem[]) => {
-    setWorkspaceContexts((current) =>
-      workspaceContextItemsEqual(current, next) ? current : next,
-    );
-  }, []);
-
   const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
     const next = await fetchProjectFiles(project.id);
     projectFilesRef.current = next;
@@ -1216,24 +1080,6 @@ export function ProjectView({
     effectiveBrandExtractionStatus,
     refreshWorkspaceItems,
   ]);
-
-  useEffect(() => {
-    if (!tabsLoadedRef.current) return;
-    if (hasAppliedInitialPrimaryOpenRef.current) return;
-    if (routeFileName) return;
-    if (openTabsState.active || openTabsState.tabs.length > 0) {
-      hasAppliedInitialPrimaryOpenRef.current = true;
-      return;
-    }
-    if (tabsHydratedFromSavedStateRef.current) {
-      hasAppliedInitialPrimaryOpenRef.current = true;
-      return;
-    }
-    const primaryFile = selectPrimaryProjectFile(projectFiles);
-    if (!primaryFile) return;
-    hasAppliedInitialPrimaryOpenRef.current = true;
-    persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
-  }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName]);
 
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
@@ -1401,6 +1247,27 @@ export function ProjectView({
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
   );
+
+  const {
+    openTabsState,
+    headerArtifact,
+    activeWorkspaceContext,
+    workspaceContexts,
+    handleActiveWorkspaceContextChange,
+    handleWorkspaceContextsChange,
+    persistTabsState,
+    tabsLoadedRef,
+    tabsHydratedFromSavedStateRef,
+    tabsHydrationVersion,
+  } = useWiredOpenTabsSync(
+    project.id,
+    routeFileName,
+    projectFiles,
+    projectFileNames,
+    activeConversationId,
+    lastSyncedConversationIdRef,
+  );
+
   // A previewable artifact exists once any HTML file has been produced. Gates
   // the one-time first-generation hint (spec §8.3); the hint component owns its
   // own once-ever "seen" budget.
@@ -1566,48 +1433,6 @@ export function ProjectView({
     if (!routeFileName) return;
     requestOpenFile(routeFileName);
   }, [routeFileName, requestOpenFile]);
-
-  // Sync the URL when the active tab changes, so reload + share-link both
-  // land back on the same view. Replace (not push) on tab activation so the
-  // history stack doesn't fill with every tab click.
-  // Composite sync key: tracks BOTH the active file target AND the active
-  // conversation id, so a conversation-only change (e.g. `listConversations`
-  // resolves after `loadTabs` hydrated the active tab, or the user picks a
-  // different conversation under the same tab) still triggers the navigate
-  // and pushes `/conversations/:cid` into the URL. Keying only on the file
-  // target lost that update because the early-return saw `target` unchanged
-  // and skipped the navigate (lefarcen P1 on PR #1508).
-  const lastSyncedRouteKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    const target = openTabsState.active && (
-      openTabsState.tabs.includes(openTabsState.active)
-      || projectFileNames.has(openTabsState.active)
-      || isLiveArtifactTabId(openTabsState.active)
-    )
-      ? openTabsState.active
-      : null;
-    const nextKey = `${activeConversationId ?? ''}:${target ?? ''}`;
-    if (nextKey === lastSyncedRouteKeyRef.current) return;
-    lastSyncedRouteKeyRef.current = nextKey;
-    lastSyncedConversationIdRef.current = activeConversationId;
-    // PerishCode + Codex P1 on PR #1508: the prior version of this
-    // sync stripped any `/conversations/:cid` segment from the URL as
-    // soon as a tab became active, which regressed the deep-link
-    // behavior the parent commit was meant to add (reload / share
-    // would fall back to `list[0]` instead of the routed run's
-    // conversation). Thread the active conversation id so the URL
-    // always reflects the conversation the project view is actually
-    // showing, matching how `fileName` already tracks the active tab.
-    navigate(
-      {
-        kind: 'project',
-        projectId: project.id,
-        conversationId: activeConversationId,
-        fileName: target,
-      },
-      { replace: true },
-    );
-  }, [openTabsState.active, projectFileNames, project.id, activeConversationId]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
     return project.id;

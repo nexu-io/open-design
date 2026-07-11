@@ -15,6 +15,7 @@ import type {
   ChatAttachment,
   ChatMessage,
   Conversation,
+  OpenTabsState,
   PreviewComment,
   PreviewCommentAttachment,
   PreviewCommentTarget,
@@ -155,4 +156,14 @@ export interface ProjectViewTransportPort {
   ): Promise<PreviewComment | null>;
   /** Delete a preview comment. Resolves `false` on failure. */
   deletePreviewComment(projectId: string, conversationId: string, commentId: string): Promise<boolean>;
+  /** Load the project's persisted open-tabs state, reconciling the local
+   *  cache against the daemon by `updatedAt`. Best-effort: falls back to the
+   *  cache (or an empty state) on failure. */
+  loadOpenTabs(projectId: string): Promise<OpenTabsState>;
+  /** Write tab state to the local cache only (synchronous), returning the
+   *  `updatedAt`-stamped state. */
+  cacheOpenTabsLocally(projectId: string, state: OpenTabsState): OpenTabsState;
+  /** Persist already-stamped tab state to the daemon (the debounced write).
+   *  Best-effort: never rejects. */
+  persistOpenTabsToDaemon(projectId: string, state: OpenTabsState): Promise<void>;
 }

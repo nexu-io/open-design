@@ -86,6 +86,13 @@ function makeHarness(savedWidth = 460): Harness {
     listMessages: vi.fn(async () => []),
     saveMessage: vi.fn(async () => {}),
     fetchPreviewComments: vi.fn(async () => []),
+    uploadPreviewCommentImages: vi.fn(async () => []),
+    savePreviewComment: vi.fn(async () => null),
+    patchPreviewCommentStatus: vi.fn(async () => null),
+    deletePreviewComment: vi.fn(async () => true),
+    loadOpenTabs: vi.fn(async () => ({ tabs: [], active: null })),
+    cacheOpenTabsLocally: vi.fn((_projectId, state) => state),
+    persistOpenTabsToDaemon: vi.fn(async () => {}),
     },
   };
   return harness;

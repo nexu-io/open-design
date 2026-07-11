@@ -42,6 +42,9 @@ import {
   savePreviewComment,
   patchPreviewCommentStatus,
   deletePreviewComment,
+  loadOpenTabs,
+  cacheOpenTabsLocally,
+  persistOpenTabsToDaemon,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -88,4 +91,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   savePreviewComment,
   patchPreviewCommentStatus,
   deletePreviewComment,
+  loadOpenTabs,
+  cacheOpenTabsLocally,
+  persistOpenTabsToDaemon,
 };

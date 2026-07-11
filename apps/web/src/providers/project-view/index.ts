@@ -45,3 +45,4 @@ export {
   patchPreviewCommentStatus,
   deletePreviewComment,
 } from './preview-comment-actions';
+export { loadOpenTabs, cacheOpenTabsLocally, persistOpenTabsToDaemon } from './open-tabs';

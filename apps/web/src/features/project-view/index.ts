@@ -212,6 +212,8 @@ export {
 } from './hooks/useConversationMessages.hooks';
 export type { PreviewCommentsController } from './hooks/usePreviewComments.hooks';
 export { usePreviewComments, useWiredPreviewComments } from './hooks/usePreviewComments.hooks';
+export type { OpenTabsSyncController } from './hooks/useOpenTabsSync.hooks';
+export { useOpenTabsSync, useWiredOpenTabsSync } from './hooks/useOpenTabsSync.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';
