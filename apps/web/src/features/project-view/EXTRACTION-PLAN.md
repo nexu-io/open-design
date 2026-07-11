@@ -63,7 +63,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/hooks/useQuestionFormPanel.hooks.ts` (new).
 - **Shape:** feature hook (mostly pure computation over `messages`)
 - **Risk:** low-medium — good unit-test candidate, well isolated.
-- **Status:** pending
+- **Status:** done. Landed as `useQuestionFormPanel(messages, activeConversationId, currentConversationStreaming, projectId)` — no port needed (pure derivation). Only the final `displayed*`/`focusQuestionsRequest`/`openQuestionsTab` values are consumed outside this cluster (verified via grep before extracting) — the intermediate `questionForm`/`lastAssistantIndex`/etc. stay hook-internal, so the controller interface is small. Imports `parseSubmittedAnswers` from `components/QuestionForm.tsx` and `QuestionFormOpenRequest` from `components/AssistantMessage.tsx` directly — these are plain component-file exports, not providers/ or cross-slice features/**, so the guard doesn't restrict them (flagged here since it's a slightly unusual features→components import direction, but ADR 0002 doesn't forbid it and moving those two exports out of scope is a bigger change than this cluster warrants).
 
 ## 6. Preview comments management
 - **Lines:** 729–736, 2662–2745

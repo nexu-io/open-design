@@ -201,3 +201,5 @@ export {
   useRunCompletionNotifications,
   useWiredRunCompletionNotifications,
 } from './hooks/useRunCompletionNotifications.hooks';
+export type { QuestionFormPanelController } from './hooks/useQuestionFormPanel.hooks';
+export { useQuestionFormPanel } from './hooks/useQuestionFormPanel.hooks';
