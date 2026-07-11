@@ -36,6 +36,8 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     duplicatePluginAsProject: vi.fn(async () => {
       throw new Error('not implemented in this fake');
     }),
+    copyTextToClipboard: vi.fn(async () => true),
+    subscribeCapturedKeyDown: vi.fn(() => () => {}),
     ...overrides,
   };
 }

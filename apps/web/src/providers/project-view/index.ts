@@ -27,3 +27,5 @@ export {
   listPlugins,
   duplicatePluginAsProject,
 } from './plugin-context';
+export { copyTextToClipboard } from './clipboard';
+export { subscribeCapturedKeyDown } from './keyboard-shortcuts';

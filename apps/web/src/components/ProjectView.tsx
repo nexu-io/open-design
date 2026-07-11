@@ -83,7 +83,6 @@ import {
 } from '../analytics/onboarding-session';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
-import { isMacPlatform } from '../utils/platform';
 import {
   canAutoRenameProjectFromPrompt,
   summarizeProjectNameFromPrompt,
@@ -240,9 +239,6 @@ import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
 import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
-import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
-import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
-import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
@@ -252,10 +248,6 @@ import {
   useByokVideoModelOptions,
   useByokSpeechModelOptions,
 } from '../media/aihubmix-image-models';
-import {
-  buildFinalizeCredentialsMissingToast,
-  buildFinalizeRequest,
-} from '../lib/resolve-finalize-request';
 import {
   SPLIT_RESIZE_HANDLE_WIDTH,
   mergeSavedPreviewComment,
@@ -268,6 +260,7 @@ import {
   useByokModelOverrides,
   useWiredGithubConnectRepo,
   useWiredPluginContextDetails,
+  useWiredProjectFinalizeActions,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -7060,66 +7053,20 @@ export function ProjectView({
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
-  const handleFinalize = useCallback(() => {
-    const request = buildFinalizeRequest(config);
-    if (!request) {
-      setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
-      return;
-    }
-    void finalize.trigger(request).then((result) => {
-      if (result) void designMdState.refresh();
-    });
-  }, [finalize, config, designMdState]);
-
-  const handleCancelFinalize = useCallback(() => {
-    finalize.cancel();
-  }, [finalize]);
-
-  const handleContinueInCli = useCallback(async () => {
-    const projectDir = projectDetail.resolvedDir;
-    if (!projectDir) {
-      setProjectActionsToast({
-        message: 'Working directory unavailable. Update the daemon to enable Continue in CLI.',
-        details: null,
-      });
-      return;
-    }
-    const prompt = buildClipboardPrompt({
-      project: { id: project.id, name: project.name },
-      designMdState: {
-        generatedAt: designMdState.generatedAt,
-        transcriptMessageCount: designMdState.transcriptMessageCount,
-        designSystemId: designMdState.designSystemId,
-        currentArtifact: designMdState.currentArtifact,
-      },
-      projectDir,
-    });
-    const copied = await copyToClipboard(prompt);
-    if (!copied) {
-      // Clipboard write failed in both the canonical and execCommand
-      // fallback paths (locked clipboard / insecure context). Surface
-      // the prompt body in the toast so the user can manually
-      // select-and-copy. Do not open the folder — the user has nothing
-      // to paste yet.
-      setProjectActionsToast({
-        message: 'Clipboard unavailable. Copy this prompt manually, then run `claude` at the working directory.',
-        details: `Working directory: ${projectDir}`,
-        code: prompt,
-      });
-      return;
-    }
-    const launched = await terminalLauncher.open(project.id);
-    setProjectActionsToast(buildContinueInCliToast(projectDir, launched));
-  }, [
-    project.id,
-    project.name,
-    projectDetail.resolvedDir,
-    designMdState.generatedAt,
-    designMdState.transcriptMessageCount,
-    designMdState.designSystemId,
-    designMdState.currentArtifact,
-    terminalLauncher,
-  ]);
+  const projectIdentity = useMemo(
+    () => ({ id: project.id, name: project.name }),
+    [project.id, project.name],
+  );
+  const { handleFinalize, handleCancelFinalize, handleContinueInCli } =
+    useWiredProjectFinalizeActions(
+      config,
+      finalize,
+      designMdState,
+      terminalLauncher,
+      projectIdentity,
+      projectDetail.resolvedDir,
+      setProjectActionsToast,
+    );
 
   // Defensive: if the conversation already has messages once they
   // hydrate, the pendingPrompt that seeded the composer is stale (the
@@ -7184,36 +7131,6 @@ export function ProjectView({
     if (!normalized || normalized === 'the active project design system') return null;
     return designSystems.find((d) => d.title === normalized) ?? null;
   }, [activeDesignSystemSummary, activePluginSnapshot?.inputs, designSystems]);
-
-  // Lift finalize errors into the shared project-actions toast so the
-  // user sees both the daemon's category message and any upstream
-  // detail (per #450 verification commitment).
-  useEffect(() => {
-    if (finalize.error) {
-      setProjectActionsToast({
-        message: finalize.error.message,
-        details: finalize.error.details,
-      });
-    }
-  }, [finalize.error]);
-
-  // ⌘+Shift+K (mac) / Ctrl+Shift+K (others) → Continue in CLI. Mirrors
-  // the capture-phase, platform-gated pattern from FileWorkspace's
-  // Quick Switcher shortcut. ⌘+Shift+K is free (⌘+P is the only
-  // existing primary-modifier shortcut on this surface).
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (primary && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
-        if (e.isComposing) return;
-        if (!designMdState.exists) return;
-        e.preventDefault();
-        void handleContinueInCli();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [designMdState.exists, handleContinueInCli]);
 
   // PluginLoopHome auto-send: when the user submits on Home, app.tsx
   // sets `sessionStorage['od:auto-send-first:<projectId>']` and routes

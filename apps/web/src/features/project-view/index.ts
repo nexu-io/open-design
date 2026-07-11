@@ -99,6 +99,7 @@ export {
   autoSendContextKey,
   autoSendAmrGateOkKey,
   designSystemAuditAutoRepairKey,
+  isContinueInCliShortcut,
 } from './rules';
 
 // Pure formatters (prompt / attachment / summary builders).
@@ -141,3 +142,11 @@ export {
   usePluginContextDetails,
   useWiredPluginContextDetails,
 } from './hooks/usePluginContextDetails.hooks';
+export type {
+  ProjectFinalizeActionsController,
+  ProjectFinalizeToast,
+} from './hooks/useProjectFinalizeActions.hooks';
+export {
+  useProjectFinalizeActions,
+  useWiredProjectFinalizeActions,
+} from './hooks/useProjectFinalizeActions.hooks';

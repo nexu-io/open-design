@@ -1164,3 +1164,25 @@ export function autoSendAmrGateOkKey(projectId: string): string {
 export function designSystemAuditAutoRepairKey(projectId: string): string {
   return `od:design-system-audit-auto-repair:${projectId}`;
 }
+
+// --- Continue in CLI keyboard shortcut ---------------------------------------
+
+/**
+ * ⌘+Shift+K (mac) / Ctrl+Shift+K (others) → Continue in CLI. ⌘+Shift+K is
+ * free (⌘+P is the only existing primary-modifier shortcut on this surface).
+ */
+export function isContinueInCliShortcut(
+  event: {
+    metaKey: boolean;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+    altKey: boolean;
+    key: string;
+    isComposing: boolean;
+  },
+  isMac: boolean,
+): boolean {
+  if (event.isComposing) return false;
+  const primary = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return primary && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k';
+}

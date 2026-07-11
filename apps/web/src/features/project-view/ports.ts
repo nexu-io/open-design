@@ -64,4 +64,8 @@ export interface ProjectViewTransportPort {
     pluginId: string,
     input?: { name?: string },
   ): Promise<PluginDuplicateProjectResponse>;
+  /** Copy text to the clipboard. Resolves `false` if every fallback path fails. */
+  copyTextToClipboard(text: string): Promise<boolean>;
+  /** Subscribe to capture-phase keydown events on window; returns an unsubscribe. */
+  subscribeCapturedKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
 }

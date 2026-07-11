@@ -52,6 +52,7 @@ import {
   isGenericDaemonDisconnect,
   hasGenericDisconnectFailureEvent,
   appendLiveArtifactEventItem,
+  isContinueInCliShortcut,
 } from '../../../src/features/project-view/rules';
 import type {
   ChatMessage,
@@ -465,5 +466,33 @@ describe('appendLiveArtifactEventItem', () => {
     let items: LiveArtifactEventItem[] = [];
     for (let i = 0; i < 60; i += 1) items = appendLiveArtifactEventItem(items, evt);
     expect(items).toHaveLength(50);
+  });
+});
+
+describe('isContinueInCliShortcut', () => {
+  const base = { metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, key: 'k', isComposing: false };
+
+  it('matches Cmd+Shift+K on mac and rejects Ctrl+Shift+K', () => {
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true }, true)).toBe(true);
+    expect(isContinueInCliShortcut({ ...base, ctrlKey: true, shiftKey: true }, true)).toBe(false);
+  });
+
+  it('matches Ctrl+Shift+K elsewhere and rejects Cmd+Shift+K', () => {
+    expect(isContinueInCliShortcut({ ...base, ctrlKey: true, shiftKey: true }, false)).toBe(true);
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true }, false)).toBe(false);
+  });
+
+  it('rejects when Shift is missing, Alt is held, the key differs, or both mod keys are held', () => {
+    expect(isContinueInCliShortcut({ ...base, metaKey: true }, true)).toBe(false);
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true, altKey: true }, true)).toBe(false);
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true, key: 'j' }, true)).toBe(false);
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, ctrlKey: true, shiftKey: true }, true)).toBe(false);
+  });
+
+  it('is case-insensitive on the key and rejects mid-IME composition', () => {
+    expect(isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true, key: 'K' }, true)).toBe(true);
+    expect(
+      isContinueInCliShortcut({ ...base, metaKey: true, shiftKey: true, isComposing: true }, true),
+    ).toBe(false);
   });
 });

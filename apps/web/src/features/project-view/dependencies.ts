@@ -23,6 +23,8 @@ import {
   fetchAppliedPluginSnapshot,
   listPlugins,
   duplicatePluginAsProject,
+  copyTextToClipboard,
+  subscribeCapturedKeyDown,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -48,4 +50,6 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   fetchAppliedPluginSnapshot,
   listPlugins,
   duplicatePluginAsProject,
+  copyTextToClipboard,
+  subscribeCapturedKeyDown,
 };

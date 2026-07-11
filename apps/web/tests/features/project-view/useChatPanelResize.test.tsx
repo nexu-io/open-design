@@ -70,6 +70,8 @@ function makeHarness(savedWidth = 460): Harness {
       duplicatePluginAsProject: vi.fn(async () => {
         throw new Error('not implemented in this fake');
       }),
+      copyTextToClipboard: vi.fn(async () => true),
+      subscribeCapturedKeyDown: vi.fn(() => () => {}),
     },
   };
   return harness;
