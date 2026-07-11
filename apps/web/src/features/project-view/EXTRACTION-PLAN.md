@@ -115,7 +115,7 @@ once prior clusters have landed.
 - **Target:** fold into Cluster 9's hook, or a tiny `features/project-view/hooks/useIframeEvictionOnContextChange.hooks.ts` if kept separate.
 - **Shape:** pure rule + tiny effect
 - **Risk:** low (low-payoff to extract standalone — recommend merging into Cluster 9).
-- **Status:** pending
+- **Status:** done. Landed as a standalone `useIframeEvictionOnContextChange(...)` hook (Cluster 9 was already committed by the time this was picked up, so folding in would have reopened that commit). The signature derivation moved to `promptContextSignature` in `rules.ts` (pure); the hook owns only `previousPromptContextSignatureRef` + the eviction effect. No port needed — no transport, just props/derived values and the `iframeKeepAlivePool` component-hook value passed in.
 
 ## 12. AMR balance gate
 - **Lines:** 853–877 (state/refs), 4002–4087 (gate-check block **embedded inside** `handleSend`), 5477–5538 (`pendingAmrRetry` state + poll effect + `handleSwitchToAmrAndRetry`), 7243–7273 (dialog JSX).
