@@ -60,6 +60,7 @@ vi.mock('../../src/providers/daemon', () => ({
 
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
+  createProjectEventsConnection: vi.fn(() => ({ close: () => {} })),
 }));
 
 vi.mock('../../src/providers/registry', async () => {

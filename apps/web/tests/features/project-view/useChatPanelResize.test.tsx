@@ -96,6 +96,7 @@ function makeHarness(savedWidth = 460): Harness {
     fetchProjectFiles: vi.fn(async () => []),
     fetchLiveArtifacts: vi.fn(async () => []),
     writeProjectTextFile: vi.fn(async () => null),
+    subscribeProjectFileEvents: vi.fn(() => () => {}),
     },
   };
   return harness;

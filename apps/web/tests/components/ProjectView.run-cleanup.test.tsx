@@ -143,6 +143,7 @@ vi.mock('../../src/providers/registry', () => ({
 
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
+  createProjectEventsConnection: vi.fn(() => ({ close: () => {} })),
 }));
 
 vi.mock('../../src/runtime/brands', async () => {

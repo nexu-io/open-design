@@ -28,9 +28,7 @@ import {
   patchPreviewCommentStatus,
   uploadProjectFiles,
 } from '../providers/registry';
-import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
-import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
@@ -113,7 +111,6 @@ import {
 import {
   createConversation,
   installGeneratedPluginFolder,
-  listConversations,
   listMessages,
   patchConversation,
   patchProject,
@@ -229,6 +226,7 @@ import {
   useWiredPreviewComments,
   useWiredOpenTabsSync,
   useWiredProjectFilesAndArtifacts,
+  useWiredProjectLiveEvents,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -287,7 +285,6 @@ import {
   createBufferedTextUpdates,
   brandExtractionPreviewFileName,
   byokOpenCodeProviderFromConfig,
-  projectEventToAgentEvent,
   artifactWithHtml,
 } from '../features/project-view';
 import type {
@@ -1140,78 +1137,19 @@ export function ProjectView({
   // bump filesRefresh so the file list refetches with new mtimes — which
   // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
   // cache-bust, triggering an automatic preview reload without a click.
-  //
-  // Coalesce the refresh: agent rewrites surface to chokidar as an
-  // `unlink` + `add` (+ later `change`) burst within a single tick (#2195).
-  // Refreshing the file list on the intermediate `unlink` makes the open
-  // tab's active file vanish for one frame before the `add` restores it,
-  // and FileWorkspace's "tab no longer on disk" path then drops the user
-  // out of their preview. A short trailing wait absorbs the burst; the
-  // maxWait cap stops a sustained edit storm from starving the UI.
-  const refreshFilesAndDesignMd = useCallback(() => {
-    setFilesRefresh((n) => n + 1);
-    // Round 7 (mrcfps): file mutations are the dominant staleness signal
-    // post-finalize — bump the refresh key so DESIGN.md staleness
-    // recomputes against the new mtimes.
-    setDesignMdRefreshKey((n) => n + 1);
-  }, []);
-  const coalescedFileChangedRefresh = useCoalescedCallback(
-    refreshFilesAndDesignMd,
-    { wait: 80, maxWait: 250 },
+  useWiredProjectLiveEvents(
+    project.id,
+    daemonLive,
+    iframeKeepAlivePool,
+    conversationsRefreshTokenRef,
+    projectIdRef,
+    setConversations,
+    onProjectsRefresh,
+    refreshLiveArtifacts,
+    setLiveArtifactEvents,
+    setFilesRefresh,
+    setDesignMdRefreshKey,
   );
-  const handleProjectEvent = useCallback((evt: ProjectEvent) => {
-    if (evt.type === 'file-changed') {
-      iframeKeepAlivePool.evictProject(project.id);
-      coalescedFileChangedRefresh();
-      return;
-    }
-    if (evt.type === 'conversation-created') {
-      // A new conversation was inserted into this project by a path the
-      // open project view can't observe through its own state (currently:
-      // Routines "Run now" in reuse-an-existing-project mode, #1361).
-      // Refetch the conversation list so the new entry becomes visible
-      // without requiring the user to leave and re-enter the project.
-      // Deliberately do NOT change the active conversation here — the
-      // user keeps their current context. Auto-switch is a separate UX
-      // decision tracked in #1361.
-      if (evt.projectId !== project.id) return;
-      const capturedProjectId = project.id;
-      const myToken = ++conversationsRefreshTokenRef.current;
-      void (async () => {
-        try {
-          const list = await listConversations(capturedProjectId);
-          // Bail if the user switched projects while this request was in
-          // flight (#1361 review, Codex P1). The captured project id is the
-          // one we asked the daemon about; the live ref is the one the
-          // user is looking at right now. If they don't match, applying
-          // the list would overwrite the new project's sidebar with
-          // stale data from the old one.
-          if (projectIdRef.current !== capturedProjectId) return;
-          // Bail if a newer conversation-created event already dispatched
-          // its own refresh after us (#1361 review, lefarcen P2). With two
-          // rapid events the later request may resolve first; if this
-          // earlier request resolves afterwards it would drop the newer
-          // conversation. Only the latest dispatch is allowed to apply.
-          if (conversationsRefreshTokenRef.current !== myToken) return;
-          setConversations(list);
-        } catch {
-          // Defensive: refresh failed (network blip, daemon gone). The
-          // next project mount or another conversation-created event
-          // will retry; no need to surface an error here.
-        }
-      })();
-      return;
-    }
-    const agentEvent = projectEventToAgentEvent(evt);
-    if (!agentEvent) return;
-    setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
-    void refreshLiveArtifacts();
-    onProjectsRefresh();
-    // Live artifact events come from chat-turn-emitted artifacts; they
-    // also imply the conversation transcript changed.
-    setDesignMdRefreshKey((n) => n + 1);
-  }, [coalescedFileChangedRefresh, iframeKeepAlivePool, onProjectsRefresh, refreshLiveArtifacts, project.id]);
-  useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   const activePromptContextSignature = useMemo(() => {
     const skill = project.skillId

@@ -26,6 +26,7 @@ import type { ArtifactManifest } from '../../artifacts/types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
+  ProjectLiveEvent,
   QueuedChatSend,
   RunStatusSnapshot,
   SaveMessageOptions,
@@ -181,4 +182,11 @@ export interface ProjectViewTransportPort {
     content: string,
     options?: { artifactManifest?: ArtifactManifest },
   ): Promise<ProjectFile | null>;
+  /** Subscribe to a project's filesystem-change SSE stream. Returns an
+   *  unsubscribe. No-ops when `EventSource` isn't available (SSR / a test
+   *  environment without it). */
+  subscribeProjectFileEvents(
+    projectId: string,
+    onEvent: (evt: ProjectLiveEvent) => void,
+  ): () => void;
 }
