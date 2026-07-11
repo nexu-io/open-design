@@ -2,7 +2,8 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type { Express } from 'express';
 import { scanCreatorMediaRoot } from '../creator-media/scanner.js';
-import { getCreatorMediaProjectData, upsertCreatorMediaAssets } from '../creator-media/store.js';
+import { getCreatorMediaProjectData, linkCreatorTaskMediaAsset, unlinkCreatorTaskMediaAsset, upsertCreatorMediaAssets } from '../creator-media/store.js';
+import { getCreatorWorkbenchProjectData } from '../creator-workbench-store.js';
 
 export interface RegisterCreatorMediaRoutesDeps {
   paths: { RUNTIME_DATA_DIR: string };
@@ -29,5 +30,20 @@ export function registerCreatorMediaRoutes(app: Express, deps: RegisterCreatorMe
       const assets = await upsertCreatorMediaAssets(deps.paths.RUNTIME_DATA_DIR, req.params.id, scan.discovered);
       res.status(201).json({ assets, skipped: scan.skipped, errors: scan.errors });
     } catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
+  });
+  app.post('/api/projects/:id/creator-tasks/:taskId/media-assets', async (req, res) => {
+    try {
+      requireProject(req.params.id);
+      const assetId = typeof req.body?.assetId === 'string' ? req.body.assetId : '';
+      if (!assetId) throw new Error('assetId is required');
+      const tasks = await getCreatorWorkbenchProjectData(deps.paths.RUNTIME_DATA_DIR, req.params.id);
+      if (!tasks.tasks.some((task) => task.id === req.params.taskId)) throw new Error('creator task not found');
+      await linkCreatorTaskMediaAsset(deps.paths.RUNTIME_DATA_DIR, req.params.id, req.params.taskId, assetId);
+      res.status(201).json({ ok: true });
+    } catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
+  });
+  app.delete('/api/projects/:id/creator-tasks/:taskId/media-assets/:assetId', async (req, res) => {
+    try { requireProject(req.params.id); await unlinkCreatorTaskMediaAsset(deps.paths.RUNTIME_DATA_DIR, req.params.id, req.params.taskId, req.params.assetId); res.status(204).end(); }
+    catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
   });
 }

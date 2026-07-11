@@ -31,3 +31,9 @@ export async function linkCreatorTaskMediaAsset(dataDir: string, projectId: stri
   if (!data.taskLinks.some((link) => link.taskId === taskId && link.assetId === assetId)) data.taskLinks.push({ taskId, assetId, createdAt: new Date().toISOString() });
   await write(dataDir, projectId, data);
 }
+
+export async function unlinkCreatorTaskMediaAsset(dataDir: string, projectId: string, taskId: string, assetId: string): Promise<void> {
+  const data = await read(dataDir, projectId);
+  data.taskLinks = data.taskLinks.filter((link) => link.taskId !== taskId || link.assetId !== assetId);
+  await write(dataDir, projectId, data);
+}

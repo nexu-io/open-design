@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { registerCreatorMediaRoutes } from '../src/routes/creator-media.js';
+import { createCreatorTask } from '../src/creator-workbench-store.js';
 
 let dataDir = '';
 let mediaDir = '';
@@ -30,11 +31,17 @@ describe('creator media routes', () => {
     registerCreatorMediaRoutes(app, { db: {}, paths: { RUNTIME_DATA_DIR: dataDir }, projectStore: { getProject: (_db, id) => id === 'project-1' ? { id } : null } });
     const { server, baseUrl } = await listen(app);
     try {
+      const taskId = (await createCreatorTask(dataDir, 'project-1', { title: '整理素材' })).id;
       const missing = await fetch(`${baseUrl}/api/projects/missing/creator-media-roots`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rootPath: mediaDir }) });
       expect(missing.status).toBe(404);
       const scanned = await fetch(`${baseUrl}/api/projects/project-1/creator-media-roots`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rootPath: mediaDir }) });
       expect(scanned.status).toBe(201);
-      await expect(scanned.json()).resolves.toMatchObject({ assets: [expect.objectContaining({ fileName: 'clip.mp4' })] });
+      const body = await scanned.json() as { assets: Array<{ id: string; fileName: string }> };
+      expect(body).toMatchObject({ assets: [expect.objectContaining({ fileName: 'clip.mp4' })] });
+      const linked = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/${taskId}/media-assets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: body.assets[0]!.id }) });
+      expect(linked.status).toBe(201);
+      const data = await fetch(`${baseUrl}/api/projects/project-1/creator-media-assets`);
+      await expect(data.json()).resolves.toMatchObject({ taskLinks: [expect.objectContaining({ taskId, assetId: body.assets[0]!.id })] });
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
 });
