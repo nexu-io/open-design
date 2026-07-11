@@ -10,12 +10,14 @@ import {
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
 import { subscribeOutsideDismiss, subscribeOutsidePointerDismiss } from '../../providers/file-viewer/outside-dismiss';
 import { saveTemplate } from '../../providers/templates';
+import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import type {
   ClipboardPort,
   DismissPort,
   DocumentPreviewPort,
   FileTextPort,
   ProjectFilesPort,
+  ShareLinkClipboardPort,
   TemplateSavePort,
 } from './ports';
 
@@ -48,4 +50,9 @@ export const dismissPort: DismissPort = {
 /** Default binding: the real `/api/templates` save-as-template transport. */
 export const templateSavePort: TemplateSavePort = {
   saveTemplate,
+};
+
+/** Default binding: the real Clipboard API + textarea-fallback, boolean-result adapter. */
+export const shareLinkClipboardPort: ShareLinkClipboardPort = {
+  copyToClipboard,
 };

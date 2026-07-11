@@ -43,3 +43,12 @@ export interface TemplateSavePort {
     sourceProjectId: string;
   }): Promise<ProjectTemplate | null>;
 }
+
+/**
+ * The share-link copy action's clipboard side effect (DOM-touching, so a
+ * port). Distinct from `ClipboardPort`: this caller needs the boolean
+ * success/failure result to drive the copied/failed feedback pill.
+ */
+export interface ShareLinkClipboardPort {
+  copyToClipboard(text: string): Promise<boolean>;
+}

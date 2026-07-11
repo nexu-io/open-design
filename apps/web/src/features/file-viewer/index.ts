@@ -214,3 +214,8 @@ export { FileVersionViewportControls } from './components/FileVersionViewportCon
 // touch) and drives it via this hook's returned controller.
 export { useWiredTemplateSave } from './hooks/useTemplateSave.hooks';
 export type { TemplateSaveController, TemplateSaveDeps } from './hooks/useTemplateSave.hooks';
+
+// Copy-share-link feedback: feature-local hook owning the copied/failed pill
+// state and its auto-clear timeout.
+export { useWiredShareLinkCopy } from './hooks/useShareLinkCopy.hooks';
+export type { ShareLinkCopyController, ShareLinkCopyDeps } from './hooks/useShareLinkCopy.hooks';

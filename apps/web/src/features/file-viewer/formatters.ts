@@ -225,6 +225,17 @@ export function defaultTemplateName(fileName: string, t: TranslateFn): string {
   return fileName.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
 }
 
+// Copy-share-link menu item label: reflects the transient copied/failed
+// feedback, falling back to the static "copy" prompt.
+export function shareLinkCopyLabel(
+  feedback: 'copied' | 'failed' | null,
+  t: TranslateFn,
+): string {
+  if (feedback === 'copied') return t('fileViewer.copied');
+  if (feedback === 'failed') return t('useEverywhere.copyFailed');
+  return t('fileViewer.copyShareLink');
+}
+
 // Document-kind meta label for the toolbar of read-only document previews.
 export function documentMetaLabel(file: ProjectFile, t: TranslateFn): string {
   if (file.kind === 'pdf') return t('fileViewer.pdfMeta');
