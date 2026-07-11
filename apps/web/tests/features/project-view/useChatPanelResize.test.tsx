@@ -77,6 +77,8 @@ function makeHarness(savedWidth = 460): Harness {
     createConversation: vi.fn(async () => null),
     patchConversation: vi.fn(async () => null),
     deleteConversation: vi.fn(async () => true),
+    fetchRunStatus: vi.fn(async () => null),
+    subscribeBufferedTextFlushTriggers: vi.fn(() => () => {}),
     },
   };
   return harness;

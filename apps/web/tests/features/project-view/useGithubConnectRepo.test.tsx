@@ -42,6 +42,8 @@ function makePort(
     createConversation: vi.fn(async () => null),
     patchConversation: vi.fn(async () => null),
     deleteConversation: vi.fn(async () => true),
+    fetchRunStatus: vi.fn(async () => null),
+    subscribeBufferedTextFlushTriggers: vi.fn(() => () => {}),
     ...overrides,
   };
 }

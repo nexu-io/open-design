@@ -26,6 +26,8 @@ export type {
   DesignSystemReviewEntry,
   DesignSystemReviewAgentTask,
   DesignSystemReviewDetails,
+  RunStatusSnapshot,
+  BufferedTextFlushHandlers,
 } from './types';
 
 // Pure decision rules.
@@ -128,6 +130,10 @@ export {
   pluginWorkflowFailureContent,
   stripTrailingUrl,
 } from './formatters';
+
+// Streaming-text buffering (chat-send + run-reattach shared utility).
+export type { BufferedTextUpdates } from './streaming-text-buffer';
+export { resolveTerminalEndedAt, createBufferedTextUpdates } from './streaming-text-buffer';
 
 // Transport port + its default binding.
 export type { ProjectViewTransportPort } from './ports';

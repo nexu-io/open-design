@@ -12,7 +12,12 @@ import type {
   RunContextSelection,
 } from '@open-design/contracts';
 import type { ChatAttachment, ChatMessage, Conversation } from '../../types';
-import type { ChatPanelPointerDragHandlers, QueuedChatSend } from './types';
+import type {
+  BufferedTextFlushHandlers,
+  ChatPanelPointerDragHandlers,
+  QueuedChatSend,
+  RunStatusSnapshot,
+} from './types';
 
 /** Transport the project-view orchestrator needs from the outside world. */
 export interface ProjectViewTransportPort {
@@ -95,4 +100,10 @@ export interface ProjectViewTransportPort {
   ): Promise<Conversation | null>;
   /** Delete a conversation. Resolves `false` on failure. */
   deleteConversation(projectId: string, conversationId: string): Promise<boolean>;
+  /** Fetch a run's current status snapshot. Best-effort: resolves `null` on
+   *  a non-terminal-safe fetch failure. */
+  fetchRunStatus(runId: string): Promise<RunStatusSnapshot | null>;
+  /** Subscribe to the buffered-text-updates flush triggers (tab hidden /
+   *  page hide); returns an unsubscribe. */
+  subscribeBufferedTextFlushTriggers(handlers: BufferedTextFlushHandlers): () => void;
 }

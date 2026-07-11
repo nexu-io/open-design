@@ -3,7 +3,7 @@
 // helpers produce or consume.
 import type { CSSProperties } from 'react';
 import type { ChatAttachment, ChatCommentAttachment, ChatMessage, ProjectMetadata } from '../../types';
-import type { ChatAnalyticsEntryFrom, ChatSessionMode } from '@open-design/contracts';
+import type { ChatAnalyticsEntryFrom, ChatRunStatusResponse, ChatSessionMode } from '@open-design/contracts';
 import type { ChatSendMeta } from '../../components/ChatComposer';
 
 /** Normalized parts of a brand-extraction source URL, for source-vs-snapshot
@@ -88,4 +88,16 @@ export interface DesignSystemReviewDetails {
   feedback?: string;
   files?: string[];
   agentTask?: DesignSystemReviewAgentTask;
+}
+
+/** A daemon run-status snapshot, as returned by `fetchChatRunStatus`/
+ *  `listActiveChatRuns`. A direct alias of the wire DTO (not redeclared). */
+export type RunStatusSnapshot = ChatRunStatusResponse;
+
+/** Handlers the buffered-text-updates flush-triggers bridge drives (port
+ *  result type, kept in-slice per ADR 0002). Bound structurally to the
+ *  provider's `BufferedTextFlushHandlers` in `dependencies.ts`. */
+export interface BufferedTextFlushHandlers {
+  onHiddenFlush: () => void;
+  onPageHideFlush: () => void;
 }

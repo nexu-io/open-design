@@ -23,6 +23,7 @@ describe('createBufferedTextUpdates pending text accounting', () => {
         msg = u(msg);
       },
       persistSoon: () => {},
+      subscribeFlushTriggers: () => () => {},
     });
 
     expect(buf.hasPendingText()).toBe(false);

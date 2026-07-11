@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamViaDaemon } from '../../providers/daemon';
+import { subscribeBufferedTextFlushTriggers } from '../../providers/project-view';
 import { listMessages, saveMessage } from '../../state/projects';
 import { appendErrorStatusEvent } from '../../runtime/chat-events';
 import { agentModelDisplayName } from '../../utils/agentLabels';
@@ -219,6 +220,7 @@ export function useConversationChat(
         updateMessage: (updater) => updateAssistant(assistantId, updater),
         // Side chat persists at done/error (+ onRunCreated), not mid-stream.
         persistSoon: () => {},
+        subscribeFlushTriggers: subscribeBufferedTextFlushTriggers,
       });
       textBufferRef.current = textBuffer;
 
