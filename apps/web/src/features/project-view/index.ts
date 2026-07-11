@@ -191,3 +191,5 @@ export {
   useConversationManagement,
   useWiredConversationManagement,
 } from './hooks/useConversationManagement.hooks';
+export type { ProjectTimeoutsController } from './hooks/useProjectTimeouts.hooks';
+export { useProjectTimeouts } from './hooks/useProjectTimeouts.hooks';

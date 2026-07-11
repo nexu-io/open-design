@@ -36,7 +36,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/hooks/useProjectTimeouts.hooks.ts` (new).
 - **Shape:** feature hook
 - **Risk:** low — self-contained, but extract early since it's a foundational dependency of the two highest-risk clusters.
-- **Status:** pending
+- **Status:** done. Landed as `useProjectTimeouts()` — no injected port needed (pure `setTimeout` bookkeeping, no transport). The orchestrator destructures `{ mountedRef, scheduleProjectTimeout, clearProjectTimeout }` from the hook in place of the three inline `useRef`/`useCallback` declarations.
 
 ## 3. Onboarding entry & first-loop funnel wiring
 - **Lines:** 584–635, 1852–1861, 4088–4115, 4668–4689, 6256–6349, 6731–6794

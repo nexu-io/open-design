@@ -262,6 +262,7 @@ import {
   useShareToOpenDesign,
   useWiredDesignSystemReview,
   useWiredConversationManagement,
+  useProjectTimeouts,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -530,34 +531,7 @@ export function ProjectView({
   // Reviewer #2285 (mrcfps, 2026-05-20 04:08) flagged the previous
   // ChatComposer-level emit for skewing the funnel.
   const chatPanelPageViewFiredRef = useRef<string | null>(null);
-  const mountedRef = useRef(true);
-  const trackedTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      for (const timer of trackedTimeoutsRef.current) clearTimeout(timer);
-      trackedTimeoutsRef.current.clear();
-    };
-  }, []);
-
-  const scheduleProjectTimeout = useCallback((callback: () => void, delayMs: number) => {
-    if (!mountedRef.current) return null;
-    const timer = setTimeout(() => {
-      trackedTimeoutsRef.current.delete(timer);
-      if (!mountedRef.current) return;
-      callback();
-    }, delayMs);
-    trackedTimeoutsRef.current.add(timer);
-    return timer;
-  }, []);
-
-  const clearProjectTimeout = useCallback((timer: ReturnType<typeof setTimeout> | null) => {
-    if (timer == null) return;
-    clearTimeout(timer);
-    trackedTimeoutsRef.current.delete(timer);
-  }, []);
+  const { mountedRef, scheduleProjectTimeout, clearProjectTimeout } = useProjectTimeouts();
 
   useEffect(() => {
     if (chatPanelPageViewFiredRef.current === project.id) return;
