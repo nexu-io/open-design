@@ -132,3 +132,5 @@ export { projectViewTransportPort } from './dependencies';
 // Feature-local hooks.
 export type { ChatPanelResizeController } from './hooks/useChatPanelResize.hooks';
 export { useChatPanelResize, useWiredChatPanelResize } from './hooks/useChatPanelResize.hooks';
+export type { ByokModelOverridesController } from './hooks/useByokModelOverrides.hooks';
+export { useByokModelOverrides } from './hooks/useByokModelOverrides.hooks';

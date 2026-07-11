@@ -270,14 +270,13 @@ import {
   projectSplitStyle,
   buildQuestionFormKey,
   useWiredChatPanelResize,
+  useByokModelOverrides,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
-  projectMediaVoiceSeed,
   isDesignSystemWorkspaceMetadata,
   isBrandStatusValue,
   brandExtractionAllowsEditing,
-  byokModelSeedForProtocol,
   byokMediaDefaultsForRun,
   isGenericDaemonDisconnect,
   hasGenericDisconnectFailureEvent,
@@ -776,33 +775,22 @@ export function ProjectView({
   const [commentInspectorActive, setCommentInspectorActive] = useState(false);
   const commentInspectorPortalId = useId();
   const leftInspectorActive = commentInspectorActive;
-  // Per-session override for the BYOK chat's generate_image tool. Seeded once
-  // from the New Project → Media model pick (project.metadata.imageModel) — but
-  // only when that pick belongs to the active BYOK provider (see
-  // byokModelSeedForProtocol) — falling back to the Settings default
-  // (config.byokImageModel) otherwise. Subsequent selections live only in this
-  // component's state — page refresh / project switch resets to this seed.
-  // Persistent defaults live in Settings → BYOK → Image generation model.
-  const [byokImageModelOverride, setByokImageModelOverride] = useState<string>(
-    () => byokModelSeedForProtocol(project.metadata, 'image', config.apiProtocol) ?? config.byokImageModel ?? '',
-  );
-  // Same per-session override for the BYOK chat's generate_video tool, seeded
-  // from the project's videoModel pick (provider-gated), then Settings.
-  const [byokVideoModelOverride, setByokVideoModelOverride] = useState<string>(
-    () => byokModelSeedForProtocol(project.metadata, 'video', config.apiProtocol) ?? config.byokVideoModel ?? '',
-  );
-  // Same per-session overrides for the BYOK chat's generate_speech tool (model +
-  // voice), seeded from the project's speech pick (provider-gated), then Settings.
-  const [byokSpeechModelOverride, setByokSpeechModelOverride] = useState<string>(
-    () => byokModelSeedForProtocol(project.metadata, 'speech', config.apiProtocol) ?? config.byokSpeechModel ?? '',
-  );
-  // Voice only carries when the speech model itself is carried (same provider),
-  // so a cross-provider voice id never leaks into the request.
-  const [byokSpeechVoiceOverride, setByokSpeechVoiceOverride] = useState<string>(
-    () => (byokModelSeedForProtocol(project.metadata, 'speech', config.apiProtocol)
-      ? projectMediaVoiceSeed(project.metadata)
-      : undefined) ?? config.byokSpeechVoice ?? '',
-  );
+  // Per-session BYOK chat tool-call model/voice overrides (generate_image /
+  // generate_video / generate_speech). Seeded once from the project's
+  // creation-time media picks (when they belong to the active BYOK provider),
+  // falling back to the Settings default otherwise. Subsequent selections
+  // live only in this state — page refresh / project switch resets to the
+  // seed. Persistent defaults live in Settings → BYOK.
+  const {
+    byokImageModelOverride,
+    setByokImageModelOverride,
+    byokVideoModelOverride,
+    setByokVideoModelOverride,
+    byokSpeechModelOverride,
+    setByokSpeechModelOverride,
+    byokSpeechVoiceOverride,
+    setByokSpeechVoiceOverride,
+  } = useByokModelOverrides(project.metadata, config);
   // Live model option lists (same hooks the composer/Settings pickers use) so
   // the chat "default" (no explicit pick) resolves to the FIRST catalogue model
   // shown in the dropdown — not a hardcoded id. The daemon keeps its own
