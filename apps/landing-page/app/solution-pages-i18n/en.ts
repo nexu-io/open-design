@@ -847,6 +847,134 @@ export const EN: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design for engineering' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — turn HTML into an editable PowerPoint with Open Design',
+    description:
+      'A free, open-source HTML-to-PPT workflow: your coding agent builds a polished HTML deck and exports a real, editable .pptx — inside the agent you already use. No cloud converter, no flat slide images, no locked export. The HTML and the PowerPoint are files you own.',
+    breadcrumb: 'HTML to PPT',
+    label: 'Tool · HTML to PPT',
+    heading: 'HTML to PPT, in your agent',
+    lead: 'Have an HTML page, a markdown doc, or just a prompt? Let your coding agent build it into a clean HTML deck and export a real, editable PowerPoint — native shapes and text you can keep editing, not a screenshot per slide. The HTML is the source; the .pptx is yours to present, hand off, and own.',
+    heroImageAlt:
+      'Editorial illustration of an HTML deck converting into an editable PowerPoint file inside a coding agent, framed by a green selection box',
+    tldrTitle: 'In one line',
+    tldrBody:
+      'Most HTML-to-PPT converters flatten your page into static slide images you cannot edit. Open Design builds the deck as HTML inside your coding agent and exports a real, editable .pptx — native text and shapes, your design system, no per-seat meter, no vendor lock.',
+    stepsTitle: 'How HTML to PPT works',
+    steps: [
+      {
+        title: 'Start from HTML, a doc, or a prompt',
+        body: 'Point your agent at an HTML page, a markdown doc, or just describe the deck. Open Design loads the right skill so the agent reads structure and intent — headings, sections, data — not just raw markup.',
+        imageAlt: 'Illustration of HTML and a markdown doc being handed to a coding agent',
+      },
+      {
+        title: 'Build a clean HTML deck',
+        body: 'The agent lays the content out as an HTML deck on a real design system — consistent type, grid, and color — using ready themes (pitch deck, product launch, editorial, technical) instead of a wall of untitled boxes.',
+        imageAlt: 'Illustration of HTML content becoming a sequence of designed slides',
+      },
+      {
+        title: 'Export an editable .pptx',
+        body: 'Open Design’s pptx-generator turns the HTML deck into a real PowerPoint — native shapes, editable text, and charts you can still change — with an HTML-to-PPTX fidelity audit, not a flat image per slide.',
+        imageAlt: 'Illustration of an HTML deck exporting into an editable PowerPoint file',
+      },
+      {
+        title: 'Own and hand off the slides',
+        body: 'The HTML and the .pptx land in your repo, fully yours. Open the .pptx in PowerPoint or Keynote, present from the browser, or keep iterating in the agent — no cloud lock-in, no redraw between the HTML and the deck.',
+        imageAlt: 'Illustration of finished slides held in a green selection frame, ready to hand off',
+      },
+    ],
+    tableTitle: 'Open Design vs. typical HTML-to-PPT converters',
+    tableColCapability: 'What you need',
+    tableColWithOd: 'With Open Design',
+    tableColWithout: 'Typical HTML-to-PPT converters',
+    tableRows: [
+      {
+        capability: 'Start point',
+        withOd: 'HTML, a doc, or a prompt — in the agent you already run',
+        without: 'Paste HTML into a separate cloud converter',
+      },
+      {
+        capability: 'Slide quality',
+        withOd: 'Clean HTML deck from a real design system + ready themes',
+        without: 'A literal render of your page, box by box',
+      },
+      {
+        capability: 'Editable output',
+        withOd: 'Real .pptx — native, editable text & shapes',
+        without: 'Flat slide images you cannot change',
+      },
+      {
+        capability: 'Iterate after export',
+        withOd: 'Refine by talking; regenerate and re-export any time',
+        without: 'A frozen, one-time file',
+      },
+      {
+        capability: 'Own the output',
+        withOd: 'HTML + .pptx files in your repo, fully yours',
+        without: 'Locked to their editor or export credits',
+      },
+      {
+        capability: 'Cost & lock-in',
+        withOd: 'Open source, bring your own keys, runs locally',
+        without: 'Per-file or per-credit subscription, vendor-hosted',
+      },
+    ],
+    featuresTitle: 'What you can turn into a deck',
+    features: [
+      { title: 'HTML page to PPT', body: 'Turn an HTML page or export into an editable PowerPoint deck.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown to PPT', body: 'Hand your agent a markdown doc and get a clean deck plus a .pptx.', thumb: 'example-html-ppt-course-module' },
+      { title: 'Prompt to deck', body: 'Describe the talk; the agent drafts the slides and exports .pptx.', thumb: 'example-html-ppt-product-launch' },
+      { title: 'Pitch decks', body: 'Investor and sales decks with a strong narrative and clean data slides.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Presenter mode', body: 'Reveal-style HTML decks that also export to editable PowerPoint.', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: 'Any visual taste', body: 'Editorial, bold, or minimal — the theme carries all the way to the .pptx.', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: 'Slide templates you can start from',
+    galleryLead:
+      'Real decks rendered by Open Design, ready to export to an editable .pptx. Pick a theme close to your content, describe your variation, and the agent builds the deck — then hands you the PowerPoint you own.',
+    gallery: [
+      { thumb: 'deck-pitch', caption: 'Pitch deck' },
+      { thumb: 'deck-product-launch', caption: 'Product launch deck' },
+      { thumb: 'deck-data-graph', caption: 'Dark data-graph deck' },
+      { thumb: 'deck-gradient', caption: 'Gradient keynote' },
+      { thumb: 'deck-blueprint', caption: 'Technical blueprint deck' },
+      { thumb: 'deck-course', caption: 'Course module deck' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Browse deck templates',
+    faqTitle: 'HTML to PPT FAQ',
+    faq: [
+      {
+        q: 'How does Open Design turn HTML into a PPT?',
+        a: 'Your coding agent builds the content into a clean HTML deck, then Open Design’s pptx-generator skill exports it to a real, editable .pptx — native shapes and text, audited for HTML-to-PPTX fidelity, not a flat image per slide.',
+      },
+      {
+        q: 'Can I convert HTML to an editable PowerPoint?',
+        a: 'Yes. The .pptx has native, editable text and shapes you can keep changing in PowerPoint or Keynote — not screenshots. You can also keep iterating the source deck in your agent and re-export any time.',
+      },
+      {
+        q: 'Does it work with Claude Code?',
+        a: 'Yes — "claude html to ppt" is exactly this workflow. Drive it with Claude Code, or Codex, Cursor Agent, Gemini CLI, and more. You bring your own provider keys; nothing is hosted for you.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own keys — there is no per-file or per-credit meter on the HTML-to-PPT workflow.',
+      },
+      {
+        q: 'What’s the difference from generating slides?',
+        a: 'Generating a deck usually starts from a prompt or outline; HTML to PPT starts from HTML or markdown you already have and focuses on the editable .pptx export. Both use the same Open Design deck engine — see the slides use case for the outline-first flow.',
+      },
+    ],
+    ctaTitle: 'Turn your next HTML deck into an editable PPT',
+    ctaBody:
+      'Star the repo, install Open Design, and turn HTML — or a prompt — into a clean deck and a real, editable .pptx, in the agent you already use.',
+    relatedTitle: 'Related tools & guides',
+    related: [
+      { href: '/solutions/slides/', label: 'Generate presentation decks' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/plugins/templates/', label: 'Browse deck templates' },
+      { href: '/solutions/marketing/', label: 'Open Design for marketing' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'AI Prototype Generator — prompt to a clickable prototype, then code',
     description:
@@ -1349,8 +1477,8 @@ export const EN: SolutionLocaleCopy = {
         a: 'No. The agent applies a real deck template with a grid, type scale, and visual hierarchy, so slides look designed rather than auto-filled.',
       },
       {
-        q: 'Can I export to PowerPoint for a client?',
-        a: 'Yes. Decks export to PPTX and PDF in addition to the HTML you present from, so they fit whatever the audience expects.',
+        q: 'Can I export to an editable PowerPoint?',
+        a: 'Yes. Open Design’s pptx-generator exports the deck to a real .pptx with native, editable text and shapes — audited for HTML-to-PPTX fidelity, not flat slide images — plus PDF and the HTML you present from. See the HTML to PPT tool for the conversion-first flow.',
       },
       {
         q: 'Which agents can I use?',
@@ -1360,6 +1488,13 @@ export const EN: SolutionLocaleCopy = {
     ctaTitle: 'Build your next deck tonight',
     ctaBody:
       'Star the repo, install Open Design, and turn your outline into a designed deck — in the agent you already use.',
+    relatedTitle: 'Related tools & guides',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'HTML to PPT with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/plugins/templates/', label: 'Browse deck templates' },
+      { href: '/solutions/marketing/', label: 'Open Design for marketing' },
+    ],
   },
   image: {
     title: 'Generate on-brand graphics with Open Design + Claude Code',

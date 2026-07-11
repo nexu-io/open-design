@@ -232,6 +232,14 @@ describe('importLocalDesignSystemProject', () => {
 
     const packageInfo = await readDesignSystemPackageInfo(userDesignSystemsRoot, 'kami-app');
     expect(packageInfo?.manifest?.sourceFiles?.report).toBe('source/token-contract.report.json');
+    expect(packageInfo?.availableFiles).toEqual(
+      expect.arrayContaining([
+        'components.html',
+        'preview/app.html',
+        'preview/colors.html',
+      ]),
+    );
+    expect(packageInfo?.availableFiles).not.toContain('system/kit.html');
     expect(packageInfo?.sourceEvidence?.tokenContract).toMatchObject({
       contract: 'TOKEN_SCHEMA',
       selfCheckOk: true,

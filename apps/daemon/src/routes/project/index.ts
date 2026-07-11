@@ -19,6 +19,7 @@ import { ArtifactPublicationBlockedError } from '../../artifacts/publication-gua
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
 import {
   createProjectFileVersion,
+  ensureCurrentProjectFileVersion,
   isProjectFileVersionPath,
   listProjectFileVersions,
   markProjectFileVersionStoreDeleted,
@@ -31,6 +32,7 @@ import {
   deleteUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
+  propagateWorkspaceProjectRename,
 } from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
@@ -1542,11 +1544,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      // Website Clone projects that already carry the target URL skip the
+      // turn-1 discovery brief: for this scenario the URL *is* the brief —
+      // the user asked for a reproduction, not a requirements interview, and
+      // an unanswered question form just stalls the run (the agent then
+      // "answers" it with conservative defaults). An explicit client-provided
+      // skipDiscoveryBrief still wins in both directions.
+      const webCloneUrlSkipsDiscovery =
+        skipDiscoveryBrief === undefined
+        && metadata && typeof metadata === 'object'
+        && (metadata as { intent?: unknown }).intent === 'web-clone'
+        && typeof pendingPrompt === 'string'
+        && /https?:\/\/\S+/i.test(pendingPrompt);
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
               ...metadata,
-              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(skipDiscoveryBrief === true || webCloneUrlSkipsDiscovery
+                ? { skipDiscoveryBrief: true }
+                : {}),
               ...(externalProjectDir
                 ? {
                     baseDir: externalProjectDir,
@@ -2122,6 +2138,31 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
+      }
+      if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
+        // Design-system workspace projects mirror their design system's
+        // title: the workspace ensure re-stamps the project name from the
+        // registry on every open, so a rename applied only to the project
+        // row silently reverts. Write the rename through to the design
+        // system so both records agree.
+        const existing = getProject(db, req.params.id);
+        if (existing) {
+          // Decide from the post-patch shape (updateProject merges the
+          // patch shallowly over the row), so a PATCH that also rebinds
+          // or detaches the design system only ever renames the system
+          // the project remains bound to after this request.
+          const propagation = await propagateWorkspaceProjectRename(
+            USER_DESIGN_SYSTEMS_DIR,
+            { ...existing, ...patch },
+            patch.name,
+          );
+          if (propagation === 'failed') {
+            return sendApiError(
+              res, 409, 'CONFLICT',
+              'rename could not be written through to the bound design system; project left unchanged',
+            );
+          }
+        }
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -3336,6 +3377,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       let file: ProjectFile | null = null;
       let historyFileName = fileName;
+      let workingFileContent: string | null = null;
       try {
         const workingFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
         if (!/\.html?$/i.test(workingFile.name)) {
@@ -3343,10 +3385,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         }
         file = workingFile;
         historyFileName = workingFile.name;
+        workingFileContent = workingFile.buffer.toString('utf8');
       } catch (err: any) {
         if (err?.code !== 'ENOENT') throw err;
       }
-      const versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      let versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      if (workingFileContent !== null && versions.length === 0) {
+        const initial = await ensureCurrentProjectFileVersion(
+          PROJECTS_DIR,
+          project.id,
+          historyFileName,
+          workingFileContent,
+          { source: 'manual', promptSource: 'manual' },
+          project.metadata,
+        );
+        if (initial) {
+          versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+        }
+      }
       file ??= fileFromVersionHistory(historyFileName, versions);
       if (!file) {
         return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
@@ -3828,11 +3884,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {}
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
+  const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { handleProjectUpload } = ctx.uploads;
+  const { PROJECTS_DIR } = ctx.paths;
+  const { getProject } = ctx.projectStore;
+  const { readProjectFile } = ctx.projectFiles;
   const { fs } = ctx.node;
 
   app.post(
@@ -3845,6 +3905,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         // stashed by the multer destination resolver. Prepend it so callers
         // get the file's true project-relative path, not just its basename.
         const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
+        const project = getProject(db, req.params.id);
         const out = [];
         for (const f of incoming) {
           try {
@@ -3857,6 +3918,17 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
               mtime: stat.mtimeMs,
               originalName: f.originalname,
             });
+            if (project && /\.html?$/i.test(rel)) {
+              const savedFile = await readProjectFile(PROJECTS_DIR, req.params.id, rel, project.metadata);
+              await ensureCurrentProjectFileVersion(
+                PROJECTS_DIR,
+                project.id,
+                savedFile.name,
+                savedFile.buffer.toString('utf8'),
+                { source: 'manual', promptSource: 'manual' },
+                project.metadata,
+              );
+            }
           } catch {
             // skip files that vanished mid-flight
           }

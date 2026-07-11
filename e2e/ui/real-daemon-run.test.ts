@@ -13,8 +13,11 @@ const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
+const EDITED_GENERATED_HEADING = 'Real Daemon Smoke Edited';
 const CHUNKED_FILE = 'chunked-daemon-smoke.html';
 const CHUNKED_HEADING = 'Chunked Daemon Smoke';
+const PLAIN_STREAM_FILE = 'fake-agent-runtime-qwen.html';
+const PLAIN_STREAM_HEADING = 'Fake Agent Runtime qwen';
 const DELAYED_FILE = 'delayed-daemon-smoke.html';
 const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
@@ -112,6 +115,20 @@ test('[P0] real daemon run persists an artifact streamed across multiple chunks'
   await expectProjectFileToContain(page, projectId, CHUNKED_FILE, CHUNKED_HEADING);
 });
 
+test('[P1] plain stdout daemon runtime persists artifact tags into project files and preview', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Plain stream artifact smoke', 'qwen');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Fake runtime smoke for qwen');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [PLAIN_STREAM_FILE]);
+  await expect(artifactPreview(page)).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: PLAIN_STREAM_HEADING })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, PLAIN_STREAM_FILE, PLAIN_STREAM_HEADING);
+});
+
 test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Daemon error smoke');
@@ -157,6 +174,38 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   expect(files.map((file) => file.name)).toEqual(expect.arrayContaining([GENERATED_FILE, FOLLOW_UP_FILE]));
 
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
+});
+
+test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Daemon artifact edit smoke');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Create a deterministic smoke artifact');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+
+  await sendPrompt(page, 'Edit the existing deterministic smoke artifact');
+
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, EDITED_GENERATED_HEADING);
+  const files = await listProjectFiles(page, projectId);
+  expect(files.filter((file) => file.name === GENERATED_FILE)).toHaveLength(1);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: EDITED_GENERATED_HEADING })).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistantMessages = messages.filter((message) => message.role === 'assistant');
+      return assistantMessages.map((message) => ({
+        runStatus: message.runStatus ?? null,
+        producedFiles: message.producedFiles?.map((file) => file.name) ?? [],
+      }));
+    }, { timeout: 15_000 })
+    .toContainEqual({
+      runStatus: 'succeeded',
+      producedFiles: [GENERATED_FILE],
+    });
 });
 
 test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
@@ -364,6 +413,29 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
+test('[P1] plain stdout daemon runtime surfaces stderr-only failures without ghost files', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Plain stderr failure smoke', 'qwen');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return a stderr-only daemon smoke failure');
+
+  const expectedError = 'stderr-only daemon smoke failure from fake qwen';
+  await expect(runErrorCard(page)).toContainText(expectedError, { timeout: 15_000 });
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
+  }, { timeout: 15_000 }).toBe('failed');
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(runErrorCard(page)).toContainText(expectedError);
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+});
+
 test('[P0] separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Real daemon isolation alpha');
@@ -411,6 +483,36 @@ test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', a
 
   const { projectId } = currentProject(page);
   await expectProjectFileToContain(page, projectId, fileName, heading);
+});
+
+test('[P1] BYOK OpenCode run fails clearly before spawn when provider config is missing', async ({ page }) => {
+  await createByokOpenCodeProject(page, 'BYOK OpenCode missing provider smoke');
+  await expectWorkspaceReady(page);
+
+  const runResponse = await sendPrompt(page, 'Create a BYOK OpenCode missing provider smoke artifact');
+  expectCreateRunAgentId(runResponse, 'byok-opencode');
+  const { runId } = (await runResponse.json()) as { runId: string };
+
+  const expectedError = 'BYOK OpenCode requires a provider, API key, and model for this run.';
+  await expect(runErrorCard(page)).toContainText(expectedError, { timeout: 15_000 });
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${runId}`);
+    expect(response.ok()).toBeTruthy();
+    const body = (await response.json()) as { status?: string; error?: string };
+    return { status: body.status ?? null, error: body.error ?? null };
+  }, { timeout: 15_000 }).toEqual({ status: 'failed', error: expectedError });
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
+  }, { timeout: 15_000 }).toBe('failed');
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(runErrorCard(page)).toContainText(expectedError);
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
 test('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
@@ -500,6 +602,23 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await setBrowserAgentConfig(page, agentId);
   await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
+  await dismissPrivacyDialog(page);
+  await openNewProjectModalFromProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill(name);
+  await page.getByTestId('create-project').click();
+}
+
+async function createByokOpenCodeProject(page: Page, name: string) {
+  await configureByokOpenCodeWithoutProvider(page);
+  await installBrowserByokOpenCodeConfig(page);
+  await gotoEntryHome(page);
+  await setBrowserByokOpenCodeConfig(page);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserByokOpenCodeConfig(page);
+  await configureByokOpenCodeWithoutProvider(page);
+  await expectBrowserAgentConfig(page, 'byok-opencode');
   await dismissPrivacyDialog(page);
   await openNewProjectModalFromProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
@@ -655,10 +774,29 @@ async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
   expect(response.ok()).toBeTruthy();
 }
 
+async function configureByokOpenCodeWithoutProvider(page: Page) {
+  const response = await page.request.put('/api/app-config', {
+    data: {
+      onboardingCompleted: true,
+      agentId: 'byok-opencode',
+      agentModels: { 'byok-opencode': { model: 'default', reasoning: 'default' } },
+      agentCliEnv: {},
+      skillId: null,
+      designSystemId: null,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function setBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
   const payload = { key: STORAGE_KEY, id: agentId, env: fakeRuntimes[agentId].env };
   await installBrowserAgentConfig(page, agentId);
   await page.evaluate(installConfig, payload);
+}
+
+async function setBrowserByokOpenCodeConfig(page: Page) {
+  await installBrowserByokOpenCodeConfig(page);
+  await page.evaluate(installByokOpenCodeConfig, { key: STORAGE_KEY });
 }
 
 async function installBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
@@ -667,6 +805,10 @@ async function installBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
     id: agentId,
     env: fakeRuntimes[agentId].env,
   });
+}
+
+async function installBrowserByokOpenCodeConfig(page: Page) {
+  await page.addInitScript(installByokOpenCodeConfig, { key: STORAGE_KEY });
 }
 
 function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Record<string, string> }) {
@@ -687,7 +829,25 @@ function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Re
   );
 }
 
-async function expectBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
+function installByokOpenCodeConfig({ key }: { key: string }) {
+  window.localStorage.setItem(
+    key,
+    JSON.stringify({
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: 'default',
+      agentId: 'byok-opencode',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: { 'byok-opencode': { model: 'default', reasoning: 'default' } },
+      agentCliEnv: {},
+    }),
+  );
+}
+
+async function expectBrowserAgentConfig(page: Page, agentId: string) {
   await expect
     .poll(async () => page.evaluate(({ key }) => {
       const raw = window.localStorage.getItem(key);
@@ -897,7 +1057,7 @@ function isCreateProjectRequest(request: Request): boolean {
   return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
-function expectCreateRunAgentId(response: Response, agentId: FakeAgentId) {
+function expectCreateRunAgentId(response: Response, agentId: string) {
   expect(response.request().postDataJSON()).toMatchObject({ agentId });
 }
 

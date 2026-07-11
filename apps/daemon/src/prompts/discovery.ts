@@ -91,6 +91,12 @@ Default-router exception: when the Active plugin / Active skill is \`od-default\
       "placeholder": "e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video"
     },
     {
+      "id": "speakerNotes",
+      "label": "For slide decks, include speaker notes?",
+      "type": "switch",
+      "defaultValue": true
+    },
+    {
       "id": "constraints",
       "label": "Any important constraints?",
       "type": "textarea",
@@ -133,6 +139,8 @@ Form authoring rules:
 - Body must be valid JSON. No comments. No trailing commas.
 - \`type\` is one of: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, \`switch\`, \`direction-cards\`.
 - Use the most expressive mainstream web form control for the information you need: sliders for numeric intensity, color for brand/accent picks, date/time for deadlines, url/email/tel for contact/reference fields, file for upload requests, switch for binary preferences, and textarea only for genuinely open prose.
+- When the selected or likely output is a slide deck / pitch deck, include a \`speakerNotes\` switch with \`defaultValue: true\` unless project metadata or plugin inputs already supply \`speakerNotes\`.
+- For reference images, brand specs, PDFs, slide/docs, screenshots, source exports, or any brief that asks the user to "upload/paste a file", include a \`type: "file"\` question in the same form instead of asking in prose after the form. Use \`multiple: true\` when several assets are useful, and \`accept\` such as \`"image/*"\`, \`".pdf,.doc,.docx"\`, or a comma-separated mix when the needed source type is known. Selected files are uploaded into Design Files and submitted as attached/context files on the answer turn.
 - For \`checkbox\` questions, include \`maxSelections\` when the user should choose only a limited number of options. Do not encode limits only in the label text.
 - For every finite-choice question (\`radio\`, \`checkbox\`, \`select\`, or \`direction-cards\`), include a user-editable escape hatch by leaving \`allowCustom\` unset or setting it to \`true\`; add localized \`customLabel\` / \`customPlaceholder\` when the default copy is not specific enough. Only set \`allowCustom: false\` when the downstream system truly requires one exact machine id.
 - Localize every user-facing string in the form (\`title\`, \`description\`, the per-question \`label\`, \`placeholder\`, and option \`label\`s) to the user's chat language. \`id\`, \`type\`, option \`value\`, and the stable branch values (\`pick_direction\`, \`brand_spec\`, \`reference_match\`) MUST stay in English because later branch rules match against them.
@@ -290,7 +298,7 @@ When the user selects multiple platform targets or metadata says \`platform: res
 - **Desktop app**: include desktop chrome/sidebar density, keyboard-friendly states, resizable panes, and hover/focus states.
 - **App-specific modules/components**: every product/app prototype must include domain-specific in-app modules by default (not optional): player controls for media, streak/check-in modules for habits, cart/order/coupon modules for commerce, balance/transaction/budget modules for finance, etc. These are inside the app UI and must include purpose, states, responsive behavior, and interaction notes where relevant.
 - **OS widgets / quick-access surfaces**: only include these when requested by metadata or user brief. They are platform-native home-screen, lock-screen, Live Activity, tablet glance, or Android widget surfaces outside the app, with realistic sizes and quick actions.
-- **CJX-ready UX**: artifacts must be implementation-ready. Prefer clear tokens, component classes, responsive comments, and real JS interactions for tabs, modals, drawers, filters, form validation, copy/generate actions, player controls, and state transitions. A self-contained \`index.html\` is acceptable only if its CSS/JS is structured and labelled; complex UX may use \`css/\` and \`js/\` files.
+- **CJX-ready UX**: artifacts must be implementation-ready. Prefer clear tokens, component classes, responsive comments, and real JS interactions for tabs, modals, drawers, filters, form validation, copy/generate actions, player controls, and state transitions. A self-contained semantic HTML file is acceptable only if its CSS/JS is structured and labelled; complex UX may use \`css/\` and \`js/\` files.
 
 ### I. Restraint over ornament
 "One thousand no's for every yes." A single decisive flourish — one orchestrated load animation, one striking pull quote, one piece of real photography — separates work from a sketch. Three competing flourishes turn it back into noise.

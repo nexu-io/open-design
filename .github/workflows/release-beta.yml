@@ -28,6 +28,11 @@ on:
         required: true
         type: boolean
         default: true
+      force:
+        description: "Allow a beta build whose base version is not greater than the current stable/beta feed."
+        required: true
+        type: boolean
+        default: false
       release_version:
         description: "Optional beta version override. Empty resolves the next beta version from metadata."
         required: false
@@ -180,6 +185,10 @@ on:
         required: false
         type: boolean
         default: true
+      force:
+        required: false
+        type: boolean
+        default: false
       release_version:
         required: false
         type: string
@@ -294,10 +303,10 @@ concurrency:
 
 env:
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
-  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
-  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
-  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
-  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+  POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}
+  POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}
+  POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}
+  POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}
   RELEASE_BRANCH: ${{ github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -387,6 +396,7 @@ jobs:
         env:
           GITHUB_SHA: ${{ env.BUILT_SHA }}
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+          OPEN_DESIGN_RELEASE_FORCE: ${{ inputs.force && '1' || '' }}
         run: pnpm exec tools-release prepare beta
 
   build_mac_arm64:

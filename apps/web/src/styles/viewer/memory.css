@@ -1445,6 +1445,33 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
 }
 
+.privacy-consent-action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast, #fff);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.privacy-consent-action--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  border-color: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  color: var(--accent-contrast, #fff);
+}
+
+.privacy-consent-action.is-active {
+  background: var(--bg-subtle);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+  color: var(--text-strong);
+}
+
+.privacy-consent-action--primary.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-contrast, #fff);
+}
+
 /* First-run privacy consent banner. Cookie-consent-style: anchored to the
    bottom-right of the viewport, prominent but non-blocking. Reuses the
    same typography + radii + shadow as the rest of the panels. */

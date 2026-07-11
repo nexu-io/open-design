@@ -1,17 +1,39 @@
 ---
 name: deck-guizang-editorial
-zh_name: "归藏编辑墨水 Deck"
-en_name: "Guizang Editorial E-Ink Deck"
+en_name: "Write an Annual Marketing Plan like a World-Class CMO"
+zh_name: "像世界级 CMO 一样写年度营销计划"
+description: |
+  Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
+en_description: |
+  Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
+zh_description: |
+  像世界级 CMO 一样写年度营销计划——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "deck-guizang-editorial"
+triggers:
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write an Annual Marketing Plan like a World-Class CMO"
+  - "像世界级 CMO 一样写年度营销计划"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 emoji: "🖋️"
-description: "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune)."
-zh_description: "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
-en_description: "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune)."
 category: slides
 scenario: marketing
 aspect_hint: "16:9 横向翻页"
 featured: 49
 recommended: 1
-tags: ["editorial", "e-ink", "magazine", "narrative", "guizang"]
 example_id: sample-guizang-editorial
 example_name: "归藏编辑墨水 · 章节封页"
 example_format: markdown
@@ -22,7 +44,6 @@ example_source_label: "op7418/guizang-ppt-skill"
 od:
   mode: deck
   surface: web
-  scenario: marketing
   featured: 0.01
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
@@ -31,9 +52,11 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "Use the Guizang Editorial E-Ink Deck template to turn my content into an editorial magazine x e-ink horizontal deck with 10 layouts and 5 palettes. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
   example_prompt_i18n:
     zh-CN: "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Write an Annual Marketing Plan like a World-Class CMO\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Audience: CMO, growth lead, founder. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 【模板: 归藏编辑墨水 Deck (Editorial × E-Ink)】

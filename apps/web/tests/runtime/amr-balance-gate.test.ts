@@ -75,8 +75,8 @@ describe('checkAmrBalanceGate', () => {
   });
 
   it('soft-warns between the hard-block and low-balance lines', async () => {
-    expect(AMR_LOW_BALANCE_WARN_USD).toBe(4);
-    const low = snapshot({ balanceUsd: '3.20' });
+    expect(AMR_LOW_BALANCE_WARN_USD).toBe(2);
+    const low = snapshot({ balanceUsd: '1.20' });
     mockedFetch.mockResolvedValueOnce(low);
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: low });
     // Soft trusts the cache — no upstream refresh for a dismissible reminder.
@@ -84,11 +84,11 @@ describe('checkAmrBalanceGate', () => {
   });
 
   it('soft-warns exactly at the low-balance line and allows just above it', async () => {
-    const atLine = snapshot({ balanceUsd: '4.00' });
+    const atLine = snapshot({ balanceUsd: '2.00' });
     mockedFetch.mockResolvedValueOnce(atLine);
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: atLine });
     mockedFetch.mockReset();
-    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '4.01' }));
+    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '2.01' }));
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
@@ -96,7 +96,7 @@ describe('checkAmrBalanceGate', () => {
     expect(isAmrLowBalanceWarnOptedOut()).toBe(false);
     setAmrLowBalanceWarnOptedOut();
     expect(isAmrLowBalanceWarnOptedOut()).toBe(true);
-    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '3.20' }));
+    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '1.20' }));
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
     mockedFetch.mockReset();
     const empty = snapshot({ balanceUsd: '0' });

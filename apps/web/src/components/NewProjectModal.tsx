@@ -30,6 +30,7 @@ import {
 interface Props {
   open: boolean;
   skills: SkillSummary[];
+  designTemplates?: SkillSummary[];
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
@@ -67,6 +68,7 @@ export function NewProjectModal({ open, ...rest }: Props) {
 
 function NewProjectModalBody({
   skills,
+  designTemplates,
   designSystems,
   defaultDesignSystemId,
   templates,
@@ -165,6 +167,7 @@ function NewProjectModalBody({
         <div className="new-project-modal__body">
           <NewProjectPanel
             skills={skills}
+            {...(designTemplates ? { designTemplates } : {})}
             designSystems={designSystems}
             defaultDesignSystemId={defaultDesignSystemId}
             templates={templates}

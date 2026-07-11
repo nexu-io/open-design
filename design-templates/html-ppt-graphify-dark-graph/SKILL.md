@@ -1,16 +1,34 @@
 ---
 name: html-ppt-graphify-dark-graph
-description: 暗底知识图谱 deck — #06060c→#0e1020 深夜渐变 + 漂浮 blur orbs、封面 SVG 力导向图谱、彩虹渐变标题、JetBrains Mono 命令行高亮、glass-morphism 卡片。适合 dev-tool / CLI / 知识图谱 / 数据可视化的发布会，"AI-native + 科幻 + 暖色" 调子。
+en_name: "Write a Feature Business Case like a Principal PM"
+zh_name: "像 Principal PM 一样写功能商业论证"
+description: |
+  Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
+en_description: |
+  Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
+zh_description: |
+  像 Principal PM 一样写功能商业论证——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "product-management"
+  - "pm-feature-business-case-deck"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-graphify-dark-graph"
 triggers:
-  - "知识图谱"
-  - "graph deck"
-  - "dark graph"
-  - "dev tool launch"
-  - "cli launch"
-  - "data viz launch"
+  - "pm-feature-business-case-deck"
+  - "product-management"
+  - "Write a Feature Business Case like a Principal PM"
+  - "像 Principal PM 一样写功能商业论证"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-graphify-dark-graph 模板做一份 dev-tool 发布会 PPT。深夜渐变背景 + 力导向图谱封面 + 彩虹标题 + JetBrains Mono 命令行。先确认：工具名、核心能力、demo 步骤；要不要现场敲 CLI。"
+  category: "product-management"
+  scenario: "product"
+  example_prompt: "Create \"Write a Feature Business Case like a Principal PM\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Audience: PM, eng, design, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 # HTML PPT · 暗底知识图谱
 

@@ -42,7 +42,7 @@ Rules:
 - The HTML must be **complete and standalone** — inline all CSS, no external CSS files, no external JS unless explicitly pinned (see React/Babel section).
 - If the user explicitly asks for React output, the artifact may instead be a single React component file: \`<artifact identifier="component-slug" type="text/jsx" title="Human title">...</artifact>\`. Export a default component or define \`App\`, \`Component\`, or \`Preview\`; do not include build-tool config in the artifact.
 - After \`</artifact>\`, stop. Do not narrate what you produced. Do not wrap the artifact in markdown code fences.
-- If you've written multiple files to the project, the artifact should be the **canonical entry point** (usually \`index.html\`). Reference supporting files by their project-relative paths in \`<link>\` / \`<script>\` tags only if you also intend the user to use them; otherwise inline.
+- If you've written multiple files to the project, the artifact should be the **canonical semantic entry point** named from the brief. Use \`index.html\` only when it is a launcher/overview or a fixed runtime convention requires that path. Reference supporting files by their project-relative paths in \`<link>\` / \`<script>\` tags only if you also intend the user to use them; otherwise inline.
 - For decks and multi-page work, you may write companion files; the artifact still wraps the entry HTML.
 
 ## Reading documents and images
@@ -51,7 +51,7 @@ You can read Markdown, HTML, and other plaintext formats natively. You can read 
 PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.) when the binary is available; if not, ask the user to convert.
 
 ## Design output guidelines
-- Give files descriptive names (\`landing-page.html\`, \`pricing.html\`).
+- Give files descriptive names derived from the user's brief (\`landing-page.html\`, \`pricing.html\`, \`investor-pitch-deck.html\`). Do not default a new user-facing deliverable to \`index.html\` unless a fixed runtime convention requires that path.
 - For significant revisions, copy the file to a versioned name (\`landing.html\` → \`landing-v2.html\`) so the previous version stays browsable.
 - Keep individual files under ~1000 lines. If you're approaching that, split into smaller JSX/CSS files and \`<script>\`/\`<link>\` them in.
 - For decks, slideshows, videos, or anything with a "current position" — persist that position to localStorage so a refresh doesn't lose the user's place.
@@ -127,3 +127,37 @@ Before emitting your final artifact, sanity-check the file you wrote. If you use
 ## Surprise the user
 HTML, CSS, SVG, and modern JS can do far more than most users expect. Within the constraints of taste and the brief, look for the move that's a notch more ambitious than what was asked for. Restraint over ornament — but a single decisive flourish per design is what separates a sketch from a real piece.
 `;
+
+// The default IP guardrail bullet under "What you don't do". Website Clone runs
+// (project metadata `intent: 'web-clone'`) swap it out: faithfully reproducing an
+// existing site is that scenario's whole job, so the blanket "build something
+// original instead" instruction makes the agent silently substitute placeholder
+// branding / original artwork for the site's real assets — which users experience
+// as "images missing / fonts wrong / colors off". The swapped bullet keeps the
+// legal caution but routes it through a pre-deploy replacement checklist the user
+// owns. This mirrors `apps/daemon/src/prompts/official-system.ts` so API/BYOK and
+// daemon-backed web-clone runs get identical guidance. Must stay byte-identical to
+// the bullet inside OFFICIAL_DESIGNER_PROMPT above (a contracts test guards it).
+export const COPYRIGHT_GUARDRAIL_BULLET =
+  "- Don't recreate copyrighted designs (other companies' distinctive UI patterns, branded visual elements). Help the user build something original instead.";
+export const WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET =
+  '- This is a Website Clone run: the user explicitly asked for a faithful local reproduction of an existing site (evaluation / prototyping use). Reproduce its layout, visuals, assets, fonts, and copy faithfully — do NOT silently swap in placeholder branding or original artwork. Record trademarks and copyrighted media in a pre-deploy replacement checklist (NOTES.md) so the user decides what to replace before publishing.';
+
+export interface RenderOfficialDesignerPromptOptions {
+  // True for runs whose project metadata carries `intent: 'web-clone'`.
+  webCloneFidelity?: boolean;
+}
+
+// API/BYOK counterpart of the daemon renderer. The contracts base prompt carries
+// no execution-profile placeholders, so this only swaps the copyright guardrail
+// for web-clone runs; everything else is the shared OFFICIAL_DESIGNER_PROMPT.
+export function renderOfficialDesignerPrompt(
+  options: RenderOfficialDesignerPromptOptions = {},
+): string {
+  return options.webCloneFidelity === true
+    ? OFFICIAL_DESIGNER_PROMPT.replace(
+        COPYRIGHT_GUARDRAIL_BULLET,
+        WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET,
+      )
+    : OFFICIAL_DESIGNER_PROMPT;
+}

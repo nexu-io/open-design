@@ -3,7 +3,7 @@
 // Plugins home section — UI contract.
 //
 // The section renders artifact-kind filters for the starter grid:
-// Prototype / Live Artifact / Slides / Image / Video / HyperFrames / Audio.
+// Slides / Prototype / Live Artifact / Image / Video / HyperFrames / Audio.
 // Prototype, Slides, Image, and Video expose a second row of scene buckets;
 // the smaller Live Artifact, HyperFrames, and Audio slices stay flat. Saved is an
 // orthogonal user collection override, and sparse buckets should fall
@@ -131,7 +131,7 @@ const sample: InstalledPluginRecord[] = [
     tags: ['live-artifacts'],
   }),
   makePlugin({ id: 'example-live-artifact', mode: 'prototype', tags: ['live-artifact'] }),
-  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['pitch-deck'], featured: true }),
+  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['fundraising-pitch'], featured: true }),
   makePlugin({ id: 'image-logo', mode: 'image', tags: ['logo'] }),
   makePlugin({ id: 'video-short', mode: 'video', tags: ['short-form'] }),
   makePlugin({ id: 'video-cinematic', mode: 'video', tags: ['cinematic'] }),
@@ -214,7 +214,17 @@ describe('PluginsHomeSection (community gallery)', () => {
   it('keeps the inline Use menu on the rich management layout (PluginsView)', () => {
     renderSection(sample, { cardLayout: 'rich' });
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     expect(screen.getByTestId('plugins-home-use-prototype-dashboard')).toBeTruthy();
+  });
+
+  it('hides All and keeps Slides selected on the lightweight gallery layout', () => {
+    renderSection(sample, { cardLayout: 'gallery' });
+
+    expect(screen.queryByTestId('plugins-home-pill-category-all')).toBeNull();
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
   });
 });
 
@@ -228,7 +238,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the artifact category row and the default Prototype scene row', () => {
+  it('renders the artifact category row and the default Slides scene row', () => {
     renderSection();
 
     expect(screen.getByTestId('plugins-home-row-category')).toBeTruthy();
@@ -245,10 +255,8 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-export')).toBeNull();
 
-    expect(screen.getByTestId('plugins-home-row-subcategory-prototype')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-business-dashboards')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-developer-tools')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-row-subcategory-deck')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-deck-fundraising-pitch')).toBeTruthy();
   });
 
   it('filters Video separately from HyperFrames', () => {
@@ -292,6 +300,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('saves a plugin, updates the Saved chip, and shows a toast', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
 
     expect(screen.getByTestId('plugins-home-save-prototype-dashboard').textContent).toContain('Saved');
@@ -374,6 +383,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('Saved chip overrides the category selection and shows only saved plugins', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
     fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));

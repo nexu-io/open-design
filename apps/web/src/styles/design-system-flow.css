@@ -2362,7 +2362,7 @@ a.ds-source-link-open:focus-visible {
 .ws-tab.design-system-tab.active {
   background: var(--bg-subtle);
 }
-.workspace.has-design-system-tab .ws-tab.design-files-tab {
+.workspace.has-design-system-tab .ws-pages-menu-anchor {
   /* Stick exactly to the right edge of the sticky Design System tab. The width
      is measured live (locale-proof) into --ds-system-tab-w by FileWorkspace; the
      148px fallback only applies before the first measurement. The old hardcoded

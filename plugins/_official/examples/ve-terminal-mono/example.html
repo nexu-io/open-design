@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Open Design — Terminal Mono Deck</title>
+<title>Teach an AI CLI Workflow like a Developer-Tools Educator - AI literacy</title>
 <!--
   Terminal Mono — Open Design community deck plugin (ve-terminal-mono).
   Based on nicobailon/visual-explainer slide-deck.html, Terminal Mono aesthetic
@@ -654,11 +654,11 @@
       <line x1="0" y1="120" x2="40" y2="120" stroke="var(--accent)" stroke-width="1.5" opacity="0.25"/>
     </svg>
     <div class="reveal">
-      <p class="slide__subtitle" style="margin-bottom:clamp(16px,2vh,32px);">Apache-2.0 &middot; Runs Locally &middot; BYOK &middot; No Sign-up</p>
+      <p class="slide__subtitle" style="margin-bottom:clamp(16px,2vh,32px);">AI Literacy &middot; CLI Curriculum &middot; For Engineering Teams</p>
     </div>
-    <h1 class="slide__display reveal">Open Design</h1>
+    <h1 class="slide__display reveal">Teach the <code style="font-family:inherit;">od</code> Workflow</h1>
     <div class="reveal">
-      <p class="slide__subtitle" style="margin-top:clamp(16px,2vh,32px);">The open-source, local, agent-driven design platform</p>
+      <p class="slide__subtitle" style="margin-top:clamp(16px,2vh,32px);">Open Design from the command line &mdash; scripted, composable, agent-ready</p>
     </div>
   </section>
 
@@ -666,8 +666,8 @@
   <section class="slide slide--divider">
     <span class="slide__number">01</span>
     <div>
-      <h2 class="slide__heading reveal">The Closed Frontier</h2>
-      <p class="slide__subtitle reveal" style="margin-top:12px;">Why frontier AI design stays locked away</p>
+      <h2 class="slide__heading reveal">Why Now</h2>
+      <p class="slide__subtitle reveal" style="margin-top:12px;">Design is the last unscripted tool left in the stack</p>
     </div>
   </section>
 
@@ -675,13 +675,13 @@
   <section class="slide slide--content">
     <div class="slide__inner">
       <div>
-        <p class="slide__label reveal">April 2026</p>
-        <h2 class="slide__heading reveal">Closed, Paid, Cloud-Only</h2>
+        <p class="slide__label reveal">Q3 2026 training backlog</p>
+        <h2 class="slide__heading reveal">Engineers Already Script Everything Else</h2>
         <ul class="slide__bullets">
-          <li class="reveal">Claude Design proved an LLM can truly design &mdash; real artifacts, not prose</li>
-          <li class="reveal">But it is closed-source, paid, and runs only in the cloud</li>
-          <li class="reveal">Locked to one model &mdash; no agent choice, no self-hosting</li>
-          <li class="reveal">No BYOK &mdash; your keys and your machine stay out of the loop</li>
+          <li class="reveal">Deploys, migrations, and CI all run from the terminal &mdash; design still means a mouse and a shared Figma seat</li>
+          <li class="reveal">New hires ask why there's a <code>git</code> for code but no equivalent for design work</li>
+          <li class="reveal">Agent-native CLIs (Claude Code, Codex, Cursor) already live in every engineer's shell today</li>
+          <li class="reveal">No onboarding path teaches design as a scriptable, agent-driven step in the pipeline</li>
         </ul>
       </div>
       <div class="slide__aside reveal">
@@ -689,7 +689,7 @@
           <rect x="20" y="20" width="120" height="120" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.3"/>
           <rect x="40" y="40" width="80" height="80" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.2" stroke-dasharray="4 4"/>
           <rect x="74" y="74" width="12" height="12" fill="var(--accent)" opacity="0.5"/>
-          <text x="80" y="150" text-anchor="middle" font-family="Geist Mono, monospace" font-size="10" letter-spacing="1" fill="var(--text-dim)">CLOUD-ONLY</text>
+          <text x="80" y="150" text-anchor="middle" font-family="Geist Mono, monospace" font-size="10" letter-spacing="1" fill="var(--text-dim)">GUI-ONLY</text>
         </svg>
       </div>
     </div>
@@ -699,23 +699,23 @@
   <section class="slide slide--split">
     <div class="slide__panels">
       <div class="slide__panel slide__panel--primary">
-        <p class="slide__label reveal" style="color:var(--text-dim);">Closed &mdash; Cloud</p>
-        <h2 class="slide__heading reveal" style="font-size:clamp(20px,3vw,32px);">One Model, One Vendor</h2>
+        <p class="slide__label reveal" style="color:var(--text-dim);">Before &mdash; GUI Habit</p>
+        <h2 class="slide__heading reveal" style="font-size:clamp(20px,3vw,32px);">One Designer, One Screen</h2>
         <ul class="slide__bullets" style="margin-top:16px;">
-          <li class="reveal">Locked to a single model</li>
-          <li class="reveal">Cloud-only, no self-hosting</li>
-          <li class="reveal">$500 per month, fixed</li>
-          <li class="reveal">Your work lives on their servers</li>
+          <li class="reveal">Every request queues behind a single Figma seat</li>
+          <li class="reveal">No way to template or script a repeat layout</li>
+          <li class="reveal">Handoff means screenshots dropped in Slack</li>
+          <li class="reveal">No audit trail of who changed what, or when</li>
         </ul>
       </div>
       <div class="slide__panel slide__panel--secondary">
-        <p class="slide__label reveal">Open &mdash; Local</p>
-        <h2 class="slide__heading reveal" style="font-size:clamp(20px,3vw,32px);">Any Agent, Your Machine</h2>
+        <p class="slide__label reveal">Pilot &mdash; Week 1&ndash;6</p>
+        <h2 class="slide__heading reveal" style="font-size:clamp(20px,3vw,32px);">Any Engineer, One Command</h2>
         <ul class="slide__bullets" style="margin-top:16px;">
-          <li class="reveal">21 coding agents, auto-detected from PATH</li>
-          <li class="reveal">Runs locally &mdash; Apache-2.0, fork and self-host</li>
-          <li class="reveal">BYOK &mdash; ~$73 per month, -80%</li>
-          <li class="reveal">Local files, Figma exports, repos readable in place</li>
+          <li class="reveal">14 engineers ran <code>od project create</code> in week one, zero onboarding tickets</li>
+          <li class="reveal">Design specs live as git-diffable files, reviewed in normal PRs</li>
+          <li class="reveal"><code>od plugin apply</code> scripts a full page from a design system in under 90s</li>
+          <li class="reveal">Full shell history doubles as the change-audit trail</li>
         </ul>
       </div>
     </div>
@@ -725,50 +725,50 @@
   <section class="slide slide--divider">
     <span class="slide__number">02</span>
     <div>
-      <h2 class="slide__heading reveal">The Workflow</h2>
-      <p class="slide__subtitle reveal" style="margin-top:12px;">From idea to delivery in five steps</p>
+      <h2 class="slide__heading reveal">The Workflow Map</h2>
+      <p class="slide__subtitle reveal" style="margin-top:12px;">Five commands, one continuous loop</p>
     </div>
   </section>
 
   <!-- SLIDE 6: DIAGRAM (pure CSS/SVG pipeline — no mermaid, no external JS) -->
   <section class="slide slide--diagram">
-    <h2 class="slide__heading reveal">From Idea to Artifact</h2>
+    <h2 class="slide__heading reveal">Five Commands, One Loop</h2>
     <div class="pipeline-wrap reveal">
       <div class="pipeline-row">
         <div class="pipe-node">
-          <div class="pipe-node__name">idea</div>
-          <div class="pipe-node__meta">one sentence</div>
+          <div class="pipe-node__name">od init</div>
+          <div class="pipe-node__meta">new project</div>
         </div>
         <div class="pipe-link"><div class="pipe-link__line"></div></div>
         <div class="pipe-node">
-          <div class="pipe-node__name">direction</div>
-          <div class="pipe-node__meta">palette &middot; type</div>
+          <div class="pipe-node__name">od design</div>
+          <div class="pipe-node__meta">import system</div>
         </div>
         <div class="pipe-link"><div class="pipe-link__line"><span class="pipe-link__label">design system</span></div></div>
         <div class="pipe-node pipe-node--accent">
-          <div class="pipe-node__name">agent</div>
-          <div class="pipe-node__meta">full context</div>
+          <div class="pipe-node__name">od agent</div>
+          <div class="pipe-node__meta">run task</div>
         </div>
         <div class="pipe-link"><div class="pipe-link__line"><span class="pipe-link__label">sandbox</span></div></div>
         <div class="pipe-node">
-          <div class="pipe-node__name">artifact</div>
-          <div class="pipe-node__meta">runnable files</div>
+          <div class="pipe-node__name">od export</div>
+          <div class="pipe-node__meta">ship files</div>
         </div>
       </div>
       <div class="pipeline-row">
         <div class="pipe-node">
-          <div class="pipe-node__name">ship</div>
-          <div class="pipe-node__meta">hand off</div>
+          <div class="pipe-node__name">od plugin</div>
+          <div class="pipe-node__meta">apply template</div>
         </div>
-        <div class="pipe-link pipe-link--dashed"><div class="pipe-link__line"><span class="pipe-link__label">or film it</span></div></div>
+        <div class="pipe-link pipe-link--dashed"><div class="pipe-link__line"><span class="pipe-link__label">or preview</span></div></div>
         <div class="pipe-node">
-          <div class="pipe-node__name">hyperframes</div>
-          <div class="pipe-node__meta">html &rarr; mp4</div>
+          <div class="pipe-node__name">od preview</div>
+          <div class="pipe-node__meta">html &rarr; live</div>
         </div>
         <div class="pipe-link"><div class="pipe-link__line"></div></div>
         <div class="pipe-node pipe-node--accent">
-          <div class="pipe-node__name">memory</div>
-          <div class="pipe-node__meta">preferences</div>
+          <div class="pipe-node__name">od skill</div>
+          <div class="pipe-node__meta">learns style</div>
         </div>
         <div class="pipe-link"><div class="pipe-link__line"></div></div>
         <div class="pipe-node">
@@ -785,45 +785,45 @@
 
   <!-- SLIDE 7: DASHBOARD -->
   <section class="slide slide--dashboard">
-    <h2 class="slide__heading reveal">An Open Community</h2>
+    <h2 class="slide__heading reveal">Pilot Results, Six Weeks In</h2>
     <div class="slide__kpis">
       <div class="slide__kpi reveal">
-        <div class="slide__kpi-val" style="color:var(--accent);">60K+</div>
-        <div class="slide__kpi-label">GitHub Stars</div>
-        <div class="slide__kpi-trend">Apache-2.0 open source</div>
+        <div class="slide__kpi-val" style="color:var(--accent);">14</div>
+        <div class="slide__kpi-label">Engineers Onboarded</div>
+        <div class="slide__kpi-trend">zero design-tool tickets filed</div>
       </div>
       <div class="slide__kpi reveal">
-        <div class="slide__kpi-val" style="color:var(--accent);">300+</div>
-        <div class="slide__kpi-label">Contributors</div>
-        <div class="slide__kpi-trend">and counting</div>
+        <div class="slide__kpi-val" style="color:var(--accent);">38</div>
+        <div class="slide__kpi-label">Pages Shipped via CLI</div>
+        <div class="slide__kpi-trend">reviewed in PRs, not Slack</div>
       </div>
       <div class="slide__kpi reveal">
-        <div class="slide__kpi-val">217+</div>
-        <div class="slide__kpi-label">Plugins</div>
-        <div class="slide__kpi-trend">community + official</div>
+        <div class="slide__kpi-val">6 min</div>
+        <div class="slide__kpi-label">Median Cycle Time</div>
+        <div class="slide__kpi-trend">prompt to merged PR</div>
       </div>
       <div class="slide__kpi reveal">
-        <div class="slide__kpi-val">-80%</div>
-        <div class="slide__kpi-label">Monthly Cost</div>
-        <div class="slide__kpi-trend">$500 &rarr; ~$73 vs Claude Design</div>
+        <div class="slide__kpi-val">-71%</div>
+        <div class="slide__kpi-label">Design Backlog</div>
+        <div class="slide__kpi-trend">queue length, week 1 &rarr; week 6</div>
       </div>
     </div>
   </section>
 
   <!-- SLIDE 8: TABLE -->
   <section class="slide slide--table">
-    <h2 class="slide__heading reveal">Core Capabilities</h2>
+    <h2 class="slide__heading reveal">Guardrails Before Rollout</h2>
     <div class="table-wrap reveal" style="flex:1; min-height:0; margin-top:clamp(8px,1.5vh,20px);">
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Capability</th><th>Detail</th><th>Surface</th><th>Status</th></tr></thead>
+          <thead><tr><th>Control</th><th>Detail</th><th>Surface</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>Desktop-first</td><td>Local files, Figma exports, and code repos readable in place</td><td><code>local</code></td><td style="color:var(--accent);">shipped</td></tr>
-            <tr><td>21 coding agents</td><td>Auto-detected from PATH, zero config</td><td><code>agents</code></td><td style="color:var(--accent);">shipped</td></tr>
-            <tr><td>129 design systems</td><td>Import from GitHub, Figma, or local</td><td><code>design.md</code></td><td style="color:var(--accent);">shipped</td></tr>
-            <tr><td>HTML video pipeline</td><td>Programmatic video via HyperFrames</td><td><code>hyperframes</code></td><td style="color:var(--accent);">shipped</td></tr>
-            <tr><td>Full-stack BYOK</td><td>Anthropic / OpenAI / Azure / Google + 14 media providers</td><td><code>byok</code></td><td style="color:var(--accent);">shipped</td></tr>
-            <tr><td>Design memory</td><td>Remembers preferences and color lineage across runs</td><td><code>memory</code></td><td style="color:var(--text-dim);">evolving</td></tr>
+            <tr><td>Sandboxed runs</td><td>Agent writes only inside the project workspace, never the host</td><td><code>sandbox</code></td><td style="color:var(--accent);">shipped</td></tr>
+            <tr><td>BYOK keys</td><td>Each engineer's provider key stays in their local env, never centralized</td><td><code>byok</code></td><td style="color:var(--accent);">shipped</td></tr>
+            <tr><td>Git-diffable output</td><td>Every generated file reviewable in a normal pull request</td><td><code>diff</code></td><td style="color:var(--accent);">shipped</td></tr>
+            <tr><td>Command allowlist</td><td><code>od</code> subcommands scoped per role through CI policy</td><td><code>policy</code></td><td style="color:var(--accent);">shipped</td></tr>
+            <tr><td>Local-first data</td><td>No design content leaves the laptop unless explicitly exported</td><td><code>local</code></td><td style="color:var(--accent);">shipped</td></tr>
+            <tr><td>Rollback via git</td><td>A bad agent run reverts with a plain <code>git checkout</code></td><td><code>rollback</code></td><td style="color:var(--text-dim);">evolving</td></tr>
           </tbody>
         </table>
       </div>
@@ -832,17 +832,17 @@
 
   <!-- SLIDE 9: CODE -->
   <section class="slide slide--code">
-    <h2 class="slide__heading reveal" style="text-align:center;">Your Agents, Your Keys</h2>
+    <h2 class="slide__heading reveal" style="text-align:center;">The Five Commands to Teach First</h2>
     <div class="slide__code-block reveal" style="margin-top:clamp(12px,2vh,24px);">
-      <span class="slide__code-filename">open-design.toml</span>
-      <pre><code><span class="hl">[agents]</span>
-detect   = <span class="hl">"auto"</span>        <span class="cm"># 21 coding agents found on PATH, zero config</span>
-roster   = <span class="hl">"claude-code, codex, cursor-agent, gemini, ..."</span>
-<span class="hl">[providers]</span>
-byok     = <span class="hl">"anthropic | openai | azure | google"</span>
-media    = <span class="hl">"14 providers"</span> <span class="cm"># image, video, audio</span>
-<span class="hl">[license]</span>
-type     = <span class="hl">"Apache-2.0"</span>  <span class="cm"># fork, self-host, commercial use — all allowed</span></code></pre>
+      <span class="slide__code-filename">od-101.md</span>
+      <pre><code><span class="hl">[week 1]</span>
+init     = <span class="hl">"od project create &lt;name&gt;"</span>     <span class="cm"># first command every hire runs</span>
+import   = <span class="hl">"od design import &lt;repo&gt;"</span>
+<span class="hl">[week 2]</span>
+run      = <span class="hl">"od agent run --prompt-file brief.md"</span> <span class="cm"># --json pipes into CI</span>
+apply    = <span class="hl">"od plugin apply &lt;template&gt;"</span>
+<span class="hl">[week 3]</span>
+ship     = <span class="hl">"od file export --to ./dist"</span>       <span class="cm"># git-diffable, PR-ready</span></code></pre>
     </div>
   </section>
 
@@ -850,9 +850,9 @@ type     = <span class="hl">"Apache-2.0"</span>  <span class="cm"># fork, self-h
   <section class="slide slide--quote">
     <div class="slide__quote-mark reveal">&gt;</div>
     <blockquote class="reveal">
-      File-system semantics plus git-diffable design artifacts &mdash; design is finally under version control.
+      The moment <code style="font-family:inherit;">od agent run --json</code> piped cleanly into our CI, design stopped being the one GUI-shaped exception in an otherwise scripted stack.
     </blockquote>
-    <cite class="reveal">&mdash; Indie developer</cite>
+    <cite class="reveal">&mdash; Staff engineer, pilot cohort</cite>
   </section>
 
   <!-- SLIDE 11: CLOSING -->
@@ -861,9 +861,9 @@ type     = <span class="hl">"Apache-2.0"</span>  <span class="cm"># fork, self-h
       <line x1="120" y1="0" x2="120" y2="40" stroke="var(--accent)" stroke-width="1.5" opacity="0.25"/>
       <line x1="80" y1="0" x2="120" y2="0" stroke="var(--accent)" stroke-width="1.5" opacity="0.25"/>
     </svg>
-    <p class="slide__label reveal">Open &middot; Local &middot; Agent-native</p>
-    <h2 class="slide__display reveal">Frontier AI design,<br><em>back on your desk.</em></h2>
-    <p class="slide__subtitle reveal" style="margin-top:clamp(16px,2vh,32px);">Download for macOS / Windows &mdash; Star on GitHub &mdash; github.com/nexu-io/open-design</p>
+    <p class="slide__label reveal">Rollout &middot; Weeks 7&ndash;12</p>
+    <h2 class="slide__display reveal">Ship the curriculum,<br><em>not just the tool.</em></h2>
+    <p class="slide__subtitle reveal" style="margin-top:clamp(16px,2vh,32px);">Week 7: guild office hours &mdash; Week 9: <code style="font-family:inherit;">od</code> added to onboarding checklist &mdash; Week 12: org-wide, CLI-first</p>
   </section>
 
 </div><!-- /deck -->

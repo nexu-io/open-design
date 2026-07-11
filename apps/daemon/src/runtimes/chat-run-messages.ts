@@ -16,6 +16,10 @@ type ChatRunMessageState = {
   createdAt?: number;
   sessionMode?: string | null;
   context?: Record<string, unknown> | null;
+  error?: string | null;
+  errorCode?: string | null;
+  failureCategory?: string | null;
+  failureDetail?: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,6 +39,74 @@ export function persistRunEventToAssistantMessage(
     appendMessageAgentEvent(db, run.assistantMessageId, persisted);
   } catch (err) {
     console.warn('[runs] message event persistence failed', err);
+  }
+}
+
+/**
+ * Stamp the daemon's finalize-time failure classification onto the persisted
+ * assistant message so a reload — or any consumer that reads the stored
+ * message instead of the live SSE stream — still sees the fine-grained cause.
+ *
+ * The `error` SSE frame is emitted from the child-close handler BEFORE the run
+ * is finalized, so `failureCategory` / `failureDetail` (computed at finalize)
+ * aren't known when that frame is first persisted. This enriches the last
+ * persisted `status:error` event in place once the classification exists, and
+ * appends one only if a failed run somehow never persisted an error frame.
+ * Without this, a daemon-persisted failure (no live web error handler saving
+ * the message, or a conversation reloaded before that save) falls back to the
+ * coarse `errorCode` UI and loses the specific fix guidance.
+ */
+export function persistRunFailureClassification(
+  db: SqliteDb,
+  run: ChatRunMessageState,
+): void {
+  if (!run.assistantMessageId) return;
+  const failureCategory = run.failureCategory ?? null;
+  const failureDetail = run.failureDetail ?? null;
+  if (!failureCategory && !failureDetail) return;
+  try {
+    const row = db
+      .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get(run.assistantMessageId) as { eventsJson?: string } | undefined;
+    if (!row) return;
+    let events: unknown[] = [];
+    try {
+      const parsed = JSON.parse(row.eventsJson ?? '[]');
+      if (Array.isArray(parsed)) events = parsed;
+    } catch {
+      events = [];
+    }
+    let idx = -1;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      if (isRecord(event) && event.kind === 'status' && event.label === 'error') {
+        idx = i;
+        break;
+      }
+    }
+    const existing = idx >= 0 ? events[idx] : null;
+    const base: Record<string, unknown> = isRecord(existing)
+      ? existing
+      : { kind: 'status', label: 'error' };
+    const enriched: Record<string, unknown> = {
+      ...base,
+      ...(failureCategory ? { failureCategory } : {}),
+      ...(failureDetail ? { failureDetail } : {}),
+    };
+    if (run.errorCode && typeof enriched.code !== 'string') enriched.code = run.errorCode;
+    if (idx >= 0) {
+      if (JSON.stringify(enriched) === JSON.stringify(events[idx])) return;
+      events[idx] = enriched;
+    } else {
+      if (run.error && typeof enriched.detail !== 'string') enriched.detail = run.error;
+      events.push(enriched);
+    }
+    db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(
+      JSON.stringify(events),
+      run.assistantMessageId,
+    );
+  } catch (err) {
+    console.warn('[runs] failure classification persistence failed', err);
   }
 }
 

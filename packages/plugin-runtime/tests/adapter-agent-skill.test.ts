@@ -47,4 +47,40 @@ describe('adaptAgentSkill', () => {
     const result = adaptAgentSkill('---\n---\n# heading', { folderId: 'no-name' });
     expect(result.manifest.name).toBe('no-name');
   });
+
+  it('passes display copy and tags from SKILL frontmatter into the manifest', () => {
+    const result = adaptAgentSkill(
+      `---
+name: board-pre-read
+en_name: Board Pre-read Decision Memo
+zh_name: 董事会决策预读
+description: Legacy design note.
+en_description: Turn metrics, risks, and owners into a board-ready decision deck.
+zh_description: 把经营指标、风险和负责人收敛成董事会可直接决策的预读材料。
+tags: [board-pre-read, corporate-strategy, decision-deck]
+od:
+  mode: deck
+---
+# Board Pre-read
+`,
+      { folderId: 'board-pre-read' },
+    );
+
+    expect(result.manifest.title).toBe('Board Pre-read Decision Memo');
+    expect(result.manifest.title_i18n).toEqual({
+      en: 'Board Pre-read Decision Memo',
+      'zh-CN': '董事会决策预读',
+    });
+    expect(result.manifest.description).toBe('Turn metrics, risks, and owners into a board-ready decision deck.');
+    expect(result.manifest.description_i18n).toEqual({
+      en: 'Turn metrics, risks, and owners into a board-ready decision deck.',
+      'zh-CN': '把经营指标、风险和负责人收敛成董事会可直接决策的预读材料。',
+    });
+    expect(result.manifest.tags).toEqual([
+      'board-pre-read',
+      'corporate-strategy',
+      'decision-deck',
+    ]);
+    expect(parseManifestObject(result.manifest).ok).toBe(true);
+  });
 });

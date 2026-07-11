@@ -446,6 +446,55 @@ afterEach(() => {
   restoreOpenDesignHost = null;
 });
 
+describe('SettingsDialog privacy settings interactions', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('preserves a pending privacy choice when an unrelated parent config update arrives', async () => {
+    const randomUUID = vi.fn(() => 'inst-new');
+    vi.stubGlobal('crypto', { randomUUID });
+    const initial: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentId: null,
+      installationId: null,
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: false, content: false, artifactManifest: true },
+    };
+    const view = renderSettingsDialog(initial, { initialSection: 'privacy' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
+    });
+
+    view.rerender(
+      <SettingsDialog
+        initial={{ ...initial, agentId: 'codex' }}
+        agents={availableAgents}
+        daemonLive={true}
+        appVersionInfo={null}
+        initialSection="privacy"
+        onPersist={view.onPersist}
+        onPersistComposioKey={view.onPersistComposioKey}
+        onClose={view.onClose}
+        onRefreshAgents={view.onRefreshAgents}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
+    expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))
+      .toBe('true');
+  });
+});
+
 describe('SettingsDialog execution settings BYOK interactions', () => {
   afterEach(() => {
     cleanup();

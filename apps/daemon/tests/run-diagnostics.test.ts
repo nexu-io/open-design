@@ -39,6 +39,24 @@ describe('run diagnostics', () => {
     expect(result.rpc_close_reason).toBe('exit_0');
   });
 
+  it('flags resume_auto_reseeded from native session recovery diagnostics', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'diagnostic',
+          data: {
+            type: 'native_session_recovery',
+            nativeSessionRecovery: { state: 'auto_reseeded' },
+          },
+        },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+
+    expect(result.resume_auto_reseeded).toBe(true);
+  });
+
   it('returns only low-cardinality stderr fields for PostHog analytics', () => {
     const result = summarizeRunDiagnosticsForAnalytics({
       events: [

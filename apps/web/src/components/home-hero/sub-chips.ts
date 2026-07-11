@@ -44,13 +44,22 @@ const SUBCATEGORY_ICONS: Record<string, IconName> = {
   'developer-tools': 'terminal',
   'docs-reports': 'file',
   'brand-design': 'palette',
-  // deck
-  'pitch-business': 'present',
-  'course-training': 'lightbulb',
-  'reports-briefings': 'file',
-  'product-sales': 'star',
-  'engineering-talks': 'terminal',
-  'creative-decks': 'palette',
+  // deck — the 15 commercial "品类" scenes (slug === commercial category id)
+  'fundraising-pitch': 'present',
+  'corporate-strategy': 'kanban',
+  'b2b-sales': 'send',
+  'product-management': 'blocks',
+  'design-craft': 'palette',
+  'marketing-gtm': 'globe',
+  'data-finance': 'sliders',
+  consulting: 'orbit',
+  'government-policy': 'info',
+  'professional-training': 'lightbulb',
+  'academic-research': 'search',
+  'ai-literacy': 'sparkles',
+  career: 'star',
+  'student-coursework': 'file-text',
+  life: 'sun',
 };
 const DEFAULT_SUBCATEGORY_ICON: IconName = 'blocks';
 

@@ -47,6 +47,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   const reloginVelaBin = await writeFakeVelaBin(join(root, 'bin-relogin'), {
     failAuthAtPrompt: true,
     requireLoginConfig: false,
+    requireSetModel: false,
   });
   await mkdir(root, { recursive: true });
   let loggedIn = true;

@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-long-table
+en_name: "Present a Unit-Economics Model like an FP&A Partner"
+zh_name: "像 FP&A 伙伴一样讲清单位经济模型"
 description: |
-  Long Table — Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons. Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership pitches, lifestyle and wine brands.
+  Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.
+en_description: |
+  Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.
+zh_description: |
+  像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "data-finance"
+  - "product-analytics-deck"
+  - "finance"
+  - "kpi"
+  - "metrics"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-long-table"
 triggers:
-  - "long-table"
-  - "zhangzara-long-table"
-  - "Long Table"
-  - "warm"
-  - "intimate"
-  - "playful"
-  - "supper club or dinner series"
-  - "event or community gathering"
+  - "product-analytics-deck"
+  - "data-finance"
+  - "Present a Unit-Economics Model like an FP&A Partner"
+  - "像 FP&A 伙伴一样讲清单位经济模型"
+  - "kpi"
+  - "finance"
+  - "metrics"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/long-table"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "data-finance"
+  scenario: "finance"
+  example_prompt: "Create \"Present a Unit-Economics Model like an FP&A Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Audience: CFO, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Long Table

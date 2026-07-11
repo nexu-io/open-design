@@ -1,26 +1,32 @@
 ---
 name: huashu-keynote-black
+en_name: "Run an All-Hands Town Hall like a World-Class Founder-CEO"
+zh_name: "像世界级创始人 CEO 一样开全员大会"
 description: |
-  Keynote Black (黑场大数字) — Jobs-2007 / Lei-Jun-launch-event black-stage
-  keynote decks, generated from the「黑底巨型数字剧场 / Black Big-Number
-  Stage」spec in 花叔 (alchaincyf)'s huashu-design design-styles library.
-  Pure black #000000 stage, pure white type, one word or one giant
-  tabular-nums numeral per screen, exactly one brand accent for the whole
-  deck (Mi orange #FF6900 / Spotify green #1ED760 / Apple blue #2997FF),
-  massive negative space, accent-vs-grey spec comparison bars, and a
-  price-reveal climax. Use when the user wants a product launch keynote,
-  发布会 PPT, 主题演讲, town hall, year-in-review, Jobs-style or
-  雷军式 presentation, or a one-word-per-slide black deck.
+  Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.
+en_description: |
+  Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.
+zh_description: |
+  像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "corporate-strategy"
+  - "board-pre-read-deck"
+  - "strategy"
+  - "board"
+  - "business-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-keynote-black"
 triggers:
-  - "keynote"
-  - "product launch deck"
-  - "black stage slides"
-  - "big number slides"
-  - "发布会 PPT"
-  - "主题演讲"
-  - "雷军式"
-  - "黑底大字"
-  - "一屏一词"
+  - "board-pre-read-deck"
+  - "corporate-strategy"
+  - "Run an All-Hands Town Hall like a World-Class Founder-CEO"
+  - "像世界级创始人 CEO 一样开全员大会"
+  - "board"
+  - "strategy"
+  - "business-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -29,9 +35,11 @@ od:
     entry: example.html
   design_system:
     requires: false
-  example_prompt: "Use the Keynote Black template to turn my launch story into a black-stage HTML keynote: 1920×1080 fixed canvas, pure black background and pure white geometric bold type, one word or one giant tabular-nums number per screen, a single Mi-orange #FF6900 accent for the whole deck, accent-vs-grey spec comparison bars and a price-reveal page. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「黑场大数字」模板把我的发布会故事做成黑场 HTML 主题演讲：1920×1080 固定画布、纯黑底纯白几何粗体、一屏一词或一个超大 tabular-nums 数字、整套只用一个小米橙 #FF6900 强调色、强调色对灰色的参数对比条和价格揭晓页。从 example.html 出发只换内容，不要重写设计。"
+  category: "corporate-strategy"
+  scenario: "strategy"
+  example_prompt: "Create \"Run an All-Hands Town Hall like a World-Class Founder-CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Audience: whole company. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Keynote Black · 黑场大数字

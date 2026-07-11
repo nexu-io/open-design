@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Testing Safety Alert</title>
+<title>Brief a Health-System Board on Data Governance like a Chief Compliance Officer - Government &amp; policy</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -244,167 +244,156 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 1. COVER -->
   <section class="slide is-active">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">ai safety · 高优先级</span><span class="ts-page">01 / 08</span></div>
-    <div class="ts-kicker">2026 年最重要的一条判断</div>
-    <h1 class="ts-h1">别再追问<br><span class="strike">AI 会不会干活</span><br>开始问：<span class="red">它出事谁负责</span></h1>
-    <p class="ts-sub">AI 出错的代价，不再是一次 bad response 这么简单 —— 它可能一次性写 300 份工单、提 80 个 PR、发 5000 封邮件。</p>
+    <div class="ts-chrome"><span class="ts-alert-tag">合规简报 · 需董事会批准</span><span class="ts-page">01 / 08</span></div>
+    <div class="ts-kicker">美年医疗集团 · 数据治理董事会简报</div>
+    <h1 class="ts-h1">别再问供应商<br><span class="strike">能不能碰患者数据</span><br>先批准<span class="red">数据治理框架</span></h1>
+    <p class="ts-sub">过去六个月，美年医疗集团向 14 家外部供应商开放了患者数据接口；其中仅 3 家有完整的数据保护协议(BAA)配合数据防泄漏(DLP)控制覆盖。</p>
     <div class="ts-alert-box">
-      <h3>风险已经规模化</h3>
-      <p>「做错」成本 × N；「做对」收益 × N。<br>这就是为什么 <b>测试、验收、安全、风控</b> 会变成未来 3 年最贵的能力。</p>
+      <h3>今晚需要董事会做出的决定</h3>
+      <p>批准四级数据治理框架，暂停两个已逾期审批的科研试点访问权限，并授权首席合规官(CCO)在无需董事会二次表决的情况下叫停不合规接入。<br><b>由合规办公室起草 · 提交董事会表决</b>。</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>AI SAFETY BRIEF · LEWIS · 2026.04</span><span>01 / 08</span></div>
+    <div class="ts-footer"><span>美年医疗集团 · 数据治理简报 · 2026</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">section · risk 分级</span><span class="ts-page">02 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">section · 数据流向</span><span class="ts-page">02 / 08</span></div>
     <div style="margin:auto 0">
-      <div class="ts-kicker">Chapter One</div>
-      <h1 class="ts-h1" style="font-size:130px">先分 <span class="red">等级</span></h1>
-      <p class="ts-sub" style="font-size:28px">不是所有 AI 行为都同等危险。<br>先把「可撤销」和「不可撤销」分开，再谈流程。</p>
+      <div class="ts-kicker">第一部分</div>
+      <h1 class="ts-h1" style="font-size:130px">先看清 <span class="red">数据去哪了</span></h1>
+      <p class="ts-sub" style="font-size:28px">一次急诊就诊要经过 11 个系统才能归档。<br>每一次流转，都是患者隐私信息(PHI)可能失控的一个节点。</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>section · level taxonomy</span><span>02 / 08</span></div>
+    <div class="ts-footer"><span>section · 患者数据流向图谱</span><span>02 / 08</span></div>
   </section>
 
   <!-- 3. CONTENT risk levels -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">风险分级 · 3 levels</span><span class="ts-page">03 / 08</span></div>
-    <h2 class="ts-h2">三档风险，三种处理</h2>
+    <div class="ts-chrome"><span class="ts-alert-tag">暴露等级 · 3 levels</span><span class="ts-page">03 / 08</span></div>
+    <h2 class="ts-h2">三条数据流，三种暴露等级</h2>
     <div class="ts-grid-3">
-      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · 绿色</div><h4>可撤销</h4><p>写 draft、生成图片、起草文档。<br>错了 Ctrl+Z，零代价。<br><b style="color:var(--ts-green)">策略：放开跑</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · 琥珀</div><h4>半可撤销</h4><p>发 draft 邮件、提 PR、改 staging 数据。<br>错了要道歉 / 回滚。<br><b style="color:var(--ts-amber)">策略：人工复核</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · 红色</div><h4>不可撤销</h4><p>发真实邮件、付款、删库、删 prod 数据。<br>错了就真错了。<br><b style="color:var(--ts-red)">策略：硬卡 + 双人审</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">一级 · 绿色</div><h4>治理内、全程留痕</h4><p>院内电子病历访问，角色分级、全程审计、最小必要原则。<br><b style="color:var(--ts-green)">风险：可控、受监控</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">二级 · 琥珀</div><h4>供应商共享</h4><p>影像 AI、账单清算、人群健康分析已签 BAA，但 DLP 覆盖不完整。<br><b style="color:var(--ts-amber)">风险：合同覆盖，技术未覆盖</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">三级 · 红色</div><h4>失管试点接入</h4><p>两个科研试点和一个照护协同应用仍在拉取完整病历，BAA 已过期未续签。<br><b style="color:var(--ts-red)">风险：构成可上报的数据泄露</b></p></div>
     </div>
     <div class="ts-alert-box amber">
-      <h3>绝不要让 agent 自己升级</h3>
-      <p>L1 的任务不能自己变成 L2。授权必须是显式的、可撤销的、带过期时间的。</p>
+      <h3>16.2 万份患者记录目前处于三级(失管)风险</h3>
+      <p>内部审计(2026 年 3 月)发现，这一数字超过我们全年门诊量。必须在 45 天内完成整改，才能赶在下一轮 OCR 审查之前。</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>risk · 3 levels</span><span>03 / 08</span></div>
+    <div class="ts-footer"><span>暴露等级 · 3 levels</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">policy as code</span><span class="ts-page">04 / 08</span></div>
-    <div class="ts-kicker">别用文档管规则 · 用代码管规则</div>
-    <h2 class="ts-h2">三十行 YAML，<br><span class="ts-highlight-red">红线硬卡</span></h2>
-    <pre class="ts-codebox"><span class="cm"># safety-policy.yaml · compiled → runtime guard</span>
-<span class="kw">level_1_allow</span>:
-  - tools: [<span class="st">write_draft</span>, <span class="st">generate_image</span>, <span class="st">read_docs</span>]
+    <div class="ts-chrome"><span class="ts-alert-tag">policy as enforcement</span><span class="ts-page">04 / 08</span></div>
+    <div class="ts-kicker">别用备忘录管规则 · 用系统强制执行的策略管规则</div>
+    <h2 class="ts-h2">一份策略文件，四个等级，<br><span class="ts-highlight-red">网关层强制执行</span></h2>
+    <pre class="ts-codebox"><span class="cm"># data-governance-policy.yaml · 网关层强制执行</span>
+<span class="kw">tier_1_内部临床</span>:
+  - systems: [<span class="st">电子病历</span>, <span class="st">药房系统</span>]
+    control: <span class="st">角色访问 + 最小必要原则</span>
 
-<span class="kw">level_2_require_review</span>:
-  - tools: [<span class="st">send_email_draft</span>, <span class="st">open_pr</span>, <span class="st">write_staging_db</span>]
-    reviewer: <span class="st">human</span>
+<span class="kw">tier_2_供应商_BAA</span>:
+  - systems: [<span class="st">影像AI</span>, <span class="st">账单清算</span>, <span class="st">人群健康分析</span>]
+    control: <span class="st">DLP扫描 + 已签BAA + 季度审计</span>
 
-<span class="kw">level_3_hard_block</span>:
-  - tools: [<span class="st">send_real_email</span>, <span class="st">transfer_money</span>, <span class="st">delete_prod</span>]
-    unless: <span class="st">two_human_sign_off AND within_24h</span>
+<span class="kw">tier_3_科研试点</span>:
+  - systems: [<span class="st">科研登记库</span>, <span class="st">照护协同应用</span>]
+    control: <span class="st">伦理委员会批准 AND 去标识化 AND 90天复审</span>
 
 <span class="bad">forbidden_always</span>:
-  - <span class="bad">"r&#109; &#45;rf /"</span>
-  - <span class="bad">"dr&#111;p table"</span>
-  - <span class="bad">"force push &#111;rigin main"</span></pre>
+  - <span class="bad">"患者数据导出至个人邮箱"</span>
+  - <span class="bad">"未加密U盘传输"</span>
+  - <span class="bad">"供应商无BAA接入"</span></pre>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>policy · yaml-as-guard</span><span>04 / 08</span></div>
+    <div class="ts-footer"><span>policy · 网关强制的四级分层</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. CHART -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">incident report · q1</span><span class="ts-page">05 / 08</span></div>
-    <h2 class="ts-h2">我们 Q1 的 <span class="red">12 起 AI 事故</span></h2>
-    <p class="ts-sub">幸好全部捕获在 staging。但每一起都能上生产。</p>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">evidence · 不作为的代价</span><span class="ts-page">05 / 08</span></div>
+    <h2 class="ts-h2">一次监管处罚 = 治理项目 <span class="red">14 年</span> 的预算</h2>
+    <p class="ts-sub">2025 年 OCR 对供应商失管事件的处罚中位数为 420 万美元；提议的数据治理办公室年运营预算仅 31 万美元。</p>
     <svg viewBox="0 0 1040 360" style="width:100%;max-width:1040px;margin-top:18px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="Inter,sans-serif" font-size="14" fill="#4a4955">
         <line x1="70" y1="320" x2="1000" y2="320" stroke="#eaecf3" stroke-width="2"/>
-        <!-- month columns: Jan Feb Mar, L1/L2/L3 stacked -->
-        <g transform="translate(120,0)">
-          <rect x="0" y="220" width="60" height="100" fill="#067647"/>
-          <rect x="0" y="160" width="60" height="60" fill="#d97706"/>
-          <rect x="0" y="130" width="60" height="30" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Jan</text>
-          <text x="30" y="120" text-anchor="middle" font-weight="800" fill="#14141a">5</text>
-        </g>
-        <g transform="translate(320,0)">
-          <rect x="0" y="240" width="60" height="80" fill="#067647"/>
-          <rect x="0" y="200" width="60" height="40" fill="#d97706"/>
-          <rect x="0" y="180" width="60" height="20" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Feb</text>
-          <text x="30" y="170" text-anchor="middle" font-weight="800" fill="#14141a">3</text>
+        <!-- cost columns: OCR settlement median vs governance program annual cost -->
+        <g transform="translate(200,0)">
+          <rect x="0" y="80" width="140" height="240" fill="#e0314a"/>
+          <text x="70" y="345" text-anchor="middle" font-weight="700">OCR处罚中位数</text>
+          <text x="70" y="68" text-anchor="middle" font-weight="800" fill="#14141a">420万美元</text>
         </g>
         <g transform="translate(520,0)">
-          <rect x="0" y="250" width="60" height="70" fill="#067647"/>
-          <rect x="0" y="220" width="60" height="30" fill="#d97706"/>
-          <rect x="0" y="210" width="60" height="10" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Mar</text>
-          <text x="30" y="200" text-anchor="middle" font-weight="800" fill="#14141a">4</text>
+          <rect x="0" y="300" width="140" height="20" fill="#067647"/>
+          <text x="70" y="345" text-anchor="middle" font-weight="700">治理项目年预算</text>
+          <text x="70" y="288" text-anchor="middle" font-weight="800" fill="#14141a">31万美元/年</text>
         </g>
         <!-- legend -->
-        <g transform="translate(720,60)">
-          <rect x="0" y="0" width="16" height="16" fill="#e0314a"/><text x="24" y="13" font-weight="700">L3 不可撤销 (3)</text>
-          <rect x="0" y="26" width="16" height="16" fill="#d97706"/><text x="24" y="39" font-weight="700">L2 需复核 (4)</text>
-          <rect x="0" y="52" width="16" height="16" fill="#067647"/><text x="24" y="65" font-weight="700">L1 可恢复 (5)</text>
-          <text x="0" y="100" font-size="13" fill="#8a8892">全部被 safety-policy 在 runtime 拦下，</text>
-          <text x="0" y="118" font-size="13" fill="#8a8892">未进 prod。但 3 起 L3 非常惊险。</text>
+        <g transform="translate(760,60)">
+          <rect x="0" y="0" width="16" height="16" fill="#e0314a"/><text x="24" y="13" font-weight="700">供应商失管事件的处罚中位数</text>
+          <rect x="0" y="26" width="16" height="16" fill="#067647"/><text x="24" y="39" font-weight="700">治理办公室 · 年运营预算</text>
+          <text x="0" y="74" font-size="13" fill="#8a8892">未来三年内只要避免一起事故，</text>
+          <text x="0" y="92" font-size="13" fill="#8a8892">治理项目的投入回报率就超过 4 倍。</text>
         </g>
       </g>
     </svg>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>incident · q1 summary</span><span>05 / 08</span></div>
+    <div class="ts-footer"><span>evidence · 处罚成本 vs 项目预算</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. CHECKLIST -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">red-team checklist</span><span class="ts-page">06 / 08</span></div>
-    <h2 class="ts-h2">上线前 <span class="red">必过 7 道题</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">风控自查清单</span><span class="ts-page">06 / 08</span></div>
+    <h2 class="ts-h2">董事会须确认已落实的 <span class="red">7 项控制</span></h2>
     <div class="ts-checklist">
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">它能删除东西吗？有人类 review 吗？能 60 秒内回滚吗？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">它的 prompt 注入能让它越权吗？（跑过红队提示词）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">它处理 PII 吗？日志里是不是也有 PII？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">上下游失败时，它会不会开始乱改其他资源？</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">并发 100 个 agent 一起跑会不会死锁？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">错了能不能 <b>立刻</b> 停？（kill switch 能 2 秒内生效吗）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">出事时有没有人值班？值班手册有没有 agent 专属章节？</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">所有二、三级供应商都持有当季度验证过的有效 BAA。</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">DLP 在网络出口拦截未授权的患者数据外发，全部记录进合规看板。</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">两个科研试点的伦理审批已过期，访问权限待董事会批准后暂停。</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">事故响应手册指定 CCO 为事件总指挥，24 小时内完成 OCR 报备。</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">14 个供应商接入中有 3 个的风险评估已逾期 8 个月。</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">所有临床访问强制 MFA，审计日志留存 6 年且不可篡改。</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">目前没有董事会层面的数据治理委员会来承接这份政策。</div></div>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>checklist · pre-launch</span><span>06 / 08</span></div>
+    <div class="ts-footer"><span>checklist · 风险控制</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">今晚就能动</span><span class="ts-page">07 / 08</span></div>
-    <h2 class="ts-h2">今晚先做 <span class="ts-highlight-red">三件事</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">今晚需要表决</span><span class="ts-page">07 / 08</span></div>
+    <h2 class="ts-h2">今晚董事会需要批准的 <span class="ts-highlight-red">三件事</span></h2>
     <div class="ts-grid-3">
-      <div class="ts-card"><div class="lbl">1 · 分级</div><h4>给你的 agent<br>写 L1/L2/L3</h4><p>把所有工具列出来，标上等级。不标的一律按 L3。</p></div>
-      <div class="ts-card"><div class="lbl">2 · 写 policy</div><h4>policy.yaml<br>接 runtime</h4><p>不要信 prompt 里的 "be careful"，要信执行层的硬卡。</p></div>
-      <div class="ts-card"><div class="lbl">3 · kill switch</div><h4>红按钮<br>能在 2 秒内停</h4><p>CTO / on-call 都得知道怎么按。演练一次。</p></div>
+      <div class="ts-card"><div class="lbl">1 · 批准框架</div><h4>确立<br>四级治理政策</h4><p>将数据治理框架确立为具有约束力的机构政策，即时生效。</p></div>
+      <div class="ts-card"><div class="lbl">2 · 批准暂停令</div><h4>暂停逾期试点<br>重新认证 BAA</h4><p>暂停两个逾期科研试点，45 天内完成全部 14 家供应商 BAA 的重新认证。</p></div>
+      <div class="ts-card"><div class="lbl">3 · 批准委员会</div><h4>设立常设<br>数据治理委员会</h4><p>由 CCO 牵头，设立常设委员会，每季度向董事会全体报告。</p></div>
     </div>
     <div class="ts-alert-box green">
-      <h3>真正的安全不是 prompt，是流程</h3>
-      <p>prompt 会被注入，流程不会。—— 把保护放在不可被说服的一层。</p>
+      <h3>批准降低的是风险敞口，不是场面话</h3>
+      <p>这份框架不能消除风险，但能证明美年医疗集团在监管介入之前，已主动识别并处理了自己的风险敞口。</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>cta · tonight</span><span>07 / 08</span></div>
+    <div class="ts-footer"><span>decision · 董事会表决</span><span>07 / 08</span></div>
   </section>
 
   <!-- 8. THANKS -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">please stay safe</span><span class="ts-page">08 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">计入董事会会议纪要</span><span class="ts-page">08 / 08</span></div>
     <div style="margin:auto 0">
-      <div class="ts-kicker">end of brief</div>
-      <h1 class="ts-h1" style="font-size:140px">谢谢 <span class="red">·</span> thanks</h1>
-      <p class="ts-sub" style="font-size:24px">policy.yaml 模板、红队 prompt 清单、事故复盘模板 —— 评论区扣「安全」。</p>
+      <div class="ts-kicker">数据治理框架表决动议</div>
+      <h1 class="ts-h1" style="font-size:140px">表决通过 <span class="red">·</span> 附议</h1>
+      <p class="ts-sub" style="font-size:24px">框架即日生效 · 供应商重新认证 45 天内完成 · 委员会首次报告下季度提交。</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>end of brief</span><span>08 / 08</span></div>
+    <div class="ts-footer"><span>简报结束</span><span>08 / 08</span></div>
   </section>
 
 </div>

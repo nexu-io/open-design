@@ -272,6 +272,45 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
   });
 
+  it('refreshes AMR status and model catalog when returning from an external upgrade flow', async () => {
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'locked-model', label: 'locked-model', enabled: false }],
+      })
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'unlocked-model', label: 'unlocked-model', enabled: true }],
+      });
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      user: null,
+      configPath: '/tmp/amr-config.json',
+      account: { plan: 'pro' },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('locked-model');
+    });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => {
+      expect(mockedFetchVelaLoginStatus).toHaveBeenCalledWith({ refresh: true });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('unlocked-model');
+    });
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+  });
+
   it('starts AMR preset polling before the agent probe resolves', { timeout: 10_000 }, async () => {
     let resolveAgents!: (value: Array<{
       id: string;
@@ -425,6 +464,37 @@ describe('App AMR polling', () => {
       expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
       expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
     }, { timeout: 4_000 });
+  });
+
+  it('does not restart AMR model polling for repeated signed-in status snapshots', async () => {
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'remote-a', label: 'remote-a' }],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByText('open settings'));
+    await waitFor(() => {
+      expect(screen.getByText('mark amr signed in')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
   });
 
   it('stops polling after the preset retry budget is exhausted when remote never arrives', {

@@ -69,7 +69,7 @@ import {
   type VelaLoginStatus,
 } from './providers/daemon';
 import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
-import { goBack, navigate, useRoute } from './router';
+import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
@@ -399,6 +399,7 @@ function AppInner() {
   configRef.current = config;
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
+  const settingsDraftConfigRef = useRef<AppConfig | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Surfaced when a Home-picked working dir could not be applied to a freshly
   // created project (expired/invalid desktop token, daemon rejection). Without
@@ -627,6 +628,28 @@ function AppInner() {
   // globals effect below reads it; the sync effects live next to the
   // other AMR plumbing further down.
   const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+  // Child surfaces report status snapshots, not login events. Deduplicate the
+  // signed-in transition here: restarting the model poll for every Settings
+  // snapshot updates `agents`, which makes Settings fetch status again and
+  // creates a status -> models -> agents request loop.
+  const amrLoginStatusRef = useRef<VelaLoginStatus | null>(null);
+  const applyAmrLoginStatus = useCallback((
+    status: VelaLoginStatus,
+    options: { forceModelRefresh?: boolean; restartOnSignIn?: boolean } = {},
+  ) => {
+    const wasLoggedIn = amrLoginStatusRef.current?.loggedIn === true;
+    amrLoginStatusRef.current = status;
+    setAmrLoginStatus(status);
+    if (
+      status.loggedIn === true
+      && (
+        options.forceModelRefresh === true
+        || (options.restartOnSignIn === true && !wasLoggedIn)
+      )
+    ) {
+      restartAmrPolling();
+    }
+  }, [restartAmrPolling]);
 
   // v2 analytics requires every event to carry the configure-state
   // triplet (has_available_configure_cli / configure_type /
@@ -768,20 +791,36 @@ function AppInner() {
   // unmounted before their poll settled.
   useEffect(() => {
     let cancelled = false;
-    const sync = async () => {
-      const status = await fetchVelaLoginStatus();
-      if (!cancelled && status) setAmrLoginStatus(status);
+    const sync = async (
+      options: { refresh?: boolean } = {},
+      restartOnSignIn = false,
+    ) => {
+      const status = await fetchVelaLoginStatus(options);
+      if (!cancelled && status) {
+        applyAmrLoginStatus(status, {
+          forceModelRefresh: options.refresh === true,
+          restartOnSignIn,
+        });
+      }
     };
     void sync();
     const onStatusEvent = () => {
-      void sync();
+      void sync({}, true);
+    };
+    const onReturnToApp = () => {
+      if (document.visibilityState === 'hidden') return;
+      void sync({ refresh: true });
     };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    window.addEventListener('focus', onReturnToApp);
+    document.addEventListener('visibilitychange', onReturnToApp);
     return () => {
       cancelled = true;
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+      window.removeEventListener('focus', onReturnToApp);
+      document.removeEventListener('visibilitychange', onReturnToApp);
     };
-  }, [daemonLive]);
+  }, [applyAmrLoginStatus, daemonLive]);
 
   useEffect(() => {
     analytics.setUserId(
@@ -790,10 +829,8 @@ function AppInner() {
   }, [analytics.setUserId, amrLoginStatus]);
 
   const handleAmrLoginStatusChange = useCallback((status: VelaLoginStatus | null) => {
-    if (status) setAmrLoginStatus(status);
-    if (status?.loggedIn !== true) return;
-    restartAmrPolling();
-  }, [restartAmrPolling]);
+    if (status) applyAmrLoginStatus(status, { restartOnSignIn: true });
+  }, [applyAmrLoginStatus]);
 
   // Bootstrap — detect daemon, then fan out independent fetches so each
   // entry-view tab can render the moment its own data lands. Earlier this
@@ -1177,6 +1214,27 @@ function AppInner() {
       syncConfigToDaemon(persisted, { throwOnError: true }),
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
+
+  const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
+    settingsDraftConfigRef.current = draft;
+  }, []);
+
+  const handlePrivacyConsentChoice = useCallback((share: boolean) => {
+    const base = settingsDraftConfigRef.current ?? latestPersistedConfigRef.current;
+    const installationId = share
+      ? base.installationId ?? generateInstallationIdSafe()
+      : null;
+    void handleConfigPersist({
+      ...base,
+      installationId,
+      privacyDecisionAt: Date.now(),
+      telemetry: {
+        ...(base.telemetry ?? {}),
+        metrics: share,
+        content: share,
+      },
+    });
+  }, [handleConfigPersist]);
 
   /**
    * Explicit Composio API-key save. Called from the section-local
@@ -1895,9 +1953,12 @@ function AppInner() {
     void patchProject(id, { name: trimmed });
   }, []);
 
+  // The project header back button is an escape hatch back to Home. Avoid
+  // depending on browser history here: tab restores and template-create flows
+  // can leave an in-app history entry that points back to the same project.
   const handleBack = useCallback(() => {
     const currentProjectId = route.kind === 'project' ? route.projectId : null;
-    goBack({ kind: 'home', view: 'projects' });
+    navigate({ kind: 'home', view: 'home' });
     if (currentProjectId && typeof window !== 'undefined') {
       window.setTimeout(() => {
         iframeKeepAlivePool.evictProject(currentProjectId, { includeActive: true });
@@ -2442,6 +2503,7 @@ function AppInner() {
           initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
+          onDraftChange={handleSettingsDraftChange}
           onPersistComposioKey={handleConfigPersistComposioKey}
           onClose={() => {
             // Closing the dialog is the canonical "I'm done" gesture
@@ -2457,6 +2519,7 @@ function AppInner() {
               setConfig(next);
             }
             setSettingsOpen(false);
+            settingsDraftConfigRef.current = null;
             setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
@@ -2506,21 +2569,14 @@ function AppInner() {
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
         >
         <PrivacyConsentModal
-          onAccept={() => {
-            // Default opt-in: clicking "I get it" enables the same telemetry
-            // surface the previous two-button "Share usage data" path opted
-            // into. The banner footer + PrivacySection give the user a
-            // one-click path to flip everything off later.
+          onShare={() => {
             // The banner owns only the privacy decision; it does not drive
-            // navigation. Onboarding is gated by `onboardingCompleted` on
-            // its own and runs in parallel.
-            const installationId = generateInstallationIdSafe();
-            void handleConfigPersist({
-              ...latestPersistedConfigRef.current,
-              installationId,
-              privacyDecisionAt: Date.now(),
-              telemetry: { metrics: true, content: true },
-            });
+            // navigation. Choosing Share keeps the current anonymous identity
+            // when one already exists and enables the telemetry surface.
+            handlePrivacyConsentChoice(true);
+          }}
+          onDecline={() => {
+            handlePrivacyConsentChoice(false);
           }}
         />
       </motion.div>

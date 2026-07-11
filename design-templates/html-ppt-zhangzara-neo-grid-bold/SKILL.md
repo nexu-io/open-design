@@ -1,23 +1,35 @@
 ---
 name: html-ppt-zhangzara-neo-grid-bold
+en_name: "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser"
+zh_name: "像招聘 Bar Raiser 一样搭设计作品集叙事"
 description: |
-  Neo-Grid Bold — Editorial neo-brutalism with a single neon yellow accent on off-white paper. Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes.
+  A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Built as a decision-grade career deck for hiring panel.
+en_description: |
+  A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Built as a decision-grade career deck for hiring panel.
+zh_description: |
+  像招聘 Bar Raiser 一样搭设计作品集叙事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "career"
+  - "year-end-self-review-deck"
+  - "personal"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-neo-grid-bold"
 triggers:
-  - "neo-grid-bold"
-  - "zhangzara-neo-grid-bold"
-  - "Neo-Grid Bold"
-  - "confident"
-  - "punchy"
-  - "bold"
-  - "minimal"
-  - "product launch"
-  - "design review"
+  - "year-end-self-review-deck"
+  - "career"
+  - "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser"
+  - "像招聘 Bar Raiser 一样搭设计作品集叙事"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/neo-grid-bold"
   upstream_license: MIT
   preview:
@@ -27,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "career"
+  scenario: "personal"
+  example_prompt: "Create \"Build a Designer Portfolio Narrative like a Hiring Bar-Raiser\" as a decision-grade Career deck in this template's own visual system. Subject: A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Audience: hiring panel. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned."
 ---
 
 # Neo-Grid Bold

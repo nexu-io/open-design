@@ -70,6 +70,7 @@ const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
   { href: '/solutions/design-to-code/', key: 'designToCode' },
   { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
   { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
 ];
 
 // Agent column — the coding agents with a dedicated long-form design page

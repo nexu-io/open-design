@@ -123,13 +123,54 @@ function autoOpenPreviewRank(file: CandidateFile): number {
   return 0;
 }
 
+// `zh/index.html` → depth 2, root `index.html` → depth 1; null for non-entry
+// files. Depth orders competing entries so the site root wins over a locale
+// or section subtree's own index.
+function siteEntryDepth(file: CandidateFile): number | null {
+  const path = file.path ?? file.name;
+  if (!/(^|\/)index\.html?$/i.test(path)) return null;
+  return path.split('/').length;
+}
+
+export interface SelectAutoOpenOptions {
+  // Prefer the site entry (`index.html`) among the turn's produced HTML
+  // files. Website-clone turns reproduce a whole multi-page site in one run —
+  // subpages, assets, and reports keep landing after the entry page, so the
+  // newest-mtime tie-break below would open whatever page happened to be
+  // written last. With this flag the shallowest produced `index.html` wins
+  // (ties to newest mtime); turns that produce no index.html keep the
+  // standard rank/mtime behavior.
+  readonly preferSiteEntry?: boolean;
+}
+
 // Pick which of a turn's produced files to auto-open in the viewer. Among
 // previewable files, a higher-priority kind always beats a lower one; ties
 // break to the most recently written file (newest mtime). Returns null when
 // the turn produced nothing previewable.
 export function selectAutoOpenProducedArtifact(
   producedFiles: ReadonlyArray<CandidateFile>,
+  options: SelectAutoOpenOptions = {},
 ): string | null {
+  if (options.preferSiteEntry) {
+    let entry: CandidateFile | null = null;
+    let entryDepth = Number.POSITIVE_INFINITY;
+    for (const file of producedFiles) {
+      if (!isHtmlPreviewFile(file)) continue;
+      const depth = siteEntryDepth(file);
+      if (depth === null) continue;
+      if (depth < entryDepth) {
+        entry = file;
+        entryDepth = depth;
+        continue;
+      }
+      if (depth > entryDepth || !entry) continue;
+      const nextMtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
+      const entryMtime =
+        typeof entry.mtime === 'number' && Number.isFinite(entry.mtime) ? entry.mtime : 0;
+      if (nextMtime >= entryMtime) entry = file;
+    }
+    if (entry) return entry.name;
+  }
   let selected: CandidateFile | null = null;
   let selectedRank = 0;
   for (const file of producedFiles) {

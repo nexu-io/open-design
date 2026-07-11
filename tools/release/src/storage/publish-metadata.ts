@@ -294,8 +294,9 @@ if (assetVersionSuffix === "auto") {
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 
 const latestMetadataUpdated = releaseState === "complete";
+const releaseFields = releaseMetadataFields();
 const metadata = {
-  ...releaseMetadataFields(),
+  ...releaseFields,
   channel: releaseChannel,
   expectedPlatforms: expectedTargets,
   expectedTargets,

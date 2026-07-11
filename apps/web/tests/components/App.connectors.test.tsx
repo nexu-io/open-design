@@ -93,15 +93,28 @@ vi.mock('../../src/components/SettingsDialog', () => ({
   SettingsDialog: ({
     initial,
     initialSection,
+    onDraftChange,
     onPersistComposioKey,
   }: {
     initial: AppConfig;
     initialSection?: string;
+    onDraftChange?: (config: AppConfig) => void;
     onPersistComposioKey: (composio: AppConfig['composio']) => void;
   }) => (
     <div role="dialog" aria-label="Settings dialog">
       <div>Section: {initialSection}</div>
       <div>Composio tail: {initial.composio?.apiKeyTail ?? 'none'}</div>
+      <button
+        type="button"
+        onClick={() =>
+          onDraftChange?.({
+            ...initial,
+            model: 'claude-draft-before-autosave',
+          })
+        }
+      >
+        Edit settings draft
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -273,9 +286,136 @@ describe('App connectors settings flows', () => {
     const banner = container.querySelector('.privacy-consent-banner');
     expect(banner?.querySelector('.seg-control')).toBeNull();
     expect(banner?.querySelector('.seg-btn.active')).toBeNull();
-    expect(screen.getByRole('button', { name: 'I get it' }).className).toContain(
+    expect(screen.getByRole('button', { name: 'Share' }).className)
+      .toContain('privacy-consent-action--primary');
+    expect(screen.getByRole('button', { name: "Don't share" }).className).toContain(
       'privacy-consent-action',
     );
+  });
+
+  it('keeps telemetry and content sharing enabled when the first-run banner share choice is clicked', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          installationId: expect.any(String),
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: true, content: true },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
+  });
+
+  it('preserves an existing installation id when the first-run banner share choice is clicked', async () => {
+    const randomUUID = vi.fn(() => 'inst-new');
+    vi.stubGlobal('crypto', { randomUUID });
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      installationId: 'inst-existing',
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          installationId: 'inst-existing',
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: true, content: true },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
+    expect(randomUUID).not.toHaveBeenCalled();
+  });
+
+  it('preserves the artifact manifest preference when the first-run banner share choice is clicked', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      installationId: 'inst-existing',
+      telemetry: { metrics: false, content: false, artifactManifest: true },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          installationId: 'inst-existing',
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: true, content: true, artifactManifest: true },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
+  });
+
+  it('turns telemetry off when the first-run banner decline choice is clicked', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: "Don't share" }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          installationId: null,
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: false, content: false },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
+  });
+
+  it('preserves the artifact manifest preference when the first-run banner decline choice is clicked', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      installationId: 'inst-existing',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: "Don't share" }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          installationId: null,
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: false, content: false, artifactManifest: true },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
   });
 
   it('keeps the first-run privacy banner mounted while settings is open', async () => {
@@ -295,6 +435,36 @@ describe('App connectors settings flows', () => {
       expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
     });
     expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
+  });
+
+  it('preserves an open settings draft when the first-run banner share choice is clicked before autosave', async () => {
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.privacy-consent-banner')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open execution settings' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
+    });
+
+    mockedSyncConfigToDaemon.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings draft' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-draft-before-autosave',
+          installationId: expect.any(String),
+          privacyDecisionAt: expect.any(Number),
+          telemetry: { metrics: true, content: true },
+        }),
+        expect.objectContaining({ throwOnError: true }),
+      );
+    });
   });
 
   it('withholds the privacy banner until onboarding completes', async () => {

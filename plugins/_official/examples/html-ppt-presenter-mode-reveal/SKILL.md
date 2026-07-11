@@ -1,17 +1,34 @@
 ---
 name: html-ppt-presenter-mode
-description: 演讲者模式专用 deck — tokyo-night 默认主题，5 套主题 T 键切换，每页带 150-300 字逐字稿示例（<aside class="notes">），按 S 打开 popup（CURRENT / NEXT / SCRIPT / TIMER 四张磁吸卡片）。用于技术分享、公开演讲、课程讲解，怕忘词或要提词器的场景。
+en_name: "Run a Live AI Product Demo like a Founding DevRel Lead"
+zh_name: "像创始 DevRel 一样做现场 AI 演示"
+description: |
+  Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
+en_description: |
+  Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
+zh_description: |
+  像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "ai-literacy"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-presenter-mode-reveal"
 triggers:
-  - "presenter mode"
-  - "演讲者模式"
-  - "逐字稿"
-  - "speaker notes"
-  - "提词器"
-  - "presenter view"
-  - "演讲"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai-literacy"
+  - "Run a Live AI Product Demo like a Founding DevRel Lead"
+  - "像创始 DevRel 一样做现场 AI 演示"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   featured: 26
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -21,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-presenter-mode 模板做一份带逐字稿的演讲 PPT。先确认：演讲主题、时长（每页 2-3 分钟）、目标听众。然后帮我每页写 150-300 字的口语化逐字稿（不是讲稿，是提示信号），按 S 能打开 presenter 弹窗。"
+  category: "ai-literacy"
+  scenario: "ai"
+  example_prompt: "Create \"Run a Live AI Product Demo like a Founding DevRel Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Audience: developers, prospects, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · Presenter Mode (演讲者模式)
 

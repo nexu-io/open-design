@@ -115,6 +115,11 @@ export function PluginsHomeSection({
     [filtered, renderLimit],
   );
   const hasMorePlugins = renderLimit < filtered.length;
+  const categoryAllVisible = cardLayout !== 'gallery';
+  const handlePickCategory = (slug: string | null): void => {
+    if (!categoryAllVisible && slug === selection.category) return;
+    pickCategory(slug);
+  };
 
   useEffect(() => {
     setRenderLimit(initialRenderLimit);
@@ -193,7 +198,6 @@ export function PluginsHomeSection({
               options={catalog.category}
               selectedSlug={selection.category}
               totalVisible={totalVisible}
-              onPick={pickCategory}
               // The Saved collection lives on the rich management surface
               // (PluginsView). The minimal Community gallery has no per-card
               // save affordance, so the orthogonal Saved chip is hidden there.
@@ -203,10 +207,12 @@ export function PluginsHomeSection({
               onToggleSaved={() =>
                 setMode(mode === 'saved' ? 'all' : 'saved')
               }
+              showAll={categoryAllVisible}
               query={query}
               onQueryChange={setQuery}
               sortOrder={sortOrder}
               onSortOrderChange={setSortOrder}
+              onPick={handlePickCategory}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -289,6 +295,7 @@ interface CategoryRowProps {
   savedCount: number;
   savedActive: boolean;
   onToggleSaved: () => void;
+  showAll: boolean;
   query: string;
   onQueryChange: (next: string) => void;
   sortOrder: PluginSortOrder;
@@ -309,6 +316,7 @@ function CategoryRow({
   savedCount,
   savedActive,
   onToggleSaved,
+  showAll,
   query,
   onQueryChange,
   sortOrder,
@@ -345,14 +353,16 @@ function CategoryRow({
             <span className="plugins-home__chip-count">{savedCount}</span>
           </button>
         ) : null}
-        <CategoryPill
-          slug={null}
-          label={t('common.all')}
-          count={totalVisible}
-          active={selectedSlug === null}
-          onPick={onPick}
-          variant="all"
-        />
+        {showAll ? (
+          <CategoryPill
+            slug={null}
+            label={t('common.all')}
+            count={totalVisible}
+            active={selectedSlug === null}
+            onPick={onPick}
+            variant="all"
+          />
+        ) : null}
         {options.map((opt) => (
           <CategoryPill
             key={opt.slug}

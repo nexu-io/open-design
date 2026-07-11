@@ -158,6 +158,14 @@ export function AmrBalanceDialog({
       className={styles.panel}
       data-testid="amr-balance-dialog"
     >
+      <button
+        type="button"
+        className={styles.closeButton}
+        onClick={onClose}
+        aria-label={t('common.close')}
+      >
+        <Icon name="close" size={14} />
+      </button>
       <div className={styles.iconBadge} aria-hidden>
         <Icon name="sparkles" size={22} />
       </div>

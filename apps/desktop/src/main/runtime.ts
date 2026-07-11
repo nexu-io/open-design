@@ -415,6 +415,14 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
+  /**
+   * Fired once the main window is actually revealed (the web app mounted and
+   * the window is shown) — the real "app is running" moment, distinct from
+   * `createDesktopRuntime` returning (which starts async bootstrap via
+   * `void tick()` and returns before the first load). Used to mark the session
+   * as having reached running for abnormal-exit detection.
+   */
+  onRevealed?: () => void;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -1425,6 +1433,7 @@ interface SaveAsDialogOptions {
   title: string;
   defaultPath: string;
   filters: Array<{ name: string; extensions: string[] }>;
+  properties: Array<"dontAddToRecent">;
 }
 
 // Pure: the Save As dialog options for a downloaded filename, or null when the
@@ -1447,7 +1456,7 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
           { name: "PowerPoint Presentation", extensions: ["pptx"] },
           { name: "All Files", extensions: ["*"] },
         ];
-  return { title: "Save As", defaultPath: filename, filters };
+  return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
@@ -1574,7 +1583,11 @@ async function showDirectoryPickerForSender(
   const parent =
     BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
   const pickerOptions: Electron.OpenDialogOptions = {
-    properties: ["openDirectory", "createDirectory"],
+    // `dontAddToRecent` avoids shell recent-items / jump-list writes against
+    // the browsed folder. Combined with not seeding a cloud-backed default
+    // location, this trims the shell work that stalls the native picker on
+    // OneDrive-backed folders (see AppHangB1 note in diagnostics.ts).
+    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)
@@ -1880,11 +1893,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // PostHog with `device_id = installationId`. Best-effort: a failure to
   // reach the daemon must not block the crash recovery flow.
   window.webContents.on("render-process-gone", (_event, details) => {
+    // During app quit / teardown the renderer goes away and the window (and its
+    // webContents) can already be destroyed when this fires. Reading getURL()
+    // then throws "Object has been destroyed" as a fatal uncaught exception, so
+    // guard the same way `sendUpdaterStatus` does below and skip crash-report /
+    // recovery work once the window is already on its way out.
+    const gone = window.isDestroyed() || window.webContents.isDestroyed();
     console.error("[open-design desktop] main window render-process-gone", {
       exitCode: details.exitCode,
       reason: details.reason,
-      url: window.webContents.getURL(),
+      url: gone ? null : window.webContents.getURL(),
     });
+    if (gone) return;
     void reportRendererCrash(options, {
       reason: details.reason,
       exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
@@ -2199,6 +2219,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.focus();
     ensureWindowVisible(window);
     if (splash != null && !splash.isDestroyed()) splash.close();
+    // The app is now truly up (mounted + shown). Fire once — revealed guards
+    // re-entry — so callers can mark "reached running".
+    try {
+      options.onRevealed?.();
+    } catch {
+      // A callback fault must not break reveal.
+    }
   };
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it

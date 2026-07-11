@@ -1,22 +1,33 @@
 ---
 name: huashu-pentagram-grid
+en_name: "Build a Positioning & Messaging System like a Brand Strategist"
+zh_name: "像品牌策略师一样搭建定位与信息体系"
 description: |
-  Pentagram Info-Architecture (信息建筑·红) — rational Swiss-grid data decks
-  adapted from the ppt-pentagram showcase of 花叔 (alchaincyf)'s huashu-design.
-  Black-and-white restraint on a 1920×1080 canvas, Helvetica Neue hierarchy,
-  one red (#E63946), 64px black chrome bars, 5%-opacity grid hairlines, giant
-  900-weight numerals anchoring red/dark/grey comparison bar charts. Use when
-  the user wants a data report, benchmark deck, annual report, KPI review,
-  数据报告, 基准对比, or a Swiss-grid / Pentagram-style presentation.
+  Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Built as a decision-grade marketing & GTM deck for brand & marketing team.
+en_description: |
+  Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Built as a decision-grade marketing & GTM deck for brand & marketing team.
+zh_description: |
+  像品牌策略师一样搭建定位与信息体系——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-pentagram-grid"
 triggers:
-  - "pentagram"
-  - "swiss grid"
-  - "data report deck"
-  - "benchmark deck"
-  - "信息建筑"
-  - "数据报告 PPT"
-  - "瑞士网格"
-  - "红黑白幻灯片"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Build a Positioning & Messaging System like a Brand Strategist"
+  - "像品牌策略师一样搭建定位与信息体系"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -25,9 +36,11 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Use the Pentagram Info-Architecture template to turn my data story into a Swiss-grid HTML deck: 1920×1080 fixed canvas, black 64px chrome bars top and bottom, Helvetica Neue hierarchy, a single #E63946 red accent, giant 900-weight hero numerals, and red/dark/grey comparison bar charts. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「信息建筑·红」模板把我的数据故事做成瑞士网格 HTML 幻灯片：1920×1080 固定画布、上下 64px 黑色信息条、Helvetica Neue 强层级、唯一红色 #E63946、巨型 900 字重数字锚点、红/黑/灰三色对比条形图。从 example.html 出发只换内容，不要重写设计。"
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Build a Positioning & Messaging System like a Brand Strategist\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Audience: brand & marketing team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Pentagram Info-Architecture · 信息建筑·红
