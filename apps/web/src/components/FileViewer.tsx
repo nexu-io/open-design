@@ -12888,7 +12888,7 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {deploySavedToast ? (
+      {deploySavedToast && typeof document !== 'undefined' ? createPortal(
         <Toast
           message={deploySavedToast.message}
           details={deploySavedToast.details}
@@ -12896,7 +12896,8 @@ function HtmlViewer({
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
-        />
+        />,
+        document.body,
       ) : null}
       {deployActionToast && typeof document !== 'undefined' ? createPortal(
         <Toast
