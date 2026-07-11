@@ -31,6 +31,11 @@ export {
   type WorkspaceKeyboardShortcutsController,
   type WorkspaceKeyboardShortcutsParams,
 } from './hooks/useWorkspaceKeyboardShortcuts.hooks';
+export {
+  useWiredWorkspaceTabBarDom,
+  type WorkspaceTabBarDomController,
+  type WorkspaceTabBarDomParams,
+} from './hooks/useWorkspaceTabBarDom.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';

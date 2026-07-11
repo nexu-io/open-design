@@ -46,7 +46,15 @@ cluster (`useWorkspaceKeyboardShortcuts`).
   `WorkspaceTabBarDomPort`.
 - **Risk**: low. Pure DOM measurement/listeners, no shared business state,
   single consumer.
-- **Status**: pending.
+- **Status**: done. Landed as `providers/dom.ts` bridges
+  (`subscribeWindowFileDropGuard`, `subscribeTabBarWheelScroll`,
+  `scrollActiveTabIntoView`, `subscribeTabBarOverflowMeasure`) +
+  `WorkspaceTabBarDomPort` + `hooks/useWorkspaceTabBarDom.hooks.ts` +
+  `useWiredWorkspaceTabBarDom` wirer, wired into the orchestrator as a
+  single `useWiredWorkspaceTabBarDom({ tabsBarRef, activeTab,
+  browserTabsCount, designSystemProject, tabNamesCount })` call replacing
+  the 4 removed effects + the `tabsOverflowing` state. 6 new hook tests
+  added. FileWorkspace.tsx: 2156 → 2063 lines.
 
 ## Cluster 2 — Upload / file CRUD
 
