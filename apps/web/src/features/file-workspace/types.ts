@@ -2,7 +2,7 @@
 // `packages/contracts`. Moved out of `components/FileWorkspace.tsx` as part of
 // the ADR-0002 vertical-slice decomposition; the orchestrator imports these
 // back through the slice barrel instead of redeclaring them.
-import type { ProjectBrowserWorkspaceTab, ProjectFile, ProjectMetadata } from '../../types';
+import type { ChatAttachment, ProjectBrowserWorkspaceTab, ProjectFile, ProjectMetadata } from '../../types';
 import type { Dict } from '../../i18n/types';
 import type { TodoItem } from '../../runtime/todos';
 import type { ExcalidrawSketchScene, SketchItem } from '../../components/sketch-model';
@@ -156,4 +156,20 @@ export interface DesignSystemGenerationStep {
 export interface DesignSystemPreviewAssetPath {
   filePath: string;
   suffix: string;
+}
+
+/** Result-type mirror of `providers/registry`'s `uploadProjectFiles` —
+ *  defined in-slice per the port-result-types-live-in-slice rule (the
+ *  boundary guard rejects `import type` from `providers/` outside
+ *  `dependencies.ts`), bound structurally in `dependencies.ts`. */
+export interface ProjectUploadFailure {
+  name: string;
+  code?: string;
+  error?: string;
+}
+
+export interface UploadProjectFilesResult {
+  uploaded: ChatAttachment[];
+  failed: ProjectUploadFailure[];
+  error?: string;
 }
