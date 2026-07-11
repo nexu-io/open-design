@@ -7,7 +7,7 @@ import '../src/index.css';
 import '../src/styles/home/index.css';
 
 export const metadata: Metadata = {
-  title: 'Open Design',
+  title: '無限畫布工作台',
   icons: {
     icon: '/app-icon.png',
     apple: '/app-icon.png',
