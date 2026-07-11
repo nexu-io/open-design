@@ -246,3 +246,13 @@ export { LiveArtifactRefreshHistoryPanel } from './components/LiveArtifactRefres
 // by both the live-artifact viewer (in-slice) and the orchestrator's
 // HtmlViewer (not yet extracted) so both draw from one eviction budget.
 export { getCachedPreviewViewport, setCachedPreviewViewport, previewViewportStateKey } from './viewport-cache';
+
+// HtmlViewer's toolbar chrome: mode/zoom/version-modal/menu-open state (+ the
+// zoom/more-menu/present-menu outside-click dismiss effects) and the dumb
+// toolbar JSX (mode tabs, zoom control, "more" overflow menu, version-history
+// entry). The present menu and deploy/share menus stay in the orchestrator's
+// chrome-actions portal — not part of this toolbar's own JSX subtree.
+export { useWiredViewerToolbarMenus } from './hooks/useViewerToolbarMenus.hooks';
+export type { ViewerToolbarMenusController } from './hooks/useViewerToolbarMenus.hooks';
+export { ViewerToolbar } from './components/ViewerToolbar';
+export type { ViewerToolbarProps, ViewerToolbarSlideState } from './components/ViewerToolbar';
