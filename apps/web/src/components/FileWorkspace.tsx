@@ -51,7 +51,6 @@ import {
   type ProjectFile,
 } from '../types';
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
-import { killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import { DesignBrowserPanel, labelFromUrl } from './DesignBrowserPanel';
@@ -118,7 +117,6 @@ import {
   optionalDesignSystemManifestString,
   preferPreviewArtifactsOverRawAssets,
   QUESTIONS_TAB,
-  reanchorBrowserTabsToCurrentOrder,
   scrollWorkspaceTabsWithWheel,
   Tab,
   truncateDesignSystemActivityText,
@@ -132,9 +130,11 @@ import {
   useWiredWorkspaceTabBarDom,
   useWorkspaceContextTracking,
   useWorkspaceLauncher,
+  useWorkspaceTabActivation,
   useWorkspaceTabRequests,
   type BrowserAttentionRequest,
   type BrowserOpenRequest,
+  type BrowserWorkspaceTab,
   type DesignSystemReviewAgentTask,
   type DesignSystemReviewDecision,
   type DesignSystemReviewDetails,
@@ -428,20 +428,33 @@ export function FileWorkspace({
   // ref the orchestrator updates at render time right after
   // `useWorkspaceContextTracking` below, mirroring `openFileRef` above.
   const orderedWorkspaceTabsRef = useRef<WorkspaceOrderedTab[]>([]);
-
-  // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
-  // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a
-  // fresh session while the tab id stays constant, and the surface is unmounted
-  // whenever its tab isn't active — so this ref (which survives the child's
-  // unmount) is the only place that knows which PTY to kill on an explicit
-  // Close. `<TerminalViewer onSessionIdChange>` keeps it current.
-  const terminalLiveSessionsRef = useRef<Map<string, string>>(new Map());
-  const handleTerminalSessionChange = useCallback(
-    (originalId: string, sessionId: string) => {
-      terminalLiveSessionsRef.current.set(originalId, sessionId);
-    },
+  // `useWorkspaceTabActivation` (below) owns `openFile`/`commitTabsState`/
+  // `workspaceTabsState`/`setPersistedActive`, but it must be called AFTER
+  // `useBrowserTabs`/`useWorkspaceContextTracking` (it needs their derived
+  // values as plain params, not refs — see EXTRACTION-PLAN.md cluster 3).
+  // `useWiredSketches`/`useWiredFileOperations`/`useBrowserTabs` are called
+  // BEFORE it and still need to invoke these four primitives, so they get a
+  // stable wrapper that always forwards to the latest `.current` — the same
+  // ref-bridge shape as `openFileRef`, generalized to the other three.
+  const workspaceTabsStateRef = useRef<
+    (tabs: string[], active: string | null, nextBrowserTabs?: BrowserWorkspaceTab[]) => OpenTabsState
+  >((tabs, active) => ({ tabs, active }));
+  const commitTabsStateRef = useRef<(next: OpenTabsState) => void>(() => {});
+  const setPersistedActiveRef = useRef<(name: string | null) => void>(() => {});
+  const workspaceTabsStateStable = useCallback(
+    (tabs: string[], active: string | null, nextBrowserTabs?: BrowserWorkspaceTab[]) =>
+      workspaceTabsStateRef.current(tabs, active, nextBrowserTabs),
     [],
   );
+  const commitTabsStateStable = useCallback(
+    (next: OpenTabsState) => commitTabsStateRef.current(next),
+    [],
+  );
+  const setPersistedActiveStable = useCallback(
+    (name: string | null) => setPersistedActiveRef.current(name),
+    [],
+  );
+  const openFileStable = useCallback((name: string) => openFileRef.current(name), []);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -484,13 +497,14 @@ export function FileWorkspace({
     onUploadError: setUploadError,
     getCurrentTabs: () => tabsStateRef.current.tabs,
     getCurrentActive: () => tabsStateRef.current.active ?? null,
-    commitTabs: (nextTabs, nextActive) => commitTabsState(workspaceTabsState(nextTabs, nextActive)),
+    commitTabs: (nextTabs, nextActive) =>
+      commitTabsStateStable(workspaceTabsStateStable(nextTabs, nextActive)),
   });
 
   // File-operations cluster (upload/delete/rename/new-document) is threaded
-  // through as params too: `openFile`/`workspaceTabsState`/`commitTabsState`
-  // are hoisted function declarations further down this render, still owned
-  // by the not-yet-extracted tab-activation cluster.
+  // through as params too: `openFile`/`workspaceTabsState` are owned by
+  // `useWorkspaceTabActivation`, called later in this render — reached here
+  // through the stable ref-bridge wrappers declared above.
   const {
     handleFilePicked,
     uploadFiles,
@@ -509,13 +523,13 @@ export function FileWorkspace({
     tabsStateActive: tabsState.active,
     t,
     analyticsTrack: analytics.track,
-    openFile,
+    openFile: openFileStable,
     onRefreshFiles,
     refreshProjectFolders,
     onUploadError: setUploadError,
     onTabsStateChange,
     setActiveTab,
-    workspaceTabsState,
+    workspaceTabsState: workspaceTabsStateStable,
     removeSketchEntry,
     removeSketchEntries,
     renameSketchEntry,
@@ -550,10 +564,10 @@ export function FileWorkspace({
   // registers — and therefore flushes — LATER than that effect on mount;
   // reversing this order would let the persisted-tab effect clobber a
   // freshly-opened browser tab's `activeTab` back to `tabsState.active`.
-  // `commitTabsState`/`workspaceTabsState`/`setPersistedActive` are hoisted
-  // function declarations further down this render (still owned by the
-  // not-yet-extracted tab-activation cluster) — referencing them here before
-  // their textual declaration point is safe, same as `useWiredFileOperations`.
+  // `commitTabsState`/`workspaceTabsState`/`setPersistedActive` are owned by
+  // `useWorkspaceTabActivation` below, called AFTER this hook — reached here
+  // through the stable ref-bridge wrappers declared above (same shape as
+  // `openFileRef`).
   const {
     browserTabs,
     setBrowserTabs,
@@ -575,178 +589,14 @@ export function FileWorkspace({
     persistedTabs,
     orderedWorkspaceTabsRef,
     onTabsStateChange,
-    commitTabsState,
-    workspaceTabsState,
+    commitTabsState: commitTabsStateStable,
+    workspaceTabsState: workspaceTabsStateStable,
     setUploadError,
-    setPersistedActive,
+    setPersistedActive: setPersistedActiveStable,
     openFileRef,
     browserOpenRequest,
     t,
   });
-
-  function workspaceTabsState(
-    tabs: string[],
-    active: string | null,
-    nextBrowserTabs = browserTabs,
-  ): OpenTabsState {
-    const state: OpenTabsState = { tabs, active };
-    if (nextBrowserTabs.length > 0) state.browserTabs = nextBrowserTabs;
-    return state;
-  }
-
-  // Single entry point for committing tab state: mirror it into the ref so
-  // async launcher actions read the freshest tabs, then notify the parent.
-  function commitTabsState(next: OpenTabsState) {
-    tabsStateRef.current = next;
-    onTabsStateChange(next);
-  }
-
-  function setPersistedActive(name: string | null) {
-    const nextActive = name ?? defaultRootTab;
-    setActiveTab(nextActive);
-    commitTabsState(workspaceTabsState(persistedTabs, name));
-  }
-
-  function activatePending(name: string) {
-    // Pending sketches are not in tabsState.tabs — flip the local
-    // activeTab without round-tripping through the parent.
-    setActiveTab(name);
-  }
-
-  // The external-tab-request sync cluster (persisted-tab fallback,
-  // designSystemEditRequest/openRequest/shareRequest/downloadRequest/
-  // slideNavRequest/focusQuestionsRequest routing, and the Questions-tab
-  // fallbacks) lives in `useWorkspaceTabRequests` below, called after
-  // `useWorkspaceContextTracking` since it needs `orderedWorkspaceTabs` as a
-  // plain value — see that hook's file header for why this ordering is safe.
-
-  function openFile(name: string) {
-    setUploadError(null);
-    // Read from the ref, not the `persistedTabs` prop closure: this path is
-    // reached asynchronously from launcher "create" actions (after the daemon
-    // resolves a new terminal/side-chat id), so the closure could be stale and
-    // clobber tabs added in the meantime.
-    const currentTabs = tabsStateRef.current.tabs;
-    const isNewTab = !currentTabs.includes(name);
-    const nextBrowserTabs = isNewTab
-      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
-      : browserTabs;
-    const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
-    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
-    setActiveTab(name);
-  }
-  openFileRef.current = openFile;
-
-  function focusWorkspaceTab(tabId: string) {
-    setUploadError(null);
-    if (tabId === DESIGN_SYSTEM_TAB) {
-      setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
-      return;
-    }
-    if (tabId === DESIGN_FILES_TAB) {
-      setPersistedActive(DESIGN_FILES_TAB);
-      return;
-    }
-    if (isBrowserTabId(tabId)) {
-      if (!browserTabs.some((tab) => tab.id === tabId)) return;
-      commitTabsState(workspaceTabsState(persistedTabs, tabId, browserTabs));
-      setActiveTab(tabId);
-      return;
-    }
-    openFile(tabId);
-  }
-
-  function activateWorkspaceTab(tabId: string) {
-    if (tabId === QUESTIONS_TAB) {
-      setUploadError(null);
-      setActiveTab(tabId);
-      return;
-    }
-    const sketchEntry = sketches[tabId];
-    if (sketchEntry && !sketchEntry.persisted) {
-      setUploadError(null);
-      activatePending(tabId);
-      return;
-    }
-    focusWorkspaceTab(tabId);
-  }
-
-  function activateWorkspaceTabByOffset(offset: number) {
-    if (workspaceTabIds.length === 0) return;
-    const activeIndex = workspaceTabIds.indexOf(activeTab);
-    const startIndex = activeIndex >= 0 ? activeIndex : 0;
-    const targetIndex =
-      (startIndex + offset + workspaceTabIds.length) % workspaceTabIds.length;
-    activateWorkspaceTab(workspaceTabIds[targetIndex]!);
-  }
-
-  function activateWorkspaceTabByIndex(index: number) {
-    if (index < 0 || index >= workspaceTabIds.length) return;
-    activateWorkspaceTab(workspaceTabIds[index]!);
-  }
-
-  function closeActiveWorkspaceTab() {
-    if (!workspaceTabIds.includes(activeTab)) return;
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
-    if (activeTab === QUESTIONS_TAB) {
-      setActiveTab(defaultRootTab);
-      return;
-    }
-    if (isBrowserTabId(activeTab)) {
-      closeBrowserTab(activeTab);
-      return;
-    }
-    closeTab(activeTab);
-  }
-
-  // Open `openName` (focusing it) and close `closeName` in a single tab-state
-  // update. Used by the React module pointer (issue #2744): once the user
-  // jumps to the HTML entry that renders a module, the dead-end module tab is
-  // dropped. Done atomically because calling openFile() then closeTab() would
-  // each read the same stale `persistedTabs` prop and the second would clobber
-  // the first.
-  function openFileReplacing(openName: string, closeName: string) {
-    setUploadError(null);
-    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
-    const nextTabs = withoutClosed.includes(openName)
-      ? withoutClosed
-      : [...withoutClosed, openName];
-    onTabsStateChange(workspaceTabsState(nextTabs, openName));
-    setActiveTab(openName);
-  }
-
-  function closeTab(name: string) {
-    // Terminal tabs own a daemon PTY that now outlives unmount (so tab switches
-    // reattach cheaply). An explicit Close is the one place we terminate it —
-    // kill the LIVE session (which may differ from the tab's original id after
-    // a Restart), falling back to the tab id when the surface never reported.
-    if (isTerminalTabId(name)) {
-      const originalId = terminalIdFromTabId(name);
-      const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
-      void killTerminal(projectId, liveId, { keepalive: true });
-      terminalLiveSessionsRef.current.delete(originalId);
-    }
-    const sketchEntry = sketches[name];
-    const isPending = sketchEntry && !sketchEntry.persisted;
-    const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
-    if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
-    if (isPending) {
-      discardPendingSketchEntry(name);
-      if (activeTab === name) {
-        setPersistedActive(persistedTabs[persistedTabs.length - 1] ?? null);
-      }
-      return;
-    }
-    const nextTabs = persistedTabs.filter((n) => n !== name);
-    const nextActive =
-      tabsState.active === name
-        ? nextTabs[nextTabs.length - 1] ?? null
-        : tabsState.active;
-    onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-    setActiveTab(nextActive ?? DESIGN_FILES_TAB);
-    pruneClosedSketchEntry(name);
-  }
 
   const activeFile = useMemo<ProjectFile | null>(() => {
     if (
@@ -811,6 +661,56 @@ export function FileWorkspace({
   // never during render), so a plain render-time assignment is safe — see the
   // ref's declaration comment above.
   orderedWorkspaceTabsRef.current = orderedWorkspaceTabs;
+
+  // The tab-activation cluster: `openFile`/`closeTab`/`focusWorkspaceTab`/
+  // `activateWorkspaceTab*`/`closeActiveWorkspaceTab`/`openFileReplacing`/
+  // `commitTabsState`/`workspaceTabsState`/`setPersistedActive`/
+  // `activatePending`. Called here — AFTER `useBrowserTabs` and
+  // `useWorkspaceContextTracking` — because it needs `browserTabs`/
+  // `closeBrowserTab`/`orderedWorkspaceTabs`/`workspaceTabIds`/`sketches` as
+  // plain values, not refs (see EXTRACTION-PLAN.md cluster 3). The three
+  // earlier hooks that call these primitives before they exist go through
+  // the stable ref-bridge wrappers declared near `openFileRef` above; the
+  // refs are populated with the real functions right after this call.
+  const {
+    workspaceTabsState,
+    commitTabsState,
+    setPersistedActive,
+    activatePending,
+    openFile,
+    focusWorkspaceTab,
+    activateWorkspaceTab,
+    activateWorkspaceTabByOffset,
+    activateWorkspaceTabByIndex,
+    closeActiveWorkspaceTab,
+    openFileReplacing,
+    closeTab,
+    handleTerminalSessionChange,
+  } = useWorkspaceTabActivation({
+    projectId,
+    t,
+    tabsState,
+    tabsStateRef,
+    defaultRootTab,
+    persistedTabs,
+    activeTab,
+    setActiveTab,
+    onTabsStateChange,
+    setUploadError,
+    browserTabs,
+    setBrowserTabs,
+    closeBrowserTab,
+    orderedWorkspaceTabs,
+    workspaceTabIds,
+    sketches,
+    discardPendingSketchEntry,
+    pruneClosedSketchEntry,
+    designSystemProject,
+  });
+  workspaceTabsStateRef.current = workspaceTabsState;
+  commitTabsStateRef.current = commitTabsState;
+  setPersistedActiveRef.current = setPersistedActive;
+  openFileRef.current = openFile;
 
   const { slideNavDeliverableNonce } = useWorkspaceTabRequests({
     activeTab,

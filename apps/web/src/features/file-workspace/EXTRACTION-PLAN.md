@@ -224,17 +224,46 @@ cluster (`useWorkspaceKeyboardShortcuts`).
     `slideNavRequest` prop in the orchestrator's JSX). 19 new hook tests
     (`useWorkspaceTabRequests.test.tsx`). FileWorkspace.tsx: 1620 → 1513
     lines.
-  - **Remaining (pending)**: the tab-state-primitive half described above
-    (`openFile`/`closeTab`/`focusWorkspaceTab`/`activateWorkspaceTab*`/
+  - **Remaining half (DONE)**: the tab-state-primitive half — `openFile`/
+    `closeTab`/`focusWorkspaceTab`/`activateWorkspaceTab*`/
     `closeActiveWorkspaceTab`/`openFileReplacing`/`commitTabsState`/
     `workspaceTabsState`/`setPersistedActive`/`activatePending`/
-    `tabsStateRef`/`terminalLiveSessionsRef`+`handleTerminalSessionChange`),
-    plus `activeTab` state itself and the two effects that must stay inline
-    ahead of `useBrowserTabs` (the "pull persisted active tab" effect and
-    the launcher-close-on-`projectId`-change effect — note the latter's
-    inline comment claiming "cluster 5 isn't extracted yet" is now STALE,
-    cluster 5 (`useWorkspaceLauncher`) IS extracted; flag this for the
-    Phase 8.5 audit rather than fixing it opportunistically here).
+    `terminalLiveSessionsRef`+`handleTerminalSessionChange` — landed as
+    `hooks/useWorkspaceTabActivation.hooks.ts` (`useWorkspaceTabActivation`,
+    no port — pure state/dispatch). The ref-threading design this entry
+    anticipated turned out to be unnecessary in the direction first assumed:
+    the hook is called AFTER `useBrowserTabs`/`useWorkspaceContextTracking`
+    (so it receives `browserTabs`/`closeBrowserTab`/`orderedWorkspaceTabs`/
+    `workspaceTabIds`/`sketches` as plain values, no refs needed for those),
+    and the *earlier* hooks (`useWiredSketches`/`useWiredFileOperations`/
+    `useBrowserTabs`) that need this cluster's `openFile`/`commitTabsState`/
+    `workspaceTabsState`/`setPersistedActive` before it has run go through
+    four small stable-wrapper refs declared near `openFileRef`
+    (`workspaceTabsStateRef`/`commitTabsStateRef`/`setPersistedActiveRef`,
+    plus reusing the existing `openFileRef`) — each wrapped in a
+    `useCallback(..., [])` so its identity never changes, forwarding to
+    `.current` at call time. This is the same shape as `openFileRef` already
+    used for cluster 4, just generalized to the other three primitives.
+    `activeTab`/`setActiveTab` and `tabsStateRef`/`lastTabsStatePropRef`
+    (the prop-sync) stay inline in the orchestrator — NOT moved into any
+    hook — because `useWiredSketches` (called first) reads them directly as
+    plain values, and a real hook call's params are evaluated eagerly at its
+    call site (unlike a hoisted `function` declaration or an effect closure,
+    both of which only evaluate their body later); moving `activeTab`'s
+    `useState` into a hook would force that hook to be called before
+    `useWiredSketches`, which is exactly the ordering cycle this half of the
+    cluster exists to solve. Both are trivial (`useState`/`useRef` +
+    render-time sync), not "standalone function declarations" — see
+    Phase 8.5 audit item 3 for why this is an acceptable orchestrator-owned
+    primitive rather than a gap. The two effects that must stay inline ahead
+    of `useBrowserTabs` (the "pull persisted active tab" effect and the
+    launcher-close-on-`projectId`-change effect) are UNCHANGED by this
+    extraction — still inline, still relying on the closure-over-later-const
+    pattern for `setLauncherOpen`. Their stale inline comment ("cluster 5
+    isn't extracted yet") is still stale; still flagged for the Phase 8.5
+    audit rather than fixed opportunistically here. 33 new hook tests
+    (`useWorkspaceTabActivation.test.tsx`). FileWorkspace.tsx: 1513 → 1413
+    lines.
 
 ## Cluster 4 — Embedded browser tabs
 
@@ -451,8 +480,14 @@ cluster (`useWorkspaceKeyboardShortcuts`).
    cluster 3.
 5. Cluster 3 (tab activation) — last of the big four; by this point it's
    the only remaining hub and its param surface is as small as it can get.
+   DONE (both sub-clusters 3a and the tab-state-primitive half).
 6. Cluster 6 — fold into cluster 2's commit if still small when reached.
-7. Cluster 7 + Phase 8.5 audit — final pass before the sentinel.
+   DONE.
+7. Cluster 7 + Phase 8.5 audit — final pass before the sentinel. This is
+   the ONLY remaining work per this plan: Cluster 7's trivial page-view
+   effect, then the two-pass Phase 8.5 audit (per AGENTS.md's completion
+   instructions, run it twice, independently) before writing
+   SLICE-COMPLETE.md.
 
 Clusters 2 and 4 do NOT share state/functions directly (only via
 already-injected `openFile`/`commitTabsState` params) — they are
