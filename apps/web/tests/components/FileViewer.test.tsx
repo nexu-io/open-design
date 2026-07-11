@@ -13,9 +13,9 @@ const { saveTemplateMock } = vi.hoisted(() => ({
   saveTemplateMock: vi.fn(),
 }));
 
-vi.mock('../../src/state/projects', async () => {
-  const actual = await vi.importActual<typeof import('../../src/state/projects')>(
-    '../../src/state/projects',
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
   );
   return {
     ...actual,

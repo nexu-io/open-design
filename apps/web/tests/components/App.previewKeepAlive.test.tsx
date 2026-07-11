@@ -24,7 +24,8 @@ import {
   fetchPromptTemplates,
   fetchSkills,
 } from '../../src/providers/registry';
-import { listProjects, listTemplates } from '../../src/state/projects';
+import { listProjects } from '../../src/state/projects';
+import { listTemplates } from '../../src/providers/templates';
 import { useIframeKeepAlivePool } from '../../src/components/IframeKeepAlivePool';
 
 const evictProjectMock = vi.fn();
@@ -180,6 +181,15 @@ vi.mock('../../src/state/projects', async () => {
   return {
     ...actual,
     listProjects: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
+  );
+  return {
+    ...actual,
     listTemplates: vi.fn(),
   };
 });

@@ -97,10 +97,9 @@ import {
   importClaudeDesignZip,
   importFolderProject,
   listProjects,
-  listTemplates,
-  deleteTemplate,
   patchProject,
 } from './state/projects';
+import { listTemplates, deleteTemplate } from './providers/templates';
 import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import type {
   PluginShareAction,

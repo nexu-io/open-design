@@ -15,7 +15,8 @@ import {
   fetchSkills,
 } from '../../src/providers/registry';
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
-import { listProjects, listTemplates } from '../../src/state/projects';
+import { listProjects } from '../../src/state/projects';
+import { listTemplates } from '../../src/providers/templates';
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -137,6 +138,15 @@ vi.mock('../../src/state/projects', async () => {
   return {
     ...actual,
     listProjects: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
+  );
+  return {
+    ...actual,
     listTemplates: vi.fn(),
   };
 });

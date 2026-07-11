@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { documentMetaLabel, formatJsonFileTextForDisplay } from '../../../src/features/file-viewer/formatters';
+import {
+  defaultTemplateName,
+  documentMetaLabel,
+  formatJsonFileTextForDisplay,
+} from '../../../src/features/file-viewer/formatters';
 import type { TranslateFn } from '../../../src/features/file-viewer/types';
 import type { ProjectFile } from '../../../src/types';
 
@@ -113,5 +117,23 @@ describe('documentMetaLabel', () => {
     expect(documentMetaLabel(file({ kind: 'binary', size: 2048 }), t)).toBe(
       'fileViewer.binaryMeta:{"size":"2.0 KB"}',
     );
+  });
+});
+
+describe('defaultTemplateName', () => {
+  it('strips a .html extension', () => {
+    expect(defaultTemplateName('landing.html', t)).toBe('landing');
+  });
+
+  it('strips a .htm extension case-insensitively', () => {
+    expect(defaultTemplateName('Landing.HTM', t)).toBe('Landing');
+  });
+
+  it('leaves a non-html file name untouched', () => {
+    expect(defaultTemplateName('report.pdf', t)).toBe('report.pdf');
+  });
+
+  it('falls back to the translated default when nothing but the extension remains', () => {
+    expect(defaultTemplateName('.html', t)).toBe('fileViewer.templateNameDefault');
   });
 });

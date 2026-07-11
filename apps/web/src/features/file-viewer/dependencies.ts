@@ -9,7 +9,15 @@ import {
 } from '../../providers/registry';
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
 import { subscribeOutsideDismiss, subscribeOutsidePointerDismiss } from '../../providers/file-viewer/outside-dismiss';
-import type { ClipboardPort, DismissPort, DocumentPreviewPort, FileTextPort, ProjectFilesPort } from './ports';
+import { saveTemplate } from '../../providers/templates';
+import type {
+  ClipboardPort,
+  DismissPort,
+  DocumentPreviewPort,
+  FileTextPort,
+  ProjectFilesPort,
+  TemplateSavePort,
+} from './ports';
 
 /** Default binding: the real `/api/projects/:id/files/:name/preview` transport. */
 export const documentPreviewPort: DocumentPreviewPort = {
@@ -35,4 +43,9 @@ export const projectFilesPort: ProjectFilesPort = {
 export const dismissPort: DismissPort = {
   subscribeOutsideDismiss,
   subscribeOutsidePointerDismiss,
+};
+
+/** Default binding: the real `/api/templates` save-as-template transport. */
+export const templateSavePort: TemplateSavePort = {
+  saveTemplate,
 };

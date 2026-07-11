@@ -177,3 +177,19 @@ export type InspectTarget = {
   style: InspectStyleSnapshot;
   clickedDescendant?: InspectClickedDescendant;
 };
+
+/**
+ * The subset of the app's analytics context a feature hook needs to fire
+ * click->result tracking. Structurally identical to `AnalyticsContextValue`
+ * in `analytics/provider.tsx` (not exported there) — duplicated by intent
+ * (ADR 0002: only wire DTOs and transport adapters are shared for
+ * correctness).
+ */
+export type TemplateSaveAnalytics = {
+  track: (
+    event: string,
+    properties: Record<string, unknown>,
+    options?: { requestId?: string; insertId?: string },
+  ) => void;
+  newRequestId: () => string;
+};

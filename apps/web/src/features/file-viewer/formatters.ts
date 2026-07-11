@@ -218,6 +218,13 @@ export function formatCommentTime(ts: number, t: TranslateFn): string {
   return new Date(ts).toLocaleDateString();
 }
 
+// Default name suggested when opening the "Save as template" modal: the
+// current file's name with any .htm(l) extension stripped, or a generic
+// fallback when that leaves nothing (e.g. a file literally named ".html").
+export function defaultTemplateName(fileName: string, t: TranslateFn): string {
+  return fileName.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
+}
+
 // Document-kind meta label for the toolbar of read-only document previews.
 export function documentMetaLabel(file: ProjectFile, t: TranslateFn): string {
   if (file.kind === 'pdf') return t('fileViewer.pdfMeta');

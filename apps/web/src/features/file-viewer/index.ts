@@ -207,3 +207,10 @@ export { CommentSideDock } from './components/CommentSideDock';
 // modal's toggle group (dumb).
 export { PreviewViewportControls } from './components/PreviewViewportControls';
 export { FileVersionViewportControls } from './components/FileVersionViewportControls';
+
+// Save-as-template flow: feature-local hook owning the modal's state and the
+// click->result analytics correlation. The orchestrator's portal-based modal
+// JSX stays put (createPortal/document are DOM globals a slice file may not
+// touch) and drives it via this hook's returned controller.
+export { useWiredTemplateSave } from './hooks/useTemplateSave.hooks';
+export type { TemplateSaveController, TemplateSaveDeps } from './hooks/useTemplateSave.hooks';
