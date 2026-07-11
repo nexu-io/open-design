@@ -187,8 +187,13 @@ export function PluginsView({
   ) {
     setNotice(null);
     const outcome = await work();
-    setNotice(outcome);
     if (outcome.ok) {
+      // Only the success path publishes to the page-level Notice. Failure
+      // outcomes are now surfaced inline inside the import modal (see
+      // PluginImportModal), so we no longer push failure notices to the
+      // page banner — that banner sits behind the modal backdrop and was
+      // effectively invisible while the modal stayed open on failure.
+      setNotice(outcome);
       setImportOpen(false);
       await refresh();
       setActiveTab(targetTab);
@@ -1560,6 +1565,7 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
+  const [importError, setImportError] = useState<PluginInstallOutcome | null>(null);
 
   function selectKind(next: ImportKind) {
     trackPluginImportModalClick(analytics.track, {
@@ -1569,6 +1575,12 @@ function PluginImportModal({
       import_source: next,
     });
     setKind(next);
+    setImportError(null);
+  }
+
+  function handleClose() {
+    setImportError(null);
+    onClose();
   }
 
   async function runImport() {
@@ -1579,6 +1591,7 @@ function PluginImportModal({
       import_source: kind,
     });
     setWorking(true);
+    setImportError(null);
     try {
       let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
@@ -1597,6 +1610,12 @@ function PluginImportModal({
           result: outcome.ok ? 'success' : 'failed',
           ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
         });
+        if (!outcome.ok) {
+          // Surface the failure inside the modal instead of relying on the
+          // page-level Notice banner (which sits behind the modal backdrop
+          // and is invisible while the modal stays open on failure).
+          setImportError(outcome);
+        }
       }
     } finally {
       setWorking(false);
@@ -1609,7 +1628,7 @@ function PluginImportModal({
     (kind === 'folder' && folderFiles.length > 0);
 
   return (
-    <div className="plugins-import-modal__backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="plugins-import-modal__backdrop" role="presentation" onMouseDown={handleClose}>
       <section
         className="plugins-import-modal"
         role="dialog"
@@ -1625,7 +1644,7 @@ function PluginImportModal({
           <button
             type="button"
             className="plugins-import-modal__close"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close import dialog"
           >
             <Icon name="close" size={16} />
@@ -1714,6 +1733,7 @@ function PluginImportModal({
             />
           ) : null}
 
+          {importError ? <Notice outcome={importError} /> : null}
         </div>
 
         <footer className="plugins-import-modal__foot">
@@ -1730,7 +1750,7 @@ function PluginImportModal({
                 area: 'import_modal',
                 element: 'cancel',
               });
-              onClose();
+              handleClose();
             }}
           >
             Cancel
