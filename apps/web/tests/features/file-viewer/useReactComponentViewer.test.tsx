@@ -42,6 +42,8 @@ function makeDismissPort(over: Partial<DismissPort> = {}): DismissPort {
   return {
     subscribeOutsideDismiss: vi.fn(() => () => {}),
     subscribeOutsidePointerDismiss: vi.fn(() => () => {}),
+    subscribeOutsidePointerDown: vi.fn(() => () => {}),
+    subscribeEscapeKey: vi.fn(() => () => {}),
     ...over,
   };
 }
