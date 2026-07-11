@@ -440,6 +440,47 @@ describe('TasksView page shell', () => {
     expect(screen.queryByText(/^阻塞：/)).toBeNull();
   });
 
+  it('filters creator tasks and restores a completed creator task', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-archive-1', name: '归档任务', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    }];
+    const creatorProjectData: Record<string, CreatorProjectData> = {
+      'project-archive-1': { tasks: [
+        { id: 'creator-task:active-1', projectId: 'project-archive-1', title: '正在整理素材', stage: 'material', status: 'ready', priority: 'high', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' },
+        { id: 'creator-task:done-1', projectId: 'project-archive-1', title: '发布复盘', stage: 'review', status: 'done', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-02T00:00:00Z' },
+      ], activities: [] },
+    };
+    const writes: Array<Record<string, unknown>> = [];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH' || (init?.method === 'POST' && input.toString().endsWith('/creator-activities'))) {
+        writes.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const taskPanel = screen.getByRole('heading', { name: 'Tasks' }).closest('section')!;
+    expect(within(taskPanel).getByText('正在整理素材')).toBeTruthy();
+    expect(within(taskPanel).queryByText('发布复盘')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: '已完成' }));
+    expect(within(taskPanel).getByText('发布复盘')).toBeTruthy();
+    expect(within(taskPanel).queryByText('正在整理素材')).toBeNull();
+    fireEvent.click(within(taskPanel).getByRole('button', { name: '恢复' }));
+
+    await waitFor(() => {
+      expect(writes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ status: 'ready', blockerNote: '' }),
+        expect.objectContaining({ taskId: 'creator-task:done-1', category: 'review', title: '发布复盘 已恢复进行中' }),
+      ]));
+    });
+  });
+
   it('renders the creator workbench empty focus state when no projects exist', async () => {
     mockTasksViewFetch({ creatorProjects: [], creatorRuns: [] });
 

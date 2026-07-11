@@ -390,6 +390,10 @@
 
 .creator-task-form__submit:disabled { opacity: .5; }
 
+.creator-task-filter { display: flex; gap: 4px; margin: 8px 0; }
+.creator-task-filter button { min-height: 28px; padding: 4px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-panel); color: var(--text-muted); font: inherit; font-size: 11px; }
+.creator-task-filter button[aria-selected="true"] { background: var(--bg-subtle); color: var(--text-strong); font-weight: 600; }
+
 .creator-task-edit {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

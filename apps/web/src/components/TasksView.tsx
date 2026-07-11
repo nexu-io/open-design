@@ -57,6 +57,7 @@ type TemplateFilter =
   | 'quality';
 
 type TasksSurface = 'automations' | 'creator';
+type CreatorTaskFilter = 'active' | 'completed' | 'all';
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
 const CREATOR_STATUSES: CreatorTaskStatus[] = ['todo', 'ready', 'blocked', 'done'];
 const CREATOR_PRIORITIES: CreatorTaskPriority[] = ['low', 'medium', 'high'];
@@ -438,6 +439,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const [creatorTaskTitle, setCreatorTaskTitle] = useState('');
   const [creatorTaskStage, setCreatorTaskStage] = useState<CreatorTaskStage>('topic');
   const [creatorTaskSaving, setCreatorTaskSaving] = useState(false);
+  const [creatorTaskFilter, setCreatorTaskFilter] = useState<CreatorTaskFilter>('active');
   const [creatorTaskEdit, setCreatorTaskEdit] = useState<{
     id: string; projectId: string; originalStatus: string; title: string; description: string;
     stage: CreatorTaskStage; status: CreatorTaskStatus; priority: CreatorTaskPriority; blockerNote: string;
@@ -473,6 +475,11 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       })),
     [entryProjects],
   );
+  const visibleCreatorTasks = useMemo(() => creatorDashboard.tasks.filter((task) => {
+    if (creatorTaskFilter === 'active') return task.status !== 'done';
+    if (creatorTaskFilter === 'completed') return task.status === 'done';
+    return true;
+  }), [creatorDashboard.tasks, creatorTaskFilter]);
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -662,6 +669,21 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setCreatorTaskSaving(false);
     }
   }, [creatorTaskEdit, refresh]);
+
+  const restoreCreatorTask = useCallback(async (task: { id: string; projectId: string; stage: string; title: string }) => {
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-tasks/${encodeURIComponent(task.id)}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'ready', blockerNote: '' }),
+      });
+      if (!response.ok) throw new Error(`creator task restore: ${response.status}`);
+      const activity = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-activities`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: task.id, category: task.stage, title: `${task.title} 已恢复进行中` }),
+      });
+      if (!activity.ok) throw new Error(`creator activity: ${activity.status}`);
+      await refresh();
+    } catch (err) { setError(errorMessage(err)); }
+  }, [refresh]);
 
   const triggerCreatorFocusAction = useCallback(async () => {
     const focus = creatorDashboard.focus;
@@ -1003,8 +1025,13 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                   </button>
                 </form>
               ) : null}
+              <div className="creator-task-filter" role="tablist" aria-label="Task filters">
+                {([['active', '进行中'], ['completed', '已完成'], ['all', '全部']] as const).map(([value, label]) => (
+                  <button key={value} type="button" role="tab" aria-selected={creatorTaskFilter === value} onClick={() => setCreatorTaskFilter(value)}>{label}</button>
+                ))}
+              </div>
               <ul className="creator-list">
-                {creatorDashboard.tasks.map((task) => {
+                {visibleCreatorTasks.map((task) => {
                   const isEditable = task.id.startsWith('creator-task:');
                   const isEditing = creatorTaskEdit?.id === task.id;
                   return (
@@ -1046,6 +1073,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                               Advance
                             </Button>
                           ) : null}
+                          {isEditable && task.status === 'done' ? <Button variant="ghost" className="creator-list__action" onClick={() => void restoreCreatorTask(task)}>恢复</Button> : null}
                           {isEditable ? <Button variant="ghost" className="creator-list__action" onClick={() => setCreatorTaskEdit({ id: task.id, projectId: task.projectId, originalStatus: task.status, title: task.title, description: task.description ?? '', stage: task.stage as CreatorTaskStage, status: task.status as CreatorTaskStatus, priority: task.priority as CreatorTaskPriority, blockerNote: task.blockerNote ?? '' })}>Edit</Button> : null}
                           <Button variant="ghost" className="creator-list__action" onClick={() => openCreatorProject(task.projectId)}>
                             Open
