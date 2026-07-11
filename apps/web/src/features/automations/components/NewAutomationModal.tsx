@@ -4,6 +4,7 @@
 import { Icon } from '../../../components/Icon';
 import { useI18n, useT } from '../../../i18n';
 import { localizePluginDescription, localizePluginTitle } from '../../../components/plugins-home/localization';
+import { isContextSelected } from '../rules';
 import {
   useWiredAutomationCapabilities,
   type AutomationCapabilitiesController,
@@ -174,7 +175,7 @@ export function NewAutomationModal({
                         icon="file"
                         label={skill.name}
                         meta={skill.description || skill.mode}
-                        selected={form.selectedContextItems.some((item) => item.kind === 'skills' && item.id === skill.id)}
+                        selected={isContextSelected(form.selectedContextItems, 'skills', skill.id)}
                         onPick={() => form.pickSkill(skill)}
                       />
                     ))}
@@ -188,7 +189,7 @@ export function NewAutomationModal({
                         icon="sparkles"
                         label={localizePluginTitle(locale, plugin)}
                         meta={localizePluginDescription(locale, plugin) || plugin.id}
-                        selected={form.selectedContextItems.some((item) => item.kind === 'plugins' && item.id === plugin.id)}
+                        selected={isContextSelected(form.selectedContextItems, 'plugins', plugin.id)}
                         onPick={() => form.pickPlugin(plugin)}
                       />
                     ))}
@@ -202,7 +203,7 @@ export function NewAutomationModal({
                         icon="link"
                         label={server.label || server.id}
                         meta={server.url || server.command || server.transport}
-                        selected={form.selectedContextItems.some((item) => item.kind === 'mcp' && item.id === server.id)}
+                        selected={isContextSelected(form.selectedContextItems, 'mcp', server.id)}
                         onPick={() => form.pickMcp(server)}
                       />
                     ))}
@@ -216,7 +217,7 @@ export function NewAutomationModal({
                         icon="link"
                         label={connector.name}
                         meta={connector.accountLabel ?? connector.provider ?? connector.id}
-                        selected={form.selectedContextItems.some((item) => item.kind === 'connectors' && item.id === connector.id)}
+                        selected={isContextSelected(form.selectedContextItems, 'connectors', connector.id)}
                         onPick={() => form.pickConnector(connector)}
                       />
                     ))}

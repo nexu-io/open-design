@@ -12,6 +12,7 @@ import {
   NewAutomationModal,
   ProposalsSection,
   TemplatesSection,
+  buildModalInitial,
   sortRoutinesNewestFirst,
   useWiredAutomationsDashboard,
   type AutomationsDashboardController,
@@ -91,13 +92,7 @@ export function TasksView({
 
       <NewAutomationModal
         open={dashboard.modal !== null}
-        initial={
-          dashboard.modal?.kind === 'edit'
-            ? { routine: dashboard.modal.routine }
-            : dashboard.modal?.kind === 'create' && dashboard.modal.template
-              ? { template: dashboard.modal.template }
-              : null
-        }
+        initial={buildModalInitial(dashboard.modal)}
         templates={dashboard.templates}
         projects={dashboard.projects}
         skills={skills}

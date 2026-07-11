@@ -23,6 +23,7 @@ import { localizePluginDescription, localizePluginTitle } from '../../components
 import { describeRoutineSchedule, detectLocalTimezone } from './formatters';
 import type {
   AutomationFormState,
+  AutomationModal,
   AutomationTemplateKind,
   AutomationTemplate,
   CapabilityKind,
@@ -488,6 +489,12 @@ export function buildSelectedContextItems(
   return items;
 }
 
+/** Whether a capability id is among the modal's already-selected context
+ * chips, for the "@mention" picker's selected checkmark. */
+export function isContextSelected(items: SelectedContextItem[], kind: CapabilityKind, id: string): boolean {
+  return items.some((item) => item.kind === kind && item.id === id);
+}
+
 export function removeSelectedContextId(
   selected: SelectedContextIds,
   kind: CapabilityKind,
@@ -539,4 +546,23 @@ export function buildUpdateRoutineRequest(
     skillId: created.skillId,
     context: created.context,
   };
+}
+
+/** The saved-automation row's target-project label: the reused project's
+ * name (falling back to its id if unknown), or the "new project each run"
+ * copy. */
+export function routineTargetLabel(routine: Routine, projectsById: Map<string, string>, t: TranslateFn): string {
+  return routine.target.mode === 'reuse'
+    ? projectsById.get(routine.target.projectId) ?? routine.target.projectId
+    : t('automations.targetNewEachRun');
+}
+
+/** Maps the dashboard's create/edit modal state to the automation modal's
+ * `initial` prop. */
+export function buildModalInitial(
+  modal: AutomationModal,
+): { routine?: Routine; template?: AutomationTemplate } | null {
+  if (modal?.kind === 'edit') return { routine: modal.routine };
+  if (modal?.kind === 'create' && modal.template) return { template: modal.template };
+  return null;
 }

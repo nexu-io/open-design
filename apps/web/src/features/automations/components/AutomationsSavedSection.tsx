@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 
 import { Icon } from '../../../components/Icon';
 import type { AutomationAnalyticsController } from '../hooks/useAutomationAnalytics.hooks';
+import { routineTargetLabel } from '../rules';
 import type { TranslateFn } from '../types';
 import { AutomationRow } from './AutomationRow';
 
@@ -65,15 +66,11 @@ export function AutomationsSavedSection({
       {routines.length > 0 ? (
         <ul className="automations-saved__list">
           {routines.map((r) => {
-            const targetLabel =
-              r.target.mode === 'reuse'
-                ? projectsById.get(r.target.projectId) ?? r.target.projectId
-                : t('automations.targetNewEachRun');
             return (
               <AutomationRow
                 key={r.id}
                 routine={r}
-                targetLabel={targetLabel}
+                targetLabel={routineTargetLabel(r, projectsById, t)}
                 isBusy={busyId === r.id}
                 isExpanded={expandedId === r.id}
                 isFocused={focusRoutineId === r.id}

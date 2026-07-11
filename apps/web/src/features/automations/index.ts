@@ -16,7 +16,7 @@ export type {
 
 // Pure rules the orchestrator needs directly (kept public for the existing
 // `sortRoutinesNewestFirst` unit-test import).
-export { sortRoutinesNewestFirst } from './rules';
+export { buildModalInitial, sortRoutinesNewestFirst } from './rules';
 
 // Hooks (with their controller/options types) the orchestrator wires.
 export {
