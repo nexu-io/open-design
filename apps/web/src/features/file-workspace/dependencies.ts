@@ -3,6 +3,7 @@
 // import `providers/` — everything else in the slice depends on the port, so
 // swapping the adapter (or a fake in tests) touches only this file.
 import {
+  applyLibraryAsset,
   deleteDesignSystemDraft,
   deleteProjectFile,
   fetchProjectFileText,
@@ -30,6 +31,7 @@ import { finalizeBrandProject } from '../../runtime/brands';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../../runtime/exports';
 import { deleteBrandImage, deleteBrandLogo, readDesignMd, updateBrandColor } from '../../runtime/kit-edit';
 import type {
+  DesignFilesLibraryPort,
   DesignSystemKitActionsPort,
   DesignSystemPreviewPort,
   FileOperationsPort,
@@ -101,4 +103,9 @@ export const fileOperationsPort: FileOperationsPort = {
   renameProjectFile,
   uploadProjectFiles,
   writeProjectTextFile,
+};
+
+/** Default binding: the real "apply library asset into project" transport. */
+export const designFilesLibraryPort: DesignFilesLibraryPort = {
+  applyLibraryAsset,
 };

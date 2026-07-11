@@ -57,6 +57,11 @@ export {
   type WorkspaceLauncherController,
 } from './hooks/useWorkspaceLauncher.hooks';
 export {
+  useWiredDesignFilesPanelState,
+  type DesignFilesPanelStateController,
+  type UseDesignFilesPanelStateParams,
+} from './hooks/useDesignFilesPanelState.hooks';
+export {
   useTabReorderDnd,
   type TabReorderDndController,
   type UseTabReorderDndParams,
