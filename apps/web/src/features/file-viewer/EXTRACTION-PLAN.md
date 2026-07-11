@@ -305,7 +305,7 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 
 ### Cluster E — Deploy & Publish ★ recommended next pending cluster
 
-- **Status:** partially done. The hook/logic half landed: all state, the
+- **Status:** done. The hook/logic half landed: all state, the
   `deploymentMapForCurrentFile`/`syncDeployFormFromConfig`/
   `cloudflareConfigHintsFromForm`/`buildDeployConfigRequest`/
   `loadDeployProvider`/`loadCloudflareZones` helpers, the deploy-fetch effect,
@@ -350,10 +350,22 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
   directly into the component from `../constants`/`../rules` (stable
   slice-level constants/pure-rules, same pattern as `ViewerToolbar` importing
   `PREVIEW_VIEWPORT_PRESETS`), not passed as props.
-  **STILL NOT done**: the share-menu dropdown (the toolbar's Share button
-  popover listing Deploy-to-provider/social-share entries) and its trigger
-  are still inline in `FileViewer.tsx` — that's the remaining piece before
-  this cluster reaches its full target shape (hook + 2 dumb components).
+  **Share-menu JSX now also split out**: `components/ShareMenu.tsx` (props
+  in, JSX out — the share-link copy/open actions, the per-provider
+  "Deploy to X" entries, and the social-share entry). The trigger
+  button + `deployMenuOpen` open/close state are owned by a not-yet-extracted
+  sibling cluster (the share/download chrome-menu open state), so they're
+  threaded through as `deployMenuOpen`/`onToggleMenu`/`onCloseMenu` props,
+  same pattern as `DeployModal`'s `portalRoot`. One behavior convergence: the
+  "open share page in new tab" action used a bare `window.open(url, '_blank',
+  'noopener')` inline — the guard forbids `document`/`window` inside
+  `features/**`, so this is now an injected `onOpenInNewTab` prop; rather than
+  introduce a near-duplicate of the slice's existing `WindowOpenPort.openInNewTab`
+  (which adds `noreferrer`), the orchestrator passes the EXACT original inline
+  arrow function (`(url) => window.open(url, '_blank', 'noopener')`) — zero
+  behavior change, since `FileViewer.tsx` itself isn't guard-restricted.
+  This closes out Cluster E: hook + 2 dumb components, matching the plan's
+  original target shape (deploy modal + share menu).
 - **Lines (scattered):** state ~2144–2181; helpers ~2571–2685
   (`deploymentMapForCurrentFile`, `syncDeployFormFromConfig`,
   `cloudflareConfigHintsFromForm`, `buildDeployConfigRequest`,
