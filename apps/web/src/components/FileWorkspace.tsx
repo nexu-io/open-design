@@ -155,6 +155,7 @@ import {
   truncateDesignSystemActivityText,
   useWiredSketches,
   useWiredWorkspaceKeyboardShortcuts,
+  useWiredWorkspaceTabBarDom,
   useWorkspaceContextTracking,
   type BrowserAttentionRequest,
   type BrowserOpenRequest,
@@ -480,7 +481,6 @@ export function FileWorkspace({
   // fails on the daemon side, so the click is never a silent no-op.
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
   const [browserSnapshotToast, setBrowserSnapshotToast] = useState<WorkspaceActionToast | null>(null);
-  const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
   const [dragOverTab, setDragOverTab] = useState<{
     name: string;
@@ -1210,71 +1210,6 @@ export function FileWorkspace({
     }
   }
 
-  useEffect(() => {
-    const hasFiles = (e: DragEvent) =>
-      Array.from(e.dataTransfer?.types ?? []).includes('Files');
-    const isAllowedDropTarget = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return false;
-      return Boolean(target.closest('.df-panel, .composer'));
-    };
-    const onDragOver = (e: DragEvent) => {
-      if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
-      e.preventDefault();
-    };
-    window.addEventListener('dragover', onDragOver);
-    window.addEventListener('drop', onDrop);
-    return () => {
-      window.removeEventListener('dragover', onDragOver);
-      window.removeEventListener('drop', onDrop);
-    };
-  }, []);
-
-  useEffect(() => {
-    const tabBar = tabsBarRef.current;
-    if (!tabBar) return;
-
-    const onWheel = (event: globalThis.WheelEvent) => {
-      scrollWorkspaceTabsWithWheel(tabBar, event);
-    };
-    tabBar.addEventListener('wheel', onWheel, { passive: false });
-    return () => tabBar.removeEventListener('wheel', onWheel);
-  }, []);
-
-  // Browser-style tab bar: when the active tab changes (open from a chat
-  // file chip, switch via Cmd+P, etc.), scroll it into view so the user
-  // can always see what they have selected even when the strip overflows.
-  // The Design Files entry is already sticky-pinned, so we only scroll
-  // for real workspace tabs. Issue #775.
-  useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
-    const tabBar = tabsBarRef.current;
-    if (!tabBar) return;
-    const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
-    if (!el) return;
-    // The Design Files tab is sticky-pinned to the scrollport's left
-    // edge (index.css:.ws-tab.design-files-tab), so a naive scrollIntoView
-    // with inline: 'nearest' would slide a leftward-jumped active tab
-    // flush with that edge and leave it hidden underneath the sticky
-    // panel. Compute scrollLeft manually instead, treating the sticky
-    // tab's right edge as the effective visible-left boundary.
-    const tabRect = el.getBoundingClientRect();
-    const barRect = tabBar.getBoundingClientRect();
-    const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
-    const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
-    const visibleLeft = barRect.left + stickyWidth;
-    const visibleRight = barRect.right;
-    if (tabRect.left < visibleLeft) {
-      tabBar.scrollLeft += tabRect.left - visibleLeft;
-    } else if (tabRect.right > visibleRight) {
-      tabBar.scrollLeft += tabRect.right - visibleRight;
-    }
-  }, [activeTab]);
-
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
     const ok = await deleteProjectFile(projectId, name);
@@ -1433,41 +1368,13 @@ export function FileWorkspace({
     activateWorkspaceTabByIndex,
   });
 
-  useEffect(() => {
-    const tabBar = tabsBarRef.current;
-    if (!tabBar) return;
-    let frame = 0;
-    const measure = () => {
-      frame = 0;
-      setTabsOverflowing(tabBar.scrollWidth > tabBar.clientWidth + 1);
-      // Pin the sticky Design Files tab to the exact right edge of the sticky
-      // Design System tab (its real, locale-dependent width + the 2px flex gap),
-      // so the two read as adjacent instead of leaving a hardcoded-offset gap.
-      const systemTab = tabBar.querySelector<HTMLElement>('.ws-tab.design-system-tab');
-      if (systemTab) {
-        tabBar.style.setProperty('--ds-system-tab-w', `${Math.round(systemTab.offsetWidth) + 2}px`);
-      } else {
-        tabBar.style.removeProperty('--ds-system-tab-w');
-      }
-    };
-    const requestMeasure = () => {
-      if (frame) window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(measure);
-    };
-    requestMeasure();
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
-    if (resizeObserver) {
-      resizeObserver.observe(tabBar);
-      Array.from(tabBar.children).forEach((child) => resizeObserver.observe(child));
-    }
-    window.addEventListener('resize', requestMeasure);
-    return () => {
-      if (frame) window.cancelAnimationFrame(frame);
-      resizeObserver?.disconnect();
-      window.removeEventListener('resize', requestMeasure);
-    };
-  }, [browserTabs.length, designSystemProject, tabNames.length]);
+  const { tabsOverflowing } = useWiredWorkspaceTabBarDom({
+    tabsBarRef,
+    activeTab,
+    browserTabsCount: browserTabs.length,
+    designSystemProject,
+    tabNamesCount: tabNames.length,
+  });
 
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;

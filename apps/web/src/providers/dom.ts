@@ -45,3 +45,103 @@ export function toggleDocumentBodyClass(className: string, active: boolean): () 
     document.body.classList.remove(className);
   };
 }
+
+/**
+ * Block a stray file drop from navigating the whole app away from the
+ * workspace. Only file drags outside an allowed drop target (the design
+ * files panel, the chat composer) are suppressed; drops inside those
+ * targets are left alone so their own drop handlers still fire.
+ */
+export function subscribeWindowFileDropGuard(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const hasFiles = (e: DragEvent) =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const isAllowedDropTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest('.df-panel, .composer'));
+  };
+  const onDragOver = (e: DragEvent) => {
+    if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+  };
+  const onDrop = (e: DragEvent) => {
+    if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
+    e.preventDefault();
+  };
+  window.addEventListener('dragover', onDragOver);
+  window.addEventListener('drop', onDrop);
+  return () => {
+    window.removeEventListener('dragover', onDragOver);
+    window.removeEventListener('drop', onDrop);
+  };
+}
+
+/**
+ * Subscribe a `wheel` listener on a specific element (not `window`), so a
+ * slice hook can react to wheel gestures over a scrollable strip (e.g. the
+ * workspace tab bar) without touching a bare DOM global itself.
+ */
+export function subscribeTabBarWheelScroll(
+  tabBar: HTMLElement,
+  onWheel: (event: WheelEvent) => void,
+): () => void {
+  tabBar.addEventListener('wheel', onWheel, { passive: false });
+  return () => tabBar.removeEventListener('wheel', onWheel);
+}
+
+/**
+ * Scroll `tabBar` so its `.ws-tab.active` child is fully visible, accounting
+ * for the sticky Design Files tab pinned to the scrollport's left edge (its
+ * real width, not a hardcoded offset).
+ */
+export function scrollActiveTabIntoView(tabBar: HTMLElement): void {
+  const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
+  if (!el) return;
+  const tabRect = el.getBoundingClientRect();
+  const barRect = tabBar.getBoundingClientRect();
+  const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
+  const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
+  const visibleLeft = barRect.left + stickyWidth;
+  const visibleRight = barRect.right;
+  if (tabRect.left < visibleLeft) {
+    tabBar.scrollLeft += tabRect.left - visibleLeft;
+  } else if (tabRect.right > visibleRight) {
+    tabBar.scrollLeft += tabRect.right - visibleRight;
+  }
+}
+
+/**
+ * Batch `tabBar` overflow/width remeasurement behind a `requestAnimationFrame`
+ * and re-trigger it on element resize (`ResizeObserver`, when available) and
+ * window resize. Calls `onMeasure` once immediately and again on every
+ * subsequent trigger; the caller does the actual DOM reads/writes so this
+ * bridge stays a pure scheduling primitive.
+ */
+export function subscribeTabBarOverflowMeasure(
+  tabBar: HTMLElement,
+  onMeasure: () => void,
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+  let frame = 0;
+  const requestMeasure = () => {
+    if (frame) window.cancelAnimationFrame(frame);
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      onMeasure();
+    });
+  };
+  requestMeasure();
+  const resizeObserver =
+    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
+  if (resizeObserver) {
+    resizeObserver.observe(tabBar);
+    Array.from(tabBar.children).forEach((child) => resizeObserver.observe(child));
+  }
+  window.addEventListener('resize', requestMeasure);
+  return () => {
+    if (frame) window.cancelAnimationFrame(frame);
+    resizeObserver?.disconnect();
+    window.removeEventListener('resize', requestMeasure);
+  };
+}

@@ -14,8 +14,12 @@ import {
 } from '../../providers/registry';
 import {
   confirmDialog,
+  scrollActiveTabIntoView,
   subscribeCaptureKeyDown,
   subscribePageUnload,
+  subscribeTabBarOverflowMeasure,
+  subscribeTabBarWheelScroll,
+  subscribeWindowFileDropGuard,
   toggleDocumentBodyClass,
 } from '../../providers/dom';
 import { finalizeBrandProject } from '../../runtime/brands';
@@ -26,6 +30,7 @@ import type {
   DesignSystemPreviewPort,
   SketchesPort,
   WorkspaceKeyboardShortcutsPort,
+  WorkspaceTabBarDomPort,
 } from './ports';
 
 /** Default binding: the real project-file-text + raw/file URL transport. */
@@ -67,4 +72,13 @@ export const sketchesPort: SketchesPort = {
 export const workspaceKeyboardShortcutsPort: WorkspaceKeyboardShortcutsPort = {
   subscribeCaptureKeyDown,
   toggleDocumentBodyClass,
+};
+
+/** Default binding: the real window/tab-bar DOM bridges (file-drop guard,
+ *  wheel scroll, scroll-into-view, overflow remeasurement scheduler). */
+export const workspaceTabBarDomPort: WorkspaceTabBarDomPort = {
+  subscribeWindowFileDropGuard,
+  subscribeTabBarWheelScroll,
+  scrollActiveTabIntoView,
+  subscribeTabBarOverflowMeasure,
 };

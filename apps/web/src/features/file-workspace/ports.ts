@@ -63,3 +63,19 @@ export interface WorkspaceKeyboardShortcutsPort {
   subscribeCaptureKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
   toggleDocumentBodyClass(className: string, active: boolean): () => void;
 }
+
+/** The DOM bridges the workspace tab-bar cluster needs: a whole-window
+ *  file-drop guard, a tab-bar `wheel` subscription, the active-tab
+ *  scroll-into-view action, and the overflow/width remeasurement scheduler
+ *  (`requestAnimationFrame` + `ResizeObserver` + window `resize`). None of
+ *  these carry business state — the slice never touches `window`/`document`
+ *  directly. */
+export interface WorkspaceTabBarDomPort {
+  subscribeWindowFileDropGuard(): () => void;
+  subscribeTabBarWheelScroll(
+    tabBar: HTMLElement,
+    onWheel: (event: WheelEvent) => void,
+  ): () => void;
+  scrollActiveTabIntoView(tabBar: HTMLElement): void;
+  subscribeTabBarOverflowMeasure(tabBar: HTMLElement, onMeasure: () => void): () => void;
+}
