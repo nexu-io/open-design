@@ -119,6 +119,33 @@ describe('fetchAutomationsSnapshot', () => {
     });
     expect((await fetchAutomationsSnapshot()).routines).toEqual([]);
   });
+
+  it('marks automationCatalog null (without proposalRefreshFailed) when the templates request itself throws', async () => {
+    const fn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/automation-templates') throw new TypeError('network down');
+      if (url === '/api/routines') return { ok: true, json: async () => ({ routines: [] }) } as unknown as Response;
+      if (url === '/api/projects') return { ok: true, json: async () => ({ projects: [] }) } as unknown as Response;
+      if (url === '/api/automation-proposals?status=pending-review') {
+        return { ok: true, json: async () => ({ proposals: [] }) } as unknown as Response;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fn as unknown as typeof fetch;
+    const snapshot = await fetchAutomationsSnapshot();
+    expect(snapshot.automationCatalog).toBeNull();
+    expect(snapshot.proposalRefreshFailed).toBe(false);
+  });
+
+  it('defaults an ok projects response with no `projects` field to []', async () => {
+    mockFetch({
+      '/api/routines': () => ({ ok: true, json: async () => ({ routines: [] }) }),
+      '/api/projects': () => ({ ok: true, json: async () => ({}) }),
+      '/api/automation-templates': () => ({ ok: true, json: async () => ({ templates: [] }) }),
+      '/api/automation-proposals?status=pending-review': () => ({ ok: true, json: async () => ({ proposals: [] }) }),
+    });
+    expect((await fetchAutomationsSnapshot()).projects).toEqual([]);
+  });
 });
 
 describe('runRoutineNow', () => {
@@ -151,6 +178,18 @@ describe('runRoutineNow', () => {
     });
     await expect(runRoutineNow('r1')).rejects.toThrow('run failed: 500');
   });
+
+  it('returns null when the success response body is unparsable', async () => {
+    mockFetch({
+      '/api/routines/r1/run': () => ({
+        ok: true,
+        json: async () => {
+          throw new Error('bad json');
+        },
+      }),
+    });
+    expect(await runRoutineNow('r1')).toBeNull();
+  });
 });
 
 describe('toggleRoutinePaused', () => {
@@ -167,6 +206,24 @@ describe('toggleRoutinePaused', () => {
   it('throws the daemon error message on failure', async () => {
     mockFetch({ '/api/routines/r1': () => ({ ok: false, status: 500, json: async () => ({ error: 'update boom' }) }) });
     await expect(toggleRoutinePaused({ id: 'r1', enabled: true } as never)).rejects.toThrow('update boom');
+  });
+
+  it('falls back to a generic message when the error body has no `error` field', async () => {
+    mockFetch({ '/api/routines/r1': () => ({ ok: false, status: 500, json: async () => ({}) }) });
+    await expect(toggleRoutinePaused({ id: 'r1', enabled: true } as never)).rejects.toThrow('update failed: 500');
+  });
+
+  it('falls back to a generic message when the error body is unparsable', async () => {
+    mockFetch({
+      '/api/routines/r1': () => ({
+        ok: false,
+        status: 500,
+        json: async () => {
+          throw new Error('bad json');
+        },
+      }),
+    });
+    await expect(toggleRoutinePaused({ id: 'r1', enabled: true } as never)).rejects.toThrow('update failed: 500');
   });
 });
 
