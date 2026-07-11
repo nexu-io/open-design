@@ -18,6 +18,8 @@ import {
   subscribeSplitResize,
   getSplitIsRtl,
   subscribeChatPanelPointerDrag,
+  fetchGithubConnectorConnected,
+  subscribeGithubConnectRefreshTriggers,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -38,4 +40,6 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   subscribeSplitResize,
   getSplitIsRtl,
   subscribeChatPanelPointerDrag,
+  checkGithubConnected: fetchGithubConnectorConnected,
+  subscribeGithubConnectRefreshTriggers,
 };

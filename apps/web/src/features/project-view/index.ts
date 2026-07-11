@@ -134,3 +134,5 @@ export type { ChatPanelResizeController } from './hooks/useChatPanelResize.hooks
 export { useChatPanelResize, useWiredChatPanelResize } from './hooks/useChatPanelResize.hooks';
 export type { ByokModelOverridesController } from './hooks/useByokModelOverrides.hooks';
 export { useByokModelOverrides } from './hooks/useByokModelOverrides.hooks';
+export type { GithubConnectRepoController } from './hooks/useGithubConnectRepo.hooks';
+export { useGithubConnectRepo, useWiredGithubConnectRepo } from './hooks/useGithubConnectRepo.hooks';

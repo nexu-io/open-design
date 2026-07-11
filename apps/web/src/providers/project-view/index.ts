@@ -18,3 +18,7 @@ export {
   getSplitIsRtl,
   subscribeChatPanelPointerDrag,
 } from './chat-panel-resize-dom';
+export {
+  fetchGithubConnectorConnected,
+  subscribeGithubConnectRefreshTriggers,
+} from './github-connect';

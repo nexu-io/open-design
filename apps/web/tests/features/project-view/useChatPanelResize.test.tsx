@@ -63,6 +63,8 @@ function makeHarness(savedWidth = 460): Harness {
         harness.drag = handlers;
         return stopDrag;
       }),
+      checkGithubConnected: vi.fn(async () => false),
+      subscribeGithubConnectRefreshTriggers: vi.fn(() => () => {}),
     },
   };
   return harness;

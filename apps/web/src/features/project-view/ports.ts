@@ -45,4 +45,8 @@ export interface ProjectViewTransportPort {
   getSplitIsRtl(split: HTMLDivElement | null): boolean;
   /** Start a chat-panel resize pointer drag; returns an unsubscribe. */
   subscribeChatPanelPointerDrag(handlers: ChatPanelPointerDragHandlers): () => void;
+  /** Whether the GitHub connector is currently connected (best-effort; resolves `false` on failure). */
+  checkGithubConnected(options?: { signal?: AbortSignal }): Promise<boolean>;
+  /** Subscribe to browser signals (focus/tab visibility) that should re-check GitHub connection status. */
+  subscribeGithubConnectRefreshTriggers(onTrigger: () => void): () => void;
 }
