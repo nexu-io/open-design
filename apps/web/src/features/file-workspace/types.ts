@@ -87,3 +87,9 @@ export interface DesignSystemGenerationStep {
   detail: string;
   status: DesignSystemGenerationStepStatus;
 }
+
+/** A design-system preview asset ref resolved relative to its owning file. */
+export interface DesignSystemPreviewAssetPath {
+  filePath: string;
+  suffix: string;
+}
