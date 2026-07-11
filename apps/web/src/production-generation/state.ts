@@ -1,5 +1,6 @@
 import type { ProductionSegment } from './types';
 import type { MediaJobStatus, ProductionMediaJob, MediaJobKind } from './types';
+import type { Production3DPlan } from './types';
 
 export function buildNarration(paragraph: string, voiceTone: string, voiceLabel: string) {
   const trimmedParagraph = paragraph.trim();
@@ -51,6 +52,8 @@ export function createProductionMediaJob(input: {
   model: string;
   prompt: string;
   referenceAssetIds?: readonly string[];
+  plan?: Production3DPlan | null;
+  planOnly?: boolean;
 }): ProductionMediaJob {
   return {
     id: input.id,
@@ -63,6 +66,8 @@ export function createProductionMediaJob(input: {
     referenceAssetIds: input.referenceAssetIds ?? [],
     resultAssetIds: [],
     progress: [],
+    plan: input.plan ?? null,
+    planOnly: input.planOnly ?? false,
     file: null,
   };
 }

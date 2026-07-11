@@ -3,6 +3,7 @@ import { streamMessage, type StreamHandlers } from '../providers/anthropic';
 import { buildGenerationSystemPrompt, buildGenerationUserPrompt, extractJsonPayload } from './prompts';
 import { mergeGeneratedSegments, validateGeneratedSegments } from './merge';
 import type { GenerationKind, ProductionSegment } from './types';
+import type { TextGenerationAdapter, TextGenerationAdapterRunInput } from './adapters';
 
 export interface RunProductionGenerationInput {
   kind: GenerationKind;
@@ -21,6 +22,10 @@ export interface RunProductionGenerationResult {
   notice: string;
 }
 
+export interface RunProductionGenerationOptions extends RunProductionGenerationInput {
+  adapter?: TextGenerationAdapter;
+}
+
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 function generationNotice(kind: GenerationKind): string {
@@ -35,7 +40,7 @@ function isRetryableStreamError(error: Error): boolean {
   return /fetch failed|network|timeout|aborted|ECONNRESET|ETIMEDOUT/i.test(error.message);
 }
 
-export async function runProductionGeneration(
+async function runOpenRouterProductionGeneration(
   input: RunProductionGenerationInput,
 ): Promise<RunProductionGenerationResult> {
   const trimmedBaseUrl = input.config.baseUrl.trim();
@@ -154,3 +159,25 @@ export async function runProductionGeneration(
   };
 }
 
+export const openRouterTextGenerationAdapter: TextGenerationAdapter = {
+  name: 'openrouter',
+  run: runOpenRouterProductionGeneration,
+};
+
+export async function runProductionGeneration(
+  input: RunProductionGenerationOptions,
+): Promise<RunProductionGenerationResult> {
+  const adapter = input.adapter ?? openRouterTextGenerationAdapter;
+  const adapterInput: TextGenerationAdapterRunInput = {
+    kind: input.kind,
+    config: input.config,
+    segments: input.segments,
+    voiceTone: input.voiceTone,
+    defaultVoiceProfileId: input.defaultVoiceProfileId,
+    knownVoiceProfileIds: input.knownVoiceProfileIds,
+    resolveVoiceLabel: input.resolveVoiceLabel,
+    timeoutMs: input.timeoutMs,
+    streamMessageImpl: input.streamMessageImpl,
+  };
+  return adapter.run(adapterInput);
+}

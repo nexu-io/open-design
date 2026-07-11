@@ -14,12 +14,18 @@ import {
   createVoicePreview,
   cancelFalMediaJob,
   cancelFalMediaTask,
+  createProductionSegmentSyncState,
+  markProductionSegmentSyncStateStale,
   planFalMediaJobs,
+  recordProductionLaneManualEdit,
+  resolveProductionLaneSyncState,
   submitFalMediaJob,
   waitForFalMediaJob,
   runProductionGeneration,
   type GenerationKind,
   type ProductionMediaJob,
+  type ProductionLaneSyncStatus,
+  type ProductionSegmentSyncState,
   type ProductionSegment,
 } from '../../production-generation';
 
@@ -40,14 +46,15 @@ type ProductionProjectMetadata = ProjectMetadata & {
 
 type ProductionSegmentId = string;
 
-type ProductionLaneId = 'paragraph' | 'voice' | 'shot' | 'assets' | 'output';
+type ProductionEditableLaneId = 'paragraph' | 'voice' | 'shot' | 'assets' | 'output';
 type MediaLaneKind = 'image' | 'video' | '3d';
 
 interface ProductionWorkspaceSnapshot {
-  version: 1;
+  version: 2;
   segments: ProductionSegment[];
   mediaJobs: ProductionMediaJob[];
   nextSegmentNumber: number;
+  syncState: Record<ProductionSegmentId, ProductionSegmentSyncState>;
 }
 
 interface VoiceProfileCard {
@@ -165,6 +172,42 @@ function createEmptySegment(
   };
 }
 
+function getSyncStateForSegment(
+  syncState: Record<ProductionSegmentId, ProductionSegmentSyncState>,
+  segmentId: ProductionSegmentId,
+) {
+  return syncState[segmentId] ?? createProductionSegmentSyncState();
+}
+
+function statusLabel(status: ProductionLaneSyncStatus) {
+  return status === 'in-sync'
+    ? 'in sync'
+    : status === 'stale'
+      ? 'stale'
+      : status === 'diverged'
+        ? 'diverged'
+        : 'detached';
+}
+
+function updateLaneSyncState(
+  syncState: Record<ProductionSegmentId, ProductionSegmentSyncState>,
+  segmentId: ProductionSegmentId,
+  updater: (state: ProductionSegmentSyncState) => ProductionSegmentSyncState,
+) {
+  return {
+    ...syncState,
+    [segmentId]: updater(getSyncStateForSegment(syncState, segmentId)),
+  };
+}
+
+function laneStatusFor(
+  syncState: Record<ProductionSegmentId, ProductionSegmentSyncState>,
+  segmentId: ProductionSegmentId,
+  lane: 'narration' | 'shot' | 'assets' | 'output',
+) {
+  return getSyncStateForSegment(syncState, segmentId)[lane];
+}
+
 function workspaceStorageKey(projectId: string) {
   return `open-design:production-workspace:${projectId}`;
 }
@@ -176,7 +219,7 @@ function readWorkspaceSnapshot(projectId: string): ProductionWorkspaceSnapshot |
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ProductionWorkspaceSnapshot>;
     if (
-      parsed.version !== 1 ||
+      (parsed.version !== 1 && parsed.version !== 2) ||
       !Array.isArray(parsed.segments) ||
       !Array.isArray(parsed.mediaJobs) ||
       typeof parsed.nextSegmentNumber !== 'number' ||
@@ -184,11 +227,18 @@ function readWorkspaceSnapshot(projectId: string): ProductionWorkspaceSnapshot |
     ) {
       return null;
     }
+    const syncState =
+      parsed.version === 2 && parsed.syncState && typeof parsed.syncState === 'object'
+        ? (parsed.syncState as Record<ProductionSegmentId, ProductionSegmentSyncState>)
+        : Object.fromEntries(
+            (parsed.segments as ProductionSegment[]).map((segment) => [segment.id, createProductionSegmentSyncState()]),
+          );
     return {
-      version: 1,
+      version: 2,
       segments: parsed.segments as ProductionSegment[],
       mediaJobs: parsed.mediaJobs as ProductionMediaJob[],
       nextSegmentNumber: Math.floor(parsed.nextSegmentNumber),
+      syncState,
     };
   } catch {
     return null;
@@ -219,6 +269,16 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const [mediaJobs, setMediaJobs] = useState<ProductionMediaJob[]>(
     () => savedSnapshot?.mediaJobs ?? [],
   );
+  const [segmentSyncState, setSegmentSyncState] = useState<Record<ProductionSegmentId, ProductionSegmentSyncState>>(
+    () =>
+      savedSnapshot?.syncState ??
+      Object.fromEntries(
+        (savedSnapshot?.segments ?? createInitialSegments(voiceTone, defaultVoiceProfileId)).map((segment) => [
+          segment.id,
+          createProductionSegmentSyncState(),
+        ]),
+      ),
+  );
   const [nextSegmentNumber, setNextSegmentNumber] = useState(
     () => savedSnapshot?.nextSegmentNumber ?? DEFAULT_SEGMENT_BLUEPRINTS.length + 1,
   );
@@ -237,12 +297,13 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
 
   useEffect(() => {
     writeWorkspaceSnapshot(projectId, {
-      version: 1,
+      version: 2,
       segments,
       mediaJobs,
       nextSegmentNumber,
+      syncState: segmentSyncState,
     });
-  }, [mediaJobs, nextSegmentNumber, projectId, segments]);
+  }, [mediaJobs, nextSegmentNumber, projectId, segmentSyncState, segments]);
 
   const voicePreview = useMemo(
     () => createVoicePreview(segments, voiceTone, (profileId) => getVoiceProfile(profileId).role),
@@ -257,31 +318,47 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
     return counts;
   }, [segments]);
 
-  const updateSegment = (segmentId: ProductionSegmentId, field: ProductionLaneId | 'voiceProfileId', value: string) => {
-    setSegments((current) =>
-      current.map((segment) => {
-        if (segment.id !== segmentId) return segment;
-
-        if (field === 'paragraph') {
-          const profile = getVoiceProfile(segment.voiceProfileId);
+  const updateSegment = (segmentId: ProductionSegmentId, field: ProductionEditableLaneId | 'voiceProfileId', value: string) => {
+    if (field === 'paragraph') {
+      setSegments((current) =>
+        current.map((segment) => {
+          if (segment.id !== segmentId) return segment;
           return {
             ...segment,
             paragraph: value,
-            narration: buildNarration(value, voiceTone, profile.role),
-            shot: buildShot(value),
-            assets: buildAssets(value),
-            output: buildOutput(value),
           };
-        }
+        }),
+      );
+      setSegmentSyncState((current) =>
+        updateLaneSyncState(current, segmentId, (state) => markProductionSegmentSyncStateStale(state)),
+      );
+      return;
+    }
 
-        if (field === 'voiceProfileId') {
+    if (field === 'voiceProfileId') {
+      setSegments((current) =>
+        current.map((segment) => {
+          if (segment.id !== segmentId) return segment;
           const profile = getVoiceProfile(value);
           return {
             ...segment,
             voiceProfileId: profile.id,
             narration: buildNarration(segment.paragraph, voiceTone, profile.role),
           };
-        }
+        }),
+      );
+      setSegmentSyncState((current) =>
+        updateLaneSyncState(current, segmentId, (state) =>
+          resolveProductionLaneSyncState(state, 'narration', 'regenerate'),
+        ),
+      );
+      return;
+    }
+
+    const lane = field === 'voice' ? 'narration' : field;
+    setSegments((current) =>
+      current.map((segment) => {
+        if (segment.id !== segmentId) return segment;
 
         if (field === 'voice') {
           return {
@@ -314,6 +391,9 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
         return segment;
       }),
     );
+    setSegmentSyncState((current) =>
+      updateLaneSyncState(current, segmentId, (state) => recordProductionLaneManualEdit(state, lane)),
+    );
   };
 
   const appendSegment = () => {
@@ -324,6 +404,10 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       ...current,
       createEmptySegment(`第 ${nextNumber} 段`, voiceTone, defaultVoiceProfileId, `segment-${nextNumber}`),
     ]);
+    setSegmentSyncState((current) => ({
+      ...current,
+      [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
+    }));
   };
 
   const insertSegmentAfter = (segmentId: ProductionSegmentId) => {
@@ -340,11 +424,19 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       );
 
       if (index < 0) {
+        setSegmentSyncState((current) => ({
+          ...current,
+          [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
+        }));
         return [...current, nextSegment];
       }
 
       const next = current.slice();
       next.splice(index + 1, 0, nextSegment);
+      setSegmentSyncState((current) => ({
+        ...current,
+        [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
+      }));
       return next;
     });
   };
@@ -354,8 +446,44 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       if (current.length <= 1) {
         return current;
       }
+      setSegmentSyncState((syncCurrent) => {
+        const { [segmentId]: _removed, ...rest } = syncCurrent;
+        return rest;
+      });
       return current.filter((segment) => segment.id !== segmentId);
     });
+  };
+
+  const resolveSegmentLane = (
+    segmentId: ProductionSegmentId,
+    lane: 'narration' | 'shot' | 'assets' | 'output',
+    action: 'regenerate' | 'keep' | 'detach',
+  ) => {
+    setSegmentSyncState((current) =>
+      updateLaneSyncState(current, segmentId, (state) => resolveProductionLaneSyncState(state, lane, action)),
+    );
+    setSegments((current) =>
+      current.map((segment) => {
+        if (segment.id !== segmentId) return segment;
+        const profile = getVoiceProfile(segment.voiceProfileId);
+        const currentText = lane === 'narration'
+          ? buildNarration(segment.paragraph, voiceTone, profile.role)
+          : lane === 'shot'
+            ? buildShot(segment.paragraph)
+            : lane === 'assets'
+              ? buildAssets(segment.paragraph)
+              : buildOutput(segment.paragraph);
+
+        if (action !== 'regenerate') {
+          return segment;
+        }
+
+        return {
+          ...segment,
+          [lane]: currentText,
+        };
+      }),
+    );
   };
 
   const updateMediaJob = (jobId: string, updater: (job: ProductionMediaJob) => ProductionMediaJob) => {
@@ -680,30 +808,40 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           <p data-testid="production-voice-preview">{voicePreview}</p>
           {segments.map((segment) => {
             const currentProfile = getVoiceProfile(segment.voiceProfileId);
+            const narrationStatus = laneStatusFor(segmentSyncState, segment.id, 'narration');
             return (
               <article key={segment.id} className="production-workspace__lane-card">
-                <label style={{ display: 'grid', gap: 8 }}>
-                  <span className="production-workspace__label">{segment.label} 角色綁定</span>
-                  <select
-                    aria-label={`${segment.label} 角色綁定`}
-                    value={segment.voiceProfileId}
-                    onChange={(event) => updateSegment(segment.id, 'voiceProfileId', event.target.value)}
-                    style={{
-                      width: '100%',
-                      borderRadius: 16,
-                      border: '1px solid rgba(148, 163, 184, 0.25)',
-                      background: 'rgba(15, 23, 42, 0.82)',
-                      color: '#e2e8f0',
-                      padding: '12px 14px',
-                    }}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <label style={{ display: 'grid', gap: 8, flex: 1 }}>
+                    <span className="production-workspace__label">{segment.label} 角色綁定</span>
+                    <select
+                      aria-label={`${segment.label} 角色綁定`}
+                      value={segment.voiceProfileId}
+                      onChange={(event) => updateSegment(segment.id, 'voiceProfileId', event.target.value)}
+                      style={{
+                        width: '100%',
+                        borderRadius: 16,
+                        border: '1px solid rgba(148, 163, 184, 0.25)',
+                        background: 'rgba(15, 23, 42, 0.82)',
+                        color: '#e2e8f0',
+                        padding: '12px 14px',
+                      }}
+                    >
+                      {VOICE_PROFILE_CARDS.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.role} / {profile.tone}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span
+                    data-testid={`${segment.id}-narration-status`}
+                    className="production-task-card__pill"
+                    title="Narration sync status"
                   >
-                    {VOICE_PROFILE_CARDS.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.role} / {profile.tone}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {statusLabel(narrationStatus)}
+                  </span>
+                </div>
                 <label style={{ display: 'grid', gap: 8, marginTop: 12 }}>
                   <span className="production-workspace__label">{segment.label} 旁白</span>
                   <textarea
@@ -723,6 +861,19 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
                     }}
                   />
                 </label>
+                {narrationStatus !== 'in-sync' ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'narration', 'regenerate')}>
+                      Regenerate
+                    </button>
+                    <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'narration', 'keep')}>
+                      Keep
+                    </button>
+                    <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'narration', 'detach')}>
+                      Detach
+                    </button>
+                  </div>
+                ) : null}
                 <p style={{ marginTop: 10, color: '#94a3b8' }}>{currentProfile.role} locked to this lane.</p>
               </article>
             );
@@ -734,25 +885,47 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           <p>逐 shot 編修，讓分鏡能跟腳本一起演進。</p>
           {segments.map((segment) => (
             <article key={segment.id} className="production-workspace__lane-card">
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span className="production-workspace__label">{segment.label} 鏡頭</span>
-                <textarea
-                  aria-label={`${segment.label} 鏡頭`}
-                  value={segment.shot}
-                  onChange={(event) => updateSegment(segment.id, 'shot', event.target.value)}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    resize: 'vertical',
-                    borderRadius: 16,
-                    border: '1px solid rgba(148, 163, 184, 0.25)',
-                    background: 'rgba(15, 23, 42, 0.82)',
-                    color: '#e2e8f0',
-                    padding: '14px 16px',
-                    lineHeight: 1.6,
-                  }}
-                />
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <label style={{ display: 'grid', gap: 8, flex: 1 }}>
+                  <span className="production-workspace__label">{segment.label} 鏡頭</span>
+                  <textarea
+                    aria-label={`${segment.label} 鏡頭`}
+                    value={segment.shot}
+                    onChange={(event) => updateSegment(segment.id, 'shot', event.target.value)}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      resize: 'vertical',
+                      borderRadius: 16,
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                      background: 'rgba(15, 23, 42, 0.82)',
+                      color: '#e2e8f0',
+                      padding: '14px 16px',
+                      lineHeight: 1.6,
+                    }}
+                  />
+                </label>
+                <span
+                  data-testid={`${segment.id}-shot-status`}
+                  className="production-task-card__pill"
+                  title="Shot sync status"
+                >
+                  {statusLabel(laneStatusFor(segmentSyncState, segment.id, 'shot'))}
+                </span>
+              </div>
+              {laneStatusFor(segmentSyncState, segment.id, 'shot') !== 'in-sync' ? (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'shot', 'regenerate')}>
+                    Regenerate
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'shot', 'keep')}>
+                    Keep
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'shot', 'detach')}>
+                    Detach
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))}
         </section>
@@ -762,25 +935,47 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           <p>把每段需要的畫面、圖片、B-roll 與素材提醒寫在同一欄。</p>
           {segments.map((segment) => (
             <article key={segment.id} className="production-workspace__lane-card">
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span className="production-workspace__label">{segment.label} 素材</span>
-                <textarea
-                  aria-label={`${segment.label} 素材`}
-                  value={segment.assets}
-                  onChange={(event) => updateSegment(segment.id, 'assets', event.target.value)}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    resize: 'vertical',
-                    borderRadius: 16,
-                    border: '1px solid rgba(148, 163, 184, 0.25)',
-                    background: 'rgba(15, 23, 42, 0.82)',
-                    color: '#e2e8f0',
-                    padding: '14px 16px',
-                    lineHeight: 1.6,
-                  }}
-                />
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <label style={{ display: 'grid', gap: 8, flex: 1 }}>
+                  <span className="production-workspace__label">{segment.label} 素材</span>
+                  <textarea
+                    aria-label={`${segment.label} 素材`}
+                    value={segment.assets}
+                    onChange={(event) => updateSegment(segment.id, 'assets', event.target.value)}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      resize: 'vertical',
+                      borderRadius: 16,
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                      background: 'rgba(15, 23, 42, 0.82)',
+                      color: '#e2e8f0',
+                      padding: '14px 16px',
+                      lineHeight: 1.6,
+                    }}
+                  />
+                </label>
+                <span
+                  data-testid={`${segment.id}-assets-status`}
+                  className="production-task-card__pill"
+                  title="Assets sync status"
+                >
+                  {statusLabel(laneStatusFor(segmentSyncState, segment.id, 'assets'))}
+                </span>
+              </div>
+              {laneStatusFor(segmentSyncState, segment.id, 'assets') !== 'in-sync' ? (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'assets', 'regenerate')}>
+                    Regenerate
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'assets', 'keep')}>
+                    Keep
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'assets', 'detach')}>
+                    Detach
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))}
           {projectFiles.length > 0 ? (
@@ -828,25 +1023,47 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           </div>
           {segments.map((segment) => (
             <article key={segment.id} className="production-workspace__lane-card">
-              <label style={{ display: 'grid', gap: 8 }}>
-                <span className="production-workspace__label">{segment.label} 成片</span>
-                <textarea
-                  aria-label={`${segment.label} 成片`}
-                  value={segment.output}
-                  onChange={(event) => updateSegment(segment.id, 'output', event.target.value)}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    resize: 'vertical',
-                    borderRadius: 16,
-                    border: '1px solid rgba(148, 163, 184, 0.25)',
-                    background: 'rgba(15, 23, 42, 0.82)',
-                    color: '#e2e8f0',
-                    padding: '14px 16px',
-                    lineHeight: 1.6,
-                  }}
-                />
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <label style={{ display: 'grid', gap: 8, flex: 1 }}>
+                  <span className="production-workspace__label">{segment.label} 成片</span>
+                  <textarea
+                    aria-label={`${segment.label} 成片`}
+                    value={segment.output}
+                    onChange={(event) => updateSegment(segment.id, 'output', event.target.value)}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      resize: 'vertical',
+                      borderRadius: 16,
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                      background: 'rgba(15, 23, 42, 0.82)',
+                      color: '#e2e8f0',
+                      padding: '14px 16px',
+                      lineHeight: 1.6,
+                    }}
+                  />
+                </label>
+                <span
+                  data-testid={`${segment.id}-output-status`}
+                  className="production-task-card__pill"
+                  title="Output sync status"
+                >
+                  {statusLabel(laneStatusFor(segmentSyncState, segment.id, 'output'))}
+                </span>
+              </div>
+              {laneStatusFor(segmentSyncState, segment.id, 'output') !== 'in-sync' ? (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'output', 'regenerate')}>
+                    Regenerate
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'output', 'keep')}>
+                    Keep
+                  </button>
+                  <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'output', 'detach')}>
+                    Detach
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))}
           <p style={{ marginTop: 16 }}>{storyboardShots.length} shots ready for export.</p>
@@ -881,6 +1098,11 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
                             <p style={{ margin: '8px 0 0' }}>
                               {job.kind} / {job.model}
                             </p>
+                            {job.plan ? (
+                              <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>
+                                plan-only 3D / {job.plan.engine} / {job.plan.outputIntent} / {job.plan.camera.angle}
+                              </p>
+                            ) : null}
                             {job.taskId ? <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>task {job.taskId}</p> : null}
                             {job.progress.length > 0 ? <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>{job.progress.at(-1)}</p> : null}
                             <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>{job.prompt}</p>

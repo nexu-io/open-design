@@ -97,6 +97,31 @@ describe('fal media adapter', () => {
     expect(jobs[0]?.model).toBe('fal/wan-2.1-t2v');
   });
 
+  it('plans 3D jobs as explicit plan-only jobs', () => {
+    const jobs = planFalMediaJobs({
+      segments: [
+        {
+          id: 'hook',
+          label: 'Hook',
+          paragraph: 'Open with a turntable view.',
+          narration: '專業講解者 (professional) 旁白：Open with a turntable view.',
+          shot: '鏡頭：Open with a turntable view.',
+          assets: '素材：Use a hero render.',
+          output: '成片：Open with a turntable view.',
+          voiceProfileId: 'guide-host',
+        },
+      ],
+      kind: '3d',
+    });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.kind).toBe('3d');
+    expect(jobs[0]?.provider).toBe('blender');
+    expect(jobs[0]?.planOnly).toBe(true);
+    expect(jobs[0]?.plan?.engine).toBe('blender');
+    expect(jobs[0]?.plan?.sceneSummary).toContain('Open with a turntable view.');
+  });
+
   it('submits and polls a daemon media task', async () => {
     const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
       const href = String(url);
@@ -147,6 +172,24 @@ describe('fal media adapter', () => {
     expect(polled.job.status).toBe('completed');
     expect(polled.job.file).toEqual({ name: 'render.mp4' });
     expect(polled.snapshot.status).toBe('done');
+  });
+
+  it('rejects attempts to submit plan-only 3D jobs to FAL.ai', async () => {
+    const job = createFalMediaJob({
+      id: 'job-3d',
+      segmentId: 'hook',
+      kind: '3d',
+      model: 'blender/plan-only',
+      prompt: '3D prompt',
+    });
+
+    await expect(
+      submitFalMediaJob({
+        projectId: 'project-1',
+        job,
+        fetchImpl: vi.fn() as never,
+      }),
+    ).rejects.toThrow('plan-only');
   });
 
   it('marks a queued job as canceled locally', () => {

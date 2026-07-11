@@ -1,5 +1,7 @@
 import type { MediaJobKind, ProductionMediaJob, ProductionSegment } from './types';
 import { updateProductionMediaJobStatus } from './state';
+import type { MediaGenerationAdapter } from './adapters';
+import { buildProduction3DPlan, createProduction3DMediaJob } from './three-d';
 
 export interface FalMediaRequest {
   provider: 'fal';
@@ -13,6 +15,15 @@ export interface FalMediaRequest {
 export function buildFalMediaRequest(input: FalMediaRequest): FalMediaRequest {
   return input;
 }
+
+export const falMediaAdapter: MediaGenerationAdapter = {
+  name: 'fal',
+  buildRequest: buildFalMediaRequest,
+  planJobs: planFalMediaJobs,
+  submitJob: submitFalMediaJob,
+  waitForJob: waitForFalMediaJob,
+  cancelJob: cancelFalMediaTask,
+};
 
 export function createFalMediaJob(input: {
   id: string;
@@ -74,10 +85,14 @@ export interface CancelFalMediaJobInput {
 const DEFAULT_WAIT_TIMEOUT_MS = 25_000;
 
 function falSurfaceForKind(kind: MediaJobKind): 'image' | 'video' {
+  if (kind === '3d') {
+    throw new Error('3D jobs are plan-only and cannot be submitted to FAL.ai.');
+  }
   return kind === 'video' ? 'video' : 'image';
 }
 
 function defaultFalModelForKind(kind: MediaJobKind): string {
+  if (kind === '3d') return 'blender/plan-only';
   if (kind === 'video') return 'fal/wan-2.1-t2v';
   return 'fal/flux-pro';
 }
@@ -127,11 +142,28 @@ export function planFalMediaJobs(input: {
       prompt: buildFalMediaPrompt(segment, kind),
     });
 
-    return updateProductionMediaJobStatus(job, 'queued', {});
+    if (kind !== '3d') {
+      return updateProductionMediaJobStatus(job, 'queued', {});
+    }
+
+    return createProduction3DMediaJob({
+      jobId: job.id,
+      segment,
+      plan: buildProduction3DPlan({
+        segment,
+        styleHint: segment.output,
+        referenceAssetIds: [],
+      }),
+      model,
+    });
   });
 }
 
 export async function submitFalMediaJob(input: SubmitFalMediaJobInput): Promise<ProductionMediaJob> {
+  if (input.job.kind === '3d') {
+    throw new Error('3D jobs are plan-only and cannot be submitted to FAL.ai.');
+  }
+
   const submit = input.fetchImpl ?? fetch;
   const resp = await submit(falMediaGenerateUrl(input.projectId), {
     method: 'POST',

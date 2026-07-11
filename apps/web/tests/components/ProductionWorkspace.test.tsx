@@ -165,17 +165,36 @@ describe('ProductionWorkspace', () => {
 
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
-      '專業講解者 (professional) 旁白：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      '專業講解者 (professional) 旁白：Hook: explain the core idea in one line.',
     );
     expect(screen.getByRole('textbox', { name: 'Hook 鏡頭' })).toHaveValue(
-      '鏡頭：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      '鏡頭：Hook: explain the core idea in one line.',
     );
     expect(screen.getByRole('textbox', { name: 'Hook 素材' })).toHaveValue(
-      '素材：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      '素材：Hook: explain the core idea in one line.',
     );
     expect(screen.getByRole('textbox', { name: 'Hook 成片' })).toHaveValue(
-      '成片：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      '成片：Hook: explain the core idea in one line.',
     );
+    expect(screen.getByTestId('hook-narration-status')).toHaveTextContent('stale');
+    expect(screen.getByTestId('hook-shot-status')).toHaveTextContent('stale');
+    expect(screen.getByTestId('hook-assets-status')).toHaveTextContent('stale');
+    expect(screen.getByTestId('hook-output-status')).toHaveTextContent('stale');
+  });
+
+  it('can regenerate a stale downstream lane back into sync', () => {
+    renderWorkspace();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Hook 段落' }), {
+      target: { value: 'A fresh script paragraph.' },
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Regenerate' })[0]!);
+
+    expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
+      '專業講解者 (professional) 旁白：A fresh script paragraph.',
+    );
+    expect(screen.getByTestId('hook-narration-status')).toHaveTextContent('in sync');
   });
 
   it('can bind a voice profile to a segment lane', () => {
@@ -279,6 +298,73 @@ describe('ProductionWorkspace', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
+  it('shows plan-only 3D jobs without offering daemon submission', () => {
+    window.localStorage.setItem(
+      'open-design:production-workspace:project-1',
+      JSON.stringify({
+        version: 2,
+        nextSegmentNumber: 4,
+        segments: [
+          {
+            id: 'hook',
+            label: 'Hook',
+            paragraph: 'Open with a product hero shot.',
+            narration: '專業講解者 (professional) 旁白：Open with a product hero shot.',
+            shot: '鏡頭：Open with a product hero shot.',
+            assets: '素材：Use a clean hero render.',
+            output: '成片：Open with a product hero shot.',
+            voiceProfileId: 'guide-host',
+          },
+        ],
+        syncState: {
+          hook: {
+            narration: 'in-sync',
+            shot: 'in-sync',
+            assets: 'in-sync',
+            output: 'in-sync',
+          },
+        },
+        mediaJobs: [
+          {
+            id: 'job-3d-hook-1',
+            segmentId: 'hook',
+            kind: '3d',
+            status: 'queued',
+            provider: 'blender',
+            model: 'blender/plan-only',
+            prompt: '3D prompt for Hook: Open with a product hero shot.',
+            referenceAssetIds: ['hero-reference'],
+            resultAssetIds: [],
+            progress: ['queued locally as a 3D plan'],
+            planOnly: true,
+            plan: {
+              engine: 'blender',
+              purpose: 'product',
+              sceneSummary: 'Open with a product hero shot.',
+              camera: {
+                angle: 'three-quarter',
+                framing: 'medium',
+                movement: 'orbit',
+              },
+              styleNotes: ['Keep the scene glossy but editable.'],
+              objectNotes: ['Segment: Hook'],
+              outputIntent: 'turntable',
+              referenceAssetIds: ['hero-reference'],
+              planOnly: true,
+            },
+            file: null,
+          },
+        ],
+      }),
+    );
+
+    renderWorkspace();
+
+    expect(screen.getByText('1 media jobs queued for FAL.ai: 0 image, 0 video, 1 plan-only 3D.')).toBeInTheDocument();
+    expect(screen.getByText('plan-only 3D / blender / turntable / three-quarter')).toBeInTheDocument();
+    expect(screen.getByText('3D is intentionally plan-only until we confirm a supported FAL daemon surface.')).toBeInTheDocument();
+  });
+
   it('restores a saved production workspace snapshot from localStorage', () => {
     window.localStorage.setItem(
       'open-design:production-workspace:project-1',
@@ -297,6 +383,14 @@ describe('ProductionWorkspace', () => {
             voiceProfileId: 'guide-host',
           },
         ],
+        syncState: {
+          hook: {
+            narration: 'stale',
+            shot: 'stale',
+            assets: 'stale',
+            output: 'stale',
+          },
+        },
         mediaJobs: [
           {
             id: 'job-hook',
