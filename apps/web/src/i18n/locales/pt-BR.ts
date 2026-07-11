@@ -337,6 +337,8 @@ export const ptBR: Dict = {
   'settings.kicker': 'Configurações',
   'settings.title': 'Modo de execução',
   'settings.subtitle': 'Escolha entre CLI local e BYOK.',
+  'settings.general': 'Geral',
+  'settings.generalHint': 'Idioma, aparência, notificações, locais dos projetos, privacidade e detalhes do app.',
   'settings.modeAria': 'Modo de execução',
   'settings.protocolAria': 'Protocolo de API',
   'settings.modeDaemon': 'CLI local',

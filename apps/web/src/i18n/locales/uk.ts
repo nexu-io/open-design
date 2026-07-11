@@ -337,6 +337,8 @@ export const uk: Dict = {
   'settings.kicker': 'Налаштування',
   'settings.title': 'Режим виконання',
   'settings.subtitle': 'Виберіть локальний CLI або BYOK.',
+  'settings.general': 'Загальні',
+  'settings.generalHint': 'Мова, вигляд, сповіщення, розташування проєктів, приватність і відомості про застосунок.',
   'settings.modeAria': 'Режим виконання',
   'settings.protocolAria': 'Протокол API',
   'settings.modeDaemon': 'Локальний CLI',

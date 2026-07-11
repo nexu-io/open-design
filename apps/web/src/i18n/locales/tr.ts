@@ -337,6 +337,8 @@ export const tr: Dict = {
   'settings.kicker': 'Ayarlar',
   'settings.title': 'Yürütme modu',
   'settings.subtitle': 'Yerel CLI ile BYOK arasında seçim yapın.',
+  'settings.general': 'Genel',
+  'settings.generalHint': 'Dil, görünüm, bildirimler, proje konumları, gizlilik ve uygulama ayrıntıları.',
   'settings.modeAria': 'Çalıştırma modu',
   'settings.protocolAria': 'API protokolü',
   'settings.modeDaemon': 'Yerel CLI',

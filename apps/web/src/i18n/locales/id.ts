@@ -337,6 +337,8 @@ export const id: Dict = {
   'settings.kicker': 'Pengaturan',
   'settings.title': 'Mode eksekusi',
   'settings.subtitle': 'Pilih antara CLI lokal dan BYOK.',
+  'settings.general': 'Umum',
+  'settings.generalHint': 'Bahasa, tampilan, notifikasi, lokasi proyek, privasi, dan detail aplikasi.',
   'settings.modeAria': 'Mode eksekusi',
   'settings.protocolAria': 'Protokol API',
   'settings.modeDaemon': 'CLI lokal',

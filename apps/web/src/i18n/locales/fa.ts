@@ -337,6 +337,8 @@ export const fa: Dict = {
   'settings.kicker': 'تنظیمات',
   'settings.title': 'حالت اجرا',
   'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید.',
+  'settings.general': 'عمومی',
+  'settings.generalHint': 'زبان، ظاهر، اعلان‌ها، مکان پروژه‌ها، حریم خصوصی و جزئیات برنامه.',
   'settings.modeAria': 'حالت اجرا',
   'settings.protocolAria': 'پروتکل API',
   'settings.modeDaemon': 'CLI محلی',

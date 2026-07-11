@@ -333,6 +333,8 @@ export const zhCN: Dict = {
   "settings.kicker": "设置",
   "settings.title": "执行模式",
   "settings.subtitle": "在本机 CLI 与 BYOK 之间选择。",
+  "settings.general": "通用",
+  "settings.generalHint": "语言、外观、通知、项目位置、隐私和应用详情。",
   "settings.modeAria": "执行模式",
   "settings.protocolAria": "API 协议",
   "settings.modeDaemon": "本机 CLI",

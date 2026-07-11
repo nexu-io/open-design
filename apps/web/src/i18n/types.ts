@@ -350,6 +350,8 @@ export interface Dict {
   'settings.kicker': string;
   'settings.title': string;
   'settings.subtitle': string;
+  'settings.general': string;
+  'settings.generalHint': string;
   'settings.modeAria': string;
   'settings.protocolAria': string;
   'settings.modeDaemon': string;

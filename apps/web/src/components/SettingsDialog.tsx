@@ -192,6 +192,7 @@ import {
 } from '../utils/notifications';
 
 export type SettingsSection =
+  | 'general'
   | 'execution'
   | 'workspace'
   | 'instructions'
@@ -217,6 +218,20 @@ export type SettingsSection =
   // navigate() call so openSettings only owns dialog-bound sections.
   | 'library'
   | 'about';
+
+function normalizeSettingsSection(section: SettingsSection): SettingsSection {
+  switch (section) {
+    case 'language':
+    case 'appearance':
+    case 'notifications':
+    case 'projectLocations':
+    case 'privacy':
+    case 'about':
+      return 'general';
+    default:
+      return section;
+  }
+}
 
 interface ByokProviderPreset {
   id: string;
@@ -1319,7 +1334,7 @@ export function SettingsDialog({
   daemonLive,
   appVersionInfo,
   welcome,
-  initialSection = 'execution',
+  initialSection = 'general',
   initialHighlight = null,
   onPersist,
   onPersistComposioKey,
@@ -1418,7 +1433,7 @@ export function SettingsDialog({
       ? { [initial.apiProtocol ?? 'anthropic']: byokProviderKeyForConfig(initial) }
       : {},
   );
-  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection));
   // Workspace region gating (E-frontend, D4.3). One shared read of the workspace
   // context; the Workspace nav item + section only appear for a team workspace
   // whose viewer may see workspace settings. Gate on the folded permission bits,
@@ -1426,7 +1441,7 @@ export function SettingsDialog({
   const { context: workspaceContext } = useWorkspaceContext();
   const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
   const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
-  const [settingsFullscreen, setSettingsFullscreen] = useState(false);
+  const [settingsFullscreen, setSettingsFullscreen] = useState(true);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
   // long section the user had scrolled (e.g. Library) into a short one
@@ -1746,7 +1761,7 @@ export function SettingsDialog({
   // routes through this when the MCP tab is active so the user can press the
   // single Save button at the bottom instead of hunting for the inner one.
   useEffect(() => {
-    setActiveSection(initialSection);
+    setActiveSection(normalizeSettingsSection(initialSection));
   }, [initialSection]);
 
   // settings_view — fires whenever the active section changes (and once on
@@ -3514,6 +3529,7 @@ export function SettingsDialog({
   // BYOK content so "Local CLI" only renders once (in the seg-control tab),
   // not twice (heading + tab).
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
+    general: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
     workspace: { title: t('settings.workspace'), subtitle: t('settings.workspaceHint') },
     instructions: {
@@ -3912,6 +3928,17 @@ export function SettingsDialog({
           >
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'general' ? ' active' : ''}`}
+              onClick={() => setActiveSection('general')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.general')}</strong>
+                <small>{t('settings.generalHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
               onClick={() => setActiveSection('execution')}
             >
@@ -4003,28 +4030,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
-              onClick={() => setActiveSection('language')}
-            >
-              <Icon name="languages" size={18} />
-              <span>
-                <strong>{t('settings.language')}</strong>
-                <small>{t('settings.languageHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
-              onClick={() => setActiveSection('appearance')}
-            >
-              <Icon name="sun-moon" size={18} />
-              <span>
-                <strong>{t('settings.appearance')}</strong>
-                <small>{t('settings.appearanceHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
               onClick={() => setActiveSection('critiqueTheater')}
             >
@@ -4032,17 +4037,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('critiqueTheater.settingsNav')}</strong>
                 <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
-              onClick={() => setActiveSection('notifications')}
-            >
-              <Icon name="bell" size={18} />
-              <span>
-                <strong>{t('settings.notifications')}</strong>
-                <small>{t('settings.notificationsHint')}</small>
               </span>
             </button>
             <button
@@ -4065,39 +4059,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.designSystems')}</strong>
                 <small>{t('settings.designSystemsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
-              onClick={() => setActiveSection('projectLocations')}
-            >
-              <Icon name="folder" size={18} />
-              <span>
-                <strong>{t('settings.projectLocations')}</strong>
-                <small>{t('settings.projectLocationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
-              onClick={() => setActiveSection('privacy')}
-            >
-              <Icon name="eye" size={18} />
-              <span>
-                <strong>{t('settings.privacy')}</strong>
-                <small>{t('settings.privacyHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
-              onClick={() => setActiveSection('about')}
-            >
-              <Icon name="settings" size={18} />
-              <span>
-                <strong>{t('settings.about')}</strong>
-                <small>{t('settings.aboutHint')}</small>
               </span>
             </button>
           </aside>
@@ -5437,8 +5398,16 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'language' ? (
-          <section className="settings-section">
+          {activeSection === 'general' || activeSection === 'language' ? (
+          <section className="settings-section settings-general-block">
+            {activeSection === 'general' ? (
+              <div className="settings-general-block-head">
+                <div>
+                  <h3>{t('settings.language')}</h3>
+                  <p className="hint">{t('settings.languageHint')}</p>
+                </div>
+              </div>
+            ) : null}
             <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
               {LOCALES.map((code) => {
                 const active = locale === code;
@@ -5477,7 +5446,7 @@ export function SettingsDialog({
           </section>
           ) : null}
 
-          {activeSection === 'appearance' ? (
+          {activeSection === 'general' || activeSection === 'appearance' ? (
             <AppearanceSection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
@@ -5485,7 +5454,7 @@ export function SettingsDialog({
             <CritiqueTheaterSection />
           ) : null}
 
-          {activeSection === 'notifications' ? (
+          {activeSection === 'general' || activeSection === 'notifications' ? (
             <NotificationsSection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
@@ -5502,7 +5471,7 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'projectLocations' ? (
+          {activeSection === 'general' || activeSection === 'projectLocations' ? (
             <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
           ) : null}
 
@@ -5542,11 +5511,11 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'privacy' ? (
+          {activeSection === 'general' || activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'about' ? (
+          {activeSection === 'general' || activeSection === 'about' ? (
             <section className="settings-section">
               {appVersionInfo ? (
                 <dl className="settings-about-list">

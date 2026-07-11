@@ -337,6 +337,8 @@ export const ja: Dict = {
   'settings.kicker': '設定',
   'settings.title': '実行モード',
   'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。',
+  'settings.general': '一般',
+  'settings.generalHint': '言語、外観、通知、プロジェクトの場所、プライバシー、アプリ詳細。',
   'settings.modeAria': '実行モード',
   'settings.protocolAria': 'API プロトコル',
   'settings.modeDaemon': 'ローカル CLI',

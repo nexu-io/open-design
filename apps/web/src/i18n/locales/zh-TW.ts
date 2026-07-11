@@ -333,6 +333,8 @@ export const zhTW: Dict = {
   "settings.kicker": "設定",
   "settings.title": "執行模式",
   "settings.subtitle": "在本機 CLI 與 BYOK 之間選擇。",
+  "settings.general": "通用",
+  "settings.generalHint": "語言、外觀、通知、專案位置、隱私和應用程式詳細資訊。",
   "settings.modeAria": "執行模式",
   "settings.protocolAria": "API 協定",
   "settings.modeDaemon": "本機 CLI",

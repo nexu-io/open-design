@@ -337,6 +337,8 @@ export const ko: Dict = {
   'settings.kicker': '설정',
   'settings.title': '실행 모드',
   'settings.subtitle': '로컬 CLI와 BYOK 중에서 선택하세요.',
+  'settings.general': '일반',
+  'settings.generalHint': '언어, 외관, 알림, 프로젝트 위치, 개인정보 및 앱 세부 정보.',
   'settings.modeAria': '실행 모드',
   'settings.protocolAria': 'API 프로토콜',
   'settings.modeDaemon': '로컬 CLI',

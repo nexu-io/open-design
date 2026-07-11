@@ -337,6 +337,8 @@ export const de: Dict = {
   'settings.kicker': 'Einstellungen',
   'settings.title': 'Ausführungsmodus',
   'settings.subtitle': 'Wählen Sie zwischen lokaler CLI und BYOK.',
+  'settings.general': 'Allgemein',
+  'settings.generalHint': 'Sprache, Darstellung, Benachrichtigungen, Projektorte, Datenschutz und App-Details.',
   'settings.modeAria': 'Ausführungsmodus',
   'settings.protocolAria': 'API-Protokoll',
   'settings.modeDaemon': 'Lokale CLI',

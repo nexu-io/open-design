@@ -293,7 +293,11 @@ export function EntryNavRail({
                       <span className="entry-nav-rail__menu-chevron"><Icon name="chevron-right" size={13} /></span>
                     </button>
                   ) : null}
-                  <div className="entry-nav-rail__language-wrap">
+                  <div
+                    className="entry-nav-rail__language-wrap"
+                    onMouseEnter={() => setLanguageOpen(true)}
+                    onMouseLeave={() => setLanguageOpen(false)}
+                  >
                     <button
                       type="button"
                       className={`entry-nav-rail__menu-item${languageOpen ? ' is-open' : ''}`}
@@ -301,6 +305,7 @@ export function EntryNavRail({
                       aria-haspopup="menu"
                       aria-expanded={languageOpen}
                       onClick={() => setLanguageOpen((value) => !value)}
+                      onFocus={() => setLanguageOpen(true)}
                     >
                       <Icon name="languages" size={15} />
                       {t('entry.accountSwitchLanguage')}

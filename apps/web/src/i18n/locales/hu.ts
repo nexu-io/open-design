@@ -337,6 +337,8 @@ export const hu: Dict = {
   'settings.kicker': 'Beállítások',
   'settings.title': 'Végrehajtási mód',
   'settings.subtitle': 'Válassz helyi CLI és BYOK között.',
+  'settings.general': 'Általános',
+  'settings.generalHint': 'Nyelv, megjelenés, értesítések, projekt-helyek, adatvédelem és alkalmazásadatok.',
   'settings.modeAria': 'Végrehajtási mód',
   'settings.protocolAria': 'API protokoll',
   'settings.modeDaemon': 'Helyi CLI',

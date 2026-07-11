@@ -337,6 +337,8 @@ export const th: Dict = {
   'settings.kicker': 'การตั้งค่า',
   'settings.title': 'โหมดการรัน',
   'settings.subtitle': 'เลือกระหว่าง Local CLI และ BYOK',
+  'settings.general': 'ทั่วไป',
+  'settings.generalHint': 'ภาษา รูปลักษณ์ การแจ้งเตือน ตำแหน่งโปรเจกต์ ความเป็นส่วนตัว และรายละเอียดแอป',
   'settings.modeAria': 'โหมดการทำงาน',
   'settings.protocolAria': 'โปรโตคอล API',
   'settings.modeDaemon': 'CLI ในเครื่อง',

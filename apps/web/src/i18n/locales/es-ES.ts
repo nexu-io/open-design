@@ -337,6 +337,8 @@ export const esES: Dict = {
   'settings.kicker': 'Ajustes',
   'settings.title': 'Modo de ejecución',
   'settings.subtitle': 'Elige entre CLI local y BYOK.',
+  'settings.general': 'General',
+  'settings.generalHint': 'Idioma, apariencia, notificaciones, ubicaciones de proyectos, privacidad y detalles de la app.',
   'settings.modeAria': 'Modo de ejecución',
   'settings.protocolAria': 'Protocolo de API',
   'settings.modeDaemon': 'CLI local',

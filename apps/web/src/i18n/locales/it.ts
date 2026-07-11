@@ -337,6 +337,8 @@ export const it: Dict = {
   'settings.kicker': 'Impostazioni',
   'settings.title': 'Esecuzione e modello',
   'settings.subtitle': 'Scegli tra CLI locale e BYOK.',
+  'settings.general': 'Generali',
+  'settings.generalHint': 'Lingua, aspetto, notifiche, posizioni dei progetti, privacy e dettagli dell’app.',
   'settings.modeAria': 'Modalità di esecuzione',
   'settings.protocolAria': 'Protocollo API',
   'settings.modeDaemon': 'CLI locale',
