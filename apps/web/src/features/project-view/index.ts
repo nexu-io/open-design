@@ -234,6 +234,11 @@ export {
   useAutoSendFirstMessage,
   useWiredAutoSendFirstMessage,
 } from './hooks/useOnboardingFunnel.hooks';
+export type { BrandBrowserSnapshotController } from './hooks/useBrandBrowserSnapshot.hooks';
+export {
+  useBrandBrowserSnapshot,
+  useWiredBrandBrowserSnapshot,
+} from './hooks/useBrandBrowserSnapshot.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

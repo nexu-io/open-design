@@ -99,6 +99,7 @@ function makeHarness(savedWidth = 460): Harness {
     subscribeProjectFileEvents: vi.fn(() => () => {}),
     hasAutoSendFirstMessageFlag: vi.fn(() => false),
     readAmrGateOkFlag: vi.fn(() => false),
+    fetchProjectFileText: vi.fn(async () => null),
     },
   };
   return harness;

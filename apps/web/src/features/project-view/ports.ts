@@ -195,4 +195,12 @@ export interface ProjectViewTransportPort {
     projectId: string,
     onEvent: (evt: ProjectLiveEvent) => void,
   ): () => void;
+  /** Read a project file as text (distinct from `readProjectRawText`: this one
+   *  supports a cache-bust key for freshly-written manifest/snapshot files).
+   *  Best-effort: resolves `null` on a non-ok response or a network error. */
+  fetchProjectFileText(
+    projectId: string,
+    name: string,
+    options?: { cache?: RequestCache; cacheBustKey?: string | number },
+  ): Promise<string | null>;
 }

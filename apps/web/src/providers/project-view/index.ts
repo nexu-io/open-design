@@ -50,3 +50,4 @@ export {
 export { loadOpenTabs, cacheOpenTabsLocally, persistOpenTabsToDaemon } from './open-tabs';
 export { fetchProjectFiles, fetchLiveArtifacts, writeProjectTextFile } from './project-files';
 export { subscribeProjectFileEvents } from './project-live-events';
+export { fetchProjectFileText } from './project-file-text';

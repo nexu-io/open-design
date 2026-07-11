@@ -64,6 +64,7 @@ function makePort(
     subscribeProjectFileEvents: vi.fn(() => () => {}),
     hasAutoSendFirstMessageFlag: vi.fn(() => false),
     readAmrGateOkFlag: vi.fn(() => false),
+    fetchProjectFileText: vi.fn(async () => null),
     ...overrides,
   };
 }

@@ -65,6 +65,7 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     subscribeProjectFileEvents: vi.fn(() => () => {}),
     hasAutoSendFirstMessageFlag: vi.fn(() => false),
     readAmrGateOkFlag: vi.fn(() => false),
+    fetchProjectFileText: vi.fn(async () => null),
     ...overrides,
   };
 }

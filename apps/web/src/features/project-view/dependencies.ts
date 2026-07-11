@@ -51,6 +51,7 @@ import {
   fetchLiveArtifacts,
   writeProjectTextFile,
   subscribeProjectFileEvents,
+  fetchProjectFileText,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -106,4 +107,5 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   fetchLiveArtifacts,
   writeProjectTextFile,
   subscribeProjectFileEvents,
+  fetchProjectFileText,
 };
