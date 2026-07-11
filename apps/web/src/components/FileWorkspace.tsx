@@ -44,11 +44,11 @@ import {
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel } from './DesignFilesPanel';
-import { DesignBrowserPanel, labelFromUrl } from './DesignBrowserPanel';
+import { DesignBrowserPanel } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
-import { Icon, type IconName } from './Icon';
+import { Icon } from './Icon';
 import { Toast } from './Toast';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
@@ -63,8 +63,10 @@ import type { ChatMessage } from '../types';
 import {
   activeFileForTab,
   activeLiveArtifactForTab,
+  browserTabRenderInfo,
   DESIGN_FILES_TAB,
   DESIGN_SYSTEM_TAB,
+  fileTabRenderInfo,
   isBrowserTabId,
   isLiveArtifactImplementationPath,
   isSketchName,
@@ -831,15 +833,12 @@ export function FileWorkspace({
           {orderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
-              const browserUrl = browserTab.url?.trim() ?? '';
-              const browserTitle = browserUrl
-                ? browserTab.title?.trim() || labelFromUrl(browserUrl)
-                : browserTab.label;
+              const { label, title } = browserTabRenderInfo(browserTab);
               return (
                 <Tab
                   key={browserTab.id}
-                  label={browserTitle}
-                  title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
+                  label={label}
+                  title={title}
                   active={activeTab === browserTab.id}
                   onActivate={() => setPersistedActive(browserTab.id)}
                   onClose={() => closeBrowserTab(browserTab.id)}
@@ -848,38 +847,15 @@ export function FileWorkspace({
               );
             }
             const name = entry.name;
-            const sketchEntry = sketches[name];
-            const dirtyMark =
-              sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
-            const isPending = sketchEntry && !sketchEntry.persisted;
-            const onDisk = visibleFiles.find((f) => f.name === name);
-            const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
-            const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
-            const isTerminal = isTerminalTabId(name);
-            const isSideChat = isSideChatTabId(name);
-            // Terminal and side-chat tabs are not files: give them a friendly
-            // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
-            let label: string;
-            if (isTerminal) {
-              // Number multiple terminals so the tabs stay distinguishable.
-              const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
-              label =
-                ordinal > 1
-                  ? `${t('workspace.newTerminal')} ${ordinal}`
-                  : t('workspace.newTerminal');
-            } else if (isSideChat) {
-              const conv = conversations.find(
-                (c) => c.id === conversationIdFromSideChatTabId(name),
-              );
-              label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
-            } else {
-              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
-            }
-            const iconNameOverride: IconName | undefined = isTerminal
-              ? 'terminal'
-              : isSideChat
-                ? 'comment'
-                : undefined;
+            const { label, iconNameOverride, kind, liveArtifact, isPending } = fileTabRenderInfo(
+              name,
+              sketches,
+              visibleFiles,
+              liveArtifactEntries,
+              tabNames,
+              conversations,
+              t,
+            );
             return (
               <Tab
                 key={name}

@@ -13,6 +13,7 @@ import {
 import { designSystemGithubEvidenceState } from '../../components/design-system-github-evidence';
 import type { DesignFilesNavState } from '../../components/DesignFilesPanel';
 import { labelFromUrl } from '../../components/DesignBrowserPanel';
+import type { IconName } from '../../components/Icon';
 import { parseDesignMd } from '../../runtime/design-md-parse';
 import { replaceDesignMdColorAtIndex } from '../../runtime/kit-edit';
 import type { FileOpEntry } from '../../runtime/file-ops';
@@ -295,6 +296,73 @@ export function activeLiveArtifactForTab(
     || isBrowserTabId(activeTab)
   ) return null;
   return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
+}
+
+export interface BrowserTabRenderInfo {
+  label: string;
+  title: string;
+}
+
+// Display label/title for a browser tab chip in the tab bar: falls back to
+// the tab's own label until a real page title/URL is known.
+export function browserTabRenderInfo(
+  browserTab: Pick<BrowserWorkspaceTab, 'label' | 'title' | 'url'>,
+): BrowserTabRenderInfo {
+  const browserUrl = browserTab.url?.trim() ?? '';
+  const label = browserUrl
+    ? browserTab.title?.trim() || labelFromUrl(browserUrl)
+    : browserTab.label;
+  return {
+    label,
+    title: browserUrl ? `${label}\n${browserUrl}` : label,
+  };
+}
+
+export interface FileTabRenderInfo {
+  label: string;
+  iconNameOverride: IconName | undefined;
+  kind: ProjectFile['kind'] | 'live-artifact' | 'browser';
+  liveArtifact: LiveArtifactWorkspaceEntry | undefined;
+  isPending: boolean;
+}
+
+// Display label/icon/kind for a file/sketch/terminal/side-chat tab chip in
+// the tab bar. Terminal and side-chat tabs are not files: they get a
+// friendly label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
+export function fileTabRenderInfo(
+  name: string,
+  sketches: Record<string, SketchState>,
+  visibleFiles: ProjectFile[],
+  liveArtifactEntries: LiveArtifactWorkspaceEntry[],
+  tabNames: string[],
+  conversations: Conversation[],
+  t: TranslateFn,
+): FileTabRenderInfo {
+  const sketchEntry = sketches[name];
+  const dirtyMark = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
+  const isPending = Boolean(sketchEntry && !sketchEntry.persisted);
+  const onDisk = visibleFiles.find((f) => f.name === name);
+  const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
+  const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+  const isTerminal = isTerminalTabId(name);
+  const isSideChat = isSideChatTabId(name);
+  let label: string;
+  if (isTerminal) {
+    // Number multiple terminals so the tabs stay distinguishable.
+    const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
+    label = ordinal > 1 ? `${t('workspace.newTerminal')} ${ordinal}` : t('workspace.newTerminal');
+  } else if (isSideChat) {
+    const conv = conversations.find((c) => c.id === conversationIdFromSideChatTabId(name));
+    label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
+  } else {
+    label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+  }
+  const iconNameOverride: IconName | undefined = isTerminal
+    ? 'terminal'
+    : isSideChat
+      ? 'comment'
+      : undefined;
+  return { label, iconNameOverride, kind, liveArtifact, isPending };
 }
 
 // --- Design-system project: pure section/status/manifest/color/todo helpers ---
