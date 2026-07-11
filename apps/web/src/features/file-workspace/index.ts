@@ -5,6 +5,7 @@
 export { Tab } from './components/Tab';
 export { DesignSystemProjectLoading } from './components/DesignSystemProjectLoading';
 export { DesignSystemInlinePreview } from './components/DesignSystemInlinePreview';
+export { useWiredDesignSystemCardManifest } from './hooks/useDesignSystemCardManifest.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
