@@ -120,6 +120,8 @@ import {
   scanRunEventsForFinishedProps,
   scanRunEventsForRetrySideEffects,
 } from './runtimes/run-lifecycle-analytics.js';
+import { scanRunEventsForUsageAnalytics } from './run-analytics-observability.js';
+import { detectSkillPluginCandidate } from './plugins/skill-candidates.js';
 export {
   composeLiveInstructionPrompt,
   formatDesignFilesWorkspaceHint,
