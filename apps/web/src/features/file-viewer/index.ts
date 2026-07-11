@@ -278,3 +278,17 @@ export type { ViewerToolbarProps, ViewerToolbarSlideState } from './components/V
 // with the HTML file-viewer's srcDoc/postMessage bridges.
 export { MarkdownViewer } from './components/MarkdownViewer';
 export type { MarkdownViewerMode, MarkdownSaveState, MarkdownScrollPane } from './types';
+
+// HtmlViewer's analytics fire-helpers: toolbar/draw-toolbar/header/present-
+// popover/comment-popover click events plus the share/export click->result
+// funnel and its loading-toast ticker. A leaf dependency other, not-yet-
+// extracted HtmlViewer clusters call through.
+export { useWiredArtifactAnalytics } from './hooks/useArtifactAnalytics.hooks';
+export type {
+  ArtifactAnalyticsController,
+  ArtifactAnalyticsDeps,
+  ArtifactHeaderClickElement,
+  ArtifactShareExportFormat,
+  ArtifactToolbarClickElement,
+} from './hooks/useArtifactAnalytics.hooks';
+export type { ArtifactExportToast, ArtifactTrackingAnalytics } from './types';

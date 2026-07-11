@@ -216,7 +216,22 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 
 ### Cluster B — Analytics/tracking fire-helpers
 
-- **Status:** pending
+- **Status:** done. Landed as `useArtifactAnalytics`/`useWiredArtifactAnalytics` in
+  `hooks/useArtifactAnalytics.hooks.ts`, with `ArtifactAnalyticsController`/
+  `ArtifactAnalyticsDeps`/`ArtifactToolbarClickElement`/`ArtifactHeaderClickElement`/
+  `ArtifactShareExportFormat` types and `ArtifactExportToast`/`ArtifactTrackingAnalytics`
+  in `types.ts`, exported through the barrel. Structural move only. Since
+  `fireShareExport` also writes `exportToast` state (owned by the not-yet-extracted
+  Cluster F — Export & Download), the hook takes an `onExportToast` callback
+  instead of owning that state; the orchestrator wires it via
+  `useWiredArtifactAnalytics({ ..., onExportToast: setExportToast })` positioned
+  right after `const [exportToast, setExportToast] = useState(...)`, mirroring
+  where `useWiredShareLinkCopy` already sits for the same reason. Integrated by
+  hand against the post-Cluster-C/Q tip (built on an earlier base commit) since a
+  mechanical patch/merge wasn't viable; only conflict was the old inline
+  fire-helper block vs. Cluster C's `useWiredViewerToolbarMenus()` destructure at
+  the top of `HtmlViewer` — resolved by dropping the old block and keeping the
+  toolbar-menus hook.
 - **Lines:** ~1876–2102
 - **Owns:** `exportProgressRef`; `fireShareExport`, `onExportProgress`,
   `fireArtifactToolbarClick`, `fireDrawToolbarClick`, `fireArtifactHeaderClick`,

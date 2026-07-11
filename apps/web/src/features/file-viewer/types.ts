@@ -220,6 +220,34 @@ export type FileVersionManagerAnalytics = {
 };
 
 /**
+ * The subset of the app's analytics context `useArtifactAnalytics` needs (the
+ * share/export click->result funnel correlates a click to a later async
+ * result, so it needs `newRequestId` too). Duplicated rather than reusing
+ * `TemplateSaveAnalytics` by intent (ADR 0002: only wire DTOs and transport
+ * adapters are shared for correctness).
+ */
+export type ArtifactTrackingAnalytics = {
+  track: (
+    event: string,
+    properties: Record<string, unknown>,
+    options?: { requestId?: string; insertId?: string },
+  ) => void;
+  newRequestId: () => string;
+};
+
+/**
+ * The export/share loading|success|error toast `useArtifactAnalytics`'s
+ * `fireShareExport` drives. The toast state itself is owned by the
+ * not-yet-extracted export/download HtmlViewer cluster (its `exportToast`
+ * state lives in the orchestrator until that cluster lands), so the hook
+ * reaches it through an `onExportToast` deps callback instead of owning it.
+ */
+export type ArtifactExportToast = {
+  message: string;
+  tone: 'default' | 'success' | 'error' | 'loading';
+};
+
+/**
  * Result shape of the live-artifact refresh port, defined in-slice per ADR
  * 0002 (a port's result type must not be imported from `providers/`).
  * Structurally identical to `providers/registry`'s `LiveArtifactRefreshResult`.

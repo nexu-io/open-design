@@ -20,12 +20,7 @@ import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
   trackArtifactDeployResult,
-  trackArtifactHeaderClick,
-  trackArtifactToolbarClick,
-  trackCommentPopoverClick,
-  trackDrawToolbarClick,
   trackPageView,
-  trackPresentPopoverClick,
   trackShareOptionPopoverClick,
 } from '../analytics/events';
 import { recordFirstLoopStep } from '../onboarding/first-loop';
@@ -78,7 +73,6 @@ import {
   planDeckImageCapture,
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
-  type ExportProgress,
   type ImageExportFormat,
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -101,7 +95,7 @@ import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
 import { SocialShareGrid } from './SocialShareGrid';
 import { Toast } from './Toast';
-import { PreviewDrawOverlay, type DrawToolbarElement } from './PreviewDrawOverlay';
+import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
   commentSnapshotEqual,
@@ -228,6 +222,7 @@ import {
   useWiredShareLinkCopy,
   useWiredDeployLinkCopy,
   useWiredPreviewCanvasSize,
+  useWiredArtifactAnalytics,
   fileVersionPreviewOptions,
   FileVersionManagerModal,
   getCachedPreviewViewport,
@@ -624,233 +619,6 @@ function HtmlViewer({
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
-  // Latest per-slide capture progress for the programmatic exporters, read by
-  // the loading-toast ticker in fireShareExport to render elapsed time + ETA.
-  const exportProgressRef = useRef<{ done: number; total: number } | null>(null);
-  // Shared helper for the share menu: emit studio_click share_option on
-  // entry and artifact_export_result on resolution. Sync exports report
-  // success immediately after the call returns; async exports get .then
-  // / .catch. The same request_id threads both events so PostHog can
-  // stitch click → result via $insert_id correlation.
-  const fireShareExport = (
-    format:
-      | 'pdf'
-      | 'pptx'
-      | 'zip'
-      | 'html'
-      | 'image'
-      | 'markdown'
-      | 'template'
-      | 'share_link'
-      | 'share_page',
-    fn: () => Promise<unknown> | unknown,
-  ) => {
-    const requestId = analytics.newRequestId();
-    const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
-    const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
-    const trackingFormat = format;
-    trackShareOptionPopoverClick(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: artifactId,
-        artifact_kind: artifactKind,
-        element: trackingFormat,
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
-    const started = performance.now();
-    const finish = (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
-      trackArtifactExportResult(
-        analytics.track,
-        {
-          page_name: 'artifact',
-          area: 'share_option_popover',
-          artifact_id: artifactId,
-          artifact_kind: artifactKind,
-          project_id: projectId,
-          project_kind: projectKind,
-          export_format: trackingFormat,
-          result,
-          ...(errorCode ? { error_code: errorCode } : {}),
-          export_duration_ms: Math.round(performance.now() - started),
-        },
-        { requestId },
-      );
-      // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL export
-      // closes the loop. Project-scoped — a no-op unless the project was
-      // started from the Home recommendation.
-      if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
-    };
-    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
-    // Programmatic exports compute in-browser and can take a while (one render
-    // per deck slide), so the loading toast ticks every second with elapsed time
-    // and — once at least one slide is captured — a live ETA derived from the
-    // average time per completed slide. onExportProgress (passed into the export
-    // call by the menu item) feeds slide progress into exportProgressRef.
-    exportProgressRef.current = null;
-    const startedAt = performance.now();
-    let ticker: ReturnType<typeof setInterval> | null = null;
-    const renderLoadingToast = () => {
-      if (!toastFormats.has(format)) return;
-      const elapsedS = Math.max(0, Math.round((performance.now() - startedAt) / 1000));
-      const p = exportProgressRef.current;
-      let message: string;
-      if (p && p.total > 1 && p.done > 0) {
-        const remainingS = Math.max(
-          1,
-          Math.round(((performance.now() - startedAt) / p.done) * (p.total - p.done) / 1000),
-        );
-        message = t('fileViewer.exportSlideEta', { current: p.done, total: p.total, seconds: remainingS });
-      } else if (p && p.total > 1) {
-        message = t('fileViewer.exportSlideProgress', { current: p.done, total: p.total });
-      } else {
-        message = elapsedS > 0
-          ? t('fileViewer.exportingElapsed', { seconds: elapsedS })
-          : t('fileViewer.exportingProgress');
-      }
-      setExportToast({ message, tone: 'loading' });
-    };
-    const stopTicker = () => {
-      if (ticker != null) {
-        clearInterval(ticker);
-        ticker = null;
-      }
-    };
-    if (toastFormats.has(format)) {
-      renderLoadingToast();
-      ticker = setInterval(renderLoadingToast, 1000);
-    }
-    const failToast = (err?: unknown) => {
-      stopTicker();
-      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportFailed');
-      if (toastFormats.has(format)) setExportToast({ message, tone: 'error' });
-    };
-    try {
-      const out = fn();
-      if (out && typeof (out as Promise<unknown>).then === 'function') {
-        (out as Promise<unknown>).then(
-          (result) => {
-            stopTicker();
-            if (result === 'cancelled') {
-              finish('cancelled');
-              if (toastFormats.has(format)) setExportToast(null);
-              return;
-            }
-            finish('success');
-            if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
-          },
-          (err) => {
-            finish('failed', exportErrorCode(err));
-            failToast(err);
-          },
-        );
-      } else {
-        stopTicker();
-        if (out === 'cancelled') {
-          finish('cancelled');
-          if (toastFormats.has(format)) setExportToast(null);
-          return;
-        }
-        finish('success');
-        if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
-      }
-    } catch (err) {
-      finish('failed', exportErrorCode(err));
-      failToast(err);
-    }
-  };
-  // Feeds per-slide capture progress into the ref the loading-toast ticker reads
-  // (apps/web/src/runtime/exports.ts drives this for the PDF exporter).
-  const onExportProgress: ExportProgress = (done, total) => {
-    exportProgressRef.current = { done, total };
-  };
-  // P0 helpers — keep the artifact_id + artifact_kind derivation in one place
-  // so each per-button onClick stays a one-liner. We compute lazily inside the
-  // closure because `file.kind` / `file.name` can change as the user navigates
-  // tabs without remounting HtmlViewer.
-  const fireArtifactToolbarClick = (
-    element:
-      | 'reload'
-      | 'preview'
-      | 'source'
-      | 'screenshot'
-      | 'tweaks'
-      | 'mark'
-      | 'comment'
-      | 'pods'
-      | 'inspect'
-      | 'edit'
-      | 'zoom_out'
-      | 'zoom_level_dropdown'
-      | 'zoom_in'
-      | 'versions',
-    entryFrom?: 'toolbar' | 'more_menu',
-  ) => {
-    trackArtifactToolbarClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'artifact_toolbar',
-      element,
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-      ...(entryFrom ? { entry_from: entryFrom } : {}),
-    });
-  };
-  const fireDrawToolbarClick = (
-    element: DrawToolbarElement,
-    submitAction?: 'draft' | 'queue' | 'send',
-  ) => {
-    trackDrawToolbarClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'draw_toolbar',
-      element,
-      ...(submitAction ? { submit_action: submitAction } : {}),
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-    });
-  };
-  const fireArtifactHeaderClick = (
-    element:
-      | 'back'
-      | 'edit'
-      | 'present_dropdown'
-      | 'download_dropdown'
-      | 'share_dropdown'
-      | 'settings',
-  ) => {
-    trackArtifactHeaderClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'artifact_header',
-      element,
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-    });
-  };
-  const firePresentPopoverClick = (
-    element: 'in_this_tab' | 'fullscreen' | 'new_tab',
-  ) => {
-    trackPresentPopoverClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'present_popover',
-      element,
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-    });
-  };
-  const fireCommentPopoverClick = (
-    element: 'save_comment' | 'send_to_chat' | 'add_note',
-  ) => {
-    trackCommentPopoverClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'comment_popover',
-      element,
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-    });
-  };
   const {
     mode,
     setMode,
@@ -1304,6 +1072,24 @@ function HtmlViewer({
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
+  const {
+    exportProgressRef,
+    fireShareExport,
+    onExportProgress,
+    fireArtifactToolbarClick,
+    fireDrawToolbarClick,
+    fireArtifactHeaderClick,
+    firePresentPopoverClick,
+    fireCommentPopoverClick,
+  } = useWiredArtifactAnalytics({
+    projectId,
+    projectKind,
+    fileName: file.name,
+    fileKind: file.kind ?? null,
+    t,
+    analytics,
+    onExportToast: setExportToast,
+  });
   const shareLinkCopy = useWiredShareLinkCopy({
     t,
     onCopyFailed: () => setExportToast({ message: t('useEverywhere.copyFailed'), tone: 'error' }),
