@@ -52,7 +52,7 @@ import {
   type ProjectFile,
 } from '../types';
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
-import { createTerminal, killTerminal } from '../state/projects';
+import { killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import { DesignBrowserPanel, labelFromUrl } from './DesignBrowserPanel';
@@ -62,7 +62,6 @@ import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon, type IconName } from './Icon';
 import { Toast } from './Toast';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
-import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { LibraryPicker } from './LibraryPicker';
@@ -73,7 +72,6 @@ import { SketchEnginePrewarm } from './SketchEnginePrewarm';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
 import {
-  arraysEqual,
   colorHexFromBrandJson,
   colorHexFromDesignMd,
   createDefaultDesignFilesNavState,
@@ -125,22 +123,22 @@ import {
   reanchorBrowserTabsToCurrentOrder,
   scrollWorkspaceTabsWithWheel,
   Tab,
-  tabDropEdgeFromEvent,
   truncateDesignSystemActivityText,
   useBrowserTabs,
+  useTabReorderDnd,
   useWiredFileOperations,
   useWiredProjectFolders,
   useWiredSketches,
   useWiredWorkspaceKeyboardShortcuts,
   useWiredWorkspaceTabBarDom,
   useWorkspaceContextTracking,
+  useWorkspaceLauncher,
   type BrowserAttentionRequest,
   type BrowserOpenRequest,
   type DesignSystemReviewAgentTask,
   type DesignSystemReviewDecision,
   type DesignSystemReviewDetails,
   type DesignSystemReviewEntry,
-  type TabDropEdge,
   type TranslateFn,
   type WorkspaceOrderedTab,
 } from '../features/file-workspace';
@@ -421,21 +419,8 @@ export function FileWorkspace({
 
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // "+" launcher (file search + registry-driven create-new actions:
-  // Side Chat, Terminal, Browser).
-  const [launcherOpen, setLauncherOpen] = useState(false);
-  // Transient feedback when a launcher "create" action (e.g. New Terminal)
-  // fails on the daemon side, so the click is never a silent no-op.
-  const [launcherToast, setLauncherToast] = useState<string | null>(null);
-  const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
-  const [dragOverTab, setDragOverTab] = useState<{
-    name: string;
-    edge: TabDropEdge;
-  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
-  const draggedTabNameRef = useRef<string | null>(null);
   const openFileRef = useRef<(name: string) => void>(() => {});
   // Cluster 4 (`useBrowserTabs`) needs the tab-activation cluster's derived
   // `orderedWorkspaceTabs` to anchor a newly-opened browser tab, but that
@@ -844,11 +829,6 @@ export function FileWorkspace({
     activateWorkspaceTab(workspaceTabIds[index]!);
   }
 
-  function openWorkspaceTabLauncher() {
-    setLauncherOpen(true);
-    launcherBtnRef.current?.focus();
-  }
-
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
     if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
@@ -909,29 +889,6 @@ export function FileWorkspace({
     onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
     setActiveTab(nextActive ?? DESIGN_FILES_TAB);
     pruneClosedSketchEntry(name);
-  }
-
-  function reorderPersistedTab(
-    draggedName: string,
-    targetName: string,
-    edge: TabDropEdge,
-  ) {
-    if (draggedName === targetName) return;
-    if (!persistedTabs.includes(draggedName)) return;
-    if (!persistedTabs.includes(targetName)) return;
-
-    const nextTabs = persistedTabs.filter((name) => name !== draggedName);
-    const targetIndex = nextTabs.indexOf(targetName);
-    if (targetIndex === -1) return;
-    nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, draggedName);
-    if (arraysEqual(nextTabs, persistedTabs)) return;
-    onTabsStateChange(workspaceTabsState(nextTabs, tabsState.active));
-  }
-
-  function clearTabDragState() {
-    draggedTabNameRef.current = null;
-    setDraggedTabName(null);
-    setDragOverTab(null);
   }
 
   const activeFile = useMemo<ProjectFile | null>(() => {
@@ -998,6 +955,46 @@ export function FileWorkspace({
   // ref's declaration comment above.
   orderedWorkspaceTabsRef.current = orderedWorkspaceTabs;
 
+  // Launcher ("+" menu: file search + create-new actions) and tab-bar
+  // drag-reorder. `openFile`/`workspaceTabsState` are hoisted function
+  // declarations further down this render — referencing them here before
+  // their textual declaration point is safe, same as `useBrowserTabs` above.
+  const {
+    launcherOpen,
+    setLauncherOpen,
+    launcherToast,
+    setLauncherToast,
+    launcherBtnRef,
+    launcherContext,
+    launcherActions,
+    openWorkspaceTabLauncher,
+  } = useWorkspaceLauncher({
+    projectId,
+    openFile,
+    openBrowserTab,
+    startNewSketch,
+    createMarkdownDocument,
+    fileInputRef,
+    t,
+  });
+
+  const {
+    draggedTabName,
+    dragOverTab,
+    handleTabDragStart,
+    handleTabDragOver,
+    handleTabDragLeave,
+    handleTabDrop,
+    handleTabDragEnd,
+    handleTabBarDragLeave,
+    handleTabBarDrop,
+  } = useTabReorderDnd({
+    persistedTabs,
+    tabsStateActive: tabsState.active,
+    onTabsStateChange,
+    workspaceTabsState,
+  });
+
   const { quickSwitcherOpen, setQuickSwitcherOpen } = useWiredWorkspaceKeyboardShortcuts({
     workspaceTabIds,
     openWorkspaceTabLauncher,
@@ -1016,38 +1013,6 @@ export function FileWorkspace({
 
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
-  // The "+" launcher's create-new actions come from the registry. `openTab`
-  // reuses the same tab-state path as opening a file so a new terminal:<id>
-  // tab is focused; `createBrowser` opens an embedded browser tab.
-  // Built fresh each render (not memoized): `createBrowser` closes over
-  // `openBrowserTab`, which reads the live `browserTabs` state — memoizing it
-  // would capture a stale closure and make every "New Browser" click overwrite
-  // the same single tab. The terminal action routes through `openFile`
-  // (ref-based), so freshness here is cheap and only matters while the launcher
-  // is open.
-  const launcherContext: LauncherContext = {
-    projectId,
-    openTab: openFile,
-    // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
-    // tab synchronously (no daemon round-trip) and let the launcher close.
-    createBrowser: () => openBrowserTab(),
-    createSketch: () => void startNewSketch(),
-    createDocument: () => void createMarkdownDocument(),
-    uploadDesignFiles: () => fileInputRef.current?.click(),
-    // Terminal needs only the project id — spawn the PTY here and hand the
-    // resulting session id back so the launcher opens a terminal:<id> tab.
-    // Surface a toast when the daemon can't start one (e.g. node-pty not
-    // compiled) instead of silently no-opping the launcher action.
-    createTerminal: async () => {
-      const term = await createTerminal(projectId);
-      if (!term) {
-        setLauncherToast(t('workspace.terminalStartFailed'));
-        return null;
-      }
-      return term.id;
-    },
-  };
-  const launcherActions = buildLauncherActions(launcherContext);
 
   return (
     <div
@@ -1089,14 +1054,8 @@ export function FileWorkspace({
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
             el.scrollLeft += event.deltaY;
           }}
-          onDragLeave={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-            setDragOverTab(null);
-          }}
-          onDrop={(event) => {
-            if (event.target !== event.currentTarget) return;
-            clearTabDragState();
-          }}
+          onDragLeave={handleTabBarDragLeave}
+          onDrop={handleTabBarDrop}
         >
           {designSystemProject ? (
             <button
@@ -1218,37 +1177,11 @@ export function FileWorkspace({
                     ? dragOverTab.edge
                     : null
                 }
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move';
-                  event.dataTransfer.setData('text/plain', name);
-                  draggedTabNameRef.current = name;
-                  setDraggedTabName(name);
-                }}
-                onDragOver={(event) => {
-                  const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
-                  if (!currentDraggedName || currentDraggedName === name) return;
-                  if (!persistedTabs.includes(currentDraggedName)) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                  const edge = tabDropEdgeFromEvent(event);
-                  setDragOverTab((current) =>
-                    current?.name === name && current.edge === edge
-                      ? current
-                      : { name, edge },
-                  );
-                }}
-                onDragLeave={() => {
-                  setDragOverTab((current) => (current?.name === name ? null : current));
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const draggedName = draggedTabNameRef.current || draggedTabName;
-                  if (draggedName) {
-                    reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
-                  }
-                  clearTabDragState();
-                }}
-                onDragEnd={clearTabDragState}
+                onDragStart={(event) => handleTabDragStart(name, event)}
+                onDragOver={(event) => handleTabDragOver(name, event)}
+                onDragLeave={() => handleTabDragLeave(name)}
+                onDrop={(event) => handleTabDrop(name, event)}
+                onDragEnd={handleTabDragEnd}
               />
             );
           })}
