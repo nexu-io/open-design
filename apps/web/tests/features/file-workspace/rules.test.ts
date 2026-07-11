@@ -233,7 +233,7 @@ describe('activeFileForTab', () => {
 
 describe('activeLiveArtifactForTab', () => {
   const entries: LiveArtifactWorkspaceEntry[] = [
-    { tabId: 'artifact-1', title: 'Artifact 1' } as LiveArtifactWorkspaceEntry,
+    { tabId: 'artifact-1', title: 'Artifact 1' } as unknown as LiveArtifactWorkspaceEntry,
   ];
 
   it('returns null for the reserved tabs', () => {
