@@ -16,6 +16,11 @@ export {
   useDesignSystemReviewCards,
   type DesignSystemReviewCardsController,
 } from './hooks/useDesignSystemReviewCards.hooks';
+export {
+  useWiredSketches,
+  type SketchesController,
+  type UseSketchesParams,
+} from './hooks/useSketches.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';

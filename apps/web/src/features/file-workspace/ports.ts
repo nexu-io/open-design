@@ -3,6 +3,7 @@
 // directly; a provider is bound to it in `dependencies.ts`. Tests supply a
 // hand-written fake — no global `fetch` mocking, no module-path mocks.
 import type { ExtractBrandFromHtmlOutcome } from '../../runtime/brands';
+import type { ProjectFile } from '../../types';
 
 /** Transport the design-system inline-preview cluster needs: reading a
  *  project file's text (HTML/CSS/JS) and building stable raw/file URLs for
@@ -43,4 +44,14 @@ export interface DesignSystemKitActionsPort {
   deleteBrandLogo(projectId: string, index: number): Promise<boolean>;
   deleteBrandImage(projectId: string, index: number): Promise<boolean>;
   confirmDelete(message: string): boolean;
+}
+
+/** Transport + the page-teardown DOM bridge the sketch cluster needs: reading
+ *  a sketch's saved JSON, writing its autosaved/explicit-saved JSON and any
+ *  exported PNG, and flushing a pending autosave before the page unloads. */
+export interface SketchesPort {
+  fetchProjectFileText(projectId: string, name: string): Promise<string | null>;
+  writeProjectTextFile(projectId: string, name: string, content: string): Promise<ProjectFile | null>;
+  writeProjectBase64File(projectId: string, name: string, base64: string): Promise<ProjectFile | null>;
+  subscribePageUnload(onUnload: () => void): () => void;
 }
