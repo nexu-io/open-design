@@ -5,7 +5,7 @@ import type { DeployProviderId, DeploymentInfo, ProjectFileVersion } from '@open
 import type { TrackingFileVersionSource } from '@open-design/contracts/analytics';
 import type { ManualEditStyles, ManualEditTarget } from '../../edit-mode/types';
 import { MANUAL_EDIT_STYLE_PROPS } from '../../edit-mode/types';
-import type { PreviewComment, PreviewCommentMember } from '../../types';
+import type { LiveArtifact, LiveArtifactRefreshLogEntry, PreviewComment, PreviewCommentMember } from '../../types';
 import { sourceLooksLikeExportableDeck } from '../../runtime/exports';
 import {
   overlayBoundsFromSnapshot,
@@ -36,15 +36,18 @@ import type {
   InspectOverrideMap,
   InspectOverridePayload,
   InspectSpliceScan,
+  LiveArtifactRefreshEvent,
   ManualEditPendingStyleSave,
   MarkdownCodeLanguage,
   PreviewCanvasSize,
   PreviewOverlayTransform,
   PreviewScaleOptions,
   PreviewViewportId,
+  RefreshStatusDescriptor,
   StrokePoint,
   TranslateFn,
 } from './types';
+import { LiveArtifactRefreshFailure } from './types';
 
 // Allow-list of CSS properties the host will persist on Save. Mirrors the
 // in-iframe ALLOWED_PROPS list so the host doesn't accept properties that
@@ -1507,6 +1510,180 @@ export function activeCommentPinStyle(
 
 export function exportReadyNudgeKey(projectId: string, fileName: string): string {
   return `${EXPORT_READY_NUDGE_STORAGE_PREFIX}${projectId}:${fileName}`;
+}
+
+// Structurally identical to `providers/registry`'s `liveArtifactPreviewUrl`,
+// duplicated because it is a pure string builder with no transport/DOM
+// dependency, so it belongs in the slice per ADR 0002 (the guard treats any
+// `providers/` import as a transport reach regardless of the export's own
+// purity).
+export function liveArtifactPreviewUrl(
+  projectId: string,
+  artifactId: string,
+  variant: 'rendered' | 'template' | 'rendered-source' = 'rendered',
+): string {
+  const variantQuery = variant === 'rendered' ? '' : `&variant=${encodeURIComponent(variant)}`;
+  return `/api/live-artifacts/${encodeURIComponent(artifactId)}/preview?projectId=${encodeURIComponent(projectId)}${variantQuery}`;
+}
+
+export function liveArtifactViewerTabs(
+  t: TranslateFn,
+): Array<{ id: 'preview' | 'code' | 'data' | 'refresh-history'; label: string }> {
+  return [
+    { id: 'preview', label: t('liveArtifact.viewer.tabPreview') },
+    { id: 'code', label: t('liveArtifact.viewer.tabCode') },
+    { id: 'data', label: t('liveArtifact.viewer.tabData') },
+    { id: 'refresh-history', label: t('liveArtifact.viewer.tabRefreshHistory') },
+  ];
+}
+
+export function liveArtifactMetadataPayload(liveArtifact: LiveArtifact): unknown {
+  return {
+    artifact: {
+      id: liveArtifact.id,
+      title: liveArtifact.title,
+      slug: liveArtifact.slug,
+      status: liveArtifact.status,
+      pinned: liveArtifact.pinned,
+      preview: liveArtifact.preview,
+      refreshStatus: liveArtifact.refreshStatus,
+      createdAt: liveArtifact.createdAt,
+      updatedAt: liveArtifact.updatedAt,
+      lastRefreshedAt: liveArtifact.lastRefreshedAt,
+    },
+    document: liveArtifact.document
+      ? {
+          format: liveArtifact.document.format,
+          templatePath: liveArtifact.document.templatePath,
+          generatedPreviewPath: liveArtifact.document.generatedPreviewPath,
+          dataPath: liveArtifact.document.dataPath,
+          dataSchemaJson: liveArtifact.document.dataSchemaJson,
+          sourceJson: liveArtifact.document.sourceJson,
+        }
+      : null,
+  };
+}
+
+export function liveArtifactProvenancePayload(liveArtifact: LiveArtifact): unknown {
+  return {
+    documentSource: liveArtifact.document?.sourceJson ?? null,
+  };
+}
+
+export function liveArtifactRefreshPayload(liveArtifact: LiveArtifact): unknown {
+  return {
+    refreshStatus: liveArtifact.refreshStatus,
+    lastRefreshedAt: liveArtifact.lastRefreshedAt ?? null,
+  };
+}
+
+// Capped at 25 entries to keep the session-refresh-events panel lightweight.
+const MAX_LIVE_ARTIFACT_REFRESH_EVENTS = 25;
+
+export function appendRefreshEvent(
+  prev: LiveArtifactRefreshEvent[],
+  next: Omit<LiveArtifactRefreshEvent, 'id' | 'at' | 'durationMs'>,
+  nextId: number,
+  at: number,
+): LiveArtifactRefreshEvent[] {
+  const event: LiveArtifactRefreshEvent = { ...next, id: nextId, at };
+  if (next.phase !== 'started') {
+    // Pair with the most recent 'started' to compute duration.
+    for (let i = prev.length - 1; i >= 0; i -= 1) {
+      const candidate = prev[i];
+      if (candidate && candidate.phase === 'started') {
+        event.durationMs = Math.max(0, at - candidate.at);
+        break;
+      }
+    }
+  }
+  const combined = [...prev, event];
+  return combined.length > MAX_LIVE_ARTIFACT_REFRESH_EVENTS
+    ? combined.slice(combined.length - MAX_LIVE_ARTIFACT_REFRESH_EVENTS)
+    : combined;
+}
+
+export function describeRefreshStatus(
+  status: LiveArtifact['refreshStatus'],
+  t: TranslateFn,
+): RefreshStatusDescriptor {
+  switch (status) {
+    case 'running':
+      return {
+        label: t('liveArtifact.refresh.statusRunning'),
+        tone: 'running',
+        description: t('liveArtifact.refresh.statusRunningDescription'),
+      };
+    case 'succeeded':
+      return {
+        label: t('liveArtifact.refresh.statusSucceeded'),
+        tone: 'success',
+        description: t('liveArtifact.refresh.statusSucceededDescription'),
+      };
+    case 'failed':
+      return {
+        label: t('liveArtifact.refresh.statusFailed'),
+        tone: 'error',
+        description: t('liveArtifact.refresh.statusFailedDescription'),
+      };
+    case 'idle':
+      return {
+        label: t('liveArtifact.refresh.statusReady'),
+        tone: 'neutral',
+        description: t('liveArtifact.refresh.statusReadyDescription'),
+      };
+    case 'never':
+    default:
+      return {
+        label: t('liveArtifact.refresh.statusNever'),
+        tone: 'warning',
+        description: t('liveArtifact.refresh.statusNeverDescription'),
+      };
+  }
+}
+
+export function describeEventPhase(
+  event: LiveArtifactRefreshEvent,
+  t: TranslateFn,
+): { label: string; tone: 'running' | 'success' | 'error' } {
+  if (event.phase === 'started')
+    return { label: t('liveArtifact.refresh.eventStarted'), tone: 'running' };
+  if (event.phase === 'succeeded')
+    return { label: t('liveArtifact.refresh.eventSucceeded'), tone: 'success' };
+  return { label: t('liveArtifact.refresh.eventFailed'), tone: 'error' };
+}
+
+export function describePersistedStatus(
+  status: LiveArtifactRefreshLogEntry['status'],
+  t: TranslateFn,
+): string {
+  switch (status) {
+    case 'succeeded':
+      return t('liveArtifact.refresh.persistedStatusSucceeded');
+    case 'running':
+      return t('liveArtifact.refresh.persistedStatusRunning');
+    case 'failed':
+      return t('liveArtifact.refresh.persistedStatusFailed');
+    case 'cancelled':
+      return t('liveArtifact.refresh.persistedStatusCancelled');
+    case 'skipped':
+      return t('liveArtifact.refresh.persistedStatusSkipped');
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+export function refreshErrorMessage(error: unknown, t: TranslateFn): string {
+  if (error instanceof LiveArtifactRefreshFailure && error.status === 0) {
+    return t('liveArtifact.refresh.networkFailure');
+  }
+  if (error instanceof LiveArtifactRefreshFailure && error.code === 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE') {
+    return t('liveArtifact.refresh.noSourceTitle');
+  }
+  if (error instanceof Error && error.message.length > 0) return error.message;
+  return t('liveArtifact.refresh.genericFailure');
 }
 
 // ---------------------------------------------------------------------------

@@ -42,7 +42,7 @@ File shape at plan time (8773 lines total):
 
 ## Cluster A — LiveArtifactViewer
 
-- **Status:** pending
+- **Status:** done
 - **Lines:** 726–1438, 1455–1823 (skip 1439–1453, see Cluster F)
 - **Owns:** the exported `LiveArtifactViewer` component (mode/detail/loading/
   reloadKey/zoom/previewViewport/refreshing/refreshError/refreshSuccess/
@@ -90,6 +90,22 @@ File shape at plan time (8773 lines total):
   through the slice's existing `dismissPort`). Existing test coverage in
   `apps/web/tests/components/FileViewer.test.tsx` (`describe('LiveArtifactViewer')`,
   `describe('LiveArtifactRefreshHistoryPanel')`) is the behavior-preserving
+- **Landed (2026-07-11):** also created, reusable by later clusters — do not
+  recreate: `providers/file-viewer/chrome-actions-host.ts` +
+  `ports.ts`'s `ChromeActionsHostPort` (Cluster P's `chromeActionsHost`
+  resolution now has a home; the orchestrator's remaining `HtmlViewer` still
+  has its own copy of `resolveChromeActionsHost` to migrate when Cluster C/P
+  lands — swap it to the provider fn or the port then, don't add a third
+  copy). `providers/file-viewer/window-open.ts` + `ports.ts`'s
+  `WindowOpenPort` (any future `window.open(...)` call, e.g. inside Cluster E's
+  share menu, should bind to this port rather than adding a new one).
+  `features/file-viewer/viewport-cache.ts` (`getCachedPreviewViewport`/
+  `setCachedPreviewViewport`/`previewViewportStateKey`) replaces the old
+  module-level `htmlPreviewViewportState` Map that used to live in
+  `FileViewer.tsx`; the orchestrator's `HtmlViewer` now imports these from the
+  slice barrel instead of a local copy — do not reintroduce a second Map. A
+  sibling `htmlPreviewSlideState` Map still lives locally in the orchestrator
+  for now, scoped to Cluster H (deck/slide nav) to migrate.
   proof; must stay green unmodified.
 
 ## Cluster Q — MarkdownViewer

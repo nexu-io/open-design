@@ -235,3 +235,14 @@ export type { DeployLinkCopyController } from './hooks/useDeployLinkCopy.hooks';
 // dumb component instead of staying pinned to the orchestrator.
 export { FileVersionManagerModal } from './components/FileVersionManagerModal';
 export { useWiredPreviewCanvasSize } from './hooks/usePreviewCanvasSize.hooks';
+
+// Live-artifact viewer: the standalone preview/code/data/refresh-history tab
+// surface for a project's live artifacts. Fully self-contained — no overlap
+// with the HTML file-viewer's srcDoc/postMessage bridges.
+export { LiveArtifactViewer } from './components/LiveArtifactViewer';
+export { LiveArtifactRefreshHistoryPanel } from './components/LiveArtifactRefreshHistoryPanel';
+
+// Shared preview-viewport preference cache, keyed per preview surface. Used
+// by both the live-artifact viewer (in-slice) and the orchestrator's
+// HtmlViewer (not yet extracted) so both draw from one eviction budget.
+export { getCachedPreviewViewport, setCachedPreviewViewport, previewViewportStateKey } from './viewport-cache';
