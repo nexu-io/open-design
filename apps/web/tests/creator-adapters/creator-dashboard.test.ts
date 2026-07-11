@@ -153,7 +153,7 @@ describe("buildCreatorDashboardData", () => {
     expect(firstWorkflow.defaultStageLabel).toBe("选题");
   });
 
-  it("uses latest completion activity as a focus fallback when no run metadata exists", () => {
+  it("uses a run.finished event as a focus fallback when no run metadata exists", () => {
     const tasks: Task[] = [
       {
         id: "t-review",
@@ -166,24 +166,27 @@ describe("buildCreatorDashboardData", () => {
         updatedAt: "2025-01-02T00:00:00Z",
       },
     ];
-    const activities: ActivityEvent[] = [
-      {
-        id: "a-review",
-        projectId: "p-review",
-        category: "review",
-        title: "运行完成",
-        createdAt: "2025-01-03T00:00:00Z",
-      },
-    ];
+    const events: CreatorEvent[] = [{
+      type: "run.finished",
+      id: "e-review",
+      projectId: "p-review",
+      occurredAt: "2025-01-03T00:00:00Z",
+      payload: { session: {
+        id: "s-review", projectId: "p-review", workflowId: "w-review",
+        prompt: "review", startedAt: "2025-01-02T00:00:00Z", status: "succeeded",
+      }},
+    }];
 
-    const result = buildCreatorDashboardData({ tasks, activities });
+    const result = buildCreatorDashboardData({ tasks, events });
 
     expect(result.focus?.projectId).toBe("p-review");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
+    expect(result.focus?.reasonLabel).toBe("Fresh result to review");
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
+    expect(result.focus?.recommendedActionLabel).toBe("Review output");
   });
 
-  it("uses latest start activity as a focus fallback when no run metadata exists", () => {
+  it("uses a run.started event as a focus fallback when no run metadata exists", () => {
     const tasks: Task[] = [
       {
         id: "t-running",
@@ -196,24 +199,25 @@ describe("buildCreatorDashboardData", () => {
         updatedAt: "2025-01-02T00:00:00Z",
       },
     ];
-    const activities: ActivityEvent[] = [
-      {
-        id: "a-running",
-        projectId: "p-running",
-        category: "editing",
-        title: "运行开始",
-        createdAt: "2025-01-03T00:00:00Z",
-      },
-    ];
+    const events: CreatorEvent[] = [{
+      type: "run.started",
+      id: "e-running",
+      projectId: "p-running",
+      occurredAt: "2025-01-03T00:00:00Z",
+      payload: { session: {
+        id: "s-running", projectId: "p-running", workflowId: "w-running",
+        prompt: "continue", startedAt: "2025-01-03T00:00:00Z", status: "running",
+      }},
+    }];
 
-    const result = buildCreatorDashboardData({ tasks, activities });
+    const result = buildCreatorDashboardData({ tasks, events });
 
     expect(result.focus?.projectId).toBe("p-running");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
-  it("prefers the newest activity when multiple fallback activities exist for one project", () => {
+  it("prefers the newest run event when multiple fallback events exist for one project", () => {
     const tasks: Task[] = [
       {
         id: "t-multi",
@@ -226,28 +230,38 @@ describe("buildCreatorDashboardData", () => {
         updatedAt: "2025-01-02T00:00:00Z",
       },
     ];
-    const activities: ActivityEvent[] = [
+    const events: CreatorEvent[] = [
       {
-        id: "a-older",
-        projectId: "p-multi",
-        category: "editing",
-        title: "运行开始",
-        createdAt: "2025-01-03T00:00:00Z",
+        type: "run.started", id: "e-older", projectId: "p-multi", occurredAt: "2025-01-03T00:00:00Z",
+        payload: { session: { id: "s-older", projectId: "p-multi", workflowId: "w-multi", prompt: "start", startedAt: "2025-01-03T00:00:00Z", status: "running" } },
       },
       {
-        id: "a-newer",
-        projectId: "p-multi",
-        category: "review",
-        title: "运行完成",
-        createdAt: "2025-01-04T00:00:00Z",
+        type: "run.finished", id: "e-newer", projectId: "p-multi", occurredAt: "2025-01-04T00:00:00Z",
+        payload: { session: { id: "s-newer", projectId: "p-multi", workflowId: "w-multi", prompt: "finish", startedAt: "2025-01-03T00:00:00Z", status: "succeeded" } },
       },
     ];
 
-    const result = buildCreatorDashboardData({ tasks, activities });
+    const result = buildCreatorDashboardData({ tasks, events });
 
     expect(result.activities.map((item) => item.title)).toEqual(["运行完成", "运行开始"]);
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
+  });
+
+  it("does not infer run state from a regular activity title", () => {
+    const tasks: Task[] = [{
+      id: "t-plain", projectId: "p-plain", title: "普通项目", stage: "editing",
+      status: "todo", priority: "low", createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-02T00:00:00Z",
+    }];
+    const activities: ActivityEvent[] = [{
+      id: "a-plain", projectId: "p-plain", category: "review", title: "运行完成",
+      createdAt: "2025-01-03T00:00:00Z",
+    }];
+
+    const result = buildCreatorDashboardData({ tasks, activities });
+
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.nextBestTask);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.continueTask);
   });
 });
 
@@ -358,8 +372,10 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
       stageLabel: "剪辑",
       statusLabel: "就绪",
       sourceLabel: "video",
-      reason: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
-      recommendedAction: CREATOR_FOCUS_ACTIONS.startFirstRun,
+      reasonKey: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
+      reasonLabel: "Ready brief, no run yet",
+      recommendedActionKey: CREATOR_FOCUS_ACTIONS.startFirstRun,
+      recommendedActionLabel: "Start first run",
     });
   });
 
@@ -389,8 +405,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(firstTask.priorityLabel).toBe("中");
 
     expect(result.focus?.title).toBe("待启动素材整理");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
   });
 
   it("maps awaiting_input status into blocked review work", () => {
@@ -515,8 +531,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.focus?.title).toBe("待处理剪辑");
     expect(result.focus?.conversationId).toBe("conv-1");
     expect(result.focus?.assistantMessageId).toBe("msg-1");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.latestRunFailed);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.retryRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.latestRunFailed);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.retryRun);
   });
 
   it("derives run events and runback rows from succeeded runs", () => {
@@ -583,8 +599,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.activities.map((item) => item.title)).toEqual(["运行开始"]);
     expect(result.focus?.conversationId).toBe("conv-4");
     expect(result.focus?.assistantMessageId).toBe("msg-4");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
   it("skips runback activity for non-succeeded runs", () => {
@@ -685,8 +701,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     });
 
     expect(result.focus?.title).toBe("有明确 brief 的项目");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
   });
 
   it("keeps focus mapped by projectId when multiple projects share the same name", () => {
@@ -734,8 +750,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.focus?.projectId).toBe("project-a");
     expect(result.focus?.conversationId).toBe("conv-a");
     expect(result.focus?.assistantMessageId).toBe("msg-a");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
   it("maps queued runs into queued focus state", () => {
@@ -769,7 +785,7 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.activities.map((item) => item.title)).toEqual(["运行开始"]);
     expect(result.focus?.conversationId).toBe("conv-queued");
     expect(result.focus?.assistantMessageId).toBe("msg-queued");
-    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runQueued);
-    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
+    expect(result.focus?.reasonKey).toBe(CREATOR_FOCUS_REASONS.runQueued);
+    expect(result.focus?.recommendedActionKey).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 });

@@ -61,6 +61,7 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
     return {
       id: `activity.recorded:${activity.id}`,
       projectId: activity.projectId,
+      eventType: event.type,
       title: activity.title,
       summary: activity.summary ?? "",
       category: activity.category,
@@ -75,6 +76,7 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
     return {
       id: `run.started:${session.id}`,
       projectId: session.projectId,
+      eventType: event.type,
       title: "运行开始",
       summary: "",
       category: "system",
@@ -89,6 +91,7 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
     return {
       id: `run.finished:${session.id}`,
       projectId: session.projectId,
+      eventType: event.type,
       title: "运行完成",
       summary: "",
       category: "system",
@@ -103,6 +106,7 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
     return {
       id: `runback.recorded:${runback.id}`,
       projectId: runback.projectId,
+      eventType: event.type,
       title: runback.title,
       summary: "",
       category: "system",

@@ -190,6 +190,7 @@ describe("toActivityItemViewModelFromActivity", () => {
     expect(vm.category).toBe("topic");
     expect(vm.categoryLabel).toBe("选题");
     expect(vm.occurredAt).toBe("2025-01-01T00:00:00Z");
+    expect(vm.eventType).toBeUndefined();
     expect(vm.triggerSourceLabel).toBe("来源：manual / Timer");
   });
 
@@ -260,6 +261,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     expect(vm!.category).toBe("topic");
     expect(vm!.categoryLabel).toBe("选题");
     expect(vm!.occurredAt).toBe("2025-01-01T00:00:00Z");
+    expect(vm!.eventType).toBe("activity.recorded");
     expect(vm!.triggerSourceLabel).toBe("来源：manual");
   });
 
@@ -276,6 +278,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
     expect(vm!.projectId).toBe("p-1");
+    expect(vm!.eventType).toBe("run.started");
     expect(vm!.title).toBe("运行开始");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");
@@ -296,6 +299,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
     expect(vm!.projectId).toBe("p-1");
+    expect(vm!.eventType).toBe("run.finished");
     expect(vm!.title).toBe("运行完成");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");
@@ -314,6 +318,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
     expect(vm!.projectId).toBe("p-1");
+    expect(vm!.eventType).toBe("runback.recorded");
     expect(vm!.title).toBe("Runback A");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");

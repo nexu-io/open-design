@@ -39,7 +39,7 @@ export function normalizeTaskCardViewModel(input: unknown): TaskCardViewModel | 
 export function normalizeActivityItemViewModel(input: unknown): ActivityItemViewModel | null {
   if (!isObjectRecord(input)) return null;
   if (!hasStringFields(input, ["id", "projectId", "title", "category", "categoryLabel", "occurredAt"])) return null;
-  if (!hasOptionalStringFields(input, ["summary", "triggerSourceLabel"])) return null;
+  if (!hasOptionalStringFields(input, ["eventType", "summary", "triggerSourceLabel"])) return null;
   return input as unknown as ActivityItemViewModel;
 }
 

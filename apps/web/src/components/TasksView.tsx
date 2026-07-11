@@ -546,8 +546,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     if (!focus?.projectId) return;
 
     if (
-      focus.recommendedAction === CREATOR_FOCUS_ACTIONS.monitorRun ||
-      focus.recommendedAction === CREATOR_FOCUS_ACTIONS.reviewOutput
+      focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.monitorRun ||
+      focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.reviewOutput
     ) {
       navigate({
         kind: 'project',
@@ -558,7 +558,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       return;
     }
 
-    if (focus.recommendedAction === CREATOR_FOCUS_ACTIONS.retryRun) {
+    if (focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.retryRun) {
       if (focus.assistantMessageId) {
         try {
           window.sessionStorage.setItem(
@@ -578,7 +578,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       return;
     }
 
-    if (focus.recommendedAction === CREATOR_FOCUS_ACTIONS.startFirstRun) {
+    if (focus.recommendedActionKey === CREATOR_FOCUS_ACTIONS.startFirstRun) {
       const project = entryProjects.find((candidate) => candidate.id === focus.projectId);
       const pendingPrompt = project?.pendingPrompt?.trim();
       if (pendingPrompt) {
@@ -835,8 +835,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                 {creatorDashboard.focus?.description ?? 'Queue a topic, material, or editing task to start the chain.'}
               </p>
               <div className="creator-list__chips">
-                {creatorDashboard.focus?.reason ? <span className="creator-chip">{creatorDashboard.focus.reason}</span> : null}
-                {creatorDashboard.focus?.recommendedAction ? <span className="creator-chip">{creatorDashboard.focus.recommendedAction}</span> : null}
+                {creatorDashboard.focus?.reasonLabel ? <span className="creator-chip">{creatorDashboard.focus.reasonLabel}</span> : null}
+                {creatorDashboard.focus?.recommendedActionLabel ? <span className="creator-chip">{creatorDashboard.focus.recommendedActionLabel}</span> : null}
                 {creatorDashboard.focus?.stageLabel ? <span className="creator-chip">{creatorDashboard.focus.stageLabel}</span> : null}
                 {creatorDashboard.focus?.statusLabel ? <span className="creator-chip">{creatorDashboard.focus.statusLabel}</span> : null}
                 {creatorDashboard.focus?.sourceLabel ? <span className="creator-chip">{creatorDashboard.focus.sourceLabel}</span> : null}
@@ -850,7 +850,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                       void triggerCreatorFocusAction();
                     }}
                   >
-                    {creatorDashboard.focus.recommendedAction}
+                    {creatorDashboard.focus.recommendedActionLabel}
                   </Button>
                 </div>
               ) : null}

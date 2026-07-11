@@ -17,6 +17,8 @@ export interface TaskCardViewModel {
 export interface ActivityItemViewModel {
   id: string;
   projectId: string;
+  /** Present only when this item was derived from a CreatorEvent. */
+  eventType?: string;
   title: string;
   summary?: string;
   category: string;

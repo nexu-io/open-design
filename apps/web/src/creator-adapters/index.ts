@@ -52,29 +52,56 @@ export interface CreatorDashboardData {
 }
 
 export const CREATOR_FOCUS_REASONS = {
-  latestRunFailed: "Latest run failed",
-  runQueued: "Run queued",
-  runInProgress: "Run in progress",
-  freshResultToReview: "Fresh result to review",
-  readyBriefNoRunYet: "Ready brief, no run yet",
-  needsIntervention: "Needs intervention",
-  activePriority: "Active priority",
-  nextBestTask: "Next best task",
+  latestRunFailed: "latest_run_failed",
+  runQueued: "run_queued",
+  runInProgress: "run_in_progress",
+  freshResultToReview: "fresh_result_to_review",
+  readyBriefNoRunYet: "ready_brief_no_run_yet",
+  needsIntervention: "needs_intervention",
+  activePriority: "active_priority",
+  nextBestTask: "next_best_task",
 } as const;
 
 export const CREATOR_FOCUS_ACTIONS = {
-  retryRun: "Retry run",
-  monitorRun: "Monitor run",
-  reviewOutput: "Review output",
-  startFirstRun: "Start first run",
-  unblockProject: "Unblock project",
-  continueEditing: "Continue editing",
-  continueTask: "Continue task",
+  retryRun: "retry_run",
+  monitorRun: "monitor_run",
+  reviewOutput: "review_output",
+  startFirstRun: "start_first_run",
+  unblockProject: "unblock_project",
+  continueEditing: "continue_editing",
+  continueTask: "continue_task",
 } as const;
 
-export type CreatorFocusReason =
+export const CREATOR_FOCUS_REASON_LABELS = {
+  [CREATOR_FOCUS_REASONS.latestRunFailed]: "Latest run failed",
+  [CREATOR_FOCUS_REASONS.runQueued]: "Run queued",
+  [CREATOR_FOCUS_REASONS.runInProgress]: "Run in progress",
+  [CREATOR_FOCUS_REASONS.freshResultToReview]: "Fresh result to review",
+  [CREATOR_FOCUS_REASONS.readyBriefNoRunYet]: "Ready brief, no run yet",
+  [CREATOR_FOCUS_REASONS.needsIntervention]: "Needs intervention",
+  [CREATOR_FOCUS_REASONS.activePriority]: "Active priority",
+  [CREATOR_FOCUS_REASONS.nextBestTask]: "Next best task",
+} as const satisfies Record<
+  (typeof CREATOR_FOCUS_REASONS)[keyof typeof CREATOR_FOCUS_REASONS],
+  string
+>;
+
+export const CREATOR_FOCUS_ACTION_LABELS = {
+  [CREATOR_FOCUS_ACTIONS.retryRun]: "Retry run",
+  [CREATOR_FOCUS_ACTIONS.monitorRun]: "Monitor run",
+  [CREATOR_FOCUS_ACTIONS.reviewOutput]: "Review output",
+  [CREATOR_FOCUS_ACTIONS.startFirstRun]: "Start first run",
+  [CREATOR_FOCUS_ACTIONS.unblockProject]: "Unblock project",
+  [CREATOR_FOCUS_ACTIONS.continueEditing]: "Continue editing",
+  [CREATOR_FOCUS_ACTIONS.continueTask]: "Continue task",
+} as const satisfies Record<
+  (typeof CREATOR_FOCUS_ACTIONS)[keyof typeof CREATOR_FOCUS_ACTIONS],
+  string
+>;
+
+export type CreatorFocusReasonKey =
   (typeof CREATOR_FOCUS_REASONS)[keyof typeof CREATOR_FOCUS_REASONS];
-export type CreatorFocusAction =
+export type CreatorFocusActionKey =
   (typeof CREATOR_FOCUS_ACTIONS)[keyof typeof CREATOR_FOCUS_ACTIONS];
 
 export interface CreatorFocusCard {
@@ -86,8 +113,10 @@ export interface CreatorFocusCard {
   stageLabel?: string;
   statusLabel?: string;
   sourceLabel?: string;
-  reason: CreatorFocusReason;
-  recommendedAction: CreatorFocusAction;
+  reasonKey: CreatorFocusReasonKey;
+  reasonLabel: string;
+  recommendedActionKey: CreatorFocusActionKey;
+  recommendedActionLabel: string;
 }
 
 export interface BuildCreatorDashboardDataOptions {
@@ -111,10 +140,18 @@ interface FocusCandidate {
   stageLabel?: string;
   statusLabel?: string;
   sourceLabel?: string;
-  reason: CreatorFocusReason;
-  recommendedAction: CreatorFocusAction;
+  reasonKey: CreatorFocusReasonKey;
+  recommendedActionKey: CreatorFocusActionKey;
   rank: number;
   moment: number;
+}
+
+function getCreatorFocusReasonLabel(reasonKey: CreatorFocusReasonKey): string {
+  return CREATOR_FOCUS_REASON_LABELS[reasonKey];
+}
+
+function getCreatorFocusActionLabel(actionKey: CreatorFocusActionKey): string {
+  return CREATOR_FOCUS_ACTION_LABELS[actionKey];
 }
 
 // ---------------------------------------------------------------------------
@@ -586,8 +623,10 @@ function buildFocusCard(
     stageLabel: best.stageLabel,
     statusLabel: best.statusLabel,
     sourceLabel: best.sourceLabel,
-    reason: best.reason,
-    recommendedAction: best.recommendedAction,
+    reasonKey: best.reasonKey,
+    reasonLabel: getCreatorFocusReasonLabel(best.reasonKey),
+    recommendedActionKey: best.recommendedActionKey,
+    recommendedActionLabel: getCreatorFocusActionLabel(best.recommendedActionKey),
   };
 }
 
@@ -618,8 +657,8 @@ function buildFocusCandidates(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: resolveTaskFocusReason(task, relatedActivity),
-      recommendedAction: resolveTaskRecommendedAction(task, relatedActivity),
+      reasonKey: resolveTaskFocusReason(task, relatedActivity),
+      recommendedActionKey: resolveTaskRecommendedAction(task, relatedActivity),
       rank: resolveTaskFocusRank(task, relatedActivity),
       moment: fallbackMoment,
     });
@@ -669,8 +708,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: CREATOR_FOCUS_REASONS.latestRunFailed,
-      recommendedAction: CREATOR_FOCUS_ACTIONS.retryRun,
+      reasonKey: CREATOR_FOCUS_REASONS.latestRunFailed,
+      recommendedActionKey: CREATOR_FOCUS_ACTIONS.retryRun,
       rank: 100,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -685,8 +724,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: CREATOR_FOCUS_REASONS.runQueued,
-      recommendedAction: CREATOR_FOCUS_ACTIONS.monitorRun,
+      reasonKey: CREATOR_FOCUS_REASONS.runQueued,
+      recommendedActionKey: CREATOR_FOCUS_ACTIONS.monitorRun,
       rank: 90,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -701,8 +740,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: CREATOR_FOCUS_REASONS.runInProgress,
-      recommendedAction: CREATOR_FOCUS_ACTIONS.monitorRun,
+      reasonKey: CREATOR_FOCUS_REASONS.runInProgress,
+      recommendedActionKey: CREATOR_FOCUS_ACTIONS.monitorRun,
       rank: 90,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -717,8 +756,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: CREATOR_FOCUS_REASONS.freshResultToReview,
-      recommendedAction: CREATOR_FOCUS_ACTIONS.reviewOutput,
+      reasonKey: CREATOR_FOCUS_REASONS.freshResultToReview,
+      recommendedActionKey: CREATOR_FOCUS_ACTIONS.reviewOutput,
       rank: 70,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -741,8 +780,8 @@ function buildPromptFocusCandidate(
     stageLabel: task.stageLabel,
     statusLabel: task.statusLabel,
     sourceLabel: task.sourceLabel,
-    reason: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
-    recommendedAction: CREATOR_FOCUS_ACTIONS.startFirstRun,
+    reasonKey: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
+    recommendedActionKey: CREATOR_FOCUS_ACTIONS.startFirstRun,
     rank: 80,
     moment: project.updatedAt,
   };
@@ -751,17 +790,17 @@ function buildPromptFocusCandidate(
 function resolveTaskFocusReason(
   task: TaskCardViewModel,
   activity: ActivityItemViewModel | undefined,
-): CreatorFocusReason {
+): CreatorFocusReasonKey {
   if (task.status === "blocked") {
     return CREATOR_FOCUS_REASONS.needsIntervention;
   }
   if (task.status === "ready" && task.priority === "high") {
     return CREATOR_FOCUS_REASONS.activePriority;
   }
-  if (activity?.title === "运行完成") {
+  if (activity?.eventType === "run.finished") {
     return CREATOR_FOCUS_REASONS.freshResultToReview;
   }
-  if (activity?.title === "运行开始") {
+  if (activity?.eventType === "run.started") {
     return CREATOR_FOCUS_REASONS.runInProgress;
   }
   return CREATOR_FOCUS_REASONS.nextBestTask;
@@ -770,17 +809,17 @@ function resolveTaskFocusReason(
 function resolveTaskRecommendedAction(
   task: TaskCardViewModel,
   activity: ActivityItemViewModel | undefined,
-): CreatorFocusAction {
+): CreatorFocusActionKey {
   if (task.status === "blocked") {
     return CREATOR_FOCUS_ACTIONS.unblockProject;
   }
   if (task.status === "ready" && task.priority === "high") {
     return CREATOR_FOCUS_ACTIONS.continueEditing;
   }
-  if (activity?.title === "运行完成") {
+  if (activity?.eventType === "run.finished") {
     return CREATOR_FOCUS_ACTIONS.reviewOutput;
   }
-  if (activity?.title === "运行开始") {
+  if (activity?.eventType === "run.started") {
     return CREATOR_FOCUS_ACTIONS.monitorRun;
   }
   return CREATOR_FOCUS_ACTIONS.continueTask;
@@ -792,8 +831,8 @@ function resolveTaskFocusRank(
 ): number {
   if (task.status === "blocked") return 60;
   if (task.status === "ready" && task.priority === "high") return 50;
-  if (activity?.title === "运行完成") return 40;
-  if (activity?.title === "运行开始") return 30;
+  if (activity?.eventType === "run.finished") return 40;
+  if (activity?.eventType === "run.started") return 30;
   return 10;
 }
 
