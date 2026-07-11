@@ -39,3 +39,9 @@ export {
 export { subscribeBufferedTextFlushTriggers } from './buffered-text-flush-triggers';
 export { isDocumentHidden, isDocumentFocused, focusWindow } from './document-visibility';
 export { listMessages, saveMessage, fetchPreviewComments } from './messages';
+export {
+  uploadPreviewCommentImages,
+  savePreviewComment,
+  patchPreviewCommentStatus,
+  deletePreviewComment,
+} from './preview-comment-actions';

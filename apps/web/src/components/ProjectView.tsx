@@ -25,8 +25,6 @@ import {
 } from '../providers/daemon';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
-  deletePreviewComment,
-  fetchPreviewComments,
   fetchProjectDesignSystemPackageAudit,
   fetchLiveArtifacts,
   fetchProjectFiles,
@@ -34,7 +32,6 @@ import {
   fetchSkill,
   patchPreviewCommentStatus,
   uploadProjectFiles,
-  upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
@@ -159,8 +156,6 @@ import type {
   OpenTabsState,
   Project,
   PreviewComment,
-  PreviewCommentAttachment,
-  PreviewCommentTarget,
   ProjectFile,
   LiveArtifactEventItem,
   LiveArtifactSummary,
@@ -169,10 +164,7 @@ import type {
 import {
   commentsToAttachments,
   historyWithCommentAttachmentContext,
-  mergeAttachedComments,
-  mergePreviewCommentAttachments,
   queuedSlideNavTarget,
-  removeAttachedComment,
 } from '../comments';
 import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
@@ -236,7 +228,6 @@ import {
   BYOK_OPENCODE_UNAVAILABLE_MESSAGE,
   BEDROCK_BYOK_UNSUPPORTED_MESSAGE,
   TAB_PERSIST_DEBOUNCE_MS,
-  mergeSavedPreviewComment,
   projectSplitClassName,
   projectSplitStyle,
   useWiredChatPanelResize,
@@ -252,6 +243,7 @@ import {
   useWiredRunCompletionNotifications,
   useQuestionFormPanel,
   useWiredConversationMessages,
+  useWiredPreviewComments,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -979,6 +971,21 @@ export function ProjectView({
     savedArtifactRef,
     lastSyncedConversationIdRef,
     scheduleProjectTimeout,
+  );
+
+  const {
+    refreshPreviewComments,
+    savePreviewComment,
+    removePreviewComment,
+    attachPreviewComment,
+    detachPreviewComment,
+    patchAttachedStatuses,
+  } = useWiredPreviewComments(
+    project.id,
+    activeConversationId,
+    previewComments,
+    setPreviewComments,
+    setAttachedComments,
   );
 
   useEffect(() => {
@@ -2089,91 +2096,6 @@ export function ProjectView({
       refreshWorkspaceItems,
       updateMessageById,
     ],
-  );
-
-  const refreshPreviewComments = useCallback(async () => {
-    if (!activeConversationId) return;
-    const next = await fetchPreviewComments(project.id, activeConversationId);
-    setPreviewComments(next);
-    setAttachedComments((current) =>
-      current
-        .map((attached) => next.find((comment) => comment.id === attached.id))
-        .filter((comment): comment is PreviewComment => Boolean(comment)),
-    );
-  }, [project.id, activeConversationId]);
-
-  const savePreviewComment = useCallback(
-    async (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images: File[] = []) => {
-      if (!activeConversationId) return null;
-      // Upload any attached images first so the saved comment carries durable
-      // file paths — this is what lets the comment list / re-opened popover
-      // re-display the images instead of losing them on echo.
-      let uploadedAttachments: PreviewCommentAttachment[] | undefined;
-      if (images.length > 0) {
-        const result = await uploadProjectFiles(project.id, images);
-        if (result.uploaded.length !== images.length) return null;
-        uploadedAttachments = result.uploaded.map((file) => ({ path: file.path, name: file.name }));
-      }
-      const existing = previewComments.find(
-        (comment) => comment.filePath === target.filePath && comment.elementId === target.elementId,
-      );
-      const attachments = mergePreviewCommentAttachments(existing?.attachments, uploadedAttachments);
-      const saved = await upsertPreviewComment(project.id, activeConversationId, {
-        target,
-        note,
-        ...(attachments.length > 0 ? { attachments } : {}),
-      });
-      if (!saved) return null;
-      setPreviewComments((current) => mergeSavedPreviewComment(current, saved));
-      setAttachedComments((current) =>
-        attachAfterSave ? mergeAttachedComments(current, saved) : current.map((comment) => comment.id === saved.id ? saved : comment),
-      );
-      return saved;
-    },
-    [project.id, activeConversationId, previewComments],
-  );
-
-  const removePreviewComment = useCallback(
-    async (commentId: string) => {
-      if (!activeConversationId) return;
-      const ok = await deletePreviewComment(project.id, activeConversationId, commentId);
-      if (!ok) return;
-      setPreviewComments((current) => current.filter((comment) => comment.id !== commentId));
-      setAttachedComments((current) => removeAttachedComment(current, commentId));
-    },
-    [project.id, activeConversationId],
-  );
-
-  const attachPreviewComment = useCallback((comment: PreviewComment) => {
-    setAttachedComments((current) => mergeAttachedComments(current, comment));
-  }, []);
-
-  const detachPreviewComment = useCallback((commentId: string) => {
-    setAttachedComments((current) => removeAttachedComment(current, commentId));
-  }, []);
-
-  const patchAttachedStatuses = useCallback(
-    async (attachments: ChatCommentAttachment[], status: PreviewComment['status']) => {
-      if (!activeConversationId || attachments.length === 0) return;
-      const persistedAttachments = attachments.filter(
-        (attachment) => attachment.source !== 'board-batch',
-      );
-      if (persistedAttachments.length === 0) return;
-      setPreviewComments((current) =>
-        current.map((comment) =>
-          persistedAttachments.some((attachment) => attachment.id === comment.id)
-            ? { ...comment, status }
-            : comment,
-        ),
-      );
-      await Promise.all(
-        persistedAttachments.map((attachment) =>
-          patchPreviewCommentStatus(project.id, activeConversationId, attachment.id, status),
-        ),
-      );
-      void refreshPreviewComments();
-    },
-    [project.id, activeConversationId, refreshPreviewComments],
   );
 
   // Maximum number of times we will retry fetching a null status for a

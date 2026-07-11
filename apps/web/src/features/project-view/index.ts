@@ -210,6 +210,8 @@ export {
   useConversationMessages,
   useWiredConversationMessages,
 } from './hooks/useConversationMessages.hooks';
+export type { PreviewCommentsController } from './hooks/usePreviewComments.hooks';
+export { usePreviewComments, useWiredPreviewComments } from './hooks/usePreviewComments.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

@@ -11,7 +11,14 @@ import type {
   ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
-import type { ChatAttachment, ChatMessage, Conversation, PreviewComment } from '../../types';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  Conversation,
+  PreviewComment,
+  PreviewCommentAttachment,
+  PreviewCommentTarget,
+} from '../../types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
@@ -126,4 +133,26 @@ export interface ProjectViewTransportPort {
   ): Promise<void>;
   /** List a conversation's preview comments. Best-effort: resolves `[]` on failure. */
   fetchPreviewComments(projectId: string, conversationId: string): Promise<PreviewComment[]>;
+  /** Upload preview-comment images ahead of saving. Best-effort: resolves only
+   *  the images that succeeded, so the caller can detect a partial failure by
+   *  comparing lengths against the input. */
+  uploadPreviewCommentImages(
+    projectId: string,
+    images: File[],
+  ): Promise<PreviewCommentAttachment[]>;
+  /** Create or update a preview comment. Best-effort: resolves `null` on failure. */
+  savePreviewComment(
+    projectId: string,
+    conversationId: string,
+    input: { target: PreviewCommentTarget; note: string; attachments?: PreviewCommentAttachment[] },
+  ): Promise<PreviewComment | null>;
+  /** Patch a preview comment's status. Best-effort: resolves `null` on failure. */
+  patchPreviewCommentStatus(
+    projectId: string,
+    conversationId: string,
+    commentId: string,
+    status: PreviewComment['status'],
+  ): Promise<PreviewComment | null>;
+  /** Delete a preview comment. Resolves `false` on failure. */
+  deletePreviewComment(projectId: string, conversationId: string, commentId: string): Promise<boolean>;
 }

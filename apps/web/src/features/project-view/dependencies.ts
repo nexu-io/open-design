@@ -38,6 +38,10 @@ import {
   listMessages,
   saveMessage,
   fetchPreviewComments,
+  uploadPreviewCommentImages,
+  savePreviewComment,
+  patchPreviewCommentStatus,
+  deletePreviewComment,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -80,4 +84,8 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   listMessages,
   saveMessage,
   fetchPreviewComments,
+  uploadPreviewCommentImages,
+  savePreviewComment,
+  patchPreviewCommentStatus,
+  deletePreviewComment,
 };
