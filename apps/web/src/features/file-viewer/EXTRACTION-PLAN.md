@@ -336,15 +336,24 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
   `setDeployMenuOpen(false)` (owned by the not-yet-extracted deploy dropdown
   menu, out of this cluster's scope) fires inside `openDeployModal` — threaded
   in as `deps.closeDeployMenu`.
-  **NOT yet done**: the JSX (deploy modal + share menu + the deploy/share
-  toolbar trigger) is still inline in `FileViewer.tsx`, now just sourcing all
-  its values from the hook's destructured return instead of local
-  state/functions — this is a legitimate, safe intermediate state (the guard
-  only restricts `features/**` files, not orchestrator JSX), but the cluster
-  isn't at its full target shape (hook + 2 dumb components) until that JSX
-  moves into `components/DeployModal.tsx` + `components/ShareMenu.tsx`. Do
-  that as the next pass on this cluster before moving to a new one, per the
-  original plan's shape.
+  **Deploy modal JSX now split out**: `components/DeployModal.tsx` (props in,
+  JSX out — the full portal/backdrop/provider-form/Cloudflare-zone-picker/
+  result-cards/social-share panel), wired from `FileViewer.tsx` via one
+  `<DeployModal ... />` call with ~40 flat props sourced directly from the
+  `useWiredDeployFlow` destructure (matching the flat-prop convention already
+  used by `ViewerToolbar`/`MarkdownViewerView`, not a bundled-controller
+  prop). The modal's `createPortal` target is a `portalRoot: Element` prop
+  (the orchestrator's `document.body`) rather than a bare `document` read —
+  the guard forbids `document` inside `features/**` even for a portal
+  target. `DEPLOY_PROVIDER_OPTIONS`/`CLOUDFLARE_PAGES_PROVIDER_ID`/
+  `isValidCloudflareDomainPrefixInput`/`deployResultState` are imported
+  directly into the component from `../constants`/`../rules` (stable
+  slice-level constants/pure-rules, same pattern as `ViewerToolbar` importing
+  `PREVIEW_VIEWPORT_PRESETS`), not passed as props.
+  **STILL NOT done**: the share-menu dropdown (the toolbar's Share button
+  popover listing Deploy-to-provider/social-share entries) and its trigger
+  are still inline in `FileViewer.tsx` — that's the remaining piece before
+  this cluster reaches its full target shape (hook + 2 dumb components).
 - **Lines (scattered):** state ~2144–2181; helpers ~2571–2685
   (`deploymentMapForCurrentFile`, `syncDeployFormFromConfig`,
   `cloudflareConfigHintsFromForm`, `buildDeployConfigRequest`,
