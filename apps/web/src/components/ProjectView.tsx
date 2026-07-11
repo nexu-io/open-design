@@ -112,15 +112,12 @@ import {
 } from '../design-system-auto-prompt';
 import {
   createConversation,
-  installGeneratedPluginFolder,
   listConversations,
   listMessages,
   patchConversation,
   patchProject,
   saveMessage,
-  startGeneratedPluginShareTask,
   type SaveMessageOptions,
-  waitGeneratedPluginShareTask,
 } from '../state/projects';
 import type {
   BrandStatus,
@@ -174,9 +171,6 @@ import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-sy
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { DESIGN_SYSTEM_TAB, FileWorkspace } from './FileWorkspace';
-import {
-  type PluginFolderAgentAction,
-} from './design-files/pluginFolderActions';
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
@@ -229,6 +223,7 @@ import {
   useWiredPreviewComments,
   useWiredOpenTabsSync,
   useWiredProjectFilesAndArtifacts,
+  useWiredPluginFolderAgentAction,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -274,12 +269,6 @@ import {
   clearStreamingConversationMarker,
   shouldClearActiveRunRefs,
   finalizeActiveAssistantMessagesOnStop,
-  pluginWorkflowTitle,
-  pluginWorkflowPlannedEvents,
-  pluginWorkflowResultEvents,
-  pluginWorkflowStartContent,
-  pluginWorkflowSuccessContent,
-  pluginWorkflowFailureContent,
   stripQueueOnlyFromMeta,
   autoSendFirstMessageKey,
   autoSendAmrGateOkKey,
@@ -538,9 +527,6 @@ export function ProjectView({
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activePluginActionPaths, setActivePluginActionPaths] = useState<Set<string>>(() => new Set());
-  const [hiddenAssistantPluginActionPaths, setHiddenAssistantPluginActionPaths] = useState<Set<string>>(() => new Set());
-  const [forceStreamingPluginMessageIds, setForceStreamingPluginMessageIds] = useState<Set<string>>(() => new Set());
   // Ephemeral, live-only accumulation of a tool call's streaming JSON input,
   // keyed by tool-use id (globally unique per run). Fed by `onToolInputDelta`
   // while the model is still emitting `input_json_delta`; dropped per-id once
@@ -4617,271 +4603,22 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
-  const selectedPluginActionAgent =
-    config.mode === 'daemon' && config.agentId
-      ? agentsById.get(config.agentId)
-      : null;
-  const selectedPluginActionChoice =
-    config.mode === 'daemon' && config.agentId
-      ? config.agentModels?.[config.agentId]
-      : undefined;
-  const effectiveSelectedPluginActionChoice = effectiveAgentModelChoice(
-    selectedPluginActionAgent,
-    selectedPluginActionChoice,
+  const {
+    activePluginActionPaths,
+    hiddenAssistantPluginActionPaths,
+    forceStreamingPluginMessageIds,
+    handlePluginFolderAgentAction,
+  } = useWiredPluginFolderAgentAction(
+    project.id,
+    config,
+    agentsById,
+    activeConversationId,
+    currentConversationActionDisabled,
+    appendConversationMessage,
+    replaceConversationMessage,
+    setConversations,
   );
-  const pluginWorkflowAgentName =
-    config.mode === 'daemon'
-      ? agentModelDisplayName(
-          config.agentId,
-          selectedPluginActionAgent?.name,
-          effectiveSelectedPluginActionChoice?.model,
-        )
-      : apiProtocolModelLabel(config.apiProtocol, config.model);
 
-  const handlePluginFolderAgentAction = useCallback(
-    async (relativePath: string, action: PluginFolderAgentAction) => {
-      if (currentConversationActionDisabled || !activeConversationId) return;
-      setHiddenAssistantPluginActionPaths((prev) => new Set(prev).add(relativePath));
-      if (action === 'install') {
-        setActivePluginActionPaths((prev) => new Set(prev).add(relativePath));
-        let outcome;
-        try {
-          outcome = await installGeneratedPluginFolder(project.id, relativePath);
-        } finally {
-          setActivePluginActionPaths((prev) => {
-            const next = new Set(prev);
-            next.delete(relativePath);
-            return next;
-          });
-          setHiddenAssistantPluginActionPaths((prev) => {
-            const next = new Set(prev);
-            next.delete(relativePath);
-            return next;
-          });
-        }
-        if (!outcome.ok) throw new Error(outcome.message);
-        return { message: outcome.message };
-      }
-      const conversationId = activeConversationId;
-      const shareAction = action === 'publish' ? 'publish-github' : 'contribute-open-design';
-      setActivePluginActionPaths((prev) => new Set(prev).add(relativePath));
-      let taskStart;
-      try {
-        taskStart = await startGeneratedPluginShareTask(project.id, relativePath, shareAction);
-      } catch (error) {
-        setActivePluginActionPaths((prev) => {
-          const next = new Set(prev);
-          next.delete(relativePath);
-          return next;
-        });
-        setHiddenAssistantPluginActionPaths((prev) => {
-          const next = new Set(prev);
-          next.delete(relativePath);
-          return next;
-        });
-        throw error;
-      }
-      const startedAt = taskStart.startedAt;
-      const messageId = randomUUID();
-      const updateConversationLatestRun = (
-        status: NonNullable<ChatMessage['runStatus']>,
-        endedAt?: number,
-      ) => {
-        setConversations((curr) =>
-          curr.map((conversation) =>
-            conversation.id === conversationId
-              ? {
-                  ...conversation,
-                  updatedAt: endedAt ?? startedAt,
-                  latestRun: {
-                    status,
-                    startedAt,
-                    ...(endedAt === undefined
-                      ? {}
-                      : {
-                          endedAt,
-                          durationMs: Math.max(0, endedAt - startedAt),
-                        }),
-                  },
-                }
-              : conversation,
-          ),
-        );
-      };
-      const progressMessage: ChatMessage = {
-        id: messageId,
-        role: 'assistant',
-        content: pluginWorkflowStartContent(action, relativePath),
-        agentName: pluginWorkflowAgentName,
-        events: pluginWorkflowPlannedEvents(action, relativePath),
-        createdAt: startedAt,
-        startedAt,
-        runStatus: 'running',
-      };
-      setForceStreamingPluginMessageIds((prev) => new Set(prev).add(messageId));
-      appendConversationMessage(conversationId, progressMessage, undefined, false);
-      updateConversationLatestRun('running');
-      void (async () => {
-        let since = 0;
-        let liveEvents = [...pluginWorkflowPlannedEvents(action, relativePath)];
-        let liveContent = pluginWorkflowStartContent(action, relativePath);
-        while (true) {
-          const snapshot = await waitGeneratedPluginShareTask(taskStart.taskId, since, 25_000);
-          since = snapshot.nextSince;
-          if (snapshot.progress.length > 0) {
-            const newTextEvents = snapshot.progress
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .map((line) => ({ kind: 'text' as const, text: `${line}\n` }));
-            liveEvents = [
-              ...liveEvents.filter((event, index) => !(index === liveEvents.length - 1 && event.kind === 'status' && event.label === 'working')),
-              ...newTextEvents,
-              { kind: 'status', label: 'working', detail: pluginWorkflowTitle(action) },
-            ];
-            liveContent = `${liveContent}\n\n${snapshot.progress.map((line) => line.trim()).filter(Boolean).join('\n')}`.trim();
-            replaceConversationMessage(
-              conversationId,
-              {
-                ...progressMessage,
-                content: liveContent,
-                events: liveEvents,
-                runStatus: 'running',
-              },
-              undefined,
-              false,
-            );
-          }
-          if (snapshot.status === 'running' || snapshot.status === 'queued') continue;
-          const endedAt = snapshot.endedAt ?? Date.now();
-          setActivePluginActionPaths((prev) => {
-            const next = new Set(prev);
-            next.delete(relativePath);
-            return next;
-          });
-          setHiddenAssistantPluginActionPaths((prev) => {
-            const next = new Set(prev);
-            next.delete(relativePath);
-            return next;
-          });
-          if (snapshot.status === 'done' && snapshot.result) {
-            setForceStreamingPluginMessageIds((prev) => {
-              const next = new Set(prev);
-              next.delete(messageId);
-              return next;
-            });
-            replaceConversationMessage(
-              conversationId,
-              {
-                ...progressMessage,
-                content: pluginWorkflowSuccessContent(
-                  action,
-                  relativePath,
-                  snapshot.result.message,
-                  snapshot.result.url,
-                  snapshot.result.log,
-                ),
-                events: pluginWorkflowResultEvents(
-                  action,
-                  relativePath,
-                  snapshot.result.message,
-                  snapshot.result.url,
-                  snapshot.result.log,
-                  true,
-                  liveEvents,
-                ),
-                endedAt,
-                runStatus: 'succeeded',
-              },
-              { telemetryFinalized: true },
-            );
-            updateConversationLatestRun('succeeded', endedAt);
-            return;
-          }
-          const errorMessage = snapshot.error?.message || `${pluginWorkflowTitle(action)} failed.`;
-          setForceStreamingPluginMessageIds((prev) => {
-            const next = new Set(prev);
-            next.delete(messageId);
-            return next;
-          });
-          replaceConversationMessage(
-            conversationId,
-            {
-              ...progressMessage,
-              content: pluginWorkflowFailureContent(
-                action,
-                relativePath,
-                errorMessage,
-                snapshot.error?.log,
-              ),
-              events: pluginWorkflowResultEvents(
-                action,
-                relativePath,
-                errorMessage,
-                undefined,
-                snapshot.error?.log,
-                false,
-                liveEvents,
-              ),
-              endedAt,
-              runStatus: 'failed',
-            },
-            { telemetryFinalized: true },
-          );
-          updateConversationLatestRun('failed', endedAt);
-          return;
-        }
-      })().catch((err) => {
-        const endedAt = Date.now();
-        setForceStreamingPluginMessageIds((prev) => {
-          const next = new Set(prev);
-          next.delete(messageId);
-          return next;
-        });
-        setActivePluginActionPaths((prev) => {
-          const next = new Set(prev);
-          next.delete(relativePath);
-          return next;
-        });
-        setHiddenAssistantPluginActionPaths((prev) => {
-          const next = new Set(prev);
-          next.delete(relativePath);
-          return next;
-        });
-        replaceConversationMessage(
-          conversationId,
-          {
-            ...progressMessage,
-            content: pluginWorkflowFailureContent(
-              action,
-              relativePath,
-              err instanceof Error ? err.message : String(err),
-            ),
-            events: pluginWorkflowResultEvents(
-              action,
-              relativePath,
-              err instanceof Error ? err.message : String(err),
-              undefined,
-              [],
-              false,
-            ),
-            endedAt,
-            runStatus: 'failed',
-          },
-          { telemetryFinalized: true },
-        );
-        updateConversationLatestRun('failed', endedAt);
-      });
-      return;
-    },
-    [
-      activeConversationId,
-      appendConversationMessage,
-      currentConversationActionDisabled,
-      pluginWorkflowAgentName,
-      project.id,
-      replaceConversationMessage,
-    ],
-  );
 
   const { shareToOpenDesignBusyMessageId, handleShareToOpenDesign } = useShareToOpenDesign(
     currentConversationActionDisabled,

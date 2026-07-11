@@ -96,6 +96,13 @@ function makeHarness(savedWidth = 460): Harness {
     fetchProjectFiles: vi.fn(async () => []),
     fetchLiveArtifacts: vi.fn(async () => []),
     writeProjectTextFile: vi.fn(async () => null),
+    installGeneratedPluginFolder: vi.fn(async () => ({ ok: true, message: 'installed', warnings: [], log: [] })),
+    startGeneratedPluginShareTask: vi.fn(async () => {
+      throw new Error('not implemented in this fake');
+    }),
+    waitGeneratedPluginShareTask: vi.fn(async () => {
+      throw new Error('not implemented in this fake');
+    }),
     },
   };
   return harness;

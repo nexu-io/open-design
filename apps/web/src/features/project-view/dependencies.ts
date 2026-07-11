@@ -48,6 +48,9 @@ import {
   fetchProjectFiles,
   fetchLiveArtifacts,
   writeProjectTextFile,
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -100,4 +103,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   fetchProjectFiles,
   fetchLiveArtifacts,
   writeProjectTextFile,
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
 };

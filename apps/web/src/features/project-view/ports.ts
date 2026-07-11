@@ -8,6 +8,7 @@ import type {
   ExtractMemoryRequest,
   InstalledPluginRecord,
   PluginDuplicateProjectResponse,
+  PluginInstallOutcome,
   ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
@@ -26,6 +27,8 @@ import type { ArtifactManifest } from '../../artifacts/types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
+  PluginShareTaskSnapshot,
+  PluginShareTaskStart,
   QueuedChatSend,
   RunStatusSnapshot,
   SaveMessageOptions,
@@ -181,4 +184,21 @@ export interface ProjectViewTransportPort {
     content: string,
     options?: { artifactManifest?: ArtifactManifest },
   ): Promise<ProjectFile | null>;
+  /** Install a generated plugin folder into the plugin registry. */
+  installGeneratedPluginFolder(
+    projectId: string,
+    relativePath: string,
+  ): Promise<PluginInstallOutcome>;
+  /** Start a plugin-folder GitHub share workflow (publish repo / open-design PR). */
+  startGeneratedPluginShareTask(
+    projectId: string,
+    relativePath: string,
+    action: 'publish-github' | 'contribute-open-design',
+  ): Promise<PluginShareTaskStart>;
+  /** Long-poll a plugin-folder share task for new progress/terminal status. */
+  waitGeneratedPluginShareTask(
+    taskId: string,
+    since: number,
+    timeoutMs?: number,
+  ): Promise<PluginShareTaskSnapshot>;
 }

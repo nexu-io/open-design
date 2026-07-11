@@ -47,3 +47,8 @@ export {
 } from './preview-comment-actions';
 export { loadOpenTabs, cacheOpenTabsLocally, persistOpenTabsToDaemon } from './open-tabs';
 export { fetchProjectFiles, fetchLiveArtifacts, writeProjectTextFile } from './project-files';
+export {
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
+} from './plugin-folder-agent-action';
