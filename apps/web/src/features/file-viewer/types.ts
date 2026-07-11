@@ -4,6 +4,7 @@
 import type { Dict } from '../../i18n/types';
 import type { DeployProviderId } from '@open-design/contracts';
 import type { ManualEditStyles } from '../../edit-mode/types';
+import type { LiveArtifact } from '../../types';
 
 /**
  * The i18n translate function the slice's formatters accept. Structurally
@@ -208,3 +209,61 @@ export type FileVersionManagerAnalytics = {
     options?: { requestId?: string; insertId?: string },
   ) => void;
 };
+
+/**
+ * Result shape of the live-artifact refresh port, defined in-slice per ADR
+ * 0002 (a port's result type must not be imported from `providers/`).
+ * Structurally identical to `providers/registry`'s `LiveArtifactRefreshResult`.
+ */
+export type LiveArtifactRefreshResult = {
+  artifact: LiveArtifact;
+  refresh: {
+    id: string;
+    status: 'succeeded';
+    refreshedSourceCount: number;
+  };
+};
+
+/**
+ * Slice-local error the live-artifact port throws on a failed refresh/update
+ * call, defined in-slice per ADR 0002 rather than importing
+ * `providers/registry`'s `LiveArtifactRefreshError` class directly (the
+ * boundary guard is AST-level and blocks any `providers/` import outside
+ * `dependencies.ts`, including one needed only for a runtime `instanceof`
+ * check). `dependencies.ts` catches the provider's error and rethrows this one
+ * structurally.
+ */
+export class LiveArtifactRefreshFailure extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'LiveArtifactRefreshFailure';
+  }
+}
+
+export type LiveArtifactRefreshEventPhase = 'started' | 'succeeded' | 'failed';
+
+/** One session-local (non-persisted) live-artifact refresh attempt. */
+export type LiveArtifactRefreshEvent = {
+  id: number;
+  phase: LiveArtifactRefreshEventPhase;
+  at: number;
+  durationMs?: number;
+  refreshedSourceCount?: number;
+  error?: string;
+};
+
+export type RefreshStatusTone = 'neutral' | 'running' | 'success' | 'warning' | 'error';
+
+/** Label/tone/description for the live-artifact refresh status badge. */
+export type RefreshStatusDescriptor = {
+  label: string;
+  tone: RefreshStatusTone;
+  description: string;
+};
+
+/** Which source variant the live-artifact code panel is showing. */
+export type LiveArtifactCodeVariant = 'template' | 'rendered-source';

@@ -3,7 +3,13 @@
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks.
 import type { ProjectFileVersion, ProjectTemplate } from '@open-design/contracts';
-import type { DocumentPreview, PreviewCanvasSize } from './types';
+import type { LiveArtifact, LiveArtifactRefreshLogEntry } from '../../types';
+import type {
+  DocumentPreview,
+  LiveArtifactCodeVariant,
+  LiveArtifactRefreshResult,
+  PreviewCanvasSize,
+} from './types';
 
 /** Transport the read-only document preview viewer needs. */
 export interface DocumentPreviewPort {
@@ -92,4 +98,27 @@ export interface TemplateSavePort {
  */
 export interface ShareLinkClipboardPort {
   copyToClipboard(text: string): Promise<boolean>;
+}
+
+/** Transport the live-artifact viewer needs: detail/code/refresh-history reads and the refresh action. */
+export interface LiveArtifactPort {
+  fetchLiveArtifact(projectId: string, artifactId: string): Promise<LiveArtifact | null>;
+  fetchLiveArtifactRefreshes(projectId: string, artifactId: string): Promise<LiveArtifactRefreshLogEntry[]>;
+  fetchLiveArtifactCode(
+    projectId: string,
+    artifactId: string,
+    variant: LiveArtifactCodeVariant,
+  ): Promise<string | null>;
+  /** Throws a `LiveArtifactRefreshFailure` (types.ts) on failure. */
+  refreshLiveArtifact(projectId: string, artifactId: string): Promise<LiveArtifactRefreshResult>;
+}
+
+/** Resolve the app chrome's file-actions portal slot (DOM-touching, so a port). */
+export interface ChromeActionsHostPort {
+  getChromeActionsHost(): HTMLElement | null;
+}
+
+/** Open a URL in a new tab (DOM-touching, so a port). */
+export interface WindowOpenPort {
+  openInNewTab(url: string): void;
 }
