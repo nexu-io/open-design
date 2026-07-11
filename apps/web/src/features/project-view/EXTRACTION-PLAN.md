@@ -27,7 +27,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/rules.ts` (functions) + `features/project-view/types.ts` (the two result types) + `features/project-view/constants.ts` (the string/number constants).
 - **Shape:** pure rule
 - **Risk:** low
-- **Status:** pending
+- **Status:** done. Landed in `rules.ts`/`types.ts`/`constants.ts`. Found the dead `let liveArtifactEventSequence = 0;` in `ProjectView.tsx` was orphaned — an already-extracted counter of the same name already lives in `rules.ts` (used by `appendLiveArtifactEventItem`) — so it was simply deleted, not moved. `ProjectEvent`'s type (needed by `projectEventToAgentEvent`) comes from `providers/project-events.ts`, so it was re-declared in-slice as `ProjectLiveEvent` in `types.ts` (structurally identical, sourced from the same `@open-design/contracts` SSE payload types) rather than imported, per the guard's port-result-type-in-slice rule. Found `artifactWithHtml` was ALREADY duplicated into `rules.ts` (unexported) by a prior pass that never removed the `ProjectView.tsx` original or exported the moved copy — exported the existing `rules.ts` copy instead of adding a second one (would have been a duplicate-function-implementation compile error). `BRAND_KIT_FILE` turned out to be dead in `ProjectView.tsx` (only referenced in its own comment, never read) — moved anyway for parity with its constants siblings; harmless if it stays unused.
 
 ## 2. Mount lifecycle / tracked-timeout utility
 - **Lines:** 636–664

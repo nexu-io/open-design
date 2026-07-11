@@ -14,6 +14,12 @@ export {
   DEFAULT_CHAT_PANEL_WIDTH,
   CHAT_PANEL_WIDTH_STORAGE_KEY,
   DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS,
+  BRAND_KIT_FILE,
+  BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS,
+  COMMENT_INSPECTOR_PANEL_WIDTH,
+  BYOK_OPENCODE_UNAVAILABLE_MESSAGE,
+  BEDROCK_BYOK_UNSUPPORTED_MESSAGE,
+  TAB_PERSIST_DEBOUNCE_MS,
 } from './constants';
 
 // Local helper types.
@@ -28,6 +34,9 @@ export type {
   DesignSystemReviewDetails,
   RunStatusSnapshot,
   BufferedTextFlushHandlers,
+  ProjectLiveEvent,
+  BrandBrowserSnapshot,
+  BrandBrowserSnapshotExtractionResult,
 } from './types';
 
 // Pure decision rules.
@@ -105,6 +114,12 @@ export {
   autoSendAmrGateOkKey,
   designSystemAuditAutoRepairKey,
   isContinueInCliShortcut,
+  brandExtractionPreviewFileName,
+  byokOpenCodeProviderFromConfig,
+  selectedKnownProviderForConfig,
+  isOpenCodeByokChatProtocol,
+  projectEventToAgentEvent,
+  artifactWithHtml,
 } from './rules';
 
 // Pure formatters (prompt / attachment / summary builders).

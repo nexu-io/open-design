@@ -38,3 +38,21 @@ export const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 export const GENERIC_DAEMON_DISCONNECT_MESSAGE =
   'daemon stream disconnected before run completed';
 export const GENERIC_DAEMON_DISCONNECT_CODE = 'DAEMON_STREAM_DISCONNECTED';
+
+// The brand-extraction project's design-system (brand kit) preview tab. Mirrors
+// the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
+// local literal to respect the web↔daemon app boundary (daemon and web cannot
+// import each other's `src`).
+export const BRAND_KIT_FILE = 'brand.html';
+/** Retry delays (ms) for an empty brand-extraction transcript re-check. */
+export const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
+/** Width (px) of the comment-inspector side panel. */
+export const COMMENT_INSPECTOR_PANEL_WIDTH = 320;
+export const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
+  'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
+export const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
+  'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
+// Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
+// Embedded-browser navigation bursts settle well within this; the local cache
+// is written immediately so nothing is lost if the daemon write is coalesced.
+export const TAB_PERSIST_DEBOUNCE_MS = 400;

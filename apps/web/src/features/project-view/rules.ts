@@ -18,6 +18,8 @@ import type {
 } from '../../types';
 import type {
   BrandStatus,
+  ByokChatProtocol,
+  ByokChatProviderConfig,
   ByokMediaDefaults,
   RunContextSelection,
   WorkspaceContextItem,
@@ -29,6 +31,9 @@ import { createArtifactParser } from '../../artifacts/parser';
 import { filterImplicitProducedFiles } from '../../produced-files';
 import { agentDisplayName } from '../../utils/agentLabels';
 import { isProgrammaticBrandExtractionProject } from '../../runtime/brand-enrichment';
+import { byokProviderRequiresApiKey } from '../../utils/byokProvider';
+import { KNOWN_PROVIDERS } from '../../state/config';
+import type { ProjectLiveEvent } from './types';
 import {
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -793,7 +798,9 @@ export function artifactFromRecoverableSourceText(sourceText: string): Artifact 
   };
 }
 
-function artifactWithHtml(
+/** Applies newly-recovered HTML onto an existing artifact, or synthesizes a
+ *  fresh artifact record when none exists yet. */
+export function artifactWithHtml(
   artifact: Artifact | null,
   fallbackIdentifier: string,
   html: string,
@@ -1186,3 +1193,91 @@ export function isContinueInCliShortcut(
   const primary = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   return primary && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k';
 }
+
+// --- Brand-kit / BYOK / live-event module helpers ----------------------------
+
+/** The brand-kit preview file name within a project's file list, falling back
+ *  to the canonical `brand.html` name when no match is found (e.g. before the
+ *  first extraction write lands). */
+export function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): string {
+  return (
+    projectFiles.find((file) => file.name === 'brand.html')?.name ??
+    projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
+    'brand.html'
+  );
+}
+
+export function byokOpenCodeProviderFromConfig(
+  config: AppConfig,
+): ByokChatProviderConfig | undefined {
+  const selectedProvider = selectedKnownProviderForConfig(config);
+  if (
+    !isOpenCodeByokChatProtocol(config.apiProtocol) ||
+    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim())
+  ) {
+    return undefined;
+  }
+  return {
+    protocol: config.apiProtocol,
+    apiKey: config.apiKey.trim(),
+    baseUrl: config.baseUrl,
+    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
+    apiVersion:
+      config.apiProtocol === 'azure'
+        ? config.apiVersion ?? ''
+        : '',
+  };
+}
+
+export function selectedKnownProviderForConfig(config: AppConfig) {
+  if (!config.apiProtocol) return undefined;
+  return KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === config.apiProtocol &&
+      provider.baseUrl === config.baseUrl &&
+      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
+  );
+}
+
+export function isOpenCodeByokChatProtocol(
+  protocol: AppConfig['apiProtocol'],
+): protocol is ByokChatProtocol {
+  return (
+    protocol === 'anthropic' ||
+    protocol === 'openai' ||
+    protocol === 'azure' ||
+    protocol === 'google' ||
+    protocol === 'ollama' ||
+    protocol === 'senseaudio' ||
+    protocol === 'aihubmix'
+  );
+}
+
+/** Maps a project's live SSE/file-change event onto the live-artifact-events
+ *  feed's `AgentEvent` shape, or `null` for events that feed doesn't track
+ *  (file-changed, conversation-created). */
+export function projectEventToAgentEvent(evt: ProjectLiveEvent): LiveArtifactEventItem['event'] | null {
+  if (evt.type === 'file-changed') return null;
+  if (evt.type === 'conversation-created') return null;
+  if (evt.type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: evt.action,
+      projectId: evt.projectId,
+      artifactId: evt.artifactId,
+      title: evt.title,
+      refreshStatus: evt.refreshStatus,
+    };
+  }
+  return {
+    kind: 'live_artifact_refresh',
+    phase: evt.phase,
+    projectId: evt.projectId,
+    artifactId: evt.artifactId,
+    refreshId: evt.refreshId,
+    title: evt.title,
+    refreshedSourceCount: evt.refreshedSourceCount,
+    error: evt.error,
+  };
+}
+

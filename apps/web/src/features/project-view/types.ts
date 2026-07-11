@@ -3,7 +3,14 @@
 // helpers produce or consume.
 import type { CSSProperties } from 'react';
 import type { ChatAttachment, ChatCommentAttachment, ChatMessage, ProjectMetadata } from '../../types';
-import type { ChatAnalyticsEntryFrom, ChatRunStatusResponse, ChatSessionMode } from '@open-design/contracts';
+import type {
+  ChatAnalyticsEntryFrom,
+  ChatRunStatusResponse,
+  ChatSessionMode,
+  LiveArtifactRefreshSsePayload,
+  LiveArtifactSsePayload,
+  ProjectConversationCreatedSsePayload,
+} from '@open-design/contracts';
 import type { ChatSendMeta } from '../../components/ChatComposer';
 
 /** Normalized parts of a brand-extraction source URL, for source-vs-snapshot
@@ -101,3 +108,28 @@ export interface BufferedTextFlushHandlers {
   onHiddenFlush: () => void;
   onPageHideFlush: () => void;
 }
+
+/** A project's live SSE/file-change event, structurally matching `ProjectEvent`
+ *  from `providers/project-events.ts` (kept in-slice per ADR 0002 — that type
+ *  isn't a port result, but a plain param the provider's own file-changed
+ *  variant isn't a wire DTO, so it's re-declared here rather than imported). */
+export type ProjectLiveEvent =
+  | { type: 'file-changed'; path: string; kind: 'add' | 'change' | 'unlink' }
+  | ProjectConversationCreatedSsePayload
+  | LiveArtifactSsePayload
+  | LiveArtifactRefreshSsePayload;
+
+/** A brand-browser-assist snapshot read from the embedded webview, or the
+ *  reason none was available. Produced by `readBrandBrowserSnapshot*`
+ *  (still resident in the orchestrator; not yet extracted). */
+export type BrandBrowserSnapshot =
+  | { status: 'ready'; html: string; css: string; baseUrl: string }
+  | { status: 'unavailable'; message: string }
+  | { status: 'read-failed'; message: string };
+
+/** Result of continuing a brand extraction from a browser snapshot: either
+ *  the snapshot handled the continuation, or it missed and the caller should
+ *  fall back to the next strategy in the chain. */
+export type BrandBrowserSnapshotExtractionResult =
+  | { status: 'handled' }
+  | { status: 'miss'; message: string | null };

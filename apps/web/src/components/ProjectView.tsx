@@ -50,8 +50,6 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
-  type ByokChatProviderConfig,
-  type ByokChatProtocol,
   type ResearchOptions,
 } from '@open-design/contracts';
 import {
@@ -211,7 +209,6 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { KNOWN_PROVIDERS } from '../state/config';
 import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -239,7 +236,6 @@ import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -247,6 +243,11 @@ import {
 } from '../media/aihubmix-image-models';
 import {
   SPLIT_RESIZE_HANDLE_WIDTH,
+  BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS,
+  COMMENT_INSPECTOR_PANEL_WIDTH,
+  BYOK_OPENCODE_UNAVAILABLE_MESSAGE,
+  BEDROCK_BYOK_UNSUPPORTED_MESSAGE,
+  TAB_PERSIST_DEBOUNCE_MS,
   mergeSavedPreviewComment,
   mergeServerMessagesIntoConversation,
   projectSplitClassName,
@@ -322,11 +323,17 @@ import {
   autoSendAmrGateOkKey,
   resolveTerminalEndedAt,
   createBufferedTextUpdates,
+  brandExtractionPreviewFileName,
+  byokOpenCodeProviderFromConfig,
+  projectEventToAgentEvent,
+  artifactWithHtml,
 } from '../features/project-view';
 import type {
   ProjectChatSendMeta,
   QueuedChatSend,
   BufferedTextUpdates,
+  BrandBrowserSnapshot,
+  BrandBrowserSnapshotExtractionResult,
 } from '../features/project-view';
 
 // Re-export the public pure helpers that previously lived in this file so the
@@ -356,15 +363,6 @@ export {
   finalizeActiveAssistantMessagesOnStop,
   createBufferedTextUpdates,
 } from '../features/project-view';
-
-type BrandBrowserSnapshot =
-  | { status: 'ready'; html: string; css: string; baseUrl: string }
-  | { status: 'unavailable'; message: string }
-  | { status: 'read-failed'; message: string };
-
-type BrandBrowserSnapshotExtractionResult =
-  | { status: 'handled' }
-  | { status: 'miss'; message: string | null };
 
 interface Props {
   project: Project;
@@ -441,114 +439,6 @@ interface QueuedChatSendUpdate {
   meta?: ChatSendMeta;
 }
 
-let liveArtifactEventSequence = 0;
-// The brand-extraction project's design-system (brand kit) preview tab. Mirrors
-// the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
-// local literal to respect the web↔daemon boundary.
-const BRAND_KIT_FILE = 'brand.html';
-const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
-const COMMENT_INSPECTOR_PANEL_WIDTH = 320;
-const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
-  'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
-const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
-  'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
-// Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
-// Embedded-browser navigation bursts settle well within this; the local cache
-// is written immediately so nothing is lost if the daemon write is coalesced.
-const TAB_PERSIST_DEBOUNCE_MS = 400;
-
-function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): string {
-  return (
-    projectFiles.find((file) => file.name === 'brand.html')?.name ??
-    projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
-    'brand.html'
-  );
-}
-
-function byokOpenCodeProviderFromConfig(
-  config: AppConfig,
-): ByokChatProviderConfig | undefined {
-  const selectedProvider = selectedKnownProviderForConfig(config);
-  if (
-    !isOpenCodeByokChatProtocol(config.apiProtocol) ||
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim())
-  ) {
-    return undefined;
-  }
-  return {
-    protocol: config.apiProtocol,
-    apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl,
-    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
-    apiVersion:
-      config.apiProtocol === 'azure'
-        ? config.apiVersion ?? ''
-        : '',
-  };
-}
-
-function selectedKnownProviderForConfig(config: AppConfig) {
-  if (!config.apiProtocol) return undefined;
-  return KNOWN_PROVIDERS.find(
-    (provider) =>
-      provider.protocol === config.apiProtocol &&
-      provider.baseUrl === config.baseUrl &&
-      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
-  );
-}
-
-function isOpenCodeByokChatProtocol(
-  protocol: AppConfig['apiProtocol'],
-): protocol is ByokChatProtocol {
-  return (
-    protocol === 'anthropic' ||
-    protocol === 'openai' ||
-    protocol === 'azure' ||
-    protocol === 'google' ||
-    protocol === 'ollama' ||
-    protocol === 'senseaudio' ||
-    protocol === 'aihubmix'
-  );
-}
-
-function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
-  if (evt.type === 'file-changed') return null;
-  if (evt.type === 'conversation-created') return null;
-  if (evt.type === 'live_artifact') {
-    return {
-      kind: 'live_artifact',
-      action: evt.action,
-      projectId: evt.projectId,
-      artifactId: evt.artifactId,
-      title: evt.title,
-      refreshStatus: evt.refreshStatus,
-    };
-  }
-  return {
-    kind: 'live_artifact_refresh',
-    phase: evt.phase,
-    projectId: evt.projectId,
-    artifactId: evt.artifactId,
-    refreshId: evt.refreshId,
-    title: evt.title,
-    refreshedSourceCount: evt.refreshedSourceCount,
-    error: evt.error,
-  };
-}
-
-function artifactWithHtml(
-  artifact: Artifact | null,
-  fallbackIdentifier: string,
-  html: string,
-): Artifact {
-  return artifact
-    ? { ...artifact, html }
-    : {
-        identifier: fallbackIdentifier,
-        title: '',
-        html,
-      };
-}
 
 export function ProjectView({
   project,
