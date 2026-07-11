@@ -5,10 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
-  useLayoutEffect,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
@@ -265,21 +262,14 @@ import {
   buildFinalizeRequest,
 } from '../lib/resolve-finalize-request';
 import {
-  MIN_CHAT_PANEL_WIDTH,
-  MAX_CHAT_PANEL_WIDTH,
-  MIN_WORKSPACE_PANEL_WIDTH,
   SPLIT_RESIZE_HANDLE_WIDTH,
   mergeSavedPreviewComment,
   mergeServerMessagesIntoConversation,
   ensureConversationPresent,
-  workspacePanelMinWidthForSplit,
-  maxChatPanelWidthForSplit,
-  clampPreferredChatPanelWidth,
-  clampChatPanelWidth,
   projectSplitClassName,
   projectSplitStyle,
-  applySplitChatPanelWidth,
   buildQuestionFormKey,
+  useWiredChatPanelResize,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -468,7 +458,6 @@ const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
   'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
-const CHAT_PANEL_KEYBOARD_STEP = 16;
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
@@ -919,26 +908,19 @@ export function ProjectView({
   const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
-  const [chatPanelWidth, setChatPanelWidth] = useState(() =>
-    projectViewTransportPort.readSavedChatPanelWidth(),
-  );
-  const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
-  const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
-  const [resizingChatPanel, setResizingChatPanel] = useState(false);
-  const splitRef = useRef<HTMLDivElement | null>(null);
-  const chatPanelWidthRef = useRef(chatPanelWidth);
-  const preferredChatPanelWidthRef = useRef(chatPanelWidth);
-  const resizeStartPreferredWidthRef = useRef(chatPanelWidth);
-  const chatPanelMaxWidthRef = useRef(chatPanelMaxWidth);
-  const resizeStateRef = useRef<{
-    startClientX: number;
-    startWidth: number;
-    isRtl: boolean;
-    hasMoved: boolean;
-  } | null>(null);
-  const pointerCleanupRef = useRef<(() => void) | null>(null);
-  const pointerFrameRef = useRef<number | null>(null);
-  const pendingPointerClientXRef = useRef<number | null>(null);
+  const {
+    splitRef,
+    chatPanelWidth,
+    chatPanelWidthRef,
+    chatPanelMaxWidth,
+    workspacePanelMinWidth,
+    workspacePanelTrack,
+    resizingChatPanel,
+    chatPanelAriaMinWidth,
+    handleChatResizePointerDown,
+    handleChatResizeBlur,
+    handleChatResizeKeyDown,
+  } = useWiredChatPanelResize();
   // The persisted set of open tabs + active tab. Persisted via PUT on every
   // change; loaded once when the project mounts.
   const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
@@ -6657,186 +6639,9 @@ export function ProjectView({
     [skills, designTemplates, project.skillId],
   );
   const chatResizeLabel = t('project.resizeChatPanel');
-  const workspacePanelTrack =
-    workspacePanelMinWidth === 0
-      ? 'minmax(0, 1fr)'
-      : `minmax(${workspacePanelMinWidth}px, 1fr)`;
   const splitLeftPanelWidth = leftInspectorActive
     ? COMMENT_INSPECTOR_PANEL_WIDTH
     : chatPanelWidthRef.current;
-  const chatPanelAriaMinWidth = Math.min(MIN_CHAT_PANEL_WIDTH, chatPanelMaxWidth);
-
-  const renderPreferredChatPanelWidth = useCallback((
-    preferredWidth: number,
-    maxWidth = chatPanelMaxWidthRef.current,
-    options: { commitState?: boolean } = {},
-  ): number => {
-    const next = clampChatPanelWidth(preferredWidth, maxWidth);
-    chatPanelWidthRef.current = next;
-    applySplitChatPanelWidth(splitRef.current, next, workspacePanelTrack);
-    if (options.commitState !== false) setChatPanelWidth(next);
-    return next;
-  }, [workspacePanelTrack]);
-
-  const applyChatPanelWidth = useCallback((
-    width: number,
-    options: { commitState?: boolean } = {},
-  ): number => {
-    const nextPreferred = clampPreferredChatPanelWidth(
-      clampChatPanelWidth(width, chatPanelMaxWidthRef.current),
-    );
-    preferredChatPanelWidthRef.current = nextPreferred;
-    return renderPreferredChatPanelWidth(nextPreferred, chatPanelMaxWidthRef.current, options);
-  }, [renderPreferredChatPanelWidth]);
-
-  const finishChatPanelResize = useCallback((saveFinalWidth = true) => {
-    pointerCleanupRef.current?.();
-    pointerCleanupRef.current = null;
-    if (pointerFrameRef.current !== null) {
-      cancelAnimationFrame(pointerFrameRef.current);
-      pointerFrameRef.current = null;
-    }
-    pendingPointerClientXRef.current = null;
-    resizeStateRef.current = null;
-    setResizingChatPanel(false);
-    if (saveFinalWidth) {
-      const finalWidth = renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current);
-      projectViewTransportPort.saveChatPanelWidth(finalWidth);
-    }
-  }, [renderPreferredChatPanelWidth]);
-
-  useEffect(() => {
-    chatPanelWidthRef.current = chatPanelWidth;
-    applySplitChatPanelWidth(splitRef.current, chatPanelWidth, workspacePanelTrack);
-  }, [chatPanelWidth, workspacePanelTrack]);
-
-  useEffect(() => {
-    chatPanelMaxWidthRef.current = chatPanelMaxWidth;
-  }, [chatPanelMaxWidth]);
-
-  useLayoutEffect(() => {
-    const split = splitRef.current;
-    if (!split) return undefined;
-
-    const updateAllowedWidth = () => {
-      const splitWidth = split.clientWidth;
-      const nextWorkspaceMin = workspacePanelMinWidthForSplit(splitWidth);
-      const nextMax = maxChatPanelWidthForSplit(splitWidth);
-      chatPanelMaxWidthRef.current = nextMax;
-      setWorkspacePanelMinWidth(nextWorkspaceMin);
-      setChatPanelMaxWidth(nextMax);
-      renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current, nextMax);
-    };
-
-    updateAllowedWidth();
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateAllowedWidth);
-      observer.observe(split);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener('resize', updateAllowedWidth);
-    return () => window.removeEventListener('resize', updateAllowedWidth);
-  }, [renderPreferredChatPanelWidth]);
-
-  useEffect(() => () => finishChatPanelResize(false), [finishChatPanelResize]);
-
-  const handleChatResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const split = splitRef.current;
-    if (!split) return;
-    event.preventDefault();
-    event.currentTarget.focus();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerCleanupRef.current?.();
-    setResizingChatPanel(true);
-    resizeStartPreferredWidthRef.current = preferredChatPanelWidthRef.current;
-
-    const updateWidthFromClientX = (clientX: number) => {
-      const state = resizeStateRef.current;
-      if (!state) return;
-      const delta = clientX - state.startClientX;
-      if (delta === 0 && !state.hasMoved) return;
-      state.hasMoved = true;
-      const rawWidth = state.startWidth + (state.isRtl ? -delta : delta);
-      applyChatPanelWidth(rawWidth, { commitState: false });
-    };
-
-    const flushPendingPointerMove = () => {
-      if (pointerFrameRef.current !== null) {
-        cancelAnimationFrame(pointerFrameRef.current);
-        pointerFrameRef.current = null;
-      }
-      const clientX = pendingPointerClientXRef.current;
-      pendingPointerClientXRef.current = null;
-      if (clientX !== null) updateWidthFromClientX(clientX);
-    };
-
-    resizeStateRef.current = {
-      startClientX: event.clientX,
-      startWidth: chatPanelWidthRef.current,
-      isRtl: window.getComputedStyle(split).direction === 'rtl',
-      hasMoved: false,
-    };
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      pendingPointerClientXRef.current = moveEvent.clientX;
-      if (pointerFrameRef.current !== null) return;
-      pointerFrameRef.current = requestAnimationFrame(() => {
-        pointerFrameRef.current = null;
-        flushPendingPointerMove();
-      });
-    };
-    const handlePointerEnd = () => {
-      flushPendingPointerMove();
-      finishChatPanelResize(true);
-    };
-    const handlePointerCancel = () => {
-      flushPendingPointerMove();
-      preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
-      renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
-      finishChatPanelResize(false);
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerEnd);
-      window.removeEventListener('pointercancel', handlePointerCancel);
-      window.removeEventListener('blur', handlePointerCancel);
-    };
-
-    pointerCleanupRef.current = cleanup;
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerEnd);
-    window.addEventListener('pointercancel', handlePointerCancel);
-    window.addEventListener('blur', handlePointerCancel);
-  }, [applyChatPanelWidth, finishChatPanelResize, renderPreferredChatPanelWidth]);
-
-  const handleChatResizeBlur = useCallback(() => {
-    if (!pointerCleanupRef.current) return;
-    preferredChatPanelWidthRef.current = resizeStartPreferredWidthRef.current;
-    renderPreferredChatPanelWidth(resizeStartPreferredWidthRef.current);
-    finishChatPanelResize(false);
-  }, [finishChatPanelResize, renderPreferredChatPanelWidth]);
-
-  const handleChatResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let nextWidth: number | null = null;
-    const split = splitRef.current;
-    const isRtl = split ? window.getComputedStyle(split).direction === 'rtl' : false;
-    if (event.key === 'ArrowLeft') {
-      nextWidth = chatPanelWidthRef.current + (isRtl ? 1 : -1) * CHAT_PANEL_KEYBOARD_STEP;
-    } else if (event.key === 'ArrowRight') {
-      nextWidth = chatPanelWidthRef.current + (isRtl ? -1 : 1) * CHAT_PANEL_KEYBOARD_STEP;
-    } else if (event.key === 'Home') {
-      nextWidth = MIN_CHAT_PANEL_WIDTH;
-    } else if (event.key === 'End') {
-      nextWidth = chatPanelMaxWidthRef.current;
-    }
-    if (nextWidth === null) return;
-    event.preventDefault();
-    const next = applyChatPanelWidth(nextWidth);
-    projectViewTransportPort.saveChatPanelWidth(next);
-  }, [applyChatPanelWidth]);
 
   // Hand the pending prompt to ChatPane exactly once per project. The local
   // project-scoped snapshot survives the conversation-id remount, while the

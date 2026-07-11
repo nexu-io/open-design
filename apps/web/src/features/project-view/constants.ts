@@ -23,6 +23,8 @@ export const MIN_NORMAL_SPLIT_WIDTH =
 export const DEFAULT_CHAT_PANEL_WIDTH = 460;
 /** localStorage key the chat-panel width preference persists under. */
 export const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
+/** Width (px) the keyboard resize handler steps per arrow-key press. */
+export const CHAT_PANEL_KEYBOARD_STEP = 16;
 
 /** Number of design-system-audit auto-repair attempts armed per eligibility mark. */
 export const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;

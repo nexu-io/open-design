@@ -65,3 +65,13 @@ export interface QueuedChatSend {
   meta?: ProjectChatSendMeta;
   createdAt: number;
 }
+
+/** Handlers a chat-panel pointer-drag subscription drives (port result type,
+ *  kept in-slice per ADR 0002 — the guard forbids importing a provider's own
+ *  types even via `import type`). Bound structurally to the provider's
+ *  `ChatPanelPointerDragHandlers` in `dependencies.ts`. */
+export interface ChatPanelPointerDragHandlers {
+  onMove: (clientX: number) => void;
+  onEnd: () => void;
+  onCancel: () => void;
+}

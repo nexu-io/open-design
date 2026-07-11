@@ -4,7 +4,7 @@
 // fake — no global `fetch` mocking, no module-path mocks (ADR 0002).
 import type { ExtractMemoryRequest, RunContextSelection } from '@open-design/contracts';
 import type { ChatAttachment } from '../../types';
-import type { QueuedChatSend } from './types';
+import type { ChatPanelPointerDragHandlers, QueuedChatSend } from './types';
 
 /** Transport the project-view orchestrator needs from the outside world. */
 export interface ProjectViewTransportPort {
@@ -38,4 +38,11 @@ export interface ProjectViewTransportPort {
   consumeDesignSystemAuditAutoRepair(projectId: string): boolean;
   /** Clear the design-system-audit auto-repair eligibility flag for a project (session-storage backed). */
   clearDesignSystemAuditAutoRepair(projectId: string): void;
+  /** Watch a split element's width, calling back immediately and on every
+   *  resize; returns an unsubscribe. */
+  subscribeSplitResize(split: HTMLDivElement, onResize: (splitWidth: number) => void): () => void;
+  /** Whether a split element's computed text direction is RTL. */
+  getSplitIsRtl(split: HTMLDivElement | null): boolean;
+  /** Start a chat-panel resize pointer drag; returns an unsubscribe. */
+  subscribeChatPanelPointerDrag(handlers: ChatPanelPointerDragHandlers): () => void;
 }

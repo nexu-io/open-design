@@ -32,6 +32,7 @@ export {
   ensureConversationPresent,
   workspacePanelMinWidthForSplit,
   maxChatPanelWidthForSplit,
+  workspacePanelTrackFor,
   clampPreferredChatPanelWidth,
   clampChatPanelWidth,
   projectSplitClassName,
@@ -127,3 +128,7 @@ export {
 // Transport port + its default binding.
 export type { ProjectViewTransportPort } from './ports';
 export { projectViewTransportPort } from './dependencies';
+
+// Feature-local hooks.
+export type { ChatPanelResizeController } from './hooks/useChatPanelResize.hooks';
+export { useChatPanelResize, useWiredChatPanelResize } from './hooks/useChatPanelResize.hooks';

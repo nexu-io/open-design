@@ -136,6 +136,15 @@ export function maxChatPanelWidthForSplit(splitWidth: number): number {
   return Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(viewportAwareMax)));
 }
 
+/** The workspace panel's CSS grid track: collapsed splits reserve nothing so
+ * the chat panel can still honor its minimum, normal splits reserve at least
+ * `workspacePanelMinWidth`. */
+export function workspacePanelTrackFor(workspacePanelMinWidth: number): string {
+  return workspacePanelMinWidth === 0
+    ? 'minmax(0, 1fr)'
+    : `minmax(${workspacePanelMinWidth}px, 1fr)`;
+}
+
 export function clampPreferredChatPanelWidth(width: number): number {
   return Math.min(MAX_CHAT_PANEL_WIDTH, Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width)));
 }

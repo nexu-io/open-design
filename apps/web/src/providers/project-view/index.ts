@@ -13,3 +13,8 @@ export {
   consumeDesignSystemAuditAutoRepair,
   clearDesignSystemAuditAutoRepair,
 } from './auto-send-session';
+export {
+  subscribeSplitResize,
+  getSplitIsRtl,
+  subscribeChatPanelPointerDrag,
+} from './chat-panel-resize-dom';

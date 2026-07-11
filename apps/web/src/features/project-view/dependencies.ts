@@ -15,6 +15,9 @@ import {
   markDesignSystemAuditAutoRepairEligible,
   consumeDesignSystemAuditAutoRepair,
   clearDesignSystemAuditAutoRepair,
+  subscribeSplitResize,
+  getSplitIsRtl,
+  subscribeChatPanelPointerDrag,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -32,4 +35,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   markDesignSystemAuditAutoRepairEligible,
   consumeDesignSystemAuditAutoRepair,
   clearDesignSystemAuditAutoRepair,
+  subscribeSplitResize,
+  getSplitIsRtl,
+  subscribeChatPanelPointerDrag,
 };

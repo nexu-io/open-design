@@ -24,6 +24,7 @@ import {
   ensureConversationPresent,
   workspacePanelMinWidthForSplit,
   maxChatPanelWidthForSplit,
+  workspacePanelTrackFor,
   clampPreferredChatPanelWidth,
   clampChatPanelWidth,
   projectSplitClassName,
@@ -205,6 +206,13 @@ describe('split-panel math', () => {
     expect(clampChatPanelWidth(10, 500)).toBe(MIN_CHAT_PANEL_WIDTH);
     // When maxWidth is below MIN, the effective min collapses to that max.
     expect(clampChatPanelWidth(999, 100)).toBe(100);
+  });
+
+  it('workspacePanelTrackFor collapses to a bare fr track at zero, else reserves the min', () => {
+    expect(workspacePanelTrackFor(0)).toBe('minmax(0, 1fr)');
+    expect(workspacePanelTrackFor(MIN_WORKSPACE_PANEL_WIDTH)).toBe(
+      `minmax(${MIN_WORKSPACE_PANEL_WIDTH}px, 1fr)`,
+    );
   });
 
   it('projectSplitClassName toggles the focus modifier', () => {
