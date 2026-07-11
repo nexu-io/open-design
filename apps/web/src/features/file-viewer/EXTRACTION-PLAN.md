@@ -192,23 +192,43 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 
 ### Cluster C — Toolbar chrome (mode tabs / zoom / versions entry / more-menu)
 
-- **Status:** pending
-- **Lines:** ~2103–2143 (state), ~4627–4717 (outside-click effects for
-  zoomMenu/toolbarMore/agentTools/presentMenu/deployMenu), toolbar JSX
-  ~6279–6696.
-- **Owns:** `mode`, `zoom`, `zoomMenuOpen`+ref, `presentMenuOpen`,
-  `toolbarMoreOpen`+ref, `versionModalOpen`, outside-click effects per menu.
-- **Coupled to:** reads `source`, `showDeckNavigation`/`slideState` (Cluster I),
-  already-extracted `PreviewViewportControls`'s `previewViewport`.
-- **Target:** `hooks/useViewerToolbarMenus.hooks.ts` (menu open/close +
-  outside-click via the slice's existing `dismissPort`) + dumb
-  `components/ViewerToolbar.tsx`; `mode`/`zoom` stay colocated (JSX reads them
-  directly for styling) — may end up owned by the toolbar hook too, decide
-  when inside.
+- **Status:** done
+- **Owns:** `mode`, `zoom`, `zoomMenuOpen`+ref, `presentMenuOpen`+new
+  `presentWrapRef`, `toolbarMoreOpen`+ref, `versionModalOpen`; the
+  zoomMenu/toolbarMore/presentMenu outside-click dismiss effects.
+- **Coupled to:** reads `source`, `showDeckNavigation`/`slideState` (Cluster I,
+  threaded through as props — not extracted), already-extracted
+  `PreviewViewportControls`. The whole `.viewer-toolbar` div (both
+  `viewer-toolbar-left` and `viewer-toolbar-actions`) moved as one dumb
+  component, so it also threads through several not-yet-extracted clusters'
+  state/callbacks as plain props: `reloadHtmlPreview`, `handleCopyScreenshot`
+  (Export cluster F), `activateCommentTool`/`activateDrawTool`/
+  `activateManualEditTool`/`activateCommentCreateTool` +
+  `boardMode`/`commentCreateMode`/`boardTool`/`drawOverlayOpen`/
+  `manualEditMode` (comment/mark/edit tool clusters), `visibleSideComments`
+  (count only), `postSlide` (Cluster I), `fireArtifactToolbarClick`/
+  `selectMode` (analytics + a mode+drawOverlayOpen cross-cluster setter, left
+  in the orchestrator since it also touches `drawOverlayOpen`).
+- **Target:** `hooks/useViewerToolbarMenus.hooks.ts` (state + outside-click via
+  the slice's existing `dismissPort`) + dumb `components/ViewerToolbar.tsx`.
 - **Shape:** hook + dumb component.
 - **Risk:** low.
 - **Rationale:** no postMessage; pure DOM click-outside/Escape listeners and
   local UI state, all coverable by the existing `DismissPort`.
+- **Landed:** `presentMenuOpen`'s dismiss effect used `target.closest('.present-wrap')`
+  instead of a ref-`contains` check (no ref existed on that div originally);
+  added a new `presentWrapRef` + `ref={presentWrapRef}` on the `.present-wrap`
+  div, mirroring Cluster A's `useLiveArtifactViewer` (which solved the exact
+  same shape for its own, separate `presentMenuOpen`) — functionally
+  equivalent since there is only one `.present-wrap` element in the DOM at a
+  time. `deployMenuOpen`'s own outside-click effect was SKIPPED — it is
+  combined with `downloadMenuOpen` in a single effect (shared `shareRef`,
+  combined open condition, both setters cleared together), which is more
+  entangled than "state colocation" per the task brief; left entirely in
+  place for Cluster E/F. `agentToolsOpen`'s dismiss effect (Cluster P
+  fold-in) was also left in place — out of this pass's explicit scope. Fold
+  those two into this hook (or leave them for Clusters E/F/P respectively) as
+  a deliberate follow-up decision, not a mechanical default.
 
 ### Cluster D — Present mode (in-tab / fullscreen / new-tab)
 
