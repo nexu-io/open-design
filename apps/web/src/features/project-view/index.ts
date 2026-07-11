@@ -150,3 +150,8 @@ export {
   useProjectFinalizeActions,
   useWiredProjectFinalizeActions,
 } from './hooks/useProjectFinalizeActions.hooks';
+export type {
+  ProjectActionsController,
+  ProjectActionsToast,
+} from './hooks/useProjectActions.hooks';
+export { useProjectActions } from './hooks/useProjectActions.hooks';

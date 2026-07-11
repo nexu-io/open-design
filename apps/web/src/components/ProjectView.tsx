@@ -261,6 +261,7 @@ import {
   useWiredGithubConnectRepo,
   useWiredPluginContextDetails,
   useWiredProjectFinalizeActions,
+  useProjectActions,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -6693,9 +6694,6 @@ export function ProjectView({
   const [brandAgentExtractionStarting, setBrandAgentExtractionStarting] = useState(false);
   const [brandProgrammaticContinueStarting, setBrandProgrammaticContinueStarting] = useState(false);
   const brandProgrammaticContinueStartingRef = useRef(false);
-  const [brandCreateDesignStarting, setBrandCreateDesignStarting] = useState(false);
-  const [projectDesignSystemCreateStarting, setProjectDesignSystemCreateStarting] = useState(false);
-  const [projectDuplicateStarting, setProjectDuplicateStarting] = useState(false);
   useEffect(() => {
     if (brandEnrichmentPromptSeed) {
       setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
@@ -6977,78 +6975,27 @@ export function ProjectView({
     skills,
   ]);
 
-  const handleCreateDesignFromActiveDesignSystem = useCallback(() => {
-    if (brandCreateDesignStarting) return;
-    const system = designSystemProject ?? activeDesignSystemSummary;
-    if (!system || !onCreateProjectFromDesignSystem) return;
-    setBrandCreateDesignStarting(true);
-    void Promise.resolve(onCreateProjectFromDesignSystem(system.id, system.title)).finally(() => {
-      setBrandCreateDesignStarting(false);
-    });
-  }, [
-    activeDesignSystemSummary,
-    brandCreateDesignStarting,
-    designSystemProject,
-    onCreateProjectFromDesignSystem,
-  ]);
-
-  const handleCreateDesignSystemFromProject = useCallback(() => {
-    if (
-      projectDesignSystemCreateStarting ||
-      projectIsDesignSystemProject ||
-      !onCreateDesignSystemFromProject
-    ) {
-      return;
-    }
-    const name = designSystemNameForSourceProject(currentProject);
-    const pendingPrompt = buildCreateDesignSystemFromProjectPrompt({
-      project: currentProject,
-      projectFiles,
-      activeDesignSystem: activeDesignSystemSummary,
-    });
-    setProjectDesignSystemCreateStarting(true);
-    void Promise.resolve(onCreateDesignSystemFromProject(currentProject.id, {
-      name,
-      pendingPrompt,
-    }))
-      .catch((err) => {
-        setProjectActionsToast({
-          message: err instanceof Error ? err.message : String(err),
-          details: null,
-          tone: 'error',
-        });
-      })
-      .finally(() => {
-        setProjectDesignSystemCreateStarting(false);
-      });
-  }, [
-    activeDesignSystemSummary,
+  const {
+    handleCreateDesignFromActiveDesignSystem,
+    createDesignFromActiveDesignSystemBusy: brandCreateDesignStarting,
+    handleCreateDesignSystemFromProject,
+    createDesignSystemFromProjectBusy: projectDesignSystemCreateStarting,
+    handleDuplicateProject,
+    duplicateProjectBusy: projectDuplicateStarting,
+    handleNavigateToDuplicatedProject,
+    handleDuplicateContextPluginFailed,
+  } = useProjectActions(
     currentProject,
-    onCreateDesignSystemFromProject,
-    projectDesignSystemCreateStarting,
     projectFiles,
     projectIsDesignSystemProject,
-  ]);
-
-  const handleDuplicateProject = useCallback(() => {
-    if (projectDuplicateStarting || !onDuplicateProject) return;
-    setProjectDuplicateStarting(true);
-    void Promise.resolve(onDuplicateProject(currentProject.id, {}))
-      .catch((err) => {
-        setProjectActionsToast({
-          message: err instanceof Error ? err.message : String(err),
-          details: null,
-          tone: 'error',
-        });
-      })
-      .finally(() => {
-        setProjectDuplicateStarting(false);
-      });
-  }, [
-    currentProject.id,
+    designSystemProject,
+    activeDesignSystemSummary,
+    onCreateProjectFromDesignSystem,
+    onCreateDesignSystemFromProject,
     onDuplicateProject,
-    projectDuplicateStarting,
-  ]);
+    setProjectActionsToast,
+    t,
+  );
 
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
@@ -7089,25 +7036,6 @@ export function ProjectView({
     (record: InstalledPluginRecord) => localizePluginTitle(locale, record),
     [locale],
   );
-  const handleNavigateToDuplicatedProject = useCallback(
-    (result: { projectId: string; conversationId: string; fileName: string }) => {
-      navigate({
-        kind: 'project',
-        projectId: result.projectId,
-        conversationId: result.conversationId,
-        fileName: result.fileName,
-      });
-    },
-    [],
-  );
-  const handleDuplicateContextPluginFailed = useCallback(() => {
-    setProjectActionsToast({
-      message: t('pluginCard.duplicateFailed'),
-      details: null,
-      tone: 'error',
-      ttlMs: 3000,
-    });
-  }, [t]);
   const {
     activePluginSnapshot,
     contextPluginDetails,
