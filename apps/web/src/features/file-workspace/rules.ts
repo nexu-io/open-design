@@ -12,12 +12,26 @@ import {
 } from '../../components/sketch-model';
 import { designSystemGithubEvidenceState } from '../../components/design-system-github-evidence';
 import type { DesignFilesNavState } from '../../components/DesignFilesPanel';
+import { labelFromUrl } from '../../components/DesignBrowserPanel';
 import { parseDesignMd } from '../../runtime/design-md-parse';
 import { replaceDesignMdColorAtIndex } from '../../runtime/kit-edit';
 import type { FileOpEntry } from '../../runtime/file-ops';
 import type { KitColor } from '../../runtime/design-kit';
 import type { TodoItem } from '../../runtime/todos';
-import type { OpenTabsState, ProjectFile, DesignSystemSummary } from '../../types';
+import type {
+  Conversation,
+  DesignSystemSummary,
+  LiveArtifactWorkspaceEntry,
+  OpenTabsState,
+  ProjectFile,
+} from '../../types';
+import {
+  conversationIdFromSideChatTabId,
+  isSideChatTabId,
+  isTerminalTabId,
+  terminalIdFromTabId,
+} from '../../types';
+import type { WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import type { Dict } from '../../i18n/types';
 import {
@@ -27,6 +41,7 @@ import {
   DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
   DESIGN_SYSTEM_GUIDANCE_FILES,
   DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS,
+  QUESTIONS_TAB,
 } from './constants';
 import type {
   BrowserWorkspaceTab,
@@ -1606,5 +1621,274 @@ export function createDefaultDesignFilesNavState(): DesignFilesNavState {
     page: 0,
     pageSize: 30,
   };
+}
+
+// Tabs rendered are persisted tabs plus any pending (un-saved) sketches.
+export function computeWorkspaceTabNames(
+  persistedTabs: string[],
+  sketches: Record<string, SketchState>,
+): string[] {
+  const seen = new Set(persistedTabs);
+  const extras: string[] = [];
+  for (const name of Object.keys(sketches)) {
+    if (!sketches[name]?.persisted && !seen.has(name)) {
+      extras.push(name);
+      seen.add(name);
+    }
+  }
+  return [...persistedTabs, ...extras];
+}
+
+export function computeWorkspaceTabIds(
+  designSystemProject: DesignSystemSummary | null,
+  orderedWorkspaceTabs: WorkspaceOrderedTab[],
+  showQuestionsTab: boolean,
+): string[] {
+  const ids: string[] = [];
+  if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
+  ids.push(DESIGN_FILES_TAB);
+  if (showQuestionsTab) ids.push(QUESTIONS_TAB);
+  for (const entry of orderedWorkspaceTabs) {
+    ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
+  }
+  return ids;
+}
+
+export interface ActiveWorkspaceContextParams {
+  activeTab: string;
+  designSystemProject: DesignSystemSummary | null;
+  designFilesTabIsEmpty: boolean;
+  uploadDir: string;
+  resolvedDir?: string | null;
+  t: TranslateFn;
+  browserTabs: BrowserWorkspaceTab[];
+  conversations: Conversation[];
+  activeLiveArtifact: LiveArtifactWorkspaceEntry | null;
+  activeFile: ProjectFile | null;
+}
+
+export function computeActiveWorkspaceContext(
+  params: ActiveWorkspaceContextParams,
+): WorkspaceContextItem | null {
+  const {
+    activeTab,
+    designSystemProject,
+    designFilesTabIsEmpty,
+    uploadDir,
+    resolvedDir,
+    t,
+    browserTabs,
+    conversations,
+    activeLiveArtifact,
+    activeFile,
+  } = params;
+  if (activeTab === DESIGN_SYSTEM_TAB && designSystemProject) {
+    return {
+      id: 'workspace:design-system',
+      kind: 'design-system',
+      label: t('dsManager.tabDesignSystem'),
+      tabId: activeTab,
+    };
+  }
+  if (activeTab === DESIGN_FILES_TAB) {
+    // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
+    if (designFilesTabIsEmpty) return null;
+    const trimmedDir = uploadDir.trim();
+    const label = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+    return {
+      id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
+      kind: trimmedDir ? 'folder' : 'design-files',
+      label,
+      tabId: activeTab,
+      ...(trimmedDir ? { path: trimmedDir } : {}),
+      ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
+    };
+  }
+  if (isBrowserTabId(activeTab)) {
+    const tab = browserTabs.find((candidate) => candidate.id === activeTab);
+    if (!tab) return null;
+    const url = tab.url?.trim() ?? '';
+    const label = url ? tab.title?.trim() || labelFromUrl(url) : tab.label;
+    return {
+      id: `browser:${tab.id}`,
+      kind: 'browser',
+      label,
+      tabId: tab.id,
+      ...(tab.title ? { title: tab.title } : {}),
+      ...(url ? { url } : {}),
+    };
+  }
+  if (isTerminalTabId(activeTab)) {
+    const terminalId = terminalIdFromTabId(activeTab);
+    return {
+      id: `terminal:${terminalId}`,
+      kind: 'terminal',
+      label: t('workspace.newTerminal'),
+      tabId: activeTab,
+    };
+  }
+  if (isSideChatTabId(activeTab)) {
+    const conversationId = conversationIdFromSideChatTabId(activeTab);
+    const conversation = conversations.find((item) => item.id === conversationId);
+    return {
+      id: `side-chat:${conversationId}`,
+      kind: 'side-chat',
+      label: conversation?.title?.trim() || t('workspace.sideChatDefaultTitle'),
+      tabId: activeTab,
+    };
+  }
+  if (activeLiveArtifact) {
+    return {
+      id: `live-artifact:${activeLiveArtifact.artifactId}`,
+      kind: 'live-artifact',
+      label: activeLiveArtifact.title,
+      tabId: activeLiveArtifact.tabId,
+      path: activeLiveArtifact.slug,
+    };
+  }
+  if (activeFile) {
+    const filePath = activeFile.path ?? activeFile.name;
+    return {
+      id: `file:${filePath}`,
+      kind: 'file',
+      label: filePath.split('/').filter(Boolean).pop() || filePath,
+      tabId: activeTab,
+      path: filePath,
+      ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, filePath) } : {}),
+    };
+  }
+  return null;
+}
+
+export interface WorkspaceContextsParams {
+  designSystemProject: DesignSystemSummary | null;
+  uploadDir: string;
+  resolvedDir?: string | null;
+  t: TranslateFn;
+  visibleFiles: ProjectFile[];
+  liveArtifactEntries: LiveArtifactWorkspaceEntry[];
+  tabNames: string[];
+  orderedWorkspaceTabs: WorkspaceOrderedTab[];
+  conversations: Conversation[];
+  sketches: Record<string, SketchState>;
+}
+
+export function computeWorkspaceContexts(
+  params: WorkspaceContextsParams,
+): WorkspaceContextItem[] {
+  const {
+    designSystemProject,
+    uploadDir,
+    resolvedDir,
+    t,
+    visibleFiles,
+    liveArtifactEntries,
+    tabNames,
+    orderedWorkspaceTabs,
+    conversations,
+    sketches,
+  } = params;
+  const out: WorkspaceContextItem[] = [];
+  const seen = new Set<string>();
+  const push = (item: WorkspaceContextItem | null | undefined) => {
+    if (!item) return;
+    const key = `${item.kind}:${item.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  };
+
+  if (designSystemProject) {
+    push({
+      id: 'workspace:design-system',
+      kind: 'design-system',
+      label: t('dsManager.tabDesignSystem'),
+      tabId: DESIGN_SYSTEM_TAB,
+    });
+  }
+
+  const trimmedDir = uploadDir.trim();
+  const designFilesLabel = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+  push({
+    id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
+    kind: trimmedDir ? 'folder' : 'design-files',
+    label: designFilesLabel,
+    tabId: DESIGN_FILES_TAB,
+    ...(trimmedDir ? { path: trimmedDir } : {}),
+    ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
+  });
+
+  const filesByName = new Map(visibleFiles.map((file) => [file.name, file] as const));
+  const liveByTabId = new Map(liveArtifactEntries.map((entry) => [entry.tabId, entry] as const));
+  const terminalTabNames = tabNames.filter(isTerminalTabId);
+
+  for (const entry of orderedWorkspaceTabs) {
+    if (entry.kind === 'browser') {
+      const tab = entry.browserTab;
+      const url = tab.url?.trim() ?? '';
+      const label = url ? tab.title?.trim() || labelFromUrl(url) : tab.label;
+      push({
+        id: `browser:${tab.id}`,
+        kind: 'browser',
+        label,
+        tabId: tab.id,
+        ...(tab.title ? { title: tab.title } : {}),
+        ...(url ? { url } : {}),
+      });
+      continue;
+    }
+
+    const name = entry.name;
+    if (isTerminalTabId(name)) {
+      const terminalId = terminalIdFromTabId(name);
+      const ordinal = terminalTabNames.indexOf(name) + 1;
+      push({
+        id: `terminal:${terminalId}`,
+        kind: 'terminal',
+        label: ordinal > 1 ? `${t('workspace.newTerminal')} ${ordinal}` : t('workspace.newTerminal'),
+        tabId: name,
+      });
+      continue;
+    }
+
+    if (isSideChatTabId(name)) {
+      const conversationId = conversationIdFromSideChatTabId(name);
+      const conversation = conversations.find((item) => item.id === conversationId);
+      push({
+        id: `side-chat:${conversationId}`,
+        kind: 'side-chat',
+        label: conversation?.title?.trim() || t('workspace.sideChatDefaultTitle'),
+        tabId: name,
+      });
+      continue;
+    }
+
+    const liveArtifact = liveByTabId.get(name as LiveArtifactWorkspaceEntry['tabId']);
+    if (liveArtifact) {
+      push({
+        id: `live-artifact:${liveArtifact.artifactId}`,
+        kind: 'live-artifact',
+        label: liveArtifact.title,
+        tabId: liveArtifact.tabId,
+        path: liveArtifact.slug,
+      });
+      continue;
+    }
+
+    const file = filesByName.get(name);
+    if (file || (isSketchName(name) && sketches[name])) {
+      const filePath = file?.path ?? file?.name ?? name;
+      push({
+        id: `file:${filePath}`,
+        kind: 'file',
+        label: filePath.split('/').filter(Boolean).pop() || filePath,
+        tabId: name,
+        path: filePath,
+        ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, filePath) } : {}),
+      });
+    }
+  }
+
+  return out;
 }
 

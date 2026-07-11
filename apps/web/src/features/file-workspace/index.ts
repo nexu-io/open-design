@@ -21,6 +21,11 @@ export {
   type SketchesController,
   type UseSketchesParams,
 } from './hooks/useSketches.hooks';
+export {
+  useWorkspaceContextTracking,
+  type WorkspaceContextTrackingController,
+  type WorkspaceContextTrackingParams,
+} from './hooks/useWorkspaceContextTracking.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
