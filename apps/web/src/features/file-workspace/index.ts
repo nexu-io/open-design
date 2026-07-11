@@ -3,6 +3,7 @@
 // path other slices and the orchestrator may use — deep imports into
 // `features/file-workspace/**` are rejected by `scripts/check-web-slice-boundaries.ts`.
 export { Tab } from './components/Tab';
+export { DesignSystemProjectLoading } from './components/DesignSystemProjectLoading';
 export * from './rules';
 export * from './constants';
 export type * from './types';
