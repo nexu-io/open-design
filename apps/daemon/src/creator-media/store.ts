@@ -7,6 +7,7 @@ function filePath(dataDir: string, projectId: string) { return path.join(dataDir
 async function read(dataDir: string, projectId: string): Promise<CreatorMediaProjectData> {
   try { const value = JSON.parse(await fsp.readFile(filePath(dataDir, projectId), 'utf8')) as CreatorMediaProjectData; return { assets: Array.isArray(value.assets) ? value.assets : [], taskLinks: Array.isArray(value.taskLinks) ? value.taskLinks : [] }; } catch { return { assets: [], taskLinks: [] }; }
 }
+export async function getCreatorMediaProjectData(dataDir: string, projectId: string): Promise<CreatorMediaProjectData> { return read(dataDir, projectId); }
 async function write(dataDir: string, projectId: string, data: CreatorMediaProjectData) {
   const file = filePath(dataDir, projectId);
   await fsp.mkdir(path.dirname(file), { recursive: true });
