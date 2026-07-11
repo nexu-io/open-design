@@ -12,6 +12,8 @@ import type { Project, ProjectFile } from '../../../src/types';
 import { useDesignSystemReview } from '../../../src/features/project-view/hooks/useDesignSystemReview.hooks';
 import type { ProjectViewTransportPort } from '../../../src/features/project-view/ports';
 
+type HandleSend = (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => Promise<boolean>;
+
 function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectViewTransportPort {
   return {
     readProjectRawText: vi.fn(async () => null),
@@ -39,6 +41,10 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     copyTextToClipboard: vi.fn(async () => true),
     subscribeCapturedKeyDown: vi.fn(() => () => {}),
     patchProjectMetadata: vi.fn(async () => {}),
+    listConversations: vi.fn(async () => []),
+    createConversation: vi.fn(async () => null),
+    patchConversation: vi.fn(async () => null),
+    deleteConversation: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -60,7 +66,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 describe('useDesignSystemReview', () => {
   describe('sendDesignSystemFeedback', () => {
     it('is a no-op for blank feedback', () => {
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const { result } = renderHook(() =>
         useDesignSystemReview(
           makePort(),
@@ -79,7 +85,7 @@ describe('useDesignSystemReview', () => {
     });
 
     it('returns a queued task and does not send when the conversation cannot accept one yet', () => {
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const { result } = renderHook(() =>
         useDesignSystemReview(
           makePort(),
@@ -98,7 +104,7 @@ describe('useDesignSystemReview', () => {
     });
 
     it('sends the feedback prompt and returns a sent task when the conversation can accept one', () => {
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const { result } = renderHook(() =>
         useDesignSystemReview(
           makePort(),
@@ -136,17 +142,17 @@ describe('useDesignSystemReview', () => {
           vi.fn(async () => true),
         ),
       );
-      act(() => result.current.persistDesignSystemReviewDecision('Colors', 'approved'));
+      act(() => result.current.persistDesignSystemReviewDecision('Colors', 'looks-good'));
       expect(onProjectChange).toHaveBeenCalledOnce();
       const [updated] = onProjectChange.mock.calls[0]!;
       expect(updated.metadata.designSystemReview.Colors).toEqual(
-        expect.objectContaining({ decision: 'approved' }),
+        expect.objectContaining({ decision: 'looks-good' }),
       );
       expect(port.patchProjectMetadata).toHaveBeenCalledWith(
         'p1',
         expect.objectContaining({
           designSystemReview: expect.objectContaining({
-            Colors: expect.objectContaining({ decision: 'approved' }),
+            Colors: expect.objectContaining({ decision: 'looks-good' }),
           }),
         }),
       );
@@ -183,7 +189,7 @@ describe('useDesignSystemReview', () => {
   describe('queued-feedback auto-send effect', () => {
     it('auto-sends a queued needs-work decision once the conversation can accept it', () => {
       const port = makePort();
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const onProjectChange = vi.fn();
       const project = makeProject({
         metadata: {
@@ -219,7 +225,7 @@ describe('useDesignSystemReview', () => {
     });
 
     it('does not auto-send when the conversation cannot accept one yet', () => {
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const project = makeProject({
         metadata: {
           kind: 'other',
@@ -249,7 +255,7 @@ describe('useDesignSystemReview', () => {
     });
 
     it('does not re-send the same queued task twice', () => {
-      const handleSend = vi.fn(async () => true);
+      const handleSend = vi.fn<HandleSend>(async () => true);
       const project = makeProject({
         metadata: {
           kind: 'other',

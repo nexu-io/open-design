@@ -33,7 +33,10 @@ describe('patchProjectMetadata transport', () => {
   });
 
   it('URL-encodes the project id', async () => {
-    const fn = vi.fn(async () => ({ ok: true, json: async () => ({ project: {} }) }) as unknown as Response);
+    const fn = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ project: {} }),
+    }) as unknown as Response);
     globalThis.fetch = fn as unknown as typeof fetch;
 
     await patchProjectMetadata('p/1', { kind: 'other' });

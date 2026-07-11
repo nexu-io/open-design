@@ -42,3 +42,82 @@ function makePort(
     createConversation: vi.fn(async () => null),
     patchConversation: vi.fn(async () => null),
     deleteConversation: vi.fn(async () => true),
+    ...overrides,
+  };
+}
+
+describe('useGithubConnectRepo', () => {
+  it('starts undefined and resolves to the checked status once connectRepoNeeded is true', async () => {
+    const port = makePort({ checkGithubConnected: vi.fn(async () => true) });
+    const { result } = renderHook(() =>
+      useGithubConnectRepo(port, true, () => 'prompt', vi.fn(), vi.fn()),
+    );
+    expect(result.current.githubConnected).toBeUndefined();
+    await waitFor(() => expect(result.current.githubConnected).toBe(true));
+  });
+
+  it('resets to undefined when connectRepoNeeded goes false', async () => {
+    const port = makePort({ checkGithubConnected: vi.fn(async () => true) });
+    const { result, rerender } = renderHook(
+      ({ needed }) => useGithubConnectRepo(port, needed, () => 'prompt', vi.fn(), vi.fn()),
+      { initialProps: { needed: true } },
+    );
+    await waitFor(() => expect(result.current.githubConnected).toBe(true));
+    rerender({ needed: false });
+    expect(result.current.githubConnected).toBeUndefined();
+  });
+
+  it('re-checks when the port fires its refresh-trigger bridge', async () => {
+    let trigger: (() => void) | null = null;
+    const check = vi.fn(async () => false);
+    const port = makePort({
+      checkGithubConnected: check,
+      subscribeGithubConnectRefreshTriggers: vi.fn((onTrigger) => {
+        trigger = onTrigger;
+        return () => {};
+      }),
+    });
+    renderHook(() => useGithubConnectRepo(port, true, () => 'prompt', vi.fn(), vi.fn()));
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+    act(() => trigger?.());
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+  });
+
+  it('handleConnectRepo is a no-op while the status is unresolved', () => {
+    const port = makePort({ checkGithubConnected: vi.fn(() => new Promise<boolean>(() => {})) });
+    const onConnected = vi.fn();
+    const onNotConnected = vi.fn();
+    const { result } = renderHook(() =>
+      useGithubConnectRepo(port, true, () => 'prompt', onConnected, onNotConnected),
+    );
+    act(() => result.current.handleConnectRepo());
+    expect(onConnected).not.toHaveBeenCalled();
+    expect(onNotConnected).not.toHaveBeenCalled();
+  });
+
+  it('calls onConnected with the built prompt when connected', async () => {
+    const port = makePort({ checkGithubConnected: vi.fn(async () => true) });
+    const onConnected = vi.fn();
+    const onNotConnected = vi.fn();
+    const { result } = renderHook(() =>
+      useGithubConnectRepo(port, true, () => 'import-prompt', onConnected, onNotConnected),
+    );
+    await waitFor(() => expect(result.current.githubConnected).toBe(true));
+    act(() => result.current.handleConnectRepo());
+    expect(onConnected).toHaveBeenCalledWith('import-prompt');
+    expect(onNotConnected).not.toHaveBeenCalled();
+  });
+
+  it('calls onNotConnected when not connected', async () => {
+    const port = makePort({ checkGithubConnected: vi.fn(async () => false) });
+    const onConnected = vi.fn();
+    const onNotConnected = vi.fn();
+    const { result } = renderHook(() =>
+      useGithubConnectRepo(port, true, () => 'import-prompt', onConnected, onNotConnected),
+    );
+    await waitFor(() => expect(result.current.githubConnected).toBe(false));
+    act(() => result.current.handleConnectRepo());
+    expect(onNotConnected).toHaveBeenCalledOnce();
+    expect(onConnected).not.toHaveBeenCalled();
+  });
+});
