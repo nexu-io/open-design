@@ -26,8 +26,6 @@ import {
   deleteProjectFile,
   fetchProjectFileText,
   fetchProjectFolders,
-  projectFileUrl,
-  projectRawUrl,
   applyLibraryAsset,
   createProjectFolder,
   deleteDesignSystemDraft,
@@ -53,7 +51,6 @@ import {
 } from '../runtime/kit-edit';
 import { latestTodosFromEvents } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
-import { buildSrcdoc } from '../runtime/srcdoc';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
 import {
@@ -125,13 +122,13 @@ import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
 import {
   arraysEqual,
-  baseDirForDesignSystemPreviewFile,
   browserTabIndex,
   browserTabsFromState,
   BROWSER_TAB_PREFIX,
   buildDesignSystemReviewSections,
   colorHexFromBrandJson,
   colorHexFromDesignMd,
+  DesignSystemInlinePreview,
   DesignSystemProjectLoading,
   DESIGN_FILES_TAB,
   DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
@@ -176,7 +173,6 @@ import {
   designSystemTodoRank,
   designSystemTodoSearchText,
   documentTemplateScenarioKey,
-  escapeDesignSystemPreviewAttr,
   formatWorkspaceSnapshotElapsed,
   inferDesignSystemReviewCategory,
   initialDesignKitColorHex,
@@ -208,11 +204,6 @@ import {
   parseDesignSystemCardManifestEntry,
   preferPreviewArtifactsOverRawAssets,
   reanchorBrowserTabsToCurrentOrder,
-  readDesignSystemPreviewHtmlAttr,
-  resolveDesignSystemPreviewRelativePath,
-  rewriteDesignSystemPreviewCssUrls,
-  rewriteDesignSystemPreviewHtmlAssetUrls,
-  rewriteDesignSystemPreviewInlineCssAssetUrls,
   sameFileName,
   scrollWorkspaceTabsWithWheel,
   slugForTestId,
@@ -4055,126 +4046,5 @@ function DesignSystemProjectPanel({
       )}
     </div>
   );
-}
-
-function DesignSystemInlinePreview({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const url = projectFileUrl(projectId, file.name);
-  const [srcDoc, setSrcDoc] = useState<string | null>(null);
-  const [srcDocReady, setSrcDocReady] = useState(false);
-
-  useEffect(() => {
-    setSrcDoc(null);
-    setSrcDocReady(false);
-    if (file.kind !== 'html') return undefined;
-    let cancelled = false;
-    void fetchProjectFileText(projectId, file.name, {
-      cache: 'no-store',
-      cacheBustKey: Math.round(file.mtime),
-    }).then(async (html) => {
-      if (cancelled) return;
-      if (!html) {
-        setSrcDocReady(true);
-        return;
-      }
-      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(html, projectId, file.name);
-      if (cancelled) return;
-      setSrcDoc(buildSrcdoc(inlinedHtml, {
-        baseHref: projectRawUrl(projectId, baseDirForDesignSystemPreviewFile(file.name)),
-      }));
-      setSrcDocReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [file.kind, file.mtime, file.name, projectId]);
-
-  if (file.kind === 'html') {
-    return (
-      <iframe
-        title={file.name}
-        src={srcDocReady && srcDoc ? undefined : url}
-        srcDoc={srcDoc ?? undefined}
-        sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox"
-      />
-    );
-  }
-  return <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />;
-}
-
-async function inlineDesignSystemPreviewRelativeAssets(
-  html: string,
-  projectId: string,
-  ownerFileName: string,
-): Promise<string> {
-  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
-  for (const tag of links) {
-    const rel = readDesignSystemPreviewHtmlAttr(tag, 'rel');
-    const href = readDesignSystemPreviewHtmlAttr(tag, 'href');
-    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
-    if (!stylesheetPath) continue;
-    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
-      if (css == null) return null;
-      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath, projectRawUrl)
-        .replace(/<\/style/gi, '<\\/style');
-      return {
-        from: tag,
-        to: [
-          `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">`,
-          safeCss,
-          '</style>',
-        ].join('\n'),
-      };
-    }));
-  }
-
-  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
-  for (const tag of scripts) {
-    const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
-    if (!src) continue;
-    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, src).then((js) => {
-      if (js == null) return null;
-      const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
-      const attrs = open
-        .replace(/^<script/i, '')
-        .replace(/>$/i, '')
-        .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
-      return {
-        from: tag,
-        to: [
-          `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">`,
-          js.replace(/<\/script/gi, '<\\/script'),
-          '</script>',
-        ].join('\n'),
-      };
-    }));
-  }
-
-  const resolved = (await Promise.all(replacements)).filter(
-    (replacement): replacement is { from: string; to: string } => replacement !== null,
-  );
-  const withInlineAssets = resolved.reduce(
-    (next, replacement) => next.replace(replacement.from, () => replacement.to),
-    html,
-  );
-  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName, projectRawUrl);
-  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName, projectRawUrl);
-}
-
-async function fetchDesignSystemPreviewRelativeText(
-  projectId: string,
-  ownerFileName: string,
-  assetRef: string,
-): Promise<string | null> {
-  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
-  if (!filePath) return null;
-  return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
 }
 

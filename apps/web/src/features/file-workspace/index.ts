@@ -4,6 +4,7 @@
 // `features/file-workspace/**` are rejected by `scripts/check-web-slice-boundaries.ts`.
 export { Tab } from './components/Tab';
 export { DesignSystemProjectLoading } from './components/DesignSystemProjectLoading';
+export { DesignSystemInlinePreview } from './components/DesignSystemInlinePreview';
 export * from './rules';
 export * from './constants';
 export type * from './types';
