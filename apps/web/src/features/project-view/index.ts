@@ -14,7 +14,13 @@ export {
 } from './constants';
 
 // Local helper types.
-export type { BrowserExtractionUrlParts, ProjectSplitStyle, RetryTarget } from './types';
+export type {
+  BrowserExtractionUrlParts,
+  ProjectSplitStyle,
+  RetryTarget,
+  ProjectChatSendMeta,
+  QueuedChatSend,
+} from './types';
 
 // Pure decision rules.
 export {
@@ -83,6 +89,7 @@ export {
   clearStreamingConversationMarker,
   shouldClearActiveRunRefs,
   finalizeActiveAssistantMessagesOnStop,
+  stripQueueOnlyFromMeta,
 } from './rules';
 
 // Pure formatters (prompt / attachment / summary builders).

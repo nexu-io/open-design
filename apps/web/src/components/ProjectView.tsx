@@ -162,7 +162,6 @@ import {
 import type {
   AppliedPluginSnapshot,
   BrandStatus,
-  ChatAnalyticsEntryFrom,
   ChatSessionMode,
   InstalledPluginRecord,
   RunContextSelection,
@@ -343,7 +342,9 @@ import {
   pluginWorkflowStartContent,
   pluginWorkflowSuccessContent,
   pluginWorkflowFailureContent,
+  stripQueueOnlyFromMeta,
 } from '../features/project-view';
+import type { ProjectChatSendMeta, QueuedChatSend } from '../features/project-view';
 
 // Re-export the public pure helpers that previously lived in this file so the
 // existing ProjectView.*/FileWorkspace test net keeps importing them from here
@@ -380,28 +381,6 @@ type BrandBrowserSnapshot =
 type BrandBrowserSnapshotExtractionResult =
   | { status: 'handled' }
   | { status: 'miss'; message: string | null };
-
-type ProjectChatSendMeta = ChatSendMeta & {
-  queueOnly?: boolean;
-  retryOfAssistantId?: string;
-  sessionMode?: ChatSessionMode;
-  /** Overrides the run_created / run_finished `entry_from` analytics prop for
-   *  this send (e.g. 'resume_continue' from the resumable-failure Continue
-   *  action). Behavior never depends on it; it only shapes PostHog props. */
-  entryFrom?: ChatAnalyticsEntryFrom;
-  /** Marks this send as the AI-optimize (deep enrichment) run so the daemon
-   *  can emit design_system_enrich_result + flag the DS as ai_refined on
-   *  success (tracking spec C14/C15). Daemon mode only. */
-  dsEnrichment?: boolean;
-  /** Marks a send replayed from the queued-sends drain. Its payload already
-   *  lives in the queue item, so a pre-run block (e.g. the AMR balance gate)
-   *  must NOT re-queue it — only pause further drains. */
-  queueDrain?: boolean;
-  /** The Open Design Cloud balance gate already ran for this exact send at
-   *  the home submit (with any soft warning answered there); skip re-gating
-   *  so the user is never double-prompted for one task. */
-  amrGatePrechecked?: boolean;
-};
 
 interface Props {
   project: Project;
@@ -469,16 +448,6 @@ interface Props {
     sourceProjectId: string,
     input?: { name?: string },
   ) => Promise<void> | void;
-}
-
-interface QueuedChatSend {
-  id: string;
-  conversationId: string;
-  prompt: string;
-  attachments: ChatAttachment[];
-  commentAttachments: ChatCommentAttachment[];
-  meta?: ProjectChatSendMeta;
-  createdAt: number;
 }
 
 interface QueuedChatSendUpdate {
@@ -1216,7 +1185,7 @@ export function ProjectView({
   useEffect(() => {
     setChatSeed(null);
     setAutoAuditRepairSeed(null);
-    const restored = loadQueuedChatSends(project.id);
+    const restored = projectViewTransportPort.loadQueuedChatSends(project.id);
     queuedChatSendsRef.current = restored;
     setQueuedChatSends(restored);
   }, [project.id]);
@@ -4057,7 +4026,7 @@ export function ProjectView({
   const commitQueuedChatSends = useCallback((next: QueuedChatSend[]) => {
     queuedChatSendsRef.current = next;
     setQueuedChatSends(next);
-    saveQueuedChatSends(project.id, next);
+    projectViewTransportPort.saveQueuedChatSends(project.id, next);
   }, [project.id]);
 
   const enqueueChatSend = useCallback((item: QueuedChatSend) => {
@@ -8253,57 +8222,6 @@ async function resolveTerminalEndedAt(
     return probed.updatedAt;
   }
   return Date.now();
-}
-
-const QUEUED_CHAT_SENDS_STORAGE_VERSION = 1;
-
-function queuedChatSendsStorageKey(projectId: string): string {
-  return `od:chat-queued-sends:${projectId}:v${QUEUED_CHAT_SENDS_STORAGE_VERSION}`;
-}
-
-function loadQueuedChatSends(projectId: string): QueuedChatSend[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(queuedChatSendsStorageKey(projectId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isQueuedChatSend).slice(0, 100);
-  } catch {
-    return [];
-  }
-}
-
-function saveQueuedChatSends(projectId: string, items: QueuedChatSend[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const key = queuedChatSendsStorageKey(projectId);
-    if (items.length === 0) {
-      window.localStorage.removeItem(key);
-      return;
-    }
-    window.localStorage.setItem(key, JSON.stringify(items.slice(0, 100)));
-  } catch {
-    // Ignore private-mode/quota failures. The in-memory queue still works.
-  }
-}
-
-function isQueuedChatSend(value: unknown): value is QueuedChatSend {
-  if (typeof value !== 'object' || value == null || Array.isArray(value)) return false;
-  const record = value as Partial<QueuedChatSend>;
-  return (
-    typeof record.id === 'string' &&
-    typeof record.conversationId === 'string' &&
-    typeof record.prompt === 'string' &&
-    Array.isArray(record.attachments) &&
-    Array.isArray(record.commentAttachments) &&
-    typeof record.createdAt === 'number'
-  );
-}
-
-function stripQueueOnlyFromMeta(meta: ChatSendMeta | undefined): ProjectChatSendMeta | undefined {
-  if (!meta) return undefined;
-  const { queueOnly: _queueOnly, ...rest } = meta;
-  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;

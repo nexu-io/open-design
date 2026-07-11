@@ -3,6 +3,7 @@
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks (ADR 0002).
 import type { ExtractMemoryRequest } from '@open-design/contracts';
+import type { QueuedChatSend } from './types';
 
 /** Transport the project-view orchestrator needs from the outside world. */
 export interface ProjectViewTransportPort {
@@ -16,4 +17,8 @@ export interface ProjectViewTransportPort {
    * request cannot block or break the chat.
    */
   extractMemory(request: ExtractMemoryRequest): Promise<void>;
+  /** Read the queued-chat-sends store for a project (local-storage backed). */
+  loadQueuedChatSends(projectId: string): QueuedChatSend[];
+  /** Persist the queued-chat-sends store for a project (local-storage backed). */
+  saveQueuedChatSends(projectId: string, items: QueuedChatSend[]): void;
 }

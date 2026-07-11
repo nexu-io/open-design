@@ -38,7 +38,13 @@ import {
   MIN_WORKSPACE_PANEL_WIDTH,
   SPLIT_RESIZE_HANDLE_WIDTH,
 } from './constants';
-import type { BrowserExtractionUrlParts, ProjectSplitStyle, RetryTarget } from './types';
+import type { ChatSendMeta } from '../../components/ChatComposer';
+import type {
+  BrowserExtractionUrlParts,
+  ProjectChatSendMeta,
+  ProjectSplitStyle,
+  RetryTarget,
+} from './types';
 
 // --- Conversation merges -------------------------------------------------
 
@@ -1116,4 +1122,12 @@ export function finalizeActiveAssistantMessagesOnStop(
     return updated;
   });
   return { messages: next, finalized };
+}
+
+// --- Queued chat sends -----------------------------------------------------
+
+export function stripQueueOnlyFromMeta(meta: ChatSendMeta | undefined): ProjectChatSendMeta | undefined {
+  if (!meta) return undefined;
+  const { queueOnly: _queueOnly, ...rest } = meta;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
