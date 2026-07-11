@@ -28,3 +28,10 @@
 ## 设计约束
 
 生产实现仅修改 `apps/web/src/components/TasksView.tsx`，沿用现有 Creator 面板样式和项目选择逻辑。测试覆盖 GET mock、成功展示、missing 状态和项目级失败降级；任务编辑生产逻辑保持不变。
+
+## 关联管理补充（2026-07-11）
+
+- 通过 `agent-reach` 的 GitHub 路由检索 `media asset task workflow` 与 `digital asset management task association`，均未返回可直接参考的仓库；这是检索失败，不以无结果虚构新的外部架构。
+- 沿用上述 Immich、PhotoPrism、AppFlowy 与 AFFiNE 的共同边界：资产保持项目内独立实体，任务只维护关联，不把素材字段复制进任务。
+- 本轮只在既有 `taskLinks` 上做 HTTP 关联管理：编辑任务时展示已关联资产；候选项限制为该任务项目内、未关联且 `availability=available` 的资产；missing 资产只读保留在已关联列表中。
+- 不采用预览、文件打开、上传、移动或跨项目选择；这些会突破既有 Web HTTP 边界和 CW-01 首版范围。

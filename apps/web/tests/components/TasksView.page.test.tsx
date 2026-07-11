@@ -526,6 +526,177 @@ describe('TasksView page shell', () => {
     expect(await screen.findByText('healthy.mp4')).toBeTruthy();
   });
 
+  it('shows linked media while editing a persisted creator task', async () => {
+    const creatorProjects: Project[] = [{ id: 'project-linked-media-1', name: '关联素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } }];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorProjectData: {
+        'project-linked-media-1': { tasks: [{ id: 'creator-task:linked-media-1', projectId: 'project-linked-media-1', title: '整理关联素材', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+      },
+      creatorMediaData: {
+        'project-linked-media-1': {
+          assets: [
+            { id: 'creator-media:linked', fileName: 'linked-missing.mp4', kind: 'video', relativePath: 'day-1/linked-missing.mp4', availability: 'missing' },
+            { id: 'creator-media:available', fileName: 'available.mp4', kind: 'video', relativePath: 'day-1/available.mp4', availability: 'available' },
+          ],
+          taskLinks: [{ taskId: 'creator-task:linked-media-1', assetId: 'creator-media:linked' }],
+        },
+      },
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    const mediaManager = screen.getByRole('group', { name: '关联素材' });
+    expect(within(mediaManager).getByText('linked-missing.mp4')).toBeTruthy();
+    expect(within(mediaManager).getByText('day-1/linked-missing.mp4')).toBeTruthy();
+    expect(within(mediaManager).getByText('Missing')).toBeTruthy();
+    expect(within(mediaManager).getByRole('option', { name: 'available.mp4' })).toBeTruthy();
+  });
+
+  it('adds an available media asset to the edited creator task', async () => {
+    const creatorProjects: Project[] = [{ id: 'project-add-media-1', name: '添加素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } }];
+    const creatorProjectData: Record<string, CreatorProjectData> = {
+      'project-add-media-1': { tasks: [{ id: 'creator-task:add-media-1', projectId: 'project-add-media-1', title: '添加素材', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+    };
+    mockTasksViewFetch({ creatorProjects, creatorProjectData, creatorMediaData: {
+      'project-add-media-1': { assets: [{ id: 'creator-media:addable', fileName: 'addable.mp4', kind: 'video', relativePath: 'day-1/addable.mp4', availability: 'available' }], taskLinks: [] },
+    } });
+    const baseFetch = globalThis.fetch;
+    const linkCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/projects/project-add-media-1/creator-tasks/creator-task%3Aadd-media-1/media-assets' && init?.method === 'POST') {
+        linkCalls.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(JSON.stringify({ ok: true }), { status: 201 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('可关联素材'), { target: { value: 'creator-media:addable' } });
+    fireEvent.click(screen.getByRole('button', { name: '添加关联素材' }));
+
+    await waitFor(() => {
+      expect(linkCalls).toEqual([{ url: '/api/projects/project-add-media-1/creator-tasks/creator-task%3Aadd-media-1/media-assets', body: { assetId: 'creator-media:addable' } }]);
+    });
+  });
+
+  it('removes a media link from the edited creator task', async () => {
+    const creatorProjects: Project[] = [{ id: 'project-remove-media-1', name: '移除素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } }];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorProjectData: {
+        'project-remove-media-1': { tasks: [{ id: 'creator-task:remove-media-1', projectId: 'project-remove-media-1', title: '移除素材', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+      },
+      creatorMediaData: {
+        'project-remove-media-1': { assets: [{ id: 'creator-media:remove', fileName: 'remove.mp4', kind: 'video', relativePath: 'day-1/remove.mp4', availability: 'available' }], taskLinks: [{ taskId: 'creator-task:remove-media-1', assetId: 'creator-media:remove' }] },
+      },
+    });
+    const baseFetch = globalThis.fetch;
+    const deleteCalls: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/projects/project-remove-media-1/creator-tasks/creator-task%3Aremove-media-1/media-assets/creator-media%3Aremove' && init?.method === 'DELETE') {
+        deleteCalls.push(url);
+        return new Response(null, { status: 204 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: '移除素材 remove.mp4' }));
+
+    await waitFor(() => {
+      expect(deleteCalls).toEqual(['/api/projects/project-remove-media-1/creator-tasks/creator-task%3Aremove-media-1/media-assets/creator-media%3Aremove']);
+    });
+  });
+
+  it('keeps cross-project media out of the edited task candidates', async () => {
+    const creatorProjects: Project[] = [
+      { id: 'project-candidate-a', name: '当前项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+      { id: 'project-candidate-b', name: '其他项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorProjectData: {
+        'project-candidate-a': { tasks: [{ id: 'creator-task:candidate-a', projectId: 'project-candidate-a', title: '当前任务', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+      },
+      creatorMediaData: {
+        'project-candidate-a': { assets: [{ id: 'creator-media:local', fileName: 'local.mp4', kind: 'video', relativePath: 'local.mp4', availability: 'available' }], taskLinks: [] },
+        'project-candidate-b': { assets: [{ id: 'creator-media:foreign', fileName: 'foreign.mp4', kind: 'video', relativePath: 'foreign.mp4', availability: 'available' }], taskLinks: [] },
+      },
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    const candidates = screen.getByLabelText('可关联素材');
+    expect(within(candidates).getByRole('option', { name: 'local.mp4' })).toBeTruthy();
+    expect(within(candidates).queryByRole('option', { name: 'foreign.mp4' })).toBeNull();
+  });
+
+  it('keeps task editing usable when its media index is empty or unavailable', async () => {
+    const creatorProjects: Project[] = [
+      { id: 'project-media-empty', name: '空素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+      { id: 'project-media-failure', name: '失败素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorMediaFailures: ['project-media-failure'],
+      creatorProjectData: {
+        'project-media-empty': { tasks: [{ id: 'creator-task:empty-media', projectId: 'project-media-empty', title: '空素材任务', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+        'project-media-failure': { tasks: [{ id: 'creator-task:failure-media', projectId: 'project-media-failure', title: '失败素材任务', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+      },
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit$/ })[0]!);
+    expect(screen.getByLabelText('Edit task title')).toBeTruthy();
+    expect(screen.getByText('暂无可关联素材。')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit$/ })[1]!);
+    expect(screen.getByLabelText('Edit task title')).toBeTruthy();
+    expect(screen.getByText('素材索引暂不可用。')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save task' })).toBeTruthy();
+  });
+
+  it('keeps task editing open and shows the existing error when linking media fails', async () => {
+    const creatorProjects: Project[] = [{ id: 'project-link-failure', name: '关联失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } }];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorProjectData: {
+        'project-link-failure': { tasks: [{ id: 'creator-task:link-failure', projectId: 'project-link-failure', title: '关联失败任务', stage: 'material', status: 'ready', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }], activities: [] },
+      },
+      creatorMediaData: {
+        'project-link-failure': { assets: [{ id: 'creator-media:failure', fileName: 'failure.mp4', kind: 'video', relativePath: 'failure.mp4', availability: 'available' }], taskLinks: [] },
+      },
+    });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input.toString() === '/api/projects/project-link-failure/creator-tasks/creator-task%3Alink-failure/media-assets' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: 'link unavailable' }), { status: 503 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Edit task title'), { target: { value: '未保存的任务标题' } });
+    fireEvent.change(screen.getByLabelText('可关联素材'), { target: { value: 'creator-media:failure' } });
+    fireEvent.click(screen.getByRole('button', { name: '添加关联素材' }));
+
+    expect(await screen.findByText('creator task media: 503')).toBeTruthy();
+    expect((screen.getByLabelText('Edit task title') as HTMLInputElement).value).toBe('未保存的任务标题');
+  });
+
   it('renders the creator workbench empty focus state when no projects exist', async () => {
     mockTasksViewFetch({ creatorProjects: [], creatorRuns: [] });
 

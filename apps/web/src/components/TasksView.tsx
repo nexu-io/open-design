@@ -451,6 +451,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     id: string; projectId: string; originalStatus: string; title: string; description: string;
     stage: CreatorTaskStage; status: CreatorTaskStatus; priority: CreatorTaskPriority; blockerNote: string;
   } | null>(null);
+  const [creatorTaskMediaAssetId, setCreatorTaskMediaAssetId] = useState('');
+  const [creatorTaskMediaSaving, setCreatorTaskMediaSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -491,6 +493,28 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     () => creatorMediaProjectData.find((value) => value.projectId === creatorTaskProjectId),
     [creatorMediaProjectData, creatorTaskProjectId],
   );
+  const editingCreatorMedia = useMemo(
+    () => creatorTaskEdit
+      ? creatorMediaProjectData.find((value) => value.projectId === creatorTaskEdit.projectId)
+      : undefined,
+    [creatorMediaProjectData, creatorTaskEdit],
+  );
+  const linkedCreatorMediaAssets = useMemo(() => {
+    if (!creatorTaskEdit || !editingCreatorMedia) return [];
+    const linkedAssetIds = new Set(
+      editingCreatorMedia.data.taskLinks
+        .filter((link) => link.taskId === creatorTaskEdit.id)
+        .map((link) => link.assetId),
+    );
+    return editingCreatorMedia.data.assets.filter((asset) => linkedAssetIds.has(asset.id));
+  }, [creatorTaskEdit, editingCreatorMedia]);
+  const availableCreatorMediaAssets = useMemo(() => {
+    if (!editingCreatorMedia) return [];
+    const linkedAssetIds = new Set(linkedCreatorMediaAssets.map((asset) => asset.id));
+    return editingCreatorMedia.data.assets.filter(
+      (asset) => asset.availability === 'available' && !linkedAssetIds.has(asset.id),
+    );
+  }, [editingCreatorMedia, linkedCreatorMediaAssets]);
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -696,6 +720,45 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       await refresh();
     } finally {
       setCreatorTaskSaving(false);
+    }
+  }, [creatorTaskEdit, refresh]);
+
+  const linkCreatorTaskMedia = useCallback(async () => {
+    if (!creatorTaskEdit || !creatorTaskMediaAssetId) return;
+    const edit = creatorTaskEdit;
+    setCreatorTaskMediaSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(edit.projectId)}/creator-tasks/${encodeURIComponent(edit.id)}/media-assets`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assetId: creatorTaskMediaAssetId }),
+      });
+      if (!response.ok) throw new Error(`creator task media: ${response.status}`);
+      setCreatorTaskMediaAssetId('');
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorTaskMediaSaving(false);
+    }
+  }, [creatorTaskEdit, creatorTaskMediaAssetId, refresh]);
+
+  const unlinkCreatorTaskMedia = useCallback(async (assetId: string) => {
+    if (!creatorTaskEdit) return;
+    const edit = creatorTaskEdit;
+    setCreatorTaskMediaSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(edit.projectId)}/creator-tasks/${encodeURIComponent(edit.id)}/media-assets/${encodeURIComponent(assetId)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error(`creator task media: ${response.status}`);
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorTaskMediaSaving(false);
     }
   }, [creatorTaskEdit, refresh]);
 
@@ -1087,7 +1150,42 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           <select aria-label="Edit task status" value={creatorTaskEdit.status} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, status: event.target.value as CreatorTaskStatus })}>{CREATOR_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                           <select aria-label="Edit task priority" value={creatorTaskEdit.priority} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, priority: event.target.value as CreatorTaskPriority })}>{CREATOR_PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
                           {creatorTaskEdit.status === 'blocked' ? <input aria-label="Blocker reason" value={creatorTaskEdit.blockerNote} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, blockerNote: event.target.value })} /> : null}
-                          <div className="creator-list__actions"><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => void saveCreatorTaskEdit()}>Save task</Button><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => setCreatorTaskEdit(null)}>Cancel task edit</Button></div>
+                          <div className="creator-task-media" role="group" aria-label="关联素材">
+                            <strong className="creator-list__title">关联素材</strong>
+                            {editingCreatorMedia?.failed ? (
+                              <p className="creator-list__desc">素材索引暂不可用。</p>
+                            ) : (
+                              <>
+                                {linkedCreatorMediaAssets.length > 0 ? (
+                                  <ul className="creator-list">
+                                    {linkedCreatorMediaAssets.map((asset) => (
+                                      <li key={asset.id} className="creator-list__item">
+                                        <div className="creator-list__main">
+                                          <strong className="creator-list__title">{asset.fileName}</strong>
+                                          <p className="creator-list__desc">{asset.relativePath}</p>
+                                          <div className="creator-list__chips">
+                                            <span className="creator-chip">{asset.kind}</span>
+                                            <span className="creator-chip">{asset.availability === 'missing' ? 'Missing' : 'Available'}</span>
+                                          </div>
+                                        </div>
+                                        <Button variant="ghost" className="creator-list__action" disabled={creatorTaskMediaSaving} aria-label={`移除素材 ${asset.fileName}`} onClick={() => void unlinkCreatorTaskMedia(asset.id)}>移除</Button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : <p className="creator-list__desc">暂无已关联素材。</p>}
+                                {availableCreatorMediaAssets.length > 0 ? (
+                                  <div className="creator-list__actions">
+                                    <select aria-label="可关联素材" value={creatorTaskMediaAssetId} onChange={(event) => setCreatorTaskMediaAssetId(event.target.value)}>
+                                      <option value="">选择可关联素材</option>
+                                      {availableCreatorMediaAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.fileName}</option>)}
+                                    </select>
+                                    <Button variant="ghost" className="creator-list__action" disabled={creatorTaskMediaSaving || !creatorTaskMediaAssetId} onClick={() => void linkCreatorTaskMedia()}>添加关联素材</Button>
+                                  </div>
+                                ) : <p className="creator-list__desc">暂无可关联素材。</p>}
+                              </>
+                            )}
+                          </div>
+                          <div className="creator-list__actions"><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => void saveCreatorTaskEdit()}>Save task</Button><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => { setCreatorTaskMediaAssetId(''); setCreatorTaskEdit(null); }}>Cancel task edit</Button></div>
                         </div>
                       ) : null}
                     </div>
@@ -1103,7 +1201,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                             </Button>
                           ) : null}
                           {isEditable && task.status === 'done' ? <Button variant="ghost" className="creator-list__action" onClick={() => void restoreCreatorTask(task)}>恢复</Button> : null}
-                          {isEditable ? <Button variant="ghost" className="creator-list__action" onClick={() => setCreatorTaskEdit({ id: task.id, projectId: task.projectId, originalStatus: task.status, title: task.title, description: task.description ?? '', stage: task.stage as CreatorTaskStage, status: task.status as CreatorTaskStatus, priority: task.priority as CreatorTaskPriority, blockerNote: task.blockerNote ?? '' })}>Edit</Button> : null}
+                          {isEditable ? <Button variant="ghost" className="creator-list__action" onClick={() => { setCreatorTaskMediaAssetId(''); setCreatorTaskEdit({ id: task.id, projectId: task.projectId, originalStatus: task.status, title: task.title, description: task.description ?? '', stage: task.stage as CreatorTaskStage, status: task.status as CreatorTaskStatus, priority: task.priority as CreatorTaskPriority, blockerNote: task.blockerNote ?? '' }); }}>Edit</Button> : null}
                           <Button variant="ghost" className="creator-list__action" onClick={() => openCreatorProject(task.projectId)}>
                             Open
                           </Button>
