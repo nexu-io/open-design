@@ -1932,7 +1932,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
 
     expect(await openDeployModal()).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

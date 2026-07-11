@@ -88,6 +88,23 @@ export type PreviewViewportPreset = {
 /** Board-space scale + offset applied to overlays for a non-desktop viewport. */
 export type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
 
+/** A selectable Cloudflare Pages DNS zone in the deploy modal's zone picker. */
+export type CloudflarePagesZoneOption = {
+  id: string;
+  name: string;
+  status?: string;
+  type?: string;
+};
+
+/** One rendered link/status row in the deploy modal's result panel. */
+export type DeployResultCard = {
+  id: string;
+  label: string;
+  url: string;
+  status: string;
+  message?: string;
+};
+
 /** Static per-provider copy/link config for the deploy modal. */
 export type DeployProviderOption = {
   id: DeployProviderId;

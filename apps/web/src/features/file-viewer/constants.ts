@@ -6,7 +6,7 @@ import type { DeployProviderOption, PreviewViewportPreset } from './types';
 // their source of truth, `providers/registry.ts`, is a transport module the
 // guard forbids importing from a feature file — the values themselves are
 // stable literals of the `DeployProviderId` union in `@open-design/contracts`.
-const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
+export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 
 export const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [

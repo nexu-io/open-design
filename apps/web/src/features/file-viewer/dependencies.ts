@@ -3,9 +3,15 @@
 // import `providers/` — everything else in the slice depends on a port, so
 // swapping the adapter (or a fake in tests) touches only this file.
 import {
+  checkDeploymentLink,
+  createSocialSharePayload,
+  deployProjectFile,
+  fetchCloudflarePagesZones,
+  fetchDeployConfig,
   fetchLiveArtifact,
   fetchLiveArtifactCode,
   fetchLiveArtifactRefreshes,
+  fetchProjectDeployments,
   fetchProjectFilePreview,
   fetchProjectFiles,
   fetchProjectFileText,
@@ -14,6 +20,7 @@ import {
   LiveArtifactRefreshError,
   refreshLiveArtifact as refreshLiveArtifactTransport,
   restoreProjectFileVersion,
+  updateDeployConfig,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../../providers/registry';
@@ -27,7 +34,7 @@ import {
 import { observeElementSize } from '../../providers/file-viewer/element-size';
 import { documentBodyPortalRoot } from '../../providers/file-viewer/portal-root';
 import { resolveChromeActionsHost } from '../../providers/file-viewer/chrome-actions-host';
-import { openInNewTab } from '../../providers/file-viewer/window-open';
+import { getLocationOrigin, openInNewTab } from '../../providers/file-viewer/window-open';
 import {
   ensureMarkdownCodeBlockControls,
   highlightMarkdownCodeBlocks,
@@ -41,6 +48,7 @@ import { LiveArtifactRefreshFailure } from './types';
 import type {
   ChromeActionsHostPort,
   ClipboardPort,
+  DeployTransportPort,
   DismissPort,
   DocumentPreviewPort,
   ElementSizePort,
@@ -141,9 +149,10 @@ export const chromeActionsHostPort: ChromeActionsHostPort = {
   getChromeActionsHost: resolveChromeActionsHost,
 };
 
-/** Default binding: the real `window.open` new-tab bridge. */
+/** Default binding: the real `window.open` new-tab + `window.location.origin` bridge. */
 export const windowOpenPort: WindowOpenPort = {
   openInNewTab,
+  getLocationOrigin,
 };
 
 /**
@@ -179,4 +188,22 @@ export const themeWatchPort: ThemeWatchPort = {
 /** Default binding: the real hidden-mirror textarea block-offset measurement. */
 export const markdownEditorMeasurePort: MarkdownEditorMeasurePort = {
   measureEditorBlockOffsets,
+};
+
+/**
+ * Default binding: the real deploy/publish transport (`/api/deploy/*`,
+ * `/api/social-share`). `checkDeploymentLink`'s provider return type widens
+ * to `DeploymentInfo`-shaped rather than the port's declared
+ * `DeployProjectFileResponse`, but the two interfaces are structurally
+ * identical (`DeployProjectFileResponse`/`CheckDeploymentLinkResponse` both
+ * `extends DeploymentInfo {}` in contracts), so no adapter is needed.
+ */
+export const deployTransportPort: DeployTransportPort = {
+  fetchProjectDeployments,
+  fetchDeployConfig,
+  updateDeployConfig,
+  deployProjectFile,
+  checkDeploymentLink,
+  fetchCloudflarePagesZones,
+  createSocialSharePayload,
 };
