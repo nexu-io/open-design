@@ -6,6 +6,7 @@
  */
 
 import type { ChatRunStatusResponse, Project as OpenDesignProject } from "@open-design/contracts";
+import type { CreatorWorkbenchProjectData } from "@open-design/contracts";
 import {
   createActivityEvent,
   createRunback,
@@ -152,6 +153,10 @@ export interface BuildCreatorDashboardDataOptions {
 export interface BuildOpenDesignCreatorDashboardOptions {
   projects?: OpenDesignProject[];
   runs?: ChatRunStatusResponse[];
+  creatorProjectData?: Array<{
+    projectId: string;
+    data: CreatorWorkbenchProjectData;
+  }>;
 }
 
 interface FocusCandidate {
@@ -229,14 +234,19 @@ export function buildCreatorDashboardDataFromOpenDesign(
   const projects = [...(input.projects ?? [])].sort((left, right) => right.updatedAt - left.updatedAt);
   const runs = [...(input.runs ?? [])].sort((left, right) => right.createdAt - left.createdAt);
   const projectById = new Map(projects.map((project) => [project.id, project]));
+  const creatorDataByProjectId = new Map(
+    (input.creatorProjectData ?? []).map(({ projectId, data }) => [projectId, data]),
+  );
   const runCountsByProject = new Map<string, number>();
   for (const run of runs) {
     if (!run.projectId) continue;
     runCountsByProject.set(run.projectId, (runCountsByProject.get(run.projectId) ?? 0) + 1);
   }
 
-  const tasks = projects.map((project) =>
-    createTask({
+  const tasks = projects.flatMap((project) => {
+    const persisted = creatorDataByProjectId.get(project.id)?.tasks ?? [];
+    if (persisted.length > 0) return persisted.map((task) => createTask(task));
+    return [createTask({
       id: `project:${project.id}`,
       projectId: project.id,
       title: project.name,
@@ -247,10 +257,16 @@ export function buildCreatorDashboardDataFromOpenDesign(
       sourceType: project.metadata?.kind,
       createdAt: toIsoString(project.createdAt),
       updatedAt: toIsoString(latestProjectMoment(project, runs)),
-    }),
-  );
+    })];
+  });
 
-  const activities = projects
+  const persistedActivities = (input.creatorProjectData ?? [])
+    .flatMap(({ data }) => data.activities)
+    .filter((activity) => projectById.has(activity.projectId))
+    .map((activity) => createActivityEvent(activity));
+  const activities = [
+    ...persistedActivities,
+    ...projects
     .filter((project) => shouldCreateProjectActivity(project, runCountsByProject.get(project.id) ?? 0))
     .map((project) =>
       createActivityEvent({
@@ -262,7 +278,8 @@ export function buildCreatorDashboardDataFromOpenDesign(
         createdAt: toIsoString(latestProjectMoment(project, runs)),
         triggerSource: buildTriggerSource(project),
       }),
-    );
+    ),
+  ];
 
   const events: CreatorEvent[] = [];
   for (const run of runs) {

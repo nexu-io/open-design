@@ -338,6 +338,48 @@ describe("creatorMockData", () => {
 });
 
 describe("buildCreatorDashboardDataFromOpenDesign", () => {
+  it("uses persisted creator tasks for a project and keeps inferred tasks as a fallback", () => {
+    const projects: Project[] = [
+      {
+        id: "project-persisted", name: "有手动任务的项目", skillId: null, designSystemId: null,
+        createdAt: 1_700_000_000_000, updatedAt: 1_700_000_100_000,
+        metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      },
+      {
+        id: "project-fallback", name: "仍需兜底的项目", skillId: null, designSystemId: null,
+        createdAt: 1_700_000_000_000, updatedAt: 1_700_000_110_000,
+        metadata: { kind: "image" satisfies ProjectMetadata["kind"] },
+      },
+    ];
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects,
+      creatorProjectData: [{
+        projectId: "project-persisted",
+        data: {
+          tasks: [{
+            id: "creator-task:1", projectId: "project-persisted", title: "整理可用镜头",
+            stage: "material", status: "ready", priority: "high",
+            createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-02T00:00:00Z",
+          }],
+          activities: [{
+            id: "creator-activity:1", projectId: "project-persisted", taskId: "creator-task:1",
+            category: "material", title: "素材任务已创建", createdAt: "2025-01-02T00:00:00Z",
+          }],
+        },
+      }],
+    });
+
+    expect(result.tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "creator-task:1", title: "整理可用镜头" }),
+      expect.objectContaining({ id: "project:project-fallback", title: "仍需兜底的项目" }),
+    ]));
+    expect(result.tasks.some((task) => task.id === "project:project-persisted")).toBe(false);
+    expect(result.activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "creator-activity:1", title: "素材任务已创建" }),
+    ]));
+  });
+
   it("maps open design projects into task and activity view-models", () => {
     const project: Project = {
       id: "project-1",

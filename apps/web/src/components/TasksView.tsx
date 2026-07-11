@@ -24,7 +24,12 @@ import {
   buildCreatorDashboardDataFromOpenDesign,
   resolveCreatorFocusActionPolicy,
 } from '../creator-adapters';
-import type { ChatRunStatusResponse, Project } from '@open-design/contracts';
+import type {
+  ChatRunStatusResponse,
+  CreatorTaskStage,
+  CreatorWorkbenchProjectData,
+  Project,
+} from '@open-design/contracts';
 
 type TranslateFn = ReturnType<typeof useT>;
 import { useAnalytics } from '../analytics/provider';
@@ -50,6 +55,7 @@ type TemplateFilter =
   | 'quality';
 
 type TasksSurface = 'automations' | 'creator';
+const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
 
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
@@ -420,6 +426,14 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   );
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [creatorRuns, setCreatorRuns] = useState<ChatRunStatusResponse[]>([]);
+  const [creatorProjectData, setCreatorProjectData] = useState<Array<{
+    projectId: string;
+    data: CreatorWorkbenchProjectData;
+  }>>([]);
+  const [creatorTaskProjectId, setCreatorTaskProjectId] = useState('');
+  const [creatorTaskTitle, setCreatorTaskTitle] = useState('');
+  const [creatorTaskStage, setCreatorTaskStage] = useState<CreatorTaskStage>('topic');
+  const [creatorTaskSaving, setCreatorTaskSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -439,8 +453,9 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       buildCreatorDashboardDataFromOpenDesign({
         projects: entryProjects,
         runs: creatorRuns,
+        creatorProjectData,
       }),
-    [entryProjects, creatorRuns],
+    [creatorProjectData, creatorRuns, entryProjects],
   );
   const projectSummaries = useMemo<ProjectSummary[]>(
     () =>
@@ -496,6 +511,20 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       } else {
         setCreatorRuns([]);
       }
+      const creatorData = await Promise.all(entryProjects.map(async (project) => {
+        try {
+          const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-workbench`);
+          if (!response.ok) return null;
+          const data = await response.json() as CreatorWorkbenchProjectData;
+          return { projectId: project.id, data };
+        } catch {
+          return null;
+        }
+      }));
+      setCreatorProjectData(creatorData.filter((value): value is {
+        projectId: string;
+        data: CreatorWorkbenchProjectData;
+      } => value !== null));
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
       }
@@ -509,7 +538,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setLoading(false);
     }
     return { proposalRefreshFailed };
-  }, []);
+  }, [entryProjects]);
 
   useEffect(() => {
     void refresh();
@@ -540,6 +569,58 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       fileName: null,
     });
   }, []);
+
+  useEffect(() => {
+    if (!creatorTaskProjectId && entryProjects[0]?.id) {
+      setCreatorTaskProjectId(entryProjects[0].id);
+    }
+  }, [creatorTaskProjectId, entryProjects]);
+
+  const createCreatorTask = useCallback(async () => {
+    const title = creatorTaskTitle.trim();
+    if (!creatorTaskProjectId || !title) return;
+    setCreatorTaskSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(creatorTaskProjectId)}/creator-tasks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title, stage: creatorTaskStage, status: 'todo', priority: 'medium', sourceType: 'manual' }),
+      });
+      if (!response.ok) throw new Error(`creator task: ${response.status}`);
+      setCreatorTaskTitle('');
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorTaskSaving(false);
+    }
+  }, [creatorTaskProjectId, creatorTaskStage, creatorTaskTitle, refresh]);
+
+  const advanceCreatorTask = useCallback(async (task: { id: string; projectId: string; stage: string; title: string }) => {
+    const stageIndex = CREATOR_STAGES.indexOf(task.stage as CreatorTaskStage);
+    const nextStage = CREATOR_STAGES[Math.max(0, stageIndex + 1)];
+    const isComplete = stageIndex >= CREATOR_STAGES.length - 1;
+    if (!nextStage) return;
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-tasks/${encodeURIComponent(task.id)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ stage: nextStage, status: isComplete ? 'done' : 'ready' }),
+      });
+      if (!response.ok) throw new Error(`creator task update: ${response.status}`);
+      const activity = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-activities`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id, category: nextStage, title: isComplete ? `${task.title} 已完成` : `${task.title} 推进到下一阶段` }),
+      });
+      if (!activity.ok) throw new Error(`creator activity: ${activity.status}`);
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, [refresh]);
 
   const triggerCreatorFocusAction = useCallback(async () => {
     const focus = creatorDashboard.focus;
@@ -861,6 +942,26 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                 <h3 id="creator-tasks-title" className="creator-panel__title">Tasks</h3>
                 <span className="creator-panel__meta">Current queue</span>
               </div>
+              {entryProjects.length > 0 ? (
+                <form
+                  className="creator-task-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void createCreatorTask();
+                  }}
+                >
+                  <select aria-label="Task project" value={creatorTaskProjectId} onChange={(event) => setCreatorTaskProjectId(event.target.value)}>
+                    {entryProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                  </select>
+                  <input aria-label="Task title" value={creatorTaskTitle} onChange={(event) => setCreatorTaskTitle(event.target.value)} placeholder="Add a task" />
+                  <select aria-label="Task stage" value={creatorTaskStage} onChange={(event) => setCreatorTaskStage(event.target.value as CreatorTaskStage)}>
+                    {CREATOR_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                  </select>
+                  <button type="submit" className="creator-task-form__submit" disabled={creatorTaskSaving || !creatorTaskTitle.trim()} title="Create task" aria-label="Create task">
+                    <Icon name="plus" size={14} />
+                  </button>
+                </form>
+              ) : null}
               <ul className="creator-list">
                 {creatorDashboard.tasks.map((task) => {
                   return (
@@ -882,13 +983,16 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                         {formatCreatorTimestamp(task.updatedAt)}
                       </time>
                       {task.projectId ? (
-                        <Button
-                          variant="ghost"
-                          className="creator-list__action"
-                          onClick={() => openCreatorProject(task.projectId)}
-                        >
-                          Open
-                        </Button>
+                        <div className="creator-list__actions">
+                          {task.id.startsWith('creator-task:') && task.status !== 'done' ? (
+                            <Button variant="ghost" className="creator-list__action" onClick={() => void advanceCreatorTask(task)}>
+                              Advance
+                            </Button>
+                          ) : null}
+                          <Button variant="ghost" className="creator-list__action" onClick={() => openCreatorProject(task.projectId)}>
+                            Open
+                          </Button>
+                        </div>
                         ) : null}
                       </div>
                     </li>

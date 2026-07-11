@@ -7,6 +7,27 @@ import type { ChatRunStatusResponse, Project, Routine } from '@open-design/contr
 import { TasksView } from '../../src/components/TasksView';
 import * as router from '../../src/router';
 
+type CreatorProjectData = {
+  tasks: Array<{
+    id: string;
+    projectId: string;
+    title: string;
+    stage: string;
+    status: string;
+    priority: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  activities: Array<{
+    id: string;
+    projectId: string;
+    taskId?: string;
+    category: string;
+    title: string;
+    createdAt: string;
+  }>;
+};
+
 const originalFetch = globalThis.fetch;
 const originalConfirm = window.confirm;
 
@@ -14,10 +35,12 @@ function mockTasksViewFetch({
   routines = [],
   creatorProjects = [],
   creatorRuns = [],
+  creatorProjectData = {},
 }: {
   routines?: Routine[];
   creatorProjects?: Project[];
   creatorRuns?: ChatRunStatusResponse[];
+  creatorProjectData?: Record<string, CreatorProjectData>;
 } = {}) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
@@ -35,6 +58,14 @@ function mockTasksViewFetch({
     }
     if (url === '/api/runs' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ runs: creatorRuns }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    const creatorRead = /^\/api\/projects\/([^/]+)\/creator-workbench$/.exec(url);
+    if (creatorRead && (!init || init.method === undefined)) {
+      const projectId = decodeURIComponent(creatorRead[1]!);
+      return new Response(JSON.stringify(creatorProjectData[projectId] ?? { tasks: [], activities: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -181,6 +212,100 @@ describe('TasksView page shell', () => {
     expect(within(creatorDashboard).getAllByText('整理素材并推进剪辑节奏').length).toBeGreaterThan(0);
     expect(within(creatorDashboard).getByText('Run output · 校园黄昏短片')).toBeTruthy();
     expect(within(creatorDashboard).getByText('Media production pipeline')).toBeTruthy();
+  });
+
+  it('renders persisted creator work and advances it with an activity writeback', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-persisted-1', name: '摄影短片', skillId: null, designSystemId: null,
+      createdAt: Date.now() - 30_000, updatedAt: Date.now() - 10_000, metadata: { kind: 'video' },
+    }];
+    const creatorProjectData: Record<string, CreatorProjectData> = {
+      'project-persisted-1': {
+        tasks: [{
+          id: 'creator-task:1', projectId: 'project-persisted-1', title: '筛选可用镜头',
+          stage: 'material', status: 'todo', priority: 'medium',
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        }],
+        activities: [],
+      },
+    };
+    const writes: Array<{ url: string; body: Record<string, unknown> }> = [];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (init?.method === 'PATCH' && url.includes('/creator-tasks/creator-task%3A1')) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        writes.push({ url, body });
+        creatorProjectData['project-persisted-1']!.tasks[0] = {
+          ...creatorProjectData['project-persisted-1']!.tasks[0]!,
+          stage: String(body.stage), status: String(body.status), updatedAt: '2025-01-02T00:00:00Z',
+        };
+        return new Response(JSON.stringify({ task: creatorProjectData['project-persisted-1']!.tasks[0] }), { status: 200 });
+      }
+      if (init?.method === 'POST' && url.endsWith('/creator-activities')) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        writes.push({ url, body });
+        creatorProjectData['project-persisted-1']!.activities.push({
+          id: 'creator-activity:1', projectId: 'project-persisted-1', taskId: String(body.taskId),
+          category: String(body.category), title: String(body.title), createdAt: '2025-01-02T00:00:00Z',
+        });
+        return new Response(JSON.stringify({ activity: creatorProjectData['project-persisted-1']!.activities[0] }), { status: 201 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect((await screen.findAllByText('筛选可用镜头')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Advance' }));
+
+    await waitFor(() => {
+      expect(writes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ body: { stage: 'editing', status: 'ready' } }),
+        expect.objectContaining({ body: expect.objectContaining({ taskId: 'creator-task:1', category: 'editing' }) }),
+      ]));
+    });
+  });
+
+  it('creates a creator task for the selected project', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-create-1', name: '夏日片段', skillId: null, designSystemId: null,
+      createdAt: Date.now() - 30_000, updatedAt: Date.now() - 10_000, metadata: { kind: 'video' },
+    }];
+    const creatorProjectData: Record<string, CreatorProjectData> = {
+      'project-create-1': { tasks: [], activities: [] },
+    };
+    mockTasksViewFetch({ creatorProjects, creatorProjectData });
+    const baseFetch = globalThis.fetch;
+    const createSpy = vi.fn();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (init?.method === 'POST' && url.endsWith('/creator-tasks')) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        createSpy(url, body);
+        creatorProjectData['project-create-1']!.tasks.push({
+          id: 'creator-task:new', projectId: 'project-create-1', title: String(body.title),
+          stage: String(body.stage), status: String(body.status), priority: String(body.priority),
+          createdAt: '2025-01-02T00:00:00Z', updatedAt: '2025-01-02T00:00:00Z',
+        });
+        return new Response(JSON.stringify({ task: creatorProjectData['project-create-1']!.tasks[0] }), { status: 201 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.change(await screen.findByLabelText('Task title'), { target: { value: '整理拍摄计划' } });
+    fireEvent.change(screen.getByLabelText('Task stage'), { target: { value: 'editing' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        '/api/projects/project-create-1/creator-tasks',
+        expect.objectContaining({ title: '整理拍摄计划', stage: 'editing', status: 'todo' }),
+      );
+    });
   });
 
   it('renders the creator workbench empty focus state when no projects exist', async () => {
