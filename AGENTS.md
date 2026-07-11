@@ -33,6 +33,12 @@ This file is the single source of truth for agents entering this repository. Rea
 
 # Development workflow
 
+## External Research Before Feature Work
+
+Before designing or implementing a new user-facing capability, integration, storage model, workflow, or delivery surface, first research relevant public open-source implementations through the `agent-reach` skill. GitHub discovery must rank candidates by stars; higher-star projects receive higher reference weight, while maintenance status and license remain explicit selection factors.
+
+Record repositories, star counts, retrieval date, observed architecture, product pattern, selected lessons, rejected approaches, and source URLs in a project-owned research, decision, or planning document. Do not copy code or adopt an approach solely because it is popular: map it to this repository's contracts, daemon data-root rules, package boundaries, and acceptance tests. A feature plan must cite that research before implementation. If public retrieval fails, record the failure and request a maintainer decision rather than inventing an ungrounded architecture.
+
 ## Environment baseline
 
 - Runtime target is Node `~24` and `pnpm@10.33.2`; use Corepack so the pnpm version pinned in `package.json` is selected.
