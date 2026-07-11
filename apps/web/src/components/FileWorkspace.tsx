@@ -200,8 +200,6 @@ import {
   optionalDesignSystemManifestString,
   orderWorkspaceTabs,
   parentDirForProjectFile,
-  parseDesignSystemCardManifest,
-  parseDesignSystemCardManifestEntry,
   preferPreviewArtifactsOverRawAssets,
   reanchorBrowserTabsToCurrentOrder,
   sameFileName,
@@ -210,9 +208,8 @@ import {
   Tab,
   tabDropEdgeFromEvent,
   truncateDesignSystemActivityText,
+  useWiredDesignSystemCardManifest,
   type BrowserWorkspaceTab,
-  type DesignSystemCardManifestEntry,
-  type DesignSystemCardManifestMap,
   type DesignSystemGenerationStep,
   type DesignSystemProjectSection,
   type DesignSystemProjectSectionReview,
@@ -3156,8 +3153,6 @@ function DesignSystemProjectPanel({
   const [status, setStatus] = useState(system.status ?? 'draft');
   const [statusBusy, setStatusBusy] = useState(false);
   const [defaultBusy, setDefaultBusy] = useState(false);
-  const [cardManifest, setCardManifest] = useState<DesignSystemCardManifestMap>(() => new Map());
-  const [cardManifestError, setCardManifestError] = useState<string | null>(null);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -3435,29 +3430,13 @@ function DesignSystemProjectPanel({
   const manifestFileName = manifestFile?.name ?? null;
   const manifestCacheBustKey = manifestFile ? Math.round(manifestFile.mtime) : null;
   const manifestReadFailedLabel = t('ds.manifestReadFailed');
-  useEffect(() => {
-    if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
-      setCardManifest((current) => (current.size === 0 ? current : new Map()));
-      setCardManifestError((current) => (current === null ? current : null));
-      return undefined;
-    }
-    let cancelled = false;
-    void fetchProjectFileText(projectId, manifestFileName, {
-      cache: 'no-store',
-      cacheBustKey: manifestCacheBustKey,
-    }).then((text) => {
-      if (cancelled) return;
-      setCardManifest(parseDesignSystemCardManifest(text));
-      setCardManifestError(null);
-    }).catch((err: unknown) => {
-      if (cancelled) return;
-      setCardManifest(new Map());
-      setCardManifestError(err instanceof Error ? err.message : manifestReadFailedLabel);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [manifestCacheBustKey, manifestFileName, manifestReadFailedLabel, projectId, system.id]);
+  const { cardManifest, cardManifestError } = useWiredDesignSystemCardManifest(
+    projectId,
+    system.id,
+    manifestFileName,
+    manifestCacheBustKey,
+    manifestReadFailedLabel,
+  );
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );
