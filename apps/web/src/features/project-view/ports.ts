@@ -5,6 +5,7 @@
 import type {
   AppliedPluginSnapshot,
   ChatSessionMode,
+  DesignSystemPackageAudit,
   ExtractMemoryRequest,
   InstalledPluginRecord,
   PluginDuplicateProjectResponse,
@@ -27,6 +28,7 @@ import type { ArtifactManifest } from '../../artifacts/types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
+  FinalizeBrandProjectOutcome,
   PluginShareTaskSnapshot,
   PluginShareTaskStart,
   QueuedChatSend,
@@ -201,4 +203,10 @@ export interface ProjectViewTransportPort {
     since: number,
     timeoutMs?: number,
   ): Promise<PluginShareTaskSnapshot>;
+  /** Finalize a brand project into its derived design-system kit. */
+  finalizeBrandProject(brandId: string, projectId: string): Promise<FinalizeBrandProjectOutcome>;
+  /** Fetch a project's design-system package audit. Resolves `null` on failure. */
+  fetchDesignSystemPackageAudit(projectId: string): Promise<DesignSystemPackageAudit | null>;
+  /** Persist a project's active `designSystemId`. Best-effort: never rejects. */
+  patchProjectDesignSystemId(projectId: string, designSystemId: string | null): Promise<void>;
 }

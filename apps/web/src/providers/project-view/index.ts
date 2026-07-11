@@ -52,3 +52,8 @@ export {
   startGeneratedPluginShareTask,
   waitGeneratedPluginShareTask,
 } from './plugin-folder-agent-action';
+export {
+  finalizeBrandProject,
+  fetchDesignSystemPackageAudit,
+  patchProjectDesignSystemId,
+} from './design-system-workspace';

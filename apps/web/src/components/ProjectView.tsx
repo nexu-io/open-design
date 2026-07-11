@@ -22,7 +22,6 @@ import {
 } from '../providers/daemon';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
-  fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkill,
   patchPreviewCommentStatus,
@@ -36,19 +35,10 @@ import {
   type ByokMediaDefaults,
   type ResearchOptions,
 } from '@open-design/contracts';
-import {
-  projectKindFromMetadataToTracking,
-  projectKindToTracking,
-} from '@open-design/contracts/analytics';
-import type {
-  TrackingDesignSystemApplyTargetKind,
-  TrackingDesignSystemOrigin,
-  TrackingDesignSystemStatusValue,
-} from '@open-design/contracts/analytics';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactHeaderClick,
-  trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
   trackOnboardingPromptPrefilled,
@@ -80,7 +70,6 @@ import {
   cancelBrandExtraction,
   continueBrandExtraction,
   extractBrandFromHtml,
-  finalizeBrandProject,
 } from '../runtime/brands';
 import { isOpenDesignHostAvailable } from '@open-design/host';
 import {
@@ -101,10 +90,6 @@ import {
   isProgrammaticBrandExtractionProject,
 } from '../runtime/brand-enrichment';
 import { useBrandReadyPrompt } from '../runtime/useBrandReadyPrompt';
-import {
-  buildDesignSystemPackageAuditRepairPrompt,
-  summarizeDesignSystemPackageAudit,
-} from '../runtime/design-system-package-audit';
 import { liveArtifactTabId } from '../types';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
@@ -224,6 +209,7 @@ import {
   useWiredOpenTabsSync,
   useWiredProjectFilesAndArtifacts,
   useWiredPluginFolderAgentAction,
+  useWiredDesignSystemWorkspace,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -242,7 +228,6 @@ import {
   historyWithWorkspaceContext,
   commentTaskQuery,
   commentTaskContextAttachment,
-  fallbackDesignSystemSummaryForProject,
   projectViewTransportPort,
   artifactFromRecoverableSourceText,
   isFileWriteToolName,
@@ -658,7 +643,6 @@ export function ProjectView({
     Boolean(brandReady);
   const pendingBrandDesignSystemOpenRef = useRef<string | null>(null);
   const handledBrandReadyDesignSystemRef = useRef<string | null>(null);
-  const missingDesignSystemRefreshRef = useRef<string | null>(null);
   const autoOpenedBrandDesignSystemRef = useRef<string | null>(null);
   const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
@@ -1631,107 +1615,35 @@ export function ProjectView({
     [updateMessageById],
   );
 
-  const auditDesignSystemWorkspaceAfterRun = useCallback(
-    async (assistantMessageId: string) => {
-      const isDesignSystemWorkspace =
-        isDesignSystemWorkspaceMetadata(currentProject.metadata) || projectIsDesignSystemProject;
-      if (!isDesignSystemWorkspace) return;
-      try {
-        if (designSystemBrandId) {
-          const outcome = await finalizeBrandProject(designSystemBrandId, project.id);
-          if (outcome.ok) {
-            await Promise.all([
-              projectDetail.refresh(),
-              Promise.resolve(onDesignSystemsRefresh?.()),
-              refreshWorkspaceItems(),
-            ]);
-            onProjectsRefresh();
-            setDesignMdRefreshKey((n) => n + 1);
-            updateMessageById(
-              assistantMessageId,
-              (prev) => ({
-                ...prev,
-                events: [
-                  ...(prev.events ?? []),
-                  {
-                    kind: 'status',
-                    label: 'design_system',
-                    detail: 'Rebuilt derived kit, assets, and registered design system from brand.json.',
-                  },
-                ],
-              }),
-              true,
-              { telemetryFinalized: true },
-            );
-          } else {
-            updateMessageById(
-              assistantMessageId,
-              (prev) => ({
-                ...prev,
-                events: [
-                  ...(prev.events ?? []),
-                  {
-                    kind: 'status',
-                    label: 'design_system',
-                    detail: `Design system sync could not run: ${outcome.error}`,
-                  },
-                ],
-              }),
-              true,
-              { telemetryFinalized: true },
-            );
-          }
-        }
-        const audit = await fetchProjectDesignSystemPackageAudit(project.id);
-        if (!audit) return;
-        const auditSummary = summarizeDesignSystemPackageAudit(audit);
-        updateMessageById(
-          assistantMessageId,
-          (prev) => ({
-            ...prev,
-            events: [...(prev.events ?? []), { kind: 'status', label: 'audit', detail: auditSummary }],
-          }),
-          true,
-          { telemetryFinalized: true },
-        );
-        const repairPrompt = buildDesignSystemPackageAuditRepairPrompt(audit);
-        if (repairPrompt) {
-          if (projectViewTransportPort.consumeDesignSystemAuditAutoRepair(project.id)) {
-            const seed = { id: `audit-${Date.now()}`, value: repairPrompt };
-            setChatSeed(seed);
-            setAutoAuditRepairSeed(seed);
-          }
-        } else {
-          projectViewTransportPort.clearDesignSystemAuditAutoRepair(project.id);
-        }
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        updateMessageById(
-          assistantMessageId,
-          (prev) => ({
-            ...prev,
-            events: [
-              ...(prev.events ?? []),
-              { kind: 'status', label: 'audit', detail: `Package audit could not run: ${detail}` },
-            ],
-          }),
-          true,
-          { telemetryFinalized: true },
-        );
-      }
-    },
-    [
-      currentProject.metadata,
-      designSystemBrandId,
-      onDesignSystemsRefresh,
-      onProjectsRefresh,
-      project.id,
-      projectDetail.refresh,
-      projectIsDesignSystemProject,
-      refreshWorkspaceItems,
-      updateMessageById,
-    ],
+  const {
+    designSystemProject,
+    designSystemProjectFromRegistry,
+    activeDesignSystemSummary,
+    projectTypeLabel,
+    handleChangeDesignSystemId,
+    auditDesignSystemWorkspaceAfterRun,
+  } = useWiredDesignSystemWorkspace(
+    project,
+    currentProject,
+    projectIsDesignSystemProject,
+    projectDesignSystemId,
+    designSystemBrandId,
+    designSystems,
+    skills,
+    designTemplates,
+    onDesignSystemsRefresh,
+    onProjectsRefresh,
+    onProjectChange,
+    projectDetail.refresh,
+    refreshWorkspaceItems,
+    updateMessageById,
+    setDesignMdRefreshKey,
+    setChatSeed,
+    setAutoAuditRepairSeed,
+    analytics.track,
+    t,
   );
+
 
   // Maximum number of times we will retry fetching a null status for a
   // spuriouslyFailedPending run before treating the absence as authoritative
@@ -4718,155 +4630,6 @@ export function ProjectView({
     ],
   );
 
-  const handleChangeDesignSystemId = useCallback(
-    (nextId: string | null) => {
-      if ((projectDesignSystemId ?? null) === nextId) return;
-      // `design_system_apply_result` studio variant. The existing
-      // NewProjectPanel picker fires the same event under
-      // `page_name=home`; this in-project header picker fires under
-      // `page_name=studio` so the funnel sees applies from both
-      // surfaces. `target_project_kind` derives from
-      // `project.metadata.kind`.
-      const target =
-        // NOTE: `target_project_kind` uses the narrower
-        // `TrackingDesignSystemApplyTargetKind` enum, which intentionally does
-        // NOT carry the prototype subtypes (wireframe/mobile) or `document`.
-        // Derive the coarse kind here (subtypes collapse back to `prototype`)
-        // so a Home-created Wireframe/Mobile/Document project never emits a
-        // value outside this field's schema. The fine-grained split only
-        // belongs on `project_kind` (create/run events).
-        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
-      const picked = nextId
-        ? designSystems.find((d) => d.id === nextId)
-        : null;
-      const origin: TrackingDesignSystemOrigin | undefined = picked
-        ? picked.source === 'user'
-          ? 'manual_create'
-          : picked.source === 'built-in'
-            ? 'official_preset'
-            : picked.source === 'installed'
-              ? 'template'
-              : 'unknown'
-        : undefined;
-      const status: TrackingDesignSystemStatusValue | undefined = picked
-        ? picked.status === 'draft' || picked.status === 'published'
-          ? picked.status
-          : 'unknown'
-        : undefined;
-      if (nextId === null) {
-        trackDesignSystemApplyResult(analytics.track, {
-          page_name: 'studio',
-          area: 'design_system_picker',
-          action: 'clear_selection',
-          result: 'success',
-          target_project_kind: target,
-          design_system_applied: false,
-          design_system_selection_mode: 'none',
-          is_default: false,
-          is_auto_selected: false,
-          available_design_system_count: designSystems.length,
-          duration_ms: 0,
-        });
-      } else {
-        trackDesignSystemApplyResult(analytics.track, {
-          page_name: 'studio',
-          area: 'design_system_picker',
-          action: 'select_design_system',
-          result: 'success',
-          target_project_kind: target,
-          design_system_id: nextId,
-          design_system_source: origin,
-          design_system_status: status,
-          design_system_applied: true,
-          design_system_selection_mode: 'manual',
-          is_default: false,
-          is_auto_selected: false,
-          available_design_system_count: designSystems.length,
-          duration_ms: 0,
-        });
-      }
-      const updated: Project = {
-        ...project,
-        designSystemId: nextId,
-        updatedAt: Date.now(),
-      };
-      onProjectChange(updated);
-      void patchProject(project.id, { designSystemId: nextId });
-    },
-    [project, projectDesignSystemId, onProjectChange, designSystems, analytics.track],
-  );
-
-  // Canonical project-type chip shown next to the editable title. We label
-  // by the resolved skill/template `mode` (the real type taxonomy) rather
-  // than the skill's display name, so every project kind — prototype, deck,
-  // template, image, video, audio, design system — reads as one consistent,
-  // short type just like "Design system". Returns null for freeform projects
-  // (no resolvable type), which hides the chip.
-  const projectTypeLabel = useMemo<string | null>(() => {
-    if (projectIsDesignSystemProject) return t('dsManager.tabDesignSystem');
-    const summary =
-      skills.find((s) => s.id === project.skillId) ??
-      designTemplates.find((s) => s.id === project.skillId);
-    switch (summary?.mode) {
-      case 'prototype':
-        return t('project.typePrototype');
-      case 'deck':
-        return t('project.typeDeck');
-      case 'template':
-        return t('project.typeTemplate');
-      case 'design-system':
-        return t('dsManager.tabDesignSystem');
-      case 'image':
-        return t('project.typeImage');
-      case 'video':
-        return t('project.typeVideo');
-      case 'audio':
-        return t('project.typeAudio');
-      default:
-        return null;
-    }
-  }, [projectIsDesignSystemProject, skills, designTemplates, project.skillId, t]);
-
-  const activeDesignSystemSummary = useMemo(() => {
-    if (!projectDesignSystemId) return null;
-    return designSystems.find((d) => d.id === projectDesignSystemId) ?? null;
-  }, [designSystems, projectDesignSystemId]);
-
-  const designSystemProject = useMemo(() => {
-    if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
-    return designSystems.find((d) => d.id === projectDesignSystemId)
-      ?? fallbackDesignSystemSummaryForProject(currentProject, projectDesignSystemId);
-  }, [
-    currentProject,
-    designSystems,
-    projectDesignSystemId,
-    projectIsDesignSystemProject,
-  ]);
-  const designSystemProjectFromRegistry = useMemo(() => {
-    if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
-    return designSystems.find((d) => d.id === projectDesignSystemId) ?? null;
-  }, [designSystems, projectDesignSystemId, projectIsDesignSystemProject]);
-  useEffect(() => {
-    if (!projectIsDesignSystemProject || !projectDesignSystemId) {
-      missingDesignSystemRefreshRef.current = null;
-      return;
-    }
-    if (designSystemProjectFromRegistry) {
-      missingDesignSystemRefreshRef.current = null;
-      return;
-    }
-    if (missingDesignSystemRefreshRef.current === projectDesignSystemId) return;
-    missingDesignSystemRefreshRef.current = projectDesignSystemId;
-    void Promise.resolve(onDesignSystemsRefresh?.()).catch((err) => {
-      missingDesignSystemRefreshRef.current = null;
-      console.warn('[design-system] failed to refresh missing project design system', err);
-    });
-  }, [
-    designSystemProjectFromRegistry,
-    onDesignSystemsRefresh,
-    projectDesignSystemId,
-    projectIsDesignSystemProject,
-  ]);
   useEffect(() => {
     const pending = pendingBrandDesignSystemOpenRef.current;
     if (!pending || designSystemProject?.id !== pending) return;

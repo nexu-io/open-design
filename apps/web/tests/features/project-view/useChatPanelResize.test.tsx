@@ -103,6 +103,9 @@ function makeHarness(savedWidth = 460): Harness {
     waitGeneratedPluginShareTask: vi.fn(async () => {
       throw new Error('not implemented in this fake');
     }),
+    finalizeBrandProject: vi.fn(async () => ({ ok: true as const, result: {} as never })),
+    fetchDesignSystemPackageAudit: vi.fn(async () => null),
+    patchProjectDesignSystemId: vi.fn(async () => {}),
     },
   };
   return harness;

@@ -4,6 +4,7 @@
 import type { CSSProperties } from 'react';
 import type { ChatAttachment, ChatCommentAttachment, ChatMessage, ProjectMetadata } from '../../types';
 import type {
+  BrandFinalizeResponse,
   ChatAnalyticsEntryFrom,
   ChatRunStatusResponse,
   ChatSessionMode,
@@ -185,3 +186,11 @@ export interface PluginShareTaskSnapshot {
   result?: PluginShareTaskResult;
   error?: PluginShareTaskError;
 }
+
+/** Result of finalizing a brand project into its derived design-system kit,
+ *  as returned by `finalizeBrandProject`. A direct structural mirror of
+ *  `runtime/brands`' `ExtractBrandFromHtmlOutcome` (kept in-slice per ADR
+ *  0002 — the guard forbids a slice file importing that module directly). */
+export type FinalizeBrandProjectOutcome =
+  | { ok: true; result: BrandFinalizeResponse }
+  | { ok: false; error: string };
