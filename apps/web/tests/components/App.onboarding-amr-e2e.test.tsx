@@ -26,7 +26,8 @@ import {
   fetchSkills,
 } from '../../src/providers/registry';
 import { fetchAmrModels } from '../../src/providers/daemon';
-import { listProjects, listTemplates } from '../../src/state/projects';
+import { listProjects } from '../../src/state/projects';
+import { listTemplates } from '../../src/providers/templates';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 
@@ -80,7 +81,14 @@ vi.mock('../../src/state/projects', async () => {
   const actual = await vi.importActual<typeof import('../../src/state/projects')>(
     '../../src/state/projects',
   );
-  return { ...actual, listProjects: vi.fn(), listTemplates: vi.fn() };
+  return { ...actual, listProjects: vi.fn() };
+});
+
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
+  );
+  return { ...actual, listTemplates: vi.fn() };
 });
 
 // Keep the REAL mergeDaemonConfig/loadConfig logic; only stub the network

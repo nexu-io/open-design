@@ -22,7 +22,8 @@ import {
   fetchPromptTemplates,
   fetchSkills,
 } from '../../src/providers/registry';
-import { listProjects, listTemplates } from '../../src/state/projects';
+import { listProjects } from '../../src/state/projects';
+import { listTemplates } from '../../src/providers/templates';
 
 const useRouteMock = vi.fn(() => ({ kind: 'home' as const, view: 'home' as const }));
 
@@ -152,6 +153,15 @@ vi.mock('../../src/state/projects', async () => {
   return {
     ...actual,
     listProjects: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
+  );
+  return {
+    ...actual,
     listTemplates: vi.fn(),
   };
 });

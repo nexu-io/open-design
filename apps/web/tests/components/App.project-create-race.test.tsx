@@ -30,9 +30,9 @@ import {
   deleteProject,
   getProject,
   listProjects,
-  listTemplates,
   patchProject,
 } from '../../src/state/projects';
+import { listTemplates } from '../../src/providers/templates';
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
@@ -222,8 +222,17 @@ vi.mock('../../src/state/projects', async () => {
     deleteProject: vi.fn(),
     getProject: vi.fn(),
     listProjects: vi.fn(),
-    listTemplates: vi.fn(),
     patchProject: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/templates', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/templates')>(
+    '../../src/providers/templates',
+  );
+  return {
+    ...actual,
+    listTemplates: vi.fn(),
   };
 });
 

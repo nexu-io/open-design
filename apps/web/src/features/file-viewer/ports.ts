@@ -2,6 +2,7 @@
 // it owns. The slice depends on this port, never on `providers/` directly; a
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks.
+import type { ProjectTemplate } from '@open-design/contracts';
 import type { DocumentPreview } from './types';
 
 /** Transport the read-only document preview viewer needs. */
@@ -32,4 +33,13 @@ export interface ProjectFilesPort {
 export interface DismissPort {
   subscribeOutsideDismiss(getContainer: () => HTMLElement | null, onDismiss: () => void): () => void;
   subscribeOutsidePointerDismiss(getContainer: () => HTMLElement | null, onDismiss: () => void): () => void;
+}
+
+/** Transport the "Save as template" flow needs to snapshot the project. */
+export interface TemplateSavePort {
+  saveTemplate(input: {
+    name: string;
+    description?: string;
+    sourceProjectId: string;
+  }): Promise<ProjectTemplate | null>;
 }

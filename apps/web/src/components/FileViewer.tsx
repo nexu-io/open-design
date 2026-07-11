@@ -119,7 +119,6 @@ import {
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
 import { resolvePoweredPreviewUrl } from '../runtime/powered-preview';
-import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
   LiveArtifact,
@@ -273,6 +272,7 @@ import {
   CommentSideDock,
   PreviewViewportControls,
   FileVersionViewportControls,
+  useWiredTemplateSave,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -2894,16 +2894,19 @@ function HtmlViewer({
   const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
-  const [savingTemplate, setSavingTemplate] = useState(false);
-  const [templateNote, setTemplateNote] = useState<string | null>(null);
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [templateName, setTemplateName] = useState('');
+  const templateSave = useWiredTemplateSave({
+    projectId,
+    projectKind,
+    fileName: file.name,
+    fileKind: file.kind ?? null,
+    t,
+    analytics,
+    closeDownloadMenu: () => setDownloadMenuOpen(false),
+  });
 
   useEffect(() => {
     setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
   }, [fileViewportKey]);
-  const [templateDescription, setTemplateDescription] = useState('');
-  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
   const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const [deployModalOpen, setDeployModalOpen] = useState(false);
@@ -3191,8 +3194,6 @@ function HtmlViewer({
   // a new file never inherits the previous file's routing predicates.
   const lastGoodSourceForRoutingRef = useRef<string | null>(null);
   const sourceFileKeyRef = useRef<string | null>(null);
-  const templateNameId = useId();
-  const templateDescriptionId = useId();
   const imageExportTitleId = useId();
   const pptxExportTitleId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
@@ -3287,7 +3288,6 @@ function HtmlViewer({
     };
   }, [boardImages]);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
-  const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
   const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
   const [versionRestoredToast, setVersionRestoredToast] = useState<{ id: number; message: string } | null>(null);
@@ -3307,14 +3307,6 @@ function HtmlViewer({
   // session (reset in openImageExportModal) resolves to exactly one
   // success / failed / cancelled, no matter which exit path runs.
   const imageExportResolvedRef = useRef(false);
-  // Same click→result correlation for Save as template, which now reports the
-  // export result only after the template is actually saved (not on open).
-  const templateExportRequestIdRef = useRef<string | null>(null);
-  const templateExportStartedRef = useRef(0);
-  // Same one-terminal-result guard as image export: a template session
-  // (reset in openSaveAsTemplateModal) emits exactly one success/failed/
-  // cancelled, whether it ends in a save or a modal dismiss.
-  const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
   const imageExportInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
@@ -5528,113 +5520,6 @@ function HtmlViewer({
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
     });
-  }
-
-  // Snapshot this project as a reusable template. The daemon snapshots
-  // EVERY html/text/code file in the project (not just the file open in
-  // the viewer), so the template captures the whole design, not a single
-  // page. Surfaced here in the Download menu because templates are saved
-  // from the same artifact output surface as files.
-  function openSaveAsTemplateModal() {
-    setDownloadMenuOpen(false);
-    // Start the template click→result correlation; the result fires later from
-    // handleSaveAsTemplate once the save actually resolves.
-    const requestId = analytics.newRequestId();
-    templateExportRequestIdRef.current = requestId;
-    templateExportStartedRef.current = performance.now();
-    templateExportResolvedRef.current = false;
-    trackShareOptionPopoverClick(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        element: 'template',
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
-    const defaultName =
-      file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
-    setTemplateName(defaultName);
-    setTemplateDescription('');
-    setTemplateSaveError(null);
-    setTemplateModalOpen(true);
-  }
-
-  // Component-scoped so both the save flow and the modal Cancel button emit
-  // the one terminal result for a template export session.
-  const fireTemplateExportResult = (
-    result: 'success' | 'failed' | 'cancelled',
-    errorCode?: string,
-  ) => {
-    if (templateExportResolvedRef.current) return;
-    templateExportResolvedRef.current = true;
-    const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
-    const started = templateExportStartedRef.current || performance.now();
-    trackArtifactExportResult(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        export_format: 'template',
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        export_duration_ms: Math.round(performance.now() - started),
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
-    // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL template
-    // export closes the loop. Project-scoped no-op unless started from Home.
-    if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
-  };
-
-  async function handleSaveAsTemplate() {
-    const name = templateName.trim();
-    if (!name) return;
-    setSavingTemplate(true);
-    setTemplateNote(null);
-    setTemplateSaveError(null);
-    let savedName: string | null = null;
-    // Default to failed; flips to success only when the save resolves. The
-    // finally block reports exactly one artifact_export_result(template),
-    // covering the !tpl branch and any thrown error too.
-    let templateOutcome: 'success' | 'failed' = 'failed';
-    let templateErrorCode: string | undefined = 'UNKNOWN';
-    try {
-      const tpl = await saveTemplate({
-        name,
-        description: templateDescription.trim() || undefined,
-        sourceProjectId: projectId,
-      });
-      if (!tpl) {
-        setTemplateSaveError(t('fileViewer.savedTemplateFail'));
-        templateErrorCode = 'SAVE_FAILED';
-        return;
-      }
-      savedName = tpl.name;
-      setTemplateModalOpen(false);
-      setTemplateName('');
-      setTemplateDescription('');
-      setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
-      // Show success toast
-      setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
-      templateOutcome = 'success';
-      templateErrorCode = undefined;
-    } finally {
-      setSavingTemplate(false);
-      fireTemplateExportResult(templateOutcome, templateErrorCode);
-      if (savedName) {
-        // Auto-clear the note so the menu doesn't keep stale state next open.
-        setTimeout(() => setTemplateNote(null), 4000);
-      }
-    }
   }
 
   async function openDeployModal(
@@ -7966,17 +7851,17 @@ function HtmlViewer({
                     type="button"
                     className="share-menu-item"
                     role="menuitem"
-                    disabled={savingTemplate}
+                    disabled={templateSave.savingTemplate}
                     onClick={() => {
-                      openSaveAsTemplateModal();
+                      templateSave.openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
                     <span>
-                      {savingTemplate
+                      {templateSave.savingTemplate
                         ? t('fileViewer.savingTemplate')
-                        : templateNote
-                          ? templateNote
+                        : templateSave.templateNote
+                          ? templateSave.templateNote
                           : t('fileViewer.saveAsTemplate')}
                     </span>
                   </button>
@@ -8197,12 +8082,12 @@ function HtmlViewer({
                   />
                 </div>
               ) : null}
-              {templateSavedToast ? (
+              {templateSave.templateSavedToast ? (
                 <div className="comment-toast-anchor">
                   <Toast
-                    message={templateSavedToast}
+                    message={templateSave.templateSavedToast}
                     ttlMs={2200}
-                    onDismiss={() => setTemplateSavedToast(null)}
+                    onDismiss={() => templateSave.dismissTemplateSavedToast()}
                   />
                 </div>
               ) : null}
@@ -8531,7 +8416,7 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {templateModalOpen && typeof document !== 'undefined' ? createPortal(
+      {templateSave.templateModalOpen && typeof document !== 'undefined' ? createPortal(
         <div className="modal-backdrop viewer-modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
@@ -8540,40 +8425,36 @@ function HtmlViewer({
               <p className="subtitle">{t('fileViewer.templateDescPrompt')}</p>
             </div>
             <div className="deploy-form">
-              <label className="field" htmlFor={templateNameId}>
+              <label className="field" htmlFor={templateSave.templateNameId}>
                 <span className="field-label">{t('fileViewer.templateNamePrompt')}</span>
                 <input
-                  id={templateNameId}
+                  id={templateSave.templateNameId}
                   type="text"
-                  value={templateName}
+                  value={templateSave.templateName}
                   placeholder={t('fileViewer.templateNameDefault')}
                   autoFocus
-                  onChange={(e) => setTemplateName(e.target.value)}
+                  onChange={(e) => templateSave.setTemplateName(e.target.value)}
                 />
               </label>
-              <label className="field" htmlFor={templateDescriptionId}>
+              <label className="field" htmlFor={templateSave.templateDescriptionId}>
                 <span className="field-label">{t('fileViewer.templateDescPrompt')}</span>
                 <textarea
-                  id={templateDescriptionId}
+                  id={templateSave.templateDescriptionId}
                   rows={3}
-                  value={templateDescription}
+                  value={templateSave.templateDescription}
                   placeholder={t('fileViewer.optional')}
-                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  onChange={(e) => templateSave.setTemplateDescription(e.target.value)}
                 />
               </label>
-              {templateSaveError ? <p className="deploy-error">{templateSaveError}</p> : null}
+              {templateSave.templateSaveError ? <p className="deploy-error">{templateSave.templateSaveError}</p> : null}
             </div>
             <div className="modal-foot">
               <button
                 type="button"
                 className="ghost-link button-like"
-                disabled={savingTemplate}
+                disabled={templateSave.savingTemplate}
                 onClick={() => {
-                  // Dismissed without saving — close the ui_click(template)→
-                  // result funnel as cancelled.
-                  fireTemplateExportResult('cancelled', 'MODAL_DISMISSED');
-                  setTemplateModalOpen(false);
-                  setTemplateSaveError(null);
+                  templateSave.cancelSaveAsTemplateModal();
                 }}
               >
                 {t('common.cancel')}
@@ -8581,12 +8462,12 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
-                disabled={savingTemplate || !templateName.trim()}
+                disabled={templateSave.savingTemplate || !templateSave.templateName.trim()}
                 onClick={() => {
-                  void handleSaveAsTemplate();
+                  void templateSave.handleSaveAsTemplate();
                 }}
               >
-                {savingTemplate ? t('fileViewer.savingTemplate') : t('common.save')}
+                {templateSave.savingTemplate ? t('fileViewer.savingTemplate') : t('common.save')}
               </button>
             </div>
           </div>
