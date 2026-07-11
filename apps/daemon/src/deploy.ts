@@ -2417,7 +2417,7 @@ function displayDevError(json: JsonObject, status: number) {
 function displayDevApiErrorCodeForStatus(status: number) {
   if (status === 401) return 'UNAUTHORIZED';
   if (status === 403) return 'FORBIDDEN';
-  if (status === 409 || status === 412) return 'CONFLICT';
+  if (status === 409 || status === 412 || status === 428) return 'CONFLICT';
   if (status === 413) return 'PAYLOAD_TOO_LARGE';
   if (status === 422) return 'VALIDATION_FAILED';
   if (status === 429) return 'RATE_LIMITED';

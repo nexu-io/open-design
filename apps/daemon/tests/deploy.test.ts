@@ -1431,7 +1431,7 @@ describe('deployToDisplayDev', () => {
     expect(calls[1]?.body?.get('showBranding')).toBeNull();
   });
 
-  it('maps stale display.dev owned update responses to conflict', async () => {
+  it.each([412, 428])('maps stale display.dev owned update %s responses to conflict', async (status) => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -1457,7 +1457,7 @@ describe('deployToDisplayDev', () => {
         return new Response(JSON.stringify({
           message: 'Republishing requires a base version.',
         }), {
-          status: 412,
+          status,
           headers: { 'content-type': 'application/json' },
         });
       }
@@ -1476,7 +1476,7 @@ describe('deployToDisplayDev', () => {
         },
       },
     })).rejects.toMatchObject({
-      status: 412,
+      status,
       code: 'CONFLICT',
       message: 'Republishing requires a base version.',
     });
