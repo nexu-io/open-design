@@ -30,3 +30,9 @@ export {
 export { copyTextToClipboard } from './clipboard';
 export { subscribeCapturedKeyDown } from './keyboard-shortcuts';
 export { patchProjectMetadata } from './patch-project-metadata';
+export {
+  listConversations,
+  createConversation,
+  patchConversation,
+  deleteConversation,
+} from './conversations';

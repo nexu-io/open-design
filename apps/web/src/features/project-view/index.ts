@@ -165,3 +165,8 @@ export {
   useDesignSystemReview,
   useWiredDesignSystemReview,
 } from './hooks/useDesignSystemReview.hooks';
+export type { ConversationManagementController } from './hooks/useConversationManagement.hooks';
+export {
+  useConversationManagement,
+  useWiredConversationManagement,
+} from './hooks/useConversationManagement.hooks';

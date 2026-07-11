@@ -4,13 +4,14 @@
 // fake — no global `fetch` mocking, no module-path mocks (ADR 0002).
 import type {
   AppliedPluginSnapshot,
+  ChatSessionMode,
   ExtractMemoryRequest,
   InstalledPluginRecord,
   PluginDuplicateProjectResponse,
   ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
-import type { ChatAttachment } from '../../types';
+import type { ChatAttachment, ChatMessage, Conversation } from '../../types';
 import type { ChatPanelPointerDragHandlers, QueuedChatSend } from './types';
 
 /** Transport the project-view orchestrator needs from the outside world. */
@@ -71,4 +72,27 @@ export interface ProjectViewTransportPort {
   subscribeCapturedKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
   /** Persist a project's `metadata` field. Best-effort: never rejects. */
   patchProjectMetadata(projectId: string, metadata: ProjectMetadata): Promise<void>;
+  /** List a project's conversations. Best-effort: resolves `[]` on failure. */
+  listConversations(projectId: string): Promise<Conversation[]>;
+  /** Create a conversation, optionally seeded from a fork point. Best-effort:
+   *  resolves `null` on failure. */
+  createConversation(
+    projectId: string,
+    title?: string,
+    opts?: {
+      seedFromConversationId?: string | null;
+      forkAfterMessageId?: string | null;
+      sessionMode?: ChatSessionMode;
+      seedMessages?: ChatMessage[];
+    },
+  ): Promise<Conversation | null>;
+  /** Patch a conversation (title/sessionMode/etc). Best-effort: resolves
+   *  `null` on failure. */
+  patchConversation(
+    projectId: string,
+    conversationId: string,
+    patch: Partial<Conversation>,
+  ): Promise<Conversation | null>;
+  /** Delete a conversation. Resolves `false` on failure. */
+  deleteConversation(projectId: string, conversationId: string): Promise<boolean>;
 }

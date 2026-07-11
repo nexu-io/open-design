@@ -137,7 +137,6 @@ import {
 } from '../design-system-auto-prompt';
 import {
   createConversation,
-  deleteConversation as deleteConversationApi,
   installGeneratedPluginFolder,
   listConversations,
   listMessages,
@@ -250,7 +249,6 @@ import {
   SPLIT_RESIZE_HANDLE_WIDTH,
   mergeSavedPreviewComment,
   mergeServerMessagesIntoConversation,
-  ensureConversationPresent,
   projectSplitClassName,
   projectSplitStyle,
   buildQuestionFormKey,
@@ -262,6 +260,7 @@ import {
   useProjectActions,
   useShareToOpenDesign,
   useWiredDesignSystemReview,
+  useWiredConversationManagement,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -707,7 +706,6 @@ export function ProjectView({
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
   const [activePluginActionPaths, setActivePluginActionPaths] = useState<Set<string>>(() => new Set());
   const [hiddenAssistantPluginActionPaths, setHiddenAssistantPluginActionPaths] = useState<Set<string>>(() => new Set());
   const [forceStreamingPluginMessageIds, setForceStreamingPluginMessageIds] = useState<Set<string>>(() => new Set());
@@ -990,7 +988,6 @@ export function ProjectView({
   // Track which conversation the current messages belong to, so we can
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
-  const creatingConversationRef = useRef(false);
   // Last conversation id this view pushed into the URL. Lets the
   // route -> active-conversation sync tell a genuine external navigation
   // apart from the URL merely lagging a local conversation switch.
@@ -1023,7 +1020,6 @@ export function ProjectView({
   // still equals `conversationsRefreshTokenRef.current` at await-return is
   // allowed to apply its result.
   const conversationsRefreshTokenRef = useRef(0);
-  const [creatingConversation, setCreatingConversation] = useState(false);
   const currentConversationHasProgrammaticBrandExtractionRun = useMemo(
     () => messages.some((m) => isProgrammaticBrandExtractionStatusMessage(m, currentProject.metadata)),
     [messages, currentProject.metadata],
@@ -1212,7 +1208,6 @@ export function ProjectView({
           return { ...queuedItem, meta: item.meta };
         })
     : [];
-  const newConversationDisabled = creatingConversation;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -5899,250 +5894,44 @@ export function ProjectView({
     handleSend,
   );
 
-  const handleNewConversation = useCallback(async () => {
-    if (creatingConversationRef.current) return;
-    // Only block if we're sure the current conversation is empty:
-    // messages must be loaded AND match the active conversation.
-    if (
-      messagesConversationIdRef.current === activeConversationId &&
-      messages.length === 0
-    ) {
-      return;
-    }
-    creatingConversationRef.current = true;
-    setCreatingConversation(true);
-    setConversationLoadError(null);
-    try {
-      const fresh = await createConversation(project.id);
-      if (!fresh) throw new Error('Could not create a conversation for this project.');
-      // Eagerly clear messages and update ref so rapid clicks don't create
-      // duplicate empty conversations before the effect resolves.
-      setMessages([]);
-      setStreaming(false);
-      streamingConversationIdRef.current = null;
-      setStreamingConversationId(null);
-      setMessagesConversationId(null);
-      messagesConversationIdRef.current = fresh.id;
-      setConversations((curr) => [fresh, ...curr]);
-      setActiveConversationId(fresh.id);
-      // Push the new conversation id into the URL synchronously so the
-      // route-sync effect sees a matching `routeConversationId` before
-      // it can revert `activeConversationId`. Without this, the route-sync
-      // effect can fight the conversation switch, preventing users from
-      // switching back to older conversations after creating a new one.
-      navigate(
-        {
-          kind: 'project',
-          projectId: project.id,
-          conversationId: fresh.id,
-          fileName: openTabsState.active ?? null,
-        },
-        { replace: true },
-      );
-      setError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
-      setConversationLoadError(message);
-      setError(message);
-    } finally {
-      creatingConversationRef.current = false;
-      setCreatingConversation(false);
-    }
-  }, [project.id, activeConversationId, messages.length, navigate, openTabsState.active]);
-
-  const handleSelectConversation = useCallback((id: string) => {
-    if (id === activeConversationId && failedMessagesConversationId !== id) return;
-    setMessages([]);
-    setPreviewComments([]);
-    setAttachedComments([]);
-    setArtifact(null);
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
-    setMessagesConversationId(null);
-    setFailedMessagesConversationId(null);
-    setConversationLoadError(null);
-    messagesConversationIdRef.current = null;
-    setActiveConversationId(id);
-    // Push the new conversation id into the URL synchronously so the
-    // route-sync effect at L512 sees a matching `routeConversationId`
-    // before it can find the previous conversation in the list and
-    // revert `activeConversationId` to it. Without this, the same
-    // effect that fights handleNewConversation also fights chat
-    // switching, ping-ponging until React's nested-update guard fires.
-    navigate(
-      {
-        kind: 'project',
-        projectId: project.id,
-        conversationId: id,
-        fileName: openTabsState.active ?? null,
-      },
-      { replace: true },
-    );
-    setMessageLoadRetryNonce((nonce) => nonce + 1);
-  }, [activeConversationId, failedMessagesConversationId, project.id, openTabsState.active]);
-
-  const refreshConversationsForProgrammaticBrandRetry = useCallback(
-    async (conversationId: string): Promise<boolean> => {
-      const capturedProjectId = project.id;
-      const myToken = ++conversationsRefreshTokenRef.current;
-      try {
-        const list = await listConversations(capturedProjectId);
-        if (projectIdRef.current !== capturedProjectId) return false;
-        if (conversationsRefreshTokenRef.current !== myToken) return false;
-        setConversations(ensureConversationPresent(list, conversationId, capturedProjectId));
-        return true;
-      } catch (err) {
-        if (projectIdRef.current !== capturedProjectId) return false;
-        if (conversationsRefreshTokenRef.current !== myToken) return false;
-        console.warn('Failed to refresh conversations after brand extraction retry', err);
-        setConversations((curr) =>
-          ensureConversationPresent(curr, conversationId, capturedProjectId),
-        );
-        return true;
-      }
-    },
-    [project.id],
-  );
-
-  const handleDeleteConversation = useCallback(
-    async (id: string) => {
-      const ok = await deleteConversationApi(project.id, id);
-      if (!ok) return;
-      // The deleted conversation may have owned an unanswered
-      // `<question-form>`, which the daemon counts toward the project's
-      // `needsInput` flag in `/api/projects`. Home cards render that
-      // flag from the cached projects payload, so without refreshing
-      // it here the `Needs input` badge survives the deletion until
-      // the next manual reload.
-      onProjectsRefresh();
-      setConversations((curr) => {
-        const next = curr.filter((c) => c.id !== id);
-        if (next.length === 0) {
-          // Re-seed so the project always has at least one conversation
-          // to write into.
-          void createConversation(project.id).then((fresh) => {
-            if (fresh) {
-              setConversations([fresh]);
-              setActiveConversationId(fresh.id);
-            }
-          });
-        } else if (id === activeConversationId) {
-          setActiveConversationId(next[0]!.id);
-        }
-        return next;
-      });
-    },
-    [project.id, activeConversationId, onProjectsRefresh],
-  );
-
-  const handleRenameConversation = useCallback(
-    async (id: string, title: string) => {
-      const trimmed = title.trim() || null;
-      setConversations((curr) =>
-        curr.map((c) => (c.id === id ? { ...c, title: trimmed } : c)),
-      );
-      await patchConversation(project.id, id, { title: trimmed });
-    },
-    [project.id],
-  );
-
-  const handleConversationSessionModeChange = useCallback(
-    async (id: string, sessionMode: ChatSessionMode) => {
-      setConversations((curr) =>
-        curr.map((conversation) =>
-          conversation.id === id ? { ...conversation, sessionMode } : conversation,
-        ),
-      );
-      const updated = await patchConversation(project.id, id, { sessionMode });
-      if (updated) {
-        setConversations((curr) =>
-          curr.map((conversation) =>
-            conversation.id === id ? { ...conversation, ...updated } : conversation,
-          ),
-        );
-      }
-    },
-    [project.id],
-  );
-
-  const handleActiveConversationSessionModeChange = useCallback(
-    (sessionMode: ChatSessionMode) => {
-      if (!activeConversationId) return;
-      void handleConversationSessionModeChange(activeConversationId, sessionMode);
-    },
-    [activeConversationId, handleConversationSessionModeChange],
-  );
-
-  const handleForkFromMessage = useCallback(
-    async (assistantMessage: ChatMessage) => {
-      if (!activeConversationId || forkingMessageId) return;
-      setForkingMessageId(assistantMessage.id);
-      setConversationLoadError(null);
-      try {
-        const sourceTitle = activeConversation?.title?.trim();
-        const forkTitle = sourceTitle
-          ? t('chat.forkedConversationTitle', { title: sourceTitle })
-          : undefined;
-        // Seed the fork from the messages the user is actually looking at,
-        // up to and including the fork point. A run that errored or had its
-        // connection reset before its assistant message was persisted leaves
-        // that message in memory only; copying from the database by id would
-        // 404 and silently drop the fork. Sending the in-memory snapshot makes
-        // the fork resilient to that gap.
-        const forkIndex = messages.findIndex((m) => m.id === assistantMessage.id);
-        const seedMessages =
-          forkIndex >= 0 ? messages.slice(0, forkIndex + 1) : [...messages, assistantMessage];
-        const fresh = await createConversation(project.id, forkTitle, {
-          seedFromConversationId: activeConversationId,
-          forkAfterMessageId: assistantMessage.id,
-          sessionMode: activeSessionMode,
-          seedMessages,
-        });
-        if (!fresh) throw new Error(t('chat.forkConversationFailed'));
-        setMessages([]);
-        setPreviewComments([]);
-        setAttachedComments([]);
-        setArtifact(null);
-        setStreaming(false);
-        streamingConversationIdRef.current = null;
-        setStreamingConversationId(null);
-        setMessagesConversationId(null);
-        messagesConversationIdRef.current = null;
-        setFailedMessagesConversationId(null);
-        setConversations((curr) => [fresh, ...curr.filter((c) => c.id !== fresh.id)]);
-        setActiveConversationId(fresh.id);
-        navigate(
-          {
-            kind: 'project',
-            projectId: project.id,
-            conversationId: fresh.id,
-            fileName: openTabsState.active ?? null,
-          },
-          { replace: true },
-        );
-        onProjectsRefresh();
-        setError(null);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : t('chat.forkConversationFailed');
-        setConversationLoadError(message);
-        setError(message);
-      } finally {
-        setForkingMessageId(null);
-      }
-    },
-    [
-      activeConversationId,
-      activeConversation?.title,
-      activeSessionMode,
-      forkingMessageId,
-      messages,
-      navigate,
-      onProjectsRefresh,
-      openTabsState.active,
-      project.id,
-      t,
-    ],
+  const {
+    creatingConversation,
+    forkingMessageId,
+    handleNewConversation,
+    handleSelectConversation,
+    refreshConversationsForProgrammaticBrandRetry,
+    handleDeleteConversation,
+    handleRenameConversation,
+    handleConversationSessionModeChange,
+    handleActiveConversationSessionModeChange,
+    handleForkFromMessage,
+  } = useWiredConversationManagement(
+    project.id,
+    activeConversationId,
+    setConversations,
+    setActiveConversationId,
+    failedMessagesConversationId,
+    setFailedMessagesConversationId,
+    messages,
+    setMessages,
+    messagesConversationIdRef,
+    setMessagesConversationId,
+    setStreaming,
+    streamingConversationIdRef,
+    setStreamingConversationId,
+    setPreviewComments,
+    setAttachedComments,
+    setArtifact,
+    setConversationLoadError,
+    setError,
+    setMessageLoadRetryNonce,
+    activeConversation?.title,
+    activeSessionMode,
+    openTabsState.active,
+    onProjectsRefresh,
+    projectIdRef,
+    conversationsRefreshTokenRef,
+    t,
   );
 
   const handleProjectRename = useCallback(
@@ -7153,7 +6942,7 @@ export function ProjectView({
               onForkFromMessage={handleForkFromMessage}
               forkingMessageId={forkingMessageId}
               onNewConversation={handleNewConversation}
-              newConversationDisabled={newConversationDisabled}
+              newConversationDisabled={creatingConversation}
               conversations={conversations}
               activeConversationId={activeConversationId}
               messagesConversationId={messagesConversationId}

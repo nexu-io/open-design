@@ -26,6 +26,10 @@ import {
   copyTextToClipboard,
   subscribeCapturedKeyDown,
   patchProjectMetadata,
+  listConversations,
+  createConversation,
+  patchConversation,
+  deleteConversation,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -54,4 +58,8 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   copyTextToClipboard,
   subscribeCapturedKeyDown,
   patchProjectMetadata,
+  listConversations,
+  createConversation,
+  patchConversation,
+  deleteConversation,
 };
