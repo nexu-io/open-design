@@ -90,9 +90,7 @@ import {
   apiProtocolModelLabel,
   usesAnthropicProxy,
 } from '../utils/apiProtocol';
-import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent, removeErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
@@ -263,6 +261,7 @@ import {
   useWiredDesignSystemReview,
   useWiredConversationManagement,
   useProjectTimeouts,
+  useWiredRunCompletionNotifications,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
   workspaceContextItemsEqual,
@@ -1079,8 +1078,6 @@ export function ProjectView({
           return { ...queuedItem, meta: item.meta };
         })
     : [];
-  const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
-  const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
   // Load conversations on project switch. If none exist (older projects
   // pre-conversations, or a freshly created one whose default seed got
@@ -1310,70 +1307,12 @@ export function ProjectView({
     reattachTextBuffersRef.current.clear();
   }, []);
 
-  const notifyCompletedRun = useCallback((last: ChatMessage) => {
-    // Round 7 (mrcfps @ useDesignMdState.ts:131): a chat turn just
-    // settled — conversation updatedAt almost certainly moved, so
-    // recompute DESIGN.md staleness even when the turn produced no
-    // file mutations or live artifacts.
-    setDesignMdRefreshKey((n) => n + 1);
-
-    const status = last.runStatus;
-    if (status !== 'succeeded' && status !== 'failed') return;
-
-    const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
-    if (cfg.soundEnabled) {
-      playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
-    }
-
-    if (cfg.desktopEnabled) {
-      // Successes only interrupt when the user is on another tab/window.
-      // Failures alert regardless — losing a long agent run silently is
-      // worse than a small interruption when the page is in focus.
-      const isHidden = typeof document !== 'undefined' && document.hidden;
-      const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (status === 'failed' || isHidden || !isFocused) {
-        const title = status === 'succeeded'
-          ? t('notify.successTitle')
-          : t('notify.failureTitle');
-        const fallbackBody = status === 'succeeded'
-          ? t('notify.successBody')
-          : t('notify.failureBody');
-        const trimmed = (last.content ?? '').trim();
-        const body = trimmed ? trimmed.slice(0, 80) : fallbackBody;
-        void showCompletionNotification({
-          status,
-          title,
-          body,
-          onClick: () => {
-            if (typeof window !== 'undefined') window.focus();
-          },
-        });
-      }
-    }
-  }, [config.notifications, t]);
-
-  // Fire completion feedback from assistant run-status transitions rather than
-  // from the local SSE listener state. A run can finish while its conversation
-  // is detached; when the user returns, the terminal status should still produce
-  // the one completion notification for runs this view previously saw active.
-  useEffect(() => {
-    const completedMessages: ChatMessage[] = [];
-    for (const message of messages) {
-      if (message.role !== 'assistant') continue;
-      const keys = message.runId ? [message.runId, message.id] : [message.id];
-      if (isActiveRunStatus(message.runStatus)) {
-        for (const key of keys) activeCompletionNotificationRunsRef.current.add(key);
-        continue;
-      }
-      if (message.runStatus !== 'succeeded' && message.runStatus !== 'failed') continue;
-      if (!keys.some((key) => activeCompletionNotificationRunsRef.current.has(key))) continue;
-      if (keys.some((key) => completedNotificationRunsRef.current.has(key))) continue;
-      for (const key of keys) completedNotificationRunsRef.current.add(key);
-      completedMessages.push(message);
-    }
-
-    for (const message of completedMessages) notifyCompletedRun(message);
-  }, [messages, notifyCompletedRun]);
+  const { activeCompletionNotificationRunsRef } = useWiredRunCompletionNotifications(
+    messages,
+    config.notifications,
+    t,
+    () => setDesignMdRefreshKey((n) => n + 1),
+  );
 
   // Hydrate the open-tabs state once per project. After this initial
   // load, every mutation flows through saveTabsState() which keeps DB +

@@ -81,7 +81,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/hooks/useRunCompletionNotifications.hooks.ts` (new).
 - **Shape:** feature hook
 - **Risk:** low
-- **Status:** pending
+- **Status:** done. Landed as `useRunCompletionNotifications(messages, notificationsConfig, t, onRunSettled, port)` + `useWiredRunCompletionNotifications(...)`. `document.hidden`/`document.hasFocus()`/`window.focus()` moved to a new provider bridge `providers/project-view/document-visibility.ts` (`isDocumentHidden`/`isDocumentFocused`/`focusWindow`, added to the port). The hook returns `{ activeCompletionNotificationRunsRef }` since `handleSend` (Cluster 17, not yet extracted) optimistically marks a new assistant message id active before this hook's own effect would observe it — the orchestrator destructures the ref back out. `setDesignMdRefreshKey` is passed in as an `onRunSettled` callback param rather than owned by this hook (that state belongs to `useDesignMdState`, a different pre-existing hook, out of scope for this cluster). `t` is typed `ReturnType<typeof useT>` (not a bare `(key: string) => string`) to match the real i18n `Dict`-keyed signature, and held in a ref per the repo's stated infinite-loop gotcha even though this specific effect's ref-based dedup means it wasn't actually at risk here — cheap to do defensively.
 
 ## 8. Open-tabs state & URL sync
 - **Lines:** 892–947 (`openTabsState`, `headerArtifact` memo, workspace-context state), 1507–1583 (tabs load/save + debounced daemon-persist), 1585–1596 (`handleActiveWorkspaceContextChange`/`handleWorkspaceContextsChange`), 1659–1675 (initial-primary-open effect), 2019–2050 (URL sync effect).

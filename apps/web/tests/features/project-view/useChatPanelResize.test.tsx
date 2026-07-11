@@ -79,6 +79,9 @@ function makeHarness(savedWidth = 460): Harness {
     deleteConversation: vi.fn(async () => true),
     fetchRunStatus: vi.fn(async () => null),
     subscribeBufferedTextFlushTriggers: vi.fn(() => () => {}),
+    isDocumentHidden: vi.fn(() => false),
+    isDocumentFocused: vi.fn(() => true),
+    focusWindow: vi.fn(),
     },
   };
   return harness;

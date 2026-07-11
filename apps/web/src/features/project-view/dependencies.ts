@@ -31,6 +31,9 @@ import {
   patchConversation,
   deleteConversation,
   subscribeBufferedTextFlushTriggers,
+  isDocumentHidden,
+  isDocumentFocused,
+  focusWindow,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -66,4 +69,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   deleteConversation,
   fetchRunStatus: fetchChatRunStatus,
   subscribeBufferedTextFlushTriggers,
+  isDocumentHidden,
+  isDocumentFocused,
+  focusWindow,
 };

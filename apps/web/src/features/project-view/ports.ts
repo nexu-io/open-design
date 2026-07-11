@@ -106,4 +106,10 @@ export interface ProjectViewTransportPort {
   /** Subscribe to the buffered-text-updates flush triggers (tab hidden /
    *  page hide); returns an unsubscribe. */
   subscribeBufferedTextFlushTriggers(handlers: BufferedTextFlushHandlers): () => void;
+  /** Whether the document is currently hidden (backgrounded tab). */
+  isDocumentHidden(): boolean;
+  /** Whether the document currently has focus. */
+  isDocumentFocused(): boolean;
+  /** Focuses the browser window, if one exists. */
+  focusWindow(): void;
 }

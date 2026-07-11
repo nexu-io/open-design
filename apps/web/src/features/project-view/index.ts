@@ -193,3 +193,11 @@ export {
 } from './hooks/useConversationManagement.hooks';
 export type { ProjectTimeoutsController } from './hooks/useProjectTimeouts.hooks';
 export { useProjectTimeouts } from './hooks/useProjectTimeouts.hooks';
+export type {
+  RunCompletionNotificationsConfig,
+  RunCompletionNotificationsController,
+} from './hooks/useRunCompletionNotifications.hooks';
+export {
+  useRunCompletionNotifications,
+  useWiredRunCompletionNotifications,
+} from './hooks/useRunCompletionNotifications.hooks';
