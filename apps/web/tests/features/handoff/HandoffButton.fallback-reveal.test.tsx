@@ -8,20 +8,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { HandoffButton } from '../../src/components/HandoffButton';
-import { I18nProvider } from '../../src/i18n';
+import { HandoffButton } from '../../../src/components/HandoffButton';
+import { I18nProvider } from '../../../src/i18n';
 import type { AgentInfo, HostEditorsResponse } from '@open-design/contracts';
 
 const fetchHostEditors = vi.fn<() => Promise<HostEditorsResponse>>();
 const openProjectInEditor = vi.fn();
 const copyToClipboard = vi.fn();
 
-vi.mock('../../src/providers/registry', () => ({
+vi.mock('../../../src/providers/registry', () => ({
   fetchHostEditors: () => fetchHostEditors(),
   openProjectInEditor: (...args: unknown[]) => openProjectInEditor(...args),
 }));
 
-vi.mock('../../src/lib/copy-to-clipboard', () => ({
+vi.mock('../../../src/lib/copy-to-clipboard', () => ({
   copyToClipboard: (...args: unknown[]) => copyToClipboard(...args),
 }));
 

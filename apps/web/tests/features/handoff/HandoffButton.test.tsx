@@ -4,9 +4,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { HostEditor, HostEditorsResponse } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { HandoffButton } from '../../src/components/HandoffButton';
-import { I18nProvider, type Locale } from '../../src/i18n';
-import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+import { HandoffButton } from '../../../src/components/HandoffButton';
+import { I18nProvider, type Locale } from '../../../src/i18n';
+import { readExpandedIndexCss } from '../../helpers/read-expanded-css';
 
 afterEach(() => {
   cleanup();
