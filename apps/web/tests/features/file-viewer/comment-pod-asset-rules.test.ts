@@ -38,6 +38,7 @@ import {
   humanSize,
   exportReadyNudgeKey,
   fileRawUrl,
+  activeCommentPinStyle,
 } from '../../../src/features/file-viewer/rules';
 import type { PreviewComment } from '../../../src/types';
 import type { PreviewCommentSnapshot } from '../../../src/comments';
@@ -222,6 +223,27 @@ describe('finiteBridgeInteger / clampBridgeCoordinate', () => {
 
   it('rounds a finite value', () => {
     expect(finiteBridgeInteger(4.6)).toBe(5);
+  });
+});
+
+describe('activeCommentPinStyle', () => {
+  it('scales and offsets the hover point when present', () => {
+    const snapshot = makeSnapshot({
+      position: { x: 10, y: 10, width: 100, height: 20 },
+      hoverPoint: { x: 30, y: 40 },
+    });
+    expect(activeCommentPinStyle(snapshot, 2, { x: 5, y: 5 })).toEqual({ left: 65, top: 85 });
+  });
+
+  it('falls back to the snapshot position when there is no hover point', () => {
+    const snapshot = makeSnapshot({ position: { x: 10, y: 20, width: 100, height: 20 } });
+    expect(activeCommentPinStyle(snapshot, 1)).toEqual({ left: 10, top: 20 });
+  });
+
+  it('treats a non-finite or non-positive scale as 1', () => {
+    const snapshot = makeSnapshot({ position: { x: 10, y: 20, width: 100, height: 20 } });
+    expect(activeCommentPinStyle(snapshot, Number.NaN)).toEqual({ left: 10, top: 20 });
+    expect(activeCommentPinStyle(snapshot, 0)).toEqual({ left: 10, top: 20 });
   });
 });
 

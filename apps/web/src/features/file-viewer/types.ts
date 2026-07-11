@@ -141,3 +141,6 @@ export type DocumentPreview = {
 
 /** Which pane the SVG viewer's preview/source toggle shows. */
 export type SvgViewerMode = 'preview' | 'source';
+
+/** The active board interaction mode: inspecting elements, or drawing a pod lasso. */
+export type BoardTool = 'inspect' | 'pod';

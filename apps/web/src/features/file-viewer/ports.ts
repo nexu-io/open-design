@@ -22,3 +22,13 @@ export interface FileTextPort {
 export interface ClipboardPort {
   copyTextToClipboard(text: string): Promise<void>;
 }
+
+/** Transport the React component viewer's sibling-HTML-entry scan needs. */
+export interface ProjectFilesPort {
+  fetchProjectFiles(projectId: string): Promise<Array<{ name: string }>>;
+}
+
+/** Dismiss a popover on an outside pointerdown or Escape (DOM-touching, so a port). */
+export interface DismissPort {
+  subscribeOutsideDismiss(getContainer: () => HTMLElement | null, onDismiss: () => void): () => void;
+}
