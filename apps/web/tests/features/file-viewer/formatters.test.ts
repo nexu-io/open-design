@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatJsonFileTextForDisplay } from '../../../src/features/file-viewer/formatters';
+import { documentMetaLabel, formatJsonFileTextForDisplay } from '../../../src/features/file-viewer/formatters';
+import type { TranslateFn } from '../../../src/features/file-viewer/types';
 import type { ProjectFile } from '../../../src/types';
 
 function file(overrides: Partial<ProjectFile> = {}): ProjectFile {
@@ -15,6 +16,11 @@ function file(overrides: Partial<ProjectFile> = {}): ProjectFile {
     ...overrides,
   };
 }
+
+// A translate stub that echoes the key + any vars so tests can assert which
+// dict entry a formatter chose without depending on the real locale bundle.
+const t: TranslateFn = (key, vars) =>
+  vars ? `${key}:${JSON.stringify(vars)}` : String(key);
 
 describe('formatJsonFileTextForDisplay', () => {
   it('returns the text untouched for a non-JSON file', () => {
@@ -83,5 +89,29 @@ describe('formatJsonFileTextForDisplay', () => {
   it('handles escaped quotes inside strings without desyncing the scanner', () => {
     const out = formatJsonFileTextForDisplay(file(), '{"s": "a \\" -0 b", "n": 2}');
     expect(out).toBe('{\n  "s": "a \\" -0 b",\n  "n": 2\n}');
+  });
+});
+
+describe('documentMetaLabel', () => {
+  it('picks the pdf label', () => {
+    expect(documentMetaLabel(file({ kind: 'pdf' }), t)).toBe('fileViewer.pdfMeta');
+  });
+
+  it('picks the document label', () => {
+    expect(documentMetaLabel(file({ kind: 'document' }), t)).toBe('fileViewer.documentMeta');
+  });
+
+  it('picks the presentation label', () => {
+    expect(documentMetaLabel(file({ kind: 'presentation' }), t)).toBe('fileViewer.presentationMeta');
+  });
+
+  it('picks the spreadsheet label', () => {
+    expect(documentMetaLabel(file({ kind: 'spreadsheet' }), t)).toBe('fileViewer.spreadsheetMeta');
+  });
+
+  it('falls back to the binary label (human-readable size) for any other kind', () => {
+    expect(documentMetaLabel(file({ kind: 'binary', size: 2048 }), t)).toBe(
+      'fileViewer.binaryMeta:{"size":"2.0 KB"}',
+    );
   });
 });

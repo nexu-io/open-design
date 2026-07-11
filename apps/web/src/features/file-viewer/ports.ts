@@ -1,0 +1,24 @@
+// The file-viewer slice's dependency on transport, expressed as an interface
+// it owns. The slice depends on this port, never on `providers/` directly; a
+// provider is bound to it in `dependencies.ts`. Tests supply a hand-written
+// fake — no global `fetch` mocking, no module-path mocks.
+import type { DocumentPreview } from './types';
+
+/** Transport the read-only document preview viewer needs. */
+export interface DocumentPreviewPort {
+  fetchProjectFilePreview(projectId: string, name: string): Promise<DocumentPreview | null>;
+}
+
+/** Transport the read-only text-based viewers (SVG source, plain text) need. */
+export interface FileTextPort {
+  fetchProjectFileText(
+    projectId: string,
+    name: string,
+    options?: { cache?: RequestCache; cacheBustKey?: string | number },
+  ): Promise<string | null>;
+}
+
+/** The text viewer's copy-to-clipboard side effect (DOM-touching, so a port). */
+export interface ClipboardPort {
+  copyTextToClipboard(text: string): Promise<void>;
+}

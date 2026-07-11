@@ -59,7 +59,6 @@ import {
   fetchProjectDeployments,
   fetchProjectFileVersion,
   fetchProjectFileVersions,
-  fetchProjectFilePreview,
   fetchProjectFiles,
   fetchProjectFileText,
   fetchProjectFileTextPreview,
@@ -80,7 +79,6 @@ import {
   writeProjectTextFile,
   writeProjectTextFileDetailed,
 } from '../providers/registry';
-import type { ProjectFilePreview } from '../providers/registry';
 import {
   downloadImageDataUrl,
   exportAsJsx,
@@ -257,6 +255,16 @@ import {
   DEPLOY_PROVIDER_OPTIONS,
   MARKDOWN_CODE_BLOCK_ATTR,
   MARKDOWN_CODE_LANGUAGE_ATTR,
+  ImageViewer,
+  SketchViewer,
+  VideoViewer,
+  AudioViewer,
+  BinaryViewer,
+  CodeWithLines,
+  JsonPanel,
+  DocumentPreviewViewer,
+  SvgViewer,
+  TextViewer,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -282,6 +290,7 @@ export {
   previewOverlayTransform,
   cancelManualEditPendingStyleSnapshot,
   appendSavedPreviewCommentOrder,
+  SvgViewer,
 } from '../features/file-viewer';
 export type { InspectOverrideEntry, InspectOverrideMap, ManualEditPendingStyleSave } from '../features/file-viewer';
 
@@ -1518,11 +1527,6 @@ function LiveArtifactCodePanel({
   );
 }
 
-function JsonPanel({ value, emptyLabel }: { value: unknown; emptyLabel: string }) {
-  if (value == null) return <div className="viewer-empty">{emptyLabel}</div>;
-  return <pre className="viewer-source">{JSON.stringify(value, null, 2)}</pre>;
-}
-
 function liveArtifactMetadataPayload(liveArtifact: LiveArtifact): unknown {
   return {
     artifact: {
@@ -1981,35 +1985,6 @@ function LiveArtifactRefreshFact({
         {resolved}
       </span>
       {sub ? <span className="live-artifact-refresh-sub">{sub}</span> : null}
-    </div>
-  );
-}
-
-function FileActions({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  return (
-    <div className="viewer-toolbar-actions">
-      <a
-        className="ghost-link"
-        href={projectFileUrl(projectId, file.name)}
-        download={file.name}
-      >
-        {t('fileViewer.download')}
-      </a>
-      <a
-        className="ghost-link"
-        href={projectFileUrl(projectId, file.name)}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        {t('fileViewer.open')}
-      </a>
     </div>
   );
 }
@@ -3914,92 +3889,6 @@ function ReactComponentViewer({
           </PreviewDrawOverlay>
         ) : (
           <CodeWithLines text={source} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BinaryViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  return (
-    <div className="viewer binary-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {t('fileViewer.binaryMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <FileActions projectId={projectId} file={file} />
-      </div>
-      <div className="viewer-body">
-        <div className="viewer-empty">
-          {t('fileViewer.binaryNote', { size: file.size })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DocumentPreviewViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  const [preview, setPreview] = useState<ProjectFilePreview | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setPreview(null);
-    void fetchProjectFilePreview(projectId, file.name).then((next) => {
-      if (!cancelled) {
-        setPreview(next);
-        setLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, file.name, file.mtime]);
-
-  return (
-    <div className="viewer document-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {documentMetaLabel(file, t)} · {humanSize(file.size)}
-          </span>
-        </div>
-        <FileActions projectId={projectId} file={file} />
-      </div>
-      <div className="viewer-body">
-        {loading ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : preview ? (
-          <div className="document-preview">
-            <h2>{preview.title}</h2>
-            {preview.sections.map((section, idx) => (
-              <section key={`${section.title}-${idx}`}>
-                <h3>{section.title}</h3>
-                {section.lines.map((line, lineIdx) => (
-                  <p key={`${lineIdx}-${line}`}>{line}</p>
-                ))}
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="viewer-empty">{t('fileViewer.previewUnavailable')}</div>
         )}
       </div>
     </div>
@@ -10444,346 +10333,6 @@ async function fetchProjectRelativeText(
   }
 }
 
-function ImageViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
-  return (
-    <div className="viewer image-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {file.kind === 'sketch'
-              ? t('fileViewer.sketchMeta', { size: humanSize(file.size) })
-              : t('fileViewer.imageMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <div className="viewer-toolbar-actions">
-          <a
-            className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
-            download={file.name}
-          >
-            {t('fileViewer.download')}
-          </a>
-          <a
-            className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {t('fileViewer.open')}
-          </a>
-        </div>
-      </div>
-      <div className="viewer-body image-body">
-        <img alt={file.name} src={url} />
-      </div>
-    </div>
-  );
-}
-
-function SketchViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  return (
-    <div className="viewer image-viewer sketch-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {t('fileViewer.sketchMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <FileActions projectId={projectId} file={file} />
-      </div>
-      <div className="viewer-body image-body">
-        <SketchPreview projectId={projectId} file={file} className="viewer-sketch-preview" />
-      </div>
-    </div>
-  );
-}
-
-function VideoViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
-  return (
-    <div className="viewer video-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {t('fileViewer.videoMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <FileActions projectId={projectId} file={file} />
-      </div>
-      <div className="viewer-body video-body">
-        <video src={url} controls playsInline preload="metadata" />
-      </div>
-    </div>
-  );
-}
-
-function AudioViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
-  return (
-    <div className="viewer audio-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {t('fileViewer.audioMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <FileActions projectId={projectId} file={file} />
-      </div>
-      <div className="viewer-body audio-body">
-        <div className="audio-card">
-          <Icon name="mic" size={28} />
-          <div className="audio-card-name">{file.name}</div>
-          <audio src={url} controls preload="metadata" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type SvgViewerMode = 'preview' | 'source';
-
-interface SvgViewerProps {
-  projectId: string;
-  file: ProjectFile;
-  initialMode?: SvgViewerMode;
-  initialSource?: string | null | undefined;
-}
-
-export function SvgViewer({
-  projectId,
-  file,
-  initialMode = 'preview',
-  initialSource,
-}: SvgViewerProps) {
-  const t = useT();
-  const [mode, setMode] = useState<SvgViewerMode>(initialMode);
-  const [source, setSource] = useState<string | null>(initialSource ?? null);
-  const [loadingSource, setLoadingSource] = useState(false);
-  const [sourceError, setSourceError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`;
-
-  useEffect(() => {
-    if (mode !== 'source') return;
-    if (initialSource !== undefined && reloadKey === 0) return;
-    let cancelled = false;
-    setLoadingSource(true);
-    setSourceError(false);
-    void fetchProjectFileText(projectId, file.name, {
-      cache: 'no-store',
-      cacheBustKey: `${Math.round(file.mtime)}-${reloadKey}`,
-    }).then((next) => {
-      if (cancelled) return;
-      if (next === null) {
-        setSource('');
-        setSourceError(true);
-      } else {
-        setSource(next);
-      }
-      setLoadingSource(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, file.name, file.mtime, initialSource, mode, reloadKey]);
-
-  return (
-    <div className="viewer svg-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left">
-          <span className="viewer-meta">
-            {t('fileViewer.imageMeta', { size: humanSize(file.size) })}
-          </span>
-        </div>
-        <div className="viewer-toolbar-actions">
-          <div className="viewer-tabs">
-            <button
-              type="button"
-              className={`viewer-tab ${mode === 'preview' ? 'active' : ''}`}
-              aria-pressed={mode === 'preview'}
-              onClick={() => setMode('preview')}
-            >
-              {t('fileViewer.preview')}
-            </button>
-            <button
-              type="button"
-              className={`viewer-tab ${mode === 'source' ? 'active' : ''}`}
-              aria-pressed={mode === 'source'}
-              onClick={() => setMode('source')}
-            >
-              {t('fileViewer.source')}
-            </button>
-          </div>
-          <span className="viewer-divider" aria-hidden />
-          <button
-            type="button"
-            className="viewer-action"
-            onClick={() => setReloadKey((n) => n + 1)}
-            title={t('fileViewer.reloadDisk')}
-          >
-            <Icon name="reload" size={13} />
-            <span>{t('fileViewer.reload')}</span>
-          </button>
-          <a
-            className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
-            download={file.name}
-          >
-            {t('fileViewer.download')}
-          </a>
-          <a
-            className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {t('fileViewer.open')}
-          </a>
-        </div>
-      </div>
-      <div className={`viewer-body ${mode === 'preview' ? 'image-body' : ''}`}>
-        {mode === 'preview' ? (
-          <img alt={file.name} src={url} />
-        ) : loadingSource ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : sourceError ? (
-          <div className="viewer-empty">{t('fileViewer.previewUnavailable')}</div>
-        ) : (
-          <pre className="viewer-source">{source ?? ''}</pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TextViewer({
-  projectId,
-  file,
-}: {
-  projectId: string;
-  file: ProjectFile;
-}) {
-  const t = useT();
-  const [text, setText] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    setText(null);
-    let cancelled = false;
-    void fetchProjectFileText(projectId, file.name).then((t) => {
-      if (!cancelled) setText(t ?? '');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, file.name, file.mtime, reloadKey]);
-
-  async function copy() {
-    if (text == null) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // best-effort fallback
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand('copy');
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-      } finally {
-        document.body.removeChild(ta);
-      }
-    }
-  }
-
-  const displayText = useMemo(
-    () => (text == null ? null : formatJsonFileTextForDisplay(file, text)),
-    [file.name, file.mime, text],
-  );
-  const lineCount = displayText ? displayText.split('\n').length : 0;
-
-  return (
-    <div className="viewer text-viewer">
-      <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left" />
-        <div className="viewer-toolbar-actions">
-          <button
-            type="button"
-            className="viewer-action"
-            onClick={() => setReloadKey((n) => n + 1)}
-            title={t('fileViewer.reloadDisk')}
-          >
-            <Icon name="reload" size={13} />
-            <span>{t('fileViewer.reload')}</span>
-          </button>
-          <button
-            type="button"
-            className="viewer-action"
-            disabled
-            title={t('fileViewer.saveDisabled')}
-          >
-            <Icon name="check" size={13} />
-            <span>{t('fileViewer.save')}</span>
-          </button>
-          <button
-            type="button"
-            className="viewer-action"
-            onClick={() => void copy()}
-            title={t('fileViewer.copyTitle')}
-          >
-            <Icon name={copied ? 'check' : 'copy'} size={13} />
-            <span>{copied ? t('fileViewer.copied') : t('fileViewer.copy')}</span>
-          </button>
-        </div>
-      </div>
-      <div className="viewer-body">
-        {text === null ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : displayText !== null && lineCount > 0 ? (
-          <CodeWithLines text={displayText} />
-        ) : (
-          <pre className="viewer-source">{displayText}</pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
 type MarkdownViewerMode = 'edit' | 'split' | 'preview';
 type MarkdownSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type MarkdownScrollPane = 'editor' | 'preview';
@@ -11454,24 +11003,3 @@ function MarkdownViewer({
   );
 }
 
-function CodeWithLines({ text }: { text: string }) {
-  const lines = text.split('\n');
-  // Trailing newline produces a phantom empty line — keep gutter aligned.
-  const gutter = lines.map((_, i) => `${i + 1}`).join('\n');
-  return (
-    <pre className="code-viewer">
-      <code className="gutter" aria-hidden>
-        {gutter}
-      </code>
-      <code className="lines">{text}</code>
-    </pre>
-  );
-}
-
-function documentMetaLabel(file: ProjectFile, t: TranslateFn): string {
-  if (file.kind === 'pdf') return t('fileViewer.pdfMeta');
-  if (file.kind === 'document') return t('fileViewer.documentMeta');
-  if (file.kind === 'presentation') return t('fileViewer.presentationMeta');
-  if (file.kind === 'spreadsheet') return t('fileViewer.spreadsheetMeta');
-  return t('fileViewer.binaryMeta', { size: humanSize(file.size) });
-}

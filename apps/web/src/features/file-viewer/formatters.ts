@@ -3,6 +3,7 @@
 import type { ProjectFile } from '../../types';
 import type { Locale } from '../../i18n/types';
 import type { TranslateFn } from './types';
+import { humanSize } from './rules';
 
 // Pretty-print a `.json` file for the read-only source view, but ONLY when the
 // round-trip is lossless. JSON re-serialization silently rewrites numbers, so
@@ -215,4 +216,13 @@ export function formatCommentTime(ts: number, t: TranslateFn): string {
   const weeks = Math.floor(days / 7);
   if (weeks < 5) return t('common.weeksAgo', { n: weeks });
   return new Date(ts).toLocaleDateString();
+}
+
+// Document-kind meta label for the toolbar of read-only document previews.
+export function documentMetaLabel(file: ProjectFile, t: TranslateFn): string {
+  if (file.kind === 'pdf') return t('fileViewer.pdfMeta');
+  if (file.kind === 'document') return t('fileViewer.documentMeta');
+  if (file.kind === 'presentation') return t('fileViewer.presentationMeta');
+  if (file.kind === 'spreadsheet') return t('fileViewer.spreadsheetMeta');
+  return t('fileViewer.binaryMeta', { size: humanSize(file.size) });
 }
