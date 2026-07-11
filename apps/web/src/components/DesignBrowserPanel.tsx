@@ -1704,15 +1704,6 @@ export function DesignBrowserPanel({
         message,
         source: 'page-snapshot',
       });
-      emitPageSnapshotToast({
-        actionFileName: manifestFile,
-        actionLabel: t('designBrowser.status.viewDesignFiles'),
-        actionTarget: 'design-files',
-        elapsedSeconds,
-        message,
-        status: 'success',
-        ttlMs: 8000,
-      });
       return {
         ok: true,
         baseUrl: manifest.baseUrl,
@@ -1732,12 +1723,9 @@ export function DesignBrowserPanel({
         message,
         source: 'page-snapshot',
       });
-      emitPageSnapshotToast({
-        elapsedSeconds,
-        message,
-        status: canceled ? 'canceled' : 'error',
-        ttlMs: canceled ? 3000 : 8000,
-      });
+      // Inline status already shows the error/cancellation scoped to the
+      // Browser pane; the global toast is suppressed on terminal outcomes to
+      // prevent the confirmation from straddling the split-pane boundary.
       return { ok: false, message };
     } finally {
       if (archiveRunRef.current?.id === run.id) {
@@ -2171,7 +2159,11 @@ export function DesignBrowserPanel({
   const statusIsPageSnapshot = Boolean(
     statusMessage && typeof statusMessage === 'object' && statusMessage.source === 'page-snapshot',
   );
-  const showStatusMessage = Boolean(statusMessage) && !(statusIsPageSnapshot && onPageSnapshotToast);
+  // Suppress the inline status message while the page-snapshot is actively saving
+  // (the global toast broadcasts elapsed progress every second). On success or
+  // failure show the inline status so the confirmation stays scoped to the
+  // Browser pane instead of straddling the split-pane boundary as a global toast.
+  const showStatusMessage = Boolean(statusMessage) && !(statusIsPageSnapshot && archiveSaving);
 
   return (
     <section className="design-browser" aria-label={t('designBrowser.aria')}>
