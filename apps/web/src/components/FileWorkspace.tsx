@@ -4,10 +4,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type ReactNode,
 } from 'react';
-import { Button } from '@open-design/components';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -18,10 +16,6 @@ import {
   trackSketchExportResult,
 } from '../analytics/events';
 import { useT } from '../i18n';
-import {
-  createProjectFolder,
-  deleteProjectFolder,
-} from '../providers/registry';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { navigate } from '../router';
 import { deliverableSlideNavForActiveFile } from '../runtime/slide-nav';
@@ -31,7 +25,6 @@ import {
   type AgentEvent,
   type AgentInfo,
   type AppConfig,
-  type ChatAttachment,
   type ChatCommentAttachment,
   type Conversation,
   conversationIdFromSideChatTabId,
@@ -42,7 +35,6 @@ import {
   type LiveArtifactSummary,
   type LiveArtifactEventItem,
   type OpenTabsState,
-  type ProjectBrowserWorkspaceTab,
   type PreviewComment,
   type PreviewCommentTarget,
   type DesignSystemSummary,
@@ -71,56 +63,14 @@ import type { ChatMessage } from '../types';
 import {
   activeFileForTab,
   activeLiveArtifactForTab,
-  colorHexFromBrandJson,
-  colorHexFromDesignMd,
   DESIGN_FILES_TAB,
-  DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
-  DESIGN_SYSTEM_GUIDANCE_FILES,
-  DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS,
   DESIGN_SYSTEM_TAB,
-  designSystemBasename,
-  designSystemFallbackReviewSections,
-  designSystemFileOpBelongsToSection,
-  designSystemGuidanceSort,
-  designSystemHasSourceContext,
-  designSystemManifestCardError,
-  designSystemPathMatchesSection,
-  designSystemRelatedFilesForCategory,
-  designSystemReviewArtifactSort,
-  designSystemReviewCategoryRank,
-  designSystemReviewSubtitle,
-  designSystemReviewTitleFromPath,
-  designSystemSectionActivityLabel,
-  designSystemSectionPhaseLabel,
-  designSystemSectionTodo,
-  designSystemTodoActivityPhase,
-  designSystemTodoBelongsToSection,
-  designSystemTodoRank,
-  designSystemTodoSearchText,
-  documentTemplateScenarioKey,
-  formatBrowserTabUrl,
-  inferDesignSystemReviewCategory,
   isBrowserTabId,
-  isDesignSystemAssetFile,
-  isDesignSystemEvidenceFile,
-  isDesignSystemGuidanceFile,
-  isDesignSystemPreviewFile,
-  isDesignSystemRawAssetFile,
-  isDesignSystemReviewArtifactFile,
-  isDesignSystemReviewableAssetArtifact,
-  isDesignSystemTokenFile,
-  isDesignSystemUiKitEntryPage,
-  isDesignSystemUiKitFile,
   isLiveArtifactImplementationPath,
   isSketchName,
-  joinProjectFilePath,
-  normalizeProjectFilePath,
-  optionalDesignSystemManifestString,
-  preferPreviewArtifactsOverRawAssets,
   QUESTIONS_TAB,
   scrollWorkspaceTabsWithWheel,
   Tab,
-  truncateDesignSystemActivityText,
   useBrowserTabs,
   useTabReorderDnd,
   useWiredDesignFilesPanelState,
@@ -139,8 +89,6 @@ import {
   type DesignSystemReviewAgentTask,
   type DesignSystemReviewDecision,
   type DesignSystemReviewDetails,
-  type DesignSystemReviewEntry,
-  type TranslateFn,
   type WorkspaceOrderedTab,
 } from '../features/file-workspace';
 // Re-exported so `./FileWorkspace` stays a stable import path for the
@@ -472,8 +420,9 @@ export function FileWorkspace({
   });
 
   // Tab-state coordination is threaded through as params (deps-bag) rather
-  // than reimplemented here: `commitTabsState`/`workspaceTabsState` below are
-  // this render's tab-state cluster, not yet its own slice hook.
+  // than reimplemented here: `commitTabsState`/`workspaceTabsState` are owned
+  // by `useWorkspaceTabActivation`, called later in this render — reached
+  // here through the stable ref-bridge wrappers declared above.
   const {
     sketches,
     setSketchScene,
@@ -553,8 +502,11 @@ export function FileWorkspace({
     setActiveTab(tabsState.active ?? defaultRootTab);
   }, [tabsState.active, defaultRootTab]);
 
-  // The launcher-close-on-projectId-change reset stays inline (cluster 5 isn't
-  // extracted yet); the browser-tab resets live inside `useBrowserTabs` below.
+  // The launcher-close-on-projectId-change reset stays inline (it must
+  // register before `useWorkspaceLauncher`'s own state exists — a mount-order
+  // constraint, not a missing extraction; `setLauncherOpen` itself IS owned
+  // by `useWorkspaceLauncher`, called later in this render); the browser-tab
+  // resets live inside `useBrowserTabs` below.
   useEffect(() => {
     setLauncherOpen(false);
   }, [projectId]);
@@ -613,7 +565,6 @@ export function FileWorkspace({
     tabNames,
     orderedWorkspaceTabs,
     workspaceTabIds,
-    activeWorkspaceContext,
     workspaceContexts,
   } = useWorkspaceContextTracking({
     persistedTabs,
@@ -656,7 +607,6 @@ export function FileWorkspace({
     activatePending,
     openFile,
     focusWorkspaceTab,
-    activateWorkspaceTab,
     activateWorkspaceTabByOffset,
     activateWorkspaceTabByIndex,
     closeActiveWorkspaceTab,
