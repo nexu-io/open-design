@@ -202,3 +202,8 @@ export type { InspectStyleSnapshot, InspectClickedDescendant, InspectTarget } fr
 // and its dock shell.
 export { CommentSidePanel } from './components/CommentSidePanel';
 export { CommentSideDock } from './components/CommentSideDock';
+
+// Viewport-preset controls: the toolbar dropdown (wired) and the file-version
+// modal's toggle group (dumb).
+export { PreviewViewportControls } from './components/PreviewViewportControls';
+export { FileVersionViewportControls } from './components/FileVersionViewportControls';
