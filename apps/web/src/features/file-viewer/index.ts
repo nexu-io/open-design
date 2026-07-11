@@ -76,9 +76,20 @@ export {
   mergeMarkdownSaveOptions,
   isMarkdownImageFile,
   markdownImageAlt,
+  markdownImageSourceUrl,
+  rewriteMarkdownImageSources,
+  markdownBaseHtml,
   humanSize,
 } from './rules';
 export type { MarkdownSaveOptions } from './rules';
+
+// Pure markdown editor/preview scroll-sync rules.
+export {
+  extractMarkdownBlockLines,
+  measurePreviewBlockOffsets,
+  buildScrollAnchors,
+  mapScrollPosition,
+} from './rules';
 
 // Pure HTML preview asset-path rules.
 export {
@@ -157,6 +168,7 @@ export type {
   PreviewOverlayTransform,
   DeployProviderOption,
   MarkdownCodeLanguage,
+  TranslateFn,
   CommentSideDropEdge,
   ManualEditPendingStyleSave,
   BoardTool,
@@ -168,6 +180,9 @@ export {
   DEPLOY_PROVIDER_OPTIONS,
   MARKDOWN_CODE_BLOCK_ATTR,
   MARKDOWN_CODE_LANGUAGE_ATTR,
+  MARKDOWN_COPY_BLOCK_ATTR,
+  MARKDOWN_COPY_BUTTON_CLASS,
+  MARKDOWN_COPY_TOAST_CLASS,
 } from './constants';
 
 // Document-kind meta-label formatter.
@@ -256,3 +271,10 @@ export { useWiredViewerToolbarMenus } from './hooks/useViewerToolbarMenus.hooks'
 export type { ViewerToolbarMenusController } from './hooks/useViewerToolbarMenus.hooks';
 export { ViewerToolbar } from './components/ViewerToolbar';
 export type { ViewerToolbarProps, ViewerToolbarSlideState } from './components/ViewerToolbar';
+
+// Markdown viewer: edit/split/preview modes, debounced autosave, pasted/
+// dropped image upload, shiki-highlighted code blocks with a per-block copy
+// button, and editor<->preview scroll sync. Fully self-contained — no overlap
+// with the HTML file-viewer's srcDoc/postMessage bridges.
+export { MarkdownViewer } from './components/MarkdownViewer';
+export type { MarkdownViewerMode, MarkdownSaveState, MarkdownScrollPane } from './types';

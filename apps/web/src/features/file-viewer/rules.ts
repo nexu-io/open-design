@@ -3,10 +3,18 @@
 // boundary guard (ADR 0002) forbids any `fetch`/`window`/`document` reach here.
 import type { DeployProviderId, DeploymentInfo, ProjectFileVersion } from '@open-design/contracts';
 import type { TrackingFileVersionSource } from '@open-design/contracts/analytics';
+import {
+  parse as micromarkParse,
+  postprocess as micromarkPostprocess,
+  preprocess as micromarkPreprocess,
+} from 'micromark';
+import { gfm } from 'micromark-extension-gfm';
 import type { ManualEditStyles, ManualEditTarget } from '../../edit-mode/types';
 import { MANUAL_EDIT_STYLE_PROPS } from '../../edit-mode/types';
 import type { LiveArtifact, LiveArtifactRefreshLogEntry, PreviewComment, PreviewCommentMember } from '../../types';
 import { sourceLooksLikeExportableDeck } from '../../runtime/exports';
+import { MarkdownRenderer } from '../../artifacts/renderer-registry';
+import { renderMarkdownToSafeHtml } from '../../artifacts/markdown';
 import {
   overlayBoundsFromSnapshot,
   type PreviewCommentSnapshot,
@@ -900,8 +908,9 @@ export function cancelManualEditPendingStyleSnapshot(
 
 // ---------------------------------------------------------------------------
 // Markdown source-path + code-block rules. Pure string transforms — no DOM,
-// no transport (the transport-touching URL resolver stays with the
-// orchestrator until the markdown viewer gets its own provider seam).
+// no transport (the URL resolver below duplicates `providers/registry`'s
+// `projectFileUrl` shape via the in-slice `fileRawUrl`, per ADR 0002, rather
+// than importing the provider).
 // ---------------------------------------------------------------------------
 
 export function markdownDirectory(path: string): string {
@@ -1056,6 +1065,181 @@ export function markdownImageAlt(name: string): string {
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim() || 'image';
+}
+
+const ABSOLUTE_MARKDOWN_IMAGE_SOURCE_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+
+/**
+ * Resolve a markdown `<img src>` to a fetchable project-file URL. Absolute
+ * URLs pass through unchanged; relative paths resolve against the markdown
+ * file's own directory. Uses the in-slice `fileRawUrl` (structurally
+ * identical to `providers/registry`'s `projectFileUrl`) rather than the
+ * provider, per ADR 0002.
+ */
+export function markdownImageSourceUrl(projectId: string, markdownPath: string, src: string): string | null {
+  const trimmed = src.trim();
+  if (!trimmed) return null;
+  if (ABSOLUTE_MARKDOWN_IMAGE_SOURCE_RE.test(trimmed)) return trimmed;
+  const relativePath = trimmed.startsWith('/')
+    ? normalizeMarkdownProjectPath(trimmed.slice(1))
+    : normalizeMarkdownProjectPath(`${markdownDirectory(markdownPath)}/${trimmed}`);
+  return relativePath ? fileRawUrl(projectId, relativePath) : null;
+}
+
+export function rewriteMarkdownImageSources(html: string, projectId: string, markdownPath: string): string {
+  return html.replace(/<img\b([^>]*?)\bsrc="([^"]*)"([^>]*)>/g, (match, before: string, src: string, after: string) => {
+    const resolved = markdownImageSourceUrl(projectId, markdownPath, decodeHtmlAttribute(src));
+    if (!resolved) return match;
+    const attrs = `${before}${after}`;
+    const loadingAttr = /\sloading=/.test(attrs) ? '' : ' loading="lazy"';
+    return `<img${before}src="${escapeHtmlAttribute(resolved)}"${loadingAttr}${after}>`;
+  });
+}
+
+/**
+ * Render + decorate a markdown source into the preview HTML: renders the
+ * artifact registry's markdown renderer (its `renderPartial` fast path when
+ * available), tags fenced code blocks for the copy-button/highlight
+ * pipeline, then rewrites relative image sources to fetchable URLs.
+ */
+export function markdownBaseHtml(text: string, projectId: string, markdownPath: string): string {
+  const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
+  return rewriteMarkdownImageSources(decorateMarkdownCodeBlocks(renderPartial(text)), projectId, markdownPath);
+}
+
+// ---------------------------------------------------------------------------
+// Markdown editor/preview scroll-sync rules. Pure math + read-only DOM
+// measurement scoped to a passed-in element (never a bare `document`/
+// `window` global) — the guard permits element-scoped reads. The one
+// measurement that touches a bare `document`/`window` global
+// (`measureEditorBlockOffsets`, which builds a hidden mirror element to
+// measure textarea soft-wrap) lives in `providers/file-viewer/
+// markdown-editor-measure.ts` instead, reached through `MarkdownEditorMeasurePort`.
+// ---------------------------------------------------------------------------
+
+const MARKDOWN_CONTAINER_TOKENS = new Set(['blockQuote', 'listOrdered', 'listUnordered']);
+const MARKDOWN_FLOW_BLOCK_TOKENS = new Set([
+  'atxHeading',
+  'setextHeading',
+  'paragraph',
+  'codeFenced',
+  'codeIndented',
+  'htmlFlow',
+  'thematicBreak',
+  'table',
+]);
+
+function markdownOffsetsHaveVerticalProgression(offsets: number[]): boolean {
+  if (offsets.length <= 1) return true;
+  const first = offsets[0] ?? 0;
+  return offsets.some((offset, index) => index > 0 && offset > first + 0.5);
+}
+
+/**
+ * 1-based source start line of every top-level markdown block, in document
+ * order. Nested blocks (list items, blockquote contents) collapse into their
+ * top-level container so the result lines up 1:1 with the preview article's
+ * direct element children.
+ */
+export function extractMarkdownBlockLines(markdown: string): number[] {
+  if (!markdown) return [];
+  let events: ReturnType<typeof micromarkPostprocess>;
+  try {
+    events = micromarkPostprocess(
+      micromarkParse({ extensions: [gfm()] })
+        .document()
+        .write(micromarkPreprocess()(markdown, undefined, true)),
+    );
+  } catch {
+    return [];
+  }
+  const lines: number[] = [];
+  let depth = 0;
+  for (const event of events) {
+    const phase = event[0];
+    const token = event[1];
+    const type = token.type;
+    if (MARKDOWN_CONTAINER_TOKENS.has(type)) {
+      if (phase === 'enter') {
+        if (depth === 0) lines.push(token.start.line);
+        depth += 1;
+      } else {
+        depth = Math.max(0, depth - 1);
+      }
+      continue;
+    }
+    if (phase === 'enter' && depth === 0 && MARKDOWN_FLOW_BLOCK_TOKENS.has(type)) {
+      lines.push(token.start.line);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Pixel offset (within the preview pane's scrollable content) of each rendered
+ * top-level block element. Returns `null` when the rendered article's direct
+ * element children do not match the expected block count — the caller then
+ * falls back to ratio sync rather than risk a wrong mapping. `pane` is a
+ * caller-supplied element (not a bare global), so this stays guard-permitted.
+ */
+export function measurePreviewBlockOffsets(pane: HTMLElement, blockCount: number): number[] | null {
+  if (blockCount === 0) return null;
+  const article = pane.querySelector<HTMLElement>('.markdown-rendered');
+  if (!article) return null;
+  const children = Array.from(article.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement,
+  );
+  if (children.length !== blockCount) return null;
+  const paneRect = pane.getBoundingClientRect();
+  const contentTop = paneRect.top - pane.scrollTop;
+  const offsets = children.map((child) => child.getBoundingClientRect().top - contentTop);
+  if (!markdownOffsetsHaveVerticalProgression(offsets)) return null;
+  return offsets;
+}
+
+/**
+ * Build a monotonic anchor array spanning the full scrollable range: a `0`
+ * anchor at the top, the per-block offsets, and the total `scrollHeight` at the
+ * bottom, clamped non-decreasing so interpolation stays stable.
+ */
+export function buildScrollAnchors(blockOffsets: number[], scrollHeight: number): number[] {
+  const anchors = [0, ...blockOffsets, Math.max(0, scrollHeight)];
+  let previous = 0;
+  for (let i = 0; i < anchors.length; i += 1) {
+    const raw = anchors[i] ?? 0;
+    let value = Math.max(0, Math.min(scrollHeight, Number.isFinite(raw) ? raw : 0));
+    if (value < previous) value = previous;
+    anchors[i] = value;
+    previous = value;
+  }
+  return anchors;
+}
+
+/**
+ * Map a scroll position from the source pane to the target pane using paired
+ * anchor arrays (same length, both monotonic). Linear interpolation within the
+ * bracketing segment.
+ */
+export function mapScrollPosition(value: number, source: number[], target: number[]): number {
+  const count = Math.min(source.length, target.length);
+  if (count === 0) return value;
+  if (count === 1) return target[0] ?? 0;
+  if (value <= (source[0] ?? 0)) return target[0] ?? 0;
+  if (value >= (source[count - 1] ?? 0)) return target[count - 1] ?? 0;
+  let low = 0;
+  let high = count - 1;
+  while (high - low > 1) {
+    const mid = (low + high) >> 1;
+    if ((source[mid] ?? 0) <= value) low = mid;
+    else high = mid;
+  }
+  const sourceLow = source[low] ?? 0;
+  const sourceHigh = source[high] ?? 0;
+  const targetLow = target[low] ?? 0;
+  const targetHigh = target[high] ?? 0;
+  const span = sourceHigh - sourceLow;
+  const fraction = span > 0 ? (value - sourceLow) / span : 0;
+  return targetLow + fraction * (targetHigh - targetLow);
 }
 
 export function humanSize(bytes: number): string {

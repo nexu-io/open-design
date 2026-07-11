@@ -143,6 +143,15 @@ export type DocumentPreview = {
 /** Which pane the SVG viewer's preview/source toggle shows. */
 export type SvgViewerMode = 'preview' | 'source';
 
+/** Which pane(s) the markdown viewer's edit/split/preview toggle shows. */
+export type MarkdownViewerMode = 'edit' | 'split' | 'preview';
+
+/** The markdown editor's debounced-autosave status. */
+export type MarkdownSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+/** Which markdown pane last drove a scroll-sync interaction. */
+export type MarkdownScrollPane = 'editor' | 'preview';
+
 /** The active board interaction mode: inspecting elements, or drawing a pod lasso. */
 export type BoardTool = 'inspect' | 'pod';
 

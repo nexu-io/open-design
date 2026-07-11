@@ -2,7 +2,7 @@
 // DOM — they map raw file data to display strings and test with zero doubles.
 import type { ProjectFile } from '../../types';
 import type { Locale } from '../../i18n/types';
-import type { TranslateFn } from './types';
+import type { MarkdownSaveState, TranslateFn } from './types';
 import { humanSize } from './rules';
 
 // Pretty-print a `.json` file for the read-only source view, but ONLY when the
@@ -234,6 +234,35 @@ export function shareLinkCopyLabel(
   if (feedback === 'copied') return t('fileViewer.copied');
   if (feedback === 'failed') return t('useEverywhere.copyFailed');
   return t('fileViewer.copyShareLink');
+}
+
+export type MarkdownAutoSaveStatus = 'error' | 'saving' | 'saved' | 'idle';
+
+// The markdown doc auto-saves on a debounce, so the toolbar shows a passive
+// status (when it last auto-saved) instead of a manual Save button that is
+// disabled almost all the time. Typing stays quiet: the indicator keeps the
+// last auto-saved time and only refreshes once the debounced save lands, so
+// there is no per-keystroke "Saving…" flicker. `saving` is reserved for an
+// explicit, foreground write (the error-retry path).
+export function markdownAutoSaveStatus(saveState: MarkdownSaveState, savedAt: number | null): MarkdownAutoSaveStatus {
+  if (saveState === 'error') return 'error';
+  if (saveState === 'saving') return 'saving';
+  return savedAt != null ? 'saved' : 'idle';
+}
+
+export function markdownAutoSaveLabel(
+  status: MarkdownAutoSaveStatus,
+  savedAt: number | null,
+  locale: Locale,
+  t: TranslateFn,
+): string {
+  if (status === 'error') return t('fileViewer.markdownSaveFailed');
+  if (status === 'saving') return t('fileViewer.markdownSaving');
+  if (status === 'saved' && savedAt != null) {
+    const time = new Date(savedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    return t('fileViewer.markdownAutoSaved', { time });
+  }
+  return t('fileViewer.markdownAutoSaveHint');
 }
 
 // Document-kind meta label for the toolbar of read-only document previews.

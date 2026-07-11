@@ -2,13 +2,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { renderMarkdownToSafeHtml } from '../../src/artifacts/markdown';
+import { renderMarkdownToSafeHtml } from '../../../src/artifacts/markdown';
 import {
   buildScrollAnchors,
   extractMarkdownBlockLines,
   mapScrollPosition,
   measurePreviewBlockOffsets,
-} from '../../src/components/markdown-scroll-sync';
+} from '../../../src/features/file-viewer/rules';
 
 function topLevelElementCount(markdown: string): number {
   const host = document.createElement('div');

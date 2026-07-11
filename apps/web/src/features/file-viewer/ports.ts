@@ -2,13 +2,14 @@
 // it owns. The slice depends on this port, never on `providers/` directly; a
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks.
-import type { ProjectFileVersion, ProjectTemplate } from '@open-design/contracts';
+import type { ChatAttachment, ProjectFileVersion, ProjectTemplate } from '@open-design/contracts';
 import type { LiveArtifact, LiveArtifactRefreshLogEntry } from '../../types';
 import type {
   DocumentPreview,
   LiveArtifactCodeVariant,
   LiveArtifactRefreshResult,
   PreviewCanvasSize,
+  TranslateFn,
 } from './types';
 
 /** Transport the read-only document preview viewer needs. */
@@ -121,4 +122,43 @@ export interface ChromeActionsHostPort {
 /** Open a URL in a new tab (DOM-touching, so a port). */
 export interface WindowOpenPort {
   openInNewTab(url: string): void;
+}
+
+/** Transport the markdown viewer needs: load/save the file text, upload pasted/dropped images. */
+export interface MarkdownFilePort {
+  fetchProjectFileText(projectId: string, name: string): Promise<string | null>;
+  /** Resolves `true` on a successful write, mirroring the caller's `if (!saved) throw` truthiness check. */
+  writeProjectTextFile(projectId: string, name: string, content: string): Promise<boolean>;
+  uploadProjectFiles(
+    projectId: string,
+    files: File[],
+    dir?: string,
+  ): Promise<{ uploaded: Array<Pick<ChatAttachment, 'name' | 'path'>> }>;
+}
+
+/**
+ * DOM-touching markdown code-block helpers (shiki highlighting via a dynamic
+ * import, copy-button DOM injection, copied-state toggling) — all build/
+ * mutate detached or caller-supplied elements via a bare `document`, so a
+ * port per the guard.
+ */
+export interface MarkdownCodeBlocksPort {
+  highlightCodeBlocks(html: string): Promise<string>;
+  ensureCodeBlockControls(root: HTMLElement, t: TranslateFn): void;
+  setCodeBlockCopiedState(block: HTMLElement, copied: boolean, t: TranslateFn): void;
+}
+
+/** Notify on OS/app theme changes (DOM `MutationObserver` + `matchMedia`, so a port). */
+export interface ThemeWatchPort {
+  subscribeThemeChange(onChange: () => void): () => void;
+}
+
+/**
+ * Measure a markdown textarea's soft-wrapped block offsets via a hidden
+ * mirror element (bare `document.createElement`/`window.getComputedStyle`,
+ * so a port — distinct from `measurePreviewBlockOffsets` in `rules.ts`,
+ * which only reads a caller-supplied element and needs no port).
+ */
+export interface MarkdownEditorMeasurePort {
+  measureEditorBlockOffsets(textarea: HTMLTextAreaElement, blockLines: number[], text: string): number[] | null;
 }
