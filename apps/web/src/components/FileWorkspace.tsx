@@ -90,11 +90,9 @@ import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
 import {
   emptySketchScene,
-  isSketchJsonFileName,
   parseSketchWorkspaceDocument,
   serializeExcalidrawSketchScene,
   type ExcalidrawSketchScene,
-  type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
@@ -102,9 +100,13 @@ import {
   arraysEqual,
   browserTabIndex,
   browserTabsFromState,
+  BROWSER_KEEPALIVE_CAP,
   BROWSER_TAB_PREFIX,
   colorHexFromBrandJson,
   colorHexFromDesignMd,
+  consumeFileWorkspaceTabShortcut,
+  createDefaultDesignFilesNavState,
+  defaultSketchState,
   DESIGN_FILES_TAB,
   DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
   DESIGN_SYSTEM_GUIDANCE_FILES,
@@ -112,6 +114,7 @@ import {
   DESIGN_SYSTEM_TAB,
   designSystemBasename,
   designSystemFallbackReviewSections,
+  EMPTY_PROJECT_FOLDERS,
   designSystemFileOpBelongsToSection,
   designSystemGuidanceSort,
   designSystemHasSourceContext,
@@ -130,6 +133,7 @@ import {
   designSystemTodoRank,
   designSystemTodoSearchText,
   documentTemplateScenarioKey,
+  formatBrowserTabUrl,
   formatWorkspaceSnapshotElapsed,
   inferDesignSystemReviewCategory,
   initialMarkdownDocument,
@@ -146,33 +150,51 @@ import {
   isDesignSystemUiKitFile,
   isLiveArtifactImplementationPath,
   isSketchName,
+  joinDisplayPath,
   joinProjectFilePath,
   lastWorkspaceTabId,
+  loadedSketchStateFromDocument,
   maxBrowserTabSequence,
+  mergeSketchSaveOptions,
   nextMarkdownDocumentPath,
   normalizeProjectFilePath,
   optionalDesignSystemManifestString,
   orderWorkspaceTabs,
   parentDirForProjectFile,
   preferPreviewArtifactsOverRawAssets,
+  QUESTIONS_TAB,
+  QUICK_SWITCHER_DOCUMENT_CLASS,
   reanchorBrowserTabsToCurrentOrder,
   sameFileName,
   scrollWorkspaceTabsWithWheel,
+  shouldKeepCurrentSketchState,
+  SKETCH_AUTOSAVE_DELAY_MS,
+  sketchFileSourceKey,
   Tab,
   tabDropEdgeFromEvent,
   truncateDesignSystemActivityText,
+  type BrowserAttentionRequest,
+  type BrowserOpenRequest,
   type BrowserWorkspaceTab,
   type DesignSystemReviewAgentTask,
   type DesignSystemReviewDecision,
   type DesignSystemReviewDetails,
   type DesignSystemReviewEntry,
+  type PendingSketchSave,
+  type QueuedSketchAutosave,
+  type SaveSketchOptions,
+  type SketchState,
   type TabDropEdge,
   type TranslateFn,
+  type WorkspaceActionToast,
   type WorkspaceOrderedTab,
+  type WorkspaceToastTone,
 } from '../features/file-workspace';
 // Re-exported so `./FileWorkspace` stays a stable import path for the
-// existing test suite now that this helper lives in the slice.
+// existing test suite / external consumers (e.g. `ProjectView.tsx`) now that
+// these live in the slice.
 export { scrollWorkspaceTabsWithWheel };
+export type { BrowserOpenRequest, BrowserAttentionRequest };
 
 interface Props {
   projectId: string;
@@ -322,172 +344,9 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
 }
 
-interface SketchState {
-  version: number;
-  rawItems: unknown[];
-  discardRawItemsOnSave: boolean;
-  items: SketchItem[];
-  scene: ExcalidrawSketchScene;
-  sourceKey?: string;
-  dirty: boolean;
-  persisted: boolean;
-  loaded: boolean;
-  saving: boolean;
-  savedAt?: number;
-}
-
-function defaultSketchState(name: string, scene: ExcalidrawSketchScene = emptySketchScene(name)): SketchState {
-  return {
-    version: 2,
-    rawItems: [],
-    discardRawItemsOnSave: false,
-    items: [],
-    scene,
-    dirty: false,
-    persisted: false,
-    loaded: true,
-    saving: false,
-  };
-}
-
-function loadedSketchStateFromDocument(
-  doc: ReturnType<typeof parseSketchWorkspaceDocument>,
-  sourceKey: string,
-): SketchState {
-  return {
-    version: doc.version,
-    rawItems: doc.rawItems,
-    discardRawItemsOnSave: false,
-    items: doc.items,
-    scene: doc.scene,
-    sourceKey,
-    dirty: false,
-    persisted: true,
-    loaded: true,
-    saving: false,
-  };
-}
-
-function sketchFileSourceKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path' | 'size' | 'mtime'>): string {
-  return `${projectId}:${file.path ?? file.name}:${file.size}:${file.mtime}`;
-}
-
-function shouldKeepCurrentSketchState(
-  current: SketchState | undefined,
-  name: string,
-  sourceKey: string,
-  saveInFlight: Set<string>,
-): boolean {
-  if (!current) return false;
-  if (!current.persisted) return true;
-  if (current.dirty || current.saving || saveInFlight.has(name)) return true;
-  return current.loaded && current.sourceKey === sourceKey;
-}
-
 // Re-exported so `./FileWorkspace` stays a stable import path for external
 // consumers (e.g. `ProjectView.tsx`) now that these live in the slice.
 export { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB };
-const QUESTIONS_TAB = '__questions__';
-// Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
-// a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
-// mounting every open browser tab made memory/CPU grow linearly with tab count.
-// We keep an LRU of the most-recently-activated browser tabs live and unmount
-// the rest; switching back to an evicted tab remounts (reloads) it.
-const BROWSER_KEEPALIVE_CAP = 3;
-const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
-const SKETCH_AUTOSAVE_DELAY_MS = 800;
-
-// Stable empty folder list so the render-phase project-switch reset is
-// idempotent (passing a fresh `[]` each render would re-trigger the reset).
-const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
-export interface BrowserOpenRequest {
-  tabId?: string;
-  url: string;
-  nonce: number;
-  /** Request a transient in-tab affordance after opening/focusing. */
-  attentionAction?: 'download-page';
-  /** Only foreground an EXISTING browser tab — do not navigate it. Used to wake
-   *  a background-throttled webview before reading its DOM (brand browser
-   *  assist) WITHOUT reloading the page and re-triggering an anti-bot wall. */
-  focusOnly?: boolean;
-}
-export interface BrowserAttentionRequest {
-  action: 'download-page';
-  nonce: number;
-}
-interface SaveSketchOptions {
-  activate?: boolean;
-  refreshFiles?: boolean;
-  showSaving?: boolean;
-}
-
-interface PendingSketchSave {
-  scene: ExcalidrawSketchScene;
-  revision: number;
-  options: SaveSketchOptions;
-  resolvers: Array<(value: boolean | undefined) => void>;
-}
-
-interface QueuedSketchAutosave {
-  scene: ExcalidrawSketchScene;
-  revision: number;
-  options: SaveSketchOptions;
-}
-
-function mergeSketchSaveOptions(a: SaveSketchOptions, b: SaveSketchOptions): SaveSketchOptions {
-  return {
-    activate: a.activate !== false || b.activate !== false,
-    refreshFiles: a.refreshFiles !== false || b.refreshFiles !== false,
-    showSaving: a.showSaving !== false || b.showSaving !== false,
-  };
-}
-
-function consumeFileWorkspaceTabShortcut(event: KeyboardEvent) {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
-function formatBrowserTabUrl(url: string): string {
-  if (!url) return '';
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.replace(/^www\./, '');
-    const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    if (!path || path === '/') return host || url;
-    return `${host}${path}`;
-  } catch {
-    return url;
-  }
-}
-
-function joinDisplayPath(root: string, child: string): string {
-  const cleanRoot = root.replace(/[\\/]+$/u, '');
-  const cleanChild = child.replace(/^[\\/]+/u, '');
-  return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
-}
-
-function createDefaultDesignFilesNavState(): DesignFilesNavState {
-  return {
-    kindFilter: new Set(),
-    currentDir: '',
-    page: 0,
-    pageSize: 30,
-  };
-}
-
-
-type WorkspaceToastTone = 'default' | 'success' | 'error' | 'loading';
-
-interface WorkspaceActionToast {
-  actionLabel?: string | null;
-  className?: string;
-  details?: string | null;
-  message: string;
-  onAction?: () => void;
-  role?: 'status' | 'alert';
-  tone?: WorkspaceToastTone;
-  ttlMs?: number;
-}
 
 export function FileWorkspace({
   projectId,
