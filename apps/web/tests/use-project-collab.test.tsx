@@ -189,4 +189,30 @@ describe('useProjectCollab', () => {
 
     expect(result.current.viewerOnly).toBe(true);
   });
+
+  it('does not auto-pull for a locked workspace owner', async () => {
+    const calls: Array<{ pathname: string; method: string }> = [];
+    const owner = makeContext({ role: 'owner', lifecycleState: 'locked', workspaceMemberId: 'wm-owner' });
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      calls.push({ pathname, method: init?.method ?? 'GET' });
+      let payload: unknown = { ok: true };
+      if (pathname.endsWith('/workspace/context')) payload = { context: owner };
+      else if (pathname.endsWith('/presence/heartbeat')) payload = { present: [{ memberId: 'wm-owner' }] };
+      else if (pathname.endsWith('/collab/status')) {
+        payload = { publishedVersion: 2, syncState: 'synced', ownerMemberId: 'wm-owner' };
+      }
+      return { ok: true, status: 200, json: async () => payload } as unknown as Response;
+    }) as typeof fetch;
+    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.viewerOnly).toBe(true);
+    expect(calls.some((call) => call.method === 'POST' && call.pathname.endsWith('/collab/pull'))).toBe(false);
+  });
 });
