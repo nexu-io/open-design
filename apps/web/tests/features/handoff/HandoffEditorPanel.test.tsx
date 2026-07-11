@@ -35,11 +35,14 @@ describe('HandoffEditorPanel', () => {
     expect(screen.queryByText('Not installed')).toBeNull();
   });
 
-  it('renders the unavailable section (dimmed) when present', () => {
-    renderPanel({ unavailable: [editor({ id: 'vscode', label: 'VS Code', available: false })] });
+  it('renders the unavailable section (dimmed) and fires onLaunch on click', () => {
+    const unavailableEditor = editor({ id: 'vscode', label: 'VS Code', available: false });
+    const { onLaunch } = renderPanel({ unavailable: [unavailableEditor] });
     const row = screen.getByTestId('handoff-menu-item-vscode');
     expect(row.className).toContain('dim');
     expect(screen.getByText('Not installed')).toBeTruthy();
+    fireEvent.click(row);
+    expect(onLaunch).toHaveBeenCalledWith(unavailableEditor);
   });
 
   it('disables the row matching busy', () => {

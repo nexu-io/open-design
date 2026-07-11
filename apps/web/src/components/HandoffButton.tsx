@@ -7,9 +7,8 @@
 // attribution side-effect) and the outside-click/Escape dismiss effect, which
 // stays here per the slice's effect-placement rule so a reused hook's
 // subscription can't double-fire.
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { handoffTargetIdToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
@@ -86,6 +85,7 @@ export function HandoffButton({
       nav.setOpen(true);
       nav.setActiveTab('editor');
     },
+    toggleOpen: () => nav.setOpen((v) => !v),
   });
   const cli = useCli({
     fireHandoff,
@@ -114,22 +114,27 @@ export function HandoffButton({
     };
   }, [nav.open, nav.wrapRef, nav.setOpen]);
 
-  const handleAmrWebsiteClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    fireHandoff({ element: 'amr_website', handoff_tab: 'cli' });
-    const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website', new Date(), {
-      metricsConsent,
-    });
-    const deviceId = amrHandoffDeviceId({
-      metricsConsent,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId,
-    });
-    event.currentTarget.href = attributedAmrUrl(
-      AMR_WEBSITE_URL,
-      attribution,
-      deviceId,
-    );
-  };
+  // Cross-cutting analytics side-effect (AMR attribution + a DOM href
+  // mutation), not owned by any single feature hook — stays here per Phase 8.
+  const handleAmrWebsiteClick = useCallback(
+    (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      fireHandoff({ element: 'amr_website', handoff_tab: 'cli' });
+      const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website', new Date(), {
+        metricsConsent,
+      });
+      const deviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      event.currentTarget.href = attributedAmrUrl(
+        AMR_WEBSITE_URL,
+        attribution,
+        deviceId,
+      );
+    },
+    [fireHandoff, analytics.track, metricsConsent, installationId],
+  );
 
   if (!editors.loaded) {
     return null;
@@ -160,25 +165,7 @@ export function HandoffButton({
         primary={editors.primary}
         primaryTitle={editors.primaryTitle}
         busy={editors.busy}
-        onTriggerClick={() => {
-          if (editors.primary && editors.busy !== editors.primary.id) {
-            // Record the button intent first (the most common path through
-            // this surface), carrying the preferred editor as target so it
-            // is distinguishable from picking the same editor in the
-            // dropdown; launch() then emits `open_editor` for the actual
-            // target launch.
-            fireHandoff({
-              element: 'trigger',
-              target_id: handoffTargetIdToTracking(editors.primary.id),
-              target_available: editors.primary.available,
-              handoff_tab: 'editor',
-            });
-            void editors.launch(editors.primary);
-          } else {
-            fireHandoff({ element: 'trigger' });
-            nav.setOpen((v) => !v);
-          }
-        }}
+        onTriggerClick={editors.handleTriggerClick}
         onCaretClick={() => {
           fireHandoff({ element: 'caret' });
           nav.setOpen((v) => !v);

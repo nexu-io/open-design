@@ -69,6 +69,14 @@ describe('useHandoffCli', () => {
     expect(result.current.selectedFramework.id).toBe('vue');
   });
 
+  it('falls back to the default framework when the stored id matches nothing', () => {
+    // A stale/corrupted localStorage value (e.g. a framework removed from a
+    // later release) must not crash the picker — it silently falls back.
+    const preferences = makePreferences({ readPreferredFramework: vi.fn(() => 'no-longer-offered') });
+    const { result } = renderCli(makeClipboard(), preferences, makeOptions());
+    expect(result.current.selectedFramework.id).toBe('react');
+  });
+
   describe('copyCliPrompt', () => {
     it('builds and copies a prompt containing the project dir, framework, and cli name', async () => {
       const clipboard = makeClipboard();

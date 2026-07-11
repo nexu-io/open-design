@@ -25,6 +25,9 @@ export interface UseHandoffEditorsOptions {
   /** Reopen the dropdown on the editor tab (launch failed, so the user can
    * see the inline error and retry). */
   openMenuOnEditorTab: () => void;
+  /** Toggle the dropdown open/closed (the split trigger's "no primary yet, or
+   * mid-launch" branch, and the caret). */
+  toggleOpen: () => void;
 }
 
 export interface HandoffEditorsController {
@@ -39,6 +42,9 @@ export interface HandoffEditorsController {
   fallback: FallbackEditorTarget;
   launch: (editor: HostEditor) => Promise<void>;
   launchFallback: () => void;
+  /** The split trigger's click: launch the primary editor when one is ready
+   * and idle, otherwise just toggle the dropdown open. */
+  handleTriggerClick: () => void;
 }
 
 export function useHandoffEditors(
@@ -55,6 +61,7 @@ export function useHandoffEditors(
     clearError,
     closeMenu,
     openMenuOnEditorTab,
+    toggleOpen,
   } = options;
 
   const [editors, setEditors] = useState<HostEditor[]>([]);
@@ -156,6 +163,25 @@ export function useHandoffEditors(
       .finally(() => setBusy(null));
   }, [fireHandoff, clearError, port, projectId, fallback, setError, onRequestRevealInFinder]);
 
+  const handleTriggerClick = useCallback(() => {
+    if (primary && busy !== primary.id) {
+      // Record the button intent first (the most common path through this
+      // surface), carrying the preferred editor as target so it is
+      // distinguishable from picking the same editor in the dropdown;
+      // launch() then emits `open_editor` for the actual target launch.
+      fireHandoff({
+        element: 'trigger',
+        target_id: handoffTargetIdToTracking(primary.id),
+        target_available: primary.available,
+        handoff_tab: 'editor',
+      });
+      void launch(primary);
+    } else {
+      fireHandoff({ element: 'trigger' });
+      toggleOpen();
+    }
+  }, [primary, busy, fireHandoff, launch, toggleOpen]);
+
   return {
     editors,
     platform,
@@ -168,6 +194,7 @@ export function useHandoffEditors(
     fallback,
     launch,
     launchFallback,
+    handleTriggerClick,
   };
 }
 

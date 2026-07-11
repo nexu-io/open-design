@@ -48,6 +48,7 @@ function makeOptions(over: Partial<UseHandoffEditorsOptions> = {}): UseHandoffEd
     clearError: vi.fn(),
     closeMenu: vi.fn(),
     openMenuOnEditorTab: vi.fn(),
+    toggleOpen: vi.fn(),
     ...over,
   };
 }
@@ -77,6 +78,38 @@ describe('useHandoffEditors', () => {
     const { result } = renderEditors(port, makePreferences(), makeOptions());
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.editors).toEqual([]);
+  });
+
+  it('ignores a load that resolves after unmount', async () => {
+    let resolveFetch!: (value: HostEditorsResponse) => void;
+    const port = makePort({
+      fetchHostEditors: vi.fn(
+        () => new Promise<HostEditorsResponse>((resolve) => { resolveFetch = resolve; }),
+      ),
+    });
+    const { unmount } = renderEditors(port, makePreferences(), makeOptions());
+    unmount();
+    await expect(
+      act(async () => {
+        resolveFetch(response());
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('ignores a load that rejects after unmount', async () => {
+    let rejectFetch!: (err: unknown) => void;
+    const port = makePort({
+      fetchHostEditors: vi.fn(
+        () => new Promise<HostEditorsResponse>((_resolve, reject) => { rejectFetch = reject; }),
+      ),
+    });
+    const { unmount } = renderEditors(port, makePreferences(), makeOptions());
+    unmount();
+    await expect(
+      act(async () => {
+        rejectFetch(new Error('too late'));
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('splits available vs unavailable and picks the preferred as primary', async () => {
@@ -245,6 +278,75 @@ describe('useHandoffEditors', () => {
 
       await waitFor(() => expect(options.setError).toHaveBeenCalledWith('spawn failed'));
       expect(onRequestRevealInFinder).toHaveBeenCalled();
+    });
+
+    it('stringifies a non-Error rejection', async () => {
+      const port = makePort({
+        fetchHostEditors: vi.fn(async () => response({ editors: [] })),
+        openProjectInEditor: vi.fn(async () => { throw 'raw string failure'; }),
+      });
+      const options = makeOptions();
+      const { result } = renderEditors(port, makePreferences(), options);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => {
+        result.current.launchFallback();
+      });
+
+      await waitFor(() => expect(options.setError).toHaveBeenCalledWith('raw string failure'));
+    });
+  });
+
+  describe('handleTriggerClick', () => {
+    it('launches the primary editor when one is ready and idle', async () => {
+      const port = makePort();
+      const preferences = makePreferences({ readPreferredEditor: vi.fn(() => 'cursor' as HostEditorId) });
+      const options = makeOptions();
+      const { result } = renderEditors(port, preferences, options);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.handleTriggerClick());
+
+      expect(options.fireHandoff).toHaveBeenCalledWith(
+        expect.objectContaining({ element: 'trigger', handoff_tab: 'editor' }),
+      );
+      expect(options.toggleOpen).not.toHaveBeenCalled();
+      await waitFor(() => expect(port.openProjectInEditor).toHaveBeenCalledWith('p1', 'cursor'));
+    });
+
+    it('toggles the menu open instead when there is no primary editor', async () => {
+      const port = makePort({ fetchHostEditors: vi.fn(async () => response({ editors: [] })) });
+      const options = makeOptions();
+      const { result } = renderEditors(port, makePreferences(), options);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.handleTriggerClick());
+
+      expect(options.fireHandoff).toHaveBeenCalledWith({ element: 'trigger' });
+      expect(options.toggleOpen).toHaveBeenCalledTimes(1);
+      expect(port.openProjectInEditor).not.toHaveBeenCalled();
+    });
+
+    it('toggles the menu open instead of relaunching while the primary is already busy', async () => {
+      const toggleOpen = vi.fn();
+      const fireHandoff = vi.fn();
+      const port = makePort({
+        openProjectInEditor: vi.fn(() => new Promise<never>(() => {})),
+      });
+      const preferences = makePreferences({ readPreferredEditor: vi.fn(() => 'cursor' as HostEditorId) });
+      const options = makeOptions({ toggleOpen, fireHandoff });
+      const { result } = renderEditors(port, preferences, options);
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+
+      act(() => result.current.handleTriggerClick());
+      await waitFor(() => expect(result.current.busy).toBe('cursor'));
+      toggleOpen.mockClear();
+      fireHandoff.mockClear();
+
+      act(() => result.current.handleTriggerClick());
+
+      expect(fireHandoff).toHaveBeenCalledWith({ element: 'trigger' });
+      expect(toggleOpen).toHaveBeenCalledTimes(1);
     });
   });
 });

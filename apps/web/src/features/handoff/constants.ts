@@ -15,9 +15,11 @@ export const FRAMEWORKS: FrameworkTarget[] = [
   { id: 'vanilla' },
 ];
 
-export const DEFAULT_FRAMEWORK: FrameworkTarget = FRAMEWORKS[0] ?? {
-  id: 'react',
-};
+// `FRAMEWORKS` is a fixed non-empty literal above, so the first entry always
+// exists; `noUncheckedIndexedAccess` still types the access as possibly
+// `undefined`, so the assertion documents an invariant `??` would leave as
+// dead, untestable fallback code.
+export const DEFAULT_FRAMEWORK: FrameworkTarget = FRAMEWORKS[0]!;
 
 /** Display + sort order for CLI targets; anything not listed sorts after by
  * alphabetical display name. */

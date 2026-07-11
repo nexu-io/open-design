@@ -61,10 +61,17 @@ describe('HandoffCliPanel', () => {
     expect(onCopyCli).toHaveBeenCalledWith(claude);
   });
 
-  it('renders not-installed CLI targets dimmed', () => {
-    renderPanel();
+  it('renders not-installed CLI targets dimmed and fires onCopyCli on click', () => {
+    const { onCopyCli } = renderPanel();
     const row = screen.getByTestId('handoff-cli-item-codex');
     expect(row.className).toContain('dim');
+    fireEvent.click(row);
+    expect(onCopyCli).toHaveBeenCalledWith(codex);
+  });
+
+  it('shows the copied state on an unavailable row too', () => {
+    renderPanel({ copiedCliId: 'codex' });
+    expect(screen.getByTestId('handoff-cli-item-codex').className).toContain('copied');
   });
 
   it('omits the installed group when there are no available targets', () => {

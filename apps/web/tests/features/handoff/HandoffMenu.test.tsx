@@ -54,6 +54,12 @@ describe('HandoffMenu', () => {
     expect(onTabChange).toHaveBeenCalledWith('cli');
   });
 
+  it('fires onTabChange when the already-active editor tab is clicked again', () => {
+    const { onTabChange } = renderMenu();
+    fireEvent.click(screen.getByRole('tab', { name: 'Open with editor' }));
+    expect(onTabChange).toHaveBeenCalledWith('editor');
+  });
+
   it('renders the CLI panel on the cli tab', () => {
     renderMenu({ activeTab: 'cli' });
     expect(screen.getByTestId('handoff-cli-item-claude')).toBeTruthy();
