@@ -9,13 +9,14 @@ import {
   projectRawUrl,
   startDesignSystemTokenContractRebuildJob,
   updateDesignSystemDraft,
+  writeProjectBase64File,
   writeProjectTextFile,
 } from '../../providers/registry';
-import { confirmDialog } from '../../providers/dom';
+import { confirmDialog, subscribePageUnload } from '../../providers/dom';
 import { finalizeBrandProject } from '../../runtime/brands';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../../runtime/exports';
 import { deleteBrandImage, deleteBrandLogo, readDesignMd, updateBrandColor } from '../../runtime/kit-edit';
-import type { DesignSystemKitActionsPort, DesignSystemPreviewPort } from './ports';
+import type { DesignSystemKitActionsPort, DesignSystemPreviewPort, SketchesPort } from './ports';
 
 /** Default binding: the real project-file-text + raw/file URL transport. */
 export const designSystemPreviewPort: DesignSystemPreviewPort = {
@@ -40,4 +41,13 @@ export const designSystemKitActionsPort: DesignSystemKitActionsPort = {
   deleteBrandLogo,
   deleteBrandImage,
   confirmDelete: confirmDialog,
+};
+
+/** Default binding: the real sketch read/write transport + the page-teardown
+ *  DOM bridge. */
+export const sketchesPort: SketchesPort = {
+  fetchProjectFileText,
+  writeProjectTextFile,
+  writeProjectBase64File,
+  subscribePageUnload,
 };

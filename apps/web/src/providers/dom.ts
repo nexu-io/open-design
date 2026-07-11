@@ -6,3 +6,18 @@ export function confirmDialog(message: string): boolean {
   if (typeof window === 'undefined') return false;
   return window.confirm(message);
 }
+
+/**
+ * Subscribe to the page-teardown signals (`pagehide` + `beforeunload`) a slice
+ * needs to flush pending work before the browser tears the page down. Returns
+ * an unsubscribe that tears both listeners down.
+ */
+export function subscribePageUnload(onUnload: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('pagehide', onUnload);
+  window.addEventListener('beforeunload', onUnload);
+  return () => {
+    window.removeEventListener('pagehide', onUnload);
+    window.removeEventListener('beforeunload', onUnload);
+  };
+}
