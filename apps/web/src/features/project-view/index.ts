@@ -37,6 +37,7 @@ export type {
   ProjectLiveEvent,
   BrandBrowserSnapshot,
   BrandBrowserSnapshotExtractionResult,
+  SaveMessageOptions,
 } from './types';
 
 // Pure decision rules.
@@ -44,6 +45,7 @@ export {
   mergeSavedPreviewComment,
   mergeServerMessagesIntoConversation,
   ensureConversationPresent,
+  findActiveConversation,
   workspacePanelMinWidthForSplit,
   maxChatPanelWidthForSplit,
   workspacePanelTrackFor,
@@ -203,6 +205,11 @@ export {
 } from './hooks/useRunCompletionNotifications.hooks';
 export type { QuestionFormPanelController } from './hooks/useQuestionFormPanel.hooks';
 export { useQuestionFormPanel } from './hooks/useQuestionFormPanel.hooks';
+export type { ConversationMessagesController } from './hooks/useConversationMessages.hooks';
+export {
+  useConversationMessages,
+  useWiredConversationMessages,
+} from './hooks/useConversationMessages.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

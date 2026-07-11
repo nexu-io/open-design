@@ -56,6 +56,9 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     isDocumentHidden: vi.fn(() => false),
     isDocumentFocused: vi.fn(() => true),
     focusWindow: vi.fn(),
+    listMessages: vi.fn(async () => []),
+    saveMessage: vi.fn(async () => {}),
+    fetchPreviewComments: vi.fn(async () => []),
     ...overrides,
   };
 }

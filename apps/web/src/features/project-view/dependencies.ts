@@ -34,6 +34,9 @@ import {
   isDocumentHidden,
   isDocumentFocused,
   focusWindow,
+  listMessages,
+  saveMessage,
+  fetchPreviewComments,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -72,4 +75,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   isDocumentHidden,
   isDocumentFocused,
   focusWindow,
+  listMessages,
+  saveMessage,
+  fetchPreviewComments,
 };

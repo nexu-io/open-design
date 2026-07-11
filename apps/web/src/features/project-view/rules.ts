@@ -127,6 +127,15 @@ export function ensureConversationPresent(
   ];
 }
 
+/** Finds the active conversation by id, or `null` if the list hasn't loaded
+ *  it yet (or `activeConversationId` is `null`). */
+export function findActiveConversation(
+  conversations: Conversation[],
+  activeConversationId: string | null,
+): Conversation | null {
+  return conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
+}
+
 // --- Split-panel math ----------------------------------------------------
 
 export function workspacePanelMinWidthForSplit(splitWidth: number): number {

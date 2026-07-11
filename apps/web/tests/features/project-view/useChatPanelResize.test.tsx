@@ -82,6 +82,9 @@ function makeHarness(savedWidth = 460): Harness {
     isDocumentHidden: vi.fn(() => false),
     isDocumentFocused: vi.fn(() => true),
     focusWindow: vi.fn(),
+    listMessages: vi.fn(async () => []),
+    saveMessage: vi.fn(async () => {}),
+    fetchPreviewComments: vi.fn(async () => []),
     },
   };
   return harness;

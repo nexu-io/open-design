@@ -133,3 +133,12 @@ export type BrandBrowserSnapshot =
 export type BrandBrowserSnapshotExtractionResult =
   | { status: 'handled' }
   | { status: 'miss'; message: string | null };
+
+/** Options for a single message-persist write, forwarded to the transport
+ *  port's `saveMessage`. A direct structural mirror of `state/projects`'
+ *  `SaveMessageOptions` (kept in-slice per ADR 0002 — the guard forbids a
+ *  slice file importing that module directly). */
+export interface SaveMessageOptions {
+  telemetryFinalized?: boolean;
+  keepalive?: boolean;
+}

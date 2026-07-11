@@ -237,7 +237,6 @@ import {
   BEDROCK_BYOK_UNSUPPORTED_MESSAGE,
   TAB_PERSIST_DEBOUNCE_MS,
   mergeSavedPreviewComment,
-  mergeServerMessagesIntoConversation,
   projectSplitClassName,
   projectSplitStyle,
   useWiredChatPanelResize,
@@ -252,6 +251,8 @@ import {
   useProjectTimeouts,
   useWiredRunCompletionNotifications,
   useQuestionFormPanel,
+  useWiredConversationMessages,
+  findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
   workspaceContextItemEqual,
@@ -292,7 +293,6 @@ import {
   textContentFromAgentEvents,
   resolveRetryTarget,
   latestDesignSystemActivityEvents,
-  isPhantomDaemonRunMessage,
   resolveSucceededRunStatus,
   computeProducedFiles,
   computeTraceObjectFiles,
@@ -558,7 +558,7 @@ export function ProjectView({
     null,
   );
   const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
+    () => findActiveConversation(conversations, activeConversationId),
     [conversations, activeConversationId],
   );
   const activeSessionMode = activeConversation?.sessionMode ?? 'design';
@@ -946,167 +946,44 @@ export function ProjectView({
         })
     : [];
 
-  // Load conversations on project switch. If none exist (older projects
-  // pre-conversations, or a freshly created one whose default seed got
-  // dropped), create one on the fly.
-  useEffect(() => {
-    let cancelled = false;
-    setConversations([]);
-    setActiveConversationId(null);
-    setMessagesConversationId(null);
-    setFailedMessagesConversationId(null);
-    setMessageLoadRetryNonce(0);
-    setConversationLoadError(null);
-    setMessages([]);
-    setPreviewComments([]);
-    setAttachedComments([]);
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
-    setError(null);
-    setArtifact(null);
-    savedArtifactRef.current = null;
-    (async () => {
-      try {
-        const list = await listConversations(project.id);
-        if (cancelled) return;
-        if (list.length === 0) {
-          const fresh = await createConversation(project.id);
-          if (cancelled) return;
-          if (fresh) {
-            setConversations([fresh]);
-            setActiveConversationId(fresh.id);
-          } else {
-            throw new Error('Could not create a conversation for this project.');
-          }
-        } else {
-          setConversations(list);
-          // Issue #1505: when the URL deep-links to a specific
-          // conversation, prefer that one. Falls through to list[0]
-          // when the routed id is null or no longer present (the
-          // routine row may have been deleted between the route
-          // landing and the conversation list loading).
-          const routedMatch = routeConversationId
-            ? list.find((c) => c.id === routeConversationId) ?? null
-            : null;
-          setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
-        setConversations([]);
-        setActiveConversationId(null);
-        setConversationLoadError(message);
-        setError(message);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id]);
-
-  // Issue #1505: when the URL changes the routed conversation id while
-  // we are already inside the project (e.g. the user clicks "Open
-  // project" on a different routine history row in the same project),
-  // switch the active conversation without re-fetching the list.
-  // Guards: only acts when the routed id is non-null AND present in
-  // the already-loaded list, and only when it differs from the current
-  // active id. Falls through to a no-op for stale / missing routes so
-  // the default picker above keeps its result.
-  useEffect(() => {
-    if (!routeConversationId) {
-      lastSeenRouteConversationIdRef.current = null;
-      return;
-    }
-    if (conversations.length === 0) return;
-    if (routeConversationId === activeConversationId) return;
-    // When the route still points at the conversation this view last
-    // pushed to the URL, the mismatch means a local switch (new
-    // conversation, history pick) moved activeConversationId ahead and
-    // the URL sync below has not caught up yet. Following the stale
-    // route here would fight that sync and remount ChatPane in a loop,
-    // so only react to a genuinely external navigation.
-    if (routeConversationId === lastSyncedConversationIdRef.current) return;
-    if (lastSeenRouteConversationIdRef.current === routeConversationId) return;
-    lastSeenRouteConversationIdRef.current = routeConversationId;
-    const match = conversations.find((c) => c.id === routeConversationId);
-    if (!match) return;
-    setActiveConversationId(routeConversationId);
-  }, [routeConversationId, conversations, activeConversationId]);
+  const {
+    persistMessage,
+    persistMessageById,
+    updateMessageById,
+    appendConversationMessage,
+    replaceConversationMessage,
+    refreshConversationMessagesFromServer,
+    scheduleConversationMessageRefresh,
+  } = useWiredConversationMessages(
+    project.id,
+    routeConversationId,
+    conversations,
+    activeConversationId,
+    setActiveConversationId,
+    setConversations,
+    setMessagesConversationId,
+    setFailedMessagesConversationId,
+    messageLoadRetryNonce,
+    setMessageLoadRetryNonce,
+    setConversationLoadError,
+    setMessages,
+    messagesConversationIdRef,
+    setMessagesInitialized,
+    setPreviewComments,
+    setAttachedComments,
+    setStreaming,
+    streamingConversationIdRef,
+    setStreamingConversationId,
+    setError,
+    setArtifact,
+    savedArtifactRef,
+    lastSyncedConversationIdRef,
+    scheduleProjectTimeout,
+  );
 
   useEffect(() => {
     setWorkspaceFocused(false);
   }, [project.id]);
-
-  // Load messages whenever the active conversation changes. This happens
-  // on project mount (after conversations load) and on user-triggered
-  // conversation switches.
-  useEffect(() => {
-    if (!activeConversationId) {
-      setMessages([]);
-      setMessagesInitialized(false);
-      setPreviewComments([]);
-      setAttachedComments([]);
-      setMessagesConversationId(null);
-      setFailedMessagesConversationId(null);
-      messagesConversationIdRef.current = null;
-      setStreaming(false);
-      streamingConversationIdRef.current = null;
-      setStreamingConversationId(null);
-      return;
-    }
-    // Reset the initialized flag so auto-send waits for the new
-    // conversation's DB read to settle before checking messages.length.
-    setMessagesInitialized(false);
-    let cancelled = false;
-    setMessages([]);
-    setPreviewComments([]);
-    setAttachedComments([]);
-    setArtifact(null);
-    setMessagesConversationId(null);
-    setFailedMessagesConversationId(null);
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
-    savedArtifactRef.current = null;
-    if (messagesConversationIdRef.current !== activeConversationId) {
-      messagesConversationIdRef.current = null;
-    }
-    (async () => {
-      try {
-        const [list, comments] = await Promise.all([
-          listMessages(project.id, activeConversationId),
-          fetchPreviewComments(project.id, activeConversationId),
-        ]);
-        if (cancelled) return;
-        setMessages(list);
-        setMessagesInitialized(true);
-        setPreviewComments(comments);
-        setAttachedComments([]);
-        setArtifact(null);
-        setError(null);
-        savedArtifactRef.current = null;
-        messagesConversationIdRef.current = activeConversationId;
-        setMessagesConversationId(activeConversationId);
-        setFailedMessagesConversationId(null);
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Could not load messages for this conversation.';
-        setMessages([]);
-        setPreviewComments([]);
-        setAttachedComments([]);
-        setArtifact(null);
-        setError(message);
-        savedArtifactRef.current = null;
-        messagesConversationIdRef.current = null;
-        setMessagesConversationId(null);
-        setFailedMessagesConversationId(activeConversationId);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, activeConversationId, messageLoadRetryNonce]);
 
   useEffect(() => {
     if (!projectIsProgrammaticBrandExtraction) return undefined;
@@ -1694,7 +1571,6 @@ export function ProjectView({
   // target lost that update because the early-return saw `target` unchanged
   // and skipped the navigate (lefarcen P1 on PR #1508).
   const lastSyncedRouteKeyRef = useRef<string | null>(null);
-  const lastSeenRouteConversationIdRef = useRef<string | null>(null);
   useEffect(() => {
     const target = openTabsState.active && (
       openTabsState.tabs.includes(openTabsState.active)
@@ -1729,83 +1605,6 @@ export function ProjectView({
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
     return project.id;
   }, [project.id]);
-
-  const persistMessage = useCallback(
-    (m: ChatMessage, options?: SaveMessageOptions) => {
-      if (!activeConversationId) return;
-      // Source-level guard against the "Working 24m+ / Waiting for first
-      // output" UI: never write a daemon assistant row that is still
-      // queued/running but has no runId. Until POST /api/runs returns the
-      // runId, the message is purely in-flight on the client; persisting it
-      // here creates a row that nothing can ever reattach to (daemon never
-      // saw the runId, client lost the response). Once onRunCreated assigns
-      // a runId — or the run finishes terminally — this guard lets the row
-      // through normally.
-      if (isPhantomDaemonRunMessage(m)) return;
-      void saveMessage(project.id, activeConversationId, m, options);
-    },
-    [project.id, activeConversationId],
-  );
-
-  const persistMessageById = useCallback(
-    (messageId: string, options?: SaveMessageOptions) => {
-      if (!activeConversationId) return;
-      setMessages((curr) => {
-        const found = curr.find((m) => m.id === messageId);
-        if (found && !isPhantomDaemonRunMessage(found)) {
-          void saveMessage(project.id, activeConversationId, found, options);
-        }
-        return curr;
-      });
-    },
-    [project.id, activeConversationId],
-  );
-
-  const updateMessageById = useCallback(
-    (
-      messageId: string,
-      updater: (message: ChatMessage) => ChatMessage,
-      persist = false,
-      persistOptions?: SaveMessageOptions,
-    ) => {
-      setMessages((curr) => {
-        let saved: ChatMessage | null = null;
-        const next = curr.map((m) => {
-          if (m.id !== messageId) return m;
-          const updated = updater(m);
-          saved = updated;
-          return updated;
-        });
-        // Same phantom guard as persistMessage: skip writes for a daemon
-        // assistant row that is still in-flight (active runStatus, no runId).
-        // The runId-arriving update from onRunCreated passes through because
-        // the updater sets runId before this check runs.
-        if (persist && saved && activeConversationId && !isPhantomDaemonRunMessage(saved)) {
-          void saveMessage(project.id, activeConversationId, saved, persistOptions);
-        }
-        return next;
-      });
-    },
-    [project.id, activeConversationId],
-  );
-
-  const appendConversationMessage = useCallback(
-    (
-      conversationId: string,
-      message: ChatMessage,
-      options?: SaveMessageOptions,
-      persist = true,
-    ) => {
-      if (
-        activeConversationId === conversationId
-        || messagesConversationIdRef.current === conversationId
-      ) {
-        setMessages((curr) => [...curr, message]);
-      }
-      if (persist) void saveMessage(project.id, conversationId, message, options);
-    },
-    [activeConversationId, project.id],
-  );
 
   const readLocalBrowserPageArchiveSnapshot = useCallback(
     async (sourceUrl: string | null | undefined): Promise<BrandBrowserSnapshot> => {
@@ -2055,50 +1854,6 @@ export function ProjectView({
     selectedAssistantIdentity,
     t,
   ]);
-
-  const replaceConversationMessage = useCallback(
-    (
-      conversationId: string,
-      message: ChatMessage,
-      options?: SaveMessageOptions,
-      persist = true,
-    ) => {
-      if (
-        activeConversationId === conversationId
-        || messagesConversationIdRef.current === conversationId
-      ) {
-        setMessages((curr) => curr.map((item) => (item.id === message.id ? message : item)));
-      }
-      if (persist) void saveMessage(project.id, conversationId, message, options);
-    },
-    [activeConversationId, project.id],
-  );
-
-  const refreshConversationMessagesFromServer = useCallback(
-    async (conversationId: string) => {
-      if (messagesConversationIdRef.current !== conversationId) return;
-      try {
-        const serverMessages = await listMessages(project.id, conversationId);
-        if (messagesConversationIdRef.current !== conversationId) return;
-        setMessages((current) => mergeServerMessagesIntoConversation(current, serverMessages));
-        setMessagesInitialized(true);
-        setMessagesConversationId(conversationId);
-        setFailedMessagesConversationId(null);
-      } catch (err) {
-        console.warn('Failed to refresh conversation messages after run completion', err);
-      }
-    },
-    [project.id],
-  );
-
-  const scheduleConversationMessageRefresh = useCallback(
-    (conversationId: string) => {
-      scheduleProjectTimeout(() => {
-        void refreshConversationMessagesFromServer(conversationId);
-      }, 150);
-    },
-    [refreshConversationMessagesFromServer, scheduleProjectTimeout],
-  );
 
   // The programmatic brand-extraction transcript is a synthetic row the daemon
   // reconciles to a terminal state out of band (finalize success, the 30s

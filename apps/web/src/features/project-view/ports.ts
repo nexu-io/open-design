@@ -11,12 +11,13 @@ import type {
   ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
-import type { ChatAttachment, ChatMessage, Conversation } from '../../types';
+import type { ChatAttachment, ChatMessage, Conversation, PreviewComment } from '../../types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
   QueuedChatSend,
   RunStatusSnapshot,
+  SaveMessageOptions,
 } from './types';
 
 /** Transport the project-view orchestrator needs from the outside world. */
@@ -112,4 +113,15 @@ export interface ProjectViewTransportPort {
   isDocumentFocused(): boolean;
   /** Focuses the browser window, if one exists. */
   focusWindow(): void;
+  /** List a conversation's messages. Best-effort: resolves `[]` on failure. */
+  listMessages(projectId: string, conversationId: string): Promise<ChatMessage[]>;
+  /** Persist a single message. Best-effort: never rejects. */
+  saveMessage(
+    projectId: string,
+    conversationId: string,
+    message: ChatMessage,
+    options?: SaveMessageOptions,
+  ): Promise<void>;
+  /** List a conversation's preview comments. Best-effort: resolves `[]` on failure. */
+  fetchPreviewComments(projectId: string, conversationId: string): Promise<PreviewComment[]>;
 }
