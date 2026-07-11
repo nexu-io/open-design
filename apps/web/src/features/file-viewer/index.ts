@@ -300,3 +300,5 @@ export type { ArtifactExportToast, ArtifactTrackingAnalytics } from './types';
 export { useWiredDeployFlow } from './hooks/useDeployFlow.hooks';
 export type { DeployFlowController, DeployFlowDeps } from './hooks/useDeployFlow.hooks';
 export type { CloudflarePagesZoneOption, DeployResultCard } from './types';
+export { DeployModal } from './components/DeployModal';
+export type { DeployModalProps } from './components/DeployModal';
