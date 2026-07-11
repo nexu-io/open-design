@@ -1,0 +1,211 @@
+/* Subscription-invitation styling for the pre-run balance gate. Centered
+ * card, warm accent halo, benefit stagger — an unlock moment, not an error.
+ * The shared Dialog chrome supplies the backdrop, elevation, and the
+ * 220ms pop-in (scale 0.97 + opacity, custom cubic-bezier). */
+
+.panel {
+  position: relative;
+  width: 400px;
+  align-items: center;
+  text-align: center;
+  padding: 32px 28px 20px;
+  gap: 0;
+}
+
+.closeButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.closeButton:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.iconBadge {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-tint);
+  /* Soft halo ring so the badge reads as a glow, not a flat chip. */
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent-tint) 45%, transparent);
+  margin-bottom: 18px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.message {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-wrap: balance;
+  font-variant-numeric: tabular-nums;
+}
+
+.benefitsCard {
+  width: 100%;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  text-align: start;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+/* Eyebrow label naming whose advantages the list below sells. Accent, not
+ * gray: the brand attribution is the label's whole job, and it ties the card
+ * to the check icons and CTA without competing with the main title. */
+.benefitsTitle {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.benefits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.benefit {
+  display: flex;
+  /* Top-align so the check hugs the first line when an item wraps. */
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+  /* Rare dialog → a light cascade adds delight without slowing anyone down. */
+  opacity: 0;
+  transform: translateY(4px);
+  animation: amr-gate-benefit-in 240ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.benefit:nth-child(1) { animation-delay: 60ms; }
+.benefit:nth-child(2) { animation-delay: 100ms; }
+.benefit:nth-child(3) { animation-delay: 140ms; }
+.benefit:nth-child(4) { animation-delay: 180ms; }
+
+@keyframes amr-gate-benefit-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.benefitIcon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.cta {
+  width: 100%;
+  height: 38px;
+  font-size: 13.5px;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cta:active {
+  transform: scale(0.98);
+}
+
+/* Signed-out variant: the AmrLoginPill's sign-in action dressed as the
+ * dialog's full-width primary CTA (the pill supplies the vela-login flow,
+ * activation-link fallback, and polling; we only restyle its button). */
+.signInPill {
+  width: 100%;
+}
+
+.signInPill :global(.amr-account-control) {
+  width: 100%;
+  justify-content: center;
+}
+
+.signInPill :global(.amr-account-control__action) {
+  width: 100%;
+  height: 38px;
+  font-size: 13.5px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms ease;
+}
+
+.signInPill :global(.amr-account-control__action:hover) {
+  background: var(--accent-hover);
+}
+
+.signInPill :global(.amr-account-control__action:active) {
+  transform: scale(0.98);
+}
+
+/* Quiet text button: the bordered ghost chrome would compete with the CTA.
+ * Scoped under .actions to outrank the shared Button variant class. */
+.actions .later {
+  width: 100%;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Quiet status line shown while the post-recharge wallet watch is armed. */
+.watchingHint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .benefit {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

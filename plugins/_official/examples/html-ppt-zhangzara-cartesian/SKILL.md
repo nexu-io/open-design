@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-cartesian
+en_name: "Present a Senior Thesis Defense like a Distinction-Grade Economics Student"
+zh_name: "像拿优等的经济学生一样做毕业论文答辩"
 description: |
-  Cartesian — Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried. Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks.
+  An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Built as a decision-grade coursework defense deck for thesis committee.
+en_description: |
+  An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Built as a decision-grade coursework defense deck for thesis committee.
+zh_description: |
+  像拿优等的经济学生一样做毕业论文答辩——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "student-coursework"
+  - "senior-capstone-defense-deck"
+  - "education"
+  - "coursework"
+  - "defense"
+  - "academic"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-cartesian"
 triggers:
-  - "cartesian"
-  - "zhangzara-cartesian"
-  - "quiet"
-  - "considered"
-  - "classical"
-  - "literary"
-  - "investment thesis"
-  - "white paper"
+  - "senior-capstone-defense-deck"
+  - "student-coursework"
+  - "Present a Senior Thesis Defense like a Distinction-Grade Economics Student"
+  - "像拿优等的经济学生一样做毕业论文答辩"
+  - "coursework"
+  - "defense"
+  - "academic"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/cartesian"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "student-coursework"
+  scenario: "education"
+  example_prompt: "Create \"Present a Senior Thesis Defense like a Distinction-Grade Economics Student\" as a decision-grade Student coursework deck in this template's own visual system. Subject: An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Audience: thesis committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds."
 ---
 
 # Cartesian

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebGL Experience — Aurora Field</title>
+<!--
+  Self-contained WebGL2 experience. No external assets, no build step.
+  Open Design renders this in "powered preview" mode (cross-origin isolated
+  iframe with allow-same-origin) because it calls getContext('webgl2') — the
+  opaque preview sandbox cannot run the modern GPU stack.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #05070d; overflow: hidden; font-family: 'Albert Sans', system-ui, -apple-system, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: flex-end; padding: 6vw;
+    pointer-events: none; color: #f7fbff; z-index: 2;
+  }
+  .kicker {
+    font-size: clamp(12px, 1.2vw, 15px); letter-spacing: 0.42em; text-transform: uppercase;
+    color: #63fe13; margin: 0 0 18px; font-weight: 600;
+  }
+  h1 {
+    margin: 0; font-size: clamp(40px, 8.5vw, 120px); line-height: 0.92;
+    font-weight: 800; letter-spacing: -0.03em; max-width: 14ch;
+    text-shadow: 0 2px 40px rgba(0,0,0,0.45);
+  }
+  p.sub { margin: 22px 0 0; font-size: clamp(15px, 1.6vw, 20px); max-width: 44ch; color: rgba(247,251,255,0.72); }
+  .badge {
+    position: fixed; top: 6vw; right: 6vw; z-index: 2; pointer-events: none;
+    font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: rgba(247,251,255,0.55); border: 1px solid rgba(247,251,255,0.18);
+    padding: 8px 14px; border-radius: 999px; backdrop-filter: blur(6px);
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="badge" id="fps">GPU · WebGL2</div>
+<div class="overlay">
+  <p class="kicker">WebGL Experience</p>
+  <h1>Motion that runs on the GPU.</h1>
+  <p class="sub">A full-screen fragment shader rendered live at 60fps — the kind of real-time visual the opaque preview sandbox used to blank out.</p>
+</div>
+<script type="text/javascript">
+(() => {
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+  if (!gl) {
+    document.getElementById('fps').textContent = 'WebGL2 unavailable';
+    return;
+  }
+
+  const vert = `#version 300 es
+  in vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+
+  // Flowing aurora field — domain-warped fbm noise tinted toward the brand lime.
+  const frag = `#version 300 es
+  precision highp float;
+  out vec4 o;
+  uniform vec2 res;
+  uniform float t;
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+  float noise(vec2 p){
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(mix(hash(i), hash(i+vec2(1,0)), u.x),
+               mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
+  }
+  float fbm(vec2 p){
+    float v = 0.0, a = 0.5;
+    for(int i=0;i<6;i++){ v += a*noise(p); p *= 2.0; a *= 0.5; }
+    return v;
+  }
+  void main(){
+    vec2 uv = (gl_FragCoord.xy - 0.5*res) / res.y;
+    float time = t*0.06;
+    vec2 q = vec2(fbm(uv*1.6 + time), fbm(uv*1.6 - time + 5.2));
+    vec2 r = vec2(fbm(uv*2.4 + q + vec2(1.7,9.2) + 0.15*time),
+                  fbm(uv*2.4 + q + vec2(8.3,2.8) - 0.15*time));
+    float f = fbm(uv*2.0 + r);
+    vec3 base = mix(vec3(0.02,0.03,0.08), vec3(0.05,0.10,0.22), clamp(f*f*2.0,0.0,1.0));
+    vec3 lime = vec3(0.39, 0.996, 0.075);
+    vec3 col = base + lime * pow(clamp(length(r)-0.35,0.0,1.0), 2.2) * 0.9;
+    col += vec3(0.35,0.55,1.0) * pow(clamp(q.y,0.0,1.0),3.0) * 0.5;
+    col = pow(col, vec3(0.85));
+    o = vec4(col, 1.0);
+  }`;
+
+  function compile(type, src){
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes = gl.getUniformLocation(prog, 'res');
+  const uT = gl.getUniformLocation(prog, 't');
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (w === canvas.width && h === canvas.height) return;
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const fpsEl = document.getElementById('fps');
+  let frames = 0, last = 0, acc = 0;
+  const start = (typeof performance !== 'undefined' ? performance.now() : 0);
+  function tick(now){
+    resize();
+    const t = (now - start) / 1000;
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uT, t);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    frames++; acc += now - last; last = now;
+    if (acc > 500){ fpsEl.textContent = 'GPU · WebGL2 · ' + Math.round(frames * 1000 / acc) + 'fps'; frames = 0; acc = 0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

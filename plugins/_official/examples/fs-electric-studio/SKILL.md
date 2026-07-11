@@ -1,24 +1,44 @@
 ---
 name: fs-electric-studio
-description: "Electric Studio (钴蓝工作室) HTML decks: bold clean vertical split panels — white over cobalt #4361ee — with corner brand marks, a dark accent bar on the panel seam, quote typography as the hero element, all-Manrope 800/400, and confident restrained spacing. Fixed 1920×1080 stage scaled to any viewport, zero dependencies."
+en_name: "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE"
+zh_name: "像一线企业客户 AE 一样写 B2B SaaS 销售提案"
+description: |
+  Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.
+en_description: |
+  Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.
+zh_description: |
+  像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "b2b-sales"
+  - "b2b-saas-sales-proposal"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "fs-electric-studio"
 triggers:
-  - "electric studio"
-  - "钴蓝工作室"
-  - "cobalt split deck"
-  - "split panel slides"
-  - "blue white deck"
-  - "manrope slides"
+  - "b2b-saas-sales-proposal"
+  - "b2b-sales"
+  - "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE"
+  - "像一线企业客户 AE 一样写 B2B SaaS 销售提案"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/frontend-slides"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use Electric Studio to turn my content into a bold split-panel single-file HTML deck: white panel over cobalt #4361ee, brand marks in the corners, a dark accent bar on the panel edge, quote typography as the hero, all Manrope. Start from example.html and replace the content only — keep the design system."
   example_prompt_i18n:
     zh-CN: "用钴蓝工作室（Electric Studio）把我的内容做成一套大胆干净的上下分割面板单文件 HTML 幻灯片：白上 × 钴蓝 #4361ee 下、四角 brand marks、面板接缝深色 accent bar、引文排印为主视觉、全 Manrope。从 example.html 出发只替换内容，保留设计系统。"
+  category: "b2b-sales"
+  scenario: "sales"
+  example_prompt: "Create \"Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Audience: economic buyer, design VP, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Electric Studio · 钴蓝工作室

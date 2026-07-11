@@ -76,6 +76,33 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
     expect(out).toMatch(/<script[^>]*data-od-deck-bridge/);
   });
 
+  it('can hide generated deck chrome so host preview chrome owns navigation', () => {
+    const out = buildSrcdoc(frameworkDeckHtml(), { deck: true, hideDeckChrome: true });
+
+    expect(out).toMatch(/<style[^>]*data-od-deck-chrome-hidden/);
+    expect(out).toContain('.deck-counter,');
+    expect(out).toContain('.deck-hint,');
+    expect(out).toContain('display: none !important');
+  });
+
+  it('does not double-install half-slide click navigation for framework decks', () => {
+    const frameworkOut = buildSrcdoc(frameworkDeckHtml(), { deck: true, deckClickNavigation: true });
+    const legacyOut = buildSrcdoc(legacyDeckHtml(), { deck: true, deckClickNavigation: true });
+
+    expect(frameworkOut).toContain('if (false) {');
+    expect(legacyOut).toContain('if (true) {');
+  });
+
+  it('forwards Escape from deck iframes so fullscreen presentation can close', () => {
+    const frameworkOut = buildSrcdoc(frameworkDeckHtml(), { deck: true });
+    const legacyOut = buildSrcdoc(legacyDeckHtml(), { deck: true });
+
+    expect(frameworkOut).toContain("key === 'Escape'");
+    expect(frameworkOut).toContain("window.parent.postMessage({ type: 'od:present-escape' }, '*')");
+    expect(legacyOut).toContain("ev && ev.key === 'Escape'");
+    expect(legacyOut).toContain("window.parent.postMessage({ type: 'od:present-escape' }, '*')");
+  });
+
   it('skips the fix when #deck-stage uses single quotes, extra whitespace, or uppercase ID syntax', () => {
     // The detector should match the framework's emit shape but also
     // tolerate the minor formatting variations that DOMParser /

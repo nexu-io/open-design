@@ -749,6 +749,26 @@ describe('deploy plan and analyzer', () => {
     expect(warnings.map((w: any) => w.code)).not.toContain('no-doctype');
   });
 
+  it('checks the doctype prolog without catastrophic backtracking on a comment-only entry', () => {
+    // Regression: the prolog check's comment-run group used a lazy `[\s\S]*?`
+    // body inside `(?:...)*`, so a comment-only entry with no doctype forced
+    // 2^n backtracking — a ~250-byte HTML could hang the single-threaded
+    // daemon for minutes (event-loop DoS on POST /deploy/preflight). The
+    // tempered comment body makes each comment match deterministically.
+    const html = '<!---->'.repeat(28) + '<html><body></body></html>';
+    const start = performance.now();
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    const elapsedMs = performance.now() - start;
+    // Correctness is preserved (no doctype -> still flagged) and the check is
+    // linear: the tempered regex handles this in well under 1ms, whereas the
+    // old lazy-body regex grew ~2x per added comment (seconds here, minutes
+    // with a few more). The 500ms budget sits far above the fixed path (~100x
+    // headroom, no false failures) yet well below the vulnerable time, so any
+    // regression blows it.
+    expect(warnings.map((w) => w.code)).toContain('no-doctype');
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
   it('flags external scripts and stylesheets', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',

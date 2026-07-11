@@ -6,6 +6,14 @@ export const STORAGE_KEY = 'open-design:config';
 export const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
 export const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
+type MockAmrWalletOptions = {
+  balanceUsd?: string;
+  email?: string;
+  loggedIn?: () => boolean;
+  plan?: string;
+  profile?: string;
+};
+
 export async function waitForLoadingToClear(page: Page) {
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
 }
@@ -17,7 +25,9 @@ export async function dismissPrivacyDialog(page: Page) {
     .first();
   await privacySurface.waitFor({ state: 'visible', timeout: 1_000 }).catch(() => {});
   if (await privacySurface.isVisible().catch(() => false)) {
-    await privacySurface.getByRole('button', { name: /not now|i get it|got it/i }).click();
+    await privacySurface
+      .getByRole('button', { name: /don['’]?t share|不分享|not now|i get it|got it/i })
+      .click();
     await expect(privacySurface).toBeHidden();
   }
 }
@@ -26,6 +36,53 @@ export async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await dismissPrivacyDialog(page);
+}
+
+export async function mockAmrWalletSnapshot(
+  page: Page,
+  options: MockAmrWalletOptions = {},
+) {
+  const profile = options.profile ?? 'local';
+  const email = options.email ?? 'amr-wallet@example.com';
+  const plan = options.plan ?? 'plus';
+  const balanceUsd = options.balanceUsd ?? '20.00';
+  const fetchedAt = '2026-07-07T00:00:00.000Z';
+
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    if (options.loggedIn?.() === false) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'signed_out',
+          profile,
+          user: null,
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt,
+          stale: false,
+          source: 'unavailable',
+          error: { code: 'signed_out', message: 'Sign in to view wallet balance.' },
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'available',
+        profile,
+        user: { id: 'amr-wallet-user', email, plan },
+        balanceUsd,
+        updatedAt: fetchedAt,
+        fetchedAt,
+        stale: false,
+        source: 'vela_api',
+      }),
+    });
+  });
 }
 
 export async function expectWorkspaceReady(page: Page) {

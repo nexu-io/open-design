@@ -847,6 +847,134 @@ export const TR: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Mühendislik için Open Design' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — Open Design ile HTML’i düzenlenebilir bir PowerPoint’a dönüştürün',
+    description:
+      'Ücretsiz, açık kaynaklı bir HTML-to-PPT akışı: kodlama ajanınız cilalı bir HTML destesi oluşturur ve gerçek, düzenlenebilir bir .pptx dışa aktarır — zaten kullandığınız ajanın içinde. Bulut dönüştürücü yok, düz slayt görüntüleri yok, kilitli dışa aktarma yok. HTML ve PowerPoint size ait dosyalardır.',
+    breadcrumb: 'HTML to PPT',
+    label: 'Araç · HTML to PPT',
+    heading: 'HTML to PPT, ajanınızın içinde',
+    lead: 'Bir HTML sayfanız, bir markdown belgeniz ya da yalnızca bir komutunuz mu var? Kodlama ajanınızın bunu temiz bir HTML destesine dönüştürmesine ve gerçek, düzenlenebilir bir PowerPoint dışa aktarmasına izin verin — slayt başına bir ekran görüntüsü değil, düzenlemeye devam edebileceğiniz yerel şekiller ve metin. HTML kaynaktır; .pptx sunmanız, teslim etmeniz ve sahiplenmeniz için sizindir.',
+    heroImageAlt:
+      'Bir kodlama ajanının içinde bir HTML destesinin düzenlenebilir bir PowerPoint dosyasına dönüştüğünü gösteren, yeşil bir seçim kutusuyla çerçevelenmiş editoryal illüstrasyon',
+    tldrTitle: 'Tek cümlede',
+    tldrBody:
+      'Çoğu HTML-to-PPT dönüştürücü sayfanızı düzenleyemeyeceğiniz statik slayt görüntülerine düzleştirir. Open Design desteyi kodlama ajanınızın içinde HTML olarak oluşturur ve gerçek, düzenlenebilir bir .pptx dışa aktarır — yerel metin ve şekiller, kendi tasarım sisteminiz, koltuk başına ücret yok, tedarikçi kilidi yok.',
+    stepsTitle: 'HTML to PPT nasıl çalışır',
+    steps: [
+      {
+        title: 'HTML’den, bir belgeden ya da bir komuttan başlayın',
+        body: 'Ajanınızı bir HTML sayfasına, bir markdown belgesine yönlendirin ya da yalnızca desteyi anlatın. Open Design doğru beceriyi yükler, böylece ajan yalnızca ham işaretlemeyi değil, yapıyı ve amacı okur — başlıklar, bölümler, veriler.',
+        imageAlt: 'HTML ve bir markdown belgesinin bir kodlama ajanına verilişini gösteren illüstrasyon',
+      },
+      {
+        title: 'Temiz bir HTML destesi oluşturun',
+        body: 'Ajan içeriği gerçek bir tasarım sistemi üzerinde bir HTML destesi olarak yerleştirir — tutarlı yazı tipi, ızgara ve renk — bir yığın başlıksız kutu yerine hazır temalar (yatırım destesi, ürün lansmanı, editoryal, teknik) kullanarak.',
+        imageAlt: 'HTML içeriğinin tasarlanmış bir slayt dizisine dönüştüğünü gösteren illüstrasyon',
+      },
+      {
+        title: 'Düzenlenebilir bir .pptx dışa aktarın',
+        body: 'Open Design’ın pptx-generator’ı HTML destesini gerçek bir PowerPoint’a dönüştürür — yerel şekiller, düzenlenebilir metin ve hâlâ değiştirebileceğiniz grafikler — slayt başına düz bir görüntü değil, HTML-to-PPTX doğruluğu denetimiyle.',
+        imageAlt: 'Bir HTML destesinin düzenlenebilir bir PowerPoint dosyasına dışa aktarıldığını gösteren illüstrasyon',
+      },
+      {
+        title: 'Slaytları sahiplenin ve teslim edin',
+        body: 'HTML ve .pptx deponuza iner, tamamen sizindir. .pptx’i PowerPoint ya da Keynote’ta açın, tarayıcıdan sunun ya da ajanda yinelemeye devam edin — bulut kilidi yok, HTML ile deste arasında yeniden çizim yok.',
+        imageAlt: 'Teslim edilmeye hazır, yeşil bir seçim çerçevesinde tutulan tamamlanmış slaytları gösteren illüstrasyon',
+      },
+    ],
+    tableTitle: 'Open Design ile tipik HTML-to-PPT dönüştürücülerinin karşılaştırması',
+    tableColCapability: 'İhtiyacınız olan',
+    tableColWithOd: 'Open Design ile',
+    tableColWithout: 'Tipik HTML-to-PPT dönüştürücüler',
+    tableRows: [
+      {
+        capability: 'Başlangıç noktası',
+        withOd: 'HTML, bir belge ya da bir komut — zaten çalıştırdığınız ajanın içinde',
+        without: 'HTML’i ayrı bir bulut dönüştürücüye yapıştırın',
+      },
+      {
+        capability: 'Slayt kalitesi',
+        withOd: 'Gerçek bir tasarım sisteminden temiz HTML destesi + hazır temalar',
+        without: 'Sayfanızın kutu kutu birebir işlenmesi',
+      },
+      {
+        capability: 'Düzenlenebilir çıktı',
+        withOd: 'Gerçek .pptx — yerel, düzenlenebilir metin ve şekiller',
+        without: 'Değiştiremeyeceğiniz düz slayt görüntüleri',
+      },
+      {
+        capability: 'Dışa aktarımdan sonra yineleme',
+        withOd: 'Konuşarak iyileştirin; istediğiniz zaman yeniden üretin ve yeniden dışa aktarın',
+        without: 'Donmuş, tek seferlik bir dosya',
+      },
+      {
+        capability: 'Çıktıyı sahiplenme',
+        withOd: 'Deponuzdaki HTML + .pptx dosyaları, tamamen sizindir',
+        without: 'Onların düzenleyicisine ya da dışa aktarma kredilerine kilitli',
+      },
+      {
+        capability: 'Maliyet ve kilit',
+        withOd: 'Açık kaynak, kendi anahtarlarınızı getirin, yerelde çalışır',
+        without: 'Dosya başına ya da kredi başına abonelik, tedarikçi tarafından barındırılır',
+      },
+    ],
+    featuresTitle: 'Desteye dönüştürebilecekleriniz',
+    features: [
+      { title: 'HTML sayfasından PPT’ye', body: 'Bir HTML sayfasını ya da dışa aktarımı düzenlenebilir bir PowerPoint destesine dönüştürün.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown’dan PPT’ye', body: 'Ajanınıza bir markdown belgesi verin, temiz bir deste ve bir .pptx alın.', thumb: 'example-html-ppt-course-module' },
+      { title: 'Komuttan desteye', body: 'Konuşmayı anlatın; ajan slaytları taslak olarak hazırlar ve .pptx dışa aktarır.', thumb: 'example-html-ppt-product-launch' },
+      { title: 'Yatırım desteleri', body: 'Güçlü bir anlatı ve temiz veri slaytlarıyla yatırımcı ve satış desteleri.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Sunum modu', body: 'Düzenlenebilir PowerPoint’a da dışa aktaran Reveal tarzı HTML desteleri.', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: 'Her görsel zevk', body: 'Editoryal, çarpıcı ya da minimal — tema en sonuna, .pptx’e kadar taşınır.', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: 'Başlayabileceğiniz slayt şablonları',
+    galleryLead:
+      'Open Design tarafından işlenmiş, düzenlenebilir bir .pptx’e dışa aktarmaya hazır gerçek desteler. İçeriğinize yakın bir tema seçin, varyasyonunuzu anlatın; ajan desteyi oluşturur — ardından size ait olan PowerPoint’u size teslim eder.',
+    gallery: [
+      { thumb: 'deck-pitch', caption: 'Yatırım destesi' },
+      { thumb: 'deck-product-launch', caption: 'Ürün lansmanı destesi' },
+      { thumb: 'deck-data-graph', caption: 'Koyu veri grafiği destesi' },
+      { thumb: 'deck-gradient', caption: 'Geçişli keynote' },
+      { thumb: 'deck-blueprint', caption: 'Teknik taslak destesi' },
+      { thumb: 'deck-course', caption: 'Kurs modülü destesi' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Deste şablonlarına göz atın',
+    faqTitle: 'HTML to PPT SSS',
+    faq: [
+      {
+        q: 'Open Design HTML’i bir PPT’ye nasıl dönüştürür?',
+        a: 'Kodlama ajanınız içeriği temiz bir HTML destesine dönüştürür, ardından Open Design’ın pptx-generator becerisi bunu gerçek, düzenlenebilir bir .pptx olarak dışa aktarır — yerel şekiller ve metin, HTML-to-PPTX doğruluğu için denetlenmiş, slayt başına düz bir görüntü değil.',
+      },
+      {
+        q: 'HTML’i düzenlenebilir bir PowerPoint’a dönüştürebilir miyim?',
+        a: 'Evet. .pptx, PowerPoint ya da Keynote’ta değiştirmeye devam edebileceğiniz yerel, düzenlenebilir metin ve şekillere sahiptir — ekran görüntüleri değil. Ayrıca kaynak desteyi ajanınızda yinelemeye ve istediğiniz zaman yeniden dışa aktarmaya devam edebilirsiniz.',
+      },
+      {
+        q: 'Claude Code ile çalışır mı?',
+        a: 'Evet — “claude html to ppt” tam olarak bu akıştır. Bunu Claude Code ile ya da Codex, Cursor Agent, Gemini CLI ve daha fazlasıyla çalıştırın. Kendi sağlayıcı anahtarlarınızı getirirsiniz; sizin için hiçbir şey barındırılmaz.',
+      },
+      {
+        q: 'Ücretsiz mi?',
+        a: 'Evet. Open Design açık kaynaktır ve zaten kullandığınız kodlama ajanının içinde kendi anahtarlarınızla çalışır — HTML-to-PPT akışında dosya başına ya da kredi başına ücret yoktur.',
+      },
+      {
+        q: 'Slayt üretmekten farkı nedir?',
+        a: 'Bir deste üretmek genellikle bir komuttan ya da taslaktan başlar; HTML to PPT, zaten sahip olduğunuz HTML ya da markdown’dan başlar ve düzenlenebilir .pptx dışa aktarımına odaklanır. İkisi de aynı Open Design deste motorunu kullanır — taslak öncelikli akış için slaytlar kullanım örneğine bakın.',
+      },
+    ],
+    ctaTitle: 'Bir sonraki HTML destenizi düzenlenebilir bir PPT’ye dönüştürün',
+    ctaBody:
+      'Depoya yıldız verin, Open Design’ı kurun ve HTML’i — ya da bir komutu — temiz bir desteye ve gerçek, düzenlenebilir bir .pptx’e dönüştürün, zaten kullandığınız ajanda.',
+    relatedTitle: 'İlgili araçlar ve rehberler',
+    related: [
+      { href: '/solutions/slides/', label: 'Sunum desteleri üretin' },
+      { href: '/solutions/design-to-code/', label: 'Open Design ile tasarımdan koda' },
+      { href: '/plugins/templates/', label: 'Deste şablonlarına göz atın' },
+      { href: '/solutions/marketing/', label: 'Pazarlama için Open Design' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'AI Prototip Oluşturucu — komuttan tıklanabilir prototipe, sonra koda',
     description:
@@ -1266,12 +1394,19 @@ export const TR: SolutionLocaleCopy = {
     faq: [
       { q: 'PowerPoint ya da Keynote’a ihtiyacım var mı?', a: 'Hayır. Open Design desteleri kodlama ajanınızın içinde HTML olarak işler ve PDF veya PPTX olarak dışa aktarabilir. Tarayıcıdan sunarsınız ya da bir dosya teslim edersiniz — kurmak için herhangi bir sunum uygulaması gerekmez.' },
       { q: 'Bunlar yalnızca yapay zekâ üretimi madde işaretleri mi?', a: 'Hayır. Ajan ızgaraya, yazı ölçeğine ve görsel hiyerarşiye sahip gerçek bir deste şablonu uygular, böylece slaytlar otomatik doldurulmuş değil, tasarlanmış görünür.' },
-      { q: 'Bir müşteri için PowerPoint’a dışa aktarabilir miyim?', a: 'Evet. Desteler, sunduğunuz HTML’nin yanı sıra PPTX ve PDF olarak da dışa aktarılır, böylece izleyicinin beklediği biçime uyar.' },
+      { q: 'Düzenlenebilir bir PowerPoint’a dışa aktarabilir miyim?', a: 'Evet. Open Design’ın pptx-generator’ı desteyi yerel, düzenlenebilir metin ve şekillerle gerçek bir .pptx olarak dışa aktarır — düz slayt görüntüleri değil, HTML-to-PPTX doğruluğu için denetlenmiş — ayrıca PDF ve sunum yaptığınız HTML. Dönüştürme öncelikli akış için HTML to PPT aracına bakın.' },
       { q: 'Hangi ajanları kullanabilirim?', a: 'Kendi sağlayıcı anahtarlarınızla Claude Code, Codex, Cursor Agent, Gemini CLI ve daha fazla birinci taraf bağdaştırıcı.' },
     ],
     ctaTitle: 'Bir sonraki destenizi bu gece kurun',
     ctaBody:
       'Depoya yıldız verin, Open Design’ı kurun ve taslağınızı tasarlanmış bir desteye dönüştürün — zaten kullandığınız ajanda.',
+    relatedTitle: 'İlgili araçlar ve rehberler',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'Open Design ile HTML to PPT' },
+      { href: '/solutions/design-to-code/', label: 'Open Design ile tasarımdan koda' },
+      { href: '/plugins/templates/', label: 'Deste şablonlarına göz atın' },
+      { href: '/solutions/marketing/', label: 'Pazarlama için Open Design' },
+    ],
   },
   image: {
     title: 'Open Design + Claude Code ile markaya uygun grafikler oluşturun',

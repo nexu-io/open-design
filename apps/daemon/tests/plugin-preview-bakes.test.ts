@@ -9,7 +9,7 @@ import {
   applyBakedPreviews,
   bakedPreviewBlock,
   PLUGIN_PREVIEWS_ROUTE,
-} from '../src/plugin-preview-bakes.js';
+} from '../src/plugins/plugin-preview-bakes.js';
 
 const PUBLIC_BASE = 'https://repo-assets.open-design.ai/plugin-previews';
 

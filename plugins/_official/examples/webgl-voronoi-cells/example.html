@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Voronoi Cells — Open Design</title>
+<!--
+  Self-contained WebGL2 hero. An animated Voronoi network: jittered feature
+  points drift, cell interiors take a palette by cell id, and edges glow along
+  the F2-F1 boundary. The pointer pushes nearby cells. No meshes/textures/build.
+-->
+<style>
+  :root{ color-scheme:dark; }
+  html,body{ margin:0; height:100%; overflow:hidden; background:#060a09;
+    font-family:'Albert Sans',ui-sans-serif,system-ui,-apple-system,sans-serif; color:#eafff4; }
+  #gl{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .overlay{ position:fixed; inset:0; z-index:2; pointer-events:none; display:flex; flex-direction:column; justify-content:space-between; padding:5vw; }
+  .top{ display:flex; justify-content:space-between; font-size:clamp(11px,1vw,14px); letter-spacing:0.32em; text-transform:uppercase; color:rgba(234,255,244,0.72); }
+  .top .dot{ width:8px; height:8px; border-radius:50%; background:#4dffa3; box-shadow:0 0 14px #4dffa3; display:inline-block; margin-right:10px; vertical-align:middle; }
+  h1{ margin:0; font-size:clamp(44px,11vw,168px); line-height:0.86; font-weight:800; letter-spacing:-0.04em; mix-blend-mode:overlay; }
+  h1 .thin{ font-weight:300; }
+  .bottom{ display:flex; justify-content:space-between; align-items:flex-end; gap:4vw; }
+  .sub{ font-size:clamp(14px,1.5vw,19px); max-width:42ch; color:rgba(234,255,244,0.82); line-height:1.45; margin:0; }
+  .badge{ font-size:11px; letter-spacing:0.28em; text-transform:uppercase; color:rgba(234,255,244,0.65); border:1px solid rgba(234,255,244,0.24); padding:9px 15px; border-radius:999px; backdrop-filter:blur(8px); white-space:nowrap; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="overlay">
+  <div class="top"><span><span class="dot"></span>Open Design · WebGL Preview</span><span>Real-time · GPU</span></div>
+  <div class="bottom">
+    <div><h1>VORONOI<br><span class="thin">CELLS</span></h1>
+      <p class="sub">A living Voronoi network — drifting feature points, palette-keyed cells, glowing boundaries. Move the cursor to push the cells.</p></div>
+    <div class="badge">Move the cursor ↗</div>
+  </div>
+</div>
+<script>
+(() => {
+const canvas=document.getElementById('gl');
+const gl=canvas.getContext('webgl2',{antialias:true});
+if (!gl) { document.body.innerHTML='<p style="color:#fff;padding:2rem;font-family:sans-serif">WebGL2 not available.</p>'; return; }
+const VERT=`#version 300 es
+void main(){ vec2 p=vec2((gl_VertexID<<1)&2, gl_VertexID&2); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }`;
+const FRAG=`#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 u_res; uniform float u_time; uniform vec2 u_mouse;
+vec2 hash2(vec2 p){ p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
+vec3 pal(float t){ return 0.55+0.42*cos(6.28318*(vec3(0.6,0.55,0.75)*t+vec3(0.1,0.35,0.55))); }
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  vec2 m=(u_mouse-0.5)*vec2(u_res.x/u_res.y,1.0);
+  float scale=4.5;
+  vec2 p=uv*scale;
+  // pointer push (smooth gaussian, no normalize singularity)
+  vec2 pull=(m*scale - p); float grab=exp(-dot(pull,pull)*0.35);
+  p += pull*grab*0.5;
+
+  vec2 g=floor(p), f=fract(p);
+  float f1=9.0, f2=9.0; vec2 id;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 lp=vec2(float(x),float(y));
+    vec2 pt=0.5+0.5*sin(u_time*0.6 + 6.2831*hash2(g+lp));  // drifting point
+    vec2 r=lp+pt-f; float d=dot(r,r);
+    if(d<f1){ f2=f1; f1=d; id=g+lp; } else if(d<f2){ f2=d; }
+  }
+  f1=sqrt(f1); f2=sqrt(f2);
+  float edge=smoothstep(0.0,0.06,f2-f1);              // 0 on borders → glowing edges
+  float cellKey=fract(sin(dot(id,vec2(12.9,78.2)))*43758.5);
+  vec3 cell=pal(cellKey);
+  vec3 col=cell*(0.28+0.6*(1.0-f1));                  // shade toward cell center
+  col=mix(vec3(0.85,1.0,0.92), col, edge);            // bright cell walls
+  col+=vec3(0.3,1.0,0.7)*(1.0-edge)*0.5;              // edge glow
+  col*=0.65+0.5*smoothstep(1.4,0.05,length(uv));
+  col=col/(col+0.75);
+  o=vec4(pow(max(col,0.0),vec3(0.85)),1.0);
+}`;
+function sh(t,s){const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(x);return x;}
+const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(pr);
+if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw gl.getProgramInfoLog(pr);
+gl.useProgram(pr);
+const uRes=gl.getUniformLocation(pr,'u_res'),uTime=gl.getUniformLocation(pr,'u_time'),uMouse=gl.getUniformLocation(pr,'u_mouse');
+let mouse=[0.5,0.5],target=[0.5,0.5];
+addEventListener('pointermove',e=>{target=[e.clientX/innerWidth,1.0-e.clientY/innerHeight];});
+function resize(){const d=Math.min(devicePixelRatio||1,2),w=innerWidth*d|0,h=innerHeight*d|0;if(w===canvas.width&&h===canvas.height)return;canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
+addEventListener('resize',resize);resize();
+const t0=performance.now();
+function frame(now){ resize(); mouse[0]+=(target[0]-mouse[0])*0.06; mouse[1]+=(target[1]-mouse[1])*0.06;
+  gl.uniform2f(uRes,canvas.width,canvas.height); gl.uniform1f(uTime,(now-t0)/1000); gl.uniform2f(uMouse,mouse[0],mouse[1]);
+  gl.drawArrays(gl.TRIANGLES,0,3); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

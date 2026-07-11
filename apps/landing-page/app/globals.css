@@ -5191,6 +5191,15 @@ footer .container {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 28px;
   margin-bottom: 36px;
+  align-items: start;
+}
+/* A grid cell that stacks two short nav sections vertically so the sub-page
+   footer's eight sections fit the 7-track grid without a section orphaning
+   onto a second row (used for Community + Company in site-footer.astro). */
+.sub-footer-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 .sub-footer-col h5 {
   font-family: var(--mono);

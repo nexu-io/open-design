@@ -171,7 +171,85 @@ describe('same-run retry runtime', () => {
     expect(secondAttemptSessionId).toBeTruthy();
     expect(secondAttemptSessionId).not.toBe(firstAttemptSessionId);
   });
+
+  it('does not let a stalled attempt’s forced-shutdown timers kill the healthy retry', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-crossgen-bin-'));
+    const { bin: fakeClaude } = await writeCrossGenKillClaude(binDir, 'claude-crossgen');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    // Watchdog trips the first (silent) attempt fast; the escalation grace is
+    // shortened so the stale SIGTERM/SIGKILL land while the retry child is
+    // mid-work (retry backoff is <=500ms, so 800ms grace guarantees overlap).
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '800';
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url);
+    // On buggy main the previous attempt's forced-shutdown timers signal the
+    // shared run.child (now the healthy retry) and kill it -> failed.
+    expect(run.status).toBe('succeeded');
+    expect(run.signal).toBeNull();
+  });
 });
+
+async function writeCrossGenKillClaude(
+  dir: string,
+  name: string,
+): Promise<{ bin: string; argsLogPath: string }> {
+  const bin = path.join(dir, name);
+  const counterPath = path.join(dir, `${name}-attempts`);
+  const argsLogPath = path.join(dir, `${name}-args.jsonl`);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const counterPath = ${JSON.stringify(counterPath)};
+const argsLogPath = ${JSON.stringify(argsLogPath)};
+if (process.argv.includes('--version')) { console.log('claude-code 1.0.0-crossgen'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: claude -p'); process.exit(0); }
+let attempts = 0;
+try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
+fs.writeFileSync(counterPath, String(attempts + 1));
+fs.appendFileSync(argsLogPath, JSON.stringify(process.argv.slice(2)) + '\\n');
+if (attempts === 0) {
+  // First attempt: silent first-token stall so the inactivity watchdog fires,
+  // triggering the same-run retry and arming the forced-shutdown escalation
+  // timers. Long fallback so we never self-exit before the watchdog.
+  setTimeout(() => process.exit(0), 60000);
+} else {
+  // Retry attempt: a healthy child that keeps emitting (feeding its own
+  // watchdog via raw stdout bytes) well past the previous attempt's
+  // SIGTERM/SIGKILL escalation window, then finishes successfully. On buggy
+  // main the stale escalation timers signal the shared run.child — i.e. THIS
+  // child — and kill it mid-work, failing the run.
+  process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-crossgen' }) + '\\n');
+  let ticks = 0;
+  const hb = setInterval(() => {
+    process.stdout.write(' \\n');
+    if (++ticks >= 14) {
+      clearInterval(hb);
+      process.stdout.write(JSON.stringify({
+        type: 'assistant',
+        message: { id: 'msg-crossgen', content: [{ type: 'text', text: 'Survived the escalation window.' }], stop_reason: 'end_turn' },
+      }) + '\\n');
+      setTimeout(() => process.exit(0), 20);
+    }
+  }, 150);
+}
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, argsLogPath };
+}
 
 function snapshotEnv(): Record<string, string | undefined> {
   return {
@@ -182,6 +260,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
+    OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS: process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS,
   };
 }
 

@@ -1,21 +1,34 @@
 ---
 name: html-ppt-zhangzara-vellum
+en_name: "Deliver a Humanities Research Lecture like a Tenured Art Historian"
+zh_name: "像终身教授一样做人文研究讲座"
 description: |
-  Vellum — Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic. Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder reflections.
+  A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Built as a decision-grade academic research deck for faculty, graduate seminar.
+en_description: |
+  A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Built as a decision-grade academic research deck for faculty, graduate seminar.
+zh_description: |
+  像终身教授一样做人文研究讲座——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "academic-research"
+  - "academic-review-deck"
+  - "research"
+  - "grant"
+  - "review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-vellum"
 triggers:
-  - "vellum"
-  - "zhangzara-vellum"
-  - "scholarly"
-  - "literary"
-  - "considered"
-  - "research findings"
-  - "white paper or longform report"
+  - "academic-review-deck"
+  - "academic-research"
+  - "Deliver a Humanities Research Lecture like a Tenured Art Historian"
+  - "像终身教授一样做人文研究讲座"
+  - "research"
+  - "grant"
+  - "review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/vellum"
   upstream_license: MIT
   preview:
@@ -25,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "academic-research"
+  scenario: "research"
+  example_prompt: "Create \"Deliver a Humanities Research Lecture like a Tenured Art Historian\" as a decision-grade Academic research deck in this template's own visual system. Subject: A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Audience: faculty, graduate seminar. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming."
 ---
 
 # Vellum

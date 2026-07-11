@@ -3,8 +3,8 @@
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
 //     title AND a one-line description.
-//   - The rail leads with the slide deck ("Slides") per the curated create
-//     order.
+//   - The rail leads with Website clone, then the slide deck ("Slides"), per the
+//     curated create order.
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
 //     route to a working scenario plugin.
 
@@ -81,8 +81,10 @@ describe('HomeHero scenario cards', () => {
     expect(deck.textContent).toContain('Presentations & pitch decks');
   });
 
-  it('leads the create rail with the slide deck', () => {
-    expect(orderedCreateChips()[0]?.id).toBe('deck');
+  it('leads the create rail with Website clone, then the slide deck', () => {
+    const ordered = orderedCreateChips();
+    expect(ordered[0]?.id).toBe('web-clone');
+    expect(ordered[1]?.id).toBe('deck');
   });
 
   it('adds the finer-grained scenarios as create cards routed to a scenario plugin', () => {

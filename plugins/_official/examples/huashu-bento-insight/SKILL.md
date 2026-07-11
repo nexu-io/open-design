@@ -1,26 +1,32 @@
 ---
 name: huashu-bento-insight
+en_name: "Write a Competitive Displacement Deck like a Top Sales Engineer"
+zh_name: "像顶级售前一样写竞品替换方案"
 description: |
-  Bento Insight Grid (便当格洞见) — Apple Keynote / QBR-school bento decks
-  generated from the「Bento便当格模块网格 / Bento Grid」spec (neutral school
-  #1, 95% fidelity) in 花叔 (alchaincyf)'s huashu-design design-styles.md.
-  Light-grey #F5F5F7 / cream pages, unequal-height rounded cards with 1px
-  hairlines and micro shadows, one insight per card (big tabular numeral /
-  linear inline-SVG icon / SVG sparkline), oversized display headlines with
-  hard weight contrast, Inter/Geist + Geist Mono. Use when the user wants a
-  QBR, business review, product feature summary, sales results deck, town
-  hall metrics deck, 季度汇报, 业务回顾, 数据汇报, or an Apple-keynote /
-  bento-grid style presentation.
+  Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
+en_description: |
+  Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
+zh_description: |
+  像顶级售前一样写竞品替换方案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "b2b-sales"
+  - "b2b-saas-sales-proposal"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-bento-insight"
 triggers:
-  - "bento"
-  - "bento grid"
-  - "便当格"
-  - "QBR deck"
-  - "business review deck"
-  - "季度汇报 PPT"
-  - "业务回顾"
-  - "apple keynote 风格"
-  - "指标汇报"
+  - "b2b-saas-sales-proposal"
+  - "b2b-sales"
+  - "Write a Competitive Displacement Deck like a Top Sales Engineer"
+  - "像顶级售前一样写竞品替换方案"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -29,9 +35,11 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Use the Bento Insight Grid template to turn my quarterly review into an Apple-keynote-style HTML deck: 1920×1080 fixed canvas, light-grey #F5F5F7 and cream pages, unequal-height rounded bento cards with 1px hairlines and micro shadows, one insight per card (giant Geist Mono tabular number, linear inline-SVG icon, or SVG sparkline), oversized display headlines with hard weight contrast. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「便当格洞见」模板把我的季度汇报做成 Apple Keynote 风格的 HTML 幻灯片：1920×1080 固定画布、#F5F5F7 浅灰与奶白底、不等高圆角便当卡（1px 细描边 + 微阴影）、每卡只装一个洞见（巨型等宽数字 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题强字重对比。从 example.html 出发只换内容，不要重写设计。"
+  category: "b2b-sales"
+  scenario: "sales"
+  example_prompt: "Create \"Write a Competitive Displacement Deck like a Top Sales Engineer\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Audience: evaluation committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Bento Insight Grid · 便当格洞见

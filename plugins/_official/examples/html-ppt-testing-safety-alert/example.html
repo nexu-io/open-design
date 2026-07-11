@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Design · Local Data Safety Brief</title>
+<title>Brief a Health-System Board on Data Governance like a Chief Compliance Officer - Government &amp; policy</title>
 <style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -252,16 +252,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 1. COVER -->
   <section class="slide is-active">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">data safety · local-first</span><span class="ts-page">01 / 08</span></div>
-    <div class="ts-kicker">Open Design · Local Data Safety Brief</div>
-    <h1 class="ts-h1" style="font-size:clamp(44px,7.6vh,58px)">Stop sending your designs<br><span class="strike">to someone else's server</span><br><span class="red">Keep data on your machine</span></h1>
-    <p class="ts-sub">The cost of cloud AI design tools isn't just the subscription — your prompts, design files, brand assets, and API keys all pass through someone else's servers.</p>
+    <div class="ts-chrome"><span class="ts-alert-tag">compliance briefing · board approval requested</span><span class="ts-page">01 / 08</span></div>
+    <div class="ts-kicker">Meridian Health System · Board Briefing on Data Governance</div>
+    <h1 class="ts-h1" style="font-size:clamp(40px,7vh,54px)">Stop asking whether AI vendors<br><span class="strike">can be trusted with patient data</span><br><span class="red">Approve a governance framework instead</span></h1>
+    <p class="ts-sub">In the last six months Meridian shared identifiable patient records with 14 external vendors. Only 3 of those connections sit behind a current Business Associate Agreement mapped to a data-loss-prevention control.</p>
     <div class="ts-alert-box">
-      <h3>Open Design: data never leaves your machine</h3>
-      <p>Sessions, memory, and design artifacts all live in SQLite and the filesystem under your local <b>.od/</b> directory; API keys stay local and connect straight to the provider.<br><b>Apache-2.0 open source · Runs locally · BYOK · No sign-up</b>.</p>
+      <h3>What this briefing asks of the board tonight</h3>
+      <p>Ratify the four-tier Data Governance Framework, suspend the two research pilots operating past their approval date, and authorize the Chief Compliance Officer to shut down non-compliant vendor access without a further board vote.<br><b>Prepared by the Office of Compliance · For board vote</b>.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>OPEN DESIGN · DATA SAFETY BRIEF · 2026</span><span>01 / 08</span></div>
+    <div class="ts-footer"><span>MERIDIAN HEALTH SYSTEM · DATA GOVERNANCE BRIEF · 2026</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION -->
@@ -270,136 +270,138 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-chrome"><span class="ts-alert-tag amber">section · data flow</span><span class="ts-page">02 / 08</span></div>
     <div style="margin:auto 0">
       <div class="ts-kicker">Chapter One</div>
-      <h1 class="ts-h1" style="font-size:110px">Follow the <span class="red">data</span></h1>
-      <p class="ts-sub" style="font-size:28px">Not every AI design tool treats your data the same way.<br>First separate "data leaves the machine" from "data stays" — then pick a tool.</p>
+      <h1 class="ts-h1" style="font-size:110px">Follow the <span class="red">record</span></h1>
+      <p class="ts-sub" style="font-size:28px">A single emergency-department visit touches 11 systems before the chart closes.<br>Every hop is a chance for protected health information to leave a controlled boundary.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>section · data flow taxonomy</span><span>02 / 08</span></div>
+    <div class="ts-footer"><span>section · patient-data flow across the system</span><span>02 / 08</span></div>
   </section>
 
   <!-- 3. CONTENT risk levels -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">data flow · 3 levels</span><span class="ts-page">03 / 08</span></div>
-    <h2 class="ts-h2">Three flows, three risk profiles</h2>
+    <div class="ts-chrome"><span class="ts-alert-tag">exposure levels · 3 tiers</span><span class="ts-page">03 / 08</span></div>
+    <h2 class="ts-h2">Three data flows, three exposure levels</h2>
     <div class="ts-grid-3">
-      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · Green</div><h4>Local-first</h4><p>Open Design: designs, memory, and SQLite all live in your local .od/; BYOK connects straight to the provider.<br><b style="color:var(--ts-green)">Risk: you're in control</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · Amber</div><h4>Partly in the cloud</h4><p>Cloud SaaS design tools: files live with the vendor, export formats are limited, and a shutdown cuts you off.<br><b style="color:var(--ts-amber)">Risk: at the vendor's mercy</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · Red</div><h4>Fully in the cloud</h4><p>Closed-source cloud AI design: prompts, artifacts, and keys all pass through a third party, model locked to one vendor.<br><b style="color:var(--ts-red)">Risk: unauditable</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">Tier 1 · Green</div><h4>Governed &amp; logged</h4><p>Care-team access inside the electronic health record, role-based, audit-logged, minimum-necessary enforced.<br><b style="color:var(--ts-green)">Risk: acceptable and monitored</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">Tier 2 · Amber</div><h4>Vendor-shared under BAA</h4><p>Imaging AI, billing clearinghouse, population-health analytics — contracts exist but DLP coverage is partial.<br><b style="color:var(--ts-amber)">Risk: contractual, not technical</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">Tier 3 · Red</div><h4>Ungoverned pilot access</h4><p>Two research pilots and one care-coordination app pull full records with no BAA renewal on file.<br><b style="color:var(--ts-red)">Risk: reportable breach exposure</b></p></div>
     </div>
     <div class="ts-alert-box amber">
-      <h3>Your API key never leaves your machine</h3>
-      <p>In BYOK mode, keys live only in your local .od/media-config.json, and requests go straight to the model provider — no intermediary servers.</p>
+      <h3>162,000 patient records currently sit in Tier 3</h3>
+      <p>Internal audit (March 2026) found this figure exceeds our entire annual outpatient volume. Remediation is required within 45 days to stay ahead of the next OCR audit cycle.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>data flow · 3 levels</span><span>03 / 08</span></div>
+    <div class="ts-footer"><span>exposure levels · 3 tiers</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">privacy as architecture</span><span class="ts-page">04 / 08</span></div>
-    <div class="ts-kicker">Don't trust the privacy policy · trust the local filesystem</div>
-    <h2 class="ts-h2">Where your data lives,<br><span class="ts-highlight-red">verifiable at a glance</span></h2>
-    <pre class="ts-codebox"><span class="cm"># .od/ · Open Design local data directory · everything stays on your machine</span>
-<span class="kw">local_data</span>:
-  - <span class="st">app.sqlite</span>          <span class="cm"># sessions, memory, preferences</span>
-  - <span class="st">projects/&lt;id&gt;/</span>      <span class="cm"># agent working directories</span>
-  - <span class="st">artifacts/</span>          <span class="cm"># saved design artifacts</span>
-  - <span class="st">media-config.json</span>   <span class="cm"># API keys · local only</span>
+    <div class="ts-chrome"><span class="ts-alert-tag">policy as enforcement</span><span class="ts-page">04 / 08</span></div>
+    <div class="ts-kicker">Don't govern by memo · govern by machine-enforced policy</div>
+    <h2 class="ts-h2">One access policy, four tiers,<br><span class="ts-highlight-red">enforced at the gateway</span></h2>
+    <pre class="ts-codebox"><span class="cm"># data-governance-policy.yaml · enforced at the API gateway</span>
+<span class="kw">tier_1_internal_clinical</span>:
+  - systems: [<span class="st">epic_ehr</span>, <span class="st">pharmacy_system</span>]
+    control: <span class="st">role_based_access + minimum_necessary</span>
 
-<span class="kw">byok_direct</span>:
-  - providers: [<span class="st">anthropic</span>, <span class="st">openai</span>, <span class="st">azure</span>, <span class="st">google</span>]
-    route: <span class="st">your machine → provider, no servers in between</span>
+<span class="kw">tier_2_vendor_baa</span>:
+  - systems: [<span class="st">imaging_ai</span>, <span class="st">billing_clearinghouse</span>, <span class="st">population_health</span>]
+    control: <span class="st">dlp_scan + signed_baa + quarterly_audit</span>
 
-<span class="bad">never_uploaded</span>:
-  - <span class="bad">"your prompts"</span>
-  - <span class="bad">"your design files"</span>
-  - <span class="bad">"your API keys"</span></pre>
+<span class="kw">tier_3_research_pilot</span>:
+  - systems: [<span class="st">research_registry</span>, <span class="st">care_coordination_app</span>]
+    control: <span class="st">irb_approval AND deidentification AND 90_day_review</span>
+
+<span class="bad">forbidden_always</span>:
+  - <span class="bad">"phi export to personal email"</span>
+  - <span class="bad">"unencrypted usb transfer"</span>
+  - <span class="bad">"vendor access without a signed baa"</span></pre>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>privacy · filesystem-as-proof</span><span>04 / 08</span></div>
+    <div class="ts-footer"><span>policy · gateway-enforced tiers</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. CHART -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">cost report · byok</span><span class="ts-page">05 / 08</span></div>
-    <h2 class="ts-h2">Same usage, monthly cost <span class="red">-80%</span></h2>
-    <p class="ts-sub">A Claude Design subscription runs $500/month; Open Design with end-to-end BYOK direct to providers runs ~$73/month.</p>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">evidence · cost of inaction</span><span class="ts-page">05 / 08</span></div>
+    <h2 class="ts-h2">One settlement costs <span class="red">14x</span> the governance program</h2>
+    <p class="ts-sub">OCR's 2025 median settlement for uncontrolled vendor access was $4.2M. The proposed governance office costs $310K per year to run.</p>
     <svg viewBox="0 0 1040 360" style="width:100%;max-width:1040px;margin-top:18px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="Archivo,sans-serif" font-size="14" fill="#43434d">
         <line x1="70" y1="320" x2="1000" y2="320" stroke="#15151a" stroke-opacity=".3" stroke-width="1.5"/>
-        <!-- monthly cost columns: Claude Design vs Open Design (BYOK) -->
+        <!-- cost columns: median OCR settlement vs annual governance program cost -->
         <g transform="translate(180,0)">
           <rect x="0" y="70" width="120" height="250" fill="#c11f33"/>
-          <text x="60" y="345" text-anchor="middle" font-weight="700">Claude Design</text>
-          <text x="60" y="58" text-anchor="middle" font-weight="800" fill="#15151a">$500 / mo</text>
+          <text x="60" y="345" text-anchor="middle" font-weight="700">OCR settlement</text>
+          <text x="60" y="58" text-anchor="middle" font-weight="800" fill="#15151a">$4.2M</text>
         </g>
         <g transform="translate(460,0)">
-          <rect x="0" y="284" width="120" height="36" fill="#1a6b45"/>
-          <text x="60" y="345" text-anchor="middle" font-weight="700">Open Design</text>
-          <text x="60" y="272" text-anchor="middle" font-weight="800" fill="#15151a">~$73 / mo</text>
+          <rect x="0" y="298" width="120" height="22" fill="#1a6b45"/>
+          <text x="60" y="345" text-anchor="middle" font-weight="700">Governance program</text>
+          <text x="60" y="286" text-anchor="middle" font-weight="800" fill="#15151a">$310K / yr</text>
         </g>
         <!-- legend -->
         <g transform="translate(720,60)">
-          <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">Closed cloud subscription · flat fee</text>
-          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Open Design · BYOK pay-per-use</text>
-          <text x="0" y="74" font-size="13" fill="#73737d">The software itself is Apache-2.0, free and open source;</text>
-          <text x="0" y="92" font-size="13" fill="#73737d">you pay only the model provider for actual usage — over 80% less.</text>
+          <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">Median OCR settlement, uncontrolled access</text>
+          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Governance office · annual operating cost</text>
+          <text x="0" y="74" font-size="13" fill="#73737d">A single prevented incident over a 3-year horizon</text>
+          <text x="0" y="92" font-size="13" fill="#73737d">pays for the governance program more than 4 times over.</text>
         </g>
       </g>
     </svg>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>cost · byok vs subscription</span><span>05 / 08</span></div>
+    <div class="ts-footer"><span>evidence · settlement vs program cost</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. CHECKLIST -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">tool-audit checklist</span><span class="ts-page">06 / 08</span></div>
-    <h2 class="ts-h2">7 questions to ask <span class="red">before you choose a tool</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">risk control checklist</span><span class="ts-page">06 / 08</span></div>
+    <h2 class="ts-h2">7 controls the board must confirm <span class="red">are in force</span></h2>
     <div class="ts-checklist">
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Where do design files live? Can you git diff them? (Open Design: local filesystem)</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Does your API key pass through third-party servers? (BYOK: stored locally, direct to provider)</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: will your prompts and artifacts be used for training? Most terms won't say.</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">If you go offline or the vendor shuts down, can you still open past work? (Local files: always)</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: model locked to one vendor — no agent swapping, no self-hosting, no BYOK.</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Can you audit the code <b>line by line</b>? (Apache-2.0, fully open — fork, self-host, commercial use all allowed)</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: can you export your preference and memory data — and truly delete it?</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Every Tier 2/3 vendor has a current signed BAA on file, verified quarterly.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">DLP scanning blocks PHI leaving the network without exception, logged to the compliance dashboard.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Two research pilots are still operating past their IRB renewal date — access suspended pending board sign-off.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">The breach-response runbook designates the CCO as incident commander with a 24-hour OCR notification clock.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Vendor risk assessments are 8 months overdue for 3 of the 14 active integrations.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">All care-team access requires MFA and is logged to an immutable audit trail retained for 6 years.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">No standing board-level data governance committee currently exists to own this policy after tonight.</div></div>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>checklist · before you choose</span><span>06 / 08</span></div>
+    <div class="ts-footer"><span>checklist · risk controls</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">do it tonight</span><span class="ts-page">07 / 08</span></div>
-    <h2 class="ts-h2">Three things to do <span class="ts-highlight-red">tonight</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">decision requested tonight</span><span class="ts-page">07 / 08</span></div>
+    <h2 class="ts-h2">Three approvals <span class="ts-highlight-red">the board must give tonight</span></h2>
     <div class="ts-grid-3">
-      <div class="ts-card"><div class="lbl">1 · Download</div><h4>Install<br>Open Design</h4><p>macOS / Windows, runs locally, no sign-up. Apache-2.0 open source.</p></div>
-      <div class="ts-card"><div class="lbl">2 · Connect an agent</div><h4>Zero-config<br>with the CLIs you own</h4><p>Auto-detects 21 coding agents on your PATH, including Claude Code / Codex / Cursor.</p></div>
-      <div class="ts-card"><div class="lbl">3 · BYOK</div><h4>Bring your own key<br>stored locally only</h4><p>Direct connections to Anthropic / OpenAI / Azure / Google — no servers in between.</p></div>
+      <div class="ts-card"><div class="lbl">1 · Approve the framework</div><h4>Ratify the<br>four-tier policy</h4><p>Adopt the Data Governance Framework as binding institutional policy, effective immediately.</p></div>
+      <div class="ts-card"><div class="lbl">2 · Approve the moratorium</div><h4>Suspend overdue<br>pilots, recertify BAAs</h4><p>Halt the two overdue research pilots and recertify all 14 vendor BAAs within 45 days.</p></div>
+      <div class="ts-card"><div class="lbl">3 · Approve the committee</div><h4>Charter a standing<br>governance committee</h4><p>Chartered committee chaired by the CCO, reporting quarterly to the full board.</p></div>
     </div>
     <div class="ts-alert-box green">
-      <h3>Real privacy isn't a promise — it's architecture</h3>
-      <p>Your data isn't uploaded because there is no upload path at all. Put the protection in a layer that can't be bypassed.</p>
+      <h3>Approval reduces exposure, not optics</h3>
+      <p>This framework does not eliminate risk. It gives the board a defensible record that Meridian identified its exposure and acted before a regulator had to point it out.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>cta · tonight</span><span>07 / 08</span></div>
+    <div class="ts-footer"><span>decision · board approvals</span><span>07 / 08</span></div>
   </section>
 
   <!-- 8. THANKS -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">open · local · agent-native</span><span class="ts-page">08 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">recorded for the board minutes</span><span class="ts-page">08 / 08</span></div>
     <div style="margin:auto 0">
-      <div class="ts-kicker">Bringing frontier AI design power back to every creator's desk</div>
-      <h1 class="ts-h1" style="font-size:140px">thank <span class="red">·</span> you</h1>
-      <p class="ts-sub" style="font-size:24px">Download Open Design (macOS / Windows) | Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/mHAjSMV6gz · x.com/nexudotio</p>
+      <div class="ts-kicker">Motion to approve the Data Governance Framework</div>
+      <h1 class="ts-h1" style="font-size:120px">so <span class="red">·</span> moved</h1>
+      <p class="ts-sub" style="font-size:24px">Framework effective today · Vendor recertification due in 45 days · Committee's first report due next quarter.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>end of brief</span><span>08 / 08</span></div>
+    <div class="ts-footer"><span>end of briefing</span><span>08 / 08</span></div>
   </section>
 
 </div>

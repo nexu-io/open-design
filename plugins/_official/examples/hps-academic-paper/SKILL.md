@@ -1,20 +1,35 @@
 ---
 name: hps-academic-paper
-description: "Academic Paper deck theme: LaTeX-paper feel on paper-white #fdfcf8 — all-serif type (Latin Modern Roman → Playfair Display fallback), ink-black body, link-blue #1a3a7a underlined anchors, italic kickers, zero radius, near-zero shadow, hairline booktabs rules. Single-file HTML deck for conference talks, thesis defenses, research reviews and journal-club presentations."
+en_name: "Write an Academic Review Deck like a Top-Journal Survey Author"
+zh_name: "像顶刊综述作者一样写学术报告"
+description: |
+  A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Built as a decision-grade academic research deck for PI, lab group, reviewers.
+en_description: |
+  A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Built as a decision-grade academic research deck for PI, lab group, reviewers.
+zh_description: |
+  像顶刊综述作者一样写学术报告——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "academic-research"
+  - "academic-review-deck"
+  - "research"
+  - "grant"
+  - "review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "hps-academic-paper"
 triggers:
-  - "academic paper"
-  - "conference talk"
-  - "paper presentation"
-  - "thesis defense"
-  - "research slides"
-  - "学术论文"
-  - "论文答辩"
-  - "学术汇报"
-  - "组会分享"
+  - "academic-review-deck"
+  - "academic-research"
+  - "Write an Academic Review Deck like a Top-Journal Survey Author"
+  - "像顶刊综述作者一样写学术报告"
+  - "research"
+  - "grant"
+  - "review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -23,9 +38,11 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use the Academic Paper theme to turn my research content into a single-file HTML conference-talk deck: paper-white background, all-serif type, link-blue citation anchors, italic kickers, double-rule title page, numbered Figure/Table captions and booktabs tables. Start from example.html — keep its token sheet, slide scaffold and keyboard runtime exactly as-is, replace slide content only, real content with no lorem ipsum."
   example_prompt_i18n:
     zh-CN: "用「学术论文风」主题把我的研究内容做成单文件 HTML 学术报告：纸白底全衬线排印、链接蓝引用锚点、斜体 kicker、双规则线扉页、带编号的 Figure/Table 图注和 booktabs 三线表。从 example.html 出发——完整保留 token 表、slide 骨架和键盘运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
+  category: "academic-research"
+  scenario: "research"
+  example_prompt: "Create \"Write an Academic Review Deck like a Top-Journal Survey Author\" as a decision-grade Academic research deck in this template's own visual system. Subject: A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Audience: PI, lab group, reviewers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming."
 ---
 
 # Academic Paper（学术论文风）

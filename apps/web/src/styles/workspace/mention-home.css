@@ -320,10 +320,10 @@
 .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .updater-popup {
+  z-index: 80;
   position: absolute;
   top: 0;
   left: calc(100% + 12px);
-  z-index: 80;
   width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -385,8 +385,39 @@
   color: var(--red) !important;
 }
 
-.updater-popup__actions {
+.updater-popup__footer {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.updater-popup__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.updater-popup__checkbox input {
+  flex: 0 0 auto;
+  inline-size: auto;
+  width: auto;
+  margin: 0;
+}
+
+.updater-popup__checkbox span {
+  min-width: 0;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.updater-popup__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;

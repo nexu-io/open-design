@@ -185,7 +185,7 @@ design-systems/your-brand/
 }
 ```
 
-이게 전부입니다. daemon이 `PATH`에서 감지하고, picker에 나타나며, 채팅 경로가 동작합니다. CLI가 (Claude Code의 `--output-format stream-json`처럼) **타입이 지정된 이벤트**를 내보낸다면 [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts)에 파서를 연결하고 `streamFormat: 'claude-stream-json'`으로 설정하세요.
+이게 전부입니다. daemon이 `PATH`에서 감지하고, picker에 나타나며, 채팅 경로가 동작합니다. CLI가 (Claude Code의 `--output-format stream-json`처럼) **타입이 지정된 이벤트**를 내보낸다면 [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts)에 파서를 연결하고 `streamFormat: 'claude-stream-json'`으로 설정하세요.
 
 머지 기준:
 

@@ -4,7 +4,7 @@
  */
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
-import type { OnboardingClickProps } from './onboarding.js';
+import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -196,6 +196,39 @@ export interface HomeChatComposerClickProps {
   plugin_type?: string;
 }
 
+// Personalized first-run recommendation on Home (spec §7). One card, three
+// actions: `enter_studio` (accept → open Studio with the first request
+// pre-filled), `change` (换一个 → cycle to another starter in the same path),
+// `browse_all` (浏览全部类型 → abandon the recommendation for the generic
+// entry). `recommendation_id` is the stable starter id; `role` / `use_cases`
+// echo the survey answers that produced the recommendation.
+export interface HomeRecommendationClickProps {
+  page_name: 'home';
+  area: 'onboarding_recommendation';
+  element: 'enter_studio' | 'change' | 'browse_all';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  role?: TrackingOnboardingRole;
+  use_cases?: TrackingOnboardingUseCase[];
+}
+
+// One-time first-generation hint in Studio (spec §8.3). A single lightweight
+// note shown when a new user's first previewable artifact appears, pointing
+// them at view / edit / export. `open_artifact` = user acted on it; `dismiss` =
+// user closed it. `hint_type` is fixed today but kept as a field so a future
+// first-run hint can reuse the shape.
+export interface StudioOnboardingHintClickProps {
+  page_name: 'chat_panel';
+  area: 'onboarding_first_artifact_hint';
+  element: 'open_artifact' | 'dismiss';
+  hint_type: 'view_artifact';
+  // First-loop stage the hint belongs to and, for feature-specific hints
+  // (spec §8.7), the capability being surfaced. Optional so the current
+  // single view-stage hint stays source-compatible.
+  studio_stage?: TrackingOnboardingFirstLoopStep;
+  feature_id?: string;
+}
+
 export interface UpdateIndicatorClickProps {
   page_name: 'home';
   area: 'update_indicator' | 'update_prompt';
@@ -203,6 +236,14 @@ export interface UpdateIndicatorClickProps {
   action: 'open_prompt' | 'dismiss' | 'install';
   app_version_before?: string;
   app_version_after?: string;
+}
+
+export interface WhatsNewPopupClickProps {
+  page_name: 'home';
+  area: 'whats_new_popup';
+  element: 'see_whats_new' | 'dismiss';
+  action: 'open_link' | 'dismiss';
+  app_version: string;
 }
 
 export interface NewProjectModalTabClickProps {
@@ -931,6 +972,10 @@ export interface FileManagerClickProps {
   area: 'file_manager';
   element:
     | 'new_sketch'
+    // Opening an existing .sketch.json from the Design Files list — the
+    // "come back to an earlier sketch" re-engagement entry (distinct from
+    // `new_sketch` which creates a fresh one).
+    | 'open_sketch'
     | 'new_browser'
     | 'create_design_system'
     | 'create_design_system_from_project'
@@ -1047,6 +1092,7 @@ export interface DrawToolbarClickProps {
   element:
     | 'rect'
     | 'pen'
+    | 'text'
     | 'undo'
     | 'redo'
     | 'attach_image'
@@ -1171,6 +1217,40 @@ export interface PresentPopoverClickProps {
   element: 'in_this_tab' | 'fullscreen' | 'new_tab';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+}
+
+// In-deck navigation and speaker-notes controls once a slide deck is open in
+// the file viewer (area 'deck_viewer'). These sit downstream of the
+// DeckViewerSurfaceView entry and measure how the deck is actually consumed:
+// paging through slides, jumping via thumbnails, toggling the thumbnail rail,
+// and opening a slide's speaker notes for editing. Entering an actual
+// presentation surface (in-tab/fullscreen/new-tab) is NOT tracked here — that
+// stays on PresentPopoverClickProps to avoid double-counting.
+export interface DeckViewerClickProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  element:
+    // Prev/next slide, from any nav surface (toolbar, floating nav, more
+    // menu, keyboard). Reported once per slide move via the shared handler.
+    | 'slide_prev'
+    | 'slide_next'
+    // Reset/jump back to slide 1 (floating "Reset" button / keyboard R).
+    | 'slide_reset'
+    // Click a thumbnail in the left rail to jump to that slide.
+    | 'thumbnail_select'
+    // Expand/collapse the thumbnail rail from the top toolbar toggle.
+    | 'thumbnail_rail_toggle'
+    // Open a slide's speaker notes for in-place editing (preview panel).
+    | 'speaker_notes_edit';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+  // Only for thumbnail_rail_toggle: which way the toggle went.
+  action?: 'expand' | 'collapse';
+  // Active slide index (0-based) at the moment of the interaction, and the
+  // deck's total slide count — lets us see where in a deck users navigate and
+  // how deck length correlates with engagement.
+  slide_index?: number;
+  slide_count?: number;
 }
 
 export interface ShareOptionPopoverClickProps {
@@ -1447,7 +1527,10 @@ export type UiClickProps =
   | ExecutionSettingsPopoverClickProps
   | SettingsPopoverClickProps
   | HomeChatComposerClickProps
+  | HomeRecommendationClickProps
+  | StudioOnboardingHintClickProps
   | UpdateIndicatorClickProps
+  | WhatsNewPopupClickProps
   | NewProjectModalTabClickProps
   | NewProjectModalElementClickProps
   | PluginReplacementModalClickProps
@@ -1503,6 +1586,7 @@ export type UiClickProps =
   | ArtifactHeaderClickProps
   | HandoffClickProps
   | PresentPopoverClickProps
+  | DeckViewerClickProps
   | ShareOptionPopoverClickProps
   | FileVersionModalClickProps
   | AssistantFeedbackButtonClickProps

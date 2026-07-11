@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
 import { createCopilotStreamHandler } from '../../src/copilot-stream.js';
-import { mapPiRpcEvent } from '../../src/pi-rpc.js';
+import { mapPiRpcEvent } from '../../src/agent-protocol/index.js';
 import { createToolLoopGuard } from '../../src/tool-loop-guard.js';
 
 describe('structured agent stream fixtures', () => {
@@ -915,6 +915,56 @@ describe('structured agent stream fixtures', () => {
       durationMs: 42,
       stopReason: 'completed',
     });
+  });
+
+  it('surfaces an is_error result as an error, not a silent success', () => {
+    // Real installed Claude CLI error-termination shape, locked by the #4275
+    // regression fixtures: is_error true, stop_reason null, human string in
+    // errors[]. The parser must not wash this frame into a plain usage event —
+    // qoder-stream already honors this contract for the same frame family.
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createClaudeStreamHandler((event: unknown) => {
+      events.push(event as Record<string, unknown>);
+    });
+
+    handler.feed(`${JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      duration_ms: 0,
+      duration_api_ms: 0,
+      is_error: true,
+      num_turns: 0,
+      stop_reason: null,
+      session_id: '00000000-0000-0000-0000-000000000000',
+      total_cost_usd: 0,
+      errors: ['No conversation found with session ID: 00000000-0000-0000-0000-000000000000'],
+    })}\n`);
+    handler.flush();
+
+    const usage = events.find((event) => event.type === 'usage');
+    expect(usage).toMatchObject({ isError: true });
+
+    const error = events.find((event) => event.type === 'error');
+    expect(error).toBeDefined();
+    expect(String(error?.message)).toContain('No conversation found with session ID');
+  });
+
+  it('does not flag a successful result as an error', () => {
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createClaudeStreamHandler((event: unknown) => {
+      events.push(event as Record<string, unknown>);
+    });
+
+    handler.feed(`${JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 42,
+      is_error: false,
+      stop_reason: 'end_turn',
+    })}\n`);
+    handler.flush();
+
+    expect(events.find((event) => event.type === 'error')).toBeUndefined();
   });
 
   it('emits TodoWrite tool_use from Pi RPC tool_execution events', () => {

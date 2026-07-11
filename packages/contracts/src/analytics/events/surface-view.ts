@@ -2,6 +2,7 @@
  * @module analytics/events/surface-view
  * surface_view event prop types and their union.
  */
+import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 // ---- surface_view --------------------------------------------------------
@@ -137,6 +138,16 @@ export interface UpdatePromptSurfaceViewProps {
   app_version_after?: string;
 }
 
+// Post-update "what's new" card on the home surface; fires once per version
+// when the card becomes visible after an update.
+export interface WhatsNewPopupSurfaceViewProps {
+  page_name: 'home';
+  area: 'whats_new_popup';
+  app_version: string;
+  /** True when release-configured highlights were shown, false for the generic fallback copy. */
+  has_release_notes: boolean;
+}
+
 // Impression of the HTML file version history modal. Fires once per open so
 // the versions funnel has a denominator (toolbar clicks → exposures →
 // version_item browsing → restore result). `entry_from` mirrors the opening
@@ -149,8 +160,45 @@ export interface FileVersionModalSurfaceViewProps {
   artifact_kind: TrackingArtifactKind;
 }
 
+// Fires once when an HTML artifact is recognized as a slide deck and the
+// slide-specific viewing chrome (thumbnail rail, slide navigation, speaker
+// notes panel) mounts in the file viewer. This is the entry/denominator for
+// the deck experience funnel: how many opened artifacts actually reach the
+// slides surface vs. plain HTML preview. `slide_count` is the deck's detected
+// slide total at mount (0 when not yet resolved).
+export interface DeckViewerSurfaceViewProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  slide_count?: number;
+}
+
+// Impression of the personalized first-run recommendation card on Home. Fires
+// once per exposure so the funnel can divide `enter_studio` / `change` /
+// `browse_all` clicks by how often the recommendation was actually seen.
+export interface HomeRecommendationSurfaceViewProps {
+  page_name: 'home';
+  area: 'onboarding_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  role?: TrackingOnboardingRole;
+  use_cases?: TrackingOnboardingUseCase[];
+}
+
+// Impression of the one-time first-generation hint in Studio (spec §8.3).
+export interface StudioOnboardingHintSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'onboarding_first_artifact_hint';
+  hint_type: 'view_artifact';
+  studio_stage?: TrackingOnboardingFirstLoopStep;
+  feature_id?: string;
+}
+
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
+  | HomeRecommendationSurfaceViewProps
+  | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps
   | SettingsPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
@@ -166,5 +214,6 @@ export type SurfaceViewProps =
   | UpdateIndicatorSurfaceViewProps
   | ReferenceBoardSurfaceViewProps
   | UpdatePromptSurfaceViewProps
-  | FileVersionModalSurfaceViewProps;
-
+  | WhatsNewPopupSurfaceViewProps
+  | FileVersionModalSurfaceViewProps
+  | DeckViewerSurfaceViewProps;

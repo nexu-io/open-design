@@ -164,6 +164,12 @@ async function emitRun(promptText) {
     emitEmptySuccess();
     return;
   }
+  if (promptText.includes('Return a stderr-only daemon smoke failure')) {
+    process.stderr.write('stderr-only daemon smoke failure from fake ' + agentId + '\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
   if (
     promptText.includes('Create an Open Design plugin for:') &&
     promptText.includes('produce a folder named generated-plugin')
@@ -173,6 +179,10 @@ async function emitRun(promptText) {
   }
   if (promptText.includes('Create a deterministic plan document')) {
     await emitPlanDocumentRun();
+    return;
+  }
+  if (promptText.includes('Edit the existing deterministic smoke artifact')) {
+    await emitExistingArtifactEditRun(promptText);
     return;
   }
   const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
@@ -209,7 +219,7 @@ async function emitRun(promptText) {
 }
 
 async function emitPluginAuthoringRun() {
-  const folder = join(process.cwd(), 'generated-plugin');
+  const folder = join(projectDir(), 'generated-plugin');
   await mkdir(join(folder, 'examples'), { recursive: true });
   await writeFileFs(
     join(folder, 'open-design.json'),
@@ -247,7 +257,7 @@ async function emitPluginAuthoringRun() {
 
 async function emitPlanDocumentRun() {
   await writeFileFs(
-    join(process.cwd(), 'plan.md'),
+    join(projectDir(), 'plan.md'),
     [
       '# Deterministic Plan',
       '',
@@ -264,6 +274,54 @@ async function emitPlanDocumentRun() {
   emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
   process.exitCode = 0;
   exitSoon(0);
+}
+
+async function emitExistingArtifactEditRun(promptText) {
+  const projectId = process.env.OD_PROJECT_ID || projectIdFromPrompt(promptText);
+  const daemonUrl = process.env.OD_DAEMON_URL;
+  if (!projectId || !daemonUrl) {
+    throw new Error('fake artifact edit requires OD_PROJECT_ID and OD_DAEMON_URL');
+  }
+  const response = await fetch(new URL('/api/projects/' + encodeURIComponent(projectId) + '/files', daemonUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'real-daemon-smoke.html',
+      content: '<!doctype html><html><body><main><h1>Real Daemon Smoke Edited</h1><p>Edited in place by a follow-up daemon run.</p></main></body></html>',
+    }),
+  });
+  if (!response.ok) {
+    throw new Error('fake artifact edit write failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 500));
+  }
+  emitSuccess('Updated real-daemon-smoke.html in place with a deterministic follow-up edit.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function projectIdFromPrompt(promptText = '') {
+  const marker = '.od/projects/';
+  const idx = promptText.indexOf(marker);
+  if (idx === -1) return '';
+  return promptText
+    .slice(idx + marker.length)
+    .split(/[\\s/]/)[0]
+    .replace(/[^a-zA-Z0-9_-].*$/, '');
+}
+
+function projectDir(promptText = '') {
+  const marker = 'current working directory: \`';
+  const idx = promptText.toLowerCase().indexOf(marker);
+  const fromPrompt = idx === -1
+    ? ''
+    : promptText.slice(idx + marker.length).split('\`')[0] || '';
+  const fromEnv = process.env.OD_DATA_DIR && process.env.OD_PROJECT_ID
+    ? join(process.env.OD_DATA_DIR, 'projects', process.env.OD_PROJECT_ID)
+    : '';
+  const cwdFlagIndex = args.indexOf('-C');
+  const fromArgs = cwdFlagIndex >= 0 && typeof args[cwdFlagIndex + 1] === 'string'
+    ? args[cwdFlagIndex + 1]
+    : '';
+  return process.env.OD_PROJECT_DIR || fromEnv || fromArgs || fromPrompt || process.cwd();
 }
 
 function writeJson(value) {

@@ -22,7 +22,6 @@ import {
   fillTemplate,
   PREMIUM_MODELS,
   STANDARD_MODELS,
-  DELIVERABLE_RANGES,
   CREDIT_BONUS_PCT,
   type PlanTierId,
 } from '../../_lib/pricing-content';
@@ -65,9 +64,15 @@ const LF = enterprise.leadForm;
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const title = 'Pricing — Open Design';
 const description =
-  'Open Design subscription plans. Plus, Pro, and Max tiers with monthly credits, one-click deployments, and auto top-up — one unified balance for every Open Design call.';
+  'Open Design subscription plans. Free, Plus, Pro, and Max tiers with monthly credits, one-click deployments, and auto top-up — one unified balance for every Open Design call.';
 
 const tiers: PlanTierConfig[] = PRICING_SNAPSHOT.tiers;
+
+// Free card model roster: trial-pool models lead the premium list, the rest
+// render greyed-out — mirrors the vela modal's Free column.
+const FREE_PREMIUM_MODELS = [...PREMIUM_MODELS].sort(
+  (a, b) => Number(b.trial === true) - Number(a.trial === true),
+);
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 const renderCatalogLabel = (label: string) => fillTemplate(label, catalogLabelVars);
 
@@ -122,13 +127,22 @@ const jsonLd = [
     '@type': 'Product',
     name: 'Open Design Subscription',
     description,
-    offers: tiers.map((t) => ({
-      '@type': 'Offer',
-      name: `Open Design ${t.tier}`,
-      price: String(t.monthly.priceUsd),
-      priceCurrency: 'USD',
-      url: CLOUD_CONSOLE_URL,
-    })),
+    offers: [
+      {
+        '@type': 'Offer',
+        name: 'Open Design free',
+        price: '0',
+        priceCurrency: 'USD',
+        url: CLOUD_CONSOLE_URL,
+      },
+      ...tiers.map((t) => ({
+        '@type': 'Offer',
+        name: `Open Design ${t.tier}`,
+        price: String(t.monthly.priceUsd),
+        priceCurrency: 'USD',
+        url: CLOUD_CONSOLE_URL,
+      })),
+    ],
   },
 ];
 ---
@@ -155,6 +169,55 @@ const jsonLd = [
     </header>
 
     <section class="pr-grid" aria-label="Subscription plans">
+      {/* Free card — content-only (not part of the paid pricing contract).
+          The CTA points at the auth-gated cloud console: signed-in visitors
+          land on the console, signed-out visitors get the login page and
+          resume there after authenticating. */}
+      <article class="pr-card" data-tier="free">
+        <header class="pr-head">
+          <span class="pr-tier-name">Free</span>
+          <p class="pr-tagline">{content.free.tagline}</p>
+        </header>
+
+        <div class="pr-price">
+          <div class="pr-price-row">
+            <span class="pr-amount">$0</span>
+            <span class="pr-per">{L.perMonth}</span>
+          </div>
+          <p class="pr-subline">{L.freeForever}</p>
+        </div>
+
+        <a
+          class="btn btn-ghost pr-cta"
+          href={CLOUD_CONSOLE_URL}
+          data-pricing-cta
+          data-tier="free"
+        >
+          {content.free.ctaLabel}
+        </a>
+
+        <ul class="pr-feats">
+          <li class="pr-feat">{L.freeTrialCreditLabel}</li>
+          <li class="pr-feat">{content.free.concurrency}</li>
+          {content.free.features.map((f) => (
+            <li class="pr-feat">{renderCatalogLabel(f)}</li>
+          ))}
+        </ul>
+
+        <div class="pr-models">
+          <p class="pr-models-head">{L.premiumModels}</p>
+          <ul class="pr-model-list">
+            {FREE_PREMIUM_MODELS.map((m) => (
+              <li class={m.trial ? undefined : 'is-unavailable'}>{m.name}</li>
+            ))}
+          </ul>
+          <p class="pr-models-head">{L.standardModels}</p>
+          <ul class="pr-model-list">
+            {STANDARD_MODELS.map((m) => <li>{m}</li>)}
+          </ul>
+        </div>
+      </article>
+
       {tiers.map((t) => {
         const v = view(t);
         const plan = content.plans[t.tier as PlanTierId];
@@ -199,21 +262,22 @@ const jsonLd = [
               </div>
             </div>
 
-            <p class="pr-anchor">{plan.costAnchor}</p>
-
             <a
               class={t.recommended ? 'btn btn-primary pr-cta' : 'btn btn-ghost pr-cta'}
               href={cloudSubscribeUrl(t.tier, 'yearly')}
               data-pricing-cta
               data-tier={t.tier}
             >
-              {plan.ctaLabel}
+              {/* CTA carries the selected billing interval (mirrors the vela
+                  modal's "升级 Plus · 年付"); the interval CSS swaps the spans. */}
+              <span data-when="monthly">{plan.ctaLabel} · {L.monthly}</span>
+              <span data-when="yearly">{plan.ctaLabel} · {L.yearly}</span>
             </a>
 
-            {/* Fully-expanded benefits — credit + deliverable lead the list,
+            {/* Fully-expanded benefits — credit + concurrency lead the list,
                 then every included benefit; no "includes all <tier>" heading. */}
             <ul class="pr-feats">
-              <li class="pr-feat pr-feat-lead">
+              <li class="pr-feat pr-feat-lead pr-feat-strong">
                 <span data-od-credit>{v.credits}</span>
                 {v.bonusPct != null && (
                   <span class="pr-bonus">
@@ -226,20 +290,7 @@ const jsonLd = [
                   </span>
                 )}
               </li>
-              <li class="pr-feat pr-feat-lead pr-feat-task">
-                <span>{fillTemplate(L.deliverableBenefit, { range: DELIVERABLE_RANGES[t.tier as PlanTierId] })}</span>
-                <button type="button" class="pr-info-btn" aria-label={L.taskTooltip.note} aria-describedby={`pr-task-tip-${t.tier}`}>
-                  <svg class="pr-info-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4M12 8h.01" />
-                  </svg>
-                </button>
-                <span class="pr-task-tip" id={`pr-task-tip-${t.tier}`} role="tooltip">
-                  <span>{L.taskTooltip.line1}</span>
-                  <span>{L.taskTooltip.line2}</span>
-                  <span class="pr-task-tip-note">{L.taskTooltip.note}</span>
-                </span>
-              </li>
+              <li class="pr-feat pr-feat-strong">{plan.concurrency}</li>
               {plan.features.map((f) => (
                 <li class="pr-feat">{renderCatalogLabel(f)}</li>
               ))}
@@ -248,7 +299,7 @@ const jsonLd = [
             <div class="pr-models">
               <p class="pr-models-head">{L.premiumModels}</p>
               <ul class="pr-model-list">
-                {PREMIUM_MODELS.map((m) => <li>{m}</li>)}
+                {PREMIUM_MODELS.map((m) => <li>{m.name}</li>)}
               </ul>
               <p class="pr-models-head">{L.standardModels}</p>
               <ul class="pr-model-list">
@@ -395,6 +446,9 @@ const jsonLd = [
       const syncCtas = (interval) => {
         for (const cta of root.querySelectorAll('[data-pricing-cta]')) {
           const tier = cta.getAttribute('data-tier') || '';
+          // The Free CTA is a plain console link (auth-gated: login page when
+          // signed out, console when signed in) — no checkout deep-link.
+          if (tier === 'free') continue;
           const q = new URLSearchParams({ view: 'plans', plan: tier, interval, checkout: 'auto' });
           cta.setAttribute('href', subscribeBase + '?' + q.toString());
         }
@@ -624,13 +678,16 @@ const jsonLd = [
   .pr-grid {
     margin-top: 40px;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    max-width: 1180px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 1280px;
     margin-inline: auto;
     align-items: stretch;
   }
-  @media (max-width: 880px) {
+  @media (max-width: 1080px) {
+    .pr-grid { grid-template-columns: repeat(2, 1fr); max-width: 760px; }
+  }
+  @media (max-width: 640px) {
     .pr-grid { grid-template-columns: 1fr; max-width: 460px; }
   }
 
@@ -656,6 +713,16 @@ const jsonLd = [
     height: 22px;
     width: auto;
     display: block;
+  }
+  /* Free tier has no wordmark asset; render the name as muted text like the
+     vela modal's Free column. */
+  .pr-tier-name {
+    display: block;
+    height: 22px;
+    line-height: 22px;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--ink-soft, #999);
   }
   .pr-tagline {
     font-size: 0.82rem;
@@ -708,18 +775,10 @@ const jsonLd = [
   .pr-yearly-nudge-arrow { transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1); }
   .pr-yearly-nudge:hover .pr-yearly-nudge-arrow { transform: translateX(2px); }
 
-  /* ---- Cost anchor ---- */
-  .pr-anchor {
-    margin: 16px 0 0;
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: var(--olive, #218c00);
-  }
-
   /* ---- CTA ---- */
   .pr-cta { margin-top: 18px; width: 100%; justify-content: center; text-align: center; }
 
-  /* ---- Features (fully expanded; credit + deliverable lead the list) ---- */
+  /* ---- Features (fully expanded; credit + concurrency lead the list) ---- */
   .pr-feats {
     list-style: none;
     margin: 22px 0 0;
@@ -744,7 +803,10 @@ const jsonLd = [
     font-weight: 700;
     color: var(--olive, #218c00);
   }
-  /* Lead rows (credit + deliverable) carry an inline badge / info icon. */
+  /* Lead rows (credit + concurrency) read bold on paid tiers, mirroring the
+     vela modal's core-benefit emphasis. */
+  .pr-feat-strong { font-weight: 600; }
+  /* The credit lead row carries an inline bonus badge. */
   .pr-feat-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .pr-bonus {
     display: inline-flex;
@@ -760,51 +822,6 @@ const jsonLd = [
     background: color-mix(in srgb, var(--brand, #2bd200) 20%, transparent);
     border: 1px solid color-mix(in srgb, var(--brand, #2bd200) 45%, transparent);
   }
-  .pr-info-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--ink-soft, #aaa);
-    cursor: help;
-    line-height: 0;
-  }
-  .pr-info-btn:focus-visible { outline: 2px solid var(--brand, #2bd200); outline-offset: 2px; border-radius: 999px; }
-  .pr-info-icon { flex-shrink: 0; }
-  /* Hover/focus tooltip explaining how a "design deliverable" is counted. */
-  .pr-feat-task { position: relative; }
-  .pr-task-tip {
-    position: absolute;
-    left: 22px;
-    top: 100%;
-    margin-top: 6px;
-    z-index: 20;
-    width: 210px;
-    padding: 10px 11px;
-    border-radius: 10px;
-    background: #262626;
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 0.72rem;
-    line-height: 1.55;
-    text-align: left;
-    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-2px);
-    transition: opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1), transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
-    pointer-events: none;
-  }
-  .pr-task-tip span { display: block; }
-  .pr-task-tip-note { margin-top: 5px; color: rgba(255, 255, 255, 0.55); }
-  .pr-feat-task:hover .pr-task-tip,
-  .pr-feat-task:focus-within .pr-task-tip {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-  }
-
   /* ---- Model lists ---- */
   .pr-models { margin-top: 22px; }
   .pr-models-head {
@@ -830,6 +847,12 @@ const jsonLd = [
     top: 0;
     font-weight: 700;
     color: var(--olive, #218c00);
+  }
+  /* Models outside the Free trial pool render greyed-out with an ✕ mark. */
+  .pr-model-list li.is-unavailable { color: var(--ink-soft, #aaa); }
+  .pr-model-list li.is-unavailable::before {
+    content: '✕';
+    color: var(--ink-soft, #bbb);
   }
 
   /* ---- Footnote ---- */

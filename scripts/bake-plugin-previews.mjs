@@ -35,7 +35,8 @@
 // script only renders + encodes so it stays runnable locally and in CI alike.
 
 import puppeteer from 'puppeteer-core';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -52,7 +53,15 @@ import path from 'node:path';
 //       misread tall pages with a horizontal marquee as decks); pan via REAL
 //       wheel events so scroll-hijack landing pages (custom/transform scroll)
 //       actually move.
-const BAKE_VERSION = 4;
+//   v5: validate the encoded output — reject blank (never-rendered) clips,
+//       record durationMs from the FILE (not the intended walk time), and
+//       clamp holdMs to the encoded duration so the gallery's idle loop never
+//       points past the end of the clip; encode static pages (screencast
+//       delivers <5 frames because nothing repaints) as a held still instead
+//       of skipping them forever. Bumped so every entry's metadata is
+//       corrected in one sweep (23 entries carried holdMs > real duration,
+//       5 static-page entries could never refresh at all).
+const BAKE_VERSION = 5;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -99,8 +108,32 @@ function argList(name) {
 const OUT = path.resolve(arg('out', '.tmp/plugin-previews'));
 const LIMIT = Number(arg('limit', '0')) || 0;
 const ONLY = argList('id');
+// Strict mode (--strict or PREVIEW_STRICT=1): exit non-zero when any bake left
+// broken metadata behind — a stale entry (source changed but the re-bake
+// failed, so the manifest keeps serving the OLD clip), a blank clip, or an
+// unexpected error (thrown exception, e.g. ffprobe unavailable). The
+// pre-merge validation workflow runs strict so a PR that breaks its own
+// preview fails visibly; the post-merge/nightly path stays lenient and only
+// reports, so one broken plugin never blocks publishing the rest.
+const STRICT = process.argv.includes('--strict') || process.env.PREVIEW_STRICT === '1';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// How many plugins to render concurrently. The per-clip cost is dominated by
+// wall-clock waits (HOLD dwell + slide walk / pan + font/image settle) that
+// yield to the event loop, so overlapping N renders scales the sweep near-
+// linearly until the runner's cores saturate. Default 4 matches the standard
+// GitHub-hosted ubuntu runner (4 vCPU / 16GB); dial down via PREVIEW_CONCURRENCY
+// if capture quality degrades under contention, or up on a bigger runner.
+const CONCURRENCY = Math.max(1,
+  Number(process.env.PREVIEW_CONCURRENCY || arg('concurrency', '')) || 4);
+
+// ffmpeg/ffprobe as promises, NOT execFileSync: a synchronous encode/probe
+// blocks the event loop, which stalls the CDP `screencastFrameAck` of every
+// OTHER concurrently-capturing page (Chrome only sends the next screencast
+// frame after the ack), starving their clips of frames. Async keeps every
+// page's capture flowing while one plugin encodes.
+const execFileP = promisify(execFile);
 
 function resolveChrome() {
   if (process.env.CHROME && existsSync(process.env.CHROME)) return process.env.CHROME;
@@ -111,6 +144,59 @@ function resolveChrome() {
   ];
   for (const c of candidates) if (existsSync(c)) return c;
   throw new Error('No Chrome found. Set CHROME=/path/to/chrome.');
+}
+
+// ---- baked-output validation ----------------------------------------------
+// The gallery faithfully renders whatever the manifest names, so a broken bake
+// must be rejected HERE — once an entry lands, the card shows the broken clip
+// until the next content change (see the "preview shows wrong content" class
+// of reports: stale clips, blank cards).
+
+// Real duration of the encoded clip. `durMs` upstream is only the *intended*
+// wall-clock walk; the VFR concat + fps resample can land somewhere else
+// entirely (observed 1155ms recorded for a 3667ms clip), and holdMs — the span
+// the gallery loops while idle — must never exceed what the file actually has.
+//
+// Both probes THROW on failure instead of degrading: ffprobe is required
+// validation infrastructure (the workflow installs ffmpeg explicitly), and a
+// swallowed probe error would silently disable exactly the checks this
+// pipeline exists for. A thrown error becomes an `error …` skip for that
+// plugin, lands in bake-report.json, and fails strict mode.
+async function probeClipMs(file) {
+  const { stdout } = await execFileP('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'csv=p=0', file], { encoding: 'utf8' });
+  const out = stdout.trim();
+  const s = Number(out);
+  if (!Number.isFinite(s) || s <= 0) throw new Error(`ffprobe returned no duration for ${file}: "${out}"`);
+  return Math.round(s * 1000);
+}
+
+// Aggregate luma range across every frame of the clip. If no frame ever gets
+// brighter than BLANK_MAX_Y (~9% grey), nothing rendered — the page 404'd into
+// a dark shell, a CDN dependency never loaded, fonts raced, … — and the mirror
+// check catches an all-white nothing. Thresholds are deliberately extreme so a
+// legitimately dark (or light) design never trips them: any visible text or
+// artwork moves YMAX/YMIN far past these bounds.
+const BLANK_MAX_Y = 24;
+const BLANK_MIN_Y = 232;
+async function clipLumaRange(file) {
+  const esc = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
+  // nk=0 keeps the tag names in the output: ffprobe emits the tags in
+  // signalstats' own order (YMIN before YMAX), not the -show_entries order,
+  // so parse by key instead of by position.
+  const { stdout: out } = await execFileP('ffprobe', ['-v', 'error', '-f', 'lavfi',
+    '-i', `movie='${esc}',signalstats`,
+    '-show_entries', 'frame_tags=lavfi.signalstats.YMAX,lavfi.signalstats.YMIN',
+    '-of', 'csv=p=0:nk=0'], { encoding: 'utf8' });
+  let maxY = 0, minY = 255, frames = 0;
+  for (const match of out.matchAll(/signalstats\.(YMAX|YMIN)=([0-9.]+)/g)) {
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    if (match[1] === 'YMAX') { frames += 1; if (value > maxY) maxY = value; }
+    else if (value < minY) minY = value;
+  }
+  if (frames === 0) throw new Error(`ffprobe signalstats returned no frames for ${file}`);
+  return { maxY, minY };
 }
 
 // ---- discover the html-preview plugins ------------------------------------
@@ -410,16 +496,33 @@ async function bakeOne(browser, id, hash, motion) {
   await client.send('Page.stopScreencast');
   await page.close();
 
-  if (frames.length < 5) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: `frames ${frames.length}` }; }
+  if (frames.length === 0) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: 'frames 0' }; }
 
   // VFR concat list (real per-frame durations) -> correct real-time speed.
   const lines = [];
   for (let i = 0; i < frames.length; i += 1) {
     const fp = path.join(frameDir, `f-${String(i).padStart(4, '0')}.jpg`);
     writeFileSync(fp, Buffer.from(frames[i].data, 'base64'));
-    if (i > 0) lines.push(`duration ${(frames[i].ts - frames[i - 1].ts).toFixed(4)}`);
+    // Clamp to >=0: CDP screencast frame timestamps are occasionally NON-
+    // monotonic (a later frame carries an earlier `metadata.timestamp`),
+    // yielding a negative inter-frame duration that ffmpeg's concat demuxer
+    // rejects outright ("Invalid data found when processing input"), failing
+    // the whole clip — and, in strict pre-merge, the PR. A 0-duration frame is
+    // harmless (the fps filter resamples the timeline anyway). CPU contention
+    // from concurrent renders makes the non-monotonic blips more frequent, so
+    // this guard matters more once the sweep runs in parallel.
+    if (i > 0) lines.push(`duration ${Math.max(0, frames[i].ts - frames[i - 1].ts).toFixed(4)}`);
     lines.push(`file '${fp}'`);
   }
+  // A static page repaints nothing after its first paint, so the screencast
+  // delivers only a frame or two. That is a still, not a failure: hold the
+  // last frame for the idle-loop span so the encode yields a real clip.
+  // (The old `frames < 5` guard skipped these pages on EVERY bake, so their
+  // manifest entries could never refresh — five entries on main were
+  // permanently stale because of it.) Half the hold here because the trailing
+  // repeated `file` below inherits the last `duration` directive, so the two
+  // sum to ~HOLD_MS.
+  if (frames.length < 5) lines.push(`duration ${(HOLD_MS / 2000).toFixed(4)}`);
   lines.push(`file '${path.join(frameDir, `f-${String(frames.length - 1).padStart(4, '0')}.jpg`)}'`);
   const listPath = path.join(frameDir, 'list.txt');
   writeFileSync(listPath, lines.join('\n'));
@@ -440,20 +543,41 @@ async function bakeOne(browser, id, hash, motion) {
   const video = path.join(OUT, videoKey);
   const poster = path.join(OUT, posterKey);
   mkdirSync(path.dirname(video), { recursive: true });
-  const ff = (a) => execFileSync('ffmpeg', ['-y', ...a], { stdio: 'ignore' });
+  // `-loglevel error -nostats` is the promisified-execFile equivalent of the
+  // old execFileSync `stdio: 'ignore'`: promisified execFile BUFFERS stderr
+  // (there is no `stdio: 'ignore'`), and ffmpeg's default banner + per-frame
+  // progress could otherwise grow past maxBuffer and reject a good encode with
+  // ENOBUFS. Quiet ffmpeg to errors only, and keep a generous buffer as a
+  // backstop. This changes only console chatter, never the encoded output.
+  const ff = (a) => execFileP('ffmpeg', ['-y', '-loglevel', 'error', '-nostats', ...a],
+    { maxBuffer: 64 * 1024 * 1024 });
   // H.264 MP4, constant frame rate (the fps filter resamples the concat's
   // real-time timeline to a constant FPS). H.264 decodes reliably in both
   // browsers and Electron — VP9 encoded from this frame pipeline intermittently
   // tripped Chromium/Electron's decoder (PIPELINE_ERROR_DECODE). `+faststart`
   // moves the moov atom up front so playback can begin before the full download.
-  ff(['-f', 'concat', '-safe', '0', '-i', listPath,
+  await ff(['-f', 'concat', '-safe', '0', '-i', listPath,
     '-vf', `scale=${OUT_W}:-2,fps=${FPS}`, '-c:v', 'libx264', '-crf', String(CRF),
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-r', String(FPS), '-an', video]);
-  ff(['-i', path.join(frameDir, 'f-0000.jpg'), '-vf', `scale=${OUT_W}:-2`,
+  await ff(['-i', path.join(frameDir, 'f-0000.jpg'), '-vf', `scale=${OUT_W}:-2`,
     '-q:v', '5', '-frames:v', '1', poster]);
   rmSync(frameDir, { recursive: true, force: true });
 
-  return { id, durationMs: durMs, holdMs: HOLD_MS, video: videoKey, poster: posterKey,
+  // Reject a clip that never rendered anything — an entry for it would show a
+  // blank card until the plugin's next content change. Deleting the outputs
+  // keeps the broken clip out of the R2 upload (the CI step copies OUT
+  // recursively).
+  const luma = await clipLumaRange(video);
+  if (luma.maxY < BLANK_MAX_Y || luma.minY > BLANK_MIN_Y) {
+    rmSync(path.dirname(video), { recursive: true, force: true });
+    return { id, skipped: `blank clip (luma ${luma.minY}..${luma.maxY})` };
+  }
+
+  // Manifest metadata must describe the FILE, not the intent: durationMs is
+  // the encoded duration, and holdMs (the span the gallery loops while idle)
+  // is clamped to it so the idle loop never points past the end of the clip.
+  const encodedMs = await probeClipMs(video);
+  return { id, durationMs: encodedMs, holdMs: Math.min(HOLD_MS, encodedMs), video: videoKey, poster: posterKey,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
 
@@ -461,19 +585,38 @@ async function bakeOne(browser, id, hash, motion) {
 mkdirSync(OUT, { recursive: true });
 const ids = await discoverIds();
 const motionMap = await loadMotionMap();
-console.log(`baking ${ids.length} plugin previews from ${BASE_URL} -> ${OUT}`);
-const browser = await puppeteer.launch({
+console.log(`baking ${ids.length} plugin previews from ${BASE_URL} -> ${OUT} (concurrency ${CONCURRENCY})`);
+// Browser launch options, reused per worker below. NOT a single shared browser:
+// CDP screencast only follows the ACTIVE tab, so capturing a page in a shared
+// browser while another page is foreground starves it of frames (a frames-0
+// skip, or a near-empty clip). Each concurrent worker therefore drives its OWN
+// browser, where its page is always the sole foreground tab.
+const launchOptions = {
   executablePath: resolveChrome(), headless: 'new',
   // Let muted hero background videos (.mp4/CloudFront, common on premium
-  // landing pages) autoplay so the capture isn't a frozen first frame.
-  args: ['--no-sandbox', '--hide-scrollbars', '--autoplay-policy=no-user-gesture-required'],
-});
+  // landing pages) autoplay so the capture isn't a frozen first frame. The
+  // backgrounding flags are belt-and-suspenders: a worker holds one page at a
+  // time so it is already foreground, but these keep painting alive if a page's
+  // window is ever treated as occluded.
+  args: ['--no-sandbox', '--hide-scrollbars', '--autoplay-policy=no-user-gesture-required',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'],
+};
 
 const manifestPath = path.join(OUT, 'manifest.json');
 const previews = existsSync(manifestPath)
   ? (JSON.parse(readFileSync(manifestPath, 'utf8')).previews || {}) : {};
 let ok = 0, skip = 0, reused = 0;
-for (const id of ids) {
+// Machine-readable outcome for the workflows: which plugins were skipped and
+// why, and — the metadata-sync failure this pipeline used to swallow — which
+// committed entries are now STALE: their source changed but the re-bake
+// failed, so the manifest keeps serving a clip of the OLD content. `errors`
+// separates unexpected failures (thrown exceptions: ffprobe missing, encoder
+// crash, …) from the routine skips every sweep has (non-html plugins 404 the
+// preview route); strict mode fails on the former, never on the latter.
+const report = { skipped: [], stale: [], blank: [], errors: [] };
+async function processOne(id, getBrowser) {
   const t0 = Date.now();
   // Content-hash skip: a plugin whose preview HTML (and the bake recipe) is
   // unchanged reuses its existing clip — no render, and the CI step re-uploads
@@ -483,6 +626,19 @@ for (const id of ids) {
     const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
     hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
   } catch {}
+  // No fingerprint -> no bake. Rendering anyway used to persist an entry with
+  // `hash: null` and un-fingerprinted keys — metadata the reuse skip can never
+  // match again (and the manifest guard rejects). A failed fingerprint fetch
+  // is an infrastructure error: report it, fail strict mode, and leave any
+  // committed entry untouched for the next sweep to refresh.
+  if (!hash) {
+    skip += 1;
+    const reason = 'error preview fingerprint fetch failed';
+    console.log(`  ~ ${id}: skip (${reason})`);
+    report.skipped.push({ id, reason });
+    report.errors.push(id);
+    return;
+  }
   const prev = previews[id];
   // In CI the unchanged clips already live on R2 (not on disk), so PREVIEW_REMOTE
   // trusts the manifest hash without a local-file check; locally we also confirm
@@ -492,15 +648,87 @@ for (const id of ids) {
   if (hash && prev && prev.hash === hash && filesPresent) {
     reused += 1;
     console.log(`  = ${id}: unchanged, reused`);
-    continue;
+    return;
   }
   let r;
-  try { r = await bakeOne(browser, id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
-  if (r.skipped) { skip += 1; console.log(`  ~ ${id}: skip (${r.skipped})`); continue; }
+  try { r = await bakeOne(await getBrowser(), id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
+  if (r.skipped) {
+    skip += 1;
+    console.log(`  ~ ${id}: skip (${r.skipped})`);
+    report.skipped.push({ id, reason: r.skipped });
+    if (r.skipped.startsWith('blank clip')) report.blank.push(id);
+    if (r.skipped.startsWith('error ')) report.errors.push(id);
+    if (prev && hash && prev.hash !== hash) report.stale.push(id);
+    return;
+  }
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;
   console.log(`  + ${id}: ${(r.bytes / 1024).toFixed(0)}KB mp4, ${(r.posterBytes / 1024).toFixed(0)}KB poster (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+  // Shared state (previews, counters, report) is only ever mutated in the
+  // synchronous span between awaits, so the single-threaded event loop
+  // serializes it — no lock needed. Rewriting the FULL manifest after each
+  // success is last-complete-wins under concurrency: whoever writes last
+  // serializes the most complete `previews`, and every earlier write is a
+  // subset it supersedes.
   writeFileSync(manifestPath, JSON.stringify({ generatedAt: null, previews }, null, 2));
 }
-await browser.close();
+
+// Bounded worker pool: CONCURRENCY workers pull ids from a shared cursor so up
+// to CONCURRENCY plugins render at once. The per-clip cost is mostly wall-clock
+// waits that yield to the event loop, so overlapping them scales the sweep
+// near-linearly until the runner's cores saturate (see CONCURRENCY above). An
+// all-cached sweep just races the cheap hash fetches through the same pool.
+let cursor = 0;
+async function worker() {
+  // Each worker owns its browser (see launchOptions) and processes its ids
+  // sequentially, reusing that browser across them — launching it inside the
+  // worker is what keeps every captured page foreground. Lazy: a worker that
+  // only hits the reuse fast-path (an all-cached sweep, the common post-merge
+  // case) never pays a browser launch.
+  let browser = null;
+  const getBrowser = async () => (browser ??= await puppeteer.launch(launchOptions));
+  try {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= ids.length) break;
+      await processOne(ids[i], getBrowser);
+    }
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+await Promise.all(
+  Array.from({ length: Math.min(CONCURRENCY, ids.length) }, () => worker()),
+);
+// Written next to the manifest (the R2 upload step excludes it, same as
+// manifest.json) so both the strict pre-merge job and a human reading a
+// nightly run can see exactly which entries are broken or lagging.
+writeFileSync(path.join(OUT, 'bake-report.json'),
+  JSON.stringify({ baked: ok, reused, ...report }, null, 2));
 console.log(`done: ${ok} baked, ${reused} reused (unchanged), ${skip} skipped -> ${manifestPath}`);
+if (report.blank.length) {
+  console.error(`BLANK bakes rejected (nothing ever rendered; entry NOT written): ${report.blank.join(', ')}`);
+}
+if (report.stale.length) {
+  console.error(`STALE manifest entries (source changed but the re-bake failed — the gallery keeps showing the OLD clip until a bake succeeds): ${report.stale.join(', ')}`);
+}
+if (report.errors.length) {
+  console.error(`ERRORED bakes (unexpected exception — validation infrastructure problem or renderer crash, see the skip reasons above): ${report.errors.join(', ')}`);
+}
+const strictFail = STRICT && (report.blank.length || report.stale.length || report.errors.length);
+if (strictFail) {
+  console.error('strict mode: failing on blank/stale/errored previews');
+}
+// Exit explicitly. Puppeteer can leave the event loop non-empty after
+// browser.close() (a lingering child-process/transport handle), and with one
+// browser PER worker that reliably keeps this CLI alive after all work is done
+// — on CI that means the step hangs until the 90-min job timeout instead of
+// finishing in minutes. Everything above is persisted synchronously
+// (writeFileSync), so the only thing left to protect is the piped stdout/stderr
+// on CI: drain both so the final summary / strict message is never truncated,
+// then hard-exit with the strict-aware code.
+await Promise.all([process.stdout, process.stderr].map(
+  (stream) => new Promise((resolve) => stream.write('', resolve)),
+));
+process.exit(strictFail ? 1 : 0);

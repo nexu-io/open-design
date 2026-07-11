@@ -4,6 +4,13 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuestionsPanel } from '../../src/components/QuestionsPanel';
 import type { QuestionForm } from '../../src/artifacts/question-form';
+import { uploadProjectFiles } from '../../src/providers/registry';
+
+vi.mock('../../src/providers/registry', () => ({
+  uploadProjectFiles: vi.fn(),
+}));
+
+const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 
 const form: QuestionForm = {
   id: 'discovery',
@@ -26,10 +33,20 @@ function textInputAt(index: number): HTMLInputElement {
   return input;
 }
 
+function fileInputAt(index: number): HTMLInputElement {
+  const input = document.querySelectorAll<HTMLInputElement>('.qf-file')[index];
+  if (!input) throw new Error(`expected file input at index ${index}`);
+  return input;
+}
+
 // Each reveal schedules the next only after its effect re-runs, so the clock
 // must be stepped one interval per question rather than all at once.
 function revealAll() {
-  for (let i = 0; i < form.questions.length; i++) {
+  revealQuestions(form.questions.length);
+}
+
+function revealQuestions(count: number) {
+  for (let i = 0; i < count; i++) {
     act(() => {
       vi.advanceTimersByTime(280);
     });
@@ -39,6 +56,7 @@ function revealAll() {
 afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
+  mockedUploadProjectFiles.mockReset();
   vi.useRealTimers();
 });
 
@@ -262,5 +280,89 @@ describe('QuestionsPanel staggered reveal', () => {
     });
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0]?.[0]).toContain('[form answers — discovery]');
+  });
+
+  it('uploads selected question files and submits them as attachments and context', async () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    const fileForm: QuestionForm = {
+      id: 'upload-brief',
+      title: 'Upload brief',
+      questions: [
+        { id: 'notes', label: 'What should I know?', type: 'text' },
+        {
+          id: 'refs',
+          label: 'Reference images',
+          type: 'file',
+          required: true,
+          multiple: true,
+          accept: 'image/*,.pdf',
+        },
+      ],
+    };
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [
+        {
+          path: 'assets/hero.png',
+          name: 'hero.png',
+          kind: 'image',
+          size: 12,
+        },
+      ],
+      failed: [],
+    });
+
+    render(
+      <QuestionsPanel
+        form={fileForm}
+        formKey="conv-1:assistant-upload"
+        projectId="project-1"
+        interactive
+        generating={false}
+        onSubmit={onSubmit}
+      />,
+    );
+    revealQuestions(fileForm.questions.length);
+
+    fireEvent.change(textInputAt(0), {
+      target: { value: 'Use this as the cover.' },
+    });
+    fireEvent.change(fileInputAt(0), {
+      target: {
+        files: [new File(['pixels'], 'hero.png', { type: 'image/png' })],
+      },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [
+      expect.objectContaining({ name: 'hero.png' }),
+    ]);
+    expect(onSubmit.mock.calls[0]?.[0]).toContain(
+      'Reference images: hero.png -> assets/hero.png',
+    );
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({
+      attachments: [
+        {
+          path: 'assets/hero.png',
+          name: 'hero.png',
+          kind: 'image',
+          size: 12,
+          order: 0,
+        },
+      ],
+      context: {
+        workspaceItems: [
+          {
+            id: 'file:assets/hero.png',
+            kind: 'file',
+            label: 'hero.png',
+            path: 'assets/hero.png',
+          },
+        ],
+      },
+    });
   });
 });

@@ -5,12 +5,12 @@ import { join } from 'node:path';
 import { expect, test } from '@/playwright/suite';
 
 import { writeFakeVelaBin } from '@/amr';
-import { runErrorCard } from '@/playwright/chat';
 import { routeAgents } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import {
   createProjectViaApi,
   gotoProject,
+  mockAmrWalletSnapshot,
   openSettingsDialog,
   putAppConfig,
   seedBrowserConfig,
@@ -47,6 +47,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   const reloginVelaBin = await writeFakeVelaBin(join(root, 'bin-relogin'), {
     failAuthAtPrompt: true,
     requireLoginConfig: false,
+    requireSetModel: false,
   });
   await mkdir(root, { recursive: true });
   let loggedIn = true;
@@ -72,6 +73,12 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await page.route('**/api/integrations/vela/logout', async (route) => {
     loggedIn = false;
     await route.fulfill({ json: { ok: true } });
+  });
+  await mockAmrWalletSnapshot(page, {
+    email: 'logout-ui@example.com',
+    loggedIn: () => loggedIn,
+    plan: 'free',
+    profile: 'local',
   });
 
   const config = {
@@ -127,12 +134,11 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await gotoProject(page, projectId);
   await sendPrompt(page, 'AMR logout should require relogin');
 
-  await expect(runErrorCard(page)).toContainText(/authorize|sign in again|login missing|expired|ACP session exited before completion/i, {
-    timeout: 15_000,
-  });
-  await expect(
-    page.getByRole('button', { name: /Authorize & retry|Sign in via terminal|Sign in again/i }).first(),
-  ).toBeVisible();
+  const balanceGate = page.getByTestId('amr-balance-dialog');
+  await expect(balanceGate).toBeVisible({ timeout: 15_000 });
+  await expect(balanceGate).toContainText(/Sign in to start creating/i);
+  await expect(balanceGate).toContainText(/sign in and this task can start right away/i);
+  await expect(balanceGate.getByRole('button', { name: /^Sign in$/i })).toBeVisible();
 
   const configResponse = await page.request.get('/api/app-config');
   expect(configResponse.ok(), await configResponse.text()).toBeTruthy();

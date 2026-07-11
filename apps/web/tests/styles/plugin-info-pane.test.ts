@@ -12,6 +12,7 @@ describe('plugin info preview pane styles', () => {
     const topLevelSelectors = topLevelRules.map((rule) => rule.selector);
 
     expect(css).toContain('.ds-modal-sidebar');
+    expect(css).toContain('.ds-modal-sidebar-body');
     expect(css).toContain('scrollbar-gutter: stable;');
     expect(topLevelSelectors).toContain('.plugin-info-pane');
     expect(css).toContain('padding: 22px 28px 28px 32px;');

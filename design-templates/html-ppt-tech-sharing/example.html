@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rust 异步运行时内部机制 · Tech Sharing</title>
+<title>Give an Engineering Tech Talk like a Staff Developer-Advocate - AI literacy</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -369,11 +369,11 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- 1. Cover -->
   <section class="slide" data-title="Cover">
-    <p class="kicker">tech-sharing / 2026-04-15</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">Rust 异步运行时<br>到底在<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">调度什么</span>?</h1>
-    <p class="lede mt-m">从 <span class="mono">Future::poll</span> 到 tokio 的 work-stealing，一次讲清楚。</p>
-    <div class="speaker"><div class="av"></div><div><b>@lewis</b><span>platform infra · 45 min + Q&amp;A</span></div></div>
-    <div class="deck-footer"><span class="mono">#async #rust #tokio</span><span class="slide-number" data-current="1" data-total="8"></span></div>
+    <p class="kicker">tech-talk playbook / ai-literacy</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">像 Staff Developer-Advocate<br>一样做<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">工程技术分享</span></h1>
+    <p class="lede mt-m">给想让内部深度分享真正落地的工程师的一份实战 rundown —— 以 Open Design 自己的 agent-stream、sandbox、artifact 内部机制作为演练对象。</p>
+    <div class="speaker"><div class="av"></div><div><b>Platform DevEx Guild</b><span>内部工程分享 · 45 min + Q&amp;A</span></div></div>
+    <div class="deck-footer"><span class="mono">#devrel #eng-talks #agent-stream</span><span class="slide-number" data-current="1" data-total="8"></span></div>
   </section>
 
   <!-- 2. Agenda -->
@@ -381,74 +381,74 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <p class="kicker">agenda.toml</p>
     <h2 class="h2">今天的路线图</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Context: 为什么需要 async</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Deep dive 1: Future &amp; Waker</span><span class="d">~12min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">Deep dive 2: Tokio scheduler</span><span class="d">~15min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Code: 手写一个 mini-runtime</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why now：内部分享是杠杆率最高的 devrel 渠道</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow map：留住听众的 6 拍节奏</span><span class="d">~10min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Pilot：以 agent-stream 内部机制做试讲</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Risk control：现场 demo 翻车应对手册</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">ROI + rollout：从一场分享到长期系列</span><span class="d">~5min</span></div>
     </div>
   </section>
 
   <!-- 3. Context -->
   <section class="slide" data-title="Context">
-    <p class="kicker">// context</p>
-    <h2 class="h2">问题：一个线程一个连接，<br>撑不住 10 万并发。</h2>
+    <p class="kicker">// why-now</p>
+    <h2 class="h2">问题：工程师不信任 slide，<br>只信任能跑起来的代码。</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>Thread-per-conn</h4><p class="dim">每条连接一根 OS 线程，栈 2–8MB。10 万连接 = 几百 GB RAM。</p><span class="tag mt-s">❌ 不现实</span></div>
-      <div class="card card-accent"><h4>Event loop (C)</h4><p class="dim">epoll/kqueue + 回调地狱。快，但写起来痛苦且容易出 bug。</p><span class="tag mt-s">😩 callback hell</span></div>
-      <div class="card card-accent"><h4>Async / await</h4><p class="dim">看起来像同步代码，编译成状态机。一根线程跑几千任务。</p><span class="tag mt-s">✅ Rust 选这个</span></div>
+      <div class="card card-accent"><h4>纯 slide 分享</h4><p class="dim">把整套系统压缩成几行 bullet，资深工程师第三页就走神了——因为没有任何一处可以被证伪。</p><span class="tag mt-s">❌ 无从验证</span></div>
+      <div class="card card-accent"><h4>营销式录屏演示</h4><p class="dim">一段剪辑过的录屏只能证明功能能跑，不能证明你真的理解它为什么能跑——Q&amp;A 一开始差距就暴露了。</p><span class="tag mt-s">😩 心智模型传递失败</span></div>
+      <div class="card card-accent"><h4>Staff 级现场走查</h4><p class="dim">现场展示真实代码路径——SSE 流、沙箱 iframe、artifact 落盘——让听众当场提问戳它。信任是攒出来的，不是讲出来的。</p><span class="tag mt-s">✅ 先验证，后相信</span></div>
     </div>
   </section>
 
   <!-- 4. Deep dive 1 -->
   <section class="slide" data-title="Deep Dive 1">
-    <p class="kicker">deep-dive · 1 / 2</p>
-    <h2 class="h2">Future 其实只有一个方法。</h2>
+    <p class="kicker">workflow map · 1 / 2</p>
+    <h2 class="h2">先画出分享的地图，再动手写第一页 slide。</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">编译器把 <span class="mono">async fn</span> 变成一个实现了 <span class="mono">Future</span> trait 的匿名状态机。运行时只做一件事：反复 <span class="mono">poll</span> 它，直到返回 <span class="mono">Ready</span>。</p>
+        <p class="lede">选定一个真实跑着的系统，然后沿六拍展开：why now、架构图、现场走查、失败模式、影响数字、下一步。每一拍结束时，听众都应该能当场问出一个问题。</p>
         <div class="mt-l">
-          <span class="tag">Pending</span> <span class="tag">Ready(T)</span> <span class="tag">Waker.wake()</span>
+          <span class="tag">6 拍</span> <span class="tag">45 分钟</span> <span class="tag">一个真实系统</span>
         </div>
       </div>
       <div class="terminal">
-        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>future.rs</span></div>
-<pre><span class="kw">pub trait</span> <span class="fn">Future</span> {
-    <span class="kw">type</span> Output;
-    <span class="kw">fn</span> <span class="fn">poll</span>(
-        <span class="kw">self</span>: Pin&lt;&amp;<span class="kw">mut Self</span>&gt;,
-        cx: &amp;<span class="kw">mut</span> Context&lt;<span class="str">'_</span>&gt;,
-    ) -&gt; Poll&lt;<span class="kw">Self</span>::Output&gt;;
-}
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>rundown.md</span></div>
+<pre><span class="cmt">// 工程技术分享 rundown</span>
+<span class="kw">$</span> <span class="fn">talk</span> map --subject agent-stream
 
-<span class="cmt">// Poll::Pending   → 挂起，等 waker 唤醒</span>
-<span class="cmt">// Poll::Ready(v)  → 完成，产出 v</span></pre>
+  <span class="str">✓</span> Why now         <span class="str">✓</span> 架构地图
+  <span class="str">✓</span> 现场走查         <span class="str">✓</span> 失败模式
+  <span class="str">✓</span> 影响数字         <span class="str">✓</span> 下一步
+  …
+
+<span class="cmt">// 6 拍，45 分钟，一个真实运行的系统</span>
+<span class="cmt">// 每一拍结束都留一个能当场问出口的问题</span></pre>
       </div>
     </div>
   </section>
 
   <!-- 5. Deep dive 2 -->
   <section class="slide" data-title="Deep Dive 2">
-    <p class="kicker">deep-dive · 2 / 2</p>
-    <h2 class="h2">Tokio 是一个偷任务的小工。</h2>
+    <p class="kicker">pilot · 2 / 2</p>
+    <h2 class="h2">把试讲对象选在你真正跑着的系统上。</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">Multi-thread runtime = N 个 worker，每个 worker 有自己的本地队列。空闲的 worker 会去别人队列里"偷"任务。</p>
+        <p class="lede">这次试讲对象是 Open Design 自己的 <span class="mono">claude-stream.ts</span> SSE 循环、沙箱 iframe 预览、以及 artifact 落盘路径——不是假想场景，也不是 slideware。正式讲之前，先在 3 位同事面前演练过。</p>
         <div class="stack mt-m">
-          <div class="tag">✦ local queue · 256 slots</div>
-          <div class="tag">✦ global injection queue</div>
-          <div class="tag">✦ work-stealing @ 50% steal ratio</div>
-          <div class="tag">✦ LIFO slot for cache locality</div>
+          <div class="tag">✦ 正式讲前演练 3 次</div>
+          <div class="tag">✦ 每一拍都掐秒计时</div>
+          <div class="tag">✦ 现场终端，不放录像</div>
+          <div class="tag">✦ 听众把问题留到最后</div>
         </div>
       </div>
       <div class="card" style="padding:32px">
-        <h4 class="mono" style="color:var(--accent-2)">scheduler tick loop</h4>
+        <h4 class="mono" style="color:var(--accent-2)">pilot · 5 个检查点</h4>
         <div class="stack mt-m" style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.9;color:var(--text-2)">
-          <div><span style="color:var(--accent)">1.</span> pop from LIFO slot</div>
-          <div><span style="color:var(--accent)">2.</span> else pop from local queue</div>
-          <div><span style="color:var(--accent)">3.</span> else drain global queue (every 61 ticks)</div>
-          <div><span style="color:var(--accent)">4.</span> else steal from random victim</div>
-          <div><span style="color:var(--accent)">5.</span> else park the thread</div>
+          <div><span style="color:var(--accent)">1.</span> 选定系统——agent-stream 的 SSE 循环，不是假想的例子</div>
+          <div><span style="color:var(--accent)">2.</span> 把失败也写进脚本——现场杀掉 daemon，讲清楚重连过程</div>
+          <div><span style="color:var(--accent)">3.</span> 每一拍都设硬性时限——45 分钟，计时器只有讲者能看到</div>
+          <div><span style="color:var(--accent)">4.</span> 找一个能打断你的资深工程师先过一遍</div>
+          <div><span style="color:var(--accent)">5.</span> 删掉一切"代码已经说明白，还要 slide 解释"的内容</div>
         </div>
       </div>
     </div>
@@ -456,53 +456,44 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- 6. Code example -->
   <section class="slide" data-title="Code">
-    <p class="kicker">mini-runtime.rs · ~40 LOC</p>
-    <h2 class="h2">手写一个最小 runtime。</h2>
+    <p class="kicker">talks/agent-stream-deep-dive/risk.md</p>
+    <h2 class="h2">每一场现场 demo，都要有一份写好的应急预案。</h2>
     <div class="terminal mt-m">
-      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>src/main.rs</span></div>
-<pre><span class="kw">use</span> std::collections::VecDeque;
-<span class="kw">use</span> std::sync::{Arc, Mutex};
-<span class="kw">use</span> std::task::{Context, Poll, Wake, Waker};
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>risk.md</span></div>
+<pre><span class="kw">## 已知失败模式</span>
+- daemon 流中重启：       <span class="num">12</span> 秒内重连——讲出来，别藏着
+- 沙箱 iframe 白屏：      切到 90 秒的录制备份片段
+- Q&amp;A 超时：            砍掉"延伸阅读"页，把时间留给听众
 
-<span class="kw">struct</span> Task(Mutex&lt;Pin&lt;Box&lt;<span class="kw">dyn</span> Future&lt;Output = ()&gt; + Send&gt;&gt;&gt;);
+<span class="kw">## 规则</span>
+- 现场 debug 不超过 <span class="num">60</span> 秒；超时立刻切备份片段，事后解释
 
-<span class="kw">impl</span> Wake <span class="kw">for</span> Task {
-    <span class="kw">fn</span> <span class="fn">wake</span>(<span class="kw">self</span>: Arc&lt;<span class="kw">Self</span>&gt;) { QUEUE.lock().unwrap().push_back(<span class="kw">self</span>); }
-}
-
-<span class="kw">fn</span> <span class="fn">block_on</span>&lt;F: Future&lt;Output = ()&gt; + Send + <span class="str">'static</span>&gt;(fut: F) {
-    <span class="fn">spawn</span>(fut);
-    <span class="kw">while let Some</span>(task) = QUEUE.lock().unwrap().pop_front() {
-        <span class="kw">let</span> waker = Waker::from(task.clone());
-        <span class="kw">let mut</span> cx = Context::from_waker(&amp;waker);
-        <span class="kw">let mut</span> fut = task.<span class="num">0</span>.lock().unwrap();
-        <span class="kw">let</span> _ = fut.as_mut().<span class="fn">poll</span>(&amp;<span class="kw">mut</span> cx); <span class="cmt">// 就是这一行</span>
-    }
-}</pre>
+<span class="cmt"># 正式讲前，对着这份清单演练了 3 次</span>
+<span class="cmt"># 备份片段是静音 b-roll，不是提前写好的台词</span></pre>
     </div>
   </section>
 
   <!-- 7. Takeaways -->
   <section class="slide" data-title="Takeaways">
-    <p class="kicker">// takeaways</p>
-    <h2 class="h2">三件事带回去。</h2>
+    <p class="kicker">// roi</p>
+    <h2 class="h2">值得这些演练时间的三个数字。</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>1 · async 是零成本抽象</h4><p class="dim">编译成状态机，没有运行时虚表，没有 GC。</p></div>
-      <div class="card card-accent"><h4>2 · Waker 是脉搏</h4><p class="dim">Future 不主动做事，运行时靠 waker 决定"什么时候再 poll"。</p></div>
-      <div class="card card-accent"><h4>3 · 别在 async 里阻塞</h4><p class="dim">一行 <span class="mono">std::fs::read</span> 能让整个 worker 停摆。用 <span class="mono">spawn_blocking</span>。</p></div>
+      <div class="card card-accent"><h4>1 · 上手速度</h4><p class="dim">看过沙箱走查的 23 位工程师，一周内就提交了第一个 agent-stream 补丁，此前平均要三周。</p></div>
+      <div class="card card-accent"><h4>2 · 重复提问变少</h4><p class="dim">"SSE 重连到底怎么工作"这类提问，录像上线后从每周约 9 次降到约 2 次。</p></div>
+      <div class="card card-accent"><h4>3 · 可复用的模板</h4><p class="dim">同样的 6 拍 rundown 这个季度又跑了两场——沙箱隔离、artifact 存储——每场准备不到 4 小时。</p></div>
     </div>
-    <p class="lede mt-l">延伸阅读：<span class="mono">tokio.rs/blog/2019-10-scheduler</span> · <span class="mono">rust-lang.github.io/async-book</span></p>
+    <p class="lede mt-l">录像与 rundown：<span class="mono">internal-wiki/agent-stream-talk</span> · <span class="mono">#eng-devrel</span></p>
   </section>
 
   <!-- 8. Q&A -->
   <section class="slide center tc" data-title="Q and A">
     <div>
       <div class="mono" style="font-size:120px;color:var(--accent);font-weight:800;letter-spacing:-.04em">?</div>
-      <h2 class="h2">Questions?</h2>
-      <p class="lede" style="margin:14px auto">github.com/lewis · @lewis on slack</p>
+      <h2 class="h2">把一场好分享，变成持续的节奏</h2>
+      <p class="lede" style="margin:14px auto">一个系统 · 一次演练 · 一份工程师真的会回看的录像</p>
       <div class="row mt-l" style="justify-content:center">
-        <span class="tag">slides: git.co/rt-deck</span>
-        <span class="tag">code: git.co/mini-rt</span>
+        <span class="tag">下一场：sandbox-isolation · Q3 wk2</span>
+        <span class="tag">owner: platform-devex guild</span>
       </div>
     </div>
   </section>

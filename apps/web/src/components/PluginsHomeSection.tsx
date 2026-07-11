@@ -31,8 +31,10 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
 import { AnimatePresence } from 'motion/react';
 
-const INITIAL_PLUGIN_RENDER_LIMIT = 60;
-const PLUGIN_RENDER_BATCH_SIZE = 60;
+const RICH_PLUGIN_RENDER_LIMIT = 60;
+const RICH_PLUGIN_RENDER_BATCH_SIZE = 60;
+const GALLERY_PLUGIN_RENDER_LIMIT = 12;
+const GALLERY_PLUGIN_RENDER_BATCH_SIZE = 12;
 
 interface Props {
   plugins: InstalledPluginRecord[];
@@ -79,7 +81,12 @@ export function PluginsHomeSection({
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [renderLimit, setRenderLimit] = useState(INITIAL_PLUGIN_RENDER_LIMIT);
+  const initialRenderLimit =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_LIMIT : RICH_PLUGIN_RENDER_LIMIT;
+  const renderBatchSize =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_BATCH_SIZE : RICH_PLUGIN_RENDER_BATCH_SIZE;
+  const loadMoreRootMargin = cardLayout === 'gallery' ? '900px' : '640px';
+  const [renderLimit, setRenderLimit] = useState(initialRenderLimit);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     visiblePlugins,
@@ -108,10 +115,15 @@ export function PluginsHomeSection({
     [filtered, renderLimit],
   );
   const hasMorePlugins = renderLimit < filtered.length;
+  const categoryAllVisible = cardLayout !== 'gallery';
+  const handlePickCategory = (slug: string | null): void => {
+    if (!categoryAllVisible && slug === selection.category) return;
+    pickCategory(slug);
+  };
 
   useEffect(() => {
-    setRenderLimit(INITIAL_PLUGIN_RENDER_LIMIT);
-  }, [filtered]);
+    setRenderLimit(initialRenderLimit);
+  }, [filtered, initialRenderLimit]);
 
   useEffect(() => {
     if (!hasMorePlugins) return;
@@ -125,14 +137,14 @@ export function PluginsHomeSection({
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         setRenderLimit((limit) =>
-          Math.min(filtered.length, limit + PLUGIN_RENDER_BATCH_SIZE),
+          Math.min(filtered.length, limit + renderBatchSize),
         );
       },
-      { rootMargin: '640px' },
+      { rootMargin: loadMoreRootMargin },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [filtered.length, hasMorePlugins]);
+  }, [filtered.length, hasMorePlugins, loadMoreRootMargin, renderBatchSize]);
 
   function handleSavePlugin(record: InstalledPluginRecord): void {
     const result = savePluginId(record.id);
@@ -186,7 +198,6 @@ export function PluginsHomeSection({
               options={catalog.category}
               selectedSlug={selection.category}
               totalVisible={totalVisible}
-              onPick={pickCategory}
               // The Saved collection lives on the rich management surface
               // (PluginsView). The minimal Community gallery has no per-card
               // save affordance, so the orthogonal Saved chip is hidden there.
@@ -196,10 +207,12 @@ export function PluginsHomeSection({
               onToggleSaved={() =>
                 setMode(mode === 'saved' ? 'all' : 'saved')
               }
+              showAll={categoryAllVisible}
               query={query}
               onQueryChange={setQuery}
               sortOrder={sortOrder}
               onSortOrderChange={setSortOrder}
+              onPick={handlePickCategory}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -282,6 +295,7 @@ interface CategoryRowProps {
   savedCount: number;
   savedActive: boolean;
   onToggleSaved: () => void;
+  showAll: boolean;
   query: string;
   onQueryChange: (next: string) => void;
   sortOrder: PluginSortOrder;
@@ -302,6 +316,7 @@ function CategoryRow({
   savedCount,
   savedActive,
   onToggleSaved,
+  showAll,
   query,
   onQueryChange,
   sortOrder,
@@ -338,14 +353,16 @@ function CategoryRow({
             <span className="plugins-home__chip-count">{savedCount}</span>
           </button>
         ) : null}
-        <CategoryPill
-          slug={null}
-          label={t('common.all')}
-          count={totalVisible}
-          active={selectedSlug === null}
-          onPick={onPick}
-          variant="all"
-        />
+        {showAll ? (
+          <CategoryPill
+            slug={null}
+            label={t('common.all')}
+            count={totalVisible}
+            active={selectedSlug === null}
+            onPick={onPick}
+            variant="all"
+          />
+        ) : null}
         {options.map((opt) => (
           <CategoryPill
             key={opt.slug}

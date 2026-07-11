@@ -115,6 +115,7 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Supported | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Supported | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Supported | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
@@ -125,6 +126,7 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Cline](https://github.com/cline/cline) | ✅ Supported | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Supported | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Supported | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Supported | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
@@ -302,8 +304,9 @@ You can use Open Design without ever opening the GUI — call it as a skill, plu
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | cursor | copilot | openclaw
+#         | antigravity | gemini | pi | vibe | hermes | cline | kimi
+#         | trae | opencode
 
 # Hosted equivalent for curl-based setup:
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Graphify Dark Graph</title>
+<title>Write a Feature Business Case like a Principal PM - Product management</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -268,10 +268,10 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     </svg>
     <div class="gd-snum">01 / 08</div>
     <div style="margin-top:auto">
-      <p class="gd-eyebrow">Tech Sharing · 纯干货</p>
-      <h1 class="gd-h1" style="font-size:88px"><span class="gd-rainbow">手把手用 Graphify<br>搭建个人知识图谱</span></h1>
-      <p class="gd-lede" style="margin-top:20px">一行命令 · 全多模态 · 诚实审计 —— <span class="gd-accent">把任何文件夹变成可导航的知识网络。</span></p>
-      <p class="gd-eyebrow" style="margin-top:26px">↑ 背景就是 Graphify 真实跑出来的知识图谱</p>
+      <p class="gd-eyebrow">Product Management · Business Case</p>
+      <h1 class="gd-h1" style="font-size:72px"><span class="gd-rainbow">Feature Business Case:<br>Plugin Marketplace</span></h1>
+      <p class="gd-lede" style="margin-top:20px">Should Open Design open a first-party plugin marketplace in Q3? <span class="gd-accent">One decision for PM, Eng, Design, and Leadership to land on.</span></p>
+      <p class="gd-eyebrow" style="margin-top:26px">Decision owner: PM · Reviewers: Eng, Design, Leadership</p>
     </div>
   </section>
 
@@ -280,9 +280,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-2"></div></div>
     <div class="gd-snum">02 / 08</div>
     <div style="margin:auto 0">
-      <div class="gd-eyebrow">Part 01</div>
-      <h1 class="gd-h1" style="font-size:120px">Why <span class="gd-grad">Graph</span>?</h1>
-      <p class="gd-lede">folder → tree → graph，人类认知的下一步</p>
+      <div class="gd-eyebrow">Decision needed</div>
+      <h1 class="gd-h1" style="font-size:96px">Ship a <span class="gd-grad">marketplace</span>, or hold the line?</h1>
+      <p class="gd-lede">217+ plugins already exist, built for free by the community — discoverable only through a static home rail, with no ratings, no revenue share, no owner of record. One call, before Q3 planning locks.</p>
     </div>
   </section>
 
@@ -290,64 +290,63 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div><div class="gd-orb gd-orb-3"></div></div>
     <div class="gd-snum">03 / 08</div>
-    <p class="gd-eyebrow">Feature Map</p>
-    <h2 class="gd-h2">一个工具，<span class="gd-grad">四件事</span></h2>
+    <p class="gd-eyebrow">The Pain</p>
+    <h2 class="gd-h2">Four ways the current model <span class="gd-grad">breaks down</span></h2>
     <div class="gd-grid-4">
-      <div class="gd-glass gd-glass-warm"><div style="font-size:30px">📂</div><h4 style="margin:10px 0 6px">Folder Ingest</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">递归扫描任意路径，支持 md / pdf / 代码 / 图片</p></div>
-      <div class="gd-glass gd-glass-blue"><div style="font-size:30px">🧠</div><h4 style="margin:10px 0 6px">Entity Extract</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">用 LLM 抽概念、人物、事件、关系</p></div>
-      <div class="gd-glass gd-glass-green"><div style="font-size:30px">🕸️</div><h4 style="margin:10px 0 6px">Force Graph</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">D3 力导向，点击即跳转原文</p></div>
-      <div class="gd-glass"><div style="font-size:30px">🔍</div><h4 style="margin:10px 0 6px">Audit Trail</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">每条边都能追溯到 source span</p></div>
+      <div class="gd-glass gd-glass-warm"><div style="font-size:30px">🔍</div><h4 style="margin:10px 0 6px">Discovery dead-ends</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">68% of installs come from the top 6 home-rail plugins; the other 211 get near-zero traffic</p></div>
+      <div class="gd-glass gd-glass-blue"><div style="font-size:30px">🛡️</div><h4 style="margin:10px 0 6px">No trust signal</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">No ratings, no verification badge — support tickets show users afraid to install unfamiliar plugin code</p></div>
+      <div class="gd-glass gd-glass-green"><div style="font-size:30px">📉</div><h4 style="margin:10px 0 6px">Zero creator incentive</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">38 external contributors shipped a plugin this year; only 4 shipped a second one</p></div>
+      <div class="gd-glass"><div style="font-size:30px">🎫</div><h4 style="margin:10px 0 6px">Unowned support load</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">112 GitHub issues this quarter trace back to plugins with no listed maintainer of record</p></div>
     </div>
-    <div class="gd-glass gd-glass-warm" style="margin-top:24px"><p style="font-size:18px;line-height:1.6">它不是「又一个 RAG」—— 它是 <span class="gd-accent">把检索结果画出来，让你一眼就知道信息长什么样</span>。</p></div>
+    <div class="gd-glass gd-glass-warm" style="margin-top:24px"><p style="font-size:18px;line-height:1.6">Every pain point traces to the same root cause: <span class="gd-accent">plugins have no marketplace, so they have no owner, no signal, and no incentive</span>.</p></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div></div>
     <div class="gd-snum">04 / 08</div>
-    <p class="gd-eyebrow">One command</p>
-    <h2 class="gd-h2">从 0 到图谱，<span class="gd-grad">大概 90 秒</span></h2>
-    <p class="gd-cmd" style="margin:16px 0 22px">$ graphify ~/notes --out ./graph</p>
-    <pre class="gd-codebox"><span class="cm"># graphify.config.yaml</span>
-<span class="kw">ingest</span>:
-  paths: [<span class="st">~/notes</span>, <span class="st">~/code/docs</span>]
-  include: [<span class="st">"*.md"</span>, <span class="st">"*.pdf"</span>, <span class="st">"*.py"</span>]
+    <p class="gd-eyebrow">Options Considered</p>
+    <h2 class="gd-h2">Three shapes, <span class="gd-grad">one recommendation</span></h2>
+    <p class="gd-cmd" style="margin:16px 0 22px">$ od plugin marketplace --compare-options</p>
+    <pre class="gd-codebox"><span class="cm"># three options weighed for Q3</span>
+<span class="kw">option_a</span>: <span class="st">status_quo</span>       <span class="cm"># home rail only, curated by us</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">none</span>   effort: <span class="fn">low</span>
 
-<span class="kw">extract</span>:
-  model: <span class="st">claude-opus-4-6</span>
-  schema: [<span class="st">concept</span>, <span class="st">person</span>, <span class="st">event</span>, <span class="st">relation</span>]
+<span class="kw">option_b</span>: <span class="st">reviewed_marketplace</span>  <span class="cm"># submission queue + revenue share</span>
+  trust_signal: <span class="fn">verified_badge</span>   creator_incentive: <span class="fn">70/30_split</span>   effort: <span class="fn">medium</span>
 
-<span class="kw">render</span>:
-  engine: <span class="st">d3-force</span>
-  audit: <span class="fn">true</span>     <span class="cm"># 每条边带 source span</span></pre>
+<span class="kw">option_c</span>: <span class="st">open_federation</span>   <span class="cm"># npm-style, no review, self-serve</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">tips_only</span>   effort: <span class="fn">low</span>
+
+<span class="kw">recommended</span>: option_b     <span class="cm"># only option that fixes trust AND incentive</span></pre>
   </section>
 
   <!-- 5. CHART — race diagram -->
   <section class="slide">
     <div class="gd-ambient"><div class="gd-orb gd-orb-3"></div></div>
     <div class="gd-snum">05 / 08</div>
-    <p class="gd-eyebrow">Efficiency Race</p>
-    <h2 class="gd-h2">没有知识库 vs 有知识库</h2>
+    <p class="gd-eyebrow">Tradeoffs</p>
+    <h2 class="gd-h2">Option B wins trust, <span class="gd-grad">costs speed</span></h2>
     <div style="max-width:900px;margin-top:30px">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-danger)">没有<br>知识库</div>
+        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-danger)">Options<br>A / C</div>
         <div style="flex:1;position:relative;height:70px;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.2);border-radius:16px">
-          <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:32px">🛵</div>
-          <div style="position:absolute;left:72px;top:50%;transform:translateY(-50%);color:var(--gd-danger);font-size:14px">反复喂信息…整理…又忘了…</div>
+          <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:32px">⚡</div>
+          <div style="position:absolute;left:72px;top:50%;transform:translateY(-50%);color:var(--gd-danger);font-size:14px">Ship in 2 weeks · no review gate · no trust signal</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">
-        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-green)">有<br>知识库</div>
+        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-green)">Option<br>B</div>
         <div style="flex:1;position:relative;height:70px;background:rgba(126,211,164,.06);border:1px solid rgba(126,211,164,.25);border-radius:16px">
-          <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:32px">🏎️</div>
-          <div style="position:absolute;right:72px;top:50%;transform:translateY(-50%);color:var(--gd-green);font-size:14px">AI 自己找 → 确认 → 干活!</div>
+          <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:32px">🛡️</div>
+          <div style="position:absolute;right:72px;top:50%;transform:translateY(-50%);color:var(--gd-green);font-size:14px">Ship in 6 weeks · review gate · verified badge + revenue share</div>
         </div>
       </div>
     </div>
     <div class="gd-grid-3" style="margin-top:36px">
-      <div class="gd-glass gd-glass-warm"><div class="gd-big gd-grad">5×</div><p class="gd-dim" style="margin-top:6px">速度提升</p></div>
-      <div class="gd-glass gd-glass-green"><div class="gd-big gd-grad">-80%</div><p class="gd-dim" style="margin-top:6px">重复喂信息</p></div>
-      <div class="gd-glass gd-glass-blue"><div class="gd-big gd-grad">∞</div><p class="gd-dim" style="margin-top:6px">记忆持久化</p></div>
+      <div class="gd-glass gd-glass-warm"><div class="gd-big gd-grad">+4wk</div><p class="gd-dim" style="margin-top:6px">added time-to-ship for review tooling</p></div>
+      <div class="gd-glass gd-glass-green"><div class="gd-big gd-grad">70/30</div><p class="gd-dim" style="margin-top:6px">creator revenue split, our favor 30%</p></div>
+      <div class="gd-glass gd-glass-blue"><div class="gd-big gd-grad">20</div><p class="gd-dim" style="margin-top:6px">creators committed for private beta</p></div>
     </div>
   </section>
 
@@ -355,34 +354,33 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
     <div class="gd-snum">06 / 08</div>
-    <p class="gd-eyebrow">Pipeline</p>
-    <h2 class="gd-h2">端到端 <span class="gd-grad">4 步走</span></h2>
+    <p class="gd-eyebrow">Recommendation</p>
+    <h2 class="gd-h2">Ship Option B in <span class="gd-grad">4 phases</span></h2>
     <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:36px">
-      <div class="gd-glass" style="flex:1;text-align:center"><div style="font-size:34px">📂</div><div style="font-weight:600;margin-top:8px">Scan</div><div class="gd-dim" style="font-size:13px">递归读文件</div></div>
+      <div class="gd-glass" style="flex:1;text-align:center"><div style="font-size:34px">📋</div><div style="font-weight:600;margin-top:8px">Freeze scope</div><div class="gd-dim" style="font-size:13px">Rubric + revenue terms locked by Jul 21</div></div>
       <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-blue" style="flex:1;text-align:center"><div style="font-size:34px">🔬</div><div style="font-weight:600;margin-top:8px">Extract</div><div class="gd-dim" style="font-size:13px">LLM 抽实体</div></div>
+      <div class="gd-glass gd-glass-blue" style="flex:1;text-align:center"><div style="font-size:34px">🛠️</div><div style="font-weight:600;margin-top:8px">Build the queue</div><div class="gd-dim" style="font-size:13px">Submission + review dashboard by Aug 11</div></div>
       <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-green" style="flex:1;text-align:center"><div style="font-size:34px">🕸️</div><div style="font-weight:600;margin-top:8px">Build</div><div class="gd-dim" style="font-size:13px">构图 + 去重</div></div>
+      <div class="gd-glass gd-glass-green" style="flex:1;text-align:center"><div style="font-size:34px">🧪</div><div style="font-weight:600;margin-top:8px">Private beta</div><div class="gd-dim" style="font-size:13px">20 creators, review SLA measured live</div></div>
       <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-warm" style="flex:1;text-align:center"><div style="font-size:34px">🎨</div><div style="font-weight:600;margin-top:8px">Render</div><div class="gd-dim" style="font-size:13px">D3 交互图</div></div>
+      <div class="gd-glass gd-glass-warm" style="flex:1;text-align:center"><div style="font-size:34px">🚀</div><div style="font-weight:600;margin-top:8px">GA rollout</div><div class="gd-dim" style="font-size:13px">All 217+ creators, revenue share turns on</div></div>
     </div>
-    <div class="gd-glass" style="margin-top:32px"><p style="font-size:16px;line-height:1.6;color:var(--gd-text2)">每一步都有 audit log：你永远知道某个节点为什么存在、它来自哪个文件的哪一行。</p></div>
+    <div class="gd-glass" style="margin-top:32px"><p style="font-size:16px;line-height:1.6;color:var(--gd-text2)">This is the irreversible step: once revenue share is live, pulling the marketplace back costs trust we won't get back. <span class="gd-accent">Sign off here, not after Aug.</span></p></div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-3"></div></div>
     <div class="gd-snum">07 / 08</div>
-    <p class="gd-eyebrow">Try it tonight</p>
-    <h2 class="gd-h1" style="font-size:80px">Graphify <span class="gd-grad">your folders</span></h2>
-    <p class="gd-cmd" style="margin-top:22px">$ npm i -g @lewis/graphify</p>
-    <p class="gd-cmd" style="margin-top:10px;color:var(--gd-warm);text-shadow:0 0 30px rgba(232,168,124,.45)">$ graphify ~/obsidian-vault</p>
+    <p class="gd-eyebrow">Measure of Success</p>
+    <h2 class="gd-h1" style="font-size:64px">North star: <span class="gd-grad">long-tail install share</span></h2>
+    <p class="gd-cmd" style="margin-top:22px">$ od plugin marketplace --track long-tail-install-share</p>
+    <p class="gd-cmd" style="margin-top:10px;color:var(--gd-warm);text-shadow:0 0 30px rgba(232,168,124,.45)">→ Target: 24% → 45% by Q4</p>
     <div style="margin-top:32px">
-      <span class="gd-tag">#knowledge-graph</span>
-      <span class="gd-tag">#open-source</span>
-      <span class="gd-tag">#claude-agent</span>
-      <span class="gd-tag">#obsidian</span>
-      <span class="gd-tag">#d3-force</span>
+      <span class="gd-tag">#review-sla-under-72h</span>
+      <span class="gd-tag">#creator-payout-on-time</span>
+      <span class="gd-tag">#support-tickets-flat</span>
+      <span class="gd-tag">#nps-unchanged</span>
     </div>
   </section>
 
@@ -391,8 +389,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
     <div class="gd-snum">08 / 08</div>
     <div style="margin:auto 0;text-align:center">
-      <div class="gd-big gd-rainbow" style="font-size:180px">Thanks.</div>
-      <p class="gd-lede" style="margin:28px auto 0">github.com/lewis/graphify · 欢迎 star / issue / PR</p>
+      <div class="gd-big gd-rainbow" style="font-size:140px">Approve.</div>
+      <p class="gd-lede" style="margin:28px auto 0">Option B — reviewed marketplace with revenue share. Sign-off requested from PM, Eng, Design, and Leadership by Jul 21.</p>
     </div>
   </section>
 

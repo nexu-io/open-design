@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Horizontal Parallax — Open Design</title>
+<!--
+  Faithful single-file port of davidfaure's "Horizontal Parallax Gallery"
+  (Codrops, MIT). Original: https://github.com/davidfaure/horizontal-parallax-gallery-codrops
+  WebGL planes are synced to a horizontal DOM row; wheel scrolls it sideways with
+  lerp smoothing, and each plane parallaxes its texture (UV shift) by its position
+  in the viewport. Three.js via CDN; images original (generated, not the author's
+  Midjourney set). Runs in powered preview.
+-->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box} :root{ --bg:#0c0c0e; --ink:#ededf0; --mut:#8b8b93; }
+  html,body{ margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:'Manrope',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  #gl{ position:fixed; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+  .frame{ position:fixed; inset:0; z-index:5; pointer-events:none; padding:1.4rem 1.6rem;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--mut); }
+  .frame .dot{ width:7px;height:7px;border-radius:50%;background:#b8ff3c;box-shadow:0 0 12px #b8ff3c;display:inline-block;margin-right:8px;vertical-align:middle;}
+  .frame a{ color:var(--mut); pointer-events:auto; }
+  .title{ position:fixed; left:1.6rem; top:44%; transform:translateY(-50%); z-index:4; pointer-events:none; mix-blend-mode:difference; }
+  .title h1{ margin:0; font-size:clamp(40px,7vw,96px); font-weight:800; line-height:0.92; letter-spacing:-0.03em; }
+  .title p{ margin:0.8rem 0 0; max-width:30ch; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); line-height:1.5; }
+  /* horizontal DOM row (provides layout/bounds; WebGL draws the images) */
+  #wrap{ position:fixed; inset:0; z-index:1; overflow:hidden; }
+  #row{ position:absolute; top:50%; transform:translateY(-50%); left:0; display:flex; align-items:center; gap:5vw; padding:0 46vw 0 6vw; will-change:transform; }
+  .cell{ flex:0 0 auto; text-decoration:none; color:inherit; }
+  .cell .img{ display:block; height:64vh; opacity:0; }   /* WebGL plane covers it */
+  .cell .cap{ margin-top:0.8rem; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--mut); display:flex; justify-content:space-between; gap:2rem; }
+  .hint{ position:fixed; right:1.6rem; bottom:1.4rem; z-index:5; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase; color:var(--mut); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="frame"><span><span class="dot"></span>Open Design · WebGL Preview</span>
+  <span>Effect: <a href="https://github.com/davidfaure/horizontal-parallax-gallery-codrops" target="_blank">David Faure / Codrops</a></span></div>
+<div class="title"><h1>Drift<br>Sideways</h1><p>Scroll — the frames glide sideways and each image parallaxes inside its own window.</p></div>
+<div id="wrap"><div id="row"></div></div>
+<div class="hint">Scroll → horizontal</div>
+
+<script>
+const DATA = [
+  { src:'hpg-img/1.jpg', w:0.30, name:'Monolith',    idx:'01' },
+  { src:'hpg-img/2.jpg', w:0.24, name:'Cantilever',  idx:'02' },
+  { src:'hpg-img/3.jpg', w:0.34, name:'Sky Well',    idx:'03' },
+  { src:'hpg-img/4.jpg', w:0.26, name:'Buttress',    idx:'04' },
+  { src:'hpg-img/5.jpg', w:0.32, name:'Concourse',   idx:'05' },
+  { src:'hpg-img/6.jpg', w:0.28, name:'Overhang',    idx:'06' },
+];
+const row=document.getElementById('row');
+DATA.forEach(d=>{ const a=document.createElement('a'); a.className='cell'; a.href='#';
+  a.innerHTML=`<img class="img gl" src="${d.src}" crossorigin="anonymous" style="width:${Math.round(d.w*innerWidth)}px">
+    <div class="cap"><span>${d.idx} · ${d.name}</span><span>◍</span></div>`;
+  row.appendChild(a); });
+</script>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const VERT=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`;
+const FRAG=`precision highp float; varying vec2 vUv;
+uniform sampler2D uTexture; uniform vec2 uResolution; uniform vec2 uImageResolution; uniform float uParallax; uniform float uUvScale;
+vec2 coverUv(vec2 uv, vec2 res, vec2 img){
+  vec2 r=vec2(min((res.x/res.y)/(img.x/img.y),1.0), min((res.y/res.x)/(img.y/img.x),1.0));
+  return vec2(uv.x*r.x+(1.0-r.x)*0.5, uv.y*r.y+(1.0-r.y)*0.5);
+}
+void main(){
+  vec2 uv=coverUv(vUv,uResolution,uImageResolution);
+  uv.x += uParallax;                 // horizontal parallax
+  uv=(uv-0.5)*uUvScale+0.5;          // buffer room
+  gl_FragColor=vec4(texture2D(uTexture,uv).rgb,1.0);
+}`;
+const canvas=document.getElementById('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(); const group=new THREE.Group(); scene.add(group);
+let W=innerWidth,H=innerHeight;
+const fov=()=>2*Math.atan(H/2/100)*(180/Math.PI);
+const camera=new THREE.PerspectiveCamera(fov(),W/H,0.01,1000); camera.position.z=100;
+const geo=new THREE.PlaneGeometry(1,1,32,32);
+const loader=new THREE.TextureLoader();
+const medias=[];
+class Media{
+  constructor(el){ this.el=el; this.parallaxIntensity=0.4;
+    this.mat=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:FRAG,uniforms:{
+      uTexture:{value:null}, uResolution:{value:new THREE.Vector2(1,1)}, uImageResolution:{value:new THREE.Vector2(1,1)},
+      uParallax:{value:0}, uUvScale:{value:0.85} }});
+    this.mesh=new THREE.Mesh(geo,this.mat); group.add(this.mesh);
+    this.mat.uniforms.uTexture.value=loader.load(el.src,t=>{ t.colorSpace=THREE.SRGBColorSpace;
+      this.mat.uniforms.uImageResolution.value.set(t.image.width,t.image.height); });
+    this.measure();
+  }
+  measure(){ this.b=this.el.getBoundingClientRect();  // captured at scroll 0
+    this.mesh.scale.set(this.b.width,this.b.height,1);
+    this.mat.uniforms.uResolution.value.set(this.b.width,this.b.height); }
+  render(scroll){
+    const x=this.b.left - scroll - W/2 + this.b.width/2;
+    const y=-this.b.top + H/2 - this.b.height/2;
+    this.mesh.position.set(x,y,0);
+    const center=this.b.left - scroll + this.b.width/2;
+    const dist=(center - W/2)/W;
+    this.mat.uniforms.uParallax.value=dist*this.parallaxIntensity;
+  }
+}
+// scroll state
+const scroll={current:0,target:0,ease:0.07,limit:0};
+const wrap=document.getElementById('wrap');
+function setLimit(){ scroll.limit=Math.max(0,row.scrollWidth - wrap.clientWidth); }
+addEventListener('wheel',e=>{ scroll.target+=e.deltaY; },{passive:true});
+function resize(){ if(innerWidth===resize._w&&innerHeight===resize._h)return; resize._w=innerWidth; resize._h=innerHeight;
+  W=innerWidth;H=innerHeight; camera.aspect=W/H; camera.fov=fov(); camera.updateProjectionMatrix();
+  renderer.setSize(W,H); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  document.querySelectorAll('.cell .img').forEach((im,i)=>{ im.style.width=Math.round(DATA[i].w*W)+'px'; });
+  setLimit(); medias.forEach(m=>m.measure()); }
+function boot(){
+  document.querySelectorAll('.cell .img').forEach(im=>medias.push(new Media(im)));
+  setLimit();
+  addEventListener('resize',resize);
+  (function frame(){ requestAnimationFrame(frame); resize();
+    scroll.target=Math.max(0,Math.min(scroll.limit,scroll.target));
+    scroll.current+=(scroll.target-scroll.current)*scroll.ease;
+    row.style.transform=`translateY(-50%) translateX(${-scroll.current}px)`;
+    medias.forEach(m=>m.render(scroll.current));
+    renderer.render(scene,camera);
+  })();
+}
+// wait images so bounds/aspect are correct
+(function whenReady(cb){ const imgs=[...document.querySelectorAll('.cell .img')]; let n=0,t=imgs.length;
+  const d=()=>{ if(++n>=t) cb(); }; imgs.forEach(im=>{ if(im.complete&&im.naturalWidth) d(); else{ im.onload=d; im.onerror=d; } }); if(!t)cb(); })(boot);
+</script>
+</body>
+</html>

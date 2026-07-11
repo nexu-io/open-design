@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-mat
+en_name: "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager"
+zh_name: "像麦肯锡项目经理一样写利润率修复终稿"
 description: |
-  Mat — Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones. Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks.
+  A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Built as a decision-grade consulting deck for client sponsor, steering committee.
+en_description: |
+  A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Built as a decision-grade consulting deck for client sponsor, steering committee.
+zh_description: |
+  像麦肯锡项目经理一样写利润率修复终稿——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "strategy"
+  - "consulting-deliverable"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-mat"
 triggers:
-  - "mat"
-  - "zhangzara-mat"
-  - "warm-modern"
-  - "considered"
-  - "warm"
-  - "design-led"
-  - "design studio credentials"
-  - "architecture / interior brand"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager"
+  - "像麦肯锡项目经理一样写利润率修复终稿"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/mat"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "consulting"
+  scenario: "strategy"
+  example_prompt: "Create \"Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager\" as a decision-grade Consulting deck in this template's own visual system. Subject: A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Audience: client sponsor, steering committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # Mat

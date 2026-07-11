@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DESIGN_SYSTEMS_USAGE,
   isDesignSystemsHelpArg,
-} from '../src/design-systems-cli-help.js';
+} from '../src/cli-help/index.js';
 
 describe('od design-systems help surface', () => {
   it('routes help, --help, and -h to the usage text', () => {

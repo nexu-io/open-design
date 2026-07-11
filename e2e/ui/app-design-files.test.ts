@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { expectAllProjectFilesActive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -318,6 +319,20 @@ async function waitForSingleSketchFile(page: Page, projectId: string): Promise<s
   return sketchName;
 }
 
+async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
+  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
+  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
+}
+
 async function clickDesignFilePreviewOpen(page: Page) {
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
@@ -338,7 +353,7 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: fileName,
   });
@@ -399,7 +414,7 @@ async function runDesignFilesUploadFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'moodboard.png',
   });
@@ -443,7 +458,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'trash-me.png',
@@ -456,7 +471,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
 
   await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expectAllProjectFilesActive(page);
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
   await expect
     .poll(async () => {
@@ -483,7 +498,7 @@ test('[P1] design files page keeps the current single-file actions and context h
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
   await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
@@ -564,6 +579,82 @@ test('[P1] design files sketch toolbar creates a sketch and exposes editor menu 
   await expect(page.getByTestId('sketch-menu-clear')).toBeDisabled();
 });
 
+test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensions', async ({ page }) => {
+  test.setTimeout(90_000);
+  const analyticsBodies: string[] = [];
+  await page.unroute('**/api/app-config').catch(() => {});
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: true,
+        agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: true, content: false, artifactManifest: false },
+      }),
+    );
+  }, STORAGE_KEY);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: true, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
+  await page.route('**/api/analytics/config', async (route) => {
+    await route.fulfill({
+      json: {
+        enabled: true,
+        env: 'e2e',
+        key: 'phc_e2e',
+        host: 'https://analytics.open-design.test',
+        installationId: 'e2e-installation',
+      },
+    });
+  });
+  await page.route('https://analytics.open-design.test/**', async (route) => {
+    analyticsBodies.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 200, json: { status: 1 } });
+  });
+  await routeMockAgents(page);
+
+  const projectId = await createProjectViaApi(page, 'Plan and sketch analytics');
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await selectComposerSessionMode(page, 'Plan mode');
+  await page.getByTestId('design-files-tab').click();
+  await page.getByTestId('design-files-empty-new-sketch').click();
+
+  const sketchName = await waitForSingleSketchFile(page, projectId);
+  await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
+  await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
+
+  await expect.poll(() => analyticsBodies.join('\n')).toContain('session_mode_toggle');
+  const raw = analyticsBodies.join('\n');
+  expect(raw).toContain('"mode_after":"plan"');
+  expect(raw).toContain('new_sketch');
+  expect(raw).toContain(projectId);
+});
+
 test('[P1] markdown plan documents support code, split, preview, and autosaved edits', async ({ page }) => {
   await routeMockAgents(page);
 
@@ -640,7 +731,7 @@ test('[P1] design files batch delete removes selected files and keeps cancel ret
   await seedProjectFile(page, projectId, 'batch-keep.txt', 'keep');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-batch-alpha.txt');
   const beta = page.getByTestId('design-file-row-batch-beta.txt');
@@ -712,7 +803,7 @@ test('[P1] design files batch download posts selected names to the archive endpo
   await seedProjectFile(page, projectId, 'download-skip.txt', 'skip');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-download-alpha.txt');
   const beta = page.getByTestId('design-file-row-download-beta.txt');
@@ -755,7 +846,7 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
     name: 'Risk Dashboard',
   })).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const sourceRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'logic.ts',
   });
@@ -817,7 +908,7 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   } else {
     // Depending on restoration timing, inactive files can either be restored as
     // tabs already or remain available from the Design Files list.
-    await page.getByTestId('design-files-tab').click();
+    await openAllProjectFiles(page);
     const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
       hasText: 'second-tab.png',
     });

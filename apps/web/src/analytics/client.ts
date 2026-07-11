@@ -15,6 +15,7 @@ import {
   clearExceptionTrackingContext,
   setExceptionTrackingContext,
 } from './error-tracking';
+import { pinFirstSessionForCapture } from './identity';
 
 interface AnalyticsContext {
   anonymousId: string;
@@ -22,6 +23,10 @@ interface AnalyticsContext {
   clientType: AnalyticsClientType;
   locale: string;
   appVersion: string;
+  // Whether this is the install's first analytics session (see
+  // identity.ts#isFirstSession). Optional so callers that don't care
+  // (error tracking) can omit it.
+  isFirstSession?: boolean;
 }
 
 let client: PostHog | null = null;
@@ -49,7 +54,7 @@ let configureGlobals: AnalyticsConfigureGlobals = {
 let lastRegisterPayload: Record<string, unknown> | null = null;
 
 // Returns the installationId the daemon stamped on /api/analytics/config
-// after the user opted in via Privacy → "Share usage data". The provider
+// after the user opted in via Privacy → "Share". The provider
 // uses this in preference to its locally-generated UUID so PostHog,
 // Langfuse, and any future sink share a single anonymous identity.
 //
@@ -251,7 +256,7 @@ export async function getAnalyticsClient(
         // various automation flags). The list also rejects some real users
         // — embedded webviews, fingerprinted browsers, e2e CI runs — which
         // is unacceptable for product analytics that needs to count every
-        // session. We instead rely on the Privacy → "Share usage data"
+        // session. We instead rely on the Privacy → "Share"
         // toggle as the single consent gate and treat every UA equally.
         opt_out_useragent_filter: true,
 
@@ -300,7 +305,7 @@ export async function getAnalyticsClient(
         // and over-redact every content surface — the same
         // "redact-by-default, single audit point" philosophy scrub.ts
         // uses for events (see scrub.ts header). Replay stays gated by the
-        // existing Privacy → "Share usage data" consent: posthog-js's
+        // existing Privacy → "Share" consent: posthog-js's
         // global opt_out_capturing() halts replay too (see applyConsent()).
         //
         // The three redaction layers, in order of how much they cover:
@@ -337,6 +342,10 @@ export async function getAnalyticsClient(
             client_type: context.clientType,
             locale: context.locale,
             session_id: context.sessionId,
+            // Onboarding-funnel dimension (spec §11.1 common fields).
+            ...(context.isFirstSession !== undefined
+              ? { is_first_session: context.isFirstSession }
+              : {}),
             // v2 rename: was `anonymous_id`. Value is unchanged — the same
             // installationId / local-UUID fallback.
             device_id: distinctId,
@@ -363,6 +372,15 @@ export async function getAnalyticsClient(
         },
       });
       client = posthog;
+      // Pin the first-analytics-session marker only now — init returned without
+      // throwing and capture is live. This is the single consent gate every
+      // caller (mount, locale effect, track(), and the setConsent opt-in
+      // re-init) funnels through, so an install that first booted with
+      // analytics OFF and opts in later records its real first analytics
+      // session as first. Pinning earlier (before import()/init) would burn the
+      // marker on a boot where init actually failed and no session was ever
+      // captured (see identity.ts#isFirstSession). Idempotent + best-effort.
+      pinFirstSessionForCapture();
       flushPersonProperties();
       return posthog;
     } catch {

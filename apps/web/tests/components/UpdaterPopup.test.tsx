@@ -125,9 +125,13 @@ describe('UpdaterPopup', () => {
 
     fireEvent.click(button);
 
-    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'Update ready' });
+    expect(dialog).toBeTruthy();
+    expect(dialog.className).toBe('updater-popup is-ready');
     expect(screen.getByText('Open Design 1.2.3-beta.4 is ready. Open Design will close and open the installer.')).toBeTruthy();
+    expect(screen.getByTestId('updater-silent-update-checkbox')).toBeChecked();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
+    expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
   });
 
   it('uses localized ready prompt copy from the app i18n provider', async () => {
@@ -174,6 +178,57 @@ describe('UpdaterPopup', () => {
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装并重启');
     expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并自动重启。')).toBeTruthy();
+  });
+
+  it('defaults silent updates checked in the prompt and writes only when installing', async () => {
+    const install = vi.fn(async () => downloadedStatus({
+      installResult: {
+        dryRun: true,
+        openedAt: '2026-05-19T00:00:00.000Z',
+        path: '/tmp/open-design-updater/Open Design Beta.dmg',
+      },
+    }));
+    const persistSilentUpdates = vi.fn(async () => undefined);
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit: vi.fn(async () => ({ ok: true as const })),
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup onAllowSilentUpdatesChange={persistSilentUpdates} />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    const checkbox = screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+  });
+
+  it('renders an explicit disabled silent update preference as unchecked', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup allowSilentUpdates={false} />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(false);
   });
 
   it('dismisses the confirmation prompt before installation starts', async () => {

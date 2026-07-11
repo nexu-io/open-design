@@ -1,0 +1,24 @@
+{
+  "id": "social-media-post-seedream-squishcraft-kids-clay-ad",
+  "surface": "image",
+  "title": "Social Media Post - Seedream Squishcraft Kids Clay Ad",
+  "summary": "A production-ready kids craft product ad prompt for Seedream 5.0 Pro, featuring a playful clay set, cheerful product typography, and warm commercial lighting.",
+  "category": "Social Media Post",
+  "tags": [
+    "advertising",
+    "product",
+    "typography",
+    "kids",
+    "seedream"
+  ],
+  "model": "seedream-5-pro",
+  "aspect": "3:4",
+  "prompt": "A messy fun kids advertisement poster. A laughing young girl age 6 with clay all over her hands proudly shows a lumpy clay sculpture beside a giant colorful clay set box 3x her height overflowing with clay blocks in every color, \"SQUISHCRAFT\" written in big squishy letters on the box. Bright cheerful craft room background with clay sculptures tools and colorful handprints on the walls. Big squishy rounded typography \"SQUISHCRAFT\" in rainbow colors filling the background. Tagline bottom: \"Get your hands messy.\" Small text top-right corner reads \"Designed with Seedream 5.0 Pro \" in grey. Photorealistic, fun kids craft product commercial, bright warm playroom lighting.",
+  "previewImageUrl": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/social-media-post-seedream-squishcraft-kids-clay-ad.jpg",
+  "source": {
+    "repo": "x.com",
+    "license": "Original X post",
+    "author": "M",
+    "url": "https://x.com/Strength04_X/status/2075063250656621054"
+  }
+}

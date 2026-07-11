@@ -1,23 +1,35 @@
 ---
 name: html-ppt-zhangzara-daisy-days
+en_name: "Write a Customer Onboarding Workshop like a Field Enablement Director"
+zh_name: "像客户成功赋能总监一样写客户上手工作坊"
 description: |
-  Daisy Days — Cheerful pastel deck with hand-drawn daisies, stars, and rainbows. Friendly, soft, and warm. Anything that should feel friendly, soft, and joyful: educational content, kids and family, wellness programs, community workshops, creator portfolios for craft / illustration.
+  A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Built as a decision-grade professional training deck for new customers, CS team.
+en_description: |
+  A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Built as a decision-grade professional training deck for new customers, CS team.
+zh_description: |
+  像客户成功赋能总监一样写客户上手工作坊——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "professional-training"
+  - "employee-onboarding-deck"
+  - "education"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-daisy-days"
 triggers:
-  - "daisy-days"
-  - "zhangzara-daisy-days"
-  - "Daisy Days"
-  - "cheerful"
-  - "playful"
-  - "friendly"
-  - "soft"
-  - "education / classroom"
-  - "kids product launch"
+  - "employee-onboarding-deck"
+  - "professional-training"
+  - "Write a Customer Onboarding Workshop like a Field Enablement Director"
+  - "像客户成功赋能总监一样写客户上手工作坊"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/daisy-days"
   upstream_license: MIT
   preview:
@@ -27,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "professional-training"
+  scenario: "education"
+  example_prompt: "Create \"Write a Customer Onboarding Workshop like a Field Enablement Director\" as a decision-grade Professional training deck in this template's own visual system. Subject: A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Audience: new customers, CS team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
 ---
 
 # Daisy Days

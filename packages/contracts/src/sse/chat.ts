@@ -1,4 +1,5 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
+import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -30,6 +31,15 @@ export interface LiveArtifactRefreshSsePayload {
   title?: string;
   refreshedSourceCount?: number;
   error?: string;
+}
+
+export interface PlainStreamArtifactSsePayload {
+  type: 'artifact';
+  source: 'plain-stream';
+  name: string;
+  path?: string;
+  identifier?: string;
+  artifactType?: string;
 }
 
 /**
@@ -76,6 +86,11 @@ export interface ChatSseEndPayload {
    *  runtime). Lets the chat offer a Continue affordance without a separate
    *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** Daemon failure classification for a `failed` run, so the chat can render
+   *  specific guidance straight off the terminal frame without a status refetch.
+   *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
+  failureCategory?: RunFailureCategory | null;
+  failureDetail?: RunFailureDetail | null;
 }
 
 export type DaemonAgentPayload =
@@ -86,6 +101,7 @@ export type DaemonAgentPayload =
   | { type: 'thinking_start' }
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
+  | PlainStreamArtifactSsePayload
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still

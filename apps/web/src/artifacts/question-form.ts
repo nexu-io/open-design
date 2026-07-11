@@ -101,6 +101,8 @@ export interface FormQuestion {
   step?: number;
   /** File inputs only. The answer serializes selected file names, not bytes. */
   multiple?: boolean;
+  /** File inputs only. Mirrors the native file input accept attribute. */
+  accept?: string;
   /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
   cards?: DirectionCard[];
 }
@@ -300,6 +302,7 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
   const max = parseNumberAttr(qo.max);
   const step = parseNumberAttr(qo.step);
   const multiple = qo.multiple === true;
+  const accept = typeof qo.accept === 'string' ? qo.accept : undefined;
   return {
     id,
     label,
@@ -317,6 +320,7 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(max !== undefined ? { max } : {}),
     ...(step !== undefined ? { step } : {}),
     ...(multiple && type === 'file' ? { multiple } : {}),
+    ...(accept && type === 'file' ? { accept } : {}),
     ...(cards ? { cards } : {}),
   };
 }

@@ -31,7 +31,7 @@ import {
   FinalizeUpstreamError,
   resolveCurrentArtifact,
   truncateTranscriptForPrompt,
-} from '../src/finalize-design.js';
+} from '../src/design/index.js';
 
 void appendVersionedApiPath;
 
