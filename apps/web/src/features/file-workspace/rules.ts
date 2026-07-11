@@ -27,6 +27,7 @@ import type {
   DesignSystemCardManifestEntry,
   DesignSystemCardManifestMap,
   DesignSystemGenerationStep,
+  DesignSystemPreviewAssetPath,
   DesignSystemProjectSection,
   DesignSystemProjectSectionReview,
   DesignSystemReviewAgentTask,
@@ -1345,5 +1346,162 @@ export function designSystemSectionChangedAfterReview(
     const file = fileByName.get(name);
     return file ? file.mtime > reviewedAt : false;
   });
+}
+
+// ── design-system inline-preview URL rewriting ──────────────────────────────
+// Pure resolution/rewrite helpers behind `DesignSystemInlinePreview`'s asset
+// inlining: resolving a relative preview asset ref against its owning file,
+// and rewriting HTML/CSS asset refs to point at the project's raw-file URLs.
+// `rawUrl` is the slice's `projectRawUrl` port function, injected by the
+// caller — these stay provider-free so they test with zero doubles.
+export type DesignSystemPreviewRawUrl = (projectId: string, filePath: string) => string;
+
+export function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
+  return resolveDesignSystemPreviewAssetPath(ownerFileName, assetRef)?.filePath ?? null;
+}
+
+export function resolveDesignSystemPreviewAssetPath(ownerFileName: string, assetRef: string): DesignSystemPreviewAssetPath | null {
+  const ref = assetRef.trim();
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
+  if (isDesignSystemPreviewAppRootRef(ref)) return null;
+  try {
+    const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
+    if (url.origin !== 'https://od.local') return null;
+    return {
+      filePath: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
+      suffix: `${url.search}${url.hash}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function isDesignSystemPreviewAppRootRef(ref: string): boolean {
+  if (!ref.startsWith('/') || ref.startsWith('//')) return false;
+  const pathOnly = ref.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+  return pathOnly === '/api'
+    || pathOnly.startsWith('/api/')
+    || pathOnly === '/artifacts'
+    || pathOnly.startsWith('/artifacts/')
+    || pathOnly === '/frames'
+    || pathOnly.startsWith('/frames/');
+}
+
+export function rewriteDesignSystemPreviewCssUrls(
+  css: string,
+  projectId: string,
+  stylesheetFileName: string,
+  rawUrl: DesignSystemPreviewRawUrl,
+): string {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
+    const ref = rawRef.trim();
+    const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
+    if (!assetPath) return match;
+    return `url("${escapeDesignSystemPreviewCssUrl(rawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
+  });
+}
+
+export function rewriteDesignSystemPreviewHtmlAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  rawUrl: DesignSystemPreviewRawUrl,
+): string {
+  const directAssetTags = new RegExp(
+    '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
+      '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
+    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName, rawUrl);
+    if (rewritten === rawRef) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+  const srcsetAssetTags = new RegExp(
+    '(<(?:img|source)\\b[^>]*?\\ssrcset\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
+    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName, rawUrl);
+    if (rewritten === rawSrcset) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+export function rewriteDesignSystemPreviewInlineCssAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  rawUrl: DesignSystemPreviewRawUrl,
+): string {
+  const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
+    match,
+    attrs: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, rawUrl);
+    if (rewritten === css) return match;
+    return `<style${attrs}>${rewritten}</style>`;
+  });
+  return withStyleBlocks.replace(/(\sstyle\s*=\s*)(['"])([\s\S]*?)\2/gi, (
+    match,
+    prefix: string,
+    quote: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, rawUrl);
+    if (rewritten === css) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+export function rewriteDesignSystemPreviewHtmlAssetRef(
+  ref: string,
+  projectId: string,
+  ownerFileName: string,
+  rawUrl: DesignSystemPreviewRawUrl,
+): string {
+  const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
+  return assetPath ? rawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
+}
+
+export function rewriteDesignSystemPreviewSrcset(
+  srcset: string,
+  projectId: string,
+  ownerFileName: string,
+  rawUrl: DesignSystemPreviewRawUrl,
+): string {
+  if (/\bdata:/i.test(srcset)) return srcset;
+  return srcset
+    .split(',')
+    .map((candidate) => {
+      const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
+      if (!match) return candidate;
+      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName, rawUrl);
+      return `${rewritten}${match[2] ?? ''}`;
+    })
+    .join(', ');
+}
+
+export function baseDirForDesignSystemPreviewFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
+}
+
+export function readDesignSystemPreviewHtmlAttr(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+export function escapeDesignSystemPreviewAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+export function escapeDesignSystemPreviewCssUrl(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
 }
 

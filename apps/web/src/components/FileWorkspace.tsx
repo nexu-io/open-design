@@ -125,6 +125,7 @@ import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
 import {
   arraysEqual,
+  baseDirForDesignSystemPreviewFile,
   browserTabIndex,
   browserTabsFromState,
   BROWSER_TAB_PREFIX,
@@ -174,6 +175,7 @@ import {
   designSystemTodoRank,
   designSystemTodoSearchText,
   documentTemplateScenarioKey,
+  escapeDesignSystemPreviewAttr,
   formatWorkspaceSnapshotElapsed,
   inferDesignSystemReviewCategory,
   initialDesignKitColorHex,
@@ -205,6 +207,11 @@ import {
   parseDesignSystemCardManifestEntry,
   preferPreviewArtifactsOverRawAssets,
   reanchorBrowserTabsToCurrentOrder,
+  readDesignSystemPreviewHtmlAttr,
+  resolveDesignSystemPreviewRelativePath,
+  rewriteDesignSystemPreviewCssUrls,
+  rewriteDesignSystemPreviewHtmlAssetUrls,
+  rewriteDesignSystemPreviewInlineCssAssetUrls,
   sameFileName,
   scrollWorkspaceTabsWithWheel,
   slugForTestId,
@@ -4163,7 +4170,7 @@ async function inlineDesignSystemPreviewRelativeAssets(
     if (!stylesheetPath) continue;
     replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
       if (css == null) return null;
-      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath)
+      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath, projectRawUrl)
         .replace(/<\/style/gi, '<\\/style');
       return {
         from: tag,
@@ -4205,8 +4212,8 @@ async function inlineDesignSystemPreviewRelativeAssets(
     (next, replacement) => next.replace(replacement.from, () => replacement.to),
     html,
   );
-  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName);
-  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName);
+  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName, projectRawUrl);
+  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName, projectRawUrl);
 }
 
 async function fetchDesignSystemPreviewRelativeText(
@@ -4219,131 +4226,3 @@ async function fetchDesignSystemPreviewRelativeText(
   return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
 }
 
-type DesignSystemPreviewAssetPath = {
-  filePath: string;
-  suffix: string;
-};
-
-function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
-  return resolveDesignSystemPreviewAssetPath(ownerFileName, assetRef)?.filePath ?? null;
-}
-
-function resolveDesignSystemPreviewAssetPath(ownerFileName: string, assetRef: string): DesignSystemPreviewAssetPath | null {
-  const ref = assetRef.trim();
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
-  if (isDesignSystemPreviewAppRootRef(ref)) return null;
-  try {
-    const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
-    if (url.origin !== 'https://od.local') return null;
-    return {
-      filePath: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
-      suffix: `${url.search}${url.hash}`,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isDesignSystemPreviewAppRootRef(ref: string): boolean {
-  if (!ref.startsWith('/') || ref.startsWith('//')) return false;
-  const pathOnly = ref.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
-  return pathOnly === '/api'
-    || pathOnly.startsWith('/api/')
-    || pathOnly === '/artifacts'
-    || pathOnly.startsWith('/artifacts/')
-    || pathOnly === '/frames'
-    || pathOnly.startsWith('/frames/');
-}
-
-function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
-  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
-    const ref = rawRef.trim();
-    const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
-    if (!assetPath) return match;
-    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
-  });
-}
-
-function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string, ownerFileName: string): string {
-  const directAssetTags = new RegExp(
-    '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
-      '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
-    'gi',
-  );
-  const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
-    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName);
-    if (rewritten === rawRef) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-  const srcsetAssetTags = new RegExp(
-    '(<(?:img|source)\\b[^>]*?\\ssrcset\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
-    'gi',
-  );
-  return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
-    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
-    if (rewritten === rawSrcset) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-}
-
-function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: string, ownerFileName: string): string {
-  const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
-    match,
-    attrs: string,
-    css: string,
-  ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
-    if (rewritten === css) return match;
-    return `<style${attrs}>${rewritten}</style>`;
-  });
-  return withStyleBlocks.replace(/(\sstyle\s*=\s*)(['"])([\s\S]*?)\2/gi, (
-    match,
-    prefix: string,
-    quote: string,
-    css: string,
-  ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
-    if (rewritten === css) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-}
-
-function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
-  const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
-  return assetPath ? projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
-}
-
-function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
-  if (/\bdata:/i.test(srcset)) return srcset;
-  return srcset
-    .split(',')
-    .map((candidate) => {
-      const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
-      if (!match) return candidate;
-      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName);
-      return `${rewritten}${match[2] ?? ''}`;
-    })
-    .join(', ');
-}
-
-function baseDirForDesignSystemPreviewFile(name: string): string {
-  const index = name.lastIndexOf('/');
-  return index >= 0 ? name.slice(0, index + 1) : '';
-}
-
-function readDesignSystemPreviewHtmlAttr(tag: string, name: string): string | null {
-  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
-  return match?.[2] ?? null;
-}
-
-function escapeDesignSystemPreviewAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeDesignSystemPreviewCssUrl(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
-}
