@@ -14,7 +14,7 @@ export {
 } from './constants';
 
 // Local helper types.
-export type { BrowserExtractionUrlParts, ProjectSplitStyle } from './types';
+export type { BrowserExtractionUrlParts, ProjectSplitStyle, RetryTarget } from './types';
 
 // Pure decision rules.
 export {
@@ -50,6 +50,39 @@ export {
   isGenericDaemonDisconnect,
   hasGenericDisconnectFailureEvent,
   appendLiveArtifactEventItem,
+  artifactExtensionFor,
+  artifactBaseNameFor,
+  filterProjectFilesByMinMtime,
+  artifactFromRecoverableSourceText,
+  isFileWriteToolName,
+  extractFileWriteToolPath,
+  conversationHasBrandBrowserAssist,
+  findExistingArtifactProjectFile,
+  findExistingNonHtmlArtifactProjectFile,
+  findSameTurnNonHtmlWriteForRecoveredArtifact,
+  findSameTurnWriteForRecoveredArtifact,
+  selectPrimaryProjectFile,
+  assistantAgentDisplayName,
+  isTerminalRunStatus,
+  isActiveRunStatus,
+  isProgrammaticBrandExtractionStatusMessage,
+  hasRecoverableArtifactMessage,
+  shouldReplayTerminalRunMessage,
+  textContentFromAgentEvents,
+  resolveRetryTarget,
+  latestDesignSystemActivityEvents,
+  isPhantomDaemonRunMessage,
+  isStoppableAssistantMessage,
+  resolveSucceededRunStatus,
+  computeProducedFiles,
+  computeTraceObjectFiles,
+  mergeRecoveredArtifact,
+  findSameTurnHtmlWriteForRecoveredArtifact,
+  mergeRecoveredTraceObjectFile,
+  extractTouchedFilePathsFromEvents,
+  clearStreamingConversationMarker,
+  shouldClearActiveRunRefs,
+  finalizeActiveAssistantMessagesOnStop,
 } from './rules';
 
 // Pure formatters (prompt / attachment / summary builders).
@@ -65,6 +98,15 @@ export {
   commentTaskContextAttachment,
   designSystemNeedsWorkPrompt,
   fallbackDesignSystemSummaryForProject,
+  pluginWorkflowTitle,
+  pluginWorkflowCliCommand,
+  pluginWorkflowPlannedSteps,
+  pluginWorkflowPlannedEvents,
+  pluginWorkflowResultEvents,
+  pluginWorkflowStartContent,
+  pluginWorkflowSuccessContent,
+  pluginWorkflowFailureContent,
+  stripTrailingUrl,
 } from './formatters';
 
 // Transport port + its default binding.

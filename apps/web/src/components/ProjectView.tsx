@@ -307,6 +307,42 @@ import {
   designSystemNeedsWorkPrompt,
   fallbackDesignSystemSummaryForProject,
   projectViewTransportPort,
+  artifactExtensionFor,
+  artifactBaseNameFor,
+  filterProjectFilesByMinMtime,
+  artifactFromRecoverableSourceText,
+  isFileWriteToolName,
+  extractFileWriteToolPath,
+  conversationHasBrandBrowserAssist,
+  findExistingArtifactProjectFile,
+  findSameTurnNonHtmlWriteForRecoveredArtifact,
+  findSameTurnWriteForRecoveredArtifact,
+  selectPrimaryProjectFile,
+  isTerminalRunStatus,
+  isActiveRunStatus,
+  isProgrammaticBrandExtractionStatusMessage,
+  hasRecoverableArtifactMessage,
+  shouldReplayTerminalRunMessage,
+  textContentFromAgentEvents,
+  resolveRetryTarget,
+  latestDesignSystemActivityEvents,
+  isPhantomDaemonRunMessage,
+  resolveSucceededRunStatus,
+  computeProducedFiles,
+  computeTraceObjectFiles,
+  mergeRecoveredArtifact,
+  findSameTurnHtmlWriteForRecoveredArtifact,
+  mergeRecoveredTraceObjectFile,
+  extractTouchedFilePathsFromEvents,
+  clearStreamingConversationMarker,
+  shouldClearActiveRunRefs,
+  finalizeActiveAssistantMessagesOnStop,
+  pluginWorkflowTitle,
+  pluginWorkflowPlannedEvents,
+  pluginWorkflowResultEvents,
+  pluginWorkflowStartContent,
+  pluginWorkflowSuccessContent,
+  pluginWorkflowFailureContent,
 } from '../features/project-view';
 
 // Re-export the public pure helpers that previously lived in this file so the
@@ -318,6 +354,22 @@ export {
   projectSplitClassName,
   projectSplitStyle,
   buildQuestionFormKey,
+  findExistingArtifactProjectFile,
+  findExistingNonHtmlArtifactProjectFile,
+  findSameTurnNonHtmlWriteForRecoveredArtifact,
+  selectPrimaryProjectFile,
+  hasRecoverableArtifactMessage,
+  resolveRetryTarget,
+  resolveSucceededRunStatus,
+  computeProducedFiles,
+  computeTraceObjectFiles,
+  mergeRecoveredArtifact,
+  findSameTurnHtmlWriteForRecoveredArtifact,
+  mergeRecoveredTraceObjectFile,
+  extractTouchedFilePathsFromEvents,
+  clearStreamingConversationMarker,
+  shouldClearActiveRunRefs,
+  finalizeActiveAssistantMessagesOnStop,
 } from '../features/project-view';
 
 type BrandBrowserSnapshot =
@@ -8166,251 +8218,6 @@ export function ProjectView({
   );
 }
 
-function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' | '.css' | '.svg' | '.md' {
-  const type = (art.artifactType || '').toLowerCase();
-  const identifier = (art.identifier || '').toLowerCase();
-  if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
-  if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) {
-    return '.jsx';
-  }
-  if (type.includes('css') || identifier.endsWith('.css')) return '.css';
-  if (type.includes('svg') || identifier.endsWith('.svg')) return '.svg';
-  if (type.includes('markdown') || type === 'md' || identifier.endsWith('.md')) {
-    return '.md';
-  }
-  return '.html';
-}
-
-function conversationHasBrandBrowserAssist(messages: ChatMessage[], brandId: string): boolean {
-  const brandNeedle = `"brandId":"${escapeJsonNeedle(brandId)}"`;
-  return messages.some((message) =>
-    message.role === 'assistant' &&
-    message.content.includes('<od-card type="brand-browser-assist"') &&
-    message.content.includes(brandNeedle),
-  );
-}
-
-function escapeJsonNeedle(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
-function artifactBaseNameFor(art: Artifact): string {
-  return (
-    (art.identifier || art.title || 'artifact')
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60) || 'artifact'
-  );
-}
-
-function artifactFileNamePattern(baseName: string, ext: string): RegExp {
-  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escapedBaseName}(?:-\\d+)?${escapedExt}$`);
-}
-
-export function findExistingArtifactProjectFile(
-  art: Artifact,
-  projectFiles: ProjectFile[],
-  options: { minMtime?: number } = {},
-): ProjectFile | null {
-  const ext = artifactExtensionFor(art);
-  const baseName = artifactBaseNameFor(art);
-  const candidateFileName = `${baseName}${ext}`;
-  const currentRunFiles = filterProjectFilesByMinMtime(projectFiles, options.minMtime);
-
-  if (ext === '.html') {
-    const pointerTarget = resolveHtmlPointerArtifactTarget({
-      content: art.html,
-      candidateFileName,
-      projectFiles: currentRunFiles,
-    });
-    const pointerFile = pointerTarget
-      ? currentRunFiles.find((file) => file.name === pointerTarget || file.path === pointerTarget)
-      : null;
-    if (pointerFile) return pointerFile;
-  }
-
-  const identifier = art.identifier || '';
-  if (identifier) {
-    const manifestMatches = currentRunFiles
-      .filter((file) => file.artifactManifest?.metadata?.identifier === identifier)
-      .sort((a, b) => b.mtime - a.mtime);
-    if (manifestMatches[0]) return manifestMatches[0];
-  }
-
-  if (ext === '.html') {
-    const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
-    if (exactNameMatch) return exactNameMatch;
-  }
-  return null;
-}
-
-export function findExistingNonHtmlArtifactProjectFile(
-  art: Artifact,
-  projectFiles: ProjectFile[],
-  options: { minMtime?: number } = {},
-): ProjectFile | null {
-  if (artifactExtensionFor(art) === '.html') return null;
-  return findExistingArtifactProjectFile(art, projectFiles, options);
-}
-
-export async function findSameTurnNonHtmlWriteForRecoveredArtifact({
-  artifact,
-  producedFiles,
-  readProjectText,
-}: {
-  artifact: Artifact;
-  producedFiles: readonly ProjectFile[];
-  readProjectText: (name: string) => Promise<string | null>;
-}): Promise<ProjectFile | null> {
-  const ext = artifactExtensionFor(artifact);
-  if (ext === '.html') return null;
-
-  const baseName = artifactBaseNameFor(artifact);
-  const candidateFileName = `${baseName}${ext}`;
-  const namePattern = artifactFileNamePattern(baseName, ext);
-  const identifier = artifact.identifier || '';
-  const candidates = producedFiles
-    .filter((file) => {
-      if (identifier && file.artifactManifest?.metadata?.identifier === identifier) {
-        return file.name.toLowerCase().endsWith(ext);
-      }
-      return file.name === candidateFileName || namePattern.test(file.name);
-    })
-    .sort((a, b) => b.mtime - a.mtime);
-
-  const expected = normalizeProjectTextForArtifactComparison(artifact.html);
-  for (const file of candidates) {
-    const text = await readProjectText(file.name);
-    if (text === null) continue;
-    const actual = normalizeProjectTextForArtifactComparison(text);
-    if (actual === expected) return file;
-  }
-  return null;
-}
-
-async function findSameTurnWriteForRecoveredArtifact({
-  artifact,
-  sourceText,
-  producedFiles,
-  readProjectText,
-}: {
-  artifact: Artifact;
-  sourceText: string;
-  producedFiles: readonly ProjectFile[];
-  readProjectText: (name: string) => Promise<string | null>;
-}): Promise<ProjectFile | null> {
-  const nonHtmlWrite = await findSameTurnNonHtmlWriteForRecoveredArtifact({
-    artifact,
-    producedFiles,
-    readProjectText,
-  });
-  if (nonHtmlWrite || artifactExtensionFor(artifact) !== '.html') return nonHtmlWrite;
-  return findSameTurnHtmlWriteForRecoveredArtifact({
-    artifactHtml: resolvePersistedArtifactHtml({
-      artifactHtml: artifact.html,
-      identifier: artifact.identifier,
-      sourceText,
-    }),
-    producedFiles,
-    readProjectHtml: readProjectText,
-  });
-}
-
-function normalizeProjectTextForArtifactComparison(value: string | null | undefined): string {
-  return String(value || '')
-    .replace(/^\uFEFF/, '')
-    .replace(/\r\n?/g, '\n');
-}
-
-function filterProjectFilesByMinMtime(
-  projectFiles: readonly ProjectFile[],
-  minMtime?: number,
-): ProjectFile[] {
-  return typeof minMtime === 'number' && Number.isFinite(minMtime)
-    ? projectFiles.filter((file) => file.mtime >= minMtime)
-    : [...projectFiles];
-}
-
-export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | null {
-  const candidates = files
-    .filter((file) => !isProcessArtifactFile(file.name))
-    .map((file) => ({ file, rank: primaryProjectFileRank(file) }))
-    .filter((candidate) => Number.isFinite(candidate.rank));
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.rank - b.rank || b.file.mtime - a.file.mtime);
-  return candidates[0]?.file ?? null;
-}
-
-function isProcessArtifactFile(name: string): boolean {
-  const base = name.split('/').pop()?.toLowerCase() ?? name.toLowerCase();
-  return (
-    base === 'critique.json'
-    || base.endsWith('.log')
-    || base.endsWith('.meta.json')
-    || base.endsWith('.artifact.json')
-    || base.endsWith('.map')
-  );
-}
-
-function primaryProjectFileRank(file: ProjectFile): number {
-  if (manifestDeclaresPrimary(file)) return 0;
-  if (file.artifactManifest && file.artifactManifest.metadata?.inferred !== true) return 1;
-  if (file.kind === 'html') return 2;
-  if (file.kind === 'image') return 3;
-  if (file.kind === 'video') return 4;
-  if (file.kind === 'sketch') return 5;
-  if (file.kind === 'pdf') return 6;
-  if (file.kind === 'presentation') return 7;
-  if (file.kind === 'document') return 8;
-  if (file.kind === 'spreadsheet') return 9;
-  return Number.POSITIVE_INFINITY;
-}
-
-function manifestDeclaresPrimary(file: ProjectFile): boolean {
-  const manifest = file.artifactManifest;
-  if (!manifest) return false;
-  if (primaryValueTargetsFile(manifest.primary, file.name)) return true;
-  const metadata = manifest.metadata;
-  if (!metadata || typeof metadata !== 'object') return false;
-  if (primaryValueTargetsFile(metadata.primary, file.name)) return true;
-  const outputs = metadata.outputs;
-  if (outputs && typeof outputs === 'object' && !Array.isArray(outputs)) {
-    return primaryValueTargetsFile(
-      (outputs as { primary?: unknown }).primary,
-      file.name,
-    );
-  }
-  return false;
-}
-
-function primaryValueTargetsFile(value: unknown, fileName: string): boolean {
-  if (value === true) return true;
-  if (typeof value !== 'string') return false;
-  return normalizeProjectFileName(value) === normalizeProjectFileName(fileName);
-}
-
-function normalizeProjectFileName(value: string): string {
-  return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
-}
-
-function assistantAgentDisplayName(
-  agentId: string | null,
-  fallbackName?: string,
-): string | undefined {
-  return agentDisplayName(agentId, fallbackName) ?? undefined;
-}
-
-function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
-  return status === 'succeeded' || status === 'failed' || status === 'canceled';
-}
-
-function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
-  return status === 'queued' || status === 'running';
-}
-
 /** A daemon run-status snapshot, as returned by `fetchChatRunStatus`/`listActiveChatRuns`. */
 type RunStatusSnapshot = Awaited<ReturnType<typeof fetchChatRunStatus>>;
 
@@ -8446,87 +8253,6 @@ async function resolveTerminalEndedAt(
     return probed.updatedAt;
   }
   return Date.now();
-}
-
-function isProgrammaticBrandExtractionStatusMessage(
-  message: ChatMessage,
-  metadata: ProjectMetadata | null | undefined,
-): boolean {
-  if (!isProgrammaticBrandExtractionProject(metadata)) return false;
-  if (message.role !== 'assistant' || message.runId) return false;
-  if (!isActiveRunStatus(message.runStatus)) return false;
-  const text = `${message.content}\n${textContentFromAgentEvents(message.events)}`;
-  return (
-    text.includes('Programmatic design-system extraction started') ||
-    text.includes('程序化设计系统抽取') ||
-    text.includes('程式化設計系統抽取')
-  );
-}
-
-export function hasRecoverableArtifactMessage(message: ChatMessage): boolean {
-  if (message.role !== 'assistant') return false;
-  if (!message.runId) return false;
-  if (!isTerminalRunStatus(message.runStatus)) return false;
-  if (message.producedFiles?.length) return false;
-  const sourceText = message.content.trim().length > 0
-    ? message.content
-    : textContentFromAgentEvents(message.events);
-  return artifactFromRecoverableSourceText(sourceText) !== null;
-}
-
-function artifactFromRecoverableSourceText(sourceText: string): Artifact | null {
-  const parser = createArtifactParser();
-  let parsedArtifact: Artifact | null = null;
-  let liveHtml = '';
-  for (const ev of [...parser.feed(sourceText), ...parser.flush()]) {
-    if (ev.type === 'artifact:start') {
-      liveHtml = '';
-      parsedArtifact = {
-        identifier: ev.identifier,
-        artifactType: ev.artifactType,
-        title: ev.title,
-        html: '',
-      };
-    } else if (ev.type === 'artifact:chunk') {
-      liveHtml += ev.delta;
-      parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, liveHtml);
-    } else if (ev.type === 'artifact:end') {
-      parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
-    }
-  }
-  if (parsedArtifact?.html) return parsedArtifact;
-
-  const html = recoverStandaloneHtmlDocument(sourceText)
-    ?? recoverHtmlDocumentFromMarkdownFence(sourceText);
-  if (!html) return null;
-  return {
-    identifier: 'response',
-    artifactType: 'text/html',
-    title: 'Response',
-    html,
-  };
-}
-
-function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
-  if (message.role !== 'assistant') return false;
-  if (!message.runId) return false;
-  if (message.runStatus !== 'succeeded') return false;
-  if (message.content.trim().length > 0) return false;
-  if (
-    message.startedAt == null
-    && !message.preTurnFileNames?.length
-    && textContentFromAgentEvents(message.events).trim().length === 0
-  ) {
-    return false;
-  }
-  return !(message.producedFiles?.length);
-}
-
-function textContentFromAgentEvents(events?: AgentEvent[]): string {
-  return (events ?? [])
-    .filter((event): event is Extract<AgentEvent, { kind: 'text' }> => event.kind === 'text')
-    .map((event) => event.text)
-    .join('');
 }
 
 const QUEUED_CHAT_SENDS_STORAGE_VERSION = 1;
@@ -8578,430 +8304,6 @@ function stripQueueOnlyFromMeta(meta: ChatSendMeta | undefined): ProjectChatSend
   if (!meta) return undefined;
   const { queueOnly: _queueOnly, ...rest } = meta;
   return Object.keys(rest).length > 0 ? rest : undefined;
-}
-
-export interface RetryTarget {
-  failedAssistant: ChatMessage;
-  userMsg: ChatMessage;
-  priorMessages: ChatMessage[];
-  preservedAttempts: ChatMessage[];
-}
-
-export function resolveRetryTarget(
-  messages: ChatMessage[],
-  failedAssistantId: string,
-): RetryTarget | null {
-  const failedIndex = messages.findIndex(
-    (message) =>
-      message.id === failedAssistantId &&
-      message.role === 'assistant' &&
-      message.runStatus === 'failed',
-  );
-  if (failedIndex <= 0 || failedIndex !== messages.length - 1) return null;
-
-  let userIndex = failedIndex - 1;
-  while (
-    userIndex >= 0 &&
-    messages[userIndex]?.role === 'assistant' &&
-    messages[userIndex]?.runStatus === 'failed'
-  ) {
-    userIndex -= 1;
-  }
-
-  const userMsg = messages[userIndex];
-  const failedAssistant = messages[failedIndex];
-  if (!userMsg || userMsg.role !== 'user' || !failedAssistant) return null;
-
-  return {
-    failedAssistant,
-    userMsg,
-    priorMessages: messages.slice(0, userIndex),
-    preservedAttempts: messages.slice(userIndex + 1, failedIndex + 1),
-  };
-}
-
-function latestDesignSystemActivityEvents(messages: ChatMessage[]): AgentEvent[] {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!message || message.role !== 'assistant') continue;
-    if ((message.events?.length ?? 0) > 0) return message.events ?? [];
-    if (isActiveRunStatus(message.runStatus)) return [];
-  }
-  return [];
-}
-
-function pluginWorkflowTitle(action: PluginFolderAgentAction): string {
-  return action === 'publish' ? 'Publish repo' : 'Open Design PR';
-}
-
-function pluginWorkflowCliCommand(action: PluginFolderAgentAction, relativePath: string): string {
-  return action === 'publish'
-    ? `od plugin publish-repo ${relativePath}`
-    : `od plugin open-design-pr ${relativePath}`;
-}
-
-function pluginWorkflowPlannedSteps(action: PluginFolderAgentAction): string[] {
-  if (action === 'publish') {
-    return [
-      'Resolve GitHub owner and validate plugin metadata',
-      'Create or update the GitHub repository',
-      'Push plugin files and tags',
-      'Return the repository URL',
-    ];
-  }
-  return [
-    'Ensure the Open Design fork exists',
-    'Clone the fork and prepare a branch',
-    'Copy the plugin into plugins/community',
-    'Push the branch and open the PR form',
-  ];
-}
-
-function pluginWorkflowPlannedEvents(action: PluginFolderAgentAction, relativePath: string): AgentEvent[] {
-  return [
-    { kind: 'text', text: `${pluginWorkflowStartContent(action, relativePath)}\n\n` },
-    { kind: 'status', label: 'working', detail: pluginWorkflowTitle(action) },
-  ];
-}
-
-function pluginWorkflowResultEvents(
-  action: PluginFolderAgentAction,
-  relativePath: string,
-  message: string,
-  url: string | undefined,
-  log: string[] | undefined,
-  ok: boolean,
-  existingEvents?: AgentEvent[],
-): AgentEvent[] {
-  const summary = ok
-    ? pluginWorkflowSuccessContent(action, relativePath, message, url, log)
-    : pluginWorkflowFailureContent(action, relativePath, message, log);
-  const baseEvents = (existingEvents ?? []).filter(
-    (event) => !(event.kind === 'status' && event.label === 'working'),
-  );
-  return [
-    ...baseEvents,
-    { kind: 'text', text: `${summary}\n\n` },
-    {
-      kind: 'status',
-      label: ok ? 'done' : 'failed',
-      detail: ok ? 'CLI command finished' : 'CLI command failed',
-    },
-  ];
-}
-
-function pluginWorkflowStartContent(action: PluginFolderAgentAction, relativePath: string): string {
-  const title = pluginWorkflowTitle(action);
-  const command = pluginWorkflowCliCommand(action, relativePath);
-  const steps = pluginWorkflowPlannedSteps(action).map((step) => `- ${step}`).join('\n');
-  return `${title} started.\n\n\`\`\`bash\n${command}\n\`\`\`\n\nPlanned steps:\n${steps}`;
-}
-
-function pluginWorkflowSuccessContent(
-  action: PluginFolderAgentAction,
-  relativePath: string,
-  message: string,
-  url?: string,
-  log?: string[],
-): string {
-  const summary = stripTrailingUrl(message, url) || `${pluginWorkflowTitle(action)} completed for \`${relativePath}\`.`;
-  const lines = (log ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 5);
-  const command = pluginWorkflowCliCommand(action, relativePath);
-  const details = lines.length > 0
-    ? `\n\nCLI output:\n${lines.map((line) => `- \`${truncatePluginWorkflowLine(line)}\``).join('\n')}`
-    : '';
-  const link = url ? `\n\nLink: [${url}](${url})` : '';
-  return `${summary}\n\n\`\`\`bash\n${command}\n\`\`\`${link}${details}`;
-}
-
-function pluginWorkflowFailureContent(
-  action: PluginFolderAgentAction,
-  relativePath: string,
-  message: string,
-  log?: string[],
-): string {
-  const lines = (log ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 5);
-  const command = pluginWorkflowCliCommand(action, relativePath);
-  const details = lines.length > 0
-    ? `\n\nCLI output:\n${lines.map((line) => `- \`${truncatePluginWorkflowLine(line)}\``).join('\n')}`
-    : '';
-  return `${pluginWorkflowTitle(action)} failed.\n\n\`\`\`bash\n${command}\n\`\`\`\n\n${message}${details}`;
-}
-
-function truncatePluginWorkflowLine(line: string): string {
-  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
-}
-
-function stripTrailingUrl(message: string, url?: string): string {
-  const text = message.trim();
-  const link = url?.trim();
-  if (!link) return text;
-  return text.replace(new RegExp(`\\s*${escapeRegExp(link)}\\s*$`), '').trim();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// A daemon assistant message that is "queued/running" but has no runId yet
-// is in-flight on the client: POST /api/runs has not returned. Persisting it
-// in this state creates a phantom DB row that the reattach loop can never
-// recover (the daemon either never saw the request or the response was lost),
-// which is what produced the "Working 24m+" stuck UI. Treat the in-flight
-// window as ephemeral and only write to DB once a runId pins the row to a
-// real daemon run — or once the run reaches a terminal state.
-function isPhantomDaemonRunMessage(m: ChatMessage): boolean {
-  return (
-    m.role === 'assistant' &&
-    isActiveRunStatus(m.runStatus) &&
-    !m.runId
-  );
-}
-
-function isStoppableAssistantMessage(message: ChatMessage): boolean {
-  if (message.role !== 'assistant') return false;
-  if (isActiveRunStatus(message.runStatus)) return true;
-  return message.runStatus === undefined && message.endedAt === undefined && message.startedAt !== undefined;
-}
-
-export function resolveSucceededRunStatus(status: ChatMessage['runStatus']): ChatMessage['runStatus'] {
-  return status === 'failed' || status === 'canceled' ? status : 'succeeded';
-}
-
-export function computeProducedFiles(
-  beforeNames: ReadonlySet<string> | readonly string[] | undefined,
-  next: readonly ProjectFile[],
-): ProjectFile[] | undefined {
-  if (!beforeNames) return undefined;
-  const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
-}
-
-export function computeTraceObjectFiles(
-  beforeNames: ReadonlySet<string> | readonly string[] | undefined,
-  next: readonly ProjectFile[],
-  touchedPaths: Iterable<string> = [],
-): ProjectFile[] | undefined {
-  if (!beforeNames) return undefined;
-  const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  const byName = new Map<string, ProjectFile>();
-  for (const file of filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)))) {
-    byName.set(file.name, { ...file, traceObjectReason: 'new' });
-  }
-  for (const rawPath of touchedPaths) {
-    const file = findTouchedProjectFile(rawPath, next);
-    if (!file) continue;
-    byName.set(file.name, {
-      ...file,
-      traceObjectReason: set.has(file.name) ? 'modified' : 'new',
-    });
-  }
-  return [...byName.values()];
-}
-
-function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]): ProjectFile | null {
-  const normalized = normalizeComparableFilePath(rawPath);
-  if (!normalized) return null;
-  const hasPathSeparator = normalized.includes('/');
-  const basename = normalized.split('/').pop() ?? normalized;
-  const normalizedFiles = files.map((file) => ({
-    file,
-    candidates: [
-      normalizeComparableFilePath(file.path ?? ''),
-      normalizeComparableFilePath(file.name),
-    ].filter(Boolean),
-  }));
-
-  const matches = (predicate: (candidate: string) => boolean): ProjectFile[] => {
-    const matched: ProjectFile[] = [];
-    for (const { file, candidates } of normalizedFiles) {
-      if (candidates.some(predicate)) matched.push(file);
-    }
-    return matched;
-  };
-
-  const exact = matches((candidate) => candidate === normalized);
-  if (exact.length === 1) return exact[0]!;
-  if (exact.length > 1) return null;
-
-  const suffix = matches((candidate) =>
-    candidate.includes('/') &&
-    (candidate.endsWith(`/${normalized}`) || normalized.endsWith(`/${candidate}`)),
-  );
-  if (suffix.length === 1) return suffix[0]!;
-  if (suffix.length > 1) return null;
-
-  if (hasPathSeparator) return null;
-
-  const basenameMatches = normalizedFiles.filter(({ candidates }) =>
-    candidates.some((candidate) => candidate.split('/').pop() === basename),
-  );
-  return basenameMatches.length === 1 ? basenameMatches[0]!.file : null;
-}
-
-function normalizeComparableFilePath(value: string): string {
-  return value
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter((part) => part && part !== '.')
-    .join('/');
-}
-
-// Reattach with a recovered (on-disk) artifact must still include any
-// other files the turn produced before the artifact write — replacing
-// the diff with a single file was the regression noted on PR #2383.
-export function mergeRecoveredArtifact(
-  diff: readonly ProjectFile[],
-  recovered: ProjectFile | null,
-): ProjectFile[] {
-  if (!recovered) return [...diff];
-  if (diff.some((f) => f.name === recovered.name)) return [...diff];
-  return [...diff, recovered];
-}
-
-export async function findSameTurnHtmlWriteForRecoveredArtifact({
-  artifactHtml,
-  producedFiles,
-  readProjectHtml,
-}: {
-  artifactHtml: string;
-  producedFiles: readonly ProjectFile[];
-  readProjectHtml: (name: string) => Promise<string | null>;
-}): Promise<ProjectFile | null> {
-  const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
-  if (!recovered) return null;
-  const candidates = producedFiles.filter(isHtmlProjectFile);
-  if (candidates.length === 0) return null;
-  const contents = await Promise.all(candidates.map((file) => readProjectHtml(file.name)));
-  const normalized = contents.map(normalizeHtmlForRecoveredArtifactComparison);
-  // Bind only on an exact normalized-content match. This is inherently
-  // agent-agnostic (#4308): whenever a filesystem-backed CLI writes an HTML
-  // file and echoes the same document as an artifact, the normalized contents
-  // are equal and we suppress the duplicate — no Claude-specific gate needed.
-  //
-  // We deliberately do NOT bind on a content *mismatch*. A differing same-turn
-  // HTML file is a genuinely different document and must persist on its own.
-  // A blind single-file bind also mis-fired across queued runs: the pre-turn
-  // file snapshot for a queued run can predate the previous run's persist, so
-  // computeProducedFiles() reports that earlier artifact as "produced this
-  // turn" and we'd bind the echo to the wrong, unrelated file.
-  const exact = candidates.find((_file, i) => normalized[i] === recovered);
-  return exact ?? null;
-}
-
-function isHtmlProjectFile(file: ProjectFile): boolean {
-  const name = (file.path || file.name).toLowerCase();
-  return file.kind === 'html' || /\.(?:html?|xhtml)$/u.test(name);
-}
-
-function normalizeHtmlForRecoveredArtifactComparison(value: string | null | undefined): string {
-  return String(value || '')
-    .replace(/^\uFEFF/, '')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-}
-
-export function mergeRecoveredTraceObjectFile(
-  files: readonly ProjectFile[],
-  recovered: ProjectFile | null,
-): ProjectFile[] {
-  const out = [...files];
-  if (!recovered) return out;
-  const existing = out.findIndex((file) => file.name === recovered.name);
-  const tagged = { ...recovered, traceObjectReason: 'recovered' as const };
-  if (existing >= 0) {
-    out[existing] = { ...out[existing]!, traceObjectReason: out[existing]!.traceObjectReason ?? 'recovered' };
-    return out;
-  }
-  return [...out, tagged];
-}
-
-export function extractTouchedFilePathsFromEvents(events: ChatMessage['events']): string[] {
-  if (!Array.isArray(events)) return [];
-  const pending = new Map<string, string>();
-  const touched: string[] = [];
-  for (const event of events) {
-    if (!event || typeof event !== 'object') continue;
-    const rec = event as Record<string, unknown>;
-    if (rec.kind === 'tool_use' && isFileWriteToolName(rec.name)) {
-      const filePath = extractFileWriteToolPath(rec.input);
-      if (typeof rec.id === 'string' && typeof filePath === 'string' && filePath) {
-        pending.set(rec.id, filePath);
-      }
-    }
-    if (rec.kind === 'tool_result') {
-      const toolUseId = typeof rec.toolUseId === 'string'
-        ? rec.toolUseId
-        : typeof rec.tool_use_id === 'string'
-          ? rec.tool_use_id
-          : '';
-      const filePath = pending.get(toolUseId);
-      if (!filePath) continue;
-      pending.delete(toolUseId);
-      if (rec.isError !== true) touched.push(filePath);
-    }
-  }
-  return touched;
-}
-
-function isFileWriteToolName(value: unknown): boolean {
-  return (
-    value === 'Write'
-    || value === 'write'
-    || value === 'create_file'
-    || value === 'Edit'
-    || value === 'str_replace_edit'
-    || value === 'MultiEdit'
-    || value === 'multi_edit'
-  );
-}
-
-function extractFileWriteToolPath(input: unknown): string | null {
-  if (!input || typeof input !== 'object') return null;
-  const rec = input as Record<string, unknown>;
-  const filePath = rec.file_path ?? rec.filePath ?? rec.path;
-  return typeof filePath === 'string' && filePath ? filePath : null;
-}
-
-export function clearStreamingConversationMarker(
-  currentConversationId: string | null,
-  completedConversationId?: string | null,
-): string | null {
-  if (
-    completedConversationId !== undefined
-    && completedConversationId !== null
-    && currentConversationId !== completedConversationId
-  ) {
-    return currentConversationId;
-  }
-  return null;
-}
-
-export function shouldClearActiveRunRefs(
-  currentConversationId: string | null,
-  completedConversationId: string,
-): boolean {
-  return currentConversationId === completedConversationId;
-}
-
-export function finalizeActiveAssistantMessagesOnStop(
-  messages: ChatMessage[],
-  stoppedAt: number,
-): { messages: ChatMessage[]; finalized: ChatMessage[] } {
-  const finalized: ChatMessage[] = [];
-  const next = messages.map((message) => {
-    if (!isStoppableAssistantMessage(message)) {
-      return message;
-    }
-    const updated = {
-      ...message,
-      runStatus: 'canceled' as const,
-      endedAt: message.endedAt ?? stoppedAt,
-    };
-    finalized.push(updated);
-    return updated;
-  });
-  return { messages: next, finalized };
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;

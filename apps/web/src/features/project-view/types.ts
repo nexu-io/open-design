@@ -2,6 +2,7 @@
 // `@open-design/contracts`; these are small local shapes the slice's pure
 // helpers produce or consume.
 import type { CSSProperties } from 'react';
+import type { ChatMessage } from '../../types';
 
 /** Normalized parts of a brand-extraction source URL, for source-vs-snapshot
  *  comparison. Produced by `browserExtractionUrlParts` in `rules.ts`. */
@@ -17,3 +18,12 @@ export type ProjectSplitStyle = CSSProperties & {
   '--project-chat-panel-width': string;
   '--project-workspace-panel-track': string;
 };
+
+/** Resolved retry target for a failed assistant message. Produced by
+ *  `resolveRetryTarget` in `rules.ts`. */
+export interface RetryTarget {
+  failedAssistant: ChatMessage;
+  userMsg: ChatMessage;
+  priorMessages: ChatMessage[];
+  preservedAttempts: ChatMessage[];
+}

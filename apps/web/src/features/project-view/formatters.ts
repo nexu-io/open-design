@@ -4,6 +4,7 @@
 // (ADR 0002). They move byte-for-byte out of the former `ProjectView`
 // god-component.
 import type {
+  AgentEvent,
   ChatAttachment,
   ChatCommentAttachment,
   ChatMessage,
@@ -15,6 +16,7 @@ import type {
 } from '../../types';
 import type { RunContextSelection } from '@open-design/contracts';
 import { isDesignSystemProject } from '../../components/design-system-project';
+import type { PluginFolderAgentAction } from '../../components/design-files/pluginFolderActions';
 
 export function designSystemFeedbackAttachments(
   projectFiles: ProjectFile[],
@@ -263,4 +265,119 @@ export function fallbackDesignSystemSummaryForProject(
       ? { provenance: { sourceUrls: [sourceUrl], sourceNotes: `Extracting from ${sourceUrl}` } }
       : {}),
   };
+}
+
+// --- Plugin-folder GitHub workflow (publish repo / open-design PR) -------
+
+export function pluginWorkflowTitle(action: PluginFolderAgentAction): string {
+  return action === 'publish' ? 'Publish repo' : 'Open Design PR';
+}
+
+export function pluginWorkflowCliCommand(action: PluginFolderAgentAction, relativePath: string): string {
+  return action === 'publish'
+    ? `od plugin publish-repo ${relativePath}`
+    : `od plugin open-design-pr ${relativePath}`;
+}
+
+export function pluginWorkflowPlannedSteps(action: PluginFolderAgentAction): string[] {
+  if (action === 'publish') {
+    return [
+      'Resolve GitHub owner and validate plugin metadata',
+      'Create or update the GitHub repository',
+      'Push plugin files and tags',
+      'Return the repository URL',
+    ];
+  }
+  return [
+    'Ensure the Open Design fork exists',
+    'Clone the fork and prepare a branch',
+    'Copy the plugin into plugins/community',
+    'Push the branch and open the PR form',
+  ];
+}
+
+export function pluginWorkflowPlannedEvents(action: PluginFolderAgentAction, relativePath: string): AgentEvent[] {
+  return [
+    { kind: 'text', text: `${pluginWorkflowStartContent(action, relativePath)}\n\n` },
+    { kind: 'status', label: 'working', detail: pluginWorkflowTitle(action) },
+  ];
+}
+
+export function pluginWorkflowResultEvents(
+  action: PluginFolderAgentAction,
+  relativePath: string,
+  message: string,
+  url: string | undefined,
+  log: string[] | undefined,
+  ok: boolean,
+  existingEvents?: AgentEvent[],
+): AgentEvent[] {
+  const summary = ok
+    ? pluginWorkflowSuccessContent(action, relativePath, message, url, log)
+    : pluginWorkflowFailureContent(action, relativePath, message, log);
+  const baseEvents = (existingEvents ?? []).filter(
+    (event) => !(event.kind === 'status' && event.label === 'working'),
+  );
+  return [
+    ...baseEvents,
+    { kind: 'text', text: `${summary}\n\n` },
+    {
+      kind: 'status',
+      label: ok ? 'done' : 'failed',
+      detail: ok ? 'CLI command finished' : 'CLI command failed',
+    },
+  ];
+}
+
+export function pluginWorkflowStartContent(action: PluginFolderAgentAction, relativePath: string): string {
+  const title = pluginWorkflowTitle(action);
+  const command = pluginWorkflowCliCommand(action, relativePath);
+  const steps = pluginWorkflowPlannedSteps(action).map((step) => `- ${step}`).join('\n');
+  return `${title} started.\n\n\`\`\`bash\n${command}\n\`\`\`\n\nPlanned steps:\n${steps}`;
+}
+
+export function pluginWorkflowSuccessContent(
+  action: PluginFolderAgentAction,
+  relativePath: string,
+  message: string,
+  url?: string,
+  log?: string[],
+): string {
+  const summary = stripTrailingUrl(message, url) || `${pluginWorkflowTitle(action)} completed for \`${relativePath}\`.`;
+  const lines = (log ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 5);
+  const command = pluginWorkflowCliCommand(action, relativePath);
+  const details = lines.length > 0
+    ? `\n\nCLI output:\n${lines.map((line) => `- \`${truncatePluginWorkflowLine(line)}\``).join('\n')}`
+    : '';
+  const link = url ? `\n\nLink: [${url}](${url})` : '';
+  return `${summary}\n\n\`\`\`bash\n${command}\n\`\`\`${link}${details}`;
+}
+
+export function pluginWorkflowFailureContent(
+  action: PluginFolderAgentAction,
+  relativePath: string,
+  message: string,
+  log?: string[],
+): string {
+  const lines = (log ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 5);
+  const command = pluginWorkflowCliCommand(action, relativePath);
+  const details = lines.length > 0
+    ? `\n\nCLI output:\n${lines.map((line) => `- \`${truncatePluginWorkflowLine(line)}\``).join('\n')}`
+    : '';
+  return `${pluginWorkflowTitle(action)} failed.\n\n\`\`\`bash\n${command}\n\`\`\`\n\n${message}${details}`;
+}
+
+function truncatePluginWorkflowLine(line: string): string {
+  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
+}
+
+export function stripTrailingUrl(message: string, url?: string): string {
+  const text = message.trim();
+  const link = url?.trim();
+  if (!link) return text;
+  return text.replace(new RegExp(`\\s*${escapeRegExp(link)}\\s*$`), '').trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
