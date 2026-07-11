@@ -124,6 +124,9 @@ export {
 // Pure live-artifact key rules.
 export { exportReadyNudgeKey } from './rules';
 
+// Pure comment-pin position rule.
+export { activeCommentPinStyle } from './rules';
+
 // Pure file-URL builder (structurally identical to providers/registry's
 // projectFileUrl, duplicated because it is pure with no transport/DOM).
 export { fileRawUrl } from './rules';
@@ -153,6 +156,7 @@ export type {
   MarkdownCodeLanguage,
   CommentSideDropEdge,
   ManualEditPendingStyleSave,
+  BoardTool,
 } from './types';
 
 // Shared constants consumed by both the slice and the orchestrator.
@@ -181,3 +185,11 @@ export { DocumentPreviewViewer } from './components/DocumentPreviewViewer';
 export { SvgViewer, type SvgViewerProps } from './components/SvgViewer';
 export { TextViewer } from './components/TextViewer';
 export type { SvgViewerMode, DocumentPreview, DocumentPreviewSection } from './types';
+
+// Comment overlay layer (dumb) and its per-target/pin sub-pieces.
+export { CommentTargetOverlay } from './components/CommentTargetOverlay';
+export { CommentPreviewOverlays } from './components/CommentPreviewOverlays';
+
+// React component (.jsx/.tsx) viewer: wired + its module-pointer fallback.
+export { ReactModulePointer } from './components/ReactModulePointer';
+export { ReactComponentViewer } from './components/ReactComponentViewer';

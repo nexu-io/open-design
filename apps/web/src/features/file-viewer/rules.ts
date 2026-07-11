@@ -1481,6 +1481,23 @@ export function clampBridgeCoordinate(value: unknown): number {
   return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
+/** Position for the active (in-progress, not-yet-saved) comment pin overlay. */
+export function activeCommentPinStyle(
+  target: PreviewCommentSnapshot,
+  scale: number,
+  offset: { x: number; y: number } = { x: 0, y: 0 },
+): { left: number; top: number } {
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const anchor = target.hoverPoint ?? {
+    x: target.position.x,
+    y: target.position.y,
+  };
+  return {
+    left: Math.round(offset.x + anchor.x * safeScale),
+    top: Math.round(offset.y + anchor.y * safeScale),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Live-artifact rules. Pure key/summary builders — no DOM, no transport.
 // ---------------------------------------------------------------------------

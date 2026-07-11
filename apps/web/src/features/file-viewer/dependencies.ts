@@ -4,10 +4,12 @@
 // swapping the adapter (or a fake in tests) touches only this file.
 import {
   fetchProjectFilePreview,
+  fetchProjectFiles,
   fetchProjectFileText,
 } from '../../providers/registry';
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
-import type { ClipboardPort, DocumentPreviewPort, FileTextPort } from './ports';
+import { subscribeOutsideDismiss } from '../../providers/file-viewer/outside-dismiss';
+import type { ClipboardPort, DismissPort, DocumentPreviewPort, FileTextPort, ProjectFilesPort } from './ports';
 
 /** Default binding: the real `/api/projects/:id/files/:name/preview` transport. */
 export const documentPreviewPort: DocumentPreviewPort = {
@@ -22,4 +24,14 @@ export const fileTextPort: FileTextPort = {
 /** Default binding: the real Clipboard API + textarea-fallback adapter. */
 export const clipboardPort: ClipboardPort = {
   copyTextToClipboard: copyTextFileToClipboard,
+};
+
+/** Default binding: the real project file-list transport. */
+export const projectFilesPort: ProjectFilesPort = {
+  fetchProjectFiles,
+};
+
+/** Default binding: the real document mousedown/Escape dismiss bridge. */
+export const dismissPort: DismissPort = {
+  subscribeOutsideDismiss,
 };
