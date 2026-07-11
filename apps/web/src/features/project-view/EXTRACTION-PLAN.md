@@ -200,7 +200,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/components/ExecutionControls.tsx` (new — first dumb component in the slice).
 - **Shape:** dumb component
 - **Risk:** low
-- **Status:** pending
+- **Status:** done. Landed as the slice's first `components/` file — props in, JSX out (`config`/`agents`/`daemonLive`/`projectId`/`track`/the six `on*` callbacks), wrapping `AvatarMenu` with the same inline `trackComposerBarClick` analytics calls. Dropped the original's wrapping `<>...</>` Fragment (single child, no markup change). `track: ReturnType<typeof useAnalytics>['track']` is passed in as a prop rather than the component calling `useAnalytics()` itself, keeping it presentational per ADR 0002.
 
 ## 22. Top-level render composition
 - **Lines:** 6865–7316 (the entire `return (...)` JSX tree)

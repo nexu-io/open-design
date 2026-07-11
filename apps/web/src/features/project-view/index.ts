@@ -203,3 +203,7 @@ export {
 } from './hooks/useRunCompletionNotifications.hooks';
 export type { QuestionFormPanelController } from './hooks/useQuestionFormPanel.hooks';
 export { useQuestionFormPanel } from './hooks/useQuestionFormPanel.hooks';
+
+// Dumb components.
+export type { ExecutionControlsProps } from './components/ExecutionControls';
+export { ExecutionControls } from './components/ExecutionControls';
