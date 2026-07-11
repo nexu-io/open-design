@@ -28,6 +28,7 @@ import type {
   AutomationTemplate,
   CapabilityKind,
   ContextMention,
+  RoutineProjectSummary,
   SelectedContextItem,
   TemplateFilter,
   TranslateFn,
@@ -549,6 +550,13 @@ export function buildUpdateRoutineRequest(
     skillId: created.skillId,
     context: created.context,
   };
+}
+
+/** Indexes the dashboard's project list by id for O(1) name lookups. */
+export function buildProjectsById(projects: RoutineProjectSummary[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const p of projects) map.set(p.id, p.name);
+  return map;
 }
 
 /** The saved-automation row's target-project label: the reused project's

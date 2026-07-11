@@ -113,7 +113,8 @@ export function NewAutomationModal({
               className="automation-modal__prompt"
               placeholder={t('automations.promptPlaceholder')}
               value={form.form.prompt}
-              onChange={(e) => form.updatePrompt(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              // A mounted <textarea>'s selectionStart is always a number, never null.
+              onChange={(e) => form.updatePrompt(e.target.value, e.target.selectionStart!)}
               onClick={form.refreshMentionFromPrompt}
               onFocus={() => form.setPopover(null)}
               onKeyDown={form.handlePromptKeyDown}

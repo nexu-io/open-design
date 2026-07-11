@@ -45,12 +45,19 @@ declarations, zero bare `useState`/`useRef`/`useMemo`/`useEffect` (verified
 against the `MemorySection.tsx` canary reference, which returns the same
 single match: the component declaration itself). `NewAutomationModal` is a
 slice-internal component (no consumer besides `TasksView`) with the identical
-zero-standalone-declarations property. Both were audited twice, independently,
-per Phase 8.5 (inline JSX callbacks, `useCallback`-wrapped logic, orphaned
-`useState`/`useRef`, and `useMemo`/`useEffect` bodies) — no dead-code
-findings; the audit itself surfaced and fixed three inline-derivation spots
-(`buildModalInitial`, `routineTargetLabel`, `isContextSelected`), now pure
-`rules.ts` functions.
+zero-standalone-declarations property. Both were audited multiple times,
+independently, per Phase 8.5 (inline JSX callbacks, `useCallback`-wrapped
+logic, orphaned `useState`/`useRef`, and `useMemo`/`useEffect` bodies). The
+audit surfaced and fixed five inline-derivation spots, now pure `rules.ts` /
+`formatters.ts` functions: `buildModalInitial`, `routineTargetLabel`,
+`isContextSelected`, `useAutomationsDashboard`'s `projectsById` (a `for`
+loop building a `Map`, hiding inside a `useMemo` body — now `rules.ts`'s
+`buildProjectsById`), and `useAutomationModalForm`'s `timezones` (a `Set`-
+dedupe derivation, likewise hiding in a `useMemo` — now `formatters.ts`'s
+`buildTimezoneOptions`). The latter two were caught on a subsequent pass
+after the first two "no dead-code findings" passes missed them, underscoring
+that the `useMemo`/`useEffect`-body sub-check in Phase 8.5 needs a genuinely
+fresh read each time, not a re-skim of the same diff.
 
 ## Tests
 
@@ -72,6 +79,25 @@ companion), `useAutomationsDashboard.test.tsx`, `useAutomationHistory.test.ts`,
 
 299 tests, 27 files, all green.
 
+## Reconciliation note
+
+This decomposition converged from two independent passes running over the
+same coverage report on the same branch tip; both landed nearly identical
+fixes for the reachable-branch gaps (regex-capture-group, timezone/schedule
+fallbacks, mention-picker meta fallbacks, error/submitting render states,
+capability dedupe, effect-cleanup races, refresh/review/run/delete error
+paths). One pass additionally caught two Phase-8.5 leaks the other missed
+(`projectsById`, `timezones` — see above) and two residual dead branches
+(`selectionStart ?? value.length` on the prompt textarea, in both
+`NewAutomationModal.tsx` and `useAutomationModalForm.hooks.ts`'s
+`refreshMentionFromPrompt` — a mounted `<textarea>`'s `selectionStart` is
+always a number in both real browsers and jsdom, so the DOM-lib `| null` in
+its type has no real runtime path here; replaced with a non-null assertion
+plus a one-line comment, closing branch coverage from 99.66% to a true
+100%). Both fixes are folded into this final state; the numbers below are
+the reconciled, re-validated result — not either pass's individually-reported
+numbers.
+
 ## Validation (final numbers)
 
 - `pnpm --filter @open-design/web typecheck` — clean.
@@ -88,23 +114,28 @@ companion), `useAutomationsDashboard.test.tsx`, `useAutomationHistory.test.ts`,
   baseline (confirmed by stashing this slice's changes and re-running that
   file in isolation before starting this work) and untouched by this
   decomposition.
-- Coverage (`--coverage.reporter=json-summary` + `json`, scoped to
+- Coverage (`--coverage.reporter=text` + `json`, scoped to
   `src/features/automations/**` and `src/providers/routines/**`): **100%
-  statements, 99.66% branches, 100% functions, 100% lines** aggregate; every
-  individual file clears 98% on all four metrics (the Phase 9.5 bar). Reached
-  via the classify-then-fix loop: the large majority of gaps were genuinely
-  reachable branches closed with real tests (provider mocks, `renderHook`
-  against fake ports, injected-fake-controller component renders, node-env
-  SSR bridge companions); two branches were reclassified as dead
-  (`readContextMention`'s two regex-capture-group `?? ''` fallbacks — both
+  statements, 100% branches, 100% functions, 100% lines** aggregate; every
+  individual file clears 98% (in fact 100%) on all four metrics (the Phase
+  9.5 bar). Reached via the classify-then-fix loop: the large majority of
+  gaps were genuinely reachable branches closed with real tests (provider
+  mocks, `renderHook` against fake ports, injected-fake-controller component
+  renders, node-env SSR bridge companions); several branches were
+  reclassified as dead and refactored away instead of tested around:
+  `readContextMention`'s two regex-capture-group `?? ''` fallbacks (both
   groups are mandatory in the pattern, so match[1]/match[2] are always
-  defined whenever `match` is non-null) and replaced with non-null assertions
-  plus a one-line comment; one `part?.value ?? 'GMT'` fallback was refactored
-  into an explicit `if (part === undefined)` for a clearer, correctly-
-  instrumented branch shape (its test had also been silently degraded by a
-  `vi.spyOn(...).mockReturnValue(...)` that vitest ignores when the mocked
-  constructor is invoked with `new` — fixed with a proper class-based
-  `mockImplementation`).
+  defined whenever `match` is non-null), `tzCityLabel`'s `split('/').pop() ??
+  timezone` (`split` always yields ≥1 element), and the prompt textarea's
+  `selectionStart ?? value.length` in both `NewAutomationModal.tsx` and
+  `useAutomationModalForm.hooks.ts` (a mounted `<textarea>`'s
+  `selectionStart` is always a number) — all replaced with non-null
+  assertions plus a one-line comment. `gmtLabel`'s `part?.value ?? 'GMT'`
+  was refactored into an explicit `if (part === undefined)` for a clearer,
+  correctly-instrumented branch shape (its test had also been silently
+  degraded by a `vi.spyOn(...).mockReturnValue(...)` that vitest ignores
+  when the mocked constructor is invoked with `new` — fixed with a proper
+  class-based `mockImplementation`).
 
 Behavior-preserving throughout: exact markup/className/i18n keys, no
 fetch/analytics-semantics changes, `TasksView`'s public export surface

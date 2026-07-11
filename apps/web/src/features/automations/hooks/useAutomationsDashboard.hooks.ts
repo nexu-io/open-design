@@ -18,6 +18,7 @@ import type { AutomationDomPort, RoutinesDashboardPort } from '../ports';
 import { automationDomPort, routinesDashboardPort } from '../dependencies';
 import {
   buildAutomationTemplates,
+  buildProjectsById,
   errorMessage,
   filterTemplates,
   mergeAutomationProposals,
@@ -124,11 +125,7 @@ export function useAutomationsDashboard(
     void refresh();
   }, [refresh]);
 
-  const projectsById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of projects) map.set(p.id, p.name);
-    return map;
-  }, [projects]);
+  const projectsById = useMemo(() => buildProjectsById(projects), [projects]);
 
   const sortedRoutines = useMemo(() => sortRoutinesNewestFirst(routines), [routines]);
 

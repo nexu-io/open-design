@@ -37,6 +37,14 @@ export function listSupportedTimezones(): string[] {
   return FALLBACK_TIMEZONES;
 }
 
+/** The schedule picker's timezone options: the detected local zone first,
+ * deduped against the full supported list. */
+export function buildTimezoneOptions(): string[] {
+  const local = detectLocalTimezone();
+  const set = new Set<string>([local, ...listSupportedTimezones()]);
+  return Array.from(set);
+}
+
 export function tzCityLabel(timezone: string): string {
   if (timezone === 'UTC') return 'UTC';
   // `split('/')` on a string always yields at least one element, so `pop()`

@@ -24,7 +24,7 @@ import {
   removeSelectedContextId,
   type SelectedContextIds,
 } from '../rules';
-import { describeRoutineSchedule, describeRoutineScheduleParts, detectLocalTimezone, listSupportedTimezones } from '../formatters';
+import { buildTimezoneOptions, describeRoutineSchedule, describeRoutineScheduleParts } from '../formatters';
 import type {
   AutomationFormState,
   AutomationTemplate,
@@ -121,11 +121,7 @@ export function useAutomationModalForm(
     setFormState(updater);
   }, []);
 
-  const timezones = useMemo(() => {
-    const local = detectLocalTimezone();
-    const set = new Set<string>([local, ...listSupportedTimezones()]);
-    return Array.from(set);
-  }, []);
+  const timezones = useMemo(() => buildTimezoneOptions(), []);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
@@ -203,7 +199,8 @@ export function useAutomationModalForm(
   const refreshMentionFromPrompt = useCallback(() => {
     const textarea = promptRef.current;
     if (!textarea) return;
-    setMention(readContextMention(textarea.value, textarea.selectionStart ?? textarea.value.length));
+    // A mounted <textarea>'s selectionStart is always a number, never null.
+    setMention(readContextMention(textarea.value, textarea.selectionStart!));
   }, []);
 
   const replaceMentionWithLabel = useCallback((label: string) => {
