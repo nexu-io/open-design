@@ -302,3 +302,5 @@ export type { DeployFlowController, DeployFlowDeps } from './hooks/useDeployFlow
 export type { CloudflarePagesZoneOption, DeployResultCard } from './types';
 export { DeployModal } from './components/DeployModal';
 export type { DeployModalProps } from './components/DeployModal';
+export { ShareMenu } from './components/ShareMenu';
+export type { ShareMenuProps } from './components/ShareMenu';
