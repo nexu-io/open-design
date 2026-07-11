@@ -110,7 +110,6 @@ import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
-import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { LibraryPicker } from './LibraryPicker';
 import { QuestionsPanel } from './QuestionsPanel';
@@ -127,6 +126,32 @@ import {
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
+import {
+  arraysEqual,
+  browserTabIndex,
+  browserTabsFromState,
+  BROWSER_TAB_PREFIX,
+  DESIGN_FILES_TAB,
+  DESIGN_SYSTEM_TAB,
+  isBrowserTabId,
+  isLiveArtifactImplementationPath,
+  isSketchName,
+  lastWorkspaceTabId,
+  maxBrowserTabSequence,
+  orderWorkspaceTabs,
+  parentDirForProjectFile,
+  reanchorBrowserTabsToCurrentOrder,
+  sameFileName,
+  scrollWorkspaceTabsWithWheel,
+  Tab,
+  tabDropEdgeFromEvent,
+  type BrowserWorkspaceTab,
+  type TabDropEdge,
+  type WorkspaceOrderedTab,
+} from '../features/file-workspace';
+// Re-exported so `./FileWorkspace` stays a stable import path for the
+// existing test suite now that this helper lives in the slice.
+export { scrollWorkspaceTabsWithWheel };
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -340,10 +365,10 @@ function shouldKeepCurrentSketchState(
   return current.loaded && current.sourceKey === sourceKey;
 }
 
-export const DESIGN_FILES_TAB = '__design_files__';
-export const DESIGN_SYSTEM_TAB = '__design_system__';
+// Re-exported so `./FileWorkspace` stays a stable import path for external
+// consumers (e.g. `ProjectView.tsx`) now that these live in the slice.
+export { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB };
 const QUESTIONS_TAB = '__questions__';
-const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
 // a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
 // mounting every open browser tab made memory/CPU grow linearly with tab count.
@@ -356,8 +381,6 @@ const SKETCH_AUTOSAVE_DELAY_MS = 800;
 // Stable empty folder list so the render-phase project-switch reset is
 // idempotent (passing a fresh `[]` each render would re-trigger the reset).
 const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
-type TabDropEdge = 'before' | 'after';
-type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
 export interface BrowserOpenRequest {
   tabId?: string;
   url: string;
@@ -373,9 +396,6 @@ export interface BrowserAttentionRequest {
   action: 'download-page';
   nonce: number;
 }
-type WorkspaceOrderedTab =
-  | { id: string; kind: 'browser'; browserTab: BrowserWorkspaceTab }
-  | { id: string; kind: 'file'; name: string };
 type DesignSystemReviewDecision =
   NonNullable<ProjectMetadata['designSystemReview']>[string]['decision'];
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
@@ -5441,302 +5461,4 @@ function escapeDesignSystemPreviewAttr(value: string): string {
 
 function escapeDesignSystemPreviewCssUrl(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
-}
-
-function Tab({
-  label,
-  meta,
-  title,
-  active,
-  onActivate,
-  onClose,
-  closable = true,
-  kind,
-  iconNameOverride,
-  liveArtifact,
-  draggable = false,
-  dragging = false,
-  dragOverEdge,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onDragEnd,
-}: {
-  label: string;
-  meta?: string;
-  title?: string;
-  active: boolean;
-  onActivate: () => void;
-  onClose?: () => void;
-  closable?: boolean;
-  kind?: ProjectFile['kind'] | 'live-artifact' | 'browser';
-  /** Force a specific icon (e.g. non-file tabs like terminal:<id> / chat:<id>). */
-  iconNameOverride?: IconName;
-  liveArtifact?: LiveArtifactWorkspaceEntry;
-  draggable?: boolean;
-  dragging?: boolean;
-  dragOverEdge?: TabDropEdge | null;
-  onDragStart?: (event: ReactDragEvent<HTMLDivElement>) => void;
-  onDragOver?: (event: ReactDragEvent<HTMLDivElement>) => void;
-  onDragLeave?: () => void;
-  onDrop?: (event: ReactDragEvent<HTMLDivElement>) => void;
-  onDragEnd?: () => void;
-}) {
-  const t = useT();
-  const iconName = iconNameOverride ?? kindIconName(kind);
-  const tabTitle = title ?? (meta ? `${label} ${meta}` : label);
-  return (
-    <div
-      className={[
-        'ws-tab',
-        'od-tooltip',
-        meta ? 'has-meta' : '',
-        kind === 'live-artifact' ? 'live-artifact-tab' : '',
-        kind === 'browser' ? 'browser-tab' : '',
-        active ? 'active' : '',
-        draggable ? 'draggable' : '',
-        dragging ? 'dragging' : '',
-        dragOverEdge ? `drag-over-${dragOverEdge}` : '',
-      ].filter(Boolean).join(' ')}
-      onClick={onActivate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onActivate();
-        }
-      }}
-      role="tab"
-      aria-selected={active}
-      tabIndex={0}
-      title={tabTitle}
-      data-tooltip={tabTitle}
-      data-tooltip-placement="bottom"
-      draggable={draggable}
-      onDragStart={draggable ? onDragStart : undefined}
-      onDragOver={draggable ? onDragOver : undefined}
-      onDragLeave={draggable ? onDragLeave : undefined}
-      onDrop={draggable ? onDrop : undefined}
-      onDragEnd={draggable ? onDragEnd : undefined}
-    >
-      {iconName ? (
-        <span className="tab-icon" aria-hidden>
-          <Icon name={iconName} size={13} />
-        </span>
-      ) : null}
-      <span className="ws-tab-text">
-        <span className="ws-tab-label">{label}</span>
-        {meta ? <span className="ws-tab-meta">{meta}</span> : null}
-      </span>
-      {liveArtifact ? (
-        <LiveArtifactBadges
-          compact
-          className="ws-live-artifact-badges"
-          status={liveArtifact.status}
-          refreshStatus={liveArtifact.refreshStatus}
-        />
-      ) : null}
-      {closable && onClose ? (
-        <button
-          type="button"
-          className="ws-tab-close od-tooltip"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          title={t('workspace.closeTab')}
-          data-tooltip={t('workspace.closeTab')}
-          data-tooltip-placement="bottom"
-          aria-label={t('workspace.closeTab')}
-        >
-          <Icon name="close" size={11} />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function tabDropEdgeFromEvent(event: ReactDragEvent<HTMLDivElement>): TabDropEdge {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
-}
-
-function arraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
-}
-
-export function scrollWorkspaceTabsWithWheel(
-  tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
-  event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
-) {
-  if (event.ctrlKey) return;
-  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-  if (tabBar.scrollWidth <= tabBar.clientWidth) return;
-
-  const before = tabBar.scrollLeft;
-  tabBar.scrollLeft += wheelDeltaToPixels(event.deltaY, event.deltaMode);
-  if (tabBar.scrollLeft === before) return;
-
-  event.preventDefault();
-}
-
-function wheelDeltaToPixels(delta: number, deltaMode: number): number {
-  const WHEEL_DELTA_LINE = 1;
-  const WHEEL_DELTA_PAGE = 2;
-
-  if (deltaMode === WHEEL_DELTA_LINE) return delta * 16;
-  if (deltaMode === WHEEL_DELTA_PAGE) return delta * 160;
-  return delta;
-}
-
-function kindIconName(
-  kind?: string,
-):
-  | 'file-code'
-  | 'globe'
-  | 'image'
-  | 'pencil'
-  | 'file'
-  | null {
-  if (kind === 'browser') return 'globe';
-  if (kind === 'live-artifact') return 'file-code';
-  if (kind === 'html') return 'file-code';
-  if (kind === 'image') return 'image';
-  if (kind === 'sketch') return 'pencil';
-  if (kind === 'code') return 'file-code';
-  if (kind === 'text') return 'file';
-  return 'file';
-}
-
-function isBrowserTabId(tabId: string): boolean {
-  return tabId.startsWith(BROWSER_TAB_PREFIX);
-}
-
-function browserTabIndex(tabId: string): number {
-  if (!isBrowserTabId(tabId)) return 0;
-  const value = Number.parseInt(tabId.slice(BROWSER_TAB_PREFIX.length), 10);
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-function browserTabsFromState(value: OpenTabsState['browserTabs']): BrowserWorkspaceTab[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const tabs: BrowserWorkspaceTab[] = [];
-  for (const item of value) {
-    if (!item || typeof item.id !== 'string' || seen.has(item.id)) continue;
-    if (!item.id.startsWith(BROWSER_TAB_PREFIX)) continue;
-    const label = item.label?.trim() || 'Browser';
-    const tab: BrowserWorkspaceTab = {
-      id: item.id,
-      label,
-    };
-    if (item.insertAfter === null) tab.insertAfter = null;
-    else if (typeof item.insertAfter === 'string') tab.insertAfter = item.insertAfter;
-    if (item.title?.trim()) tab.title = item.title.trim();
-    if (item.url?.trim()) tab.url = item.url.trim();
-    if (item.iconUrl?.trim()) tab.iconUrl = item.iconUrl.trim();
-    seen.add(item.id);
-    tabs.push(tab);
-  }
-  return tabs;
-}
-
-function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {
-  let max = 0;
-  for (const tab of tabs) {
-    const suffix = tab.id.slice(BROWSER_TAB_PREFIX.length);
-    const value = Number.parseInt(suffix, 10);
-    if (Number.isFinite(value)) max = Math.max(max, value);
-  }
-  return max;
-}
-
-function lastWorkspaceTabId(tabs: WorkspaceOrderedTab[]): string | null {
-  return tabs[tabs.length - 1]?.id ?? null;
-}
-
-function reanchorBrowserTabsToCurrentOrder(
-  orderedTabs: WorkspaceOrderedTab[],
-  browserTabs: BrowserWorkspaceTab[],
-): BrowserWorkspaceTab[] {
-  if (browserTabs.length === 0) return browserTabs;
-  const anchorByBrowserId = new Map<string, string | null>();
-  let previousId: string | null = DESIGN_FILES_TAB;
-  for (const entry of orderedTabs) {
-    if (entry.kind === 'browser') {
-      anchorByBrowserId.set(entry.browserTab.id, previousId);
-      previousId = entry.browserTab.id;
-    } else {
-      previousId = entry.name;
-    }
-  }
-
-  let changed = false;
-  const nextTabs = browserTabs.map((tab) => {
-    if (!anchorByBrowserId.has(tab.id)) return tab;
-    const nextInsertAfter = anchorByBrowserId.get(tab.id) ?? null;
-    const currentInsertAfter = tab.insertAfter ?? null;
-    if (currentInsertAfter === nextInsertAfter) return tab;
-    changed = true;
-    return { ...tab, insertAfter: nextInsertAfter };
-  });
-  return changed ? nextTabs : browserTabs;
-}
-
-function orderWorkspaceTabs(
-  fileTabNames: string[],
-  browserTabs: BrowserWorkspaceTab[],
-): WorkspaceOrderedTab[] {
-  const ordered: WorkspaceOrderedTab[] = fileTabNames.map((name) => ({
-    id: name,
-    kind: 'file',
-    name,
-  }));
-  let rootAnchorInsertIndex = 0;
-
-  for (const browserTab of browserTabs) {
-    const entry: WorkspaceOrderedTab = {
-      id: browserTab.id,
-      kind: 'browser',
-      browserTab,
-    };
-    const anchor = browserTab.insertAfter;
-    if (!anchor || anchor === DESIGN_FILES_TAB || anchor === DESIGN_SYSTEM_TAB) {
-      ordered.splice(rootAnchorInsertIndex, 0, entry);
-      rootAnchorInsertIndex += 1;
-      continue;
-    }
-    const anchorIndex = ordered.findIndex((candidate) => candidate.id === anchor);
-    if (anchorIndex === -1) {
-      ordered.push(entry);
-      continue;
-    }
-    ordered.splice(anchorIndex + 1, 0, entry);
-  }
-
-  return ordered;
-}
-
-function isSketchName(name: string): boolean {
-  return isSketchJsonFileName(name);
-}
-
-function parentDirForProjectFile(name: string): string {
-  const normalized = name.replace(/\\/g, '/');
-  const slash = normalized.lastIndexOf('/');
-  return slash > 0 ? normalized.slice(0, slash) : '';
-}
-
-function sameFileName(a: string, b: string): boolean {
-  return a === b || a.toLocaleLowerCase() === b.toLocaleLowerCase();
-}
-
-function isLiveArtifactImplementationPath(name: string): boolean {
-  if (name === '.live-artifacts') return true;
-  if (!name.startsWith('.live-artifacts/')) return false;
-  // Live artifacts are exposed through virtual tree nodes only. In
-  // particular, keep implementation-only snapshot and tile files hidden even
-  // if a generic project-files endpoint returns them in older daemon builds.
-  return true;
 }
