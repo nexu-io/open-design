@@ -203,7 +203,61 @@ cluster (`useWorkspaceKeyboardShortcuts`).
 - **Risk**: medium — self-contained CRUD but the shared reset-effect split
   with cluster 5 needs care; the LRU cap logic
   (`BROWSER_KEEPALIVE_CAP`) must stay byte-identical.
-- **Status**: pending.
+- **Status**: done. Landed as `hooks/useBrowserTabs.hooks.ts` (`useBrowserTabs`,
+  no port — no transport/DOM in this cluster) + barrel export. Corrections
+  and gotchas the plan didn't anticipate:
+  - `browserSnapshotToast`/`handleBrowserPageSnapshotToast` ARE owned by this
+    hook per the plan's own note (re-read carefully — easy to miss since they
+    sit textually far from the other `browserTabs` state in the original
+    file); landed here as planned.
+  - **Hook-ordering cycle**: `openRequestedBrowserTab`/`openBrowserTab` need
+    cluster 3's derived `orderedWorkspaceTabs` (to anchor a new tab after the
+    current last workspace tab), but `orderedWorkspaceTabs` is itself derived
+    FROM this hook's `browserTabs` (via `useWorkspaceContextTracking`) — a
+    plain value param would be a hook-ordering cycle no reordering of hook
+    calls can resolve. Fixed by threading an `orderedWorkspaceTabsRef`
+    (`MutableRefObject`, not `RefObject` — `useRef` with a non-undefined
+    initial value returns `MutableRefObject`, and `RefObject.current` is
+    typed `T | null` in this repo's `@types/react@18`, which does not match)
+    that the orchestrator updates via a plain render-time assignment right
+    after `useWorkspaceContextTracking`, mirroring the pre-existing
+    `openFileRef` pattern in this exact file. `openFileRef` itself also had
+    to become an explicit `openFileRef` param (same `MutableRefObject`
+    reasoning) since `handleBrowserPageSnapshotToast`'s file-open action
+    needs the always-current `openFile` despite being a `useCallback`
+    memoized only on `[t]`.
+  - **Effect-ordering regression (caught by the existing test suite, not by
+    typecheck/guard)**: cluster 4's hook call was first placed early in the
+    render (right where the old `browserTabs`/`liveBrowserTabIds` state used
+    to sit), which registers its internal effects — including the
+    `browserOpenRequest` effect that calls `setActiveTab` — BEFORE the
+    still-inline "pull the persisted active tab in" effect
+    (`useEffect(() => setActiveTab(tabsState.active ?? defaultRootTab), ...)`).
+    Since React flushes a component's mount effects in hook-registration
+    order, and both effects call `setActiveTab` directly (not an updater
+    function) in the same initial-mount batch, the LAST one to register wins
+    for that flush — so the persisted-tab effect silently clobbered a
+    freshly-opened browser tab's `activeTab` back to `tabsState.active`. Fixed
+    by moving the `useBrowserTabs(...)` call to AFTER that effect (and after
+    the `launcherOpen` projectId-reset effect, preserving the original file's
+    relative order for those). General lesson for the remaining clusters:
+    when an effect inside a newly-extracted hook can race a **direct-value**
+    `setState` call (not an updater fn) against an effect that stays inline,
+    hook-CALL POSITION in the orchestrator — not just parameter wiring —
+    is part of the extraction's correctness surface. Typecheck/guard cannot
+    catch this; only the existing FileWorkspace test suite caught it (the
+    `'creates and navigates a browser tab from a browser open request'` test).
+    Run the FULL existing test suite after every cluster, not just the new
+    hook's own tests.
+  - Raw `setBrowserTabs` had to stay exposed on the controller (not just the
+    higher-level actions) because the not-yet-extracted cluster 3 (`openFile`,
+    the `openRequest` effect) still reanchors `browserTabs` directly via
+    `reanchorBrowserTabsToCurrentOrder` — mirrors `useWiredProjectFolders`
+    exposing `setUploadDir` for the identical reason.
+  - 12 new hook tests (`useBrowserTabs.test.tsx`), including one that
+    specifically pins the LRU-cap-vs-pinned-tab interaction and one that
+    exercises the `browserOpenRequest` prop end-to-end (including
+    `focusOnly`). FileWorkspace.tsx: 1900 → 1701 lines.
 
 ## Cluster 5 — Tab launcher + tab-bar drag-reorder + toasts
 
