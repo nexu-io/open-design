@@ -2,6 +2,8 @@
 // transport, or DOM dependency, so slice rules and their tests can import them
 // without pulling in the orchestrator (ADR 0002).
 import type { Dict } from '../../i18n/types';
+import type { DeployProviderId } from '@open-design/contracts';
+import type { ManualEditStyles } from '../../edit-mode/types';
 
 /**
  * The i18n translate function the slice's formatters accept. Structurally
@@ -54,4 +56,68 @@ export type InspectSpliceScan = {
   // raw-text element contents and HTML comments. Hydration parses these
   // bodies for the host map; the splicer ignores them.
   bodies: string[];
+};
+
+/** The three preview breakpoints the board/inspect canvas can emulate. */
+export type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
+
+/** Measured preview canvas box, with the current scroll offset if any. */
+export type PreviewCanvasSize = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
+
+/** Inputs that shape how much of the canvas the comment side-dock reserves. */
+export type CommentPreviewCanvasOptions = {
+  boardMode: boolean;
+  sidePanelCollapsed: boolean;
+  viewport?: PreviewViewportId;
+};
+
+export type PreviewScaleOptions = {
+  canvasPadding?: number;
+};
+
+/** A single viewport-switcher preset (desktop/tablet/mobile framing). */
+export type PreviewViewportPreset = {
+  id: PreviewViewportId;
+  width: number | null;
+  height: number | null;
+  labelKey: keyof Dict;
+  titleKey: keyof Dict;
+};
+
+/** Board-space scale + offset applied to overlays for a non-desktop viewport. */
+export type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
+
+/** Static per-provider copy/link config for the deploy modal. */
+export type DeployProviderOption = {
+  id: DeployProviderId;
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  tokenLink: string;
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenPlaceholderKey:
+    | 'fileViewer.vercelTokenPlaceholder'
+    | 'fileViewer.cloudflareApiTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  tokenLabelKey:
+    | 'fileViewer.vercelToken'
+    | 'fileViewer.cloudflareApiToken';
+  accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
+  accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
+};
+
+/** A recognized markdown fenced-code-block language, for the copy/highlight UI. */
+export type MarkdownCodeLanguage = {
+  lang: string;
+  label: string;
+};
+
+/** Which edge of the hovered comment row a side-dock drag would drop onto. */
+export type CommentSideDropEdge = 'before' | 'after';
+
+/** A manual-edit inspector style save queued to flush after the debounce window. */
+export type ManualEditPendingStyleSave = {
+  id: string;
+  styles: Partial<ManualEditStyles>;
+  label: string;
+  version: number;
 };

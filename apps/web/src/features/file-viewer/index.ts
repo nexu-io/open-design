@@ -24,6 +24,106 @@ export {
   pointInPolygon,
 } from './rules';
 
+// Pure preview viewport + scale rules.
+export {
+  previewViewportIcon,
+  previewViewportStyle,
+  commentPreviewCanvasSize,
+  usesStackedCommentSideDock,
+  effectivePreviewScale,
+  previewOverlayTransform,
+  previewScaleShellStyle,
+  manualEditPreviewShellStyle,
+  manualEditFloatingPanelStyle,
+  manualEditHoverIconStyle,
+} from './rules';
+
+// Pure deploy + share rules.
+export {
+  getDeployProviderOption,
+  normalizeCloudflareDomainPrefixInput,
+  isValidCloudflareDomainPrefixInput,
+  deployResultState,
+  publicShareUrlForDeployment,
+  deploymentTimestamp,
+  compareDeploymentsByNewest,
+  shareUrlForDeployment,
+  pickLatestShareDeployment,
+} from './rules';
+
+// Pure manual-edit inspector style rules.
+export {
+  mergeManualEditInspectorStyles,
+  manualEditInspectorStyleValue,
+  normalizeManualEditInspectorColor,
+  manualEditPersistedValueMatchesSavedSnapshot,
+  canonicalManualEditStyleValue,
+  cancelManualEditPendingStyleSnapshot,
+} from './rules';
+
+// Pure markdown source-path + code-block rules.
+export {
+  markdownDirectory,
+  normalizeMarkdownProjectPath,
+  markdownRelativeProjectPath,
+  decodeHtmlAttribute,
+  escapeHtmlAttribute,
+  markdownCodeBlockLanguage,
+  decorateMarkdownCodeBlocks,
+  markdownScrollRange,
+  markdownScrollRatio,
+  markdownScrollTopForRatio,
+  mergeMarkdownSaveOptions,
+  isMarkdownImageFile,
+  markdownImageAlt,
+  humanSize,
+} from './rules';
+export type { MarkdownSaveOptions } from './rules';
+
+// Pure HTML preview asset-path rules.
+export {
+  baseDirFor,
+  toOwnerRelativePath,
+  isBlockedPreviewAssetScheme,
+  hasRelativeAssetRefs,
+  resolveProjectRelativePath,
+  readHtmlAttr,
+  escapeHtmlAttr,
+} from './rules';
+
+// Pure file-version rules.
+export {
+  isHtmlVersionableFile,
+  fileVersionSourceClassName,
+} from './rules';
+
+// Pure comment rules.
+export {
+  commentActivityAt,
+  commentCreatedAt,
+  commentTargetIntersectsPreview,
+  commentSideDropEdgeForEvent,
+  reorderPreviewCommentIds,
+  appendSavedPreviewCommentOrder,
+} from './rules';
+
+// Pure pod (multi-element selection) rules.
+export {
+  podDisplayMembers,
+  podOverlayWeights,
+  roundOverlayOpacity,
+  buildPodSnapshot,
+  pruneContainerSelections,
+  summarizeSnapshot,
+  selectionHitsSnapshot,
+  finiteBridgeInteger,
+  normalizeAnnotationStyle,
+  clampBridgeCoordinate,
+} from './rules';
+
+// Pure live-artifact key rules.
+export { exportReadyNudgeKey } from './rules';
+
 // Pure display formatters.
 export {
   formatJsonFileTextForDisplay,
@@ -39,4 +139,22 @@ export type {
   InspectOverrideEntry,
   InspectOverrideMap,
   StrokePoint,
+  PreviewViewportId,
+  PreviewCanvasSize,
+  CommentPreviewCanvasOptions,
+  PreviewScaleOptions,
+  PreviewViewportPreset,
+  PreviewOverlayTransform,
+  DeployProviderOption,
+  MarkdownCodeLanguage,
+  CommentSideDropEdge,
+  ManualEditPendingStyleSave,
 } from './types';
+
+// Shared constants consumed by both the slice and the orchestrator.
+export {
+  PREVIEW_VIEWPORT_PRESETS,
+  DEPLOY_PROVIDER_OPTIONS,
+  MARKDOWN_CODE_BLOCK_ATTR,
+  MARKDOWN_CODE_LANGUAGE_ATTR,
+} from './constants';
