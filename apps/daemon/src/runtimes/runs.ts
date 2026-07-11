@@ -364,8 +364,16 @@ export function createChatRunService({
     }
   };
 
-  const killChild = (run, signal) =>
-    signalChildProcess(run.child, run.processGroupId, signal);
+  const killChild = (run, signal) => {
+    if (signalChildProcess(run.child, run.processGroupId, signal)) return true;
+    // The direct child has already exited, but its process group can still hold
+    // survivors — grandchildren that inherited its stdio outlive it. Reap them by
+    // pgid so cancel/shutdown don't leave orphans (the same class the retry
+    // teardown reaps). Safe here: every killChild caller is a terminating path
+    // (cancel / shutdownActive) that never re-spawns into this pgid, so there is
+    // no next-generation group to mis-target (cf. #5202).
+    return signalProcessGroup(run.processGroupId, signal);
+  };
 
   const cancelGraceMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
