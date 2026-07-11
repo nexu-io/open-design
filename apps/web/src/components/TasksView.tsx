@@ -29,6 +29,7 @@ import type {
   CreatorTaskPriority,
   CreatorTaskStage,
   CreatorTaskStatus,
+  CreatorMediaProjectData,
   CreatorWorkbenchProjectData,
   Project,
 } from '@open-design/contracts';
@@ -58,6 +59,11 @@ type TemplateFilter =
 
 type TasksSurface = 'automations' | 'creator';
 type CreatorTaskFilter = 'active' | 'completed' | 'all';
+type CreatorMediaProjectState = {
+  projectId: string;
+  data: CreatorMediaProjectData;
+  failed: boolean;
+};
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
 const CREATOR_STATUSES: CreatorTaskStatus[] = ['todo', 'ready', 'blocked', 'done'];
 const CREATOR_PRIORITIES: CreatorTaskPriority[] = ['low', 'medium', 'high'];
@@ -435,6 +441,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     projectId: string;
     data: CreatorWorkbenchProjectData;
   }>>([]);
+  const [creatorMediaProjectData, setCreatorMediaProjectData] = useState<CreatorMediaProjectState[]>([]);
   const [creatorTaskProjectId, setCreatorTaskProjectId] = useState('');
   const [creatorTaskTitle, setCreatorTaskTitle] = useState('');
   const [creatorTaskStage, setCreatorTaskStage] = useState<CreatorTaskStage>('topic');
@@ -480,6 +487,10 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     if (creatorTaskFilter === 'completed') return task.status === 'done';
     return true;
   }), [creatorDashboard.tasks, creatorTaskFilter]);
+  const selectedCreatorMedia = useMemo(
+    () => creatorMediaProjectData.find((value) => value.projectId === creatorTaskProjectId),
+    [creatorMediaProjectData, creatorTaskProjectId],
+  );
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -540,6 +551,24 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         projectId: string;
         data: CreatorWorkbenchProjectData;
       } => value !== null));
+      const creatorMediaData = await Promise.all(entryProjects.map(async (project): Promise<CreatorMediaProjectState> => {
+        try {
+          const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-media-assets`);
+          if (!response.ok) return { projectId: project.id, data: { assets: [], taskLinks: [] }, failed: true };
+          const data = await response.json() as Partial<CreatorMediaProjectData>;
+          return {
+            projectId: project.id,
+            data: {
+              assets: Array.isArray(data.assets) ? data.assets : [],
+              taskLinks: Array.isArray(data.taskLinks) ? data.taskLinks : [],
+            } as CreatorMediaProjectData,
+            failed: false,
+          };
+        } catch {
+          return { projectId: project.id, data: { assets: [], taskLinks: [] }, failed: true };
+        }
+      }));
+      setCreatorMediaProjectData(creatorMediaData);
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
       }
@@ -1149,6 +1178,33 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                   </li>
                 ))}
               </ul>
+            </section>
+
+            <section className="creator-panel" aria-labelledby="creator-media-title">
+              <div className="creator-panel__head">
+                <h3 id="creator-media-title" className="creator-panel__title">Creator Media</h3>
+                <span className="creator-panel__meta">Read-only index</span>
+              </div>
+              {selectedCreatorMedia?.failed ? (
+                <p className="creator-list__desc">Media unavailable for this project.</p>
+              ) : selectedCreatorMedia && selectedCreatorMedia.data.assets.length > 0 ? (
+                <ul className="creator-list">
+                  {selectedCreatorMedia.data.assets.map((asset) => (
+                    <li key={asset.id} className="creator-list__item">
+                      <div className="creator-list__main">
+                        <strong className="creator-list__title">{asset.fileName}</strong>
+                        <p className="creator-list__desc">{asset.relativePath}</p>
+                        <div className="creator-list__chips">
+                          <span className="creator-chip">{asset.kind}</span>
+                          <span className="creator-chip">{asset.availability === 'missing' ? 'Missing' : 'Available'}</span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="creator-list__desc">No indexed media for this project.</p>
+              )}
             </section>
           </div>
         </section>

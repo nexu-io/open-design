@@ -38,11 +38,15 @@ function mockTasksViewFetch({
   creatorProjects = [],
   creatorRuns = [],
   creatorProjectData = {},
+  creatorMediaData = {},
+  creatorMediaFailures = [],
 }: {
   routines?: Routine[];
   creatorProjects?: Project[];
   creatorRuns?: ChatRunStatusResponse[];
   creatorProjectData?: Record<string, CreatorProjectData>;
+  creatorMediaData?: Record<string, { assets: Array<{ id: string; fileName: string; kind: string; relativePath: string; availability: string }>; taskLinks: Array<{ taskId: string; assetId: string }> }>;
+  creatorMediaFailures?: string[];
 } = {}) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
@@ -71,6 +75,12 @@ function mockTasksViewFetch({
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
+    }
+    const creatorMediaRead = /^\/api\/projects\/([^/]+)\/creator-media-assets$/.exec(url);
+    if (creatorMediaRead && (!init || init.method === undefined)) {
+      const projectId = decodeURIComponent(creatorMediaRead[1]!);
+      if (creatorMediaFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'media unavailable' }), { status: 503 });
+      return new Response(JSON.stringify(creatorMediaData[projectId] ?? { assets: [], taskLinks: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ templates: [] }), {
@@ -264,7 +274,7 @@ describe('TasksView page shell', () => {
 
     await waitFor(() => {
       expect(writes).toEqual(expect.arrayContaining([
-        expect.objectContaining({ body: { stage: 'editing', status: 'ready' } }),
+        expect.objectContaining({ body: expect.objectContaining({ stage: 'editing', status: 'ready' }) }),
         expect.objectContaining({ body: expect.objectContaining({ taskId: 'creator-task:1', category: 'editing' }) }),
       ]));
     });
@@ -479,6 +489,41 @@ describe('TasksView page shell', () => {
         expect.objectContaining({ taskId: 'creator-task:done-1', category: 'review', title: '发布复盘 已恢复进行中' }),
       ]));
     });
+  });
+
+  it('shows indexed creator media for the current project', async () => {
+    const creatorProjects: Project[] = [{ id: 'project-media-1', name: '素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } }];
+    mockTasksViewFetch({ creatorProjects, creatorMediaData: {
+      'project-media-1': { assets: [
+        { id: 'creator-media:1', fileName: 'sunset.mp4', kind: 'video', relativePath: 'day-1/sunset.mp4', availability: 'available' },
+        { id: 'creator-media:2', fileName: 'missing.mp4', kind: 'video', relativePath: 'day-1/missing.mp4', availability: 'missing' },
+      ], taskLinks: [] },
+    } });
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('sunset.mp4')).toBeTruthy();
+    expect(screen.getByText('day-1/sunset.mp4')).toBeTruthy();
+    expect(screen.getByText('missing.mp4')).toBeTruthy();
+    expect(screen.getByText('Missing')).toBeTruthy();
+  });
+
+  it('degrades creator media per project without hiding another project index', async () => {
+    const creatorProjects: Project[] = [
+      { id: 'project-media-failed', name: '失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+      { id: 'project-media-healthy', name: '正常项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorMediaFailures: ['project-media-failed'],
+      creatorMediaData: {
+        'project-media-healthy': { assets: [{ id: 'creator-media:healthy', fileName: 'healthy.mp4', kind: 'video', relativePath: 'day-2/healthy.mp4', availability: 'available' }], taskLinks: [] },
+      },
+    });
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Media unavailable for this project.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Task project'), { target: { value: 'project-media-healthy' } });
+    expect(await screen.findByText('healthy.mp4')).toBeTruthy();
   });
 
   it('renders the creator workbench empty focus state when no projects exist', async () => {
