@@ -57,6 +57,7 @@ export interface Task {
   status: TaskStatus;
   priority: "low" | "medium" | "high";
   sourceType?: string;
+  blockerNote?: string;
   createdAt: string;
   updatedAt: string;
 }

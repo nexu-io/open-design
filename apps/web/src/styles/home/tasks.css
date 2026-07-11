@@ -390,6 +390,39 @@
 
 .creator-task-form__submit:disabled { opacity: .5; }
 
+.creator-task-edit {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.creator-task-edit input,
+.creator-task-edit select {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.creator-task-edit > input:first-child,
+.creator-task-edit > input:nth-child(2),
+.creator-task-edit .creator-list__actions { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  .creator-task-edit { grid-template-columns: 1fr; }
+  .creator-task-edit > input:first-child,
+  .creator-task-edit > input:nth-child(2),
+  .creator-task-edit .creator-list__actions { grid-column: auto; }
+}
+
 .creator-list {
   display: flex;
   flex-direction: column;

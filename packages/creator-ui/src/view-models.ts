@@ -30,6 +30,7 @@ export function toTaskCardViewModel(task: Task): TaskCardViewModel {
     priorityLabel: getTaskPriorityLabel(task.priority),
     sourceType: task.sourceType,
     sourceLabel: getSourceTypeLabel(task.sourceType),
+    blockerNote: task.blockerNote,
     updatedAt: task.updatedAt,
   };
 }

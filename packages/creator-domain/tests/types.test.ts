@@ -123,6 +123,15 @@ describe("createTask", () => {
     expect(task.description).toBe("desc");
     expect(task.sourceType).toBe("webhook");
   });
+
+  it("preserves a blocker note", () => {
+    const task = createTask({
+      id: "t-blocked", projectId: "p-1", title: "补拍夜景", status: "blocked",
+      blockerNote: "缺少夜景素材",
+    } as never);
+
+    expect(task).toMatchObject({ status: "blocked", blockerNote: "缺少夜景素材" });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,9 @@ import {
 } from '../creator-adapters';
 import type {
   ChatRunStatusResponse,
+  CreatorTaskPriority,
   CreatorTaskStage,
+  CreatorTaskStatus,
   CreatorWorkbenchProjectData,
   Project,
 } from '@open-design/contracts';
@@ -56,6 +58,8 @@ type TemplateFilter =
 
 type TasksSurface = 'automations' | 'creator';
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
+const CREATOR_STATUSES: CreatorTaskStatus[] = ['todo', 'ready', 'blocked', 'done'];
+const CREATOR_PRIORITIES: CreatorTaskPriority[] = ['low', 'medium', 'high'];
 
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
@@ -434,6 +438,10 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const [creatorTaskTitle, setCreatorTaskTitle] = useState('');
   const [creatorTaskStage, setCreatorTaskStage] = useState<CreatorTaskStage>('topic');
   const [creatorTaskSaving, setCreatorTaskSaving] = useState(false);
+  const [creatorTaskEdit, setCreatorTaskEdit] = useState<{
+    id: string; projectId: string; originalStatus: string; title: string; description: string;
+    stage: CreatorTaskStage; status: CreatorTaskStatus; priority: CreatorTaskPriority; blockerNote: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -607,7 +615,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       const response = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-tasks/${encodeURIComponent(task.id)}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ stage: nextStage, status: isComplete ? 'done' : 'ready' }),
+        body: JSON.stringify({ stage: nextStage, status: isComplete ? 'done' : 'ready', blockerNote: '' }),
       });
       if (!response.ok) throw new Error(`creator task update: ${response.status}`);
       const activity = await fetch(`/api/projects/${encodeURIComponent(task.projectId)}/creator-activities`, {
@@ -621,6 +629,39 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setError(errorMessage(err));
     }
   }, [refresh]);
+
+  const saveCreatorTaskEdit = useCallback(async () => {
+    if (!creatorTaskEdit) return;
+    const edit = creatorTaskEdit;
+    const blockerNote = edit.blockerNote.trim();
+    if (edit.status === 'blocked' && !blockerNote) {
+      setError('Blocker reason is required');
+      return;
+    }
+    setCreatorTaskSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(edit.projectId)}/creator-tasks/${encodeURIComponent(edit.id)}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: edit.title.trim(), description: edit.description, stage: edit.stage, status: edit.status, priority: edit.priority, blockerNote }),
+      });
+      if (!response.ok) throw new Error(`creator task update: ${response.status}`);
+      const isBlocked = edit.status === 'blocked';
+      const activityTitle = isBlocked ? `${edit.title.trim()} 已阻塞` : edit.originalStatus === 'blocked' ? `${edit.title.trim()} 已解除阻塞` : `${edit.title.trim()} 已更新`;
+      const activity = await fetch(`/api/projects/${encodeURIComponent(edit.projectId)}/creator-activities`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId: edit.id, category: edit.stage, title: activityTitle, ...(isBlocked ? { summary: blockerNote } : {}) }),
+      });
+      if (!activity.ok) throw new Error(`creator activity: ${activity.status}`);
+      setCreatorTaskEdit(null);
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+      await refresh();
+    } finally {
+      setCreatorTaskSaving(false);
+    }
+  }, [creatorTaskEdit, refresh]);
 
   const triggerCreatorFocusAction = useCallback(async () => {
     const focus = creatorDashboard.focus;
@@ -964,6 +1005,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
               ) : null}
               <ul className="creator-list">
                 {creatorDashboard.tasks.map((task) => {
+                  const isEditable = task.id.startsWith('creator-task:');
+                  const isEditing = creatorTaskEdit?.id === task.id;
                   return (
                     <li key={task.id} className="creator-list__item">
                       <div className="creator-list__main">
@@ -977,6 +1020,17 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           <span className="creator-chip">{task.priorityLabel}</span>
                         {task.sourceLabel ? <span className="creator-chip">{task.sourceLabel}</span> : null}
                       </div>
+                      {isEditing ? (
+                        <div className="creator-task-edit">
+                          <input aria-label="Edit task title" value={creatorTaskEdit.title} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, title: event.target.value })} />
+                          <input aria-label="Edit task description" value={creatorTaskEdit.description} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, description: event.target.value })} />
+                          <select aria-label="Edit task stage" value={creatorTaskEdit.stage} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, stage: event.target.value as CreatorTaskStage })}>{CREATOR_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}</select>
+                          <select aria-label="Edit task status" value={creatorTaskEdit.status} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, status: event.target.value as CreatorTaskStatus })}>{CREATOR_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                          <select aria-label="Edit task priority" value={creatorTaskEdit.priority} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, priority: event.target.value as CreatorTaskPriority })}>{CREATOR_PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
+                          {creatorTaskEdit.status === 'blocked' ? <input aria-label="Blocker reason" value={creatorTaskEdit.blockerNote} onChange={(event) => setCreatorTaskEdit({ ...creatorTaskEdit, blockerNote: event.target.value })} /> : null}
+                          <div className="creator-list__actions"><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => void saveCreatorTaskEdit()}>Save task</Button><Button variant="ghost" className="creator-list__action" disabled={creatorTaskSaving} onClick={() => setCreatorTaskEdit(null)}>Cancel task edit</Button></div>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="creator-list__side">
                       <time className="creator-list__time" dateTime={task.updatedAt}>
@@ -989,6 +1043,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                               Advance
                             </Button>
                           ) : null}
+                          {isEditable ? <Button variant="ghost" className="creator-list__action" onClick={() => setCreatorTaskEdit({ id: task.id, projectId: task.projectId, originalStatus: task.status, title: task.title, description: task.description ?? '', stage: task.stage as CreatorTaskStage, status: task.status as CreatorTaskStatus, priority: task.priority as CreatorTaskPriority, blockerNote: task.blockerNote ?? '' })}>Edit</Button> : null}
                           <Button variant="ghost" className="creator-list__action" onClick={() => openCreatorProject(task.projectId)}>
                             Open
                           </Button>

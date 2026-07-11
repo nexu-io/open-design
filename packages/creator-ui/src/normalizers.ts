@@ -42,7 +42,7 @@ function hasOptionalStringFields(
 export function normalizeTaskCardViewModel(input: unknown): TaskCardViewModel | null {
   if (!isObjectRecord(input)) return null;
   if (!hasStringFields(input, ["id", "projectId", "title", "stage", "stageLabel", "status", "statusLabel", "priority", "priorityLabel", "updatedAt"])) return null;
-  if (!hasOptionalStringFields(input, ["description", "sourceType", "sourceLabel"])) return null;
+  if (!hasOptionalStringFields(input, ["description", "sourceType", "sourceLabel", "blockerNote"])) return null;
   return input as unknown as TaskCardViewModel;
 }
 

@@ -54,6 +54,7 @@ export function createTask(input: {
   status?: TaskStatus;
   priority?: "low" | "medium" | "high";
   sourceType?: string;
+  blockerNote?: string;
   createdAt?: string;
   updatedAt?: string;
 }): Task {
@@ -67,6 +68,7 @@ export function createTask(input: {
     status: input.status ?? "todo",
     priority: input.priority ?? "medium",
     sourceType: input.sourceType,
+    blockerNote: input.blockerNote,
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,
   };

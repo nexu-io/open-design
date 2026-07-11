@@ -18,6 +18,7 @@ export interface TaskCardViewModel {
   priorityLabel: string;
   sourceType?: string;
   sourceLabel?: string;
+  blockerNote?: string;
   updatedAt: string;
 }
 

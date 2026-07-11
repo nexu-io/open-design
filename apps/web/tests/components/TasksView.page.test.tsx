@@ -15,6 +15,8 @@ type CreatorProjectData = {
     stage: string;
     status: string;
     priority: string;
+    description?: string;
+    blockerNote?: string;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -305,6 +307,61 @@ describe('TasksView page shell', () => {
         '/api/projects/project-create-1/creator-tasks',
         expect.objectContaining({ title: '整理拍摄计划', stage: 'editing', status: 'todo' }),
       );
+    });
+  });
+
+  it('edits a creator task inline, records its blocker note, and writes an activity', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-edit-1', name: '夜景短片', skillId: null, designSystemId: null,
+      createdAt: Date.now() - 30_000, updatedAt: Date.now() - 10_000, metadata: { kind: 'video' },
+    }];
+    const creatorProjectData: Record<string, CreatorProjectData> = {
+      'project-edit-1': {
+        tasks: [{
+          id: 'creator-task:edit-1', projectId: 'project-edit-1', title: '补拍夜景',
+          stage: 'material', status: 'ready', priority: 'high',
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        }],
+        activities: [],
+      },
+    };
+    const writes: Array<{ url: string; body: Record<string, unknown> }> = [];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (init?.method === 'PATCH' && url.includes('/creator-tasks/creator-task%3Aedit-1')) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        writes.push({ url, body });
+        creatorProjectData['project-edit-1']!.tasks[0] = {
+          ...creatorProjectData['project-edit-1']!.tasks[0]!,
+          ...body,
+          updatedAt: '2025-01-02T00:00:00Z',
+        } as CreatorProjectData['tasks'][number];
+        return new Response(JSON.stringify({ task: creatorProjectData['project-edit-1']!.tasks[0] }), { status: 200 });
+      }
+      if (init?.method === 'POST' && url.endsWith('/creator-activities')) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        writes.push({ url, body });
+        return new Response(JSON.stringify({ activity: body }), { status: 201 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Edit task status'), { target: { value: 'blocked' } });
+    fireEvent.change(screen.getByLabelText('Blocker reason'), { target: { value: '缺少夜景素材' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
+
+    await waitFor(() => {
+      expect(writes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ body: expect.objectContaining({ status: 'blocked', blockerNote: '缺少夜景素材' }) }),
+        expect.objectContaining({ body: expect.objectContaining({
+          title: '补拍夜景 已阻塞', summary: '缺少夜景素材', category: 'material',
+        }) }),
+      ]));
     });
   });
 
