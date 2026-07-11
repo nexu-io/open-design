@@ -271,6 +271,8 @@ import {
   InspectPanel,
   CommentSidePanel,
   CommentSideDock,
+  PreviewViewportControls,
+  FileVersionViewportControls,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -471,127 +473,8 @@ function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t:
   existingToast?.remove();
 }
 
-function PreviewViewportControls({
-  viewport,
-  onViewport,
-  t,
-  tabIndex,
-}: {
-  viewport: PreviewViewportId;
-  onViewport: (viewport: PreviewViewportId) => void;
-  t: TranslateFn;
-  tabIndex?: number;
-}) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const listboxId = useId();
-  const activePreset =
-    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className="viewer-viewport-switcher" ref={menuRef}>
-      <button
-        type="button"
-        className={`viewer-action viewer-viewport-trigger${open ? '' : ' od-tooltip'}`}
-        aria-label={t('fileViewer.viewportAria')}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        title={t(activePreset.titleKey)}
-        data-tooltip={open ? undefined : t(activePreset.titleKey)}
-        data-tooltip-placement="bottom"
-        tabIndex={tabIndex}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <RemixIcon
-          name={previewViewportIcon(activePreset.id)}
-          size={14}
-          className="viewer-viewport-icon"
-        />
-        <span>{t(activePreset.labelKey)}</span>
-        <RemixIcon name="arrow-down-s-line" size={14} />
-      </button>
-      {open ? (
-        <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
-          {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-            const selected = viewport === preset.id;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={`viewer-viewport-menu-item${selected ? ' active' : ''}`}
-                role="option"
-                aria-selected={selected}
-                title={t(preset.titleKey)}
-                onClick={() => {
-                  onViewport(preset.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="viewer-viewport-menu-label">
-                  <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
-                  <span>{t(preset.labelKey)}</span>
-                </span>
-                {selected ? <Icon name="check" size={13} /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function FileVersionViewportControls({
-  viewport,
-  onViewport,
-  t,
-}: {
-  viewport: PreviewViewportId;
-  onViewport: (viewport: PreviewViewportId) => void;
-  t: TranslateFn;
-}) {
-  return (
-    <div className="file-version-viewport-toggle" role="group" aria-label={t('fileViewer.viewportAria')}>
-      {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-        const selected = viewport === preset.id;
-        const label = t(preset.titleKey);
-        return (
-          <button
-            key={preset.id}
-            type="button"
-            className={`file-version-viewport-button od-tooltip${selected ? ' active' : ''}`}
-            aria-label={label}
-            aria-pressed={selected}
-            title={label}
-            data-tooltip={label}
-            data-tooltip-placement="bottom"
-            onClick={() => onViewport(preset.id)}
-          >
-            <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// PreviewViewportControls and FileVersionViewportControls now live in the
+// file-viewer slice; imported from the slice barrel above (ADR 0002).
 
 function resolveShareUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();

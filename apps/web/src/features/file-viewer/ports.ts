@@ -28,7 +28,8 @@ export interface ProjectFilesPort {
   fetchProjectFiles(projectId: string): Promise<Array<{ name: string }>>;
 }
 
-/** Dismiss a popover on an outside pointerdown or Escape (DOM-touching, so a port). */
+/** Dismiss a popover on an outside mousedown/pointerdown or Escape (DOM-touching, so a port). */
 export interface DismissPort {
   subscribeOutsideDismiss(getContainer: () => HTMLElement | null, onDismiss: () => void): () => void;
+  subscribeOutsidePointerDismiss(getContainer: () => HTMLElement | null, onDismiss: () => void): () => void;
 }

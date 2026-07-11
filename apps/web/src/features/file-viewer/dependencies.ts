@@ -8,7 +8,7 @@ import {
   fetchProjectFileText,
 } from '../../providers/registry';
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
-import { subscribeOutsideDismiss } from '../../providers/file-viewer/outside-dismiss';
+import { subscribeOutsideDismiss, subscribeOutsidePointerDismiss } from '../../providers/file-viewer/outside-dismiss';
 import type { ClipboardPort, DismissPort, DocumentPreviewPort, FileTextPort, ProjectFilesPort } from './ports';
 
 /** Default binding: the real `/api/projects/:id/files/:name/preview` transport. */
@@ -31,7 +31,8 @@ export const projectFilesPort: ProjectFilesPort = {
   fetchProjectFiles,
 };
 
-/** Default binding: the real document mousedown/Escape dismiss bridge. */
+/** Default binding: the real document mousedown/pointerdown/Escape dismiss bridges. */
 export const dismissPort: DismissPort = {
   subscribeOutsideDismiss,
+  subscribeOutsidePointerDismiss,
 };

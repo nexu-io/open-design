@@ -41,6 +41,7 @@ function makeProjectFilesPort(over: Partial<ProjectFilesPort> = {}): ProjectFile
 function makeDismissPort(over: Partial<DismissPort> = {}): DismissPort {
   return {
     subscribeOutsideDismiss: vi.fn(() => () => {}),
+    subscribeOutsidePointerDismiss: vi.fn(() => () => {}),
     ...over,
   };
 }
