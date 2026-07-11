@@ -1,0 +1,4 @@
+interface:
+  display_name: "Character Visual Interactions"
+  short_description: "Add safe, page-local 2D and 3D character motion"
+  default_prompt: "Use $add-character-visual-interactions to add isolated character-driven visual interactions to an existing web page without changing its business behavior."
