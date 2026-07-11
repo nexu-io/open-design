@@ -1240,6 +1240,43 @@
     background-color 150ms ease,
     box-shadow 150ms ease;
 }
+.avatar-amr-row__sign-in {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.avatar-amr-row__sign-in:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+@media (hover: hover) and (pointer: fine) {
+  .avatar-amr-row__sign-in:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+.avatar-amr-row__sign-in:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.avatar-amr-row__sign-in:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
 @media (hover: hover) and (pointer: fine) {
   .avatar-amr-row__upgrade:hover {
     background: var(--accent-hover);
@@ -1260,6 +1297,12 @@
     transition: background-color 150ms ease;
   }
   .avatar-amr-row__upgrade:active {
+    transform: none;
+  }
+  .avatar-amr-row__sign-in {
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  }
+  .avatar-amr-row__sign-in:active:not(:disabled) {
     transform: none;
   }
 }
