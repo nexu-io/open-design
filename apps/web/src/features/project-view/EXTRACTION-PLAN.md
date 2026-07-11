@@ -133,7 +133,7 @@ once prior clusters have landed.
 - **Target:** `features/project-view/hooks/useBrandBrowserSnapshot.hooks.ts` (new).
 - **Shape:** feature hook
 - **Risk:** medium-high — multiple `Promise.race` timeout races and retry loops around `runtime/brand-browser-bridge.ts`.
-- **Status:** pending
+- **Status:** done. Landed as `useBrandBrowserSnapshot(...)`/`useWiredBrandBrowserSnapshot(...)`. Project-file-text transport routed through a new `providers/project-view/project-file-text.ts` provider + port method rather than a direct `state/projects` import. 7 sibling hook test files' port fakes updated for the new port method. Full existing ProjectView-related test suite (453 tests across 34 files) green, typecheck clean, guard passing.
 
 ## 14. Brand extraction workflow (continue / agent-fallback / enrichment)
 - **Lines:** 816–841 (`brandExtractionStatusOverride` effect), 1376–1399 (empty-transcript retry effect), 1639–1657 (terminal-brand-preview refresh effect), 1682–1711 (brand-ready design-system-open effect), 6150–6185 (pending/auto-opened design-system-tab effects), 6363–6636 (`handleContinueBrandExtraction`, `handleBrandAgentExtraction`, `handleBrandEnrichment` + their state: `brandEnrichmentPromptSeedCache`, `brandEnrichmentStarting`, `brandAgentExtractionStarting`, `brandProgrammaticContinueStarting`/`Ref`).
