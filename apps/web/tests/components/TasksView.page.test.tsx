@@ -365,6 +365,43 @@ describe('TasksView page shell', () => {
     });
   });
 
+  it('cancels inline editing without sending a task update', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-cancel-1', name: '取消编辑', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    }];
+    mockTasksViewFetch({ creatorProjects, creatorProjectData: {
+      'project-cancel-1': { tasks: [{
+        id: 'creator-task:cancel-1', projectId: 'project-cancel-1', title: '原始标题',
+        stage: 'topic', status: 'todo', priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }], activities: [] },
+    } });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Edit task title'), { target: { value: '不会保存' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel task edit' }));
+
+    expect(screen.queryByLabelText('Edit task title')).toBeNull();
+    expect(screen.getAllByText('原始标题').length).toBeGreaterThan(0);
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false);
+  });
+
+  it('does not render edit controls for inferred project tasks', async () => {
+    const creatorProjects: Project[] = [{
+      id: 'project-inferred-1', name: '只读项目任务', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    }];
+    mockTasksViewFetch({ creatorProjects });
+
+    render(<TasksView projects={creatorProjects} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Advance' })).toBeNull();
+  });
+
   it('renders the creator workbench empty focus state when no projects exist', async () => {
     mockTasksViewFetch({ creatorProjects: [], creatorRuns: [] });
 
