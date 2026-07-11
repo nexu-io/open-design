@@ -1131,3 +1131,27 @@ export function stripQueueOnlyFromMeta(meta: ChatSendMeta | undefined): ProjectC
   const { queueOnly: _queueOnly, ...rest } = meta;
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
+
+// --- Auto-send session storage keys -----------------------------------------
+
+export function autoSendFirstMessageKey(projectId: string): string {
+  return `od:auto-send-first:${projectId}`;
+}
+
+export function autoSendAttachmentsKey(projectId: string): string {
+  return `od:auto-send-attachments:${projectId}`;
+}
+
+export function autoSendContextKey(projectId: string): string {
+  return `od:auto-send-context:${projectId}`;
+}
+
+/** Set by the home create flow when its submit already ran the Open Design
+ * Cloud balance gate — the first auto-send must not re-prompt the user. */
+export function autoSendAmrGateOkKey(projectId: string): string {
+  return `od:auto-send-amr-gate-ok:${projectId}`;
+}
+
+export function designSystemAuditAutoRepairKey(projectId: string): string {
+  return `od:design-system-audit-auto-repair:${projectId}`;
+}

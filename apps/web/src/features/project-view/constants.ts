@@ -24,6 +24,9 @@ export const DEFAULT_CHAT_PANEL_WIDTH = 460;
 /** localStorage key the chat-panel width preference persists under. */
 export const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
+/** Number of design-system-audit auto-repair attempts armed per eligibility mark. */
+export const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
+
 // Local mirrors of the daemon-disconnect identity constants. The authoritative
 // source is `apps/web/src/providers/daemon.ts`; the slice cannot import a
 // provider outside `dependencies.ts` (ADR 0002), so these are kept as local

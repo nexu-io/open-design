@@ -13,6 +13,7 @@ export {
   MIN_NORMAL_SPLIT_WIDTH,
   DEFAULT_CHAT_PANEL_WIDTH,
   CHAT_PANEL_WIDTH_STORAGE_KEY,
+  DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS,
 } from './constants';
 
 // Local helper types.
@@ -92,6 +93,11 @@ export {
   shouldClearActiveRunRefs,
   finalizeActiveAssistantMessagesOnStop,
   stripQueueOnlyFromMeta,
+  autoSendFirstMessageKey,
+  autoSendAttachmentsKey,
+  autoSendContextKey,
+  autoSendAmrGateOkKey,
+  designSystemAuditAutoRepairKey,
 } from './rules';
 
 // Pure formatters (prompt / attachment / summary builders).

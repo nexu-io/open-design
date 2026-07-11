@@ -9,6 +9,12 @@ import {
   saveQueuedChatSends,
   readSavedChatPanelWidth,
   saveChatPanelWidth,
+  readAutoSendAttachments,
+  readAutoSendContext,
+  clearAutoSendSession,
+  markDesignSystemAuditAutoRepairEligible,
+  consumeDesignSystemAuditAutoRepair,
+  clearDesignSystemAuditAutoRepair,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -20,4 +26,10 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   saveQueuedChatSends,
   readSavedChatPanelWidth,
   saveChatPanelWidth,
+  readAutoSendAttachments,
+  readAutoSendContext,
+  clearAutoSendSession,
+  markDesignSystemAuditAutoRepairEligible,
+  consumeDesignSystemAuditAutoRepair,
+  clearDesignSystemAuditAutoRepair,
 };

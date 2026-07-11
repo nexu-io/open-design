@@ -285,8 +285,6 @@ import {
   workspaceContextItemsEqual,
   projectMediaVoiceSeed,
   isDesignSystemWorkspaceMetadata,
-  isStoredChatAttachment,
-  isStoredRunContextSelection,
   isBrandStatusValue,
   brandExtractionAllowsEditing,
   byokModelSeedForProtocol,
@@ -343,6 +341,8 @@ import {
   pluginWorkflowSuccessContent,
   pluginWorkflowFailureContent,
   stripQueueOnlyFromMeta,
+  autoSendFirstMessageKey,
+  autoSendAmrGateOkKey,
 } from '../features/project-view';
 import type { ProjectChatSendMeta, QueuedChatSend } from '../features/project-view';
 
@@ -469,7 +469,6 @@ const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
 const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
   'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
 const CHAT_PANEL_KEYBOARD_STEP = 16;
-const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
@@ -488,108 +487,6 @@ function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): s
     projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
     'brand.html'
   );
-}
-
-function autoSendFirstMessageKey(projectId: string): string {
-  return `od:auto-send-first:${projectId}`;
-}
-
-function autoSendAttachmentsKey(projectId: string): string {
-  return `od:auto-send-attachments:${projectId}`;
-}
-
-function autoSendContextKey(projectId: string): string {
-  return `od:auto-send-context:${projectId}`;
-}
-
-/** Set by the home create flow when its submit already ran the Open Design
- * Cloud balance gate — the first auto-send must not re-prompt the user. */
-function autoSendAmrGateOkKey(projectId: string): string {
-  return `od:auto-send-amr-gate-ok:${projectId}`;
-}
-
-function designSystemAuditAutoRepairKey(projectId: string): string {
-  return `od:design-system-audit-auto-repair:${projectId}`;
-}
-
-function readAutoSendAttachments(projectId: string): ChatAttachment[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.sessionStorage.getItem(autoSendAttachmentsKey(projectId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isStoredChatAttachment);
-  } catch {
-    return [];
-  }
-}
-
-function readAutoSendContext(projectId: string): RunContextSelection | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(autoSendContextKey(projectId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    return isStoredRunContextSelection(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function clearAutoSendSession(projectId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.removeItem(autoSendFirstMessageKey(projectId));
-    window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
-    window.sessionStorage.removeItem(autoSendContextKey(projectId));
-    window.sessionStorage.removeItem(autoSendAmrGateOkKey(projectId));
-  } catch {
-    /* ignore */
-  }
-}
-
-function markDesignSystemAuditAutoRepairEligible(projectId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(
-      designSystemAuditAutoRepairKey(projectId),
-      String(DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS),
-    );
-  } catch {
-    /* ignore */
-  }
-}
-
-function consumeDesignSystemAuditAutoRepair(projectId: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const key = designSystemAuditAutoRepairKey(projectId);
-    const raw = window.sessionStorage.getItem(key);
-    const attemptsRemaining = raw ? Number.parseInt(raw, 10) : 0;
-    if (!Number.isFinite(attemptsRemaining) || attemptsRemaining <= 0) {
-      window.sessionStorage.removeItem(key);
-      return false;
-    }
-    const nextAttemptsRemaining = attemptsRemaining - 1;
-    if (nextAttemptsRemaining > 0) {
-      window.sessionStorage.setItem(key, String(nextAttemptsRemaining));
-    } else {
-      window.sessionStorage.removeItem(key);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function clearDesignSystemAuditAutoRepair(projectId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.removeItem(designSystemAuditAutoRepairKey(projectId));
-  } catch {
-    /* ignore */
-  }
 }
 
 function byokOpenCodeProviderFromConfig(
@@ -2778,13 +2675,13 @@ export function ProjectView({
         );
         const repairPrompt = buildDesignSystemPackageAuditRepairPrompt(audit);
         if (repairPrompt) {
-          if (consumeDesignSystemAuditAutoRepair(project.id)) {
+          if (projectViewTransportPort.consumeDesignSystemAuditAutoRepair(project.id)) {
             const seed = { id: `audit-${Date.now()}`, value: repairPrompt };
             setChatSeed(seed);
             setAutoAuditRepairSeed(seed);
           }
         } else {
-          clearDesignSystemAuditAutoRepair(project.id);
+          projectViewTransportPort.clearDesignSystemAuditAutoRepair(project.id);
         }
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
@@ -6974,8 +6871,12 @@ export function ProjectView({
     autoSendFirstMessageRef.current = isAutoSend;
     autoSendAmrGateOkRef.current = isAutoSend && amrGateOk;
     autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
-    autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
-    autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
+    autoSendAttachmentsRef.current = isAutoSend
+      ? projectViewTransportPort.readAutoSendAttachments(project.id)
+      : [];
+    autoSendContextRef.current = isAutoSend
+      ? projectViewTransportPort.readAutoSendContext(project.id)
+      : null;
   }
   const initialWorkspaceContexts = autoSendContextRef.current?.workspaceItems ?? [];
   const brandEnrichmentEligibleForProject =
@@ -7587,7 +7488,7 @@ export function ProjectView({
     if (!messagesInitialized) return;
     if (streaming) return;
     if (projectIsProgrammaticBrandExtraction) {
-      clearAutoSendSession(project.id);
+      projectViewTransportPort.clearAutoSendSession(project.id);
       autoSendAttachmentsRef.current = [];
       autoSentRef.current = true;
       return;
@@ -7611,15 +7512,15 @@ export function ProjectView({
       ''
     ).trim();
     const attachments = autoSendAttachmentsRef.current ?? [];
-    const context = autoSendContextRef.current ?? readAutoSendContext(project.id);
+    const context = autoSendContextRef.current ?? projectViewTransportPort.readAutoSendContext(project.id);
     if (!seed && attachments.length === 0) {
       return;
     }
     autoSentRef.current = true;
     if (isDesignSystemWorkspaceMetadata(project.metadata)) {
-      markDesignSystemAuditAutoRepairEligible(project.id);
+      projectViewTransportPort.markDesignSystemAuditAutoRepairEligible(project.id);
     }
-    clearAutoSendSession(project.id);
+    projectViewTransportPort.clearAutoSendSession(project.id);
     autoSendAttachmentsRef.current = [];
     void handleSend(seed, attachments, [], {
       ...(context ? { context } : {}),

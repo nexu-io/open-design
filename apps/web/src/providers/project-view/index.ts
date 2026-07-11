@@ -5,3 +5,11 @@ export { fetchProjectRawText } from './raw-text';
 export { postMemoryExtract } from './memory-extract';
 export { loadQueuedChatSends, saveQueuedChatSends } from './queued-chat-sends';
 export { readSavedChatPanelWidth, saveChatPanelWidth } from './chat-panel-width';
+export {
+  readAutoSendAttachments,
+  readAutoSendContext,
+  clearAutoSendSession,
+  markDesignSystemAuditAutoRepairEligible,
+  consumeDesignSystemAuditAutoRepair,
+  clearDesignSystemAuditAutoRepair,
+} from './auto-send-session';
