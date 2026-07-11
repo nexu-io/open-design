@@ -5,14 +5,12 @@ import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './
 import {
   buildSocialSharePayload,
   OPEN_DESIGN_GITHUB_REPO_URL,
-  type ProjectFileVersion,
   type SocialShareRequest,
   type SocialShareResponse,
 } from '@open-design/contracts';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
-  type TrackingFileVersionSource,
   type TrackingProjectKind,
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
@@ -26,9 +24,6 @@ import {
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
   trackDrawToolbarClick,
-  trackFileVersionModalClick,
-  trackFileVersionModalSurfaceView,
-  trackFileVersionRestoreResult,
   trackPageView,
   trackPresentPopoverClick,
   trackShareOptionPopoverClick,
@@ -57,8 +52,6 @@ import {
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchProjectDeployments,
-  fetchProjectFileVersion,
-  fetchProjectFileVersions,
   fetchProjectFiles,
   fetchProjectFileText,
   fetchProjectFileTextPreview,
@@ -68,7 +61,6 @@ import {
   projectRawUrl,
   LiveArtifactRefreshError,
   refreshLiveArtifact,
-  restoreProjectFileVersion,
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
@@ -275,6 +267,9 @@ import {
   useWiredTemplateSave,
   useWiredShareLinkCopy,
   useWiredDeployLinkCopy,
+  useWiredPreviewCanvasSize,
+  fileVersionPreviewOptions,
+  FileVersionManagerModal,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -307,6 +302,7 @@ export {
   SvgViewer,
   CommentTargetOverlay,
   CommentSidePanel,
+  fileVersionPreviewOptions,
 } from '../features/file-viewer';
 export type { InspectOverrideEntry, InspectOverrideMap, ManualEditPendingStyleSave } from '../features/file-viewer';
 
@@ -486,39 +482,10 @@ function resolveShareUrl(rawUrl: string): string {
   return new URL(trimmed, window.location.origin).toString();
 }
 
-function usePreviewCanvasSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState<PreviewCanvasSize | undefined>(undefined);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => {
-      const rect = el.getBoundingClientRect();
-      setSize({
-        width: rect.width,
-        height: rect.height,
-        scrollLeft: el.scrollLeft,
-        scrollTop: el.scrollTop,
-      });
-    };
-    measure();
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(measure);
-      observer.observe(el);
-    }
-    el.addEventListener('scroll', measure, { passive: true });
-    window.addEventListener('resize', measure);
-    return () => {
-      observer?.disconnect();
-      el.removeEventListener('scroll', measure);
-      window.removeEventListener('resize', measure);
-    };
-  }, []);
-
-  return [ref, size] as const;
-}
+// usePreviewCanvasSize now lives in the file-viewer slice as
+// useWiredPreviewCanvasSize (its ResizeObserver/scroll/resize wiring is a
+// provider bridge behind an injected ElementSizePort); imported from the
+// slice barrel above (ADR 0002).
 
 function ensureMarkdownCodeBlockControls(root: HTMLElement, t: TranslateFn) {
   for (const block of root.querySelectorAll<HTMLElement>(`[${MARKDOWN_CODE_BLOCK_ATTR}]`)) {
@@ -782,7 +749,7 @@ export function LiveArtifactViewer({
     setPreviewViewportCached(liveArtifactViewportKey, viewport);
     setPreviewViewportState(viewport);
   }, [liveArtifactViewportKey]);
-  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const [previewBodyRef, previewBodySize] = useWiredPreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -1856,745 +1823,10 @@ function LiveArtifactRefreshFact({
 }
 
 
-function fileVersionSourceLabel(version: ProjectFileVersion, t: TranslateFn): string {
-  if (version.source === 'manual') return t('fileViewer.versions.sourceManual');
-  if (version.source === 'restore') return t('fileViewer.versions.sourceRestore');
-  return t('fileViewer.versions.sourceAi');
-}
-
-// Any unknown/legacy source value counts as 'ai', matching the label and
-// class-name fallbacks above.
-function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileVersionSource {
-  if (version.source === 'manual') return 'manual';
-  if (version.source === 'restore') return 'restore';
-  return 'ai';
-}
-
-export function fileVersionPreviewOptions(
-  projectId: string,
-  fileName: string,
-  source: string | null | undefined,
-) {
-  return {
-    deck: sourceLooksLikeExportableDeck(source),
-    baseHref: projectRawUrl(projectId, baseDirFor(fileName)),
-  };
-}
-
-function FileVersionManagerModal({
-  projectId,
-  projectKind,
-  file,
-  currentSource,
-  entryFrom,
-  onClose,
-  onRestored,
-}: {
-  projectId: string;
-  projectKind: TrackingProjectKind | null;
-  file: ProjectFile;
-  currentSource: string | null;
-  entryFrom: 'toolbar' | 'more_menu';
-  onClose: () => void;
-  onRestored: (content: string, version: ProjectFileVersion) => Promise<void> | void;
-}) {
-  const { locale, t } = useI18n();
-  const analytics = useAnalytics();
-  const tRef = useRef(t);
-  const [versions, setVersions] = useState<ProjectFileVersion[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedContent, setSelectedContent] = useState<string | null>(currentSource);
-  const [selectedContentVersionId, setSelectedContentVersionId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingContent, setLoadingContent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
-  const [search, setSearch] = useState('');
-  const [promptOpen, setPromptOpen] = useState(false);
-  const promptWrapRef = useRef<HTMLDivElement | null>(null);
-  const promptPopoverId = useId();
-  const [confirmRestore, setConfirmRestore] = useState(false);
-  const restoreWrapRef = useRef<HTMLDivElement | null>(null);
-  const restorePopoverId = useId();
-  const [previewFrameRef, previewFrameSize] = usePreviewCanvasSize<HTMLDivElement>();
-  // Track which srcDoc the iframe has finished rendering. Deriving readiness by
-  // comparing to the current srcDoc during render (rather than toggling a bool
-  // in a post-paint effect) keeps the overlay up across a switch with no
-  // one-frame flicker while the new document reparses.
-  const [loadedSrcDoc, setLoadedSrcDoc] = useState<string | null>(null);
-  // Client-side cache of fetched version HTML keyed by version id. Revisiting a
-  // version is then zero-fetch (and, because the srcDoc string value is stable,
-  // zero-reparse). `inFlightRef` dedupes concurrent hover-prefetch + click.
-  const contentCacheRef = useRef<Map<string, string>>(new Map());
-  const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
-  const trackingArtifactId = useMemo(
-    () => anonymizeArtifactId({ projectId, fileName: file.name }),
-    [projectId, file.name],
-  );
-  const trackingArtifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
-  const fireModalClick = (
-    element:
-      | 'version_item'
-      | 'viewport_toggle'
-      | 'prompt_toggle'
-      | 'copy_prompt'
-      | 'open_in_new_tab'
-      | 'restore'
-      | 'restore_confirm'
-      | 'restore_cancel',
-    extra?: {
-      version_source?: TrackingFileVersionSource;
-      version_is_current?: boolean;
-      viewport?: PreviewViewportId;
-    },
-  ) => {
-    trackFileVersionModalClick(analytics.track, {
-      page_name: 'artifact',
-      area: 'file_version_modal',
-      element,
-      artifact_id: trackingArtifactId,
-      artifact_kind: trackingArtifactKind,
-      version_count: versions.length,
-      ...extra,
-    });
-  };
-  // One impression per modal open. The component unmounts on close, so a
-  // fire-once ref is enough — no dependency bookkeeping needed.
-  const surfaceViewFiredRef = useRef(false);
-  useEffect(() => {
-    if (surfaceViewFiredRef.current) return;
-    surfaceViewFiredRef.current = true;
-    trackFileVersionModalSurfaceView(analytics.track, {
-      page_name: 'artifact',
-      area: 'file_version_modal',
-      entry_from: entryFrom,
-      artifact_id: trackingArtifactId,
-      artifact_kind: trackingArtifactKind,
-    });
-  }, [analytics.track, entryFrom, trackingArtifactId, trackingArtifactKind]);
-  const versionById = useMemo(() => {
-    const map = new Map<string, ProjectFileVersion>();
-    for (const version of versions) map.set(version.id, version);
-    return map;
-  }, [versions]);
-  const selectedVersion =
-    (selectedId ? versionById.get(selectedId) : undefined) ??
-    versions.find((version) => version.current) ??
-    versions[0] ??
-    null;
-  const versionCountLabel = versions.length === 1
-    ? t('fileViewer.versions.countOne')
-    : t('fileViewer.versions.countMany', { count: versions.length });
-  // Show the filter box only once the list is long enough to need it.
-  const showSearch = versions.length > 3;
-  const normalizedSearch = search.trim().toLowerCase();
-  const visibleVersions = useMemo(() => {
-    if (!showSearch || !normalizedSearch) return versions;
-    return versions.filter((version) => {
-      const restoredFrom = version.restoreFromVersionId
-        ? versionById.get(version.restoreFromVersionId)
-        : null;
-      const haystack = [
-        `v${version.version}`,
-        `version ${version.version}`,
-        version.prompt ?? '',
-        version.label ?? '',
-        fileVersionSourceLabel(version, t),
-        formatVersionDateTime(version.createdAt, locale),
-        restoredFrom ? `v${restoredFrom.version}` : '',
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(normalizedSearch);
-    });
-  }, [showSearch, normalizedSearch, versions, versionById, t, locale]);
-  // Decks are 16:9; the desktop preview centers them in an aspect box (see the
-  // `.preview-viewport-deck` CSS) instead of letting the slide bottom-anchor in
-  // a taller pane. Cheap source sniff, memoized on the selected content.
-  const isDeckPreview = useMemo(
-    () =>
-      Boolean(
-        selectedContent && fileVersionPreviewOptions(projectId, file.name, selectedContent).deck,
-      ),
-    [selectedContent, projectId, file.name],
-  );
-  const selectedPrompt = selectedVersion?.prompt?.trim() ?? '';
-  const selectedDate = selectedVersion ? formatVersionDateTime(selectedVersion.createdAt, locale) : file.name;
-  const selectedRestoredFrom = selectedVersion?.restoreFromVersionId
-    ? versionById.get(selectedVersion.restoreFromVersionId)
-    : null;
-  const selectedContentMatchesVersion = Boolean(selectedId && selectedContentVersionId === selectedId && selectedContent);
-  const restoreDisabled =
-    !selectedVersion || selectedVersion.current || restoring || loadingContent || !selectedContentMatchesVersion;
-  const srcDoc = useMemo(() => {
-    if (!selectedContent) return '';
-    const previewOptions = fileVersionPreviewOptions(projectId, file.name, selectedContent);
-    return buildSrcdoc(selectedContent, {
-      ...previewOptions,
-      previewFocusGuard: true,
-    });
-  }, [file.name, projectId, selectedContent]);
-  const frameReady = loadedSrcDoc === srcDoc;
-
-  useEffect(() => {
-    tRef.current = t;
-  }, [t]);
-
-  // Fetch a single version's HTML into the cache exactly once. Reused by the
-  // selection effect and by hover/focus prefetch so a click lands on warm data.
-  const primeVersionContent = useCallback((versionId: string): Promise<void> => {
-    if (contentCacheRef.current.has(versionId)) return Promise.resolve();
-    const pending = inFlightRef.current.get(versionId);
-    if (pending) return pending;
-    const request = fetchProjectFileVersion(projectId, file.name, versionId)
-      .then((result) => {
-        if (result) contentCacheRef.current.set(versionId, result.content);
-      })
-      .catch(() => {})
-      .finally(() => {
-        inFlightRef.current.delete(versionId);
-      });
-    inFlightRef.current.set(versionId, request);
-    return request;
-  }, [file.name, projectId]);
-
-  const loadVersions = useCallback(async (preferredId?: string | null) => {
-    setLoading(true);
-    setError(null);
-    const result = await fetchProjectFileVersions(projectId, file.name);
-    if (!result) {
-      setError(tRef.current('fileViewer.versions.loadFailed'));
-      setLoading(false);
-      return;
-    }
-    const nextVersions = [...result.versions].sort((a, b) => b.version - a.version);
-    setVersions(nextVersions);
-    // Seed the cache with the live document so opening the modal renders the
-    // current version instantly — no round-trip for the version you're on.
-    const currentVersion = nextVersions.find((version) => version.current);
-    if (currentVersion && currentSource != null && !contentCacheRef.current.has(currentVersion.id)) {
-      contentCacheRef.current.set(currentVersion.id, currentSource);
-    }
-    const nextSelected =
-      (preferredId ? nextVersions.find((version) => version.id === preferredId) : null) ??
-      currentVersion ??
-      nextVersions[0] ??
-      null;
-    setSelectedId(nextSelected?.id ?? null);
-    setLoading(false);
-  }, [currentSource, file.name, projectId]);
-
-  useEffect(() => {
-    void loadVersions();
-  }, [loadVersions]);
-
-  useEffect(() => {
-    setCopied(false);
-    setConfirmRestore(false);
-    setPromptOpen(false);
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setSelectedContent(null);
-      setSelectedContentVersionId(null);
-      return;
-    }
-    // Cache hit: swap instantly with no fetch, no flash.
-    const cached = contentCacheRef.current.get(selectedId);
-    if (cached !== undefined) {
-      setSelectedContent(cached);
-      setSelectedContentVersionId(selectedId);
-      setLoadingContent(false);
-      setError(null);
-      return;
-    }
-    // Cache miss: keep the previous preview mounted under the loading overlay
-    // (do NOT clear selectedContent) so switching never blanks to white.
-    let cancelled = false;
-    setLoadingContent(true);
-    setError(null);
-    void primeVersionContent(selectedId).then(() => {
-      if (cancelled) return;
-      const next = contentCacheRef.current.get(selectedId);
-      if (next === undefined) {
-        setSelectedContent(null);
-        setSelectedContentVersionId(null);
-        setError(tRef.current('fileViewer.versions.previewFailed'));
-      } else {
-        setSelectedContent(next);
-        setSelectedContentVersionId(selectedId);
-      }
-      setLoadingContent(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [primeVersionContent, selectedId]);
-
-  // Safety net: if the iframe's load event is ever missed, clear the overlay
-  // after a grace period so it can't get stuck over a rendered document.
-  useEffect(() => {
-    if (!srcDoc || loadedSrcDoc === srcDoc) return;
-    const fallback = window.setTimeout(() => setLoadedSrcDoc(srcDoc), 6000);
-    return () => window.clearTimeout(fallback);
-  }, [srcDoc, loadedSrcDoc]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (confirmRestore) {
-        setConfirmRestore(false);
-        return;
-      }
-      if (promptOpen) {
-        setPromptOpen(false);
-        return;
-      }
-      onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, promptOpen, confirmRestore]);
-
-  useEffect(() => {
-    if (!promptOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!promptWrapRef.current) return;
-      if (!promptWrapRef.current.contains(event.target as Node)) setPromptOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [promptOpen]);
-
-  useEffect(() => {
-    if (!confirmRestore) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!restoreWrapRef.current) return;
-      if (!restoreWrapRef.current.contains(event.target as Node)) setConfirmRestore(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [confirmRestore]);
-
-  async function copyPrompt() {
-    if (!selectedPrompt) return;
-    fireModalClick('copy_prompt', {
-      ...(selectedVersion ? { version_source: fileVersionSourceToTracking(selectedVersion) } : {}),
-    });
-    const ok = await copyToClipboard(selectedPrompt);
-    if (!ok) return;
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
-
-  function openVersionInNewTab() {
-    if (loadingContent || !selectedContentMatchesVersion || !selectedContent || !selectedVersion) return;
-    fireModalClick('open_in_new_tab', {
-      version_source: fileVersionSourceToTracking(selectedVersion),
-    });
-    openSandboxedPreviewInNewTab(
-      selectedContent,
-      `${file.name} · v${selectedVersion.version}`,
-      fileVersionPreviewOptions(projectId, file.name, selectedContent),
-    );
-  }
-
-  async function restoreVersion() {
-    if (restoreDisabled || !selectedVersion || !selectedContentMatchesVersion || !selectedContent) return;
-    setRestoring(true);
-    setError(null);
-    let closingAfterRestore = false;
-    const restoreStarted = performance.now();
-    // `versions` is sorted newest-first, so the index is "how many versions
-    // back from the newest" the restore target sits.
-    const fireRestoreResult = (result: 'success' | 'failed', errorCode?: string) => {
-      trackFileVersionRestoreResult(analytics.track, {
-        page_name: 'artifact',
-        area: 'file_version_modal',
-        artifact_id: trackingArtifactId,
-        artifact_kind: trackingArtifactKind,
-        project_id: projectId,
-        project_kind: projectKind,
-        version_source: fileVersionSourceToTracking(selectedVersion),
-        version_gap: Math.max(0, versions.findIndex((version) => version.id === selectedVersion.id)),
-        version_count: versions.length,
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        restore_duration_ms: Math.round(performance.now() - restoreStarted),
-      });
-    };
-    try {
-      const result = await restoreProjectFileVersion(projectId, file.name, selectedVersion);
-      if (!result) {
-        fireRestoreResult('failed', 'restore_request_failed');
-        setError(t('fileViewer.versions.restoreFailed'));
-        return;
-      }
-      fireRestoreResult('success', result.versionWarning?.code);
-      const restoredVersion = result.version ?? selectedVersion;
-      await onRestored(selectedContent, restoredVersion);
-      if (result.versionWarning) {
-        await loadVersions(result.version?.id ?? selectedVersion.id);
-        setError(result.versionWarning.message);
-        return;
-      }
-      closingAfterRestore = true;
-      onClose();
-    } finally {
-      if (!closingAfterRestore) setRestoring(false);
-    }
-  }
-
-  return createPortal(
-    <div
-      className="modal-backdrop viewer-modal-backdrop file-version-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="file-version-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('fileViewer.versions.title')}
-      >
-        <div className="file-version-sidebar">
-          <div className="file-version-sidebar-head">
-            <span className="file-version-count">{versionCountLabel}</span>
-          </div>
-          {showSearch ? (
-            <div className="file-version-search">
-              <RemixIcon name="search-line" size={14} />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t('common.searchEllipsis')}
-                aria-label={t('common.searchEllipsis')}
-              />
-              {search ? (
-                <button
-                  type="button"
-                  className="file-version-search-clear"
-                  aria-label={t('common.clear')}
-                  onClick={() => setSearch('')}
-                >
-                  <RemixIcon name="close-line" size={14} />
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="file-version-list" role="listbox" aria-label={t('fileViewer.versions.listAria')}>
-            {loading ? (
-              <div
-                className="file-version-skeleton-list"
-                role="status"
-                aria-label={t('fileViewer.versions.loading')}
-              >
-                {[0, 1, 2, 3].map((row) => (
-                  <div key={row} className="file-version-skeleton-item" aria-hidden="true">
-                    <div className="file-version-skeleton-row">
-                      <span className="file-version-skeleton-line badge" />
-                      <span className="file-version-skeleton-line time" />
-                    </div>
-                    <span className="file-version-skeleton-line title" />
-                    <span className="file-version-skeleton-line meta" />
-                  </div>
-                ))}
-              </div>
-            ) : versions.length === 0 ? (
-              <div className="file-version-empty">{t('fileViewer.versions.empty')}</div>
-            ) : visibleVersions.length === 0 ? (
-              <div className="file-version-empty">{t('homeHero.noResults', { query: search.trim() })}</div>
-            ) : (
-              visibleVersions.map((version) => {
-                const selected = version.id === selectedVersion?.id;
-                const itemRestoredFrom = version.restoreFromVersionId
-                  ? versionById.get(version.restoreFromVersionId)
-                  : null;
-                const prefetch = () => {
-                  void primeVersionContent(version.id);
-                };
-                return (
-                  <button
-                    key={version.id}
-                    type="button"
-                    className={`file-version-item${selected ? ' active' : ''}`}
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      if (!selected) {
-                        fireModalClick('version_item', {
-                          version_source: fileVersionSourceToTracking(version),
-                          version_is_current: Boolean(version.current),
-                        });
-                      }
-                      setSelectedId(version.id);
-                    }}
-                    onMouseEnter={prefetch}
-                    onFocus={prefetch}
-                  >
-                    <span className="file-version-item-top">
-                      {version.current ? (
-                        <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
-                      ) : null}
-                      <span className={`file-version-source-badge ${fileVersionSourceClassName(version)}`}>
-                        {fileVersionSourceLabel(version, t)}
-                      </span>
-                      <span className="file-version-time">
-                        {formatVersionDateTime(version.createdAt, locale)}
-                      </span>
-                    </span>
-                    <span className="file-version-item-title">
-                      {version.prompt || version.label || t('fileViewer.versions.versionLabel', { version: version.version })}
-                    </span>
-                    <span className="file-version-item-meta">
-                      {t('fileViewer.versions.versionLabel', { version: version.version })}
-                      {itemRestoredFrom ? (
-                        <span className="file-version-item-restored">
-                          {t('fileViewer.versions.restoredFrom', { version: itemRestoredFrom.version })}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-        <div className="file-version-main">
-          <header className="file-version-head">
-            <div className="file-version-meta">
-              <div className="file-version-meta-row">
-                {selectedVersion?.current ? (
-                  <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
-                ) : null}
-                {selectedVersion ? (
-                  <span className={`file-version-source-badge ${fileVersionSourceClassName(selectedVersion)}`}>
-                    {fileVersionSourceLabel(selectedVersion, t)}
-                  </span>
-                ) : null}
-                <span className="file-version-selected-date">{selectedDate}</span>
-                {selectedRestoredFrom ? (
-                  <span className="file-version-restored-from">
-                    {t('fileViewer.versions.restoredFrom', { version: selectedRestoredFrom.version })}
-                  </span>
-                ) : null}
-                <div
-                  className="file-version-prompt-popover-wrap"
-                  ref={promptWrapRef}
-                >
-                  <button
-                    type="button"
-                    className={`file-version-prompt-toggle${promptOpen ? ' active' : ''}`}
-                    aria-expanded={promptOpen}
-                    aria-controls={promptOpen ? promptPopoverId : undefined}
-                    disabled={!selectedVersion}
-                    onClick={() => {
-                      if (!promptOpen) {
-                        fireModalClick('prompt_toggle', {
-                          ...(selectedVersion
-                            ? { version_source: fileVersionSourceToTracking(selectedVersion) }
-                            : {}),
-                        });
-                      }
-                      setPromptOpen((value) => !value);
-                    }}
-                  >
-                    <RemixIcon name="chat-3-line" size={15} />
-                    <span>{t('fileViewer.versions.promptTitle')}</span>
-                    <RemixIcon name="arrow-down-s-line" size={14} />
-                  </button>
-                  {promptOpen ? (
-                    <section
-                      className="file-version-prompt-popover"
-                      id={promptPopoverId}
-                      role="region"
-                      aria-label={t('fileViewer.versions.promptTitle')}
-                    >
-                      <div className="file-version-prompt-head">
-                        <h3>{t('fileViewer.versions.promptTitle')}</h3>
-                        <button
-                          type="button"
-                          className="viewer-action file-version-copy-prompt"
-                          disabled={!selectedPrompt}
-                          onClick={copyPrompt}
-                        >
-                          <RemixIcon name="file-copy-line" size={14} />
-                          <span>{copied ? t('fileViewer.copied') : t('fileViewer.versions.copyPrompt')}</span>
-                        </button>
-                      </div>
-                      <p>{selectedPrompt || t('fileViewer.versions.noPromptBody')}</p>
-                    </section>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-            <div className="file-version-actions">
-              {selectedVersion && !selectedVersion.current ? (
-                <div className="file-version-restore-wrap" ref={restoreWrapRef}>
-                  <button
-                    type="button"
-                    className={`viewer-action primary file-version-restore-action${confirmRestore ? ' active' : ''}`}
-                    disabled={restoreDisabled}
-                    aria-haspopup="dialog"
-                    aria-expanded={confirmRestore}
-                    aria-controls={confirmRestore ? restorePopoverId : undefined}
-                    onClick={() => {
-                      if (!confirmRestore) {
-                        fireModalClick('restore', {
-                          version_source: fileVersionSourceToTracking(selectedVersion),
-                        });
-                      }
-                      setConfirmRestore((value) => !value);
-                    }}
-                  >
-                    <RemixIcon name={restoring ? 'loader-4-line' : 'git-branch-line'} size={14} />
-                    <span>
-                      {restoring
-                        ? t('fileViewer.versions.restoring')
-                        : t('fileViewer.versions.restore')}
-                    </span>
-                  </button>
-                  {confirmRestore ? (
-                    <div
-                      className="file-version-restore-confirm"
-                      id={restorePopoverId}
-                      role="dialog"
-                      aria-label={t('fileViewer.versions.restoreConfirmTitle')}
-                    >
-                      <h3>{t('fileViewer.versions.restoreConfirmTitle')}</h3>
-                      <p>{t('fileViewer.versions.restoreHelp')}</p>
-                      <div className="file-version-restore-confirm-actions">
-                        <button
-                          type="button"
-                          className="viewer-action"
-                          onClick={() => {
-                            fireModalClick('restore_cancel', {
-                              version_source: fileVersionSourceToTracking(selectedVersion),
-                            });
-                            setConfirmRestore(false);
-                          }}
-                        >
-                          {t('common.cancel')}
-                        </button>
-                        <button
-                          type="button"
-                          className="viewer-action primary"
-                          disabled={restoreDisabled}
-                          onClick={() => {
-                            fireModalClick('restore_confirm', {
-                              version_source: fileVersionSourceToTracking(selectedVersion),
-                            });
-                            setConfirmRestore(false);
-                            void restoreVersion();
-                          }}
-                        >
-                          {t('fileViewer.versions.restoreConfirmCta')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <FileVersionViewportControls
-                viewport={previewViewport}
-                onViewport={(viewport) => {
-                  if (viewport !== previewViewport) {
-                    fireModalClick('viewport_toggle', { viewport });
-                  }
-                  setPreviewViewport(viewport);
-                }}
-                t={t}
-              />
-              <button
-                type="button"
-                className="viewer-action viewer-action-icon od-tooltip"
-                aria-label={t('fileViewer.versions.open')}
-                title={t('fileViewer.versions.open')}
-                data-tooltip={t('fileViewer.versions.open')}
-                data-tooltip-placement="bottom"
-                disabled={!selectedContentMatchesVersion || loadingContent}
-                onClick={openVersionInNewTab}
-              >
-                <RemixIcon name="external-link-line" size={15} />
-              </button>
-              <button
-                type="button"
-                className="viewer-action viewer-action-icon od-tooltip"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                data-tooltip={t('common.close')}
-                data-tooltip-placement="bottom"
-                onClick={onClose}
-              >
-                <RemixIcon name="close-line" size={16} />
-              </button>
-            </div>
-          </header>
-          <div className="file-version-preview" ref={previewFrameRef}>
-            {error ? (
-              <div className="viewer-empty" role="alert">{error}</div>
-            ) : (
-              <>
-                {srcDoc ? (
-                  <div
-                    className={`preview-viewport preview-viewport-${previewViewport}${isDeckPreview ? ' preview-viewport-deck' : ''}`}
-                    style={previewViewportStyle(previewViewport, 1, previewFrameSize, { canvasPadding: 24 })}
-                  >
-                    <div className="preview-frame-clip">
-                      <div style={previewScaleShellStyle(previewViewport, 1)}>
-                        <iframe
-                          title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
-                          sandbox="allow-scripts allow-downloads"
-                          srcDoc={srcDoc}
-                          onLoad={() => setLoadedSrcDoc(srcDoc)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : !loading && !loadingContent ? (
-                  <div className="viewer-empty">{t('fileViewer.versions.previewLoading')}</div>
-                ) : null}
-                {loading || loadingContent || (srcDoc && !frameReady) ? (
-                  <div
-                    className="file-version-preview-overlay"
-                    role="status"
-                    aria-label={t('fileViewer.versions.previewLoading')}
-                  >
-                    <span className="file-version-preview-spinner" aria-hidden="true" />
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-
-// CommentSidePanel/CommentSideDock (comment sidebar, drag-reorder,
-// composer) now live in the file-viewer slice; imported from the slice
-// barrel above (ADR 0002).
-
-// InspectPanel now lives in the file-viewer slice; imported from the
-// slice barrel above (ADR 0002).
-// Inspect-override rules (serialize/update/parse/apply + the HTML-aware
-// splicer and its types) now live in the file-viewer slice. The orchestrator
-// imports them from the slice barrel; they are re-exported near the top of
-// this file so existing consumers and the FileViewer.* test net keep their
-// import path unchanged (ADR 0002).
-
-// CommentPreviewOverlays/CommentTargetOverlay (comment overlay layer),
-// ReactModulePointer, and ReactComponentViewer now live in the file-viewer
-// slice; imported from the slice barrel above (ADR 0002).
+// fileVersionSourceLabel/fileVersionSourceToTracking/fileVersionPreviewOptions and
+// FileVersionManagerModal now live in the file-viewer slice (the modal's
+// createPortal JSX included, via the injected PortalPort bridge); imported
+// from the slice barrel above (ADR 0002).
 
 function HtmlViewer({
   projectId,
@@ -2980,7 +2212,7 @@ function HtmlViewer({
   const [annotationFrozenSource, setAnnotationFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
-  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const [previewBodyRef, previewBodySize] = useWiredPreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);

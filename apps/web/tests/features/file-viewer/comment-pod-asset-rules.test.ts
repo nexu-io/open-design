@@ -24,6 +24,9 @@ import {
   escapeHtmlAttr,
   isHtmlVersionableFile,
   fileVersionSourceClassName,
+  fileVersionSourceLabel,
+  fileVersionSourceToTracking,
+  fileVersionPreviewOptions,
   markdownDirectory,
   normalizeMarkdownProjectPath,
   markdownRelativeProjectPath,
@@ -42,6 +45,8 @@ import {
 } from '../../../src/features/file-viewer/rules';
 import type { PreviewComment } from '../../../src/types';
 import type { PreviewCommentSnapshot } from '../../../src/comments';
+import type { ProjectFileVersion } from '@open-design/contracts';
+import type { TranslateFn } from '../../../src/features/file-viewer/types';
 
 function makeComment(overrides: Partial<PreviewComment> = {}): PreviewComment {
   return {
@@ -318,6 +323,47 @@ describe('file-version rules', () => {
     expect(fileVersionSourceClassName({ source: 'manual' })).toBe('manual');
     expect(fileVersionSourceClassName({ source: 'restore' })).toBe('restore');
     expect(fileVersionSourceClassName({ source: 'ai' })).toBe('ai');
+  });
+
+  const makeVersion = (overrides: Partial<ProjectFileVersion> = {}): ProjectFileVersion => ({
+    id: 'v1',
+    fileName: 'index.html',
+    version: 1,
+    label: '',
+    createdAt: 1000,
+    source: 'ai',
+    prompt: null,
+    size: 10,
+    mime: 'text/html',
+    kind: 'html',
+    current: false,
+    ...overrides,
+  });
+  const fakeT: TranslateFn = ((key: string) => key) as TranslateFn;
+
+  it('fileVersionSourceLabel maps each source to its translation key', () => {
+    expect(fileVersionSourceLabel(makeVersion({ source: 'manual' }), fakeT)).toBe('fileViewer.versions.sourceManual');
+    expect(fileVersionSourceLabel(makeVersion({ source: 'restore' }), fakeT)).toBe('fileViewer.versions.sourceRestore');
+    expect(fileVersionSourceLabel(makeVersion({ source: 'ai' }), fakeT)).toBe('fileViewer.versions.sourceAi');
+  });
+
+  it('fileVersionSourceToTracking maps each source to its tracking value', () => {
+    expect(fileVersionSourceToTracking(makeVersion({ source: 'manual' }))).toBe('manual');
+    expect(fileVersionSourceToTracking(makeVersion({ source: 'restore' }))).toBe('restore');
+    expect(fileVersionSourceToTracking(makeVersion({ source: 'ai' }))).toBe('ai');
+  });
+
+  it('fileVersionPreviewOptions detects a deck source and resolves the raw-file base href', () => {
+    const deckSource = '<div class="deck-slide" data-title="One"></div>';
+    const options = fileVersionPreviewOptions('proj-1', 'slides/deck.html', deckSource);
+    expect(options.deck).toBe(true);
+    expect(options.baseHref).toBe('/api/projects/proj-1/raw/slides/');
+  });
+
+  it('fileVersionPreviewOptions reports non-deck sources and the file root when there is no subdirectory', () => {
+    const options = fileVersionPreviewOptions('proj-1', 'index.html', '<p>hi</p>');
+    expect(options.deck).toBe(false);
+    expect(options.baseHref).toBe('/api/projects/proj-1/raw/');
   });
 });
 

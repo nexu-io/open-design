@@ -6,16 +6,29 @@ import {
   fetchProjectFilePreview,
   fetchProjectFiles,
   fetchProjectFileText,
+  fetchProjectFileVersion,
+  fetchProjectFileVersions,
+  restoreProjectFileVersion,
 } from '../../providers/registry';
 import { copyTextFileToClipboard } from '../../providers/file-viewer/clipboard';
-import { subscribeOutsideDismiss, subscribeOutsidePointerDismiss } from '../../providers/file-viewer/outside-dismiss';
+import {
+  subscribeEscapeKey,
+  subscribeOutsideDismiss,
+  subscribeOutsidePointerDismiss,
+  subscribeOutsidePointerDown,
+} from '../../providers/file-viewer/outside-dismiss';
+import { observeElementSize } from '../../providers/file-viewer/element-size';
+import { documentBodyPortalRoot } from '../../providers/file-viewer/portal-root';
 import { saveTemplate } from '../../providers/templates';
 import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import type {
   ClipboardPort,
   DismissPort,
   DocumentPreviewPort,
+  ElementSizePort,
   FileTextPort,
+  FileVersionsPort,
+  PortalPort,
   ProjectFilesPort,
   ShareLinkClipboardPort,
   TemplateSavePort,
@@ -45,6 +58,25 @@ export const projectFilesPort: ProjectFilesPort = {
 export const dismissPort: DismissPort = {
   subscribeOutsideDismiss,
   subscribeOutsidePointerDismiss,
+  subscribeOutsidePointerDown,
+  subscribeEscapeKey,
+};
+
+/** Default binding: the real ResizeObserver/scroll/resize element-measurement bridge. */
+export const elementSizePort: ElementSizePort = {
+  observeElementSize,
+};
+
+/** Default binding: the real project-file-version-history transport. */
+export const fileVersionsPort: FileVersionsPort = {
+  fetchProjectFileVersions,
+  fetchProjectFileVersion,
+  restoreProjectFileVersion,
+};
+
+/** Default binding: the real `document.body` portal-root bridge. */
+export const portalPort: PortalPort = {
+  getPortalRoot: documentBodyPortalRoot,
 };
 
 /** Default binding: the real `/api/templates` save-as-template transport. */

@@ -1,10 +1,12 @@
 // Pure rules for the file-viewer slice: string/geometry/number transforms with
 // no React, transport, or DOM dependency. They test with zero doubles, and the
 // boundary guard (ADR 0002) forbids any `fetch`/`window`/`document` reach here.
-import type { DeployProviderId, DeploymentInfo } from '@open-design/contracts';
+import type { DeployProviderId, DeploymentInfo, ProjectFileVersion } from '@open-design/contracts';
+import type { TrackingFileVersionSource } from '@open-design/contracts/analytics';
 import type { ManualEditStyles, ManualEditTarget } from '../../edit-mode/types';
 import { MANUAL_EDIT_STYLE_PROPS } from '../../edit-mode/types';
 import type { PreviewComment, PreviewCommentMember } from '../../types';
+import { sourceLooksLikeExportableDeck } from '../../runtime/exports';
 import {
   overlayBoundsFromSnapshot,
   type PreviewCommentSnapshot,
@@ -41,6 +43,7 @@ import type {
   PreviewScaleOptions,
   PreviewViewportId,
   StrokePoint,
+  TranslateFn,
 } from './types';
 
 // Allow-list of CSS properties the host will persist on Save. Mirrors the
@@ -1504,4 +1507,34 @@ export function activeCommentPinStyle(
 
 export function exportReadyNudgeKey(projectId: string, fileName: string): string {
   return `${EXPORT_READY_NUDGE_STORAGE_PREFIX}${projectId}:${fileName}`;
+}
+
+// ---------------------------------------------------------------------------
+// File-version-manager rules. Pure label/tracking/preview-option builders for
+// the version history modal — no DOM, no transport.
+// ---------------------------------------------------------------------------
+
+export function fileVersionSourceLabel(version: ProjectFileVersion, t: TranslateFn): string {
+  if (version.source === 'manual') return t('fileViewer.versions.sourceManual');
+  if (version.source === 'restore') return t('fileViewer.versions.sourceRestore');
+  return t('fileViewer.versions.sourceAi');
+}
+
+// Any unknown/legacy source value counts as 'ai', matching the label and
+// class-name fallbacks above.
+export function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileVersionSource {
+  if (version.source === 'manual') return 'manual';
+  if (version.source === 'restore') return 'restore';
+  return 'ai';
+}
+
+export function fileVersionPreviewOptions(
+  projectId: string,
+  fileName: string,
+  source: string | null | undefined,
+): { deck: boolean; baseHref: string } {
+  return {
+    deck: sourceLooksLikeExportableDeck(source),
+    baseHref: fileRawUrl(projectId, baseDirFor(fileName)),
+  };
 }

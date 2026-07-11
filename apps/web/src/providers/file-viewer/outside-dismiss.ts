@@ -47,3 +47,38 @@ export function subscribeOutsidePointerDismiss(
     document.removeEventListener('keydown', onKey);
   };
 }
+
+// Pointerdown-only outside-dismiss (no Escape handling) — for callers that
+// already own a separate, priority-ordered Escape handler and would double
+// fire if this bridge also listened for Escape (see the file-version
+// manager's prompt/restore-confirm popovers, which yield Escape to whichever
+// of {restore confirm, prompt, close} is topmost).
+export function subscribeOutsidePointerDown(
+  getContainer: () => HTMLElement | null,
+  onDismiss: () => void,
+): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const onPointerDown = (event: PointerEvent) => {
+    const container = getContainer();
+    if (!container) return;
+    if (!container.contains(event.target as Node)) onDismiss();
+  };
+  document.addEventListener('pointerdown', onPointerDown);
+  return () => {
+    document.removeEventListener('pointerdown', onPointerDown);
+  };
+}
+
+// Escape-only bridge, for a caller that needs a single priority-ordered
+// Escape handler across multiple pieces of dismissible UI rather than one
+// per-popover Escape listener.
+export function subscribeEscapeKey(onEscape: () => void): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') onEscape();
+  };
+  document.addEventListener('keydown', onKey);
+  return () => {
+    document.removeEventListener('keydown', onKey);
+  };
+}

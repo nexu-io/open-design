@@ -193,3 +193,18 @@ export type TemplateSaveAnalytics = {
   ) => void;
   newRequestId: () => string;
 };
+
+/**
+ * The subset of the app's analytics context the file-version-manager hook
+ * needs (only `track` — this modal never correlates a click to a later async
+ * result). Duplicated rather than reusing `TemplateSaveAnalytics` by intent
+ * (ADR 0002: only wire DTOs and transport adapters are shared for
+ * correctness).
+ */
+export type FileVersionManagerAnalytics = {
+  track: (
+    event: string,
+    properties: Record<string, unknown>,
+    options?: { requestId?: string; insertId?: string },
+  ) => void;
+};

@@ -95,6 +95,9 @@ export {
 export {
   isHtmlVersionableFile,
   fileVersionSourceClassName,
+  fileVersionSourceLabel,
+  fileVersionSourceToTracking,
+  fileVersionPreviewOptions,
 } from './rules';
 
 // Pure comment rules.
@@ -224,3 +227,11 @@ export type { ShareLinkCopyController, ShareLinkCopyDeps } from './hooks/useShar
 // copied-link pill (keyed by url) and its auto-clear timeout.
 export { useWiredDeployLinkCopy } from './hooks/useDeployLinkCopy.hooks';
 export type { DeployLinkCopyController } from './hooks/useDeployLinkCopy.hooks';
+
+// File-version-history modal: fully in-slice, including its createPortal JSX.
+// The portal target (`document.body`) is reached through the injected
+// `PortalPort` (see `dependencies.ts`'s `portalPort`) rather than a bare
+// `document` reference, so the modal can live in the slice like any other
+// dumb component instead of staying pinned to the orchestrator.
+export { FileVersionManagerModal } from './components/FileVersionManagerModal';
+export { useWiredPreviewCanvasSize } from './hooks/usePreviewCanvasSize.hooks';
