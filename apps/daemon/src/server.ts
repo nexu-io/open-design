@@ -520,6 +520,7 @@ import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerCreatorWorkbenchRoutes } from './routes/creator-workbench.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -3740,6 +3741,11 @@ export async function startServer({
 
   registerAutomationRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
+  });
+  registerCreatorWorkbenchRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    projectStore: { getProject },
   });
 
   // Reconcile follow-up — the inline POST /api/projects body that lived
