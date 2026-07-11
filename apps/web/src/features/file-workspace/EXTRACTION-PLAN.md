@@ -343,7 +343,21 @@ cluster (`useWorkspaceKeyboardShortcuts`).
   2's entry when done.
 - **Extraction shape**: feature-local hook (small) or merged into cluster 2.
 - **Risk**: low.
-- **Status**: pending.
+- **Status**: done. Cluster 2 had already landed by the time this was
+  reached, so — per the plan's own fallback — it became its own small hook
+  instead of folding in: `hooks/useDesignFilesPanelState.hooks.ts`
+  (`useDesignFilesPanelState` + `useWiredDesignFilesPanelState` wirer).
+  `applyLibraryAsset` (from `providers/registry`) IS real transport, unlike
+  cluster 5's `createTerminal` — so it got a proper port
+  (`DesignFilesLibraryPort` in `ports.ts`, bound in `dependencies.ts`)
+  rather than a direct import, per the task brief's port-wrapping rule.
+  `designFilesNavRef` is typed `MutableRefObject<DesignFilesNavState>` (not
+  `RefObject<DesignFilesNavState>`) on the controller — same class of gotcha
+  as cluster 5's `launcherBtnRef`: the ref is never null, and
+  `DesignFilesPanel`'s `navState?: DesignFilesNavState` prop rejects the
+  `| null` that `RefObject<T>.current` always adds. 7 new hook tests
+  (`useDesignFilesPanelState.test.tsx`). FileWorkspace.tsx: 1634 → 1620
+  lines (smallest single-cluster delta so far, as the plan predicted).
 
 ## Cluster 7 — Page-view analytics mount effect
 

@@ -19,7 +19,6 @@ import {
 } from '../analytics/events';
 import { useT } from '../i18n';
 import {
-  applyLibraryAsset,
   createProjectFolder,
   deleteProjectFolder,
 } from '../providers/registry';
@@ -54,7 +53,7 @@ import {
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
-import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
+import { DesignFilesPanel } from './DesignFilesPanel';
 import { DesignBrowserPanel, labelFromUrl } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
@@ -74,7 +73,6 @@ import type { ChatMessage } from '../types';
 import {
   colorHexFromBrandJson,
   colorHexFromDesignMd,
-  createDefaultDesignFilesNavState,
   DESIGN_FILES_TAB,
   DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS,
   DESIGN_SYSTEM_GUIDANCE_FILES,
@@ -126,6 +124,7 @@ import {
   truncateDesignSystemActivityText,
   useBrowserTabs,
   useTabReorderDnd,
+  useWiredDesignFilesPanelState,
   useWiredFileOperations,
   useWiredProjectFolders,
   useWiredSketches,
@@ -417,7 +416,6 @@ export function FileWorkspace({
     tabsState.active ?? defaultRootTab,
   );
 
-  const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
@@ -429,15 +427,6 @@ export function FileWorkspace({
   // ref the orchestrator updates at render time right after
   // `useWorkspaceContextTracking` below, mirroring `openFileRef` above.
   const orderedWorkspaceTabsRef = useRef<WorkspaceOrderedTab[]>([]);
-  const designFilesNavProjectIdRef = useRef(projectId);
-  const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
-  if (designFilesNavProjectIdRef.current !== projectId) {
-    designFilesNavProjectIdRef.current = projectId;
-    designFilesNavRef.current = createDefaultDesignFilesNavState();
-  }
-  const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
-    designFilesNavRef.current = state;
-  }, []);
 
   // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
   // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a
@@ -993,6 +982,19 @@ export function FileWorkspace({
     tabsStateActive: tabsState.active,
     onTabsStateChange,
     workspaceTabsState,
+  });
+
+  const {
+    designFilesNavRef,
+    onDesignFilesNavStateChange,
+    showLibraryPicker,
+    setShowLibraryPicker,
+    handleLibraryPickerConfirm,
+  } = useWiredDesignFilesPanelState({
+    projectId,
+    uploadDir,
+    onRefreshFiles,
+    openFile,
   });
 
   const { quickSwitcherOpen, setQuickSwitcherOpen } = useWiredWorkspaceKeyboardShortcuts({
@@ -1589,23 +1591,7 @@ export function FileWorkspace({
         {showLibraryPicker ? (
           <LibraryPicker
             onClose={() => setShowLibraryPicker(false)}
-            onConfirm={async (assets) => {
-              // Copy each picked asset into the project's design files (under the
-              // folder currently in view, if any). Apply records a provenance
-              // back-link so the registry knows the asset was consumed. For
-              // element-pick captures, `includeElement` also drops the captured
-              // markup as a companion `.element.html` file so the element's text
-              // lands in Design Files alongside its screenshot.
-              const dir = uploadDir || undefined;
-              let lastRelPath: string | null = null;
-              for (const asset of assets) {
-                const res = await applyLibraryAsset(asset.id, projectId, dir, { includeElement: true });
-                if (res?.relPath) lastRelPath = res.relPath;
-                if (res?.elementRelPath) lastRelPath = res.elementRelPath;
-              }
-              await onRefreshFiles();
-              if (lastRelPath) openFile(lastRelPath);
-            }}
+            onConfirm={handleLibraryPickerConfirm}
           />
         ) : null}
       </AnimatePresence>

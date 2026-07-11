@@ -2,6 +2,7 @@
 // interface it owns. The slice depends on this port, never on `providers/`
 // directly; a provider is bound to it in `dependencies.ts`. Tests supply a
 // hand-written fake — no global `fetch` mocking, no module-path mocks.
+import type { LibraryApplyResponse } from '@open-design/contracts';
 import type { ExtractBrandFromHtmlOutcome } from '../../runtime/brands';
 import type { ProjectFile, ProjectFolder, RenameProjectFileResponse } from '../../types';
 import type { UploadProjectFilesResult } from './types';
@@ -108,4 +109,15 @@ export interface FileOperationsPort {
     name: string,
     content: string,
   ): Promise<ProjectFile | null>;
+}
+
+/** Transport the design-files library-picker "apply asset" flow needs: copy
+ *  a picked library asset into the project's design files. */
+export interface DesignFilesLibraryPort {
+  applyLibraryAsset(
+    assetId: string,
+    projectId: string,
+    dir?: string,
+    opts?: { includeElement?: boolean },
+  ): Promise<LibraryApplyResponse | null>;
 }
