@@ -6,10 +6,12 @@ import {
   activeLiveArtifactForTab,
   arraysEqual,
   browserTabIndex,
+  browserTabRenderInfo,
   browserTabsFromState,
   consumeFileWorkspaceTabShortcut,
   createDefaultDesignFilesNavState,
   defaultSketchState,
+  fileTabRenderInfo,
   formatBrowserTabUrl,
   isBrowserTabId,
   isLiveArtifactImplementationPath,
@@ -35,7 +37,7 @@ import type {
   SketchState,
   WorkspaceOrderedTab,
 } from '../../../src/features/file-workspace/types';
-import type { LiveArtifactWorkspaceEntry } from '../../../src/types';
+import type { Conversation, LiveArtifactWorkspaceEntry } from '../../../src/types';
 
 function browserTab(id: string, over: Partial<BrowserWorkspaceTab> = {}): BrowserWorkspaceTab {
   return { id, label: 'Browser', ...over };
@@ -488,5 +490,94 @@ describe('createDefaultDesignFilesNavState', () => {
     const a = createDefaultDesignFilesNavState();
     const b = createDefaultDesignFilesNavState();
     expect(a.kindFilter).not.toBe(b.kindFilter);
+  });
+});
+
+describe('browserTabRenderInfo', () => {
+  it('falls back to the tab label when there is no URL yet', () => {
+    expect(browserTabRenderInfo(browserTab('__browser__:1', { label: 'Browser', url: undefined }))).toEqual({
+      label: 'Browser',
+      title: 'Browser',
+    });
+  });
+
+  it('prefers the page title over the URL-derived label once known', () => {
+    const result = browserTabRenderInfo(
+      browserTab('__browser__:1', { label: 'Browser', title: 'Example Site', url: 'https://example.com/' }),
+    );
+    expect(result.label).toBe('Example Site');
+    expect(result.title).toBe('Example Site\nhttps://example.com/');
+  });
+
+  it('derives a label from the URL when there is no page title', () => {
+    const result = browserTabRenderInfo(
+      browserTab('__browser__:1', { label: 'Browser', title: undefined, url: 'https://example.com/' }),
+    );
+    expect(result.label).toBe('example.com');
+  });
+});
+
+describe('fileTabRenderInfo', () => {
+  const visibleFiles: ProjectFile[] = [
+    { name: 'a.md', path: 'a.md', type: 'file', size: 1, mtime: 0, kind: 'text', mime: 'text/markdown' },
+  ];
+
+  it('labels a plain on-disk file by name, with kind from the file', () => {
+    const result = fileTabRenderInfo('a.md', {}, visibleFiles, [], [], [], (key) => key);
+    expect(result).toEqual({
+      label: 'a.md',
+      iconNameOverride: undefined,
+      kind: 'text',
+      liveArtifact: undefined,
+      isPending: false,
+    });
+  });
+
+  it('appends a dirty mark for an unsaved sketch', () => {
+    const sketches: Record<string, SketchState> = {
+      'sketch-1.sketch.json': { ...defaultSketchState('sketch-1.sketch.json', emptySketchScene('sketch-1.sketch.json')), dirty: true, persisted: true },
+    };
+    const result = fileTabRenderInfo('sketch-1.sketch.json', sketches, [], [], [], [], (key) => key);
+    expect(result.label).toBe('sketch-1.sketch.json •');
+    expect(result.kind).toBe('sketch');
+    expect(result.isPending).toBe(false);
+  });
+
+  it('marks a never-saved sketch as pending', () => {
+    const sketches: Record<string, SketchState> = {
+      'sketch-1.sketch.json': defaultSketchState('sketch-1.sketch.json', emptySketchScene('sketch-1.sketch.json')),
+    };
+    const result = fileTabRenderInfo('sketch-1.sketch.json', sketches, [], [], [], [], (key) => key);
+    expect(result.isPending).toBe(true);
+  });
+
+  it('prefers a live-artifact title and kind when the tab has one', () => {
+    const liveArtifact = { tabId: 'live:1', title: 'My Artifact' } as unknown as LiveArtifactWorkspaceEntry;
+    const result = fileTabRenderInfo('live:1', {}, [], [liveArtifact], [], [], (key) => key);
+    expect(result.label).toBe('My Artifact');
+    expect(result.kind).toBe('live-artifact');
+    expect(result.liveArtifact).toBe(liveArtifact);
+  });
+
+  it('gives a terminal tab a friendly numbered label and glyph', () => {
+    const tabNames = ['terminal:a', 'terminal:b'];
+    const result = fileTabRenderInfo('terminal:b', {}, [], [], tabNames, [], (key) => key);
+    expect(result.label).toBe('workspace.newTerminal 2');
+    expect(result.iconNameOverride).toBe('terminal');
+  });
+
+  it('does not number a single terminal tab', () => {
+    const result = fileTabRenderInfo('terminal:a', {}, [], [], ['terminal:a'], [], (key) => key);
+    expect(result.label).toBe('workspace.newTerminal');
+  });
+
+  it('labels a side-chat tab by its conversation title, falling back to a default', () => {
+    const conversations = [{ id: 'conv-1', title: 'Design review' } as unknown as Conversation];
+    const result = fileTabRenderInfo('chat:conv-1', {}, [], [], [], conversations, (key) => key);
+    expect(result.label).toBe('Design review');
+    expect(result.iconNameOverride).toBe('comment');
+
+    const untitled = fileTabRenderInfo('chat:conv-2', {}, [], [], [], conversations, (key) => key);
+    expect(untitled.label).toBe('workspace.sideChatDefaultTitle');
   });
 });
