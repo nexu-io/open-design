@@ -838,6 +838,19 @@ export function pickLatestShareDeployment(
     .sort(compareDeploymentsByNewest)[0] ?? null;
 }
 
+/**
+ * Resolves a deployment's share URL to an absolute URL. `origin` is injected
+ * (the caller's `WindowOpenPort.getLocationOrigin()`) rather than read from a
+ * bare `window` here, since `rules.ts` stays DOM-free per the guard.
+ */
+export function resolveShareUrl(rawUrl: string, origin: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (!origin) return trimmed;
+  return new URL(trimmed, origin).toString();
+}
+
 // ---------------------------------------------------------------------------
 // Manual-edit inspector style rules. Pure normalization/merge over the
 // element style snapshot the inspector reads back from the iframe bridge.

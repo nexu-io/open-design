@@ -2,9 +2,23 @@
 // it owns. The slice depends on this port, never on `providers/` directly; a
 // provider is bound to it in `dependencies.ts`. Tests supply a hand-written
 // fake — no global `fetch` mocking, no module-path mocks.
-import type { ChatAttachment, ProjectFileVersion, ProjectTemplate } from '@open-design/contracts';
+import type {
+  ChatAttachment,
+  CloudflarePagesConfigHints,
+  CloudflarePagesDeploySelection,
+  DeployConfigResponse,
+  DeployProjectFileResponse,
+  DeployProviderId,
+  DeploymentInfo,
+  ProjectTemplate,
+  ProjectFileVersion,
+  SocialShareRequest,
+  SocialShareResponse,
+  UpdateDeployConfigRequest,
+} from '@open-design/contracts';
 import type { LiveArtifact, LiveArtifactRefreshLogEntry } from '../../types';
 import type {
+  CloudflarePagesZoneOption,
   DocumentPreview,
   LiveArtifactCodeVariant,
   LiveArtifactRefreshResult,
@@ -119,9 +133,15 @@ export interface ChromeActionsHostPort {
   getChromeActionsHost(): HTMLElement | null;
 }
 
-/** Open a URL in a new tab (DOM-touching, so a port). */
+/**
+ * Open a URL in a new tab (DOM-touching, so a port). `getLocationOrigin`
+ * lives here too — same "trivial `window` read/write" category — and backs
+ * the deploy flow's share-URL resolution (a relative share path needs
+ * `window.location.origin` to become absolute).
+ */
 export interface WindowOpenPort {
   openInNewTab(url: string): void;
+  getLocationOrigin(): string;
 }
 
 /** Transport the markdown viewer needs: load/save the file text, upload pasted/dropped images. */
@@ -161,4 +181,28 @@ export interface ThemeWatchPort {
  */
 export interface MarkdownEditorMeasurePort {
   measureEditorBlockOffsets(textarea: HTMLTextAreaElement, blockLines: number[], text: string): number[] | null;
+}
+
+/**
+ * Transport the deploy/publish flow needs: read existing deployments/config,
+ * save provider credentials, deploy the file, poll a pending link, list
+ * Cloudflare Pages zones, and build the social-share payload for a deployed
+ * URL.
+ */
+export interface DeployTransportPort {
+  fetchProjectDeployments(projectId: string): Promise<DeploymentInfo[]>;
+  fetchDeployConfig(providerId?: DeployProviderId): Promise<DeployConfigResponse | null>;
+  updateDeployConfig(input: UpdateDeployConfigRequest): Promise<DeployConfigResponse | null>;
+  deployProjectFile(
+    projectId: string,
+    fileName: string,
+    providerId?: DeployProviderId,
+    cloudflarePages?: CloudflarePagesDeploySelection,
+  ): Promise<DeployProjectFileResponse>;
+  checkDeploymentLink(projectId: string, deploymentId: string): Promise<DeployProjectFileResponse>;
+  fetchCloudflarePagesZones(): Promise<{
+    zones: CloudflarePagesZoneOption[];
+    cloudflarePages?: CloudflarePagesConfigHints;
+  } | null>;
+  createSocialSharePayload(input: SocialShareRequest): Promise<SocialShareResponse>;
 }

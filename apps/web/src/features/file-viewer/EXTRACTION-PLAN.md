@@ -305,7 +305,46 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 
 ### Cluster E — Deploy & Publish ★ recommended next pending cluster
 
-- **Status:** pending
+- **Status:** partially done. The hook/logic half landed: all state, the
+  `deploymentMapForCurrentFile`/`syncDeployFormFromConfig`/
+  `cloudflareConfigHintsFromForm`/`buildDeployConfigRequest`/
+  `loadDeployProvider`/`loadCloudflareZones` helpers, the deploy-fetch effect,
+  all seven actions, and every derived value/label moved into
+  `hooks/useDeployFlow.hooks.ts` (`useDeployFlow`/`useWiredDeployFlow`),
+  wired into the orchestrator via one `useWiredDeployFlow({...})` call
+  (placed after `exportTitle` is defined, since the social-share derivation
+  needs it as a dep — hook-call position doesn't need to match the old
+  variable's position, only precede first use). New `DeployTransportPort`
+  (bundles `fetchProjectDeployments`/`fetchDeployConfig`/`updateDeployConfig`/
+  `deployProjectFile`/`checkDeploymentLink`/`fetchCloudflarePagesZones`/
+  `createSocialSharePayload`) bound in `dependencies.ts`; `CloudflarePagesZoneOption`/
+  `DeployResultCard` moved to `types.ts`; `resolveShareUrl` moved to `rules.ts`
+  taking `origin` as an injected param instead of reading bare `window`, fed by
+  a new `WindowOpenPort.getLocationOrigin()` (real binding in
+  `providers/file-viewer/window-open.ts`). The modal's Escape-key dismiss now
+  goes through the existing `DismissPort.subscribeEscapeKey` (document-level)
+  instead of a bare `window` keydown listener — behaviorally equivalent in a
+  real browser (keydown bubbles to `document`); updated the one existing test
+  that dispatched synthetically on `window` to dispatch on `document` instead,
+  matching the convention already used by a sibling already-migrated modal's
+  Escape test in the same file.
+  **Two cross-cluster touches preserved via injected callback deps** (easy to
+  miss since they don't appear in this plan's original "Owns" list):
+  `deployLinkCopy.resetCopiedDeployLink()` (owned by the separate, already-
+  extracted `useWiredDeployLinkCopy` hook) fires from 3 call sites inside this
+  cluster's actions/effect — threaded in as `deps.resetCopiedDeployLink`;
+  `setDeployMenuOpen(false)` (owned by the not-yet-extracted deploy dropdown
+  menu, out of this cluster's scope) fires inside `openDeployModal` — threaded
+  in as `deps.closeDeployMenu`.
+  **NOT yet done**: the JSX (deploy modal + share menu + the deploy/share
+  toolbar trigger) is still inline in `FileViewer.tsx`, now just sourcing all
+  its values from the hook's destructured return instead of local
+  state/functions — this is a legitimate, safe intermediate state (the guard
+  only restricts `features/**` files, not orchestrator JSX), but the cluster
+  isn't at its full target shape (hook + 2 dumb components) until that JSX
+  moves into `components/DeployModal.tsx` + `components/ShareMenu.tsx`. Do
+  that as the next pass on this cluster before moving to a new one, per the
+  original plan's shape.
 - **Lines (scattered):** state ~2144–2181; helpers ~2571–2685
   (`deploymentMapForCurrentFile`, `syncDeployFormFromConfig`,
   `cloudflareConfigHintsFromForm`, `buildDeployConfigRequest`,

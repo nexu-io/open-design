@@ -292,3 +292,11 @@ export type {
   ArtifactToolbarClickElement,
 } from './hooks/useArtifactAnalytics.hooks';
 export type { ArtifactExportToast, ArtifactTrackingAnalytics } from './types';
+
+// HtmlViewer's deploy/publish flow: provider selection, credential form
+// state, the Cloudflare Pages zone picker, the deploy action + pending-link
+// retry, and the social-share payload/derived-label plumbing. Entirely
+// HTTP-driven, no srcDoc/postMessage surface.
+export { useWiredDeployFlow } from './hooks/useDeployFlow.hooks';
+export type { DeployFlowController, DeployFlowDeps } from './hooks/useDeployFlow.hooks';
+export type { CloudflarePagesZoneOption, DeployResultCard } from './types';
