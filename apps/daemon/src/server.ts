@@ -5032,20 +5032,34 @@ export async function startServer({
     // drive a second close-handler pass that finalizes the run as failed before
     // the retry ever spawns.
     const tearDownAttemptForRetry = () => {
+      // Snapshot the failing attempt's child + process group BEFORE we detach
+      // them, so the reap targets THIS attempt's group and never the next one.
+      const priorChild = run.child;
+      const priorProcessGroupId = run.processGroupId;
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
-      destroyChildStdio(run.child);
+      destroyChildStdio(priorChild);
+      // Disband the WHOLE process group of the failed attempt, not just the
+      // direct child. A same-run retry that only SIGTERMs run.child leaves the
+      // CLI's spawned descendants (MCP servers, tool subprocesses) orphaned
+      // (re-parented to PID 1), accumulating one leaked group per retry. Reap by
+      // the CAPTURED pgid — the SIGKILL escalation is bound to it, so it can
+      // never hit the next attempt's group (the cross-generation kill fixed in
+      // #5202). On win32 / no pgid, fall back to signalling the direct child.
+      const reaped = design.runs.reapProcessGroup(priorProcessGroupId);
       if (
-        run.child &&
-        typeof run.child.kill === 'function' &&
-        run.child.exitCode === null &&
-        !run.child.killed
+        !reaped &&
+        priorChild &&
+        typeof priorChild.kill === 'function' &&
+        priorChild.exitCode === null &&
+        !priorChild.killed
       ) {
-        try { run.child.kill('SIGTERM'); } catch {}
+        try { priorChild.kill('SIGTERM'); } catch {}
       }
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
+      run.processGroupId = null;
       run.acpSession = null;
       run.exitCode = null;
       run.signal = null;
