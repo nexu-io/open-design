@@ -62,6 +62,8 @@ function makePort(
     fetchLiveArtifacts: vi.fn(async () => []),
     writeProjectTextFile: vi.fn(async () => null),
     subscribeProjectFileEvents: vi.fn(() => () => {}),
+    hasAutoSendFirstMessageFlag: vi.fn(() => false),
+    readAmrGateOkFlag: vi.fn(() => false),
     ...overrides,
   };
 }

@@ -52,6 +52,12 @@ export interface ProjectViewTransportPort {
   readSavedChatPanelWidth(): number;
   /** Persist the chat-panel-width preference (local-storage backed). */
   saveChatPanelWidth(width: number): void;
+  /** Whether the home-create -> project first-turn auto-send flag is armed
+   *  for this project (session-storage backed). */
+  hasAutoSendFirstMessageFlag(projectId: string): boolean;
+  /** Whether the AMR balance gate was already precleared for this project's
+   *  auto-send (session-storage backed). */
+  readAmrGateOkFlag(projectId: string): boolean;
   /** Read the auto-send attachments staged for a project's first turn (session-storage backed). */
   readAutoSendAttachments(projectId: string): ChatAttachment[];
   /** Read the auto-send run-context staged for a project's first turn (session-storage backed). */

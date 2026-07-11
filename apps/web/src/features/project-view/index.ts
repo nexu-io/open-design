@@ -222,6 +222,18 @@ export {
 } from './hooks/useProjectFilesAndArtifacts.hooks';
 export { useProjectLiveEvents, useWiredProjectLiveEvents } from './hooks/useProjectLiveEvents.hooks';
 export { useIframeEvictionOnContextChange } from './hooks/useIframeEvictionOnContextChange.hooks';
+export type {
+  OnboardingEntryController,
+  AutoSendFirstMessageParams,
+} from './hooks/useOnboardingFunnel.hooks';
+export {
+  useOnboardingEntry,
+  useWiredOnboardingEntry,
+  useFirstLoopViewedTracking,
+  useOnboardingPromptPrefilledTracking,
+  useAutoSendFirstMessage,
+  useWiredAutoSendFirstMessage,
+} from './hooks/useOnboardingFunnel.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

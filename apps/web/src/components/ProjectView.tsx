@@ -48,15 +48,9 @@ import {
   trackArtifactHeaderClick,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
-  trackPageView,
-  trackOnboardingPromptPrefilled,
   trackOnboardingFirstPromptSent,
   trackOnboardingFirstGenerationCompleted,
 } from '../analytics/events';
-import {
-  clearOnboardingSessionId,
-  peekOnboardingSessionId,
-} from '../analytics/onboarding-session';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import {
   canAutoRenameProjectFromPrompt,
@@ -179,16 +173,14 @@ import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { FirstArtifactHint } from './FirstArtifactHint';
 import {
-  consumeOnboardingEntryForProject,
   hasSentFirstOnboardingPrompt,
   markFirstOnboardingPromptSent,
   hasCompletedFirstOnboardingGeneration,
   markFirstOnboardingGenerationCompleted,
-  type OnboardingEntry,
 } from '../onboarding/onboarding-entry';
 import { producedPreviewableArtifact } from '../onboarding/first-generation';
 import { sentPrefilledPrompt } from '../onboarding/first-prompt';
-import { beginFirstLoop, recordFirstLoopStep } from '../onboarding/first-loop';
+import { recordFirstLoopStep } from '../onboarding/first-loop';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -228,6 +220,10 @@ import {
   useWiredProjectFilesAndArtifacts,
   useWiredProjectLiveEvents,
   useIframeEvictionOnContextChange,
+  useWiredOnboardingEntry,
+  useFirstLoopViewedTracking,
+  useOnboardingPromptPrefilledTracking,
+  useWiredAutoSendFirstMessage,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -280,8 +276,6 @@ import {
   pluginWorkflowSuccessContent,
   pluginWorkflowFailureContent,
   stripQueueOnlyFromMeta,
-  autoSendFirstMessageKey,
-  autoSendAmrGateOkKey,
   resolveTerminalEndedAt,
   createBufferedTextUpdates,
   brandExtractionPreviewFileName,
@@ -438,32 +432,22 @@ export function ProjectView({
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
-  // Onboarding first-generation funnel (spec §11.1). Consume the pending entry
-  // (set by the Home recommendation) exactly once on mount; the refs guard the
-  // two lifecycle events so each fires only for the genuine first send / first
-  // successful generation of a recommendation-started project.
-  const onboardingEntryInitRef = useRef(false);
-  const onboardingEntryRef = useRef<OnboardingEntry | null>(null);
-  // The prompt the recommendation prefilled into the composer. Prefer the seed
-  // cached WITH the onboarding entry (it survives a reopen-before-send, whereas
-  // `project.pendingPrompt` is wiped by `onClearPendingPrompt` on the first
-  // mount); fall back to `pendingPrompt` for the very first mount / any project
-  // without a cached seed. The first-prompt-sent funnel event compares the
-  // actually-sent prompt against this seed so `has_prefilled_prompt` reflects
-  // real behavior — the user is free to edit, clear, or replace the suggestion
-  // before sending (spec §7.4 / §8.2).
-  const onboardingSeedPromptRef = useRef('');
-  if (!onboardingEntryInitRef.current) {
-    onboardingEntryInitRef.current = true;
-    onboardingEntryRef.current = consumeOnboardingEntryForProject(project.id);
-    onboardingSeedPromptRef.current =
-      onboardingEntryRef.current?.seedPrompt ?? (project.pendingPrompt ?? '').trim();
-    // Pin the first-loop ledger for THIS project so later delivery taps (the
-    // FileViewer share/export path) can close the loop by project id without
-    // prop plumbing. Project-scoped, so an unrelated project's delivery never
-    // closes this loop.
-    if (onboardingEntryRef.current) beginFirstLoop(project.id, onboardingEntryRef.current);
-  }
+  const {
+    onboardingEntryRef,
+    onboardingSeedPromptRef,
+    autoSendSeedRef,
+    autoSendAttachmentsRef,
+    autoSendContextRef,
+    autoSendFirstMessageRef,
+    autoSendAmrGateOkRef,
+    initialDraft,
+    setInitialDraft,
+  } = useWiredOnboardingEntry(
+    project.id,
+    project.pendingPrompt,
+    onClearPendingPrompt,
+    analytics.track,
+  );
   // The once-per-project funnel guards live in the onboarding-entry module
   // (project-keyed), not mount-local refs: ProjectView remounts on every
   // leave/reopen, and the entry now survives those remounts via its cache, so a
@@ -482,42 +466,7 @@ export function ProjectView({
     : null;
   const projectIsProgrammaticBrandExtraction =
     isProgrammaticBrandExtractionProject(currentProject.metadata);
-  // P0 page_view page_name=chat_panel — fire once per project mount.
-  // ProjectView outlives conversation switches (ChatPane is keyed by
-  // activeConversationId so it remounts when the user switches chats,
-  // but this component does not), so page_view stays a "chat-panel
-  // entry" metric instead of becoming a "conversation switch" count.
-  // Reviewer #2285 (mrcfps, 2026-05-20 04:08) flagged the previous
-  // ChatComposer-level emit for skewing the funnel.
-  const chatPanelPageViewFiredRef = useRef<string | null>(null);
   const { mountedRef, scheduleProjectTimeout, clearProjectTimeout } = useProjectTimeouts();
-
-  useEffect(() => {
-    if (chatPanelPageViewFiredRef.current === project.id) return;
-    chatPanelPageViewFiredRef.current = project.id;
-    trackPageView(analytics.track, { page_name: 'chat_panel' });
-    // Onboarding's 4th step ("生成进度页") fires here, not in
-    // `DesignSystemDetailView`: the Generate path navigates
-    // straight to the project's chat_panel, not to the design
-    // system detail surface. If an onboarding session id is still
-    // in sessionStorage we stamp the funnel's last row here and
-    // clear so any later DS visit doesn't inherit the attribution.
-    // E2E (2026-05-21) confirmed this is the only path users
-    // actually take — observed: page_view chat_panel fires, but
-    // page_view design_system_project never did because that
-    // route isn't visited from the embedded onboarding generate.
-    const onboardingSessionId = peekOnboardingSessionId();
-    if (onboardingSessionId) {
-      trackPageView(analytics.track, {
-        page_name: 'onboarding',
-        area: 'generation_progress',
-        step_index: 'progress',
-        step_name: 'generation',
-        onboarding_session_id: onboardingSessionId,
-      });
-      clearOnboardingSessionId();
-    }
-  }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const conversationsRef = useRef<Conversation[]>([]);
   useEffect(() => {
@@ -1099,16 +1048,7 @@ export function ProjectView({
     }
     return false;
   }, [projectFileNames]);
-  // First-loop ledger: the artifact reaching the preview is the 查看 step of the
-  // loop (spec §8.3). Recorded once per project; a no-op for any project not
-  // started from a recommendation.
-  const firstLoopViewedRef = useRef(false);
-  useEffect(() => {
-    if (!hasPreviewableArtifact || firstLoopViewedRef.current) return;
-    if (!onboardingEntryRef.current) return;
-    firstLoopViewedRef.current = true;
-    recordFirstLoopStep(analytics.track, 'artifact_viewed', project.id);
-  }, [hasPreviewableArtifact, analytics.track, project.id]);
+  useFirstLoopViewedTracking(hasPreviewableArtifact, onboardingEntryRef, project.id, analytics.track);
   const activeProjectFileName = useMemo(
     () => (
       openTabsState.active && projectFileNames.has(openTabsState.active)
@@ -5148,73 +5088,11 @@ export function ProjectView({
     ? COMMENT_INSPECTOR_PANEL_WIDTH
     : chatPanelWidthRef.current;
 
-  // Hand the pending prompt to ChatPane exactly once per project. The local
-  // project-scoped snapshot survives the conversation-id remount, while the
-  // persisted pendingPrompt is cleared so refreshes and later entries do not
-  // re-seed the composer.
-  //
-  // PluginLoopHome auto-send case: when the project was created with
-  // `autoSendFirstMessage`, app.tsx left a sessionStorage flag telling us
-  // to fire the prompt as a real user message immediately. We must NOT
-  // seed initialDraft in that case — otherwise the textarea echoes the
-  // prompt while it is also streaming as the first user message. The ref
-  // captures the prompt independently so downstream effects can still
-  // dispatch the auto-send without going through initialDraft.
-  const autoSendSeedRef = useRef<string | null>(null);
-  const autoSendAttachmentsRef = useRef<ChatAttachment[] | null>(null);
-  const autoSendContextRef = useRef<RunContextSelection | null>(null);
-  const autoSendFirstMessageRef = useRef(false);
-  const autoSendAmrGateOkRef = useRef(false);
-  if (autoSendSeedRef.current === null) {
-    let isAutoSend = false;
-    let amrGateOk = false;
-    try {
-      isAutoSend = Boolean(
-        window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
-      );
-      amrGateOk = Boolean(
-        window.sessionStorage.getItem(autoSendAmrGateOkKey(project.id)),
-      );
-    } catch {
-      /* sessionStorage may be unavailable; treat as manual flow. */
-    }
-    autoSendFirstMessageRef.current = isAutoSend;
-    autoSendAmrGateOkRef.current = isAutoSend && amrGateOk;
-    autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
-    autoSendAttachmentsRef.current = isAutoSend
-      ? projectViewTransportPort.readAutoSendAttachments(project.id)
-      : [];
-    autoSendContextRef.current = isAutoSend
-      ? projectViewTransportPort.readAutoSendContext(project.id)
-      : null;
-  }
   const initialWorkspaceContexts = autoSendContextRef.current?.workspaceItems ?? [];
   const brandEnrichmentEligibleForProject =
     config.mode === 'daemon' &&
     projectIsProgrammaticBrandExtraction &&
     !autoSendFirstMessageRef.current;
-  const [initialDraft, setInitialDraft] = useState<
-    { projectId: string; value: string } | undefined
-  >(
-    autoSendSeedRef.current || !project.pendingPrompt
-      ? undefined
-      : { projectId: project.id, value: project.pendingPrompt },
-  );
-  useEffect(() => {
-    const pendingPrompt = project.pendingPrompt;
-    if (!pendingPrompt) return;
-    if (autoSendFirstMessageRef.current) {
-      autoSendSeedRef.current = pendingPrompt;
-      onClearPendingPrompt();
-      return;
-    }
-    setInitialDraft((current) =>
-      current?.projectId === project.id
-        ? current
-        : { projectId: project.id, value: pendingPrompt },
-    );
-    onClearPendingPrompt();
-  }, [project.id, project.pendingPrompt, onClearPendingPrompt]);
   const chatInitialDraft =
     chatSeed?.value ??
     (
@@ -5222,23 +5100,7 @@ export function ProjectView({
         ? undefined
         : (initialDraft?.projectId === project.id ? initialDraft.value : undefined)
     );
-  // Home → Studio handoff confirmation (spec §11.1 onboarding_prompt_prefilled):
-  // the recommendation's first request actually reached this composer. Fires
-  // once, only for recommendation-started projects that arrived with a seed.
-  const onboardingPrefilledFiredRef = useRef(false);
-  useEffect(() => {
-    const entry = onboardingEntryRef.current;
-    if (!entry || onboardingPrefilledFiredRef.current) return;
-    if (typeof chatInitialDraft !== 'string' || chatInitialDraft.trim().length === 0) return;
-    onboardingPrefilledFiredRef.current = true;
-    trackOnboardingPromptPrefilled(analytics.track, {
-      entry_source: entry.source,
-      product_type: entry.productType,
-      recommendation_id: entry.recommendationId,
-      ...(entry.role ? { role: entry.role } : {}),
-      ...(entry.useCases && entry.useCases.length > 0 ? { use_cases: entry.useCases } : {}),
-    });
-  }, [chatInitialDraft, analytics.track]);
+  useOnboardingPromptPrefilledTracking(onboardingEntryRef, chatInitialDraft, analytics.track);
   const brandEnrichmentPromptSeed =
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
@@ -5623,73 +5485,24 @@ export function ProjectView({
   // through createProject. Once the conversation id resolves and the
   // composer is mounted, fire handleSend(pendingPrompt) exactly once so
   // the user lands inside a running pipeline without an extra click.
-  // We gate on `messages.length === 0` so a refresh after the run is
-  // mid-flight never double-fires; the sessionStorage flag is cleared
-  // immediately after the first dispatch.
-  const autoSentRef = useRef(false);
-  useEffect(() => {
-    if (autoSentRef.current) return;
-    if (!activeConversationId) return;
-    // Wait for the initial listMessages DB read to land. Without this gate
-    // the auto-send fires before the in-flight DB response, which then
-    // arrives with `setMessages([])` and wipes the freshly-pushed user +
-    // assistant placeholder out of React state — leaving the daemon's run
-    // with no in-memory message to attach the runId to.
-    if (!messagesInitialized) return;
-    if (streaming) return;
-    if (projectIsProgrammaticBrandExtraction) {
-      projectViewTransportPort.clearAutoSendSession(project.id);
-      autoSendAttachmentsRef.current = [];
-      autoSentRef.current = true;
-      return;
-    }
-    if (messages.length > 0) return;
-    let flag: string | null = null;
-    try {
-      flag = window.sessionStorage.getItem(autoSendFirstMessageKey(project.id));
-    } catch {
-      flag = null;
-    }
-    if (!flag) return;
-    // Prefer the seed captured at mount (autoSendSeedRef) — it survives
-    // even after onClearPendingPrompt wipes project.pendingPrompt on the
-    // server. Fall back to the live values for any edge case where the
-    // ref was not populated (e.g. sessionStorage error path).
-    const seed = (
-      autoSendSeedRef.current ||
-      (initialDraft?.projectId === project.id ? initialDraft.value : '') ||
-      project.pendingPrompt ||
-      ''
-    ).trim();
-    const attachments = autoSendAttachmentsRef.current ?? [];
-    const context = autoSendContextRef.current ?? projectViewTransportPort.readAutoSendContext(project.id);
-    if (!seed && attachments.length === 0) {
-      return;
-    }
-    autoSentRef.current = true;
-    if (isDesignSystemWorkspaceMetadata(project.metadata)) {
-      projectViewTransportPort.markDesignSystemAuditAutoRepairEligible(project.id);
-    }
-    projectViewTransportPort.clearAutoSendSession(project.id);
-    autoSendAttachmentsRef.current = [];
-    void handleSend(seed, attachments, [], {
-      ...(context ? { context } : {}),
-      // The home submit already gated this exact task (and the user answered
-      // any soft warning there); asking again would double-prompt.
-      ...(autoSendAmrGateOkRef.current ? { amrGatePrechecked: true } : {}),
-    });
-  }, [
-    activeConversationId,
-    messagesInitialized,
-    streaming,
-    messages.length,
+  useWiredAutoSendFirstMessage(
     project.id,
-    projectIsProgrammaticBrandExtraction,
-    project.metadata,
-    initialDraft,
-    project.pendingPrompt,
-    handleSend,
-  ]);
+    autoSendSeedRef,
+    autoSendAttachmentsRef,
+    autoSendContextRef,
+    autoSendAmrGateOkRef,
+    {
+      activeConversationId,
+      messagesInitialized,
+      streaming,
+      messagesLength: messages.length,
+      projectIsProgrammaticBrandExtraction,
+      projectMetadata: project.metadata,
+      projectPendingPrompt: project.pendingPrompt,
+      initialDraft,
+      handleSend,
+    },
+  );
 
   // Wire the Critique Theater drop-in mount into the project workspace.
   // The hook reads the M1 Settings toggle out of the existing

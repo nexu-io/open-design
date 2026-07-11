@@ -15,6 +15,29 @@ import {
   DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS,
 } from '../../features/project-view';
 
+/** Whether the home-create → project first-turn auto-send flag is armed for
+ *  this project. */
+export function hasAutoSendFirstMessageFlag(projectId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return Boolean(window.sessionStorage.getItem(autoSendFirstMessageKey(projectId)));
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the AMR balance gate was already precleared for this project's
+ *  auto-send (set by the home submit flow before routing through
+ *  createProject). */
+export function readAmrGateOkFlag(projectId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return Boolean(window.sessionStorage.getItem(autoSendAmrGateOkKey(projectId)));
+  } catch {
+    return false;
+  }
+}
+
 export function readAutoSendAttachments(projectId: string): ChatAttachment[] {
   if (typeof window === 'undefined') return [];
   try {
