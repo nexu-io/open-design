@@ -1131,14 +1131,14 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select className={styles.select} value={kind} onChange={(e) => setKind(e.target.value)}>
+        <select aria-label="Filter by kind" className={styles.select} value={kind} onChange={(e) => setKind(e.target.value)}>
           {KIND_FILTERS.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
             </option>
           ))}
         </select>
-        <select className={styles.select} value={source} onChange={(e) => setSource(e.target.value)}>
+        <select aria-label="Filter by source" className={styles.select} value={source} onChange={(e) => setSource(e.target.value)}>
           {SOURCE_FILTERS.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}

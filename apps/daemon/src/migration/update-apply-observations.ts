@@ -13,9 +13,9 @@ import {
   type ReleaseChannel,
 } from '@open-design/release';
 
-import type { AnalyticsContext, AnalyticsService } from './analytics.js';
-import { readPosthogConfig } from './analytics.js';
-import { readAppConfig, type AppConfigPrefs } from './app-config.js';
+import type { AnalyticsContext, AnalyticsService } from '../analytics.js';
+import { readPosthogConfig } from '../analytics.js';
+import { readAppConfig, type AppConfigPrefs } from '../app-config.js';
 
 const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';

@@ -29,6 +29,13 @@ import {
 
 const argv = process.argv.slice(2);
 
+const RESUME_CONTINUE_PROMPT =
+  'The previous turn was interrupted by a transient failure. ' +
+  'If your last response was cut off, continue it from where you left off ' +
+  'and keep any work already completed; otherwise complete the original ' +
+  'request. Inspect the current project files as needed before making ' +
+  'further changes.';
+
 // ---- Subcommand router ----------------------------------------------------
 //
 // `od` is two CLIs glued together:
@@ -6066,6 +6073,7 @@ async function runRun(args) {
                [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
+  od run continue <runId> [--follow]        Continue a resumable failed run.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
@@ -6140,6 +6148,56 @@ Common options:
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       console.log(`[run] cancelled ${id}`);
+      return;
+    }
+    case 'continue': {
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od run continue <runId> [--message "<text>"] [--follow] [--json]');
+        process.exit(2);
+      }
+      const statusResp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
+      if (!statusResp.ok) return structuredHttpFailure(statusResp, 'run-not-found');
+      const status = await statusResp.json();
+      if (status?.resumable !== true) {
+        const payload = {
+          error: {
+            code: 'run-not-resumable',
+            message: `Run ${id} does not have a safe recoverable native session.`,
+          },
+        };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else console.error(payload.error.message);
+        process.exit(1);
+      }
+      if (!status.projectId || !status.conversationId) {
+        const payload = {
+          error: {
+            code: 'run-missing-context',
+            message: `Run ${id} is missing project or conversation context.`,
+          },
+        };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else console.error(payload.error.message);
+        process.exit(1);
+      }
+      const message = await readRunMessageFromFlags(flags, RESUME_CONTINUE_PROMPT);
+      const body = {
+        projectId: status.projectId,
+        conversationId: status.conversationId,
+        message,
+        analyticsHints: { entryFrom: 'resume_continue' },
+        ...(status.agentId ? { agentId: status.agentId } : {}),
+      };
+      const data = await postJsonToDaemon(base, '/api/runs', body);
+      if (flags.json && !flags.follow) {
+        return process.stdout.write(JSON.stringify({
+          ...data,
+          continuedFromRunId: id,
+        }, null, 2) + '\n');
+      }
+      console.log(`[run] continued ${id} as ${data.runId}`);
+      if (flags.follow) await streamRunEvents(base, data.runId);
       return;
     }
     case 'watch': {

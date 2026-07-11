@@ -19,6 +19,7 @@
 import type { BrandColor, BrandColorRole, BrandFontSpec } from '@open-design/contracts';
 
 import { extractColors, extractFonts, normalizeColor, type ColorCandidate } from './prefetch.js';
+import { fetchExternalBrandAsset } from './safe-fetch.js';
 
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -62,9 +63,8 @@ function metaContent(html: string, nameOrProp: string): string {
 
 async function fetchText(url: string, cap: number, timeoutMs: number): Promise<string | null> {
   try {
-    const res = await fetch(url, {
+    const res = await fetchExternalBrandAsset(url, {
       headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,text/css,*/*;q=0.8' },
-      redirect: 'follow',
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;

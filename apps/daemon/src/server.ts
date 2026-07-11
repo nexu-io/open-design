@@ -210,7 +210,7 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from './runtimes/defs/amr.js';
-import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
+import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
   consumedImportNonces,
   getDesktopAuthSecret,
@@ -369,6 +369,7 @@ import { classifyRunFailure, isResumableFailure } from './run-failure-classifica
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
+  scanRunEventsForUsageAnalytics,
 } from './run-analytics-observability.js';
 import {
   createRunArtifactBaselines,
