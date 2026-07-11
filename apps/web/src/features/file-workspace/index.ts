@@ -5,7 +5,17 @@
 export { Tab } from './components/Tab';
 export { DesignSystemProjectLoading } from './components/DesignSystemProjectLoading';
 export { DesignSystemInlinePreview } from './components/DesignSystemInlinePreview';
+export { DesignSystemReviewCard } from './components/DesignSystemReviewCard';
 export { useWiredDesignSystemCardManifest } from './hooks/useDesignSystemCardManifest.hooks';
+export {
+  useWiredDesignSystemKitActions,
+  type DesignKitActionFeedbackTone,
+  type DesignSystemKitActionsController,
+} from './hooks/useDesignSystemKitActions.hooks';
+export {
+  useDesignSystemReviewCards,
+  type DesignSystemReviewCardsController,
+} from './hooks/useDesignSystemReviewCards.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
