@@ -7,6 +7,8 @@ import {
   postMemoryExtract,
   loadQueuedChatSends,
   saveQueuedChatSends,
+  readSavedChatPanelWidth,
+  saveChatPanelWidth,
 } from '../../providers/project-view';
 import type { ProjectViewTransportPort } from './ports';
 
@@ -16,4 +18,6 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   extractMemory: postMemoryExtract,
   loadQueuedChatSends,
   saveQueuedChatSends,
+  readSavedChatPanelWidth,
+  saveChatPanelWidth,
 };

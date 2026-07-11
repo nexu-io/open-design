@@ -19,6 +19,11 @@ export const SPLIT_RESIZE_HANDLE_WIDTH = 8;
 export const MIN_NORMAL_SPLIT_WIDTH =
   MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 
+/** Default chat-panel width (px) when no saved preference exists. */
+export const DEFAULT_CHAT_PANEL_WIDTH = 460;
+/** localStorage key the chat-panel width preference persists under. */
+export const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
+
 // Local mirrors of the daemon-disconnect identity constants. The authoritative
 // source is `apps/web/src/providers/daemon.ts`; the slice cannot import a
 // provider outside `dependencies.ts` (ADR 0002), so these are kept as local

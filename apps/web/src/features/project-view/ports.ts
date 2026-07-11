@@ -21,4 +21,8 @@ export interface ProjectViewTransportPort {
   loadQueuedChatSends(projectId: string): QueuedChatSend[];
   /** Persist the queued-chat-sends store for a project (local-storage backed). */
   saveQueuedChatSends(projectId: string, items: QueuedChatSend[]): void;
+  /** Read the saved chat-panel-width preference (local-storage backed). */
+  readSavedChatPanelWidth(): number;
+  /** Persist the chat-panel-width preference (local-storage backed). */
+  saveChatPanelWidth(width: number): void;
 }

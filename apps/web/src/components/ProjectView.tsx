@@ -463,8 +463,6 @@ let liveArtifactEventSequence = 0;
 // local literal to respect the web↔daemon boundary.
 const BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
-const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
-const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const COMMENT_INSPECTOR_PANEL_WIDTH = 320;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
@@ -490,31 +488,6 @@ function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): s
     projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
     'brand.html'
   );
-}
-
-function readSavedChatPanelWidth(): number {
-  if (typeof window === 'undefined') return DEFAULT_CHAT_PANEL_WIDTH;
-  try {
-    const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    return Number.isFinite(parsed)
-      ? clampPreferredChatPanelWidth(parsed)
-      : DEFAULT_CHAT_PANEL_WIDTH;
-  } catch {
-    return DEFAULT_CHAT_PANEL_WIDTH;
-  }
-}
-
-function saveChatPanelWidth(width: number): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CHAT_PANEL_WIDTH_STORAGE_KEY,
-      String(clampPreferredChatPanelWidth(width)),
-    );
-  } catch {
-    // localStorage can be unavailable in hardened browser contexts.
-  }
 }
 
 function autoSendFirstMessageKey(projectId: string): string {
@@ -1049,7 +1022,9 @@ export function ProjectView({
   const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
-  const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
+  const [chatPanelWidth, setChatPanelWidth] = useState(() =>
+    projectViewTransportPort.readSavedChatPanelWidth(),
+  );
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
   const [resizingChatPanel, setResizingChatPanel] = useState(false);
@@ -6829,7 +6804,7 @@ export function ProjectView({
     setResizingChatPanel(false);
     if (saveFinalWidth) {
       const finalWidth = renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current);
-      saveChatPanelWidth(finalWidth);
+      projectViewTransportPort.saveChatPanelWidth(finalWidth);
     }
   }, [renderPreferredChatPanelWidth]);
 
@@ -6963,7 +6938,7 @@ export function ProjectView({
     if (nextWidth === null) return;
     event.preventDefault();
     const next = applyChatPanelWidth(nextWidth);
-    saveChatPanelWidth(next);
+    projectViewTransportPort.saveChatPanelWidth(next);
   }, [applyChatPanelWidth]);
 
   // Hand the pending prompt to ChatPane exactly once per project. The local
