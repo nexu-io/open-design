@@ -273,6 +273,7 @@ import {
   PreviewViewportControls,
   FileVersionViewportControls,
   useWiredTemplateSave,
+  useWiredShareLinkCopy,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -3312,7 +3313,10 @@ function HtmlViewer({
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
-  const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
+  const shareLinkCopy = useWiredShareLinkCopy({
+    t,
+    onCopyFailed: () => setExportToast({ message: t('useEverywhere.copyFailed'), tone: 'error' }),
+  });
   const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
@@ -5749,23 +5753,6 @@ function HtmlViewer({
     }, 1800);
   }
 
-  async function copyShareLink(url: string) {
-    const safeUrl = url.trim();
-    if (!safeUrl) {
-      setShareLinkFeedback('failed');
-      setExportToast({ message: t('useEverywhere.copyFailed'), tone: 'error' });
-      return false;
-    }
-    const ok = await copyToClipboard(safeUrl);
-    const feedback = ok ? 'copied' : 'failed';
-    setShareLinkFeedback(feedback);
-    if (!ok) setExportToast({ message: t('useEverywhere.copyFailed'), tone: 'error' });
-    window.setTimeout(() => {
-      setShareLinkFeedback((current) => (current === feedback ? null : current));
-    }, 1800);
-    return ok;
-  }
-
   function presentInThisTab() {
     setPresentMenuOpen(false);
     setMode('preview');
@@ -6762,12 +6749,6 @@ function HtmlViewer({
   const shareUnavailableHint = streaming
     ? t('fileViewer.shareAfterGenerationComplete')
     : t('fileViewer.shareLinkRequiresDeploy');
-  const copyShareLinkLabel =
-    shareLinkFeedback === 'copied'
-      ? t('fileViewer.copied')
-      : shareLinkFeedback === 'failed'
-        ? t('useEverywhere.copyFailed')
-        : t('fileViewer.copyShareLink');
   const shareMenuLabel = t('fileViewer.shareLabel');
   const deployMenuLabel = t('fileViewer.deployModalTitle') || 'Deploy';
   const isSocialShareDeployModal = deployModalIntent === 'social-share';
@@ -7576,14 +7557,14 @@ function HtmlViewer({
                             onClick={() => {
                               if (!canCopyShareLink || !sharePageUrl) return;
                               fireShareExport('share_link', async () => {
-                                const ok = await copyShareLink(sharePageUrl);
+                                const ok = await shareLinkCopy.copyShareLink(sharePageUrl);
                                 if (!ok) throw new Error('copy_share_link_failed');
                               });
                             }}
                           >
                             <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
                             <span className="share-menu-text">
-                              <span>{copyShareLinkLabel}</span>
+                              <span>{shareLinkCopy.copyShareLinkLabel}</span>
                               {shareLinkStatusHint ? (
                                 <small>{shareLinkStatusHint}</small>
                               ) : null}

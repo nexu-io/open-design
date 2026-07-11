@@ -4,6 +4,7 @@ import {
   defaultTemplateName,
   documentMetaLabel,
   formatJsonFileTextForDisplay,
+  shareLinkCopyLabel,
 } from '../../../src/features/file-viewer/formatters';
 import type { TranslateFn } from '../../../src/features/file-viewer/types';
 import type { ProjectFile } from '../../../src/types';
@@ -135,5 +136,19 @@ describe('defaultTemplateName', () => {
 
   it('falls back to the translated default when nothing but the extension remains', () => {
     expect(defaultTemplateName('.html', t)).toBe('fileViewer.templateNameDefault');
+  });
+});
+
+describe('shareLinkCopyLabel', () => {
+  it('shows the copied confirmation', () => {
+    expect(shareLinkCopyLabel('copied', t)).toBe('fileViewer.copied');
+  });
+
+  it('shows the copy-failed message', () => {
+    expect(shareLinkCopyLabel('failed', t)).toBe('useEverywhere.copyFailed');
+  });
+
+  it('falls back to the static copy prompt when there is no feedback yet', () => {
+    expect(shareLinkCopyLabel(null, t)).toBe('fileViewer.copyShareLink');
   });
 });
