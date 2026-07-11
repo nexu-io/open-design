@@ -197,3 +197,8 @@ export { ReactComponentViewer } from './components/ReactComponentViewer';
 // Board inspect-panel form (dumb, small local draft state).
 export { InspectPanel } from './components/InspectPanel';
 export type { InspectStyleSnapshot, InspectClickedDescendant, InspectTarget } from './types';
+
+// Comment sidebar: collapsed rail / expanded list + drag-reorder + composer,
+// and its dock shell.
+export { CommentSidePanel } from './components/CommentSidePanel';
+export { CommentSideDock } from './components/CommentSideDock';
