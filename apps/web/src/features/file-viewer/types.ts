@@ -144,3 +144,36 @@ export type SvgViewerMode = 'preview' | 'source';
 
 /** The active board interaction mode: inspecting elements, or drawing a pod lasso. */
 export type BoardTool = 'inspect' | 'pod';
+
+/** The computed-style facets the inspect bridge reads back for a selected element. */
+export type InspectStyleSnapshot = {
+  color?: string;
+  backgroundColor?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  paddingTop?: string;
+  paddingRight?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  borderRadius?: string;
+  textAlign?: string;
+  fontFamily?: string;
+  lineHeight?: string;
+};
+
+/** The nearest un-annotated descendant the user actually clicked, when the
+ * inspect target had to walk up to the nearest `data-od-id` ancestor. */
+export type InspectClickedDescendant = {
+  label: string;
+  text: string;
+};
+
+/** The element currently selected in the inspect panel. */
+export type InspectTarget = {
+  elementId: string;
+  selector: string;
+  label: string;
+  text: string;
+  style: InspectStyleSnapshot;
+  clickedDescendant?: InspectClickedDescendant;
+};

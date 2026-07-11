@@ -193,3 +193,7 @@ export { CommentPreviewOverlays } from './components/CommentPreviewOverlays';
 // React component (.jsx/.tsx) viewer: wired + its module-pointer fallback.
 export { ReactModulePointer } from './components/ReactModulePointer';
 export { ReactComponentViewer } from './components/ReactComponentViewer';
+
+// Board inspect-panel form (dumb, small local draft state).
+export { InspectPanel } from './components/InspectPanel';
+export type { InspectStyleSnapshot, InspectClickedDescendant, InspectTarget } from './types';
