@@ -8,6 +8,11 @@ export { DesignSystemInlinePreview } from './components/DesignSystemInlinePrevie
 export { DesignSystemReviewCard } from './components/DesignSystemReviewCard';
 export { useWiredDesignSystemCardManifest } from './hooks/useDesignSystemCardManifest.hooks';
 export {
+  useBrowserTabs,
+  type BrowserTabsController,
+  type UseBrowserTabsParams,
+} from './hooks/useBrowserTabs.hooks';
+export {
   useWiredDesignSystemKitActions,
   type DesignKitActionFeedbackTone,
   type DesignSystemKitActionsController,
