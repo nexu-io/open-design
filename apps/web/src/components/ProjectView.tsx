@@ -227,6 +227,7 @@ import {
   useWiredOpenTabsSync,
   useWiredProjectFilesAndArtifacts,
   useWiredProjectLiveEvents,
+  useIframeEvictionOnContextChange,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -1151,42 +1152,15 @@ export function ProjectView({
     setDesignMdRefreshKey,
   );
 
-  const activePromptContextSignature = useMemo(() => {
-    const skill = project.skillId
-      ? (skills.find((s) => s.id === project.skillId) ??
-        designTemplates.find((s) => s.id === project.skillId))
-      : null;
-    const designSystem = projectDesignSystemId
-      ? designSystems.find((d) => d.id === projectDesignSystemId)
-      : null;
-    return JSON.stringify({
-      designSystem: designSystem
-        ? {
-            id: designSystem.id,
-            title: designSystem.title,
-            category: designSystem.category,
-            summary: designSystem.summary,
-            source: designSystem.source ?? null,
-          }
-        : null,
-      skill: skill
-        ? {
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            mode: skill.mode,
-            source: skill.source ?? null,
-            upstream: skill.upstream,
-          }
-        : null,
-    });
-  }, [designSystems, designTemplates, projectDesignSystemId, project.skillId, skills]);
-  const previousPromptContextSignatureRef = useRef(activePromptContextSignature);
-  useEffect(() => {
-    if (previousPromptContextSignatureRef.current === activePromptContextSignature) return;
-    previousPromptContextSignatureRef.current = activePromptContextSignature;
-    iframeKeepAlivePool.evictProject(project.id, { includeActive: true });
-  }, [activePromptContextSignature, iframeKeepAlivePool, project.id]);
+  useIframeEvictionOnContextChange(
+    project.id,
+    project.skillId,
+    skills,
+    designTemplates,
+    designSystems,
+    projectDesignSystemId,
+    iframeKeepAlivePool,
+  );
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName

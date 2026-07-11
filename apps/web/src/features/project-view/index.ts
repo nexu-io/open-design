@@ -88,6 +88,7 @@ export {
   findSameTurnNonHtmlWriteForRecoveredArtifact,
   findSameTurnWriteForRecoveredArtifact,
   selectPrimaryProjectFile,
+  promptContextSignature,
   assistantAgentDisplayName,
   isTerminalRunStatus,
   isActiveRunStatus,
@@ -220,6 +221,7 @@ export {
   useWiredProjectFilesAndArtifacts,
 } from './hooks/useProjectFilesAndArtifacts.hooks';
 export { useProjectLiveEvents, useWiredProjectLiveEvents } from './hooks/useProjectLiveEvents.hooks';
+export { useIframeEvictionOnContextChange } from './hooks/useIframeEvictionOnContextChange.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

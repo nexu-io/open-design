@@ -11,10 +11,12 @@ import type {
   ChatAttachment,
   ChatMessage,
   Conversation,
+  DesignSystemSummary,
   LiveArtifactEventItem,
   PreviewComment,
   ProjectFile,
   ProjectMetadata,
+  SkillSummary,
 } from '../../types';
 import type {
   BrandStatus,
@@ -679,6 +681,49 @@ export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | nu
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.rank - b.rank || b.file.mtime - a.file.mtime);
   return candidates[0]?.file ?? null;
+}
+
+/**
+ * Stable JSON signature of the project's active skill + design-system prompt
+ * context. Iframe previews cache aggressively (`IframeKeepAlivePool`); when
+ * this signature changes the active skill/design-system that gets baked into
+ * the next run's prompt has genuinely changed, so the cached iframe for this
+ * project must be evicted rather than reused stale.
+ */
+export function promptContextSignature(
+  skillId: string | null | undefined,
+  skills: SkillSummary[],
+  designTemplates: SkillSummary[],
+  designSystems: DesignSystemSummary[],
+  designSystemId: string | null | undefined,
+): string {
+  const skill = skillId
+    ? (skills.find((s) => s.id === skillId) ?? designTemplates.find((s) => s.id === skillId))
+    : null;
+  const designSystem = designSystemId
+    ? designSystems.find((d) => d.id === designSystemId)
+    : null;
+  return JSON.stringify({
+    designSystem: designSystem
+      ? {
+          id: designSystem.id,
+          title: designSystem.title,
+          category: designSystem.category,
+          summary: designSystem.summary,
+          source: designSystem.source ?? null,
+        }
+      : null,
+    skill: skill
+      ? {
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          mode: skill.mode,
+          source: skill.source ?? null,
+          upstream: skill.upstream,
+        }
+      : null,
+  });
 }
 
 function isProcessArtifactFile(name: string): boolean {
