@@ -14,3 +14,13 @@ export async function patchProjectMetadata(
 ): Promise<void> {
   await patchProject(projectId, { metadata });
 }
+
+/** Persist a project's `name` (and optionally `metadata`) fields. Best-effort:
+ *  swallows a failed request, matching the orchestrator's pre-extraction
+ *  `void patchProject(...)` fire-and-forget rename usage. */
+export async function patchProjectName(
+  projectId: string,
+  patch: { name: string; metadata?: ProjectMetadata },
+): Promise<void> {
+  await patchProject(projectId, patch);
+}

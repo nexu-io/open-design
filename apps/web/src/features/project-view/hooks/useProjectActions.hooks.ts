@@ -12,6 +12,7 @@ import {
   buildCreateDesignSystemFromProjectPrompt,
   designSystemNameForSourceProject,
 } from '../formatters';
+import type { ProjectViewTransportPort } from '../ports';
 
 export interface ProjectActionsToast {
   message: string;
@@ -33,6 +34,7 @@ export interface ProjectActionsController {
     fileName: string;
   }) => void;
   handleDuplicateContextPluginFailed: () => void;
+  handleProjectRename: (newName: string) => void;
 }
 
 export function useProjectActions(
@@ -48,6 +50,8 @@ export function useProjectActions(
   onDuplicateProject: ((sourceProjectId: string, input?: { name?: string }) => Promise<void> | void) | undefined,
   onToast: (toast: ProjectActionsToast) => void,
   t: ReturnType<typeof useT>,
+  onProjectChange: (next: Project) => void,
+  port: ProjectViewTransportPort,
 ): ProjectActionsController {
   const [createDesignFromActiveDesignSystemBusy, setCreateDesignFromActiveDesignSystemBusy] =
     useState(false);
@@ -145,6 +149,28 @@ export function useProjectActions(
     });
   }, [onToast, t]);
 
+  const handleProjectRename = useCallback(
+    (newName: string) => {
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === currentProject.name) return;
+      const metadata = currentProject.metadata
+        ? { ...currentProject.metadata, nameSource: 'user' as const }
+        : undefined;
+      const updated: Project = {
+        ...currentProject,
+        name: trimmed,
+        ...(metadata ? { metadata } : {}),
+        updatedAt: Date.now(),
+      };
+      onProjectChange(updated);
+      void port.patchProjectName(currentProject.id, {
+        name: trimmed,
+        ...(metadata ? { metadata } : {}),
+      });
+    },
+    [currentProject, onProjectChange, port],
+  );
+
   return {
     handleCreateDesignFromActiveDesignSystem,
     createDesignFromActiveDesignSystemBusy,
@@ -154,5 +180,6 @@ export function useProjectActions(
     duplicateProjectBusy,
     handleNavigateToDuplicatedProject,
     handleDuplicateContextPluginFailed,
+    handleProjectRename,
   };
 }

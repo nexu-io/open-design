@@ -185,13 +185,13 @@ once prior clusters have landed.
 - **Status:** done. Landed in `features/project-view/streaming-text-buffer.ts`. `resolveTerminalEndedAt` takes an injected `fetchRunStatus` param (bound to `fetchChatRunStatus` via a new `ProjectViewTransportPort.fetchRunStatus`) instead of importing the daemon provider directly — `isActiveRunStatus` is imported in-slice from `rules.ts` since it's already a slice rule, not transport. `createBufferedTextUpdates`'s `document`/`window` listeners (visibilitychange/pagehide) moved to a new provider bridge `providers/project-view/buffered-text-flush-triggers.ts` (`subscribeBufferedTextFlushTriggers`), injected as a `subscribeFlushTriggers` param — timers (`requestAnimationFrame`/`setTimeout`) stayed inline since the guard only forbids `window`/`document` bare globals, not timer APIs. Found and fixed a SECOND consumer not listed in the original profiling pass: `apps/web/src/components/workspace/useConversationChat.ts` also calls `createBufferedTextUpdates` (via the `ProjectView.tsx` re-export) — updated its call site too. `ProjectView.tsx`'s compat re-export block gained `createBufferedTextUpdates` so the existing `buffered-text-pending.test.tsx` and `useConversationChat.ts` keep importing from `components/ProjectView` unchanged.
 
 ## 20. Project rename & misc project-actions glue
-- **Lines:** 5937–5957
+- **Lines:** 5371–5391 (pre-extraction snapshot)
 - **Owns:** `handleProjectRename`.
 - **Coupling:** low — trivial, calls `onProjectChange`/`patchProject`.
 - **Target:** fold into the existing `features/project-view/hooks/useProjectActions.hooks.ts` (already landed) as an additional export, rather than a new file.
 - **Shape:** feature hook (tiny addition to an existing one)
 - **Risk:** low
-- **Status:** pending
+- **Status:** done. Folded `handleProjectRename` into `useProjectActions` as an additional export — the hook now also takes `onProjectChange` and the slice's `port: ProjectViewTransportPort`. Added a narrow `patchProjectName(projectId, { name, metadata? })` transport function alongside the existing `patchProjectMetadata` in `providers/project-view/patch-project-metadata.ts` (same file, same `patchProject` narrowing pattern) since the existing `patchProjectMetadata` port method only patches `metadata`, not `name`. Wired into `ports.ts`/`dependencies.ts`/the provider barrel. `ProjectView.tsx`'s inline `handleProjectRename` `useCallback` was deleted; the orchestrator now destructures it from `useProjectActions(...)` and passes `onProjectChange`/`projectViewTransportPort` as the two new trailing args. `patchProject` (the raw `state/projects` import) stays imported in `ProjectView.tsx` — it's still used by 3 other not-yet-extracted call sites (Clusters 14/17-adjacent design-system-id patch, brand-extraction status patches).
 
 ## 21. Execution controls (avatar/agent-picker bar)
 - **Lines:** 6812–6863 (`executionControls` JSX)

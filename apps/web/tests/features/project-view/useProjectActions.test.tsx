@@ -7,6 +7,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary, Project, ProjectFile } from '../../../src/types';
+import type { ProjectViewTransportPort } from '../../../src/features/project-view/ports';
 
 import { useProjectActions } from '../../../src/features/project-view/hooks/useProjectActions.hooks';
 
@@ -33,6 +34,14 @@ function makeDesignSystem(overrides: Partial<DesignSystemSummary> = {}): DesignS
 }
 
 const noopT = ((key: string) => key) as never;
+const noopOnProjectChange = (() => {}) as (next: Project) => void;
+
+function makeFakePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectViewTransportPort {
+  return {
+    patchProjectName: vi.fn(async () => {}),
+    ...overrides,
+  } as unknown as ProjectViewTransportPort;
+}
 
 describe('useProjectActions', () => {
   describe('handleCreateDesignFromActiveDesignSystem', () => {
@@ -50,6 +59,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       act(() => result.current.handleCreateDesignFromActiveDesignSystem());
@@ -71,6 +82,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       expect(result.current.createDesignFromActiveDesignSystemBusy).toBe(false);
@@ -97,6 +110,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       await act(async () => {
@@ -122,6 +137,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       act(() => result.current.handleCreateDesignSystemFromProject());
@@ -143,6 +160,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       await act(async () => {
@@ -173,6 +192,8 @@ describe('useProjectActions', () => {
           undefined,
           onToast,
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       await act(async () => {
@@ -201,6 +222,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       act(() => result.current.handleDuplicateProject());
@@ -221,6 +244,8 @@ describe('useProjectActions', () => {
           onDuplicate,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       await act(async () => {
@@ -247,6 +272,8 @@ describe('useProjectActions', () => {
           onDuplicate,
           onToast,
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       await act(async () => {
@@ -274,6 +301,8 @@ describe('useProjectActions', () => {
           undefined,
           vi.fn(),
           noopT,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       act(() => {
@@ -303,6 +332,8 @@ describe('useProjectActions', () => {
           undefined,
           onToast,
           t,
+          noopOnProjectChange,
+          makeFakePort(),
         ),
       );
       act(() => result.current.handleDuplicateContextPluginFailed());
@@ -311,6 +342,115 @@ describe('useProjectActions', () => {
         details: null,
         tone: 'error',
         ttlMs: 3000,
+      });
+    });
+  });
+
+  describe('handleProjectRename', () => {
+    it('is a no-op when the trimmed name is empty', () => {
+      const onProjectChange = vi.fn();
+      const port = makeFakePort();
+      const { result } = renderHook(() =>
+        useProjectActions(
+          makeProject({ name: 'Old Name' }),
+          [] as ProjectFile[],
+          false,
+          null,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          vi.fn(),
+          noopT,
+          onProjectChange,
+          port,
+        ),
+      );
+      act(() => result.current.handleProjectRename('   '));
+      expect(onProjectChange).not.toHaveBeenCalled();
+      expect(port.patchProjectName).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when the trimmed name equals the current name', () => {
+      const onProjectChange = vi.fn();
+      const port = makeFakePort();
+      const { result } = renderHook(() =>
+        useProjectActions(
+          makeProject({ name: 'Same Name' }),
+          [] as ProjectFile[],
+          false,
+          null,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          vi.fn(),
+          noopT,
+          onProjectChange,
+          port,
+        ),
+      );
+      act(() => result.current.handleProjectRename('  Same Name  '));
+      expect(onProjectChange).not.toHaveBeenCalled();
+      expect(port.patchProjectName).not.toHaveBeenCalled();
+    });
+
+    it('trims the name, updates the project locally, and persists via the port', () => {
+      const onProjectChange = vi.fn();
+      const port = makeFakePort();
+      const project = makeProject({ name: 'Old Name' });
+      const { result } = renderHook(() =>
+        useProjectActions(
+          project,
+          [] as ProjectFile[],
+          false,
+          null,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          vi.fn(),
+          noopT,
+          onProjectChange,
+          port,
+        ),
+      );
+      act(() => result.current.handleProjectRename('  New Name  '));
+      expect(onProjectChange).toHaveBeenCalledOnce();
+      const updated = onProjectChange.mock.calls[0]![0] as Project;
+      expect(updated.name).toBe('New Name');
+      expect(port.patchProjectName).toHaveBeenCalledWith('p1', { name: 'New Name' });
+    });
+
+    it('stamps metadata.nameSource "user" when metadata already exists', () => {
+      const onProjectChange = vi.fn();
+      const port = makeFakePort();
+      const project = makeProject({
+        name: 'Old Name',
+        metadata: { kind: 'other' } as unknown as Project['metadata'],
+      });
+      const { result } = renderHook(() =>
+        useProjectActions(
+          project,
+          [] as ProjectFile[],
+          false,
+          null,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          vi.fn(),
+          noopT,
+          onProjectChange,
+          port,
+        ),
+      );
+      act(() => result.current.handleProjectRename('New Name'));
+      const updated = onProjectChange.mock.calls[0]![0] as Project;
+      expect(updated.metadata).toEqual({ kind: 'other', nameSource: 'user' });
+      expect(port.patchProjectName).toHaveBeenCalledWith('p1', {
+        name: 'New Name',
+        metadata: { kind: 'other', nameSource: 'user' },
       });
     });
   });

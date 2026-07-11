@@ -38,6 +38,7 @@ function makePort(
     copyTextToClipboard: vi.fn(async () => true),
     subscribeCapturedKeyDown: vi.fn(() => () => {}),
     patchProjectMetadata: vi.fn(async () => {}),
+    patchProjectName: vi.fn(async () => {}),
     listConversations: vi.fn(async () => []),
     createConversation: vi.fn(async () => null),
     patchConversation: vi.fn(async () => null),

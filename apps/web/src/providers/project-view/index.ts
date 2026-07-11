@@ -29,7 +29,7 @@ export {
 } from './plugin-context';
 export { copyTextToClipboard } from './clipboard';
 export { subscribeCapturedKeyDown } from './keyboard-shortcuts';
-export { patchProjectMetadata } from './patch-project-metadata';
+export { patchProjectMetadata, patchProjectName } from './patch-project-metadata';
 export {
   listConversations,
   createConversation,

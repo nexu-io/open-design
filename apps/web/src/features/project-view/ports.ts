@@ -78,6 +78,8 @@ export interface ProjectViewTransportPort {
   subscribeCapturedKeyDown(onKeyDown: (event: KeyboardEvent) => void): () => void;
   /** Persist a project's `metadata` field. Best-effort: never rejects. */
   patchProjectMetadata(projectId: string, metadata: ProjectMetadata): Promise<void>;
+  /** Persist a project's `name` (and optionally `metadata`) fields. Best-effort: never rejects. */
+  patchProjectName(projectId: string, patch: { name: string; metadata?: ProjectMetadata }): Promise<void>;
   /** List a project's conversations. Best-effort: resolves `[]` on failure. */
   listConversations(projectId: string): Promise<Conversation[]>;
   /** Create a conversation, optionally seeded from a fork point. Best-effort:

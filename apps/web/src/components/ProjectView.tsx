@@ -5368,28 +5368,6 @@ export function ProjectView({
     t,
   );
 
-  const handleProjectRename = useCallback(
-    (newName: string) => {
-      const trimmed = newName.trim();
-      if (!trimmed || trimmed === project.name) return;
-      const metadata = project.metadata
-        ? { ...project.metadata, nameSource: 'user' as const }
-        : undefined;
-      const updated: Project = {
-        ...project,
-        name: trimmed,
-        ...(metadata ? { metadata } : {}),
-        updatedAt: Date.now(),
-      };
-      onProjectChange(updated);
-      void patchProject(project.id, {
-        name: trimmed,
-        ...(metadata ? { metadata } : {}),
-      });
-    },
-    [project, onProjectChange],
-  );
-
   const activeConversationChatState = useMemo(
     () =>
       activeConversationId
@@ -6078,6 +6056,7 @@ export function ProjectView({
     duplicateProjectBusy: projectDuplicateStarting,
     handleNavigateToDuplicatedProject,
     handleDuplicateContextPluginFailed,
+    handleProjectRename,
   } = useProjectActions(
     currentProject,
     projectFiles,
@@ -6089,6 +6068,8 @@ export function ProjectView({
     onDuplicateProject,
     setProjectActionsToast,
     t,
+    onProjectChange,
+    projectViewTransportPort,
   );
 
   // Continue in CLI / Finalize design package handlers + keyboard
