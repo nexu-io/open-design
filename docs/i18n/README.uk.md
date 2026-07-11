@@ -115,6 +115,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Підтримується | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Підтримується | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Підтримується | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Підтримується | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Підтримується | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Підтримується | `od mcp install copilot` |
