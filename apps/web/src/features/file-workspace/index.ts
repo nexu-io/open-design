@@ -71,6 +71,11 @@ export {
   type WorkspaceTabRequestsController,
   type WorkspaceTabRequestsParams,
 } from './hooks/useWorkspaceTabRequests.hooks';
+export {
+  useWorkspaceTabActivation,
+  type UseWorkspaceTabActivationParams,
+  type WorkspaceTabActivationController,
+} from './hooks/useWorkspaceTabActivation.hooks';
 export * from './rules';
 export * from './constants';
 export type * from './types';
