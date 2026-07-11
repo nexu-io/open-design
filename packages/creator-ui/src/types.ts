@@ -1,3 +1,10 @@
+import type { CreatorEventType } from "@open-design/creator-events";
+
+export type ActivityItemEventType = Exclude<
+  CreatorEventType,
+  "task.created" | "task.updated"
+>;
+
 export interface TaskCardViewModel {
   id: string;
   projectId: string;
@@ -18,7 +25,7 @@ export interface ActivityItemViewModel {
   id: string;
   projectId: string;
   /** Present only when this item was derived from a CreatorEvent. */
-  eventType?: string;
+  eventType?: ActivityItemEventType;
   title: string;
   summary?: string;
   category: string;

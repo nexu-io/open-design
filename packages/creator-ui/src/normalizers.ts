@@ -8,6 +8,20 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+const activityItemEventTypes = [
+  "activity.recorded",
+  "run.started",
+  "run.finished",
+  "runback.recorded",
+] as const;
+
+function hasValidActivityItemEventType(record: Record<string, unknown>): boolean {
+  const eventType = record.eventType;
+  return eventType === undefined || activityItemEventTypes.includes(
+    eventType as (typeof activityItemEventTypes)[number],
+  );
+}
+
 function hasStringFields(record: Record<string, unknown>, fields: string[]): boolean {
   return fields.every((field) => typeof record[field] === "string");
 }
@@ -40,6 +54,7 @@ export function normalizeActivityItemViewModel(input: unknown): ActivityItemView
   if (!isObjectRecord(input)) return null;
   if (!hasStringFields(input, ["id", "projectId", "title", "category", "categoryLabel", "occurredAt"])) return null;
   if (!hasOptionalStringFields(input, ["eventType", "summary", "triggerSourceLabel"])) return null;
+  if (!hasValidActivityItemEventType(input)) return null;
   return input as unknown as ActivityItemViewModel;
 }
 

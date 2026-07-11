@@ -421,6 +421,27 @@ describe("normalizeActivityItemViewModel", () => {
     expect(normalizeActivityItemViewModel(rest)).toBeNull();
   });
 
+  it("accepts an event type that can produce an activity row", () => {
+    expect(normalizeActivityItemViewModel({
+      ...validVm,
+      eventType: "run.finished",
+    })).not.toBeNull();
+  });
+
+  it("rejects an event type that cannot produce an activity row", () => {
+    expect(normalizeActivityItemViewModel({
+      ...validVm,
+      eventType: "task.updated",
+    })).toBeNull();
+  });
+
+  it("rejects an unknown activity event type", () => {
+    expect(normalizeActivityItemViewModel({
+      ...validVm,
+      eventType: "run.cancelled",
+    })).toBeNull();
+  });
+
   it("returns null for non-object input", () => {
     expect(normalizeActivityItemViewModel(null)).toBeNull();
     expect(normalizeActivityItemViewModel("string")).toBeNull();
