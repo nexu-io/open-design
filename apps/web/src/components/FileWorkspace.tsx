@@ -24,7 +24,7 @@ import {
 } from '../providers/registry';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { navigate } from '../router';
-import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
+import { deliverableSlideNavForActiveFile } from '../runtime/slide-nav';
 import { type DesignKitEditFocusRequest } from './DesignKitView';
 import { DesignSystemProjectPanel } from './DesignSystemProjectPanel';
 import {
@@ -132,6 +132,7 @@ import {
   useWiredWorkspaceTabBarDom,
   useWorkspaceContextTracking,
   useWorkspaceLauncher,
+  useWorkspaceTabRequests,
   type BrowserAttentionRequest,
   type BrowserOpenRequest,
   type DesignSystemReviewAgentTask,
@@ -612,145 +613,12 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
-  // When the persisted tab list changes and the active tab is gone, fall
-  // back to the last remaining tab. Skip transient activeTab values
-  // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
-  useEffect(() => {
-    if (
-      activeTab === DESIGN_FILES_TAB
-      || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
-    ) return;
-    if (isBrowserTabId(activeTab)) {
-      if (!browserTabs.some((tab) => tab.id === activeTab)) {
-        setActiveTab(DESIGN_FILES_TAB);
-      }
-      return;
-    }
-    if (sketches[activeTab] && !sketches[activeTab]!.persisted) return;
-    if (!persistedTabs.includes(activeTab)) {
-      setPersistedActive(persistedTabs[persistedTabs.length - 1] ?? null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persistedTabs, activeTab]);
-
-  useEffect(() => {
-    if (!designSystemEditRequest) return;
-    setUploadError(null);
-    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [designSystemEditRequest?.nonce]);
-
-  // External open requests from chat (tool cards, produced-file chips,
-  // deep-linked URL, or the parent's auto-open after an agent Write) —
-  // add the file to the open-tabs set and focus it.
-  useEffect(() => {
-    if (!openRequest) return;
-    const name = openRequest.name;
-    if (!name) return;
-    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
-      const nextActive =
-        name === DESIGN_SYSTEM_TAB && !designSystemProject
-          ? DESIGN_FILES_TAB
-          : name;
-      onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
-      setActiveTab(nextActive);
-      return;
-    }
-    if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
-      onTabsStateChange(workspaceTabsState(persistedTabs, name));
-      setActiveTab(name);
-      return;
-    }
-    const isNewTab = !persistedTabs.includes(name);
-    const nextBrowserTabs = isNewTab
-      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
-      : browserTabs;
-    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-    onTabsStateChange(workspaceTabsState(
-      isNewTab ? [...persistedTabs, name] : persistedTabs,
-      name,
-      nextBrowserTabs,
-    ));
-    setActiveTab(name);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRequest]);
-
-  // Share request: ensure the target file is open + active so the FileViewer
-  // below receives the matching `shareRequest` and opens its Share menu.
-  useEffect(() => {
-    if (!shareRequest) return;
-    const name = shareRequest.name;
-    if (!name) return;
-    commitTabsState(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      name,
-    ));
-    setActiveTab(name);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shareRequest]);
-
-  // Download request: same as shareRequest, but the FileViewer opens its
-  // Download/Export menu. Without this, Download did nothing whenever the target
-  // artifact was not already the active tab (it forwards only on a name match).
-  useEffect(() => {
-    if (!downloadRequest) return;
-    const name = downloadRequest.name;
-    if (!name) return;
-    commitTabsState(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      name,
-    ));
-    setActiveTab(name);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downloadRequest]);
-
-  // Slide-nav request: decide deliverability once, at fire time. Only if the
-  // named deck is already an open tab do we mark this nonce deliverable and
-  // bring it forward so the matching FileViewer is mounted and flips. We never
-  // open a closed file — auto-flipping is a follow-along, not a reason to yank
-  // the user into a tab they never opened. Recording the deliverable nonce in
-  // state (not a ref) also means a request for a closed deck stays undeliverable
-  // forever: opening that file later matches the name but not the nonce, so the
-  // stale request can't resurface and jump the preview.
-  const [slideNavDeliverableNonce, setSlideNavDeliverableNonce] = useState<number | null>(null);
-  useEffect(() => {
-    if (!isSlideNavDeliverableNow(slideNavRequest, persistedTabs)) return;
-    setSlideNavDeliverableNonce(slideNavRequest!.nonce);
-    setActiveTab(slideNavRequest!.name);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideNavRequest]);
-
-  // Focus the Questions tab when the parent bumps the nonce (banner click in
-  // chat, or a freshly generated form). The tab is transient — not added to
-  // the persisted tab list.
-  useEffect(() => {
-    if (!focusQuestionsRequest) return;
-    setActiveTab(QUESTIONS_TAB);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusQuestionsRequest?.nonce]);
-
-  // Submitting from the right-hand panel should close the preview once. The
-  // answered form remains available, so a later chat-banner click can reopen
-  // the same Questions tab without this effect immediately closing it again.
-  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
-  useEffect(() => {
-    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
-    const isAnswered = questionFormSubmittedAnswers !== undefined;
-    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
-    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
-      setActiveTab(defaultRootTab);
-    }
-  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
-
-  // If the Questions tab is active but the form is gone because a new assistant
-  // turn has no form, fall back to the default root tab.
-  useEffect(() => {
-    if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
-      setActiveTab(defaultRootTab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, showQuestionsTab]);
+  // The external-tab-request sync cluster (persisted-tab fallback,
+  // designSystemEditRequest/openRequest/shareRequest/downloadRequest/
+  // slideNavRequest/focusQuestionsRequest routing, and the Questions-tab
+  // fallbacks) lives in `useWorkspaceTabRequests` below, called after
+  // `useWorkspaceContextTracking` since it needs `orderedWorkspaceTabs` as a
+  // plain value — see that hook's file header for why this ordering is safe.
 
   function openFile(name: string) {
     setUploadError(null);
@@ -943,6 +811,31 @@ export function FileWorkspace({
   // never during render), so a plain render-time assignment is safe — see the
   // ref's declaration comment above.
   orderedWorkspaceTabsRef.current = orderedWorkspaceTabs;
+
+  const { slideNavDeliverableNonce } = useWorkspaceTabRequests({
+    activeTab,
+    setActiveTab,
+    defaultRootTab,
+    persistedTabs,
+    browserTabs,
+    setBrowserTabs,
+    orderedWorkspaceTabs,
+    sketches,
+    designSystemProject,
+    showQuestionsTab,
+    setUploadError,
+    setPersistedActive,
+    onTabsStateChange,
+    commitTabsState,
+    workspaceTabsState,
+    openRequest,
+    shareRequest,
+    downloadRequest,
+    slideNavRequest,
+    focusQuestionsRequest,
+    designSystemEditRequest,
+    questionFormSubmittedAnswers,
+  });
 
   // Launcher ("+" menu: file search + create-new actions) and tab-bar
   // drag-reorder. `openFile`/`workspaceTabsState` are hoisted function
