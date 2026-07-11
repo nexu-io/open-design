@@ -93,6 +93,9 @@ function makeHarness(savedWidth = 460): Harness {
     loadOpenTabs: vi.fn(async () => ({ tabs: [], active: null })),
     cacheOpenTabsLocally: vi.fn((_projectId, state) => state),
     persistOpenTabsToDaemon: vi.fn(async () => {}),
+    fetchProjectFiles: vi.fn(async () => []),
+    fetchLiveArtifacts: vi.fn(async () => []),
+    writeProjectTextFile: vi.fn(async () => null),
     },
   };
   return harness;

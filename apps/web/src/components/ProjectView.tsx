@@ -8,9 +8,6 @@ import {
   type CSSProperties,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
-import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
-import { validateHtmlArtifact } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
@@ -26,13 +23,10 @@ import {
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   fetchProjectDesignSystemPackageAudit,
-  fetchLiveArtifacts,
-  fetchProjectFiles,
   fetchProjectFileText,
   fetchSkill,
   patchPreviewCommentStatus,
   uploadProjectFiles,
-  writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
@@ -149,7 +143,6 @@ import type {
   PreviewComment,
   ProjectFile,
   LiveArtifactEventItem,
-  LiveArtifactSummary,
   SkillSummary,
 } from '../types';
 import {
@@ -180,7 +173,7 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
+import { DESIGN_SYSTEM_TAB, FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
@@ -235,6 +228,7 @@ import {
   useWiredConversationMessages,
   useWiredPreviewComments,
   useWiredOpenTabsSync,
+  useWiredProjectFilesAndArtifacts,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -255,9 +249,6 @@ import {
   commentTaskContextAttachment,
   fallbackDesignSystemSummaryForProject,
   projectViewTransportPort,
-  artifactExtensionFor,
-  artifactBaseNameFor,
-  filterProjectFilesByMinMtime,
   artifactFromRecoverableSourceText,
   isFileWriteToolName,
   extractFileWriteToolPath,
@@ -585,12 +576,6 @@ export function ProjectView({
   const [error, setError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
-  // True while a working-dir replace is reindexing the new folder. Surfaced
-  // to the Design Files panel so the file list shows a loading state instead
-  // of silently sitting on the old tree for the few seconds the scan takes.
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const projectFilesRef = useRef<ProjectFile[]>([]);
-  const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [commentInspectorActive, setCommentInspectorActive] = useState(false);
@@ -730,28 +715,6 @@ export function ProjectView({
     handleChatResizeBlur,
     handleChatResizeKeyDown,
   } = useWiredChatPanelResize();
-  // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
-  // tool card, an attachment chip, or a produced-file chip in chat. We
-  // include a nonce so re-clicking the same name after the user closed the
-  // tab still focuses it.
-  const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
-  const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
-  // Like `openRequest`, but additionally asks the preview workspace to open the
-  // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
-  // existing export/deploy surface rather than introducing a new share backend.
-  const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
-  // Parallel to shareRequest, but opens the workspace's Download/Export menu.
-  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
-  const [designSystemEditRequest, setDesignSystemEditRequest] =
-    useState<{ module: 'logo'; nonce: number } | null>(null);
-  // When a queued chat send starts processing, ask the workspace to flip the
-  // deck preview to the slide its marked element lives on, so the user watches
-  // the edit land in context instead of staying parked on slide 1. Mirrors the
-  // `shareRequest` nonce signal: FileWorkspace matches `name` against the open
-  // file and FileViewer consumes each nonce once.
-  const [slideNavRequest, setSlideNavRequest] = useState<
-    { name: string; slideIndex: number; nonce: number } | null
-  >(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   // Runs explicitly superseded by a "send now" interrupt. Their abort
@@ -1019,47 +982,36 @@ export function ProjectView({
     () => setDesignMdRefreshKey((n) => n + 1),
   );
 
-  const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
-    const next = await fetchProjectFiles(project.id);
-    projectFilesRef.current = next;
-    setProjectFiles(next);
-    return next;
-  }, [project.id]);
-
-  useEffect(() => {
-    projectFilesRef.current = projectFiles;
-  }, [projectFiles]);
-
-  // Cache HTML file contents so the auto-open module check (issue #2744) does
-  // not re-fetch unchanged entries on every Write. Keyed by file name with the
-  // mtime stored alongside, so a rewrite REPLACES the file's single entry
-  // rather than accreting a new key. Bounded by the project's HTML file count.
-  const htmlContentCacheRef = useRef<Map<string, { mtime: number; text: string | null }>>(
-    new Map(),
+  const {
+    projectFiles,
+    projectFilesRef,
+    liveArtifacts,
+    openRequest,
+    browserOpenRequest,
+    setBrowserOpenRequest,
+    shareRequest,
+    setShareRequest,
+    downloadRequest,
+    setDownloadRequest,
+    designSystemEditRequest,
+    setDesignSystemEditRequest,
+    slideNavRequest,
+    setSlideNavRequest,
+    refreshProjectFiles,
+    refreshLiveArtifacts,
+    refreshWorkspaceItems,
+    requestOpenFile,
+    readProjectHtml,
+    persistArtifact,
+    artifactFromStandaloneHtml,
+  } = useWiredProjectFilesAndArtifacts(
+    project.id,
+    project.skillId ?? undefined,
+    projectDesignSystemId,
+    savedArtifactRef,
+    setError,
+    setFilesRefresh,
   );
-  const readProjectHtml = useCallback(
-    async (name: string): Promise<string | null> => {
-      const file = projectFilesRef.current.find((entry) => entry.name === name);
-      const mtime = file?.mtime ?? 0;
-      const cached = htmlContentCacheRef.current.get(name);
-      if (cached && cached.mtime === mtime) return cached.text;
-      const text = await projectViewTransportPort.readProjectRawText(project.id, name);
-      htmlContentCacheRef.current.set(name, { mtime, text });
-      return text;
-    },
-    [project.id],
-  );
-
-  const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
-    const next = await fetchLiveArtifacts(project.id);
-    setLiveArtifacts(next);
-    return next;
-  }, [project.id]);
-
-  const refreshWorkspaceItems = useCallback(async (): Promise<ProjectFile[]> => {
-    const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
-    return nextFiles;
-  }, [refreshLiveArtifacts, refreshProjectFiles]);
 
   useEffect(() => {
     if (!currentBrandExtractionId) {
@@ -1080,11 +1032,6 @@ export function ProjectView({
     effectiveBrandExtractionStatus,
     refreshWorkspaceItems,
   ]);
-
-  const requestOpenFile = useCallback((name: string) => {
-    if (!name) return;
-    setOpenRequest({ name, nonce: Date.now() });
-  }, []);
 
   useEffect(() => {
     const designSystemId = brandReady?.designSystemId;
@@ -1116,129 +1063,6 @@ export function ProjectView({
     projectDetail.refresh,
     refreshWorkspaceItems,
   ]);
-
-  const persistArtifact = useCallback(
-    async (
-      art: Artifact,
-      projectFilesSnapshot?: ProjectFile[],
-      sourceText?: string,
-      options: { pointerMinMtime?: number } = {},
-    ) => {
-      const persistedHtml = resolvePersistedArtifactHtml({
-        artifactHtml: art.html,
-        identifier: art.identifier,
-        sourceText,
-      });
-      const artifactToPersist = persistedHtml === art.html ? art : { ...art, html: persistedHtml };
-      const baseName = artifactBaseNameFor(art);
-      const ext = artifactExtensionFor(art);
-      // Pick a name that doesn't collide with an existing project file.
-      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
-      // so prior artifacts aren't silently overwritten.
-      const currentProjectFiles = projectFilesSnapshot ?? projectFilesRef.current;
-      const existing = new Set(currentProjectFiles.map((f) => f.name));
-      let fileName = `${baseName}${ext}`;
-      let n = 2;
-      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
-        fileName = `${baseName}-${n}${ext}`;
-        n += 1;
-      }
-      if (ext === '.html') {
-        const pointerProjectFiles = filterProjectFilesByMinMtime(
-          currentProjectFiles,
-          options.pointerMinMtime,
-        );
-        const pointerTarget = resolveHtmlPointerArtifactTarget({
-          content: artifactToPersist.html,
-          candidateFileName: fileName,
-          projectFiles: pointerProjectFiles,
-        });
-        if (pointerTarget) {
-          if (savedArtifactRef.current === pointerTarget) return;
-          savedArtifactRef.current = pointerTarget;
-          requestOpenFile(pointerTarget);
-          return;
-        }
-      }
-      // Pre-write structural gate for HTML artifacts (#50, #1143). Reject
-      // bodies that obviously aren't a complete document — usually a one-line
-      // prose summary the model emitted inside `<artifact type="text/html">`
-      // when only Edit-tool changes happened this turn. Without this guard,
-      // such content lands as a phantom HTML file in the project panel.
-      if (ext === '.html') {
-        const validation = validateHtmlArtifact(artifactToPersist.html);
-        if (!validation.ok) {
-          setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
-          return;
-        }
-      }
-      if (savedArtifactRef.current === fileName) return;
-      const title = art.title || art.identifier || fileName;
-      const metadata = {
-        identifier: art.identifier,
-        artifactType: art.artifactType,
-        inferred: false,
-      };
-      const manifest =
-        ext === '.html'
-          ? createHtmlArtifactManifest({
-              entry: fileName,
-              title,
-              sourceSkillId: project.skillId ?? undefined,
-              designSystemId: projectDesignSystemId,
-              metadata,
-            })
-          : inferLegacyManifest({
-              entry: fileName,
-              title,
-              metadata: {
-                ...metadata,
-                sourceSkillId: project.skillId ?? undefined,
-                designSystemId: projectDesignSystemId,
-              },
-            });
-      const file = await writeProjectTextFile(project.id, fileName, artifactToPersist.html, {
-        artifactManifest: manifest ?? undefined,
-      });
-      if (file) {
-        savedArtifactRef.current = file.name;
-        setFilesRefresh((n) => n + 1);
-        // Surface the daemon's stub-guard warning when it fires in `warn`
-        // mode (the default). Without this the warning would land in the
-        // file metadata silently and the user would never see that the
-        // model shipped a placeholder.
-        if (file.stubGuardWarning) {
-          setError(
-            `Saved "${file.name}", but the model may have shipped a placeholder: ` +
-              `${file.stubGuardWarning.message}`,
-          );
-        }
-        // Auto-open the freshly-persisted artifact as a tab so the user
-        // sees it without an extra click. The Write-tool path already does
-        // this for tool-emitted files; this handles the artifact-tag path.
-        requestOpenFile(file.name);
-      } else {
-        // writeProjectTextFile collapses all failure paths (non-OK HTTP
-        // responses, network errors, and stub-guard 422s) to null — the
-        // helper's return contract would need to be widened to distinguish
-        // them, which is out of scope here.  Show a generic banner so the
-        // failure is observable rather than silent; the daemon logs carry
-        // the structured details for any specific error type.
-        // Clear the saved-artifact ref so the user can retry.
-        savedArtifactRef.current = '';
-        setError(
-          `Couldn't save artifact "${fileName}". The write failed — ` +
-            'check the daemon logs for details.',
-        );
-      }
-    },
-    [project.id, projectDesignSystemId, project.skillId, requestOpenFile],
-  );
-
-  const artifactFromStandaloneHtml = useCallback(
-    (sourceText: string): Artifact | null => artifactFromRecoverableSourceText(sourceText),
-    [],
-  );
 
   // Set of project file names that the chat surface uses to decide whether
   // a tool card's path is openable as a tab. Recomputed on every file-list

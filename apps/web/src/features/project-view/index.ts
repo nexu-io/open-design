@@ -214,6 +214,11 @@ export type { PreviewCommentsController } from './hooks/usePreviewComments.hooks
 export { usePreviewComments, useWiredPreviewComments } from './hooks/usePreviewComments.hooks';
 export type { OpenTabsSyncController } from './hooks/useOpenTabsSync.hooks';
 export { useOpenTabsSync, useWiredOpenTabsSync } from './hooks/useOpenTabsSync.hooks';
+export type { ProjectFilesAndArtifactsController } from './hooks/useProjectFilesAndArtifacts.hooks';
+export {
+  useProjectFilesAndArtifacts,
+  useWiredProjectFilesAndArtifacts,
+} from './hooks/useProjectFilesAndArtifacts.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

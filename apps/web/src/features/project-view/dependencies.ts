@@ -45,6 +45,9 @@ import {
   loadOpenTabs,
   cacheOpenTabsLocally,
   persistOpenTabsToDaemon,
+  fetchProjectFiles,
+  fetchLiveArtifacts,
+  writeProjectTextFile,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -94,4 +97,7 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   loadOpenTabs,
   cacheOpenTabsLocally,
   persistOpenTabsToDaemon,
+  fetchProjectFiles,
+  fetchLiveArtifacts,
+  writeProjectTextFile,
 };

@@ -15,11 +15,14 @@ import type {
   ChatAttachment,
   ChatMessage,
   Conversation,
+  LiveArtifactSummary,
   OpenTabsState,
   PreviewComment,
   PreviewCommentAttachment,
   PreviewCommentTarget,
+  ProjectFile,
 } from '../../types';
+import type { ArtifactManifest } from '../../artifacts/types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
@@ -166,4 +169,16 @@ export interface ProjectViewTransportPort {
   /** Persist already-stamped tab state to the daemon (the debounced write).
    *  Best-effort: never rejects. */
   persistOpenTabsToDaemon(projectId: string, state: OpenTabsState): Promise<void>;
+  /** List a project's files. Best-effort: resolves `[]` on failure. */
+  fetchProjectFiles(projectId: string): Promise<ProjectFile[]>;
+  /** List a project's live artifacts. Best-effort: resolves `[]` on failure. */
+  fetchLiveArtifacts(projectId: string): Promise<LiveArtifactSummary[]>;
+  /** Write a project text file (e.g. a persisted HTML artifact). Resolves
+   *  `null` on failure. */
+  writeProjectTextFile(
+    projectId: string,
+    name: string,
+    content: string,
+    options?: { artifactManifest?: ArtifactManifest },
+  ): Promise<ProjectFile | null>;
 }
