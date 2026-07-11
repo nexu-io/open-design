@@ -90,6 +90,36 @@ describe('creator workbench routes', () => {
     }
   });
 
+  it('rejects a blocked task without a reason and returns its reason after a valid update', async () => {
+    const { server, baseUrl } = await listen(buildApp());
+    try {
+      const created = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: '补拍夜景' }),
+      }).then((response) => response.json()) as { task: { id: string } };
+
+      const rejected = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/${created.task.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'blocked' }),
+      });
+      expect(rejected.status).toBe(400);
+
+      const accepted = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/${created.task.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'blocked', blockerNote: '缺少夜景素材' }),
+      });
+      expect(accepted.status).toBe(200);
+      await expect(accepted.json()).resolves.toMatchObject({
+        task: { status: 'blocked', blockerNote: '缺少夜景素材' },
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('records activity only for a task in the same project', async () => {
     const { server, baseUrl } = await listen(buildApp(['project-1', 'project-2']));
     try {
