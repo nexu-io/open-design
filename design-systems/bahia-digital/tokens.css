@@ -1,0 +1,124 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/bahia-digital/tokens.css
+ *
+ * Structured token bindings for "Bahía Digital" — a coastal digital
+ * brand system. This file is the *machine-readable* form of the values
+ * described in `DESIGN.md`. Agents paste the `:root { … }` block
+ * verbatim into the first `<style>` of every artifact generated against
+ * this design system, then reference tokens via `var(--name)`.
+ *
+ * Contract sources:
+ *   - Token schema: design-systems/_schema/tokens.schema.ts
+ *   - Standard token names: craft/color.md
+ *   - Display-face contract: craft/anti-ai-slop.md
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the shared token schema.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Sea-salt canvas, white cards, and a real warm sand tier — Bahía
+   * binds --surface-warm independently for secondary buttons, asides,
+   * and neutral badges. */
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-warm: #f0ebe0;
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Sea ink → lagoon → coastal slate. Metadata collapses to muted;
+   * three text tiers are enough for this brand. */
+  --fg: #14333c;
+  --fg-2: #2a5361;
+  --muted: #61787f;
+  --meta: var(--muted);
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Card edge vs. inner row separator — the soft tier keeps table rows
+   * and list dividers from competing with card outlines. */
+  --border: #dfe5e2;
+  --border-soft: #ebefec;
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Bay teal — deep-water accent for primary CTAs, links, and ONE hero
+   * element per screen. Dark enough for white label text. */
+  --accent: #0e7490;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Muted coastal semantics — reserved for state, not decoration. */
+  --success: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Serif display over humanist body is the brand signature. */
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-body: "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+
+  /* Type scale (px) — direct copy of DESIGN.md §Typography Rules */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 34px;
+  --text-3xl: 50px;
+  --text-4xl: 68px;
+
+  --leading-body: 1.55;
+  --leading-tight: 1.15;
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base unit. Section rhythm lives below as named tokens. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Softer than the neutral starter — wave-worn edges. Pill reserved
+   * for chips, badges, and avatars. */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * Flat by default; ring for hairline edges; raised reads like haze
+   * over water — wide, soft, low-contrast. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 6px 24px color-mix(in oklab, var(--fg), transparent 90%);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Single source of truth for keyboard-focus indicators; every
+   * :focus-visible rule must use this token. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Slightly slower than the starter — coastal ease-out, no snap. */
+  --motion-fast: 160ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Narrower container than the starter keeps line lengths readable
+   * against the airy section rhythm. */
+  --container-max: 1160px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 16px;
+}
