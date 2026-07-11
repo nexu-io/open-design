@@ -1,23 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import type { OpenTabsState } from '../../../src/types';
+import type { OpenTabsState, ProjectFile } from '../../../src/types';
+import { emptySketchScene } from '../../../src/components/sketch-model';
 import {
   arraysEqual,
   browserTabIndex,
   browserTabsFromState,
+  consumeFileWorkspaceTabShortcut,
+  createDefaultDesignFilesNavState,
+  defaultSketchState,
+  formatBrowserTabUrl,
   isBrowserTabId,
   isLiveArtifactImplementationPath,
   isSketchName,
+  joinDisplayPath,
   kindIconName,
   lastWorkspaceTabId,
+  loadedSketchStateFromDocument,
   maxBrowserTabSequence,
+  mergeSketchSaveOptions,
   orderWorkspaceTabs,
   parentDirForProjectFile,
   reanchorBrowserTabsToCurrentOrder,
   sameFileName,
   scrollWorkspaceTabsWithWheel,
+  shouldKeepCurrentSketchState,
+  sketchFileSourceKey,
   tabDropEdgeFromEvent,
 } from '../../../src/features/file-workspace/rules';
-import type { BrowserWorkspaceTab, WorkspaceOrderedTab } from '../../../src/features/file-workspace/types';
+import type {
+  BrowserWorkspaceTab,
+  SketchState,
+  WorkspaceOrderedTab,
+} from '../../../src/features/file-workspace/types';
 
 function browserTab(id: string, over: Partial<BrowserWorkspaceTab> = {}): BrowserWorkspaceTab {
   return { id, label: 'Browser', ...over };
@@ -239,5 +253,168 @@ describe('scrollWorkspaceTabsWithWheel', () => {
     const bar = tabBar();
     scrollWorkspaceTabsWithWheel(bar, wheelEvent({ deltaMode: 1, deltaY: 1 }));
     expect(bar.scrollLeft).toBe(16);
+  });
+});
+
+function projectFile(over: Partial<ProjectFile> = {}): ProjectFile {
+  return {
+    name: 'sketch-1.sketch.json',
+    path: 'sketch-1.sketch.json',
+    size: 42,
+    mtime: 1000,
+    kind: 'sketch',
+    mime: 'application/json',
+    ...over,
+  };
+}
+
+describe('defaultSketchState', () => {
+  it('builds a fresh, unpersisted, loaded sketch state with a default scene', () => {
+    const state = defaultSketchState('sketch-1.sketch.json');
+    expect(state).toMatchObject({
+      version: 2,
+      rawItems: [],
+      discardRawItemsOnSave: false,
+      items: [],
+      dirty: false,
+      persisted: false,
+      loaded: true,
+      saving: false,
+    });
+    expect(state.scene.appState?.name).toBe('sketch-1.sketch.json');
+  });
+  it('accepts an explicit scene override', () => {
+    const scene = emptySketchScene('custom');
+    const state = defaultSketchState('sketch-1.sketch.json', scene);
+    expect(state.scene).toBe(scene);
+  });
+});
+
+describe('loadedSketchStateFromDocument', () => {
+  it('marks the resulting state persisted and loaded, carrying the source key', () => {
+    const scene = emptySketchScene('doc');
+    const state = loadedSketchStateFromDocument(
+      { version: 3, rawItems: [{ kind: 'stroke' }], items: [], scene, format: 'excalidraw' },
+      'proj:1:42:1000',
+    );
+    expect(state).toMatchObject({
+      version: 3,
+      rawItems: [{ kind: 'stroke' }],
+      discardRawItemsOnSave: false,
+      items: [],
+      scene,
+      sourceKey: 'proj:1:42:1000',
+      dirty: false,
+      persisted: true,
+      loaded: true,
+      saving: false,
+    });
+  });
+});
+
+describe('sketchFileSourceKey', () => {
+  it('combines project id, path, size, and mtime', () => {
+    expect(sketchFileSourceKey('proj-1', projectFile())).toBe('proj-1:sketch-1.sketch.json:42:1000');
+  });
+  it('falls back to the file name when path is absent', () => {
+    expect(sketchFileSourceKey('proj-1', projectFile({ path: undefined }))).toBe(
+      'proj-1:sketch-1.sketch.json:42:1000',
+    );
+  });
+});
+
+describe('shouldKeepCurrentSketchState', () => {
+  it('is false when there is no current state', () => {
+    expect(shouldKeepCurrentSketchState(undefined, 'a', 'key', new Set())).toBe(false);
+  });
+  it('is true when the current state is not yet persisted (a pending sketch)', () => {
+    const state = defaultSketchState('a');
+    expect(shouldKeepCurrentSketchState(state, 'a', 'key', new Set())).toBe(true);
+  });
+  it('is true when dirty, saving, or a save is in flight', () => {
+    const base: SketchState = { ...defaultSketchState('a'), persisted: true, loaded: true, sourceKey: 'key' };
+    expect(shouldKeepCurrentSketchState({ ...base, dirty: true }, 'a', 'other-key', new Set())).toBe(true);
+    expect(shouldKeepCurrentSketchState({ ...base, saving: true }, 'a', 'other-key', new Set())).toBe(true);
+    expect(shouldKeepCurrentSketchState(base, 'a', 'other-key', new Set(['a']))).toBe(true);
+  });
+  it('is true when loaded with a matching source key, false when the key changed', () => {
+    const base: SketchState = { ...defaultSketchState('a'), persisted: true, loaded: true, sourceKey: 'key' };
+    expect(shouldKeepCurrentSketchState(base, 'a', 'key', new Set())).toBe(true);
+    expect(shouldKeepCurrentSketchState(base, 'a', 'other-key', new Set())).toBe(false);
+  });
+  it('is false when persisted but not yet loaded', () => {
+    const base: SketchState = { ...defaultSketchState('a'), persisted: true, loaded: false, sourceKey: 'key' };
+    expect(shouldKeepCurrentSketchState(base, 'a', 'key', new Set())).toBe(false);
+  });
+});
+
+describe('mergeSketchSaveOptions', () => {
+  it('OR-combines each option, defaulting to true unless a side explicitly opts out', () => {
+    expect(mergeSketchSaveOptions({}, {})).toEqual({ activate: true, refreshFiles: true, showSaving: true });
+    expect(mergeSketchSaveOptions({ activate: false }, {})).toEqual({
+      activate: true,
+      refreshFiles: true,
+      showSaving: true,
+    });
+    expect(mergeSketchSaveOptions({ activate: false }, { activate: false })).toEqual({
+      activate: false,
+      refreshFiles: true,
+      showSaving: true,
+    });
+  });
+});
+
+describe('consumeFileWorkspaceTabShortcut', () => {
+  it('prevents default and stops propagation', () => {
+    let prevented = false;
+    let stopped = false;
+    consumeFileWorkspaceTabShortcut({
+      preventDefault: () => { prevented = true; },
+      stopPropagation: () => { stopped = true; },
+    } as unknown as KeyboardEvent);
+    expect(prevented).toBe(true);
+    expect(stopped).toBe(true);
+  });
+});
+
+describe('formatBrowserTabUrl', () => {
+  it('returns an empty string for an empty url', () => {
+    expect(formatBrowserTabUrl('')).toBe('');
+  });
+  it('strips a leading www. and a bare root path', () => {
+    expect(formatBrowserTabUrl('https://www.example.com/')).toBe('example.com');
+  });
+  it('keeps a non-root path, search, and hash', () => {
+    expect(formatBrowserTabUrl('https://example.com/docs?x=1#top')).toBe('example.com/docs?x=1#top');
+  });
+  it('returns the raw input when it fails to parse as a URL', () => {
+    expect(formatBrowserTabUrl('not a url')).toBe('not a url');
+  });
+});
+
+describe('joinDisplayPath', () => {
+  it('joins root and child with a single slash', () => {
+    expect(joinDisplayPath('/root', 'child')).toBe('/root/child');
+  });
+  it('trims trailing slashes on root and leading slashes on child', () => {
+    expect(joinDisplayPath('/root/', '/child')).toBe('/root/child');
+  });
+  it('returns the trimmed root when child is empty', () => {
+    expect(joinDisplayPath('/root/', '')).toBe('/root');
+  });
+});
+
+describe('createDefaultDesignFilesNavState', () => {
+  it('builds an empty nav state at page 0', () => {
+    const state = createDefaultDesignFilesNavState();
+    expect(state.kindFilter.size).toBe(0);
+    expect(state.currentDir).toBe('');
+    expect(state.page).toBe(0);
+    expect(state.pageSize).toBe(30);
+  });
+  it('returns a fresh Set instance on each call', () => {
+    const a = createDefaultDesignFilesNavState();
+    const b = createDefaultDesignFilesNavState();
+    expect(a.kindFilter).not.toBe(b.kindFilter);
   });
 });

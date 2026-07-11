@@ -4,8 +4,14 @@
 // `components/FileWorkspace.tsx` as part of the ADR-0002 vertical-slice
 // decomposition.
 import type { DragEvent as ReactDragEvent } from 'react';
-import { isSketchJsonFileName } from '../../components/sketch-model';
+import {
+  emptySketchScene,
+  isSketchJsonFileName,
+  parseSketchWorkspaceDocument,
+  type ExcalidrawSketchScene,
+} from '../../components/sketch-model';
 import { designSystemGithubEvidenceState } from '../../components/design-system-github-evidence';
+import type { DesignFilesNavState } from '../../components/DesignFilesPanel';
 import { parseDesignMd } from '../../runtime/design-md-parse';
 import { replaceDesignMdColorAtIndex } from '../../runtime/kit-edit';
 import type { FileOpEntry } from '../../runtime/file-ops';
@@ -38,6 +44,8 @@ import type {
   DesignSystemSectionActivity,
   DesignSystemSectionActivityPhase,
   DesignSystemSectionStatus,
+  SaveSketchOptions,
+  SketchState,
   TabDropEdge,
   TranslateFn,
   WorkspaceOrderedTab,
@@ -1503,5 +1511,100 @@ export function escapeDesignSystemPreviewAttr(value: string): string {
 
 export function escapeDesignSystemPreviewCssUrl(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
+}
+
+export function defaultSketchState(
+  name: string,
+  scene: ExcalidrawSketchScene = emptySketchScene(name),
+): SketchState {
+  return {
+    version: 2,
+    rawItems: [],
+    discardRawItemsOnSave: false,
+    items: [],
+    scene,
+    dirty: false,
+    persisted: false,
+    loaded: true,
+    saving: false,
+  };
+}
+
+export function loadedSketchStateFromDocument(
+  doc: ReturnType<typeof parseSketchWorkspaceDocument>,
+  sourceKey: string,
+): SketchState {
+  return {
+    version: doc.version,
+    rawItems: doc.rawItems,
+    discardRawItemsOnSave: false,
+    items: doc.items,
+    scene: doc.scene,
+    sourceKey,
+    dirty: false,
+    persisted: true,
+    loaded: true,
+    saving: false,
+  };
+}
+
+export function sketchFileSourceKey(
+  projectId: string,
+  file: Pick<ProjectFile, 'name' | 'path' | 'size' | 'mtime'>,
+): string {
+  return `${projectId}:${file.path ?? file.name}:${file.size}:${file.mtime}`;
+}
+
+export function shouldKeepCurrentSketchState(
+  current: SketchState | undefined,
+  name: string,
+  sourceKey: string,
+  saveInFlight: Set<string>,
+): boolean {
+  if (!current) return false;
+  if (!current.persisted) return true;
+  if (current.dirty || current.saving || saveInFlight.has(name)) return true;
+  return current.loaded && current.sourceKey === sourceKey;
+}
+
+export function mergeSketchSaveOptions(a: SaveSketchOptions, b: SaveSketchOptions): SaveSketchOptions {
+  return {
+    activate: a.activate !== false || b.activate !== false,
+    refreshFiles: a.refreshFiles !== false || b.refreshFiles !== false,
+    showSaving: a.showSaving !== false || b.showSaving !== false,
+  };
+}
+
+export function consumeFileWorkspaceTabShortcut(event: KeyboardEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+export function formatBrowserTabUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+    const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    if (!path || path === '/') return host || url;
+    return `${host}${path}`;
+  } catch {
+    return url;
+  }
+}
+
+export function joinDisplayPath(root: string, child: string): string {
+  const cleanRoot = root.replace(/[\\/]+$/u, '');
+  const cleanChild = child.replace(/^[\\/]+/u, '');
+  return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
+}
+
+export function createDefaultDesignFilesNavState(): DesignFilesNavState {
+  return {
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  };
 }
 

@@ -5,8 +5,72 @@
 import type { ProjectBrowserWorkspaceTab, ProjectFile, ProjectMetadata } from '../../types';
 import type { Dict } from '../../i18n/types';
 import type { TodoItem } from '../../runtime/todos';
+import type { ExcalidrawSketchScene, SketchItem } from '../../components/sketch-model';
 
 export type TabDropEdge = 'before' | 'after';
+
+export interface BrowserOpenRequest {
+  tabId?: string;
+  url: string;
+  nonce: number;
+  /** Request a transient in-tab affordance after opening/focusing. */
+  attentionAction?: 'download-page';
+  /** Only foreground an EXISTING browser tab — do not navigate it. Used to wake
+   *  a background-throttled webview before reading its DOM (brand browser
+   *  assist) WITHOUT reloading the page and re-triggering an anti-bot wall. */
+  focusOnly?: boolean;
+}
+
+export interface BrowserAttentionRequest {
+  action: 'download-page';
+  nonce: number;
+}
+
+export interface SketchState {
+  version: number;
+  rawItems: unknown[];
+  discardRawItemsOnSave: boolean;
+  items: SketchItem[];
+  scene: ExcalidrawSketchScene;
+  sourceKey?: string;
+  dirty: boolean;
+  persisted: boolean;
+  loaded: boolean;
+  saving: boolean;
+  savedAt?: number;
+}
+
+export interface SaveSketchOptions {
+  activate?: boolean;
+  refreshFiles?: boolean;
+  showSaving?: boolean;
+}
+
+export interface PendingSketchSave {
+  scene: ExcalidrawSketchScene;
+  revision: number;
+  options: SaveSketchOptions;
+  resolvers: Array<(value: boolean | undefined) => void>;
+}
+
+export interface QueuedSketchAutosave {
+  scene: ExcalidrawSketchScene;
+  revision: number;
+  options: SaveSketchOptions;
+}
+
+export type WorkspaceToastTone = 'default' | 'success' | 'error' | 'loading';
+
+export interface WorkspaceActionToast {
+  actionLabel?: string | null;
+  className?: string;
+  details?: string | null;
+  message: string;
+  onAction?: () => void;
+  role?: 'status' | 'alert';
+  tone?: WorkspaceToastTone;
+  ttlMs?: number;
+}
 
 export type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
 
