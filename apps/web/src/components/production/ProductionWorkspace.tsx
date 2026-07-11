@@ -189,6 +189,10 @@ function statusLabel(status: ProductionLaneSyncStatus) {
         : 'detached';
 }
 
+function isLaneActionable(status: ProductionLaneSyncStatus) {
+  return status !== 'in-sync' && status !== 'detached';
+}
+
 function updateLaneSyncState(
   syncState: Record<ProductionSegmentId, ProductionSegmentSyncState>,
   segmentId: ProductionSegmentId,
@@ -218,8 +222,9 @@ function readWorkspaceSnapshot(projectId: string): ProductionWorkspaceSnapshot |
     const raw = window.localStorage.getItem(workspaceStorageKey(projectId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ProductionWorkspaceSnapshot>;
+    const version = parsed.version as number | undefined;
     if (
-      (parsed.version !== 1 && parsed.version !== 2) ||
+      (version !== 1 && version !== 2) ||
       !Array.isArray(parsed.segments) ||
       !Array.isArray(parsed.mediaJobs) ||
       typeof parsed.nextSegmentNumber !== 'number' ||
@@ -228,7 +233,7 @@ function readWorkspaceSnapshot(projectId: string): ProductionWorkspaceSnapshot |
       return null;
     }
     const syncState =
-      parsed.version === 2 && parsed.syncState && typeof parsed.syncState === 'object'
+      version === 2 && parsed.syncState && typeof parsed.syncState === 'object'
         ? (parsed.syncState as Record<ProductionSegmentId, ProductionSegmentSyncState>)
         : Object.fromEntries(
             (parsed.segments as ProductionSegment[]).map((segment) => [segment.id, createProductionSegmentSyncState()]),
@@ -310,6 +315,23 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
     [segments, voiceTone],
   );
   const storyboardShots = useMemo(() => createStoryboardShots(segments), [segments]);
+  const pendingLaneSummary = useMemo(() => {
+    const items: Array<{ segmentLabel: string; lane: string }> = [];
+
+    for (const segment of segments) {
+      const syncState = segmentSyncState[segment.id] ?? createProductionSegmentSyncState();
+      if (isLaneActionable(syncState.narration)) items.push({ segmentLabel: segment.label, lane: '旁白' });
+      if (isLaneActionable(syncState.shot)) items.push({ segmentLabel: segment.label, lane: '鏡頭' });
+      if (isLaneActionable(syncState.assets)) items.push({ segmentLabel: segment.label, lane: '素材' });
+      if (isLaneActionable(syncState.output)) items.push({ segmentLabel: segment.label, lane: '成片' });
+    }
+
+    return items;
+  }, [segmentSyncState, segments]);
+  const hasPendingNarration = pendingLaneSummary.some((item) => item.lane === '旁白');
+  const hasPendingStoryboard = pendingLaneSummary.some((item) => item.lane === '鏡頭');
+  const hasPendingAssets = pendingLaneSummary.some((item) => item.lane === '素材');
+  const hasPendingOutput = pendingLaneSummary.some((item) => item.lane === '成片');
   const voiceProfileCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const segment of segments) {
@@ -399,58 +421,54 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const appendSegment = () => {
     const nextNumber = nextSegmentNumberRef.current;
     nextSegmentNumberRef.current += 1;
+    const nextSegmentId = `segment-${nextNumber}`;
+    const nextSegment = createEmptySegment(`第 ${nextNumber} 段`, voiceTone, defaultVoiceProfileId, nextSegmentId);
     setNextSegmentNumber(nextSegmentNumberRef.current);
-    setSegments((current) => [
-      ...current,
-      createEmptySegment(`第 ${nextNumber} 段`, voiceTone, defaultVoiceProfileId, `segment-${nextNumber}`),
-    ]);
+    setSegments((current) => [...current, nextSegment]);
     setSegmentSyncState((current) => ({
       ...current,
-      [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
+      [nextSegmentId]: createProductionSegmentSyncState(),
     }));
   };
 
   const insertSegmentAfter = (segmentId: ProductionSegmentId) => {
+    const nextNumber = nextSegmentNumberRef.current;
+    nextSegmentNumberRef.current += 1;
+    const nextSegmentId = `segment-${nextNumber}`;
+    setNextSegmentNumber(nextSegmentNumberRef.current);
     setSegments((current) => {
       const index = current.findIndex((segment) => segment.id === segmentId);
-      const nextNumber = nextSegmentNumberRef.current;
-      nextSegmentNumberRef.current += 1;
-      setNextSegmentNumber(nextSegmentNumberRef.current);
       const nextSegment = createEmptySegment(
         `第 ${nextNumber} 段`,
         voiceTone,
         current[index]?.voiceProfileId ?? defaultVoiceProfileId,
-        `segment-${nextNumber}`,
+        nextSegmentId,
       );
 
       if (index < 0) {
-        setSegmentSyncState((current) => ({
-          ...current,
-          [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
-        }));
         return [...current, nextSegment];
       }
 
       const next = current.slice();
       next.splice(index + 1, 0, nextSegment);
-      setSegmentSyncState((current) => ({
-        ...current,
-        [`segment-${nextNumber}`]: createProductionSegmentSyncState(),
-      }));
       return next;
     });
+    setSegmentSyncState((current) => ({
+      ...current,
+      [nextSegmentId]: createProductionSegmentSyncState(),
+    }));
   };
 
   const removeSegment = (segmentId: ProductionSegmentId) => {
+    if (segments.length <= 1) {
+      return;
+    }
     setSegments((current) => {
-      if (current.length <= 1) {
-        return current;
-      }
-      setSegmentSyncState((syncCurrent) => {
-        const { [segmentId]: _removed, ...rest } = syncCurrent;
-        return rest;
-      });
       return current.filter((segment) => segment.id !== segmentId);
+    });
+    setSegmentSyncState((current) => {
+      const { [segmentId]: _removed, ...rest } = current;
+      return rest;
     });
   };
 
@@ -615,41 +633,63 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       {
         id: 'script',
         label: 'Script',
-        status: segments.length > 0 ? 'active' : 'empty',
+        status: segments.length > 0 ? (pendingLaneSummary.length > 0 ? 'active' : 'complete') : 'empty',
         description: segments.length > 0
-          ? `${segments.length} beats ready to drive voice and storyboard.`
+          ? `${segments.length} beats drive the downstream lanes.`
           : 'Start with a clear, editable script backbone.',
       },
       {
         id: 'voice',
         label: 'Voice',
-        status: segments.length > 0 ? 'ready' : 'empty',
+        status: segments.length === 0 ? 'empty' : hasPendingNarration ? 'active' : 'ready',
         description: segments.length > 0
-          ? `Voice preview follows the same ${voiceTone} script draft.`
+          ? hasPendingNarration
+            ? `There are narration lanes waiting for confirmation.`
+            : `Voice preview follows the same ${voiceTone} script draft.`
           : 'Generate a voiceover from the script in one click.',
       },
       {
         id: 'storyboard',
         label: 'Storyboard',
-        status: segments.length > 0 ? 'ready' : 'empty',
+        status: segments.length === 0 ? 'empty' : hasPendingStoryboard ? 'active' : 'ready',
         description: segments.length > 0
-          ? `${storyboardShots.length} shots are already lined up from the script.`
+          ? hasPendingStoryboard
+            ? 'Some shot lanes still need confirmation or regeneration.'
+            : `${storyboardShots.length} shots are already lined up from the script.`
           : 'Turn beats into shots when you are ready.',
       },
       {
         id: 'assets',
         label: 'Assets',
-        status: projectFiles.length > 0 ? 'ready' : 'empty',
-        description: 'Collect generated and uploaded media in one place.',
+        status: projectFiles.length > 0 ? (hasPendingAssets ? 'active' : 'ready') : 'empty',
+        description: projectFiles.length > 0
+          ? hasPendingAssets
+            ? 'Some asset lanes still need confirmation or regeneration.'
+            : 'Collect generated and uploaded media in one place.'
+          : 'Collect generated and uploaded media in one place.',
       },
       {
         id: 'output',
         label: 'Output',
-        status: segments.length > 0 ? 'ready' : 'empty',
-        description: 'Export the assembled video when the sequence is complete.',
+        status: segments.length === 0 ? 'empty' : hasPendingOutput ? 'active' : 'ready',
+        description: segments.length > 0
+          ? hasPendingOutput
+            ? 'The final output lane still has pending confirmations.'
+            : 'Export the assembled video when the sequence is complete.'
+          : 'Export the assembled video when the sequence is complete.',
       },
     ],
-    [projectFiles.length, segments.length, storyboardShots.length, voiceTone],
+    [
+      hasPendingAssets,
+      hasPendingNarration,
+      hasPendingOutput,
+      hasPendingStoryboard,
+      pendingLaneSummary.length,
+      projectFiles.length,
+      segments.length,
+      storyboardShots.length,
+      voiceTone,
+    ],
   );
 
   return (
@@ -663,6 +703,28 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
               ? `${segments.length} script beats now drive the five production lanes in one beginner-friendly flow.`
               : 'Script, voice, storyboard, assets, and output stay connected in one beginner-friendly flow.'}
           </p>
+          {pendingLaneSummary.length > 0 ? (
+            <div
+              data-testid="production-pending-summary"
+              style={{
+                marginTop: 14,
+                padding: '12px 14px',
+                borderRadius: 16,
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(248, 113, 113, 0.25)',
+                color: '#fecaca',
+              }}
+            >
+              <strong>{pendingLaneSummary.length} lane updates pending</strong>
+              <p style={{ margin: '6px 0 0', color: '#fecaca' }}>
+                {pendingLaneSummary
+                  .slice(0, 3)
+                  .map((item) => `${item.segmentLabel} / ${item.lane}`)
+                  .join(' · ')}
+                {pendingLaneSummary.length > 3 ? ' …' : ''}
+              </p>
+            </div>
+          ) : null}
         </div>
         <button type="button" className="production-workspace__primary-action">
           Export draft video
@@ -713,7 +775,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
         {generationNotice ? <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>{generationNotice}</p> : null}
       </div>
 
-      <ProductionCanvasBoard />
+      <ProductionCanvasBoard projectId={projectId} />
 
       <div className="production-workspace__grid">
         <section className="production-workspace__pane">
@@ -864,7 +926,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
                 {narrationStatus !== 'in-sync' ? (
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'narration', 'regenerate')}>
-                      Regenerate
+                      Rebuild from script
                     </button>
                     <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'narration', 'keep')}>
                       Keep
@@ -916,7 +978,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
               {laneStatusFor(segmentSyncState, segment.id, 'shot') !== 'in-sync' ? (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'shot', 'regenerate')}>
-                    Regenerate
+                    Rebuild from script
                   </button>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'shot', 'keep')}>
                     Keep
@@ -966,7 +1028,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
               {laneStatusFor(segmentSyncState, segment.id, 'assets') !== 'in-sync' ? (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'assets', 'regenerate')}>
-                    Regenerate
+                    Rebuild from script
                   </button>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'assets', 'keep')}>
                     Keep
@@ -1054,7 +1116,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
               {laneStatusFor(segmentSyncState, segment.id, 'output') !== 'in-sync' ? (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'output', 'regenerate')}>
-                    Regenerate
+                    Rebuild from script
                   </button>
                   <button type="button" className="production-workspace__secondary-action" onClick={() => resolveSegmentLane(segment.id, 'output', 'keep')}>
                     Keep

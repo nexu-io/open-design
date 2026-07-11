@@ -154,6 +154,79 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByTestId('production-canvas-status')).toHaveTextContent('No active connection');
   });
 
+  it('can add, rename, link, and delete a custom canvas node', () => {
+    renderWorkspace();
+
+    fireEvent.click(screen.getByRole('button', { name: '新增節點' }));
+
+    expect(screen.getByTestId('production-canvas-node-custom-1')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Node 1 說明' }), {
+      target: { value: 'Describe the planning step in one sentence.' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Node 1 標題' }), {
+      target: { value: 'Planning' },
+    });
+
+    expect(screen.getByRole('textbox', { name: 'Planning 標題' })).toHaveValue('Planning');
+    expect(screen.getByRole('textbox', { name: 'Planning 說明' })).toHaveValue(
+      'Describe the planning step in one sentence.',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start outgoing link from Planning' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Complete link to Output' }));
+
+    expect(screen.getByTestId('production-canvas-edge-custom-1-output')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移除 Planning 到 Output 的連線' }));
+    expect(screen.queryByTestId('production-canvas-edge-custom-1-output')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '刪除 Planning 節點' }));
+    expect(screen.queryByTestId('production-canvas-node-custom-1')).not.toBeInTheDocument();
+  });
+
+  it('restores canvas edits from localStorage', () => {
+    window.localStorage.setItem(
+      'open-design:production-canvas:project-1',
+      JSON.stringify({
+        version: 1,
+        nextNodeNumber: 2,
+        nodes: [
+          { id: 'script', title: 'Script', description: 'Base script', x: 36, y: 44 },
+          { id: 'voice', title: 'Voice', description: 'Base voice', x: 280, y: 24 },
+          { id: 'storyboard', title: 'Storyboard', description: 'Base storyboard', x: 548, y: 86 },
+          { id: 'threeD', title: '3D', description: 'Base 3D', x: 802, y: 128 },
+          { id: 'assets', title: 'Assets', description: 'Base assets', x: 1052, y: 26 },
+          { id: 'output', title: 'Output', description: 'Base output', x: 1320, y: 66 },
+          {
+            id: 'custom-1',
+            title: 'Planning',
+            description: 'Describe the planning step in one sentence.',
+            x: 120,
+            y: 220,
+          },
+        ],
+        edges: [
+          { from: 'script', to: 'voice' },
+          { from: 'voice', to: 'storyboard' },
+          { from: 'storyboard', to: 'threeD' },
+          { from: 'threeD', to: 'assets' },
+          { from: 'storyboard', to: 'assets' },
+          { from: 'assets', to: 'output' },
+          { from: 'custom-1', to: 'output' },
+        ],
+      }),
+    );
+
+    renderWorkspace();
+
+    expect(screen.getByRole('textbox', { name: 'Planning 標題' })).toHaveValue('Planning');
+    expect(screen.getByRole('textbox', { name: 'Planning 說明' })).toHaveValue(
+      'Describe the planning step in one sentence.',
+    );
+    expect(screen.getByTestId('production-canvas-edge-custom-1-output')).toBeInTheDocument();
+  });
+
   it('syncs the voice and storyboard panels when a paragraph changes', () => {
     renderWorkspace();
 
@@ -189,7 +262,7 @@ describe('ProductionWorkspace', () => {
       target: { value: 'A fresh script paragraph.' },
     });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Regenerate' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Rebuild from script' })[0]!);
 
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
       '專業講解者 (professional) 旁白：A fresh script paragraph.',
