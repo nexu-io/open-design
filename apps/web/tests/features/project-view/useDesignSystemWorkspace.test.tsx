@@ -28,6 +28,8 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     saveQueuedChatSends: vi.fn(),
     readSavedChatPanelWidth: vi.fn(() => 460),
     saveChatPanelWidth: vi.fn(),
+    hasAutoSendFirstMessageFlag: vi.fn(() => false),
+    readAmrGateOkFlag: vi.fn(() => false),
     readAutoSendAttachments: vi.fn(() => []),
     readAutoSendContext: vi.fn(() => null),
     clearAutoSendSession: vi.fn(),
@@ -70,6 +72,8 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     fetchProjectFiles: vi.fn(async () => []),
     fetchLiveArtifacts: vi.fn(async () => []),
     writeProjectTextFile: vi.fn(async () => null),
+    subscribeProjectFileEvents: vi.fn(() => () => {}),
+    fetchProjectFileText: vi.fn(async () => null),
     installGeneratedPluginFolder: vi.fn(async () => ({ ok: true, message: 'installed', warnings: [], log: [] })),
     startGeneratedPluginShareTask: vi.fn(async () => {
       throw new Error('not implemented in this fake');
@@ -80,6 +84,7 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     finalizeBrandProject: vi.fn(async () => ({ ok: true as const, result: {} as never })),
     fetchDesignSystemPackageAudit: vi.fn(async () => null),
     patchProjectDesignSystemId: vi.fn(async () => {}),
+    fetchAmrLoginStatus: vi.fn(async () => ({ loggedIn: false })),
     ...overrides,
   };
 }

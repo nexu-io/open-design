@@ -59,7 +59,7 @@ import {
   fetchDesignSystemPackageAudit,
   patchProjectDesignSystemId,
 } from '../../providers/project-view';
-import { fetchChatRunStatus } from '../../providers/daemon';
+import { fetchChatRunStatus, fetchVelaLoginStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
 
 /** Default binding: the real project-raw-text + memory-extract transport. */
@@ -120,4 +120,5 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   finalizeBrandProject,
   fetchDesignSystemPackageAudit,
   patchProjectDesignSystemId,
+  fetchAmrLoginStatus: fetchVelaLoginStatus,
 };

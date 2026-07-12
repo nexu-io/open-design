@@ -58,6 +58,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+  fetchVelaLoginStatus: vi.fn(),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),

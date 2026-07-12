@@ -63,6 +63,7 @@ vi.mock('../../src/providers/daemon', () => ({
   GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
   GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+  fetchVelaLoginStatus: vi.fn(),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),

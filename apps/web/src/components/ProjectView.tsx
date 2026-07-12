@@ -13,7 +13,6 @@ import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
 import {
   fetchChatRunStatus,
-  fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
   reattachDaemonRun,
@@ -28,7 +27,6 @@ import {
 } from '../providers/registry';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
 import {
-  type AmrWalletSnapshot,
   type ByokMediaDefaults,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -197,6 +195,7 @@ import {
   useWiredBrandBrowserSnapshot,
   useWiredPluginFolderAgentAction,
   useWiredDesignSystemWorkspace,
+  useWiredAmrBalanceGate,
   findActiveConversation,
   ExecutionControls,
   brandBrowserSnapshotMatchesSource,
@@ -584,30 +583,6 @@ export function ProjectView({
   const autoOpenedBrandDesignSystemRef = useRef<string | null>(null);
   const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
-  // Hard block from the pre-run balance gate (empty wallet or signed out);
-  // non-null renders the AmrBalanceDialog. `conversationId` remembers whose
-  // queue to resume when the dialog resolves (sign-in done / recharge landed).
-  const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
-    {
-      reason: 'insufficient' | 'signed_out';
-      snapshot: AmrWalletSnapshot;
-      conversationId: string;
-    } | null
-  >(null);
-  // Soft low-balance warning holding a pending send: the dialog resolves the
-  // promise the gate is awaiting ('proceed' continues the very same send).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
-  >(null);
-  // Conversations with a balance-gate check currently in flight. Sends that
-  // arrive during the check queue instead of racing a duplicate run through
-  // the not-yet-busy window the gate's await opens.
-  const amrGateInFlightConversationsRef = useRef<Set<string>>(new Set());
-  // Conversations whose queue auto-drain is paused because the balance gate
-  // blocked a send. Without the pause, every unrelated re-run of the drain
-  // effect would re-hit the wallet endpoint and re-pop the dialog. Lifted by
-  // the next send that passes the gate.
-  const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
   const {
@@ -3990,20 +3965,27 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
-  // "Switch to AMR & retry" from the failed-run card: switch the run to AMR,
-  // open Settings on the AMR controls so the user can sign in / authorize /
-  // top up, and arm an auto-retry that fires once AMR is selected AND signed
-  // in (see the effect below).
-  const [pendingAmrRetry, setPendingAmrRetry] = useState<ChatMessage | null>(null);
-  const handleSwitchToAmrAndRetry = useCallback(
-    (failedAssistant: ChatMessage) => {
-      if (currentConversationActionDisabled) return;
-      onModeChange('daemon');
-      onAgentChange('amr');
-      onOpenAmrSettings?.();
-      setPendingAmrRetry(failedAssistant);
-    },
-    [currentConversationActionDisabled, onModeChange, onAgentChange, onOpenAmrSettings],
+  // Pre-run AMR balance-gate dialogs (hard block / soft low-balance warning)
+  // and the "Switch to AMR & retry" flow from a failed-run card. The gate
+  // CHECK itself stays inline above (it's embedded in `handleSend`'s control
+  // flow); this hook owns only the state it reads/writes plus the
+  // switch-and-retry poll.
+  const {
+    amrBalanceGateBlock,
+    setAmrBalanceGateBlock,
+    amrLowBalanceWarn,
+    setAmrLowBalanceWarn,
+    amrGateInFlightConversationsRef,
+    amrGatePausedQueueConversationsRef,
+    handleSwitchToAmrAndRetry,
+  } = useWiredAmrBalanceGate(
+    currentConversationActionDisabled,
+    onModeChange,
+    onAgentChange,
+    onOpenAmrSettings,
+    config.mode,
+    config.agentId,
+    handleRetry,
   );
   // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
   // so the auth banner offers a one-click "Sign in via terminal"
@@ -4028,34 +4010,6 @@ export function ProjectView({
       console.warn('[antigravity] oauth-launch threw:', err);
     }
   }, []);
-  // Poll the AMR login status while a retry is armed, rather than only reacting
-  // to the AmrLoginPill's status event — the user may close Settings (which
-  // unmounts the pill and stops its polling) before finishing sign-in in the
-  // browser. Polling here keeps working regardless of the pill's lifecycle.
-  // Fires once AMR is the selected agent AND the account is signed in.
-  useEffect(() => {
-    if (!pendingAmrRetry) return;
-    let cancelled = false;
-    const tryRetry = async () => {
-      if (cancelled) return;
-      if (!(config.mode === 'daemon' && config.agentId === 'amr')) return;
-      const status = await fetchVelaLoginStatus().catch(() => null);
-      if (cancelled || status?.loggedIn !== true) return;
-      setPendingAmrRetry(null);
-      handleRetry(pendingAmrRetry);
-    };
-    void tryRetry();
-    const interval = setInterval(() => void tryRetry(), 2000);
-    // Give up after a few minutes so we never poll forever.
-    const stop = setTimeout(() => {
-      if (!cancelled) setPendingAmrRetry(null);
-    }, 5 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      clearTimeout(stop);
-    };
-  }, [pendingAmrRetry, config.mode, config.agentId, handleRetry]);
 
   useEffect(() => {
     if (!autoAuditRepairSeed) return;

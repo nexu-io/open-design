@@ -24,4 +24,21 @@ describe('projectViewTransportPort', () => {
     await expect(projectViewTransportPort.extractMemory({ userMessage: 'hi' })).resolves.toBeUndefined();
     expect(String(fn.mock.calls[0]?.[0])).toBe('/api/memory/extract');
   });
+
+  it('fetchAmrLoginStatus delegates to the daemon vela-status endpoint', async () => {
+    const fn = vi.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => ({ loggedIn: true, profile: 'default', user: null, configPath: '/tmp/amr' }),
+    }) as unknown as Response);
+    globalThis.fetch = fn as unknown as typeof fetch;
+    await expect(projectViewTransportPort.fetchAmrLoginStatus()).resolves.toEqual(
+      expect.objectContaining({ loggedIn: true }),
+    );
+    expect(String(fn.mock.calls[0]?.[0])).toBe('/api/integrations/vela/status');
+  });
+
+  it('fetchAmrLoginStatus resolves null on failure without rejecting', async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: false }) as unknown as Response) as unknown as typeof fetch;
+    await expect(projectViewTransportPort.fetchAmrLoginStatus()).resolves.toBeNull();
+  });
 });

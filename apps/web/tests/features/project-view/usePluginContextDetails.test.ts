@@ -76,6 +76,7 @@ function makePort(overrides: Partial<ProjectViewTransportPort> = {}): ProjectVie
     finalizeBrandProject: vi.fn(async () => ({ ok: true as const, result: {} as never })),
     fetchDesignSystemPackageAudit: vi.fn(async () => null),
     patchProjectDesignSystemId: vi.fn(async () => {}),
+    fetchAmrLoginStatus: vi.fn(async () => ({ loggedIn: false })),
     ...overrides,
   };
 }

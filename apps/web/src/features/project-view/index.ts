@@ -254,6 +254,12 @@ export {
   useDesignSystemWorkspace,
   useWiredDesignSystemWorkspace,
 } from './hooks/useDesignSystemWorkspace.hooks';
+export type {
+  AmrBalanceGateBlock,
+  AmrLowBalanceWarn,
+  AmrBalanceGateController,
+} from './hooks/useAmrBalanceGate.hooks';
+export { useAmrBalanceGate, useWiredAmrBalanceGate } from './hooks/useAmrBalanceGate.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

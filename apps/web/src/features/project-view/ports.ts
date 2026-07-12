@@ -231,4 +231,6 @@ export interface ProjectViewTransportPort {
   fetchDesignSystemPackageAudit(projectId: string): Promise<DesignSystemPackageAudit | null>;
   /** Persist a project's active `designSystemId`. Best-effort: never rejects. */
   patchProjectDesignSystemId(projectId: string, designSystemId: string | null): Promise<void>;
+  /** Fetch the AMR (vela) login status. Best-effort: resolves `null` on failure. */
+  fetchAmrLoginStatus(): Promise<{ loggedIn: boolean } | null>;
 }

@@ -53,6 +53,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
+  fetchVelaLoginStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
