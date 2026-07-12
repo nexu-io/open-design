@@ -158,11 +158,25 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     const blockEnd = closeIdx + closeTag.length;
     if (form) {
       out.push({ kind: 'form', form, raw: input.slice(openStart, blockEnd) });
+      cursor = blockEnd;
     } else {
-      // Malformed — keep raw text so the user can still see it.
-      out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
+      // The body between this open tag and the matched close tag isn't valid
+      // JSON. If the body itself contains another question-form / ask-question
+      // open tag, the outer match was a false positive (e.g. the model
+      // mentioned the tag name inside backtick-quoted prose). Unwind to the
+      // inner open so it gets a clean parse on the next iteration.
+      const inner = OPEN_RE.exec(body);
+      if (inner) {
+        const resumeAt = openEnd + inner.index;
+        if (resumeAt > cursor) {
+          out.push({ kind: 'text', text: input.slice(cursor, resumeAt) });
+        }
+        cursor = resumeAt;
+      } else {
+        out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
+        cursor = blockEnd;
+      }
     }
-    cursor = blockEnd;
   }
   return out;
 }
