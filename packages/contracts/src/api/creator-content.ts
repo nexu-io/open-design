@@ -25,6 +25,14 @@ export interface CreatorStoryboardItem {
   updatedAt: string;
 }
 
+export interface CreatorStoryboardItemInput {
+  position: number;
+  purpose: string;
+  visualDescription?: string;
+  audioNotes?: string;
+  mediaAssetIds?: string[];
+}
+
 export interface CreatorRetrospective {
   publishedAt?: string;
   performanceSummary?: string;
@@ -60,6 +68,6 @@ export interface UpdateCreatorContentRequest {
   status?: CreatorContentStatus;
   brief?: CreatorContentBrief;
   outline?: CreatorContentOutline;
-  storyboardItems?: CreatorStoryboardItem[];
+  storyboardItems?: CreatorStoryboardItemInput[];
   retrospective?: CreatorRetrospective;
 }
