@@ -1330,6 +1330,7 @@ export function FileViewer({
         artifactKind={artifactKind}
         metricsConsent={metricsConsent}
         installationId={installationId}
+        viewerOnly={viewerOnly}
       />
     );
   }

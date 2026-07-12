@@ -1796,15 +1796,43 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (targetVisibility === 'team') return summary.currentUserAccess.canMoveToTeam;
     return summary.currentUserAccess.canMoveToPersonal;
   }
-  function requestTeamShares(projectIds: string[], ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
+  async function requestTeamShares(projectIds: string[], ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
     if (visibility !== 'team') return;
     for (const projectId of projectIds) {
-      collabSync.requestTeamShare(projectId, workspaceProjectPrincipal(ctx));
+      await collabSync.requestTeamShare(projectId, workspaceProjectPrincipal(ctx));
     }
   }
   function ownerForTeamShare(summary: any, ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
     if (visibility !== 'team') return summary?.createdByWorkspaceMemberId ?? null;
     return summary?.createdByWorkspaceMemberId ?? ctx.workspaceMemberId;
+  }
+  function workspaceProjectMovePatch(
+    id: string,
+    summary: any,
+    ctx: WorkspaceProjectContext,
+    visibility: 'personal' | 'team',
+  ) {
+    return {
+      visibility,
+      createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
+      updatedByWorkspaceMemberId: ctx.workspaceMemberId,
+      resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(id, workspaceProjectPrincipal(ctx)) : null,
+      cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
+      syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
+    };
+  }
+  function restoreWorkspaceProjectRow(row: any) {
+    updateWorkspaceProject(db, row.workspaceId, row.id, {
+      visibility: row.workspaceVisibility,
+      resourceState: row.resourceState,
+      createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
+      updatedByWorkspaceMemberId: row.updatedByWorkspaceMemberId ?? null,
+      resourceHubResourceId: row.resourceHubResourceId ?? null,
+      cloudTombstonedAt: row.cloudTombstonedAt ?? null,
+      syncState: row.syncState ?? 'local_only',
+      version: row.workspaceVersion ?? 1,
+      updatedAt: row.workspaceUpdatedAt ?? Date.now(),
+    });
   }
 
   app.post('/api/workspaces/:workspaceId/projects/:projectId/move', async (req, res) => {
@@ -1828,15 +1856,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!workspaceMoveAllowed(summary, visibility)) {
         return sendApiError(res, 403, 'PROJECT_DELETE_FORBIDDEN', 'project move forbidden');
       }
-      updateWorkspaceProject(db, ctx.workspaceId, project.id, {
-        visibility,
-        createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
-        updatedByWorkspaceMemberId: ctx.workspaceMemberId,
-        resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(project.id, workspaceProjectPrincipal(ctx)) : null,
-        cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
-        syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
-      });
-      requestTeamShares([project.id], ctx, visibility);
+      updateWorkspaceProject(db, ctx.workspaceId, project.id, workspaceProjectMovePatch(project.id, summary, ctx, visibility));
+      try {
+        await requestTeamShares([project.id], ctx, visibility);
+      } catch (error) {
+        restoreWorkspaceProjectRow(row);
+        throw error;
+      }
       const updatedRow = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
       res.json({ project: normalizeWorkspaceProjectRow(updatedRow, ctx) });
     } catch (err: any) {
@@ -1867,21 +1893,23 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (forbidden.length > 0) {
         return sendApiError(res, 403, 'PROJECT_BATCH_CONTAINS_FORBIDDEN_ITEMS', 'batch contains forbidden projects');
       }
+      const previousRows = projectIds.map((id: string) => rows.find((item: any) => item.id === id));
       const moveMany = db.transaction((ids: string[]) => {
         for (const id of ids) {
           const summary = summaries.find((item: any) => item?.id === id);
-          updateWorkspaceProject(db, ctx.workspaceId, id, {
-            visibility,
-            createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
-            updatedByWorkspaceMemberId: ctx.workspaceMemberId,
-            resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(id, workspaceProjectPrincipal(ctx)) : null,
-            cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
-            syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
-          });
+          updateWorkspaceProject(db, ctx.workspaceId, id, workspaceProjectMovePatch(id, summary, ctx, visibility));
         }
       });
       moveMany(projectIds);
-      requestTeamShares(projectIds, ctx, visibility);
+      try {
+        await requestTeamShares(projectIds, ctx, visibility);
+      } catch (error) {
+        const rollbackMany = db.transaction((items: any[]) => {
+          for (const item of items) restoreWorkspaceProjectRow(item);
+        });
+        rollbackMany(previousRows.filter(Boolean));
+        throw error;
+      }
       const updatedRows = listWorkspaceProjects(db, ctx.workspaceId);
       const projects = projectIds.map((id: string) => normalizeWorkspaceProjectRow(updatedRows.find((row: any) => row.id === id), ctx));
       res.json({ ok: true, projects });

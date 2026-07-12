@@ -270,15 +270,10 @@ describe('workspace project routes', () => {
     expect(moved.projects[0]).toMatchObject({
       id: moveProjectId,
       visibility: 'team',
-      syncState: 'pending_upload',
+      syncState: 'synced',
       resourceHubResourceId: projectResourceIdFor(moveProjectId, workspacePrincipal('member-direct', workspaceId, 'admin')),
       cloudTombstonedAt: null,
       createdByWorkspaceMemberId: 'member-direct',
-      pendingSyncIntent: {
-        event: 'project_team_share_requested',
-        projectId: moveProjectId,
-        workspaceId,
-      },
     });
 
     const invalidMoveResp = await fetch(`${baseUrl}/api/workspaces/${workspaceId}/projects/batch-move`, {
@@ -745,7 +740,7 @@ describe('workspace project routes', () => {
 
   it('passes the authorized workspace principal into the team-share sync seam', async () => {
     const projectId = `workspace-share-principal-${Date.now()}`;
-    const requestTeamShare = vi.fn();
+    const requestTeamShare = vi.fn(async () => ({ version: 1 }));
     const app = express();
     app.use(express.json());
     registerProjectRoutes(app, workspaceProjectRouteDeps({
@@ -771,6 +766,76 @@ describe('workspace project routes', () => {
         teamId: workspaceId,
         role: 'admin',
         lifecycleState: 'active',
+      });
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('does not mark workspace projects as team-visible when durable team share publishing fails', async () => {
+    const projectId = `workspace-share-rejected-${Date.now()}`;
+    const requestTeamShare = vi.fn(async () => {
+      throw new Error('resource hub unavailable');
+    });
+    const updateWorkspaceProject = vi.fn();
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, workspaceProjectRouteDeps({
+      workspaceId,
+      projectId,
+      dbDeleteProject: vi.fn(),
+      removeProjectDir: vi.fn(),
+      collabSync: { requestTeamShare },
+      updateWorkspaceProject,
+    }));
+    const routeServer = await listen(app);
+    try {
+      const moveResp = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects/${projectId}/move`, {
+        method: 'POST',
+        headers: headers('member-share-rejected', {
+          'x-od-workspace-role': 'admin',
+          'x-od-workspace-lifecycle-state': 'active',
+        }),
+        body: JSON.stringify({ visibility: 'team' }),
+      });
+      expect(moveResp.status).toBe(400);
+      expect(requestTeamShare).toHaveBeenCalledWith(projectId, {
+        memberId: 'member-share-rejected',
+        teamId: workspaceId,
+        role: 'admin',
+        lifecycleState: 'active',
+      });
+      expect(updateWorkspaceProject).toHaveBeenCalledTimes(2);
+      expect(updateWorkspaceProject.mock.calls[0]?.[3]).toMatchObject({
+        visibility: 'team',
+        syncState: 'pending_upload',
+      });
+      expect(updateWorkspaceProject.mock.calls[1]?.[3]).toMatchObject({
+        visibility: 'personal',
+        syncState: 'local_only',
+        resourceHubResourceId: null,
+      });
+      updateWorkspaceProject.mockClear();
+      requestTeamShare.mockClear();
+
+      const batchResp = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects/batch-move`, {
+        method: 'POST',
+        headers: headers('member-share-rejected', {
+          'x-od-workspace-role': 'admin',
+          'x-od-workspace-lifecycle-state': 'active',
+        }),
+        body: JSON.stringify({ projectIds: [projectId], visibility: 'team' }),
+      });
+      expect(batchResp.status).toBe(400);
+      expect(updateWorkspaceProject).toHaveBeenCalledTimes(2);
+      expect(updateWorkspaceProject.mock.calls[0]?.[3]).toMatchObject({
+        visibility: 'team',
+        syncState: 'pending_upload',
+      });
+      expect(updateWorkspaceProject.mock.calls[1]?.[3]).toMatchObject({
+        visibility: 'personal',
+        syncState: 'local_only',
+        resourceHubResourceId: null,
       });
     } finally {
       await close(routeServer.server);
@@ -859,6 +924,7 @@ function workspaceProjectRouteDeps({
   countWorkspaceProjectRefs,
   teamProjectCatalog,
   collabSync,
+  updateWorkspaceProject,
 }: {
   workspaceId: string;
   projectId: string;
@@ -869,6 +935,7 @@ function workspaceProjectRouteDeps({
   countWorkspaceProjectRefs?: ReturnType<typeof vi.fn>;
   teamProjectCatalog?: unknown;
   collabSync?: unknown;
+  updateWorkspaceProject?: ReturnType<typeof vi.fn>;
 }) {
   const now = 1;
   const project = {
@@ -930,7 +997,7 @@ function workspaceProjectRouteDeps({
       ensureWorkspaceProject: () => workspaceRow,
       getWorkspaceProject: () => workspaceRow,
       listWorkspaceProjects: () => [workspaceRow],
-      updateWorkspaceProject: noop,
+      updateWorkspaceProject: updateWorkspaceProject ?? noop,
     },
     projectFiles: {
       writeProjectFile: noop,

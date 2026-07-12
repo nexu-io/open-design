@@ -1579,6 +1579,39 @@ describe('FileViewer SVG artifacts', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
+  it('disables React component sharing controls for viewer-only shared projects', async () => {
+    const file = baseFile({
+      name: 'Card.jsx',
+      path: 'Card.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'Card',
+        entry: 'Card.jsx',
+        renderer: 'react-component',
+        exports: ['jsx', 'html', 'zip'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/Card.jsx') {
+        return new Response('export default function Card() { return <button>Readonly</button>; }');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} viewerOnly />);
+
+    const shareButton = await screen.findByRole('button', { name: 'Share' });
+    expect(shareButton).toBeDisabled();
+    expect(shareButton).toHaveAttribute(
+      'title',
+      'Shared project is read-only: you can comment, but cannot edit or export.',
+    );
+  });
+
   it('points a .jsx module loaded by a sibling HTML to that entry, not the React error (issue #2744)', async () => {
     const file = baseFile({
       name: 'icons.jsx',

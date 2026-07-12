@@ -153,7 +153,7 @@ export interface ServerContext {
    * used by the demo surface.
    */
   collabSync: {
-    requestTeamShare(projectId: string, share?: string | ResourceHubPrincipal): void;
+    requestTeamShare(projectId: string, share?: string | ResourceHubPrincipal): Promise<{ version: number | null }>;
   };
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
