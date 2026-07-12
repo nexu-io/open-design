@@ -104,6 +104,27 @@ describe('useProjectCollab', () => {
     expect(result.current.enabled).toBe(false);
   });
 
+  it('fails closed while the workspace context request is still pending', async () => {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/context')) {
+        return new Promise<Response>(() => {
+          /* keep the workspace context unresolved */
+        });
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+    }) as typeof fetch;
+
+    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.viewerOnly).toBe(true);
+  });
+
   it('fails closed: a non-owner admin is read-only on a shared project even before the owner id arrives', async () => {
     // An admin (canWriteSyncedFiles=true, so the workspace gate is open) opens
     // someone else's shared project. `installFetch`'s /collab/status omits

@@ -13,14 +13,13 @@ export interface UseProjectCollabOptions {
   presenceActivity?: CollabPresenceMember['activity'];
 }
 
-/**
- * Fetch the current workspace context (B-integration seam, GET /api/workspace/
- * context). Null until it loads, or when there is no team-workspace context
- * (personal / signed out / hub unavailable). The daemon serves a dev context
- * until B is wired; production proxies B.
- */
-export function useWorkspaceContext(options: UseProjectCollabOptions = {}): WorkspaceCollabContext | null {
-  const [context, setContext] = useState<WorkspaceCollabContext | null>(null);
+interface WorkspaceContextState {
+  context: WorkspaceCollabContext | null;
+  loading: boolean;
+}
+
+function useWorkspaceContextState(options: UseProjectCollabOptions = {}): WorkspaceContextState {
+  const [state, setState] = useState<WorkspaceContextState>({ context: null, loading: true });
   const baseUrl = options.baseUrl ?? '';
   const fetchImpl = options.fetch;
 
@@ -30,11 +29,14 @@ export function useWorkspaceContext(options: UseProjectCollabOptions = {}): Work
     void (async () => {
       try {
         const response = await run(`${baseUrl}/api/workspace/context`);
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!cancelled) setState({ context: null, loading: false });
+          return;
+        }
         const body = (await response.json()) as { context?: WorkspaceCollabContext | null };
-        if (!cancelled) setContext(body?.context ?? null);
+        if (!cancelled) setState({ context: body?.context ?? null, loading: false });
       } catch {
-        if (!cancelled) setContext(null);
+        if (!cancelled) setState({ context: null, loading: false });
       }
     })();
     return () => {
@@ -42,7 +44,17 @@ export function useWorkspaceContext(options: UseProjectCollabOptions = {}): Work
     };
   }, [baseUrl, fetchImpl]);
 
-  return context;
+  return state;
+}
+
+/**
+ * Fetch the current workspace context (B-integration seam, GET /api/workspace/
+ * context). Null until it loads, or when there is no team-workspace context
+ * (personal / signed out / hub unavailable). The daemon serves a dev context
+ * until B is wired; production proxies B.
+ */
+export function useWorkspaceContext(options: UseProjectCollabOptions = {}): WorkspaceCollabContext | null {
+  return useWorkspaceContextState(options).context;
 }
 
 export interface ProjectCollab {
@@ -100,7 +112,7 @@ export function useProjectCollab(
   projectId: string | null | undefined,
   options: UseProjectCollabOptions = {},
 ): ProjectCollab {
-  const context = useWorkspaceContext(options);
+  const { context, loading: workspaceContextLoading } = useWorkspaceContextState(options);
   const decision = resolveCollabSession(context);
   const member = decision.member
     ? {
@@ -122,6 +134,10 @@ export function useProjectCollab(
   // a removed member) freezes everyone — consume B's `canWriteSyncedFiles` bit
   // rather than re-deriving from lifecycle so the two lanes cannot drift.
   const workspaceReadOnly = context != null && !context.permissions.canWriteSyncedFiles;
+  // Context loading is not the same as confirmed off-team. Fail closed during
+  // the initial workspace-context request so an already-pulled shared project
+  // never flashes writable controls before B confirms the current member.
+  const workspaceContextReadOnly = Boolean(projectId) && workspaceContextLoading;
   // Gate 2 (project-level): a project shared to the team (syncState past
   // `local_only`) is read-only for everyone except the member who shared it — the
   // single writer keeps editing their own project. This fails closed: it stays
@@ -136,7 +152,7 @@ export function useProjectCollab(
   const collabEnabled = decision.enabled && (statusUnknown || shared);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
   const sharedReadOnly = statusUnknown || (shared && !isOwner);
-  const viewerOnly = workspaceReadOnly || sharedReadOnly;
+  const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
 
   // Member content auto-sync (the last link): when a read-only member sees the
   // resource-hub head (`publishedVersion`) advance past what we last pulled,
