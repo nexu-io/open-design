@@ -35,6 +35,13 @@ import { observeElementSize } from '../../providers/file-viewer/element-size';
 import { documentBodyPortalRoot } from '../../providers/file-viewer/portal-root';
 import { resolveChromeActionsHost } from '../../providers/file-viewer/chrome-actions-host';
 import { getLocationOrigin, openInNewTab } from '../../providers/file-viewer/window-open';
+import { hasFlagSeen, markFlagSeen } from '../../providers/file-viewer/session-flag';
+import {
+  postSlideAction,
+  postSlideIndex,
+  subscribeDeckKeyboardNav,
+  subscribeSlideState,
+} from '../../providers/file-viewer/deck-slide-bridge';
 import {
   ensureMarkdownCodeBlockControls,
   highlightMarkdownCodeBlocks,
@@ -48,6 +55,7 @@ import { LiveArtifactRefreshFailure } from './types';
 import type {
   ChromeActionsHostPort,
   ClipboardPort,
+  DeckSlideBridgePort,
   DeployTransportPort,
   DismissPort,
   DocumentPreviewPort,
@@ -60,6 +68,7 @@ import type {
   MarkdownFilePort,
   PortalPort,
   ProjectFilesPort,
+  SessionFlagPort,
   ShareLinkClipboardPort,
   TemplateSavePort,
   ThemeWatchPort,
@@ -153,6 +162,20 @@ export const chromeActionsHostPort: ChromeActionsHostPort = {
 export const windowOpenPort: WindowOpenPort = {
   openInNewTab,
   getLocationOrigin,
+};
+
+/** Default binding: the real `sessionStorage`-backed "seen this session" flag. */
+export const sessionFlagPort: SessionFlagPort = {
+  hasFlagSeen,
+  markFlagSeen,
+};
+
+/** Default binding: the real `od:slide`/`od:slide-state` postMessage + deck keyboard-nav bridge. */
+export const deckSlideBridgePort: DeckSlideBridgePort = {
+  postSlideAction,
+  postSlideIndex,
+  subscribeSlideState,
+  subscribeDeckKeyboardNav,
 };
 
 /**

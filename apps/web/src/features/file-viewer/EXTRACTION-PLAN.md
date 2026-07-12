@@ -404,33 +404,63 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 
 ### Cluster F — Export & Download
 
-- **Status:** pending
-- **Lines (scattered):** state ~2126–2128 (`exportReadyNudge`+ref, moved here
-  from its stray position at 1439–1453), ~2699–2718 (`imageExportModalOpen`,
+- **Status:** state/toast half done, capture half still pending (per plan —
+  deferred to a future pass alongside/after Cluster L). Landed as
+  `hooks/useArtifactExport.hooks.ts` (`useArtifactExport`/
+  `useWiredArtifactExport`), owning `imageExportModalOpen`,
   `imageExportFormat`, `imageExportError`, `pptxExportModalOpen`,
-  `pptxExportMode`, related refs, `exportToast`); nudge effect ~5341–5380;
-  `openDownloadMenu` ~5442–5445; `captureExportImageSnapshot` ~5445–5593
-  (bridge-touching, see below); `handleCopyScreenshot` ~5593;
-  `openImageExportModal`/`changeImageExportFormat`/`fireImageExportResult`/
-  `handleImageExportSave` ~5595–5731; download-menu JSX (inside Cluster E's
-  share-menu portal) ~6980–7145; PPTX modal JSX ~7446–7533; image export
-  modal JSX ~7534–7606.
-- **Owns:** `imageExportModalOpen`, `imageExportFormat`, `imageExportError`,
-  `pptxExportModalOpen`, `pptxExportMode`, `imageExportSnapshotDataUrlRef`,
+  `pptxExportMode`, `exportToast`, `exportReadyNudge`+
+  `exportReadyNudgeSeenRef`, and `hasSeenExportReadyNudge`/
+  `markExportReadyNudgeSeen`. The `window.sessionStorage` pair moved behind a
+  new `providers/file-viewer/session-flag.ts` (`hasFlagSeen`/`markFlagSeen`)
+  + `SessionFlagPort`, bound in `dependencies.ts` — the hook's
+  `hasSeenExportReadyNudge`/`markExportReadyNudgeSeen` wrap the port call with
+  the existing `exportReadyNudgeKey(projectId, fileName)` rule, preserving the
+  exact key + try/catch-swallow semantics. `imageExportSnapshotDataUrlRef`,
   `imageExportRequestIdRef`/`StartedRef`/`ResolvedRef`, `screenshotInFlightRef`,
-  `imageExportInFlightRef`, `exportToast`, `exportReadyNudge`+
-  `exportReadyNudgeSeenRef`, `hasSeenExportReadyNudge`/`markExportReadyNudgeSeen`
-  (currently at file lines 1439–1453 — a DOM-touching `window.sessionStorage`
-  pair; needs a provider bridge, e.g. `providers/file-viewer/session-flag.ts`
-  exposing `hasSeenFlag(key)`/`markFlagSeen(key)`, bound in `dependencies.ts`).
+  `imageExportInFlightRef`, `captureExportImageSnapshot`, and
+  `handleCopyScreenshot` were left in the orchestrator exactly as the plan
+  specifies (capture-flow refs + the function itself, both untouched); the
+  functions entangled with the capture flow —
+  `openImageExportModal`/`changeImageExportFormat`/`fireImageExportResult`/
+  `handleImageExportSave` — also stayed in the orchestrator (they close over
+  `captureExportImageSnapshot`/the capture refs) but now call the hook's
+  returned setters instead of local `useState` setters. The PPTX/image-export
+  modal JSX stayed in place unchanged for the same reason. One additional
+  call site threaded through: `useWiredShareLinkCopy`'s `onCopyFailed`
+  callback (previously closing over the local `setExportToast`) now closes
+  over the hook's returned `setExportToast` — same as `useWiredArtifactAnalytics`'s
+  `onExportToast`. The hook call is positioned early (where the old raw
+  `useState`s sat), before both of those, since they need `setExportToast`
+  immediately. Module-level `hasSeenExportReadyNudge`/`markExportReadyNudgeSeen`
+  functions removed from `FileViewer.tsx` entirely (replaced by the hook).
+- **Lines (scattered, pre-move):** state ~592–593 (`exportReadyNudge`+ref),
+  ~965–984 (`imageExportModalOpen`, `imageExportFormat`, `imageExportError`,
+  `pptxExportModalOpen`, `pptxExportMode`, related refs, `exportToast`);
+  module-level `hasSeenExportReadyNudge`/`markExportReadyNudgeSeen` ~506–520;
+  nudge effect ~3428–3440; `openDownloadMenu`/`openDeployMenu` ~3502–3515;
+  `captureExportImageSnapshot`/`handleCopyScreenshot`/`openImageExportModal`/
+  `changeImageExportFormat`/`fireImageExportResult`/`handleImageExportSave`
+  ~3516–3791 (all stayed, now call the hook's setters); PPTX modal JSX
+  ~4885–4967; image export modal JSX ~4968–5040 (both stayed).
+- **Owns (state/toast half, landed):** `imageExportModalOpen`,
+  `imageExportFormat`, `imageExportError`, `pptxExportModalOpen`,
+  `pptxExportMode`, `exportToast`, `exportReadyNudge`+
+  `exportReadyNudgeSeenRef`, `hasSeenExportReadyNudge`/`markExportReadyNudgeSeen`.
+- **Still owned by the orchestrator (capture half, pending):**
+  `imageExportSnapshotDataUrlRef`, `imageExportRequestIdRef`/`StartedRef`/
+  `ResolvedRef`, `screenshotInFlightRef`, `imageExportInFlightRef`,
+  `captureExportImageSnapshot`, `handleCopyScreenshot`,
+  `openImageExportModal`/`changeImageExportFormat`/`fireImageExportResult`/
+  `handleImageExportSave`, and both export modals' JSX.
 - **Coupled to:** `captureExportImageSnapshot` reaches into Cluster L's
   `iframeRef`/`srcDocPreviewIframeRef`/`urlPreviewIframeRef`,
   `useUrlLoadPreview`, `useLazySrcDocTransport`, `srcDocShellReady`,
   `activateSrcDocSnapshotTransport`, and calls `requestPreviewSnapshotWithRetry`
   (a postMessage round-trip for `od:preview-snapshot*`). Also reads
-  `slideState`/`deckExportSignal` (Cluster I).
+  `slideState`/`deckExportSignal` (Cluster H/L) — unaffected by this pass.
 - **Target:** `hooks/useArtifactExport.hooks.ts` for the modal/format/toast
-  state (bridge-free, low risk); `captureExportImageSnapshot`/
+  state (bridge-free, low risk — DONE); `captureExportImageSnapshot`/
   `handleCopyScreenshot` should become a method the Cluster L bridge exposes
   (e.g. `htmlPreviewTransportPort.captureSnapshot()`) rather than being
   reimplemented standalone — do not extract this half before Cluster L's
@@ -438,41 +468,106 @@ Already-extracted, already-wired call sites inside HtmlViewer (skip):
 - **Shape:** hook (mostly) + one function that delegates into Cluster L's
   future bridge.
 - **Risk:** medium (the bulk is low risk; `captureExportImageSnapshot` is
-  high risk in isolation — sequence this cluster AFTER Cluster L).
+  high risk in isolation — sequence the remaining half AFTER Cluster L).
 - **Rationale:** splitting the low-risk modal/toast state from the one
   bridge-touching capture function avoids blocking the whole cluster on the
   transport-engine rewrite.
 
 ### Cluster G — Version history integration (trivial)
 
-- **Status:** pending
-- **Lines:** `versionModalOpen` state ~2124; `handleVersionRestored`
-  ~5045–5051; JSX wiring ~7435–7445.
-- **Owns:** `versionModalOpen`, `handleVersionRestored`.
+- **Status:** done. **Real shape differed from the plan**: `versionModalOpen`
+  had already moved with Cluster C's `useViewerToolbarMenus.hooks.ts` (its
+  landed writeup lists `versionModalOpen` among what it owns — the plan's
+  original Cluster G entry predates that discovery). So this pass's actual
+  scope was just the write-through function plus its own toast, which turned
+  out to also include `versionRestoredToast`/`versionRestoredToastIdRef` (not
+  named in the original plan — found by reading `handleVersionRestored`'s
+  body, which sets that toast on success). Landed as
+  `hooks/useVersionRestore.hooks.ts` (`useVersionRestore`/
+  `useWiredVersionRestore`), taking `setSource`/`sourceRef`/
+  `setInlinedSource`/`setReloadKey`/`onFileSaved`/`t` as injected deps (all
+  Cluster L/prop territory) and returning `versionRestoredToast`/
+  `dismissVersionRestoredToast`/`handleVersionRestored`. No port needed (pure
+  deps-bag write-through, no transport/DOM of its own) — `useWiredVersionRestore`
+  exists anyway to match the slice's injectable-hook shape, per the
+  `useArtifactAnalytics` precedent. New `VersionRestoredToast` type added to
+  `types.ts`. The orchestrator's `FileVersionManagerModal` JSX (`onRestored`)
+  and the toast's portal JSX (`onDismiss`) now call the hook's returned
+  functions; no markup/className/i18n-key changes.
+- **Lines:** `versionModalOpen` state (Cluster C territory, not moved here);
+  `handleVersionRestored` + `versionRestoredToast`/`versionRestoredToastIdRef`
+  state, ~8 lines total pre-move; JSX wiring at the `FileVersionManagerModal`
+  call site and the toast's `createPortal`.
+- **Owns:** `handleVersionRestored`, `versionRestoredToast`,
+  `versionRestoredToastIdRef`.
 - **Coupled to:** calls `setSource`/`sourceRef`/`setInlinedSource`/
-  `setReloadKey` (Cluster L) and `onFileSaved?.()`.
-- **Target:** fold into Cluster E's hook file or keep a 10-line inline
-  `useCallback` in the orchestrator until Cluster L lands (this write-through
-  is single-directional and safe either way).
-- **Shape:** trivial.
+  `setReloadKey` (Cluster L) and `onFileSaved?.()` — all threaded in as deps.
+- **Target:** `hooks/useVersionRestore.hooks.ts`.
+- **Shape:** trivial hook (state + one write-through function).
 - **Risk:** low.
 
 ### Cluster H — Deck / slide navigation
 
-- **Status:** pending
-- **Lines (scattered):** `slideState` init ~2687; `postSlide`/
-  `syncCachedSlideStateToIframe` ~4495–4502; slide-state postMessage listener
-  effect ~3418–3438; deck keyboard-nav effect (←/→/Home/End posting
-  `od:slide`) ~4600–4625; `slideNavRequest`-nonce effect ~5416–5440 (posts
-  directly + writes slide-state cache); deck-nav JSX in primary toolbar
-  ~6335–6355 and duplicated in "more" menu ~6580–6620.
+- **Status:** done. Landed as `providers/file-viewer/deck-slide-bridge.ts`
+  (`postSlideAction`/`postSlideIndex`/`subscribeSlideState`/
+  `subscribeDeckKeyboardNav`, all byte-identical postMessage/listener bodies
+  moved verbatim) + `ports.ts`'s `DeckSlideBridgePort`, bound in
+  `dependencies.ts` as `deckSlideBridgePort`; `hooks/useDeckSlideNav.hooks.ts`
+  (`useDeckSlideNav`/`useWiredDeckSlideNav`) composes the port with the
+  `slideState` state, the reset+listener effect, the keyboard-nav effect, and
+  the `slideNavRequest`-nonce effect (jointly owned with Cluster N per the
+  plan — folded in here since this cluster owns the state/cache it writes).
+  The module-level `htmlPreviewSlideState` cache moved as a plain module
+  (mirroring Cluster A's `viewport-cache.ts` precedent, NOT a provider — a
+  bare `Map` touches no DOM) to `features/file-viewer/slide-state-cache.ts`
+  (`getCachedSlideState`/`setCachedSlideState`), exported through the slice
+  barrel. New in-slice types `SlideState`/`DeckSlideAction` added to
+  `types.ts` (structurally identical to the orchestrator's old local
+  `type SlideState`/inline union, now sourced from the slice).
+  **Real shape differed from the plan in one way**: `postSlide`/
+  `syncCachedSlideStateToIframe` themselves never touch a bare `window`/
+  `document` identifier (only `iframeRef.current?.contentWindow?.postMessage(...)`,
+  which the guard's AST check does not flag), so they did not strictly NEED a
+  port — but they were kept in the provider bridge file anyway for cohesion
+  (one module owns the whole `od:slide`/`od:slide-state` protocol) per the
+  plan's explicit target shape, and routed through the port since any
+  `providers/` file requires one regardless of which of its exports touch DOM
+  globals.
+  **Coupling to Cluster L handled via injected deps** (`DeckSlideNavDeps`):
+  `effectiveDeck`, `mode`, `previewStateKey`, `iframeRef`,
+  `isOurPreviewIframeSource`, `isActivePreviewIframeSource`, `slideNavRequest`
+  — all still orchestrator/Cluster L state, threaded in as hook params exactly
+  like Cluster E's `resetCopiedDeployLink`/`closeDeployMenu` pattern.
+  The `useWiredDeckSlideNav(...)` call had to move to right after
+  `effectiveDeck` is computed (not at the old `slideState` useState's
+  original position, which was BEFORE `effectiveDeck` existed) since the hook
+  needs `effectiveDeck` as an input; `showDeckNavigation`'s read of
+  `slideState` (which follows immediately) still works unchanged. Every other
+  orchestrator read site (`showDeckNavigation`, the two `buildSrcdoc`
+  `initialSlideIndex` call sites, `withDeckSlideIndex`,
+  `captureExportImageSnapshot`'s `trackedActive`, the comment-visibility
+  effect, `ViewerToolbar`'s `slideState`/`postSlide` props, the srcDoc
+  iframe's `onLoad` call to `syncCachedSlideStateToIframe`, and
+  `CommentPreviewOverlays`'s `activeSlideIndex` prop) now reads from the
+  hook's destructured `slideState`/`postSlide`/`syncCachedSlideStateToIframe`
+  or calls `getCachedSlideState(previewStateKey)` from the slice barrel
+  instead of the removed module-level Map — no behavior change, same
+  byte-identical postMessage payloads. `apps/web/tests/components/
+  FileViewer.test.tsx`'s deck slide-state test (dispatches a synthetic
+  `od:slide-state` MessageEvent) kept green unmodified, confirming the
+  listener's `ev.source` filtering survived the move intact.
+- **Lines (scattered, pre-move):** `slideState` init ~1023–1028 (moved to
+  after `effectiveDeck`, ~1187); `postSlide`/`syncCachedSlideStateToIframe`
+  ~2818–2830; slide-state postMessage listener effect ~1741–1761; deck
+  keyboard-nav effect (←/→/Home/End posting `od:slide`) ~2918–2943;
+  `slideNavRequest`-nonce effect ~3424–3437; deck-nav JSX in primary toolbar
+  and "more" menu (unchanged, lives in `ViewerToolbar`/chrome-actions portal,
+  out of this cluster's scope — reads `slideState`/`postSlide` as props).
 - **Owns:** `slideState`, `postSlide`, `syncCachedSlideStateToIframe`,
-  keyboard-nav effect, `slideNavRequest`-nonce effect. Also owns/reads the
-  module-level `htmlPreviewSlideState` cache (lines ~356–357, ~505–511 —
-  already a plain Map with a getter/setter pair, portable as-is into a
-  provider or kept module-level in the bridge).
+  keyboard-nav effect, `slideNavRequest`-nonce effect, the
+  `htmlPreviewSlideState` cache (now `slide-state-cache.ts`).
 - **Coupled to:** `effectiveDeck`/`looksLikeDeck` (Cluster L), `iframeRef`
-  (Cluster L).
+  (Cluster L) — both threaded in as deps, per above.
 - **Target:** `providers/file-viewer/deck-slide-bridge.ts` (owns the
   `od:slide`/`od:slide-state` postMessage pair, `subscribeSlideState`/
   `postSlide`) + `hooks/useDeckSlideNav.hooks.ts`.

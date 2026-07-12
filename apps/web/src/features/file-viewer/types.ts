@@ -62,6 +62,12 @@ export type InspectSpliceScan = {
 /** The three preview breakpoints the board/inspect canvas can emulate. */
 export type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
 
+/** A deck's currently-active slide index and its total slide count. */
+export type SlideState = { active: number; count: number };
+
+/** A deck nav request the host can post to the preview iframe's `od:slide` channel. */
+export type DeckSlideAction = 'next' | 'prev' | 'first' | 'last';
+
 /** Measured preview canvas box, with the current scroll offset if any. */
 export type PreviewCanvasSize = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 
@@ -254,14 +260,20 @@ export type ArtifactTrackingAnalytics = {
 
 /**
  * The export/share loading|success|error toast `useArtifactAnalytics`'s
- * `fireShareExport` drives. The toast state itself is owned by the
- * not-yet-extracted export/download HtmlViewer cluster (its `exportToast`
- * state lives in the orchestrator until that cluster lands), so the hook
- * reaches it through an `onExportToast` deps callback instead of owning it.
+ * `fireShareExport` drives. The toast state itself is owned by
+ * `useArtifactExport` (the export/download HtmlViewer cluster), so the
+ * analytics hook reaches it through an `onExportToast` deps callback instead
+ * of owning it directly.
  */
 export type ArtifactExportToast = {
   message: string;
   tone: 'default' | 'success' | 'error' | 'loading';
+};
+
+/** The transient "restore succeeded" toast the version-history flow shows. */
+export type VersionRestoredToast = {
+  id: number;
+  message: string;
 };
 
 /**

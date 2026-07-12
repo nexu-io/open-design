@@ -55,7 +55,6 @@ import {
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
-import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
@@ -167,7 +166,6 @@ import {
   finiteBridgeInteger,
   normalizeAnnotationStyle,
   clampBridgeCoordinate,
-  exportReadyNudgeKey,
   ImageViewer,
   SketchViewer,
   VideoViewer,
@@ -201,6 +199,10 @@ import {
   useWiredDeployFlow,
   DeployModal,
   ShareMenu,
+  useWiredVersionRestore,
+  useWiredArtifactExport,
+  useWiredDeckSlideNav,
+  getCachedSlideState,
 } from '../features/file-viewer';
 import type {
   InspectOverrideMap,
@@ -245,7 +247,6 @@ function resolveChromeActionsHost(): HTMLElement | null {
 }
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
-type SlideState = { active: number; count: number };
 const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
   value: ImageExportFormat;
   label: string;
@@ -269,12 +270,6 @@ const POWERED_PREVIEW_ALLOW =
 const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
 const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
 
-// The five basic style facets the inspect panel exposes. Kept narrow on
-// purpose — open-slide's design tokens panel only edits global tokens, so
-// the per-element delta is small + obvious + cheap to read back from
-// getComputedStyle on the iframe side.
-const MAX_CACHED_SLIDE_STATES = 64;
-const htmlPreviewSlideState = new Map<string, SlideState>();
 // Grace window before the inspect hover card is torn down. Long enough to absorb
 // the async iframe mouseout (od:comment-leave) that fires when the pointer slides
 // onto the card or hops back onto the element under it, short enough to read as
@@ -293,13 +288,12 @@ const HOVER_CARD_DISMISS_DELAY_MS = 80;
 // now lives in the file-viewer slice as `MarkdownViewer`, imported from the
 // slice barrel above (ADR 0002).
 
-function setSlideStateCached(key: string, state: SlideState) {
-  htmlPreviewSlideState.set(key, state);
-  if (htmlPreviewSlideState.size > MAX_CACHED_SLIDE_STATES) {
-    const oldest = htmlPreviewSlideState.keys().next().value;
-    if (oldest != null) htmlPreviewSlideState.delete(oldest);
-  }
-}
+// htmlPreviewSlideState/setSlideStateCached (the deck slide-state cache) and
+// postSlide/syncCachedSlideStateToIframe (the od:slide postMessage pair) now
+// live in the file-viewer slice as getCachedSlideState/setCachedSlideState
+// (slide-state-cache.ts, DOM-free) and useDeckSlideNav (the postMessage/
+// keyboard-nav bridge, since a slice file may not touch bare `window`/
+// `document`); imported from the slice barrel above (ADR 0002).
 
 function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): Promise<void> {
   return new Promise((resolve) => {
@@ -502,21 +496,10 @@ export function FileViewer({
   return <BinaryViewer projectId={projectId} file={file} />;
 }
 
-function hasSeenExportReadyNudge(projectId: string, fileName: string): boolean {
-  try {
-    return window.sessionStorage.getItem(exportReadyNudgeKey(projectId, fileName)) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function markExportReadyNudgeSeen(projectId: string, fileName: string) {
-  try {
-    window.sessionStorage.setItem(exportReadyNudgeKey(projectId, fileName), '1');
-  } catch {
-    // Ignore storage-denied contexts; the in-memory state still prevents loops.
-  }
-}
+// hasSeenExportReadyNudge/markExportReadyNudgeSeen now live in the file-viewer
+// slice as useArtifactExport's hasSeenExportReadyNudge/markExportReadyNudgeSeen
+// (the `sessionStorage` read/write moved behind the injected SessionFlagPort
+// bridge, since a slice file may not touch bare `window`/`sessionStorage`).
 
 // fileVersionSourceLabel/fileVersionSourceToTracking/fileVersionPreviewOptions and
 // FileVersionManagerModal now live in the file-viewer slice (the modal's
@@ -599,8 +582,6 @@ function HtmlViewer({
   }, [fileViewportKey]);
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [exportReadyNudge, setExportReadyNudge] = useState(false);
-  const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
   const templateSave = useWiredTemplateSave({
@@ -960,13 +941,33 @@ function HtmlViewer({
     };
   }, [boardImages]);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
-  const [versionRestoredToast, setVersionRestoredToast] = useState<{ id: number; message: string } | null>(null);
-  const versionRestoredToastIdRef = useRef(0);
-  const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
-  const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
-  const [imageExportError, setImageExportError] = useState<string | null>(null);
-  const [pptxExportModalOpen, setPptxExportModalOpen] = useState(false);
-  const [pptxExportMode, setPptxExportMode] = useState<'editable' | 'screenshot'>('editable');
+  const { versionRestoredToast, dismissVersionRestoredToast, handleVersionRestored } = useWiredVersionRestore({
+    setSource,
+    sourceRef,
+    setInlinedSource,
+    setReloadKey,
+    onFileSaved,
+    t,
+  });
+  const {
+    imageExportModalOpen,
+    setImageExportModalOpen,
+    imageExportFormat,
+    setImageExportFormat,
+    imageExportError,
+    setImageExportError,
+    pptxExportModalOpen,
+    setPptxExportModalOpen,
+    pptxExportMode,
+    setPptxExportMode,
+    exportToast,
+    setExportToast,
+    exportReadyNudge,
+    setExportReadyNudge,
+    exportReadyNudgeSeenRef,
+    hasSeenExportReadyNudge,
+    markExportReadyNudgeSeen,
+  } = useWiredArtifactExport();
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   // Threads the share-popover click → artifact_export_result(image) pair, the
   // same correlation other export formats get via fireShareExport. The image
@@ -979,9 +980,6 @@ function HtmlViewer({
   const imageExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
   const imageExportInFlightRef = useRef(false);
-  const [exportToast, setExportToast] = useState<
-    { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
-  >(null);
   const {
     exportProgressRef,
     fireShareExport,
@@ -1021,12 +1019,6 @@ function HtmlViewer({
     viewport: previewViewport,
   });
 
-  // Slide deck nav state: the iframe posts the active index + total count
-  // back to the host every time a slide settles. Host renders prev/next
-  // controls in the toolbar and reflects the count beside them.
-  const [slideState, setSlideState] = useState<SlideState | null>(
-    () => htmlPreviewSlideState.get(previewStateKey) ?? null,
-  );
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
   const overlayPreviewScale = effectivePreviewScale(
     previewViewport,
@@ -1192,6 +1184,18 @@ function HtmlViewer({
     return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s);
   }, [routingHtmlSource]);
   const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
+  // Slide deck nav state: the iframe posts the active index + total count
+  // back to the host every time a slide settles. Host renders prev/next
+  // controls in the toolbar and reflects the count beside them.
+  const { slideState, postSlide, syncCachedSlideStateToIframe } = useWiredDeckSlideNav({
+    effectiveDeck,
+    mode,
+    previewStateKey,
+    iframeRef,
+    isOurPreviewIframeSource,
+    isActivePreviewIframeSource,
+    slideNavRequest,
+  });
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
   // Extra deck signal for EXPORT only. Runtime-managed decks (`<deck-stage>` /
   // `data-screen-label`) need deck capture even when the viewer's nav bridge
@@ -1439,7 +1443,7 @@ function HtmlViewer({
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
-      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      initialSlideIndex: getCachedSlideState(previewStateKey)?.active ?? 0,
       selectionBridge: true,
       // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
       // export path), so the document is byte-identical across preview /
@@ -1733,27 +1737,9 @@ function HtmlViewer({
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
 
-  useEffect(() => {
-    if (!effectiveDeck) {
-      setSlideState(null);
-      return;
-    }
-    setSlideState(htmlPreviewSlideState.get(previewStateKey) ?? null);
-    function onMessage(ev: MessageEvent) {
-      if (!isOurPreviewIframeSource(ev.source)) return;
-      if (!isActivePreviewIframeSource(ev.source)) return;
-      const data = ev?.data as
-        | { type?: string; active?: number; count?: number }
-        | null;
-      if (!data || data.type !== 'od:slide-state') return;
-      if (typeof data.active !== 'number' || typeof data.count !== 'number') return;
-      const next = { active: data.active, count: data.count };
-      setSlideStateCached(previewStateKey, next);
-      setSlideState(next);
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [effectiveDeck, isActivePreviewIframeSource, isOurPreviewIframeSource, previewStateKey]);
+  // The deck slide-state reset + `od:slide-state` listener now lives in the
+  // file-viewer slice as part of useDeckSlideNav (Cluster H); see the
+  // useWiredDeckSlideNav() call above.
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -2810,19 +2796,6 @@ function HtmlViewer({
     return () => window.removeEventListener('message', onMessage);
   }, [inspectMode, isOurPreviewIframeSource]);
 
-  function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ type: 'od:slide', action }, '*');
-  }
-
-  function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
-    const active = htmlPreviewSlideState.get(previewStateKey)?.active;
-    const win = target?.contentWindow;
-    if (!win || typeof active !== 'number') return;
-    win.postMessage({ type: 'od:slide', action: 'go', index: active }, '*');
-  }
-
   function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -2913,34 +2886,9 @@ function HtmlViewer({
     }
   }
 
-  // Keyboard nav on the host, so the user can press ←/→ even when focus
-  // is on the chat composer or any other host control.
-  useEffect(() => {
-    if (!effectiveDeck || mode !== 'preview') return;
-    function onKey(e: KeyboardEvent) {
-      if (document.activeElement === iframeRef.current) return;
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
-      }
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
-        e.preventDefault();
-        postSlide('next');
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        postSlide('prev');
-      } else if (e.key === 'Home') {
-        e.preventDefault();
-        postSlide('first');
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        postSlide('last');
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveDeck, mode]);
+  // The deck keyboard-nav effect (←/→/Home/End posting od:slide) now lives in
+  // the file-viewer slice as part of useDeckSlideNav (Cluster H); see the
+  // useWiredDeckSlideNav() call above.
 
   useEffect(() => {
     if (!agentToolsOpen) return;
@@ -3020,7 +2968,7 @@ function HtmlViewer({
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
-      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      initialSlideIndex: getCachedSlideState(previewStateKey)?.active ?? 0,
     });
   }
 
@@ -3100,18 +3048,6 @@ function HtmlViewer({
       setSrcDocShellReady(false);
       setSrcDocTransportResetKey((key) => key + 1);
     }
-  }
-
-  async function handleVersionRestored(content: string) {
-    setSource(content);
-    sourceRef.current = content;
-    setInlinedSource(null);
-    setReloadKey((key) => key + 1);
-    await onFileSaved?.();
-    setVersionRestoredToast({
-      id: (versionRestoredToastIdRef.current += 1),
-      message: t('fileViewer.versions.restoreSuccess'),
-    });
   }
 
   function selectMode(nextMode: 'preview' | 'source') {
@@ -3476,28 +3412,9 @@ function HtmlViewer({
     setDownloadMenuOpen(true);
   }, [downloadRequest?.nonce, canShare, projectId, file.name]);
 
-  // A queued chat send for this deck just started: flip the preview to the
-  // slide its marked element lives on. We write the cached slide state first so
-  // a freshly-mounted iframe (the tab may have just been activated) restores to
-  // the target on load via syncCachedSlideStateToIframe(), then post directly
-  // to cover the already-loaded iframe. The consume-once guard lives in
-  // `shouldConsumeSlideNav` (keyed by file outside this component) so it holds
-  // across remounts — switching away from and back to the deck must not replay
-  // the stale request and yank the preview off wherever the user navigated.
-  useEffect(() => {
-    const nonce = slideNavRequest?.nonce;
-    if (nonce == null) return;
-    if (!effectiveDeck) return;
-    const requested = slideNavRequest?.slideIndex;
-    if (typeof requested !== 'number' || !Number.isFinite(requested) || requested < 0) return;
-    if (!shouldConsumeSlideNav(previewStateKey, nonce)) return;
-    const target = Math.floor(requested);
-    const cachedCount = htmlPreviewSlideState.get(previewStateKey)?.count;
-    const count = slideState?.count ?? cachedCount ?? target + 1;
-    setSlideStateCached(previewStateKey, { active: target, count });
-    setSlideState({ active: target, count });
-    syncCachedSlideStateToIframe();
-  }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
+  // The slideNavRequest-nonce effect (chat "jump to slide" follow-along) now
+  // lives in the file-viewer slice as part of useDeckSlideNav (Cluster H);
+  // see the useWiredDeckSlideNav() call above.
 
   const openDownloadMenu = () => {
     fireArtifactHeaderClick('download_dropdown');
@@ -3544,7 +3461,7 @@ function HtmlViewer({
       // would always grab slide 0, so plan to skip it and fall through to the
       // visible host snapshot (= the slide on screen). Whole-deck / pages /
       // tracked `.slide` decks still render off-screen.
-      const trackedActive = slideState?.active ?? htmlPreviewSlideState.get(previewStateKey)?.active ?? null;
+      const trackedActive = slideState?.active ?? getCachedSlideState(previewStateKey)?.active ?? null;
       const plan = planDeckImageCapture({ deck: deckExportSignal, wholeDeck, trackedActive });
       if (plan.useOffscreen) {
         const rendered = await exportProjectImageDataUrl({
@@ -5188,7 +5105,7 @@ function HtmlViewer({
           tone="success"
           placement="top"
           ttlMs={2400}
-          onDismiss={() => setVersionRestoredToast(null)}
+          onDismiss={dismissVersionRestoredToast}
         />,
         document.body,
       ) : null}

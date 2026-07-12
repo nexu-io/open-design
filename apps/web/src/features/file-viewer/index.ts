@@ -172,6 +172,8 @@ export type {
   CommentSideDropEdge,
   ManualEditPendingStyleSave,
   BoardTool,
+  SlideState,
+  DeckSlideAction,
 } from './types';
 
 // Shared constants consumed by both the slice and the orchestrator.
@@ -304,3 +306,26 @@ export { DeployModal } from './components/DeployModal';
 export type { DeployModalProps } from './components/DeployModal';
 export { ShareMenu } from './components/ShareMenu';
 export type { ShareMenuProps } from './components/ShareMenu';
+
+// Version-history restore write-through: re-hydrates the orchestrator's live
+// source state after a restore and surfaces the transient success toast. The
+// version-history modal's own open state stays in Cluster C's
+// `useWiredViewerToolbarMenus` (`versionModalOpen`).
+export { useWiredVersionRestore } from './hooks/useVersionRestore.hooks';
+export type { VersionRestoreController, VersionRestoreDeps } from './hooks/useVersionRestore.hooks';
+export type { VersionRestoredToast } from './types';
+
+// HtmlViewer's export/download modal + toast state (the state/toast half of
+// Cluster F — the pixel-capture half stays in the orchestrator until Cluster
+// L's transport engine lands; see EXTRACTION-PLAN.md).
+export { useWiredArtifactExport } from './hooks/useArtifactExport.hooks';
+export type { ArtifactExportController, PptxExportMode } from './hooks/useArtifactExport.hooks';
+
+// HtmlViewer's deck/slide navigation: active-slide state, the `od:slide`/
+// `od:slide-state` postMessage bridge, the host-side deck keyboard shortcut,
+// and the chat "jump to slide" nonce request. The per-preview-surface cache
+// (`getCachedSlideState`/`setCachedSlideState`) is exported separately since
+// it is a plain module (no DOM), mirroring `viewport-cache.ts`.
+export { useWiredDeckSlideNav } from './hooks/useDeckSlideNav.hooks';
+export type { DeckSlideNavController, DeckSlideNavDeps } from './hooks/useDeckSlideNav.hooks';
+export { getCachedSlideState, setCachedSlideState } from './slide-state-cache';

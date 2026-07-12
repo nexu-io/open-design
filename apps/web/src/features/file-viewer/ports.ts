@@ -19,6 +19,7 @@ import type {
 import type { LiveArtifact, LiveArtifactRefreshLogEntry } from '../../types';
 import type {
   CloudflarePagesZoneOption,
+  DeckSlideAction,
   DocumentPreview,
   LiveArtifactCodeVariant,
   LiveArtifactRefreshResult,
@@ -184,6 +185,16 @@ export interface MarkdownEditorMeasurePort {
 }
 
 /**
+ * A boolean "seen this session" flag persisted in `sessionStorage`
+ * (DOM-touching, so a port). Backs the export-ready toolbar nudge's
+ * once-per-session dedupe.
+ */
+export interface SessionFlagPort {
+  hasFlagSeen(key: string): boolean;
+  markFlagSeen(key: string): void;
+}
+
+/**
  * Transport the deploy/publish flow needs: read existing deployments/config,
  * save provider credentials, deploy the file, poll a pending link, list
  * Cloudflare Pages zones, and build the social-share payload for a deployed
@@ -205,4 +216,21 @@ export interface DeployTransportPort {
     cloudflarePages?: CloudflarePagesConfigHints;
   } | null>;
   createSocialSharePayload(input: SocialShareRequest): Promise<SocialShareResponse>;
+}
+
+/**
+ * The deck/slide-nav postMessage protocol (`od:slide`/`od:slide-state`) plus
+ * the host-side deck keyboard shortcut (DOM-touching, so a port).
+ */
+export interface DeckSlideBridgePort {
+  postSlideAction(iframe: HTMLIFrameElement | null, action: DeckSlideAction): void;
+  postSlideIndex(iframe: HTMLIFrameElement | null, index: number): void;
+  subscribeSlideState(
+    isAcceptedSource: (source: MessageEventSource | null) => boolean,
+    onSlideState: (state: { active: number; count: number }) => void,
+  ): () => void;
+  subscribeDeckKeyboardNav(
+    getPreviewIframe: () => HTMLIFrameElement | null,
+    onAction: (action: DeckSlideAction) => void,
+  ): () => void;
 }
