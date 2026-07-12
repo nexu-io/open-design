@@ -38,6 +38,8 @@ describe('creator media routes', () => {
       expect(scanned.status).toBe(201);
       const body = await scanned.json() as { assets: Array<{ id: string; fileName: string }> };
       expect(body).toMatchObject({ assets: [expect.objectContaining({ fileName: 'clip.mp4' })] });
+      const projectData = await fetch(`${baseUrl}/api/projects/project-1/creator-media-assets`);
+      await expect(projectData.json()).resolves.toMatchObject({ roots: [{ rootPath: mediaDir, lastScannedAt: expect.any(String) }] });
       const linked = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/${taskId}/media-assets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: body.assets[0]!.id }) });
       expect(linked.status).toBe(201);
       const data = await fetch(`${baseUrl}/api/projects/project-1/creator-media-assets`);

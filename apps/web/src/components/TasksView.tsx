@@ -578,7 +578,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       const creatorMediaData = await Promise.all(entryProjects.map(async (project): Promise<CreatorMediaProjectState> => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-media-assets`);
-          if (!response.ok) return { projectId: project.id, data: { assets: [], taskLinks: [] }, failed: true };
+          if (!response.ok) return { projectId: project.id, data: { roots: [], assets: [], taskLinks: [] }, failed: true };
           const data = await response.json() as Partial<CreatorMediaProjectData>;
           return {
             projectId: project.id,
@@ -589,7 +589,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
             failed: false,
           };
         } catch {
-          return { projectId: project.id, data: { assets: [], taskLinks: [] }, failed: true };
+          return { projectId: project.id, data: { roots: [], assets: [], taskLinks: [] }, failed: true };
         }
       }));
       setCreatorMediaProjectData(creatorMediaData);

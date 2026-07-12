@@ -80,7 +80,7 @@ function mockTasksViewFetch({
     if (creatorMediaRead && (!init || init.method === undefined)) {
       const projectId = decodeURIComponent(creatorMediaRead[1]!);
       if (creatorMediaFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'media unavailable' }), { status: 503 });
-      return new Response(JSON.stringify(creatorMediaData[projectId] ?? { assets: [], taskLinks: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify(creatorMediaData[projectId] ?? { roots: [], assets: [], taskLinks: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ templates: [] }), {

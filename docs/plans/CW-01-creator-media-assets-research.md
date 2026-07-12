@@ -35,3 +35,14 @@
 - 沿用上述 Immich、PhotoPrism、AppFlowy 与 AFFiNE 的共同边界：资产保持项目内独立实体，任务只维护关联，不把素材字段复制进任务。
 - 本轮只在既有 `taskLinks` 上做 HTTP 关联管理：编辑任务时展示已关联资产；候选项限制为该任务项目内、未关联且 `availability=available` 的资产；missing 资产只读保留在已关联列表中。
 - 不采用预览、文件打开、上传、移动或跨项目选择；这些会突破既有 Web HTTP 边界和 CW-01 首版范围。
+
+## 后端收口补充（2026-07-12）
+
+- `agent-reach doctor --json` 本机超时，按技能规定使用 `gh search repos` 的 GitHub
+  零配置路径；按 stars 检索到的结果没有比既有 Immich、PhotoPrism 更适合本地索引
+  重扫语义的高星实现，因此不引入新的外部存储架构。
+- 采用根目录级扫描游标：`roots` 独立记录 `rootPath`、`addedAt` 和
+  `lastScannedAt`；资产仍是独立实体，任务关联保持独立。
+- 只有扫描没有错误时，才把该 rootPath 本轮未发现的旧资产标记为 `missing`；扫描
+  发生错误时保留原可用状态，避免不可读子目录造成误判。历史 `taskLinks` 永不因
+  missing 被删除。

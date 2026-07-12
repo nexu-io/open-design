@@ -27,7 +27,7 @@ export function registerCreatorMediaRoutes(app: Express, deps: RegisterCreatorMe
       const rootPath = await fsp.realpath(requested);
       if (!(await fsp.stat(rootPath)).isDirectory()) throw new Error('rootPath must be a directory');
       const scan = await scanCreatorMediaRoot(rootPath);
-      const assets = await upsertCreatorMediaAssets(deps.paths.RUNTIME_DATA_DIR, req.params.id, scan.discovered);
+      const assets = await upsertCreatorMediaAssets(deps.paths.RUNTIME_DATA_DIR, req.params.id, scan.discovered, { rootPath, complete: scan.errors.length === 0 });
       res.status(201).json({ assets, skipped: scan.skipped, errors: scan.errors });
     } catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
   });

@@ -26,6 +26,12 @@ export interface CreatorTaskMediaLink {
   createdAt: string;
 }
 
+export interface CreatorMediaRoot {
+  rootPath: string;
+  addedAt: string;
+  lastScannedAt?: string;
+}
+
 export interface CreatorMediaScanCandidate extends Omit<CreatorMediaAsset, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {}
 
 export interface CreatorMediaScanResult {
@@ -35,6 +41,7 @@ export interface CreatorMediaScanResult {
 }
 
 export interface CreatorMediaProjectData {
+  roots: CreatorMediaRoot[];
   assets: CreatorMediaAsset[];
   taskLinks: CreatorTaskMediaLink[];
 }
