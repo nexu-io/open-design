@@ -9,7 +9,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { deriveConfigureGlobals } from '@open-design/contracts/analytics';
-import { runtimeTypeForRunAnalytics } from '../src/run-analytics-observability.js';
+import {
+  agentProviderIdForRunAnalytics,
+  runtimeTypeForRunAnalytics,
+} from '../src/run-analytics-observability.js';
 
 describe('runtime_type on daemon run analytics', () => {
   it('lets a client byok hint override the daemon BYOK-blind derivation', () => {
@@ -35,5 +38,29 @@ describe('runtime_type on daemon run analytics', () => {
     expect(runtimeTypeForRunAnalytics({ derived, hint: undefined })).toBe('amr_cloud');
     expect(runtimeTypeForRunAnalytics({ derived, hint: 'bogus' })).toBe('amr_cloud');
     expect(runtimeTypeForRunAnalytics({ derived, hint: 42 })).toBe('amr_cloud');
+  });
+});
+
+describe('agent_provider_id on daemon run analytics', () => {
+  it('reports the BYOK provider protocol for byok-opencode runs', () => {
+    expect(agentProviderIdForRunAnalytics({
+      agentId: 'byok-opencode',
+      byokProvider: { protocol: 'aihubmix' },
+    })).toBe('aihubmix');
+    expect(agentProviderIdForRunAnalytics({
+      agentId: 'byok-opencode',
+      byokProvider: { protocol: 'google' },
+    })).toBe('google_gemini');
+  });
+
+  it('falls back to normal CLI mapping outside byok-opencode', () => {
+    expect(agentProviderIdForRunAnalytics({
+      agentId: 'opencode',
+      byokProvider: { protocol: 'aihubmix' },
+    })).toBe('opencode');
+    expect(agentProviderIdForRunAnalytics({
+      agentId: 'byok-opencode',
+      byokProvider: { protocol: 'bedrock' },
+    })).toBe('other');
   });
 });

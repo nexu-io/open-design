@@ -1,16 +1,34 @@
 ---
 name: html-ppt-knowledge-arch-blueprint
-description: 奶油蓝图架构 deck — 奶油纸 #F0EAE0 底色 + 单一锈红 #B5392A 高亮、48px 蓝图网格 mask、2px 黑边硬卡片、pipeline 步骤盒（其中一个抬高）、右侧锈红 insight callout、Playfair 衬线大字、SVG 虚线反馈环。零渐变零软阴影，认真且印刷友好。
-triggers:
+en_name: "Turn an Incident Retro into a Learning Deck like a Platform VP"
+zh_name: "像平台 VP 一样把事故复盘写成学习稿"
+description: |
+  Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
+en_description: |
+  Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
+zh_description: |
+  像平台 VP 一样把事故复盘写成学习稿——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "product-management"
+  - "pm-feature-business-case-deck"
+  - "product"
+  - "roadmap"
   - "architecture"
-  - "blueprint"
-  - "system design"
-  - "架构图"
-  - "data flow"
-  - "engineering whitepaper"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-knowledge-arch-blueprint"
+triggers:
+  - "pm-feature-business-case-deck"
+  - "product-management"
+  - "Turn an Incident Retro into a Learning Deck like a Platform VP"
+  - "像平台 VP 一样把事故复盘写成学习稿"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-knowledge-arch-blueprint 模板做一份系统架构介绍 PPT。奶油纸底 + 锈红高亮 + 蓝图网格 + pipeline 抬高一格 + 衬线大字。先告诉我系统名 + 5-7 个核心模块 + 数据流方向，再写 8-10 页。"
+  category: "product-management"
+  scenario: "product"
+  example_prompt: "Create \"Turn an Incident Retro into a Learning Deck like a Platform VP\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Audience: engineering, SRE, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 # HTML PPT · 奶油蓝图架构
 

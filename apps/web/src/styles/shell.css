@@ -186,7 +186,10 @@
   contain: layout style;
   transition-property: background, border-color, color, opacity, transform, box-shadow;
   transition-duration: 100ms, 100ms, 100ms, 120ms, 150ms, 150ms;
-  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.2, 0.8, 0.2, 1), ease;
+  /* One easing for every property: entrance.css also declares a .workspace-tab
+     transition shorthand with var(--ease-out), so a diverging list here made
+     the tab's feel depend on stylesheet import order. */
+  transition-timing-function: var(--ease-out);
   -webkit-app-region: no-drag;
   cursor: default;
   z-index: 1;

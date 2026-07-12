@@ -1583,7 +1583,7 @@ function DesignKitViewInner({
                       </button>
                     ) : null}
                   </div>
-                  <span className={styles.dsCap}>system/kit.html</span>
+                  <span className={styles.dsCap}>{kit.system.kitLabel ?? 'system/kit.html'}</span>
                 </div>
                 <iframe
                   key={dsKitUrl}

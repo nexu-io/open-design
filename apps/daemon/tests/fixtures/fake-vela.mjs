@@ -3,7 +3,7 @@
  * Fake vela CLI used by AMR integration tests. Routes by the first argv:
  *
  *   `vela model preset --format json`   → prints the local AMR picker seed.
- *   `vela model list --format json`     → prints the authoritative remote
+ *   `vela model list --all --format json` → prints the authoritative remote
  *                                         AMR model catalog.
  *
  *   `vela login`                        → writes ~/.amr/config.json (the
@@ -44,10 +44,12 @@
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
  *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
- *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --format json`
+ *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --all --format json`
  *   FAKE_VELA_REQUIRE_SET_MODEL  – strict gate (default on); set to '0' to
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
+ *   FAKE_VELA_LOG_SET_MODEL      – when set to '1', include session/set_model
+ *                                   entries in FAKE_VELA_INVOCATION_LOG
  */
 
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -246,6 +248,9 @@ function handleMessage(msg) {
       const next = typeof params?.modelId === 'string' ? params.modelId.trim() : '';
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
       if (next) currentModelId = next;
+      if (env.FAKE_VELA_LOG_SET_MODEL === '1') {
+        logInvocation(`set_model:${next || '<empty>'}`);
+      }
       sessionsWithModel.add(sessionId);
       writeResult(id, {});
       return;
@@ -472,7 +477,7 @@ if (argv[2] === 'billing' && argv[3] === 'summary') {
   }
 }
 
-if (argv[2] === 'model' && argv[4] === '--format' && argv[5] === 'json') {
+if (argv[2] === 'model' && argv.includes('--format') && argv.includes('json')) {
   if (argv[3] === 'preset') {
     stdout.write(`${env.FAKE_VELA_MODEL_PRESET_JSON || DEFAULT_MODEL_PRESET_JSON}\n`);
     exit(0);

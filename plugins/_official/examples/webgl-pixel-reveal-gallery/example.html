@@ -190,8 +190,11 @@ function whenImagesReady(cb){
 }
 whenImagesReady(boot);
 
-addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight); computeSizes(); medias.forEach(m=>m.onResize()); ScrollTrigger.refresh(); });
+function onResize(){ const w=innerWidth,h=innerHeight; if(w===onResize._w&&h===onResize._h)return; onResize._w=w; onResize._h=h;
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); computeSizes(); medias.forEach(m=>m.onResize()); ScrollTrigger.refresh(); }
+addEventListener('resize',onResize);
+gsap.ticker.add(onResize);
 
 // ---- click → fullscreen detail (in-page Flip, replaces Barba page nav) ----
 function bindDetail(){

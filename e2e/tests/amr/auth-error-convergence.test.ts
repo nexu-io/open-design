@@ -19,6 +19,7 @@ describe('AMR auth error convergence', () => {
         endpoints: suite.amr,
         failAuthAtPrompt: true,
         requireLoginConfig: false,
+        requireSetModel: false,
       });
 
       await putAmrAppConfig(webUrl, {

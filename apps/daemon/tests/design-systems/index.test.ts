@@ -49,6 +49,23 @@ describe('design systems registry', () => {
     ]);
   });
 
+  it('parses a DESIGN.md with a pathological marker run without catastrophic backtracking', async () => {
+    // Regression: the swatch parser's Form A regex had overlapping star-consumers
+    // (`[\s>*-]*\**\s*`), so a long run of `*` at a line start was O(n^2) — a large
+    // installed DESIGN.md could hang the daemon during `listDesignSystems`
+    // (reachable via GET /api/design-systems). The collapsed prefix is linear.
+    await mkdir(path.join(root, 'acme'), { recursive: true });
+    await writeFile(
+      path.join(root, 'acme', 'DESIGN.md'),
+      `# Acme\n\n${'*'.repeat(24000)}\n`,
+    );
+    const start = performance.now();
+    const systems = await listDesignSystems(root);
+    const elapsedMs = performance.now() - start;
+    expect(systems.map((s) => s.id)).toContain('acme');
+    expect(elapsedMs).toBeLessThan(1000);
+  });
+
   it('creates, updates, reads, and deletes user design systems with prefixed ids', async () => {
     const created = await createUserDesignSystem(root, {
       title: 'Acme Product',

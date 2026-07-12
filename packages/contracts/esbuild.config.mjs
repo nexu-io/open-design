@@ -14,6 +14,7 @@ await build({
     "./src/api/providerModels.ts",
     "./src/api/reasoningExecution.ts",
     "./src/api/research.ts",
+    "./src/runtime/deck-stage-fallback.ts",
     "./src/design-systems/components-manifest.ts",
     "./src/design-systems/derived-token-outputs.ts",
     "./src/design-systems/token-schema.ts",

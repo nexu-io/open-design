@@ -530,13 +530,23 @@ describe('SettingsDialog provider model fetch helpers', () => {
     expect(
       mergeProviderModelOptions(
         [
-          { id: 'remote-a', label: 'Remote A' },
+          {
+            id: 'remote-a',
+            label: 'Remote A',
+            metadata: { cost: 'low', capability: 'standard' },
+            enabled: false,
+          },
           { id: 'gpt-4o', label: 'Remote GPT' },
         ],
         ['gpt-4o', 'o4-mini'],
       ),
     ).toEqual([
-      { id: 'remote-a', label: 'Remote A' },
+      {
+        id: 'remote-a',
+        label: 'Remote A',
+        metadata: { cost: 'low', capability: 'standard' },
+        enabled: false,
+      },
       { id: 'gpt-4o', label: 'Remote GPT' },
       { id: 'o4-mini', label: 'o4-mini' },
     ]);

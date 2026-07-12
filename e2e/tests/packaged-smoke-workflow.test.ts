@@ -29,6 +29,12 @@ const bakePreviewsAutomergeWorkflowPath = join(
   "bake-plugin-previews-automerge.yml",
 );
 const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const bakePreviewsReleaseWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "bake-plugin-previews-release.yml",
+);
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
@@ -44,6 +50,7 @@ const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
@@ -813,6 +820,32 @@ process.stdin.on("end", () => {
     expect(workflow).not.toContain("git/ref/heads/main");
   });
 
+  it("[P2] keeps the release-cut bake pushing its manifest as a ruleset bypass bot", async () => {
+    // release/** is guarded by the "Protected branches (preview/*, release/v*)" ruleset whose
+    // pull_request rule rejects a direct push (GH013) unless the pusher is a bypass actor. The
+    // release-cut bake writes the authoritative manifest straight onto the release branch, so it
+    // must push as open-design-bot — a bypass actor on that ruleset — not github-actions[bot],
+    // which is NOT and gets rejected (this stranded release/v0.14.2's manifest). These three auth
+    // invariants only work together; a refactor that drops any one silently reintroduces the
+    // GH013 regression, so lock them here rather than rely on YAML review.
+    const workflow = await readFile(bakePreviewsReleaseWorkflowPath, "utf8");
+
+    // 1. Checkout must NOT persist GITHUB_TOKEN: its http.extraheader would override the inline bot
+    //    token on push and re-authenticate as github-actions[bot] (the same override fixed in the
+    //    post-merge bake — #5357).
+    expect(workflow).toContain("persist-credentials: false");
+    // 2. The run mints an open-design-bot token via the BOT_APP_* creds — the App that IS a bypass
+    //    actor on the release ruleset. RELEASE_BOT_APP_ID (used by the post-merge bake) is a
+    //    different App and is NOT a bypass actor, so pin the correct credentials, not just the
+    //    generic token action.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.BOT_APP_CLIENT_ID");
+    expect(workflow).toContain("secrets.BOT_APP_PRIVATE_KEY");
+    // 3. The manifest push goes through the explicit tokenized URL with that bot token, so it
+    //    authenticates as the bypass actor rather than the checkout's default credential.
+    expect(workflow).toContain("x-access-token:${BOT_TOKEN}");
+  });
+
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
@@ -1390,11 +1423,47 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("ref: main");
     expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
     expect(workflow).toContain('git push origin "$BRANCH"');
+    // The version bump is a no-op whenever main already leads stable by this exact
+    // patch (apps/packaged == $VERSION), so the release commit MUST tolerate an empty
+    // tree — otherwise `git commit` dies on "nothing to commit" and no branch is cut.
+    expect(workflow).toContain('git commit --allow-empty -am "chore(release): v$VERSION"');
 
     // The notice card is a standalone poster with the same signed-webhook contract.
     expect(notice).toContain("msg_type: \"interactive\"");
     expect(notice).toContain('required("NOTICE_TITLE")');
     expect(notice).toContain('required("NOTICE_BODY")');
+  });
+
+  it("[P2] posts an immediate branch-cut Feishu card naming the backport label on both cut workflows", async () => {
+    // Cutting a release branch triggers a ~20-40 min prerelease build before the
+    // download card lands, so both cut workflows post an eager "branch cut" notice
+    // the moment the branch exists. Each must: reuse feishu-notice.ts, run AFTER the
+    // branch push + label creation, and name the exact backport label so the team
+    // knows which label to apply for backports.
+    const [minorCut, patchCut] = await Promise.all([
+      readFile(cutReleaseWorkflowPath, "utf8"),
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+    ]);
+
+    for (const [label, workflow, kind] of [
+      ["cut-release (minor)", minorCut, "大版本 minor"],
+      ["cut-patch-release (patch)", patchCut, "小版本 patch"],
+    ] as const) {
+      const step = sectionBetween(workflow, "- name: Notify Feishu that the branch was cut", "\n        run:");
+      // Same standalone notifier + the shared release webhook/secret.
+      expect(workflow, label).toContain("run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts");
+      expect(step, label).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}");
+      // Names the version's backport label in the card body.
+      expect(step, label).toContain("backport release/v${{ steps.ver.outputs.version }}");
+      // Distinguishes major vs minor cut.
+      expect(step, label).toContain(kind);
+      // The eager card must come AFTER the branch is actually cut + pushed.
+      expect(workflow.indexOf("- name: Notify Feishu that the branch was cut"), label)
+        .toBeGreaterThan(workflow.indexOf('git push origin "$BRANCH"'));
+    }
+    // The patch workflow's eager card only fires on the happy (published) path.
+    const patchNotice = sectionBetween(patchCut, "- name: Notify Feishu that the branch was cut", "\n        run:");
+    expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
   });
 
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {

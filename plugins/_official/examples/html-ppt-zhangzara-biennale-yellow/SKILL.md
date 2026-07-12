@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-biennale-yellow
+en_name: "Curate an Art Biennale Deck like a Museum Exhibition Director"
+zh_name: "像美术馆策展总监一样做双年展策展稿"
 description: |
-  Biennale Yellow — Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients. Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, studio retrospectives.
+  A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Built as a decision-grade design craft deck for museum board, curators.
+en_description: |
+  A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Built as a decision-grade design craft deck for museum board, curators.
+zh_description: |
+  像美术馆策展总监一样做双年展策展稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "design-craft"
+  - "board-upgrade-deck-rescue"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-biennale-yellow"
 triggers:
-  - "biennale-yellow"
-  - "zhangzara-biennale-yellow"
-  - "Biennale Yellow"
-  - "editorial"
-  - "atmospheric"
-  - "literary"
-  - "considered"
-  - "exhibition or biennale"
-  - "arts institution programme"
+  - "board-upgrade-deck-rescue"
+  - "design-craft"
+  - "Curate an Art Biennale Deck like a Museum Exhibition Director"
+  - "像美术馆策展总监一样做双年展策展稿"
+  - "design"
+  - "brand"
+  - "visual-system"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/biennale-yellow"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "design-craft"
+  scenario: "design"
+  example_prompt: "Create \"Curate an Art Biennale Deck like a Museum Exhibition Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Audience: museum board, curators. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated."
 ---
 
 # Biennale Yellow

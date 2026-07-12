@@ -22,6 +22,8 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "audience"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "brand"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "scale"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "speakerNotes"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"type": "switch"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "constraints"');
   });
 

@@ -2,44 +2,35 @@ import type { Dict } from '../i18n/types';
 import type { AgentModelOption } from '../types';
 
 export type ModelCapabilityTag =
-  | 'fast'
-  | 'value'
-  | 'balanced'
-  | 'reasoning'
-  | 'premium'
-  | 'coding';
+  | 'standard'
+  | 'advanced'
+  | 'bestQuality';
 
-export type ModelCostTier = 'upToHalf' | 'halfToOne' | 'oneToFour' | 'overFour';
+export type ModelCostTier = 'low' | 'medium' | 'high' | 'very_high';
 
 export const MODEL_CAPABILITY_TAG_LABEL_KEYS: Record<
   ModelCapabilityTag,
   keyof Dict
 > = {
-  fast: 'modelCapability.fast',
-  value: 'modelCapability.value',
-  balanced: 'modelCapability.balanced',
-  reasoning: 'modelCapability.reasoning',
-  premium: 'modelCapability.premium',
-  coding: 'modelCapability.coding',
+  standard: 'modelCapability.standard',
+  advanced: 'modelCapability.advanced',
+  bestQuality: 'modelCapability.bestQuality',
 };
 
 export const MODEL_CAPABILITY_TAG_DESCRIPTION_KEYS: Record<
   ModelCapabilityTag,
   keyof Dict
 > = {
-  fast: 'modelCapability.fastDescription',
-  value: 'modelCapability.valueDescription',
-  balanced: 'modelCapability.balancedDescription',
-  reasoning: 'modelCapability.reasoningDescription',
-  premium: 'modelCapability.premiumDescription',
-  coding: 'modelCapability.codingDescription',
+  standard: 'modelCapability.standardDescription',
+  advanced: 'modelCapability.advancedDescription',
+  bestQuality: 'modelCapability.bestQualityDescription',
 };
 
 export const MODEL_COST_TIER_LABEL_KEYS: Record<ModelCostTier, keyof Dict> = {
-  upToHalf: 'modelCost.upToHalf',
-  halfToOne: 'modelCost.halfToOne',
-  oneToFour: 'modelCost.oneToFour',
-  overFour: 'modelCost.overFour',
+  low: 'modelCost.upToHalf',
+  medium: 'modelCost.halfToOne',
+  high: 'modelCost.oneToFour',
+  very_high: 'modelCost.overFour',
 };
 
 const NON_MODEL_IDS = new Set([
@@ -49,83 +40,28 @@ const NON_MODEL_IDS = new Set([
   '__same_as_chat__',
 ]);
 
-const KNOWN_MODEL_FAMILIES = [
-  'claude',
-  'codex',
-  'command',
-  'deepseek',
-  'doubao',
-  'ernie',
-  'gemini',
-  'glm',
-  'gpt',
-  'grok',
-  'kimi',
-  'llama',
-  'mimo',
-  'minimax',
-  'mistral',
-  'mixtral',
-  'o1',
-  'o3',
-  'o4',
-  'qwen',
-];
-
 export function getModelCapabilityTag(
-  model: Pick<AgentModelOption, 'id' | 'label'>,
+  model: Pick<AgentModelOption, 'id' | 'metadata'>,
 ): ModelCapabilityTag | null {
-  const haystack = getModelHaystack(model);
-  if (!haystack) return null;
-
-  if (/(^|[-\s])(codex|coder?|coding|codestral)([-\s]|$)|[-\s]k2\.7-code\b/.test(haystack)) {
-    return 'coding';
-  }
-  if (/(^|[-\s])(o1|o3|o4|r1|reasoner|reasoning|thinking)([-\s]|$)/.test(haystack)) {
-    return 'reasoning';
-  }
-  if (/(^|[-\s])(flash|haiku|instant|turbo)([-\s]|$)/.test(haystack)) {
-    return 'fast';
-  }
-  if (/(^|[-\s])(mini|nano|lite|small|oss|air)([-\s]|$)/.test(haystack)) {
-    return 'value';
-  }
-  if (/(^|[-\s])(fable|opus|pro|ultra|max)([-\s]|$)|\bgpt-5\b/.test(haystack)) {
-    return 'premium';
-  }
-  return 'balanced';
+  if (isNonModelId(model.id)) return null;
+  const capability = model.metadata?.capability;
+  if (capability === 'best_quality') return 'bestQuality';
+  if (capability === 'advanced') return 'advanced';
+  if (capability === 'standard') return 'standard';
+  return null;
 }
 
 export function getModelCostTier(
-  model: Pick<AgentModelOption, 'id' | 'label' | 'inputPriceUsdPerMillion'>,
+  model: Pick<AgentModelOption, 'id' | 'metadata'>,
 ): ModelCostTier | null {
-  const inputPrice = model.inputPriceUsdPerMillion;
-  if (typeof inputPrice !== 'number' || !Number.isFinite(inputPrice) || inputPrice < 0) {
-    return null;
+  if (isNonModelId(model.id)) return null;
+  const cost = model.metadata?.cost;
+  if (cost === 'low' || cost === 'medium' || cost === 'high' || cost === 'very_high') {
+    return cost;
   }
-  if (inputPrice <= 0.5) return 'upToHalf';
-  if (inputPrice <= 1) return 'halfToOne';
-  if (inputPrice <= 4) return 'oneToFour';
-  return 'overFour';
+  return null;
 }
 
-function getModelHaystack(
-  model: Pick<AgentModelOption, 'id' | 'label'>,
-): string | null {
-  const id = model.id.trim().toLowerCase();
-  if (NON_MODEL_IDS.has(id)) return null;
-
-  const label = model.label.trim().toLowerCase();
-  const haystack = `${id} ${label}`.replace(/[_/]+/g, '-');
-  return isLikelyModelName(haystack) ? haystack : null;
-}
-
-function isLikelyModelName(value: string): boolean {
-  return KNOWN_MODEL_FAMILIES.some((family) =>
-    new RegExp(`(^|[-\\s])${escapeRegExp(family)}([-\\s.]|$)`).test(value),
-  );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function isNonModelId(id: string): boolean {
+  return NON_MODEL_IDS.has(id.trim().toLowerCase());
 }

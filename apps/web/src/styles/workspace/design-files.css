@@ -297,7 +297,8 @@
   font-weight: 600;
   padding: 8px 20px;
   background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
 }
 .df-section-count {
   margin-left: 8px;
@@ -753,7 +754,8 @@
   justify-content: center;
   gap: 10px;
   background: color-mix(in srgb, var(--accent) 3.5%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius);
 }
 .df-drop-hint {
   display: flex;

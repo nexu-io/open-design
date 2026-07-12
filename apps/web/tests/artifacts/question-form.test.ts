@@ -65,7 +65,7 @@ describe('splitOnQuestionForms', () => {
       '    { "id": "intensity", "label": "Intensity", "type": "range", "min": 1, "max": 10, "step": 1 },',
       '    { "id": "deadline", "label": "Deadline", "type": "date" },',
       '    { "id": "source", "label": "Reference URL", "type": "url" },',
-      '    { "id": "brief", "label": "Upload brief", "type": "file", "multiple": true },',
+      '    { "id": "brief", "label": "Upload brief", "type": "file", "multiple": true, "accept": "image/*,.pdf" },',
       '    { "id": "exact", "label": "Exact id", "type": "select", "allowCustom": false, "options": [{ "label": "A", "value": "a" }] },',
       '    { "id": "tone", "label": "Tone", "type": "radio", "customLabel": "Something else", "customPlaceholder": "Describe it", "options": ["Sharp"] }',
       '  ]',
@@ -86,7 +86,7 @@ describe('splitOnQuestionForms', () => {
       'radio',
     ]);
     expect(segment.form.questions[1]).toMatchObject({ min: 1, max: 10, step: 1 });
-    expect(segment.form.questions[4]).toMatchObject({ multiple: true });
+    expect(segment.form.questions[4]).toMatchObject({ multiple: true, accept: 'image/*,.pdf' });
     expect(segment.form.questions[5]).toMatchObject({ allowCustom: false });
     expect(segment.form.questions[6]).toMatchObject({
       customLabel: 'Something else',

@@ -5,14 +5,19 @@ import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.
 import type { RouteDeps } from '../../server-context.js';
 import { registerProjectCommentRoutes } from './comments.js';
 
-export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
+export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' || value === 'plan' ? value : 'design';
 }
 
+function isChatSessionMode(value: unknown): value is ChatSessionMode {
+  return value === 'chat' || value === 'design' || value === 'plan';
+}
+
 export function registerProjectConversationRoutes(app: Express, ctx: RegisterProjectConversationRoutesDeps): void {
   const { db } = ctx;
+  const { sendApiError } = ctx.http;
   const { getProject, updateProject } = ctx.projectStore;
   const {
     insertConversation,
@@ -46,6 +51,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     const hasExplicitSessionMode = Boolean(
       req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
     );
+    if (hasExplicitSessionMode && !isChatSessionMode(req.body.sessionMode)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'sessionMode must be one of design, chat, or plan');
+    }
     const requestedForkMessageId =
       typeof forkAfterMessageId === 'string' && forkAfterMessageId
         ? forkAfterMessageId
@@ -90,7 +98,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     }
     const sessionMode =
       hasExplicitSessionMode
-        ? normalizeChatSessionMode(req.body.sessionMode)
+        ? req.body.sessionMode
         : sourceConversation && sourceConversation.projectId === req.params.id
           ? normalizeChatSessionMode(sourceConversation.sessionMode)
           : 'design';
@@ -128,6 +136,13 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
+    }
+    if (
+      req.body &&
+      Object.prototype.hasOwnProperty.call(req.body, 'sessionMode') &&
+      !isChatSessionMode(req.body.sessionMode)
+    ) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'sessionMode must be one of design, chat, or plan');
     }
     const updated = updateConversation(db, req.params.cid, req.body || {});
     res.json({ conversation: updated });

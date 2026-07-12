@@ -307,11 +307,14 @@
 
 .present-overlay {
   position: fixed;
-  top: var(--workspace-tabs-chrome-height, 38px);
+  top: 0;
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 1000;
+  /* Covers the whole window including the tab chrome (z-index 120), but
+     stays below transient popovers/toasts (1100+) so user-invoked UI can
+     still layer above a running presentation. */
+  z-index: 1050;
   background: black;
   display: flex;
 }
@@ -322,12 +325,48 @@
   border: none;
   background: white;
 }
+/* Momentary "Press Esc to exit" confirmation, centered near the top of the
+   presented stage. Timed to unmount at ~3.6s from the host, so the keyframe
+   fades it in fast, holds, then eases out to meet that unmount cleanly. */
+.present-esc-hint {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 22px);
+  left: 50%;
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(20, 20, 22, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: present-esc-hint-in-out 3600ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+@keyframes present-esc-hint-in-out {
+  0% { opacity: 0; transform: translate(-50%, -8px); }
+  6% { opacity: 1; transform: translate(-50%, 0); }
+  86% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .present-esc-hint { animation: none; }
+}
 .present-exit {
+  display: none;
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 20px);
   right: calc(env(safe-area-inset-right, 0px) + 20px);
   z-index: 1001;
-  display: inline-flex;
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
@@ -900,13 +939,46 @@
   font-size: 13px;
 }
 .qf-custom {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: min(100%, 280px);
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: text;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.qf-custom:hover { border-color: var(--border-strong); }
+.qf-custom > span {
+  flex-shrink: 0;
+}
+.qf-custom .qf-input {
+  width: clamp(132px, calc(var(--qf-custom-chars, 18) * 0.62ch + 18px), 360px);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  box-shadow: none;
+}
+.qf-custom:focus-within {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.qf-custom .qf-input:focus {
+  box-shadow: none;
 }
 .qf-range-wrap {
   display: grid;
@@ -1313,6 +1385,9 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+.questions-panel-error {
+  color: var(--danger, #c0392b);
+}
 .questions-skip,
 .questions-continue {
   flex-shrink: 0;
@@ -1357,10 +1432,25 @@
   cursor: default;
 }
 .questions-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 1px solid transparent;
   color: #fff;
   background: var(--accent);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.questions-continue-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, #fff 45%, transparent);
+  border-top-color: #fff;
+  animation: icon-spin 0.7s linear infinite;
+}
+.questions-continue[aria-busy='true'] {
+  cursor: progress;
 }
 .questions-continue:hover:not(:disabled) {
   transform: translateY(-1px);
@@ -1506,6 +1596,16 @@
 .ds-modal-actions .share-menu > button {
   white-space: nowrap;
   flex-shrink: 0;
+}
+/* Uniform control height so the accent "Use" CTA and the ghost actions (Share,
+   etc.) read as one aligned row — the accent button used to sit a hair taller
+   than the ghost buttons because of their different intrinsic padding. */
+.ds-modal-actions > button,
+.ds-modal-actions .share-menu > button,
+.ds-modal-actions .ds-modal-primary-action-group,
+.ds-modal-actions .ds-modal-primary-action-group > button {
+  height: 34px;
+  box-sizing: border-box;
 }
 .ds-modal-stage {
   flex: 1;
@@ -1667,7 +1767,7 @@
 
 /* Custom (non-iframe) stage container — used by the plugin media
    detail variant so image / video / audio plugins share the
-   same modal chrome (header, sidebar toggle, fullscreen, share)
+   same modal chrome (header, sidebar handles, fullscreen, share)
    as HTML and design-system plugins. The container fills the
    stage frame and centers its child media element. */
 .ds-modal-stage-custom {
@@ -2039,14 +2139,6 @@
   border: 1px solid rgba(0, 0, 0, 0.12);
   vertical-align: middle;
 }
-/* Plugin detail suppresses the header sidebar toggle on desktop (the
-   preview-edge handle opens the info panel there). Hide it on desktop but
-   expose it again on small screens, where the edge handle is hidden and
-   would otherwise leave the collapsed info panel unreachable. */
-.ds-modal-sidebar-toggle--compact-only {
-  display: none;
-}
-
 @media (max-width: 760px) {
   .ds-modal-backdrop { padding: 0; }
   .ds-modal { border-radius: 0; }
@@ -2061,10 +2153,34 @@
     min-width: 0;
     max-width: none;
   }
-  /* On stacked layout the side handles (which assume horizontal split)
-     would float over content awkwardly — fall back to the header toggle. */
-  .ds-modal-stage-handle { display: none; }
-  .ds-modal-sidebar-toggle--compact-only { display: inline-flex; }
+  /* The header no longer carries a sidebar button. Keep the stage-edge
+     handles available in the stacked layout so the pane remains reachable. */
+  .ds-modal-stage-handle.is-expand {
+    top: auto;
+    right: 50%;
+    bottom: 0;
+    width: 56px;
+    height: 18px;
+    transform: translateX(50%);
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+  }
+  .ds-modal-stage-handle.is-expand > span { transform: rotate(-90deg); }
+  .ds-modal-stage-handle.is-collapse {
+    position: sticky;
+    top: 0;
+    left: 50%;
+    width: 56px;
+    height: 18px;
+    transform: translateX(-50%);
+    border-top: none;
+    border-left: 1px solid var(--border);
+    border-radius: 0 0 8px 8px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .ds-modal-stage-handle.is-collapse > span { transform: rotate(-90deg); }
 }
 
 /* Examples gallery toolbar — filter pills + richer card metadata */
@@ -2447,6 +2563,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
+  margin-left: 6px;
+}
+.chat-history-menu-head .chat-history-new {
+  margin-left: auto;
 }
 .chat-history-search {
   display: flex;

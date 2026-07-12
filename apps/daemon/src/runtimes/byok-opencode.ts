@@ -158,6 +158,15 @@ function isExactOrigin(value: string, origin: string): boolean {
   }
 }
 
+function isRealOpenAIHost(baseUrl: string): boolean {
+  if (!baseUrl) return true;
+  try {
+    return new URL(baseUrl).hostname === 'api.openai.com';
+  } catch {
+    return true;
+  }
+}
+
 function buildProviderEntry(
   protocol: ByokChatProviderConfig['protocol'],
   baseUrl: string,
@@ -207,11 +216,23 @@ function buildProviderEntry(
         },
       };
     case 'openai':
+      // Real OpenAI speaks the Responses API via @ai-sdk/openai. Every other
+      // host under the "openai" protocol (DeepSeek, vLLM, etc.) only serves
+      // /chat/completions, so route it through @ai-sdk/openai-compatible.
+      if (isRealOpenAIHost(baseUrl)) {
+        return {
+          npm: '@ai-sdk/openai',
+          options: {
+            ...apiKeyOption,
+            ...(baseUrl ? { baseURL: baseUrl } : {}),
+          },
+        };
+      }
       return {
-        npm: '@ai-sdk/openai',
+        npm: '@ai-sdk/openai-compatible',
         options: {
+          baseURL: baseUrl,
           ...apiKeyOption,
-          ...(baseUrl ? { baseURL: baseUrl } : {}),
         },
       };
     case 'senseaudio':

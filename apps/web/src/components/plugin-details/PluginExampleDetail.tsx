@@ -160,7 +160,6 @@ export function PluginExampleDetail({
             testId: `plugin-details-use-${record.id}`,
             menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}
-      hideSidebarToggle
       onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );

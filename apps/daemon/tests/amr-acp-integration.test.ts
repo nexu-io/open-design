@@ -219,9 +219,15 @@ describe('AMR runtime def', () => {
     const models = parseVelaModelJson(JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_kimi_k2_7_code' },
+        { id: 'public_model_kimi_k2_7_code', enabled: false },
         { id: 'public_model_deepseek_v3_2' },
-        { id: 'deepseek-v4-flash', cost: { input: 0.14, output: 0.28 } },
+        {
+          id: 'deepseek-v4-flash',
+          enabled: true,
+          default: true,
+          cost: { input: 0.14, output: 0.28 },
+          metadata: { cost: 'low', capability: 'standard' },
+        },
         { id: 'gpt-image-2' },
         { id: 'deepseek-v4-flash' },
       ],
@@ -230,11 +236,14 @@ describe('AMR runtime def', () => {
       {
         id: 'deepseek-v4-flash',
         label: 'deepseek-v4-flash',
+        enabled: true,
+        default: true,
         inputPriceUsdPerMillion: 0.14,
         outputPriceUsdPerMillion: 0.28,
+        metadata: { cost: 'low', capability: 'standard' },
       },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
+      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code', enabled: false },
     ]);
     expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
     expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
@@ -287,7 +296,7 @@ describe('AMR runtime def', () => {
         FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
           source: 'remote',
           data: [
-            { id: 'claude-fable-5' },
+            { id: 'claude-fable-5', metadata: { cost: 'medium', capability: 'best_quality' } },
             { id: 'claude-opus-4.6' },
             { id: 'mimo-v2.5-pro' },
             { id: 'gemini-3-flash-preview' },
@@ -301,24 +310,28 @@ describe('AMR runtime def', () => {
           label: 'claude-fable-5',
           inputPriceUsdPerMillion: 10,
           outputPriceUsdPerMillion: 50,
+          metadata: { cost: 'medium', capability: 'best_quality' },
         },
         {
           id: 'claude-opus-4.6',
           label: 'claude-opus-4.6',
           inputPriceUsdPerMillion: 5,
           outputPriceUsdPerMillion: 25,
+          metadata: { cost: 'very_high' },
         },
         {
           id: 'gemini-3-flash-preview',
           label: 'gemini-3-flash-preview',
           inputPriceUsdPerMillion: 0.5,
           outputPriceUsdPerMillion: 3,
+          metadata: { cost: 'low' },
         },
         {
           id: 'mimo-v2.5-pro',
           label: 'mimo-v2.5-pro',
           inputPriceUsdPerMillion: 1.74,
           outputPriceUsdPerMillion: 3.48,
+          metadata: { cost: 'high' },
         },
       ]);
     } finally {
@@ -609,6 +622,36 @@ describe('AMR model loading cache', () => {
       source: 'preset',
       models: [{ id: 'preset-prod', label: 'preset-prod' }],
       refreshing: true,
+    });
+  });
+
+  it('drops a cached remote catalog for a single environment when invalidated', async () => {
+    const cache = new AmrModelLoadingCache(60_000);
+    cache.warm('vela:local', async () => [{ id: 'locked-old', label: 'locked-old', enabled: false }]);
+    cache.warm('vela:prod', async () => [{ id: 'remote-prod', label: 'remote-prod' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    cache.invalidate('vela:local');
+
+    const local = await cache.get('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-local', label: 'preset-local' }],
+      fetchRemote: async () => [{ id: 'remote-local-new', label: 'remote-local-new', enabled: true }],
+    });
+    const prod = await cache.get('vela:prod', {
+      fetchPreset: async () => {
+        throw new Error('prod preset should not be required');
+      },
+      fetchRemote: async () => [{ id: 'remote-prod-new', label: 'remote-prod-new' }],
+    });
+
+    expect(local).toMatchObject({
+      source: 'preset',
+      models: [{ id: 'preset-local', label: 'preset-local' }],
+      refreshing: true,
+    });
+    expect(prod).toMatchObject({
+      source: 'remote',
+      models: [{ id: 'remote-prod', label: 'remote-prod' }],
     });
   });
 });

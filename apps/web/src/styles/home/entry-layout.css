@@ -1741,6 +1741,13 @@
 .model-select-searchable__option:hover {
   background: var(--bg-subtle);
 }
+.model-select-searchable__option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.model-select-searchable__option.is-disabled:hover {
+  background: transparent;
+}
 .model-select-searchable__option.is-active {
   background: var(--accent-tint);
   color: var(--accent-strong);
@@ -1776,6 +1783,8 @@
 }
 .model-select-searchable__value-label,
 .model-select-searchable__option-label {
+  display: inline-flex;
+  align-items: center;
   font-size: 12.5px;
   line-height: 1.35;
   min-width: 0;
@@ -1833,29 +1842,41 @@
 .model-select-searchable__option.is-active .model-select-searchable__option-meta {
   color: color-mix(in srgb, var(--accent-strong) 60%, var(--text-muted));
 }
-.model-select-searchable__value-badge[data-tag='fast'],
-.model-select-searchable__option-badge[data-tag='fast'] {
-  --model-tag-color: #39a9a2;
+.model-select-searchable__option-lock-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  margin-left: 6px;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.model-select-searchable__value-badge[data-tag='value'],
-.model-select-searchable__option-badge[data-tag='value'] {
-  --model-tag-color: #5b9f6d;
+.model-select-searchable__option-lock-inline:hover,
+.model-select-searchable__option-lock-inline:focus-visible {
+  color: var(--accent-strong);
+  background: var(--accent-tint);
 }
-.model-select-searchable__value-badge[data-tag='balanced'],
-.model-select-searchable__option-badge[data-tag='balanced'] {
+.model-select-searchable__value-badge[data-tag='standard'],
+.model-select-searchable__option-badge[data-tag='standard'] {
   --model-tag-color: #90887a;
 }
-.model-select-searchable__value-badge[data-tag='reasoning'],
-.model-select-searchable__option-badge[data-tag='reasoning'] {
+.model-select-searchable__value-badge[data-tag='advanced'],
+.model-select-searchable__option-badge[data-tag='advanced'] {
   --model-tag-color: #bf8a34;
 }
-.model-select-searchable__value-badge[data-tag='premium'],
-.model-select-searchable__option-badge[data-tag='premium'] {
+.model-select-searchable__value-badge[data-tag='bestQuality'],
+.model-select-searchable__option-badge[data-tag='bestQuality'] {
   --model-tag-color: #c77858;
-}
-.model-select-searchable__value-badge[data-tag='coding'],
-.model-select-searchable__option-badge[data-tag='coding'] {
-  --model-tag-color: #758bd0;
 }
 .model-select-searchable__empty {
   padding: 12px 10px;
@@ -3486,6 +3507,36 @@
   color: var(--accent-strong);
 }
 
+/* Free-text detail revealed when the visitor picks "Other" on the "Where did
+   you hear about us?" question. Rendered inline as the last item of the chip
+   row so it sits right after the Other chip (growing to fill the rest of the
+   row, or wrapping onto the next line at a comfortable width) instead of
+   floating below the group. Height matches the chips so the row stays even. */
+.onboarding-chip-field__other-input {
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-chip-field__other-input::placeholder {
+  color: var(--text-muted);
+}
+
+.onboarding-chip-field__other-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
 /* Step 2 memory callout — makes it explicit that the answers above are saved
    to Memory, and sells the compounding benefit of letting it learn. */
 .onboarding-view__memory-callout {
@@ -3728,23 +3779,14 @@
   opacity: 0.88;
   flex: 0 0 auto;
 }
-.onboarding-view__select-badge[data-tag='fast'] {
-  --model-tag-color: #39a9a2;
-}
-.onboarding-view__select-badge[data-tag='value'] {
-  --model-tag-color: #5b9f6d;
-}
-.onboarding-view__select-badge[data-tag='balanced'] {
+.onboarding-view__select-badge[data-tag='standard'] {
   --model-tag-color: #90887a;
 }
-.onboarding-view__select-badge[data-tag='reasoning'] {
+.onboarding-view__select-badge[data-tag='advanced'] {
   --model-tag-color: #bf8a34;
 }
-.onboarding-view__select-badge[data-tag='premium'] {
+.onboarding-view__select-badge[data-tag='bestQuality'] {
   --model-tag-color: #c77858;
-}
-.onboarding-view__select-badge[data-tag='coding'] {
-  --model-tag-color: #758bd0;
 }
 
 .onboarding-view__select-trigger.has-value {

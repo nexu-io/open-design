@@ -183,7 +183,7 @@ design-systems/your-brand/
 }
 ```
 
-これだけです — daemon が `PATH` 上で検出し、ピッカーに表示され、チャットパスが動作します。CLI が**型付きイベント**を出力する場合（Claude Code の `--output-format stream-json` のように）、[`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) にパーサーを追加して `streamFormat: 'claude-stream-json'` を設定してください。
+これだけです — daemon が `PATH` 上で検出し、ピッカーに表示され、チャットパスが動作します。CLI が**型付きイベント**を出力する場合（Claude Code の `--output-format stream-json` のように）、[`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) にパーサーを追加して `streamFormat: 'claude-stream-json'` を設定してください。
 
 マージ基準：
 

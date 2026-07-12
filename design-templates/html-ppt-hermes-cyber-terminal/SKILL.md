@@ -1,16 +1,34 @@
 ---
 name: html-ppt-hermes-cyber-terminal
-description: 暗终端 honest-review deck — #0a0c10 黑底 + 56px 赛博网格 + CRT 暗角 + 扫描线、窗口红绿灯 chrome、`$ prompt` 命令行标题、薄荷绿 #7ed3a4 大字、JetBrains Mono、stroke-only 柱状图、blinking 光标、琥珀/绿/红三档 tag、暗色代码块。适合 CLI / agent / dev tool 测评（含 trace、diff、benchmark）。
+en_name: "Run a BYOK Model-Choice Session like an Applied-AI Engineer"
+zh_name: "像应用 AI 工程师一样讲 BYOK 选型"
+description: |
+  Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
+en_description: |
+  Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
+zh_description: |
+  像应用 AI 工程师一样讲 BYOK 选型——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "ai-literacy"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-hermes-cyber-terminal"
 triggers:
-  - "terminal review"
-  - "cli review"
-  - "agent review"
-  - "honest review"
-  - "dev tool review"
-  - "测评"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai-literacy"
+  - "Run a BYOK Model-Choice Session like an Applied-AI Engineer"
+  - "像应用 AI 工程师一样讲 BYOK 选型"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-hermes-cyber-terminal 模板做一份 CLI / agent 测评 PPT。深色终端风 + scanlines + 命令行标题 + benchmark 柱状图。先确认：被测评对象、3-5 个对比维度、benchmark 数据。"
+  category: "ai-literacy"
+  scenario: "ai"
+  example_prompt: "Create \"Run a BYOK Model-Choice Session like an Applied-AI Engineer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Audience: engineers, IT, applied-AI teams. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · 暗终端测评
 

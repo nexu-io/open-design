@@ -1,6 +1,6 @@
-import type { ChangeEvent, ClipboardEvent, CSSProperties } from 'react';
+import type { ChangeEvent, ClipboardEvent, CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { Button, Textarea } from '@open-design/components';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
@@ -49,6 +49,14 @@ type AnnotationStyleRow = { label: string; value: string; swatch?: string };
 type PopoverBounds = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type PopoverOffset = { x: number; y: number };
 type PopoverSize = { width: number; height: number };
+type PopoverPosition = { left: number; top: number };
+type PopoverSide = 'top' | 'bottom' | 'left' | 'right';
+
+const POPOVER_PAD = 14;
+const POPOVER_DEFAULT_WIDTH = 320;
+const POPOVER_EXPANDED_ESTIMATED_HEIGHT = 320;
+const POPOVER_COLLAPSED_ESTIMATED_HEIGHT = 112;
+const POPOVER_MIN_VISIBLE_HEIGHT = 120;
 
 function annotationStyleRows(target: PreviewCommentSnapshot): AnnotationStyleRow[] {
   const rows: AnnotationStyleRow[] = [];
@@ -84,6 +92,71 @@ function clampPopoverRange(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function popoverSizeForPositioning(
+  expanded: boolean,
+  measuredSize?: PopoverSize,
+): PopoverSize {
+  return {
+    width: measuredSize?.width && measuredSize.width > 0
+      ? measuredSize.width
+      : POPOVER_DEFAULT_WIDTH,
+    height: measuredSize?.height && measuredSize.height > 0
+      ? measuredSize.height
+      : expanded
+        ? POPOVER_EXPANDED_ESTIMATED_HEIGHT
+        : POPOVER_COLLAPSED_ESTIMATED_HEIGHT,
+  };
+}
+
+function clampPopoverPositionStyle(
+  left: number,
+  top: number,
+  bounds: PopoverBounds | undefined,
+  size: PopoverSize,
+  maxHeightLimit?: number,
+): CSSProperties {
+  if (!bounds?.width || bounds.width <= 0) {
+    return {
+      left: clampPopoverCoordinate(left, POPOVER_PAD),
+      top: clampPopoverCoordinate(top, POPOVER_PAD),
+    };
+  }
+  const viewportLeft = Math.max(0, bounds.scrollLeft ?? 0);
+  const viewportTop = Math.max(0, bounds.scrollTop ?? 0);
+  const viewportRight = viewportLeft + bounds.width;
+  const viewportBottom = bounds.height ? viewportTop + bounds.height : Number.POSITIVE_INFINITY;
+  const minLeft = viewportLeft + POPOVER_PAD;
+  const minTop = viewportTop + POPOVER_PAD;
+  const maxLeft = Math.max(minLeft, viewportRight - size.width - POPOVER_PAD);
+  const effectiveHeight = typeof maxHeightLimit === 'number' && Number.isFinite(maxHeightLimit)
+    ? Math.min(size.height, Math.max(POPOVER_MIN_VISIBLE_HEIGHT, Math.floor(maxHeightLimit)))
+    : size.height;
+  const maxTop = Number.isFinite(viewportBottom)
+    ? Math.max(minTop, viewportBottom - effectiveHeight - POPOVER_PAD)
+    : top;
+  const clampedTop = clampPopoverRange(top, minTop, maxTop);
+  const style: CSSProperties = {
+    left: clampPopoverRange(left, minLeft, maxLeft),
+    top: clampedTop,
+  };
+  if (Number.isFinite(viewportBottom)) {
+    const visibleHeight = Math.floor(viewportBottom - clampedTop - POPOVER_PAD);
+    const limitedHeight = typeof maxHeightLimit === 'number' && Number.isFinite(maxHeightLimit)
+      ? Math.min(visibleHeight, Math.floor(maxHeightLimit))
+      : visibleHeight;
+    style.maxHeight = Math.max(POPOVER_MIN_VISIBLE_HEIGHT, limitedHeight);
+  }
+  return style;
+}
+
+function numericStyleValue(style: CSSProperties, key: 'left' | 'top'): number | null {
+  const value = style[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function popoverAnchorStyle(
   target: PreviewCommentSnapshot,
   scale: number,
@@ -97,14 +170,10 @@ function popoverAnchorStyle(
     x: target.position.x + Math.min(target.position.width, 24),
     y: target.position.y + Math.min(target.position.height, 24),
   };
-  const pad = 14;
-  const overlapOffset = 8;
-  const width = 320;
-  const estimatedHeight = expanded ? 252 : 112;
   const anchorX = offset.x + anchor.x * safeScale;
   const anchorY = offset.y + anchor.y * safeScale;
-  const preferredLeft = clampPopoverCoordinate(anchorX + pad, pad);
-  const preferredTop = clampPopoverCoordinate(anchorY + pad, pad);
+  const preferredLeft = clampPopoverCoordinate(anchorX + POPOVER_PAD, POPOVER_PAD);
+  const preferredTop = clampPopoverCoordinate(anchorY + POPOVER_PAD, POPOVER_PAD);
   if (bounds?.width && bounds.width > 0) {
     const viewportLeft = Math.max(0, bounds.scrollLeft ?? 0);
     const viewportTop = Math.max(0, bounds.scrollTop ?? 0);
@@ -119,57 +188,81 @@ function popoverAnchorStyle(
     };
     const rectRight = rect.left + rect.width;
     const rectBottom = rect.top + rect.height;
-    const measuredWidth = measuredSize?.width && measuredSize.width > 0 ? measuredSize.width : width;
-    const measuredHeight = measuredSize?.height && measuredSize.height > 0
-      ? measuredSize.height
-      : expanded
-        ? 320
-        : estimatedHeight;
-    const minLeft = viewportLeft + pad;
-    const minTop = viewportTop + pad;
-    const maxLeft = Math.max(minLeft, viewportRight - measuredWidth - pad);
-    const maxTop = Number.isFinite(viewportBottom)
-      ? Math.max(minTop, viewportBottom - measuredHeight - pad)
-      : preferredTop;
+    const measured = popoverSizeForPositioning(expanded, measuredSize);
+    const verticalCenterLeft = rect.left + rect.width / 2 - measured.width / 2;
+    const horizontalCenterTop = rect.top + rect.height / 2 - measured.height / 2;
     const spaces = [
-      { side: 'top' as const, space: rect.top - viewportTop - pad, fits: rect.top - viewportTop - pad >= measuredHeight },
-      { side: 'bottom' as const, space: viewportBottom - rectBottom - pad, fits: viewportBottom - rectBottom - pad >= measuredHeight },
-      { side: 'left' as const, space: rect.left - viewportLeft - pad, fits: rect.left - viewportLeft - pad >= measuredWidth },
-      { side: 'right' as const, space: viewportRight - rectRight - pad, fits: viewportRight - rectRight - pad >= measuredWidth },
+      {
+        side: 'top' as const,
+        space: rect.top - viewportTop - POPOVER_PAD,
+        fits: rect.top - viewportTop - POPOVER_PAD >= measured.height,
+      },
+      {
+        side: 'bottom' as const,
+        space: viewportBottom - rectBottom - POPOVER_PAD,
+        fits: viewportBottom - rectBottom - POPOVER_PAD >= measured.height,
+      },
+      {
+        side: 'left' as const,
+        space: rect.left - viewportLeft - POPOVER_PAD,
+        fits: rect.left - viewportLeft - POPOVER_PAD >= measured.width,
+      },
+      {
+        side: 'right' as const,
+        space: viewportRight - rectRight - POPOVER_PAD,
+        fits: viewportRight - rectRight - POPOVER_PAD >= measured.width,
+      },
     ];
     const sorted = spaces
       .filter((item) => Number.isFinite(item.space))
       .sort((a, b) => Number(b.fits) - Number(a.fits) || b.space - a.space);
-    const side = sorted[0]?.side ?? 'bottom';
-    const centerLeft = rect.left + rect.width / 2 - measuredWidth / 2;
-    const centerTop = rect.top + rect.height / 2 - measuredHeight / 2;
-    const withVisibleHeight = (left: number, top: number): CSSProperties => {
-      const clampedTop = clampPopoverRange(top, minTop, maxTop);
-      const maxHeight = Number.isFinite(viewportBottom)
-        ? Math.max(120, Math.floor(viewportBottom - clampedTop - pad))
-        : undefined;
+    const sidePosition = (side: PopoverSide): { left: number; top: number; maxHeightLimit?: number } => {
+      if (side === 'top') {
+        const topLimit = rect.top - POPOVER_PAD;
+        const top = Number.isFinite(topLimit)
+          ? Math.max(viewportTop + POPOVER_PAD, topLimit - measured.height)
+          : rect.top - measured.height - POPOVER_PAD;
+        return {
+          left: verticalCenterLeft,
+          top,
+          maxHeightLimit: Number.isFinite(topLimit) ? topLimit - top : undefined,
+        };
+      }
+      if (side === 'bottom') {
+        const top = rectBottom + POPOVER_PAD;
+        return {
+          left: verticalCenterLeft,
+          top,
+          maxHeightLimit: Number.isFinite(viewportBottom) ? viewportBottom - top - POPOVER_PAD : undefined,
+        };
+      }
+      if (side === 'left') {
+        return {
+          left: rect.left - measured.width - POPOVER_PAD,
+          top: horizontalCenterTop,
+        };
+      }
       return {
-        left: clampPopoverRange(left, minLeft, maxLeft),
-        top: clampedTop,
-        ...(maxHeight ? { maxHeight } : {}),
+        left: rectRight + POPOVER_PAD,
+        top: horizontalCenterTop,
       };
     };
-    if (side === 'top' && sorted[0]?.fits) {
-      return withVisibleHeight(centerLeft, rect.top - measuredHeight - pad);
+    const fullyFittingSide = sorted.find((item) => item.fits)?.side;
+    if (fullyFittingSide) {
+      const next = sidePosition(fullyFittingSide);
+      return clampPopoverPositionStyle(next.left, next.top, bounds, measured, next.maxHeightLimit);
     }
-    if (side === 'bottom' && sorted[0]?.fits) {
-      return withVisibleHeight(centerLeft, rectBottom + pad);
+    const partialVerticalSide = sorted.find((item) =>
+      (item.side === 'bottom' || item.side === 'top') && item.space >= POPOVER_MIN_VISIBLE_HEIGHT
+    )?.side;
+    if (partialVerticalSide) {
+      const next = sidePosition(partialVerticalSide);
+      return clampPopoverPositionStyle(next.left, next.top, bounds, measured, next.maxHeightLimit);
     }
-    if (side === 'left' && sorted[0]?.fits) {
-      return withVisibleHeight(rect.left - measuredWidth - pad, centerTop);
-    }
-    if (side === 'right' && sorted[0]?.fits) {
-      return withVisibleHeight(rectRight + pad, centerTop);
-    }
-    return withVisibleHeight(
-      anchorX + pad + measuredWidth <= viewportRight - pad ? anchorX + pad : anchorX - measuredWidth - pad,
-      anchorY + overlapOffset,
-    );
+    const fallbackLeft = anchorX + POPOVER_PAD + measured.width <= viewportRight - POPOVER_PAD
+      ? anchorX + POPOVER_PAD
+      : anchorX - measured.width - POPOVER_PAD;
+    return clampPopoverPositionStyle(fallbackLeft, anchorY + POPOVER_PAD, bounds, measured);
   }
   return {
     left: preferredLeft,
@@ -386,6 +479,29 @@ export function BoardComposerPopover({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const [popoverSize, setPopoverSize] = useState<PopoverSize | undefined>(undefined);
+  const [manualPosition, setManualPosition] = useState<PopoverPosition | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const targetPlacementKey = [
+    target.filePath,
+    target.elementId,
+    target.selector,
+    target.selectionKind,
+    target.position.x,
+    target.position.y,
+    target.position.width,
+    target.position.height,
+    target.hoverPoint?.x,
+    target.hoverPoint?.y,
+    bounds?.width,
+    bounds?.height,
+    bounds?.scrollLeft,
+    bounds?.scrollTop,
+    offset?.x,
+    offset?.y,
+  ].join('\0');
+  useEffect(() => {
+    setManualPosition(null);
+  }, [targetPlacementKey, docked]);
   useLayoutEffect(() => {
     const node = popoverRef.current;
     if (!node) return;
@@ -411,6 +527,60 @@ export function BoardComposerPopover({
     // ResizeObserver itself, so listing draft/images/notes here only churned a
     // teardown + re-observe + synchronous getBoundingClientRect on every keystroke.
   }, [commenting]);
+  const measuredPopover = popoverSizeForPositioning(commenting, popoverSize);
+  const autoStyle = docked
+    ? undefined
+    : popoverAnchorStyle(target, scale, bounds, offset, commenting, popoverSize);
+  const popoverStyle = docked
+    ? undefined
+    : manualPosition
+      ? clampPopoverPositionStyle(manualPosition.left, manualPosition.top, bounds, measuredPopover)
+      : autoStyle;
+  const startPopoverDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (docked) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const node = popoverRef.current;
+    if (!node) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startLeft = manualPosition?.left
+      ?? numericStyleValue(popoverStyle ?? {}, 'left')
+      ?? node.offsetLeft;
+    const startTop = manualPosition?.top
+      ?? numericStyleValue(popoverStyle ?? {}, 'top')
+      ?? node.offsetTop;
+    const ownerDocument = node.ownerDocument;
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
+    const previousUserSelect = ownerDocument.body.style.userSelect;
+    ownerDocument.body.style.userSelect = 'none';
+    handle.setPointerCapture?.(pointerId);
+    setDragging(true);
+    const move = (moveEvent: PointerEvent) => {
+      const clamped = clampPopoverPositionStyle(
+        startLeft + moveEvent.clientX - startX,
+        startTop + moveEvent.clientY - startY,
+        bounds,
+        measuredPopover,
+      );
+      setManualPosition({
+        left: numericStyleValue(clamped, 'left') ?? startLeft,
+        top: numericStyleValue(clamped, 'top') ?? startTop,
+      });
+    };
+    const up = () => {
+      ownerDocument.body.style.userSelect = previousUserSelect;
+      handle.releasePointerCapture?.(pointerId);
+      setDragging(false);
+      ownerDocument.removeEventListener('pointermove', move);
+      ownerDocument.removeEventListener('pointerup', up);
+      ownerDocument.removeEventListener('pointercancel', up);
+    };
+    ownerDocument.addEventListener('pointermove', move);
+    ownerDocument.addEventListener('pointerup', up);
+    ownerDocument.addEventListener('pointercancel', up);
+  };
   const trimmedDraft = draft.trim();
   const existingNote = existing?.note.trim() ?? '';
   const hasFreshImage = images.length > 0;
@@ -450,12 +620,12 @@ export function BoardComposerPopover({
   return (
     <div
       ref={popoverRef}
-      className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
+      className={`comment-popover${docked ? ' comment-popover-docked' : ''}${dragging ? ' comment-popover-dragging' : ''}`}
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
       aria-label="Annotation"
-      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting, popoverSize)}
+      style={popoverStyle}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -463,6 +633,22 @@ export function BoardComposerPopover({
         }
       }}
     >
+      {!docked ? (
+        <div className="comment-popover-titlebar">
+          <button
+            type="button"
+            className="comment-popover-drag-handle"
+            aria-label="Move comment box"
+            title="Move comment box"
+            onPointerDown={startPopoverDrag}
+          >
+            <span aria-hidden />
+          </button>
+          <span className="comment-popover-title" title={target.label || target.elementId}>
+            {target.label || target.elementId}
+          </span>
+        </div>
+      ) : null}
       <section className="comment-popover-section comment-popover-section-params">
         <AnnotationStyleSummary target={target} testId="comment-popover-style-summary" />
       </section>

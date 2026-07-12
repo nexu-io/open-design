@@ -90,10 +90,10 @@ gl.useProgram(pr);
 const uRes=gl.getUniformLocation(pr,'u_res'),uTime=gl.getUniformLocation(pr,'u_time'),uRip=gl.getUniformLocation(pr,'u_ripple');
 let ripple=[0.5,0.5,999];
 addEventListener('pointerdown',e=>{ ripple=[e.clientX/innerWidth, 1.0-e.clientY/innerHeight, 0]; });
-function resize(){const d=Math.min(devicePixelRatio||1,2);canvas.width=innerWidth*d|0;canvas.height=innerHeight*d|0;gl.viewport(0,0,canvas.width,canvas.height);}
+function resize(){const d=Math.min(devicePixelRatio||1,2),w=innerWidth*d|0,h=innerHeight*d|0;if(w===canvas.width&&h===canvas.height)return;canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
 addEventListener('resize',resize);resize();
 const t0=performance.now();
-function frame(now){ ripple[2]+=1/60;
+function frame(now){ resize(); ripple[2]+=1/60;
   gl.uniform2f(uRes,canvas.width,canvas.height); gl.uniform1f(uTime,(now-t0)/1000); gl.uniform3f(uRip,ripple[0],ripple[1],ripple[2]);
   gl.drawArrays(gl.TRIANGLES,0,3); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);

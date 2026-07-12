@@ -398,7 +398,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     //    when a reload snapshot is present), so the component skips the
     //    skeleton and renders the iframe instead — with File A's HTML if the
     //    restore-branch fires, or a blank srcdoc otherwise.
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
 
     // 2. The srcdoc iframe itself must NOT be present while the loading state
     //    is active — a blank <iframe srcDoc=""> is not an acceptable stand-in
@@ -635,7 +635,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     // On the buggy branch the leaked ref satisfies the identity check and
     // setSource(snap.source) is called, surfacing "V1-CONTENT" instead of the
     // skeleton.
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
     expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
 
     // Also confirm the stale HTML is not present anywhere in the rendered DOM.
@@ -880,7 +880,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     // On the buggy build: the ref was left armed by the canceled-fetch path
     // (B's .then() never ran), the identity check passes (A===A), and
     // setSource(snap.source) wrongly surfaces "A-V1-CONTENT" in the srcdoc.
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
     expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
     expect(screen.queryByText(/A-V1-CONTENT/)).toBeNull();
 

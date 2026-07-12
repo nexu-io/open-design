@@ -187,6 +187,16 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     if (event.event === 'diagnostic' && data.type === 'agent_resume_auto_reseed') {
       resumeAutoReseeded = true;
     }
+    if (
+      event.event === 'diagnostic' &&
+      data.type === 'native_session_recovery' &&
+      data.nativeSessionRecovery &&
+      typeof data.nativeSessionRecovery === 'object' &&
+      !Array.isArray(data.nativeSessionRecovery) &&
+      (data.nativeSessionRecovery as Record<string, unknown>).state === 'auto_reseeded'
+    ) {
+      resumeAutoReseeded = true;
+    }
     if (data.type === 'artifact') artifactWriteSeen = true;
     if (data.type === 'live_artifact' || event.event === 'live_artifact') {
       liveArtifactSeen = true;

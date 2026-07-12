@@ -736,6 +736,62 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message pin tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-failed-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Failed assistant pin fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        assistantMessageId,
+        message: 'fail before spawn',
+      }),
+    });
+    const body = await response.text();
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    let lastStatus: string | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const sqlite = new Database(dbFile, { readonly: true });
+      try {
+        const row = sqlite
+          .prepare(`SELECT run_status FROM messages WHERE id = ?`)
+          .get(assistantMessageId) as { run_status: string | null } | undefined;
+        lastStatus = row?.run_status ?? null;
+        if (lastStatus && lastStatus !== 'queued' && lastStatus !== 'running') break;
+      } finally {
+        sqlite.close();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(lastStatus).toBe('failed');
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 

@@ -1,4 +1,5 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
+import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -85,6 +86,11 @@ export interface ChatSseEndPayload {
    *  runtime). Lets the chat offer a Continue affordance without a separate
    *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** Daemon failure classification for a `failed` run, so the chat can render
+   *  specific guidance straight off the terminal frame without a status refetch.
+   *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
+  failureCategory?: RunFailureCategory | null;
+  failureDetail?: RunFailureDetail | null;
 }
 
 export type DaemonAgentPayload =

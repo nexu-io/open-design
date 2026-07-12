@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -8,8 +8,11 @@ export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 export type RuntimeModelOption = {
   id: string;
   label: string;
+  enabled?: boolean;
+  default?: boolean;
   inputPriceUsdPerMillion?: number;
   outputPriceUsdPerMillion?: number;
+  metadata?: ModelMetadata;
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';

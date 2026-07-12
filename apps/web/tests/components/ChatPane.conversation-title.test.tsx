@@ -182,6 +182,47 @@ describe('ChatPane session switcher', () => {
     );
     expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
   });
+
+  it('opens the profile-scoped plans view from the AMR tier upgrade action', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <ChatPane
+        messages={[
+          failedAssistantMessage({
+            id: 'msg-amr-upgrade',
+            runId: 'run-amr-upgrade',
+            code: 'AMR_TIER_UPGRADE_REQUIRED',
+            agentId: 'amr',
+          }),
+        ]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        onRetry={vi.fn()}
+        conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        config={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } } } as unknown as AppConfig}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('chat.amrBalanceGate.plansCta'));
+
+    const [plansUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    const parsedPlansUrl = new URL(String(plansUrl));
+    expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
+      'https://vela.powerformer.net/wallet',
+    );
+    expect(parsedPlansUrl.searchParams.get('view')).toBe('plans');
+    expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
+  });
 });
 
 function renderChatPane(props: {

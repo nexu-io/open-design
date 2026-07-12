@@ -122,7 +122,7 @@ describe('HandoffButton zero-editors fallback', () => {
 
     fireEvent.click(await screen.findByTestId('handoff-caret'));
     fireEvent.click(await screen.findByRole('tab', { name: '复制给 CLI' }));
-    const amrWebsiteLink = screen.getByRole('link', { name: /打开 AMR 官网/ }) as HTMLAnchorElement;
+    const amrWebsiteLink = screen.getByRole('link', { name: /打开 Open Design Cloud 官网/ }) as HTMLAnchorElement;
     expect(amrWebsiteLink.getAttribute('href'))
       .toBe('https://open-design.ai/amr');
     fireEvent.click(amrWebsiteLink);

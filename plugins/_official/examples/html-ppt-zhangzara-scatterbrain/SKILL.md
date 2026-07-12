@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-scatterbrain
+en_name: "Pitch a Graduation Design Project like a Portfolio-Ready Design Student"
+zh_name: "像作品集出众的设计学生一样讲毕业设计"
 description: |
-  Scatterbrain — Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack. Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews.
+  A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.
+en_description: |
+  A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.
+zh_description: |
+  像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "student-coursework"
+  - "senior-capstone-defense-deck"
+  - "education"
+  - "coursework"
+  - "defense"
+  - "academic"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-scatterbrain"
 triggers:
-  - "scatterbrain"
-  - "zhangzara-scatterbrain"
-  - "playful"
-  - "creative"
-  - "informal"
-  - "warm"
-  - "brainstorm / workshop"
-  - "creative agency credentials"
+  - "senior-capstone-defense-deck"
+  - "student-coursework"
+  - "Pitch a Graduation Design Project like a Portfolio-Ready Design Student"
+  - "像作品集出众的设计学生一样讲毕业设计"
+  - "coursework"
+  - "defense"
+  - "academic"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/scatterbrain"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "student-coursework"
+  scenario: "education"
+  example_prompt: "Create \"Pitch a Graduation Design Project like a Portfolio-Ready Design Student\" as a decision-grade Student coursework deck in this template's own visual system. Subject: A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Audience: crit panel, faculty. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds."
 ---
 
 # Scatterbrain

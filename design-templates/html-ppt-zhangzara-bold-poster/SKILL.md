@@ -1,23 +1,35 @@
 ---
 name: html-ppt-zhangzara-bold-poster
+en_name: "Write a Series A Growth Story like a Tier-1 VC Partner"
+zh_name: "像一线 VC 合伙人一样写 A 轮增长叙事"
 description: |
-  Bold Poster — Editorial poster aesthetic with massive Shrikhand display and a single fire-engine red accent. Anything that should land like a magazine cover: brand manifestos, founder vision decks, editorial / cultural pitches, creative reviews.
+  Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
+en_description: |
+  Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
+zh_description: |
+  像一线 VC 合伙人一样写 A 轮增长叙事——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "fundraising-pitch"
+  - "series-a-pitch-deck"
+  - "finance"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-bold-poster"
 triggers:
-  - "bold-poster"
-  - "zhangzara-bold-poster"
-  - "Bold Poster"
-  - "bold"
-  - "editorial"
-  - "dramatic"
-  - "graphic"
-  - "brand manifesto"
-  - "creative-led pitch"
+  - "series-a-pitch-deck"
+  - "fundraising-pitch"
+  - "Write a Series A Growth Story like a Tier-1 VC Partner"
+  - "像一线 VC 合伙人一样写 A 轮增长叙事"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/bold-poster"
   upstream_license: MIT
   preview:
@@ -27,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "fundraising-pitch"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Series A Growth Story like a Tier-1 VC Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Audience: Series A partners. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 
 # Bold Poster

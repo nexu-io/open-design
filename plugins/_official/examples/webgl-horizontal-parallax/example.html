@@ -113,7 +113,8 @@ const scroll={current:0,target:0,ease:0.07,limit:0};
 const wrap=document.getElementById('wrap');
 function setLimit(){ scroll.limit=Math.max(0,row.scrollWidth - wrap.clientWidth); }
 addEventListener('wheel',e=>{ scroll.target+=e.deltaY; },{passive:true});
-function resize(){ W=innerWidth;H=innerHeight; camera.aspect=W/H; camera.fov=fov(); camera.updateProjectionMatrix();
+function resize(){ if(innerWidth===resize._w&&innerHeight===resize._h)return; resize._w=innerWidth; resize._h=innerHeight;
+  W=innerWidth;H=innerHeight; camera.aspect=W/H; camera.fov=fov(); camera.updateProjectionMatrix();
   renderer.setSize(W,H); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   document.querySelectorAll('.cell .img').forEach((im,i)=>{ im.style.width=Math.round(DATA[i].w*W)+'px'; });
   setLimit(); medias.forEach(m=>m.measure()); }
@@ -121,7 +122,7 @@ function boot(){
   document.querySelectorAll('.cell .img').forEach(im=>medias.push(new Media(im)));
   setLimit();
   addEventListener('resize',resize);
-  (function frame(){ requestAnimationFrame(frame);
+  (function frame(){ requestAnimationFrame(frame); resize();
     scroll.target=Math.max(0,Math.min(scroll.limit,scroll.target));
     scroll.current+=(scroll.target-scroll.current)*scroll.ease;
     row.style.transform=`translateY(-50%) translateX(${-scroll.current}px)`;

@@ -92,13 +92,17 @@ export interface DesignSystemReviewEntry {
 export interface ProjectMetadata {
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
-  // live-artifact skill/system-prompt path). `document`: resume/report/PDF
-  // projects from the Home `document` card — an analytics-only discriminator
-  // (no product behavior keys off it) so a created `other`-kind project reports
-  // `project_kind: 'document'` instead of generic `other`. `webgl-experience`
-  // and `worker-visualizer`: the powered-preview GPU / off-main-thread scenario
-  // cards — analytics-only discriminators for the powered-artifact chips.
-  intent?: 'live-artifact' | 'document' | 'webgl-experience' | 'worker-visualizer';
+  // live-artifact skill/system-prompt path). `web-clone`: website reproduction
+  // projects from the Home `Website clone` card — stored as prototypes so they
+  // keep prototype preview behavior, but the intent routes the `example-web-clone`
+  // scenario plugin and splits them into their own `web_clone` analytics kind.
+  // `document`: resume/report/PDF projects from the Home `document` card — an
+  // analytics-only discriminator (no product behavior keys off it) so a created
+  // `other`-kind project reports `project_kind: 'document'` instead of generic
+  // `other`. `webgl-experience` and `worker-visualizer`: the powered-preview
+  // GPU / off-main-thread scenario cards — analytics-only discriminators for the
+  // powered-artifact chips.
+  intent?: 'live-artifact' | 'web-clone' | 'document' | 'webgl-experience' | 'worker-visualizer';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

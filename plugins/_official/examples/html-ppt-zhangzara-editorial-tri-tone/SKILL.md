@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-editorial-tri-tone
+en_name: "Build an Editorial Design System like a Magazine Art Director"
+zh_name: "像杂志艺术总监一样搭建编辑设计系统"
 description: |
-  Editorial Tri-Tone — Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif. Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews.
+  A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Built as a decision-grade design craft deck for editorial & design team.
+en_description: |
+  A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Built as a decision-grade design craft deck for editorial & design team.
+zh_description: |
+  像杂志艺术总监一样搭建编辑设计系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "design-craft"
+  - "board-upgrade-deck-rescue"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-editorial-tri-tone"
 triggers:
-  - "editorial-tri-tone"
-  - "zhangzara-editorial-tri-tone"
-  - "Editorial Tri-Tone"
-  - "editorial"
-  - "warm"
-  - "literary"
-  - "editorial / magazine pitch"
-  - "fashion brand deck"
+  - "board-upgrade-deck-rescue"
+  - "design-craft"
+  - "Build an Editorial Design System like a Magazine Art Director"
+  - "像杂志艺术总监一样搭建编辑设计系统"
+  - "design"
+  - "brand"
+  - "visual-system"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/editorial-tri-tone"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "design-craft"
+  scenario: "design"
+  example_prompt: "Create \"Build an Editorial Design System like a Magazine Art Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Audience: editorial & design team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated."
 ---
 
 # Editorial Tri-Tone
