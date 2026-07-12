@@ -148,4 +148,61 @@ describe('parseFrontmatter', () => {
     const { data } = parseFrontmatter('---\na: "\n---\n');
     expect(data['a']).toBe('"');
   });
+
+  // A block sequence may sit at the same indentation as its mapping key (the
+  // common flush-left `tags:` / `- item` YAML style). These items must attach
+  // to the key rather than being dropped.
+  it('parses a flush-left (zero-indent) block sequence', () => {
+    const { data } = parseFrontmatter('---\ntags:\n- a\n- b\n---\n');
+    expect(data['tags']).toEqual(['a', 'b']);
+  });
+
+  it('parses a nested flush-left sequence without dropping enclosing keys', () => {
+    const { data } = parseFrontmatter('---\nod:\n  craft:\n    requires:\n    - alpha\n    - beta\n---\n');
+    expect(data['od']).toEqual({ craft: { requires: ['alpha', 'beta'] } });
+  });
+
+  it('parses a flush-left sequence of single-line objects', () => {
+    const { data } = parseFrontmatter('---\nitems:\n- k: 1\n  v: 2\n- k: 3\n---\n');
+    expect(data['items']).toEqual([{ k: 1, v: 2 }, { k: 3 }]);
+  });
+
+  it('returns to the parent level for a key following a flush-left sequence', () => {
+    const { data } = parseFrontmatter('---\ntags:\n- a\n- b\nname: foo\n---\n');
+    expect(data).toEqual({ tags: ['a', 'b'], name: 'foo' });
+  });
+
+  it('still parses an indented block sequence', () => {
+    const { data } = parseFrontmatter('---\ntags:\n  - a\n  - b\n---\n');
+    expect(data['tags']).toEqual(['a', 'b']);
+  });
+
+  it('does not split inline-array elements on commas inside quotes', () => {
+    const { data } = parseFrontmatter('---\na: ["a,b", "c"]\nb: [\'x, y\', z]\n---\n');
+    expect(data['a']).toEqual(['a,b', 'c']);
+    expect(data['b']).toEqual(['x, y', 'z']);
+  });
+
+  it('treats an apostrophe inside an unquoted inline-array element as literal', () => {
+    const { data } = parseFrontmatter("---\ntags: [don't, stop]\n---\n");
+    expect(data['tags']).toEqual(["don't", 'stop']);
+  });
+
+  it('still splits plain inline arrays on commas', () => {
+    const { data } = parseFrontmatter('---\na: [x, y, z]\n---\n');
+    expect(data['a']).toEqual(['x', 'y', 'z']);
+  });
+
+  // A block scalar's indentation is derived from its first content line, not a
+  // fixed key+2, so content indented deeper is not left with leading spaces
+  // while relative indentation deeper than that base is preserved.
+  it('strips a block scalar to its own base indentation', () => {
+    const { data } = parseFrontmatter('---\ntext: |\n    line one\n    line two\n---\n');
+    expect(data['text']).toBe('line one\nline two');
+  });
+
+  it('preserves relative indentation inside a block scalar', () => {
+    const { data } = parseFrontmatter('---\ntext: |\n  a\n    b\n---\n');
+    expect(data['text']).toBe('a\n  b');
+  });
 });

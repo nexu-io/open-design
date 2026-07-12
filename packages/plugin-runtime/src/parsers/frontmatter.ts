@@ -78,13 +78,29 @@ function parseYamlSubset(src: string): FrontmatterObject {
       continue;
     }
     const indent = raw.match(/^\s*/)?.[0].length ?? 0;
+    const line = raw.slice(indent);
 
+    // A block sequence may sit at the SAME indentation as its parent mapping
+    // key (the flush-left `key:` / `- item` style). Such a `- ` item belongs
+    // to the pending key placeholder at its own indent, so don't pop that
+    // placeholder the way a normal dedent would — it is either the empty
+    // object still awaiting a value or the array we already started for it.
+    const isSeqItem = line.startsWith('- ');
     while (stack.length > 1 && indent <= (stack[stack.length - 1]?.indent ?? -1)) {
+      const entry = stack[stack.length - 1];
+      if (
+        entry &&
+        isSeqItem &&
+        indent === entry.indent &&
+        entry.key !== null &&
+        (Array.isArray(entry.container) || Object.keys(entry.container).length === 0)
+      ) {
+        break;
+      }
       stack.pop();
     }
     const top = stack[stack.length - 1];
     if (!top) throw new Error('frontmatter parser stack invariant violated');
-    const line = raw.slice(indent);
 
     if (line.startsWith('- ')) {
       const value = line.slice(2).trim();
@@ -138,7 +154,12 @@ function parseYamlSubset(src: string): FrontmatterObject {
 
     if (val === '|' || val === '|-' || val === '>' || val === '>-') {
       const collected: string[] = [];
-      const childIndent = indent + 2;
+      // YAML derives a block scalar's indentation from its first non-empty
+      // content line, not a fixed key+2, so content indented deeper than
+      // key+2 is stripped to its own base instead of keeping spurious
+      // leading whitespace. Relative indentation deeper than the base is
+      // preserved.
+      let blockIndent = -1;
       i++;
       while (i < lines.length) {
         const next = lines[i] ?? '';
@@ -148,8 +169,10 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
         const nIndent = next.match(/^\s*/)?.[0].length ?? 0;
-        if (nIndent < childIndent) break;
-        collected.push(next.slice(childIndent));
+        if (nIndent <= indent) break;
+        if (blockIndent === -1) blockIndent = nIndent;
+        if (nIndent < blockIndent) break;
+        collected.push(next.slice(blockIndent));
         i++;
       }
       if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
@@ -166,9 +189,7 @@ function parseYamlSubset(src: string): FrontmatterObject {
 
     if (val.startsWith('[') && val.endsWith(']')) {
       if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
-      top.container[key] = val
-        .slice(1, -1)
-        .split(',')
+      top.container[key] = splitInlineArrayItems(val.slice(1, -1))
         .map((s) => coerce(s.trim()))
         .filter((v): v is FrontmatterValue => v !== '');
       i++;
@@ -181,6 +202,34 @@ function parseYamlSubset(src: string): FrontmatterObject {
   }
 
   return root;
+}
+
+// Split an inline-array body (`a, "b,c", 'd'`) on top-level commas only, so a
+// comma inside a quoted element is not treated as a separator. A quote only
+// opens a quoted element when it is that element's first non-whitespace
+// character; a quote mid-token (e.g. the apostrophe in `don't`) is a literal
+// plain-scalar character. Escaping inside quotes is out of scope, matching the
+// rest of this minimal parser.
+function splitInlineArrayItems(inner: string): string[] {
+  const items: string[] = [];
+  let buf = '';
+  let quote: '"' | "'" | null = null;
+  for (const ch of inner) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = null;
+    } else if ((ch === '"' || ch === "'") && buf.trim() === '') {
+      quote = ch;
+      buf += ch;
+    } else if (ch === ',') {
+      items.push(buf);
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  items.push(buf);
+  return items;
 }
 
 function coerce(raw: string | undefined): FrontmatterValue {
