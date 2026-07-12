@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liquid Glass Card — reference implementation</title>
+<style>
+  :root {
+    /* Swap these for the active design system's tokens */
+    --lg-canvas: #0a0e0c;
+    --lg-fg: #fffaea;
+    --lg-fg-muted: #aab5a9;
+    --lg-accent: #fe9730;
+    --lg-radius: 20px;
+    --lg-surface-tint: rgba(255, 255, 255, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: Geist, Inter, system-ui, -apple-system, sans-serif;
+    color: var(--lg-fg);
+    background:
+      radial-gradient(60% 50% at 20% 10%, rgba(254, 151, 48, 0.35), transparent 60%),
+      radial-gradient(50% 45% at 85% 25%, rgba(100, 245, 163, 0.18), transparent 60%),
+      radial-gradient(70% 60% at 60% 90%, rgba(253, 251, 121, 0.12), transparent 55%),
+      var(--lg-canvas);
+  }
+
+  .stage { display: grid; gap: 28px; padding: 48px 24px; justify-items: center; }
+
+  /* ── Liquid glass card ─────────────────────────────────────────────── */
+  .liquid-glass {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: var(--lg-radius);
+    padding: 28px;
+    max-width: 380px;
+    background: var(--lg-surface-tint);
+    -webkit-backdrop-filter: blur(2px) saturate(1.15); /* Safari/Firefox fallback */
+    backdrop-filter: blur(2px) saturate(1.15);
+    transition: transform 0.3s ease;
+  }
+  /* Layer 1: the liquid distortion (Chromium honors url() backdrop-filters) */
+  .liquid-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    -webkit-backdrop-filter: url(#liquid-glass-filter);
+    backdrop-filter: url(#liquid-glass-filter);
+    pointer-events: none;
+  }
+  /* Layer 2: the layered inset "glass edge" shadow stack (from KokonutUI) */
+  .liquid-glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      0 0 8px rgba(0, 0, 0, 0.03),
+      0 2px 6px rgba(0, 0, 0, 0.08),
+      inset 3px 3px 0.5px -3.5px rgba(255, 255, 255, 0.09),
+      inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.85),
+      inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset 0 0 6px 6px rgba(255, 255, 255, 0.12),
+      inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
+      0 0 12px rgba(0, 0, 0, 0.15);
+  }
+  .liquid-glass:hover { transform: translateY(-2px); }
+
+  /* ── Liquid glass pill button ──────────────────────────────────────── */
+  .liquid-glass-btn {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 26px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--lg-fg);
+    background: var(--lg-surface-tint);
+    cursor: pointer;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    transition: transform 0.3s ease;
+    box-shadow:
+      inset 2px 2px 0.5px -2px rgba(255, 255, 255, 0.5),
+      inset -2px -2px 0.5px -2px rgba(255, 255, 255, 0.5),
+      inset 0 0 6px 4px rgba(255, 255, 255, 0.1),
+      0 0 12px rgba(0, 0, 0, 0.2);
+  }
+  .liquid-glass-btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    -webkit-backdrop-filter: url(#liquid-glass-filter-strong);
+    backdrop-filter: url(#liquid-glass-filter-strong);
+    pointer-events: none;
+  }
+  .liquid-glass-btn:hover { transform: scale(1.05); }
+  .liquid-glass-btn.accent { color: #1a1206; background: color-mix(in srgb, var(--lg-accent) 82%, transparent); }
+
+  .liquid-glass h2 { margin: 0 0 8px; font-size: 20px; }
+  .liquid-glass p { margin: 0 0 20px; color: var(--lg-fg-muted); font-size: 14px; line-height: 1.6; }
+  .row { display: flex; gap: 12px; }
+</style>
+</head>
+<body>
+  <!-- The liquid distortion filter (shared; one per document is enough).
+       feTurbulence noise displaces whatever is BEHIND the element via
+       backdrop-filter: url(#id) — that displacement is the "liquid" look. -->
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0">
+    <defs>
+      <filter id="liquid-glass-filter" color-interpolation-filters="sRGB" x="-50%" y="-50%" width="200%" height="200%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.05 0.05" numOctaves="1" seed="1" result="turbulence"/>
+        <feGaussianBlur in="turbulence" stdDeviation="2" result="blurredNoise"/>
+        <feDisplacementMap in="SourceGraphic" in2="blurredNoise" scale="30" xChannelSelector="R" yChannelSelector="B" result="displaced"/>
+        <feGaussianBlur in="displaced" stdDeviation="4" result="finalBlur"/>
+        <feComposite in="finalBlur" in2="finalBlur" operator="over"/>
+      </filter>
+      <filter id="liquid-glass-filter-strong" color-interpolation-filters="sRGB" x="-50%" y="-50%" width="200%" height="200%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.05 0.05" numOctaves="1" seed="1" result="turbulence"/>
+        <feGaussianBlur in="turbulence" stdDeviation="2" result="blurredNoise"/>
+        <feDisplacementMap in="SourceGraphic" in2="blurredNoise" scale="70" xChannelSelector="R" yChannelSelector="B" result="displaced"/>
+        <feGaussianBlur in="displaced" stdDeviation="4" result="finalBlur"/>
+        <feComposite in="finalBlur" in2="finalBlur" operator="over"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <div class="stage">
+    <div class="liquid-glass">
+      <h2>Liquid Glass</h2>
+      <p>Apple-style glass card: turbulence-displaced backdrop, layered inset edge highlights, and a soft blur. Everything behind this card bends like liquid.</p>
+      <div class="row">
+        <button class="liquid-glass-btn accent" type="button">Primary</button>
+        <button class="liquid-glass-btn" type="button">Secondary</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
