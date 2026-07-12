@@ -5,8 +5,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { registerCreatorContentRoutes } from '../src/routes/creator-content.js';
-import { createCreatorTask } from '../src/creator-workbench-store.js';
-import { upsertCreatorMediaAssets } from '../src/creator-media/store.js';
+import { createCreatorTask, getCreatorWorkbenchProjectData } from '../src/creator-workbench-store.js';
+import { getCreatorMediaProjectData, upsertCreatorMediaAssets } from '../src/creator-media/store.js';
 
 let dataDir = '';
 
@@ -171,6 +171,68 @@ describe('creator content routes', () => {
       const unlink = `${linkUrl}/${available!.id}`;
       expect((await fetch(unlink, { method: 'DELETE' })).status).toBe(204);
       expect((await fetch(unlink, { method: 'DELETE' })).status).toBe(204);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('validates storyboard media in PATCH while preserving an existing link that becomes missing', async () => {
+    const { server, baseUrl } = await listen(buildApp(['project-1', 'project-2']));
+    try {
+      const content = await createContent(baseUrl);
+      const initial = await fetch(`${baseUrl}/api/projects/project-1/creator-content/${content.content.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storyboardItems: [{ position: 1, purpose: '操场远景' }] }),
+      }).then((response) => response.json()) as { content: { storyboardItems: Array<{ id: string }> } };
+      const itemId = initial.content.storyboardItems[0]!.id;
+      const [available] = await upsertCreatorMediaAssets(dataDir, 'project-1', [{
+        rootPath: 'C:\\media', sourcePath: 'C:\\media\\keep.mp4', relativePath: 'keep.mp4', fileName: 'keep.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'available', thumbnailStatus: 'ready',
+      }]);
+      const [missing] = await upsertCreatorMediaAssets(dataDir, 'project-1', [{
+        rootPath: 'C:\\media', sourcePath: 'C:\\media\\missing.mp4', relativePath: 'missing.mp4', fileName: 'missing.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'missing', thumbnailStatus: 'unavailable',
+      }]);
+      const [otherAsset] = await upsertCreatorMediaAssets(dataDir, 'project-2', [{
+        rootPath: 'C:\\other', sourcePath: 'C:\\other\\other.mp4', relativePath: 'other.mp4', fileName: 'other.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'available', thumbnailStatus: 'ready',
+      }]);
+      const contentUrl = `${baseUrl}/api/projects/project-1/creator-content/${content.content.id}`;
+      const patchWith = (assetId: string) => fetch(contentUrl, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storyboardItems: [{ position: 1, purpose: '操场远景', mediaAssetIds: [assetId] }] }),
+      });
+
+      expect((await patchWith(otherAsset!.id)).status).toBe(400);
+      expect((await patchWith(missing!.id)).status).toBe(400);
+
+      const linkUrl = `${contentUrl}/storyboard/${itemId}/media-assets`;
+      expect((await fetch(linkUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: available!.id }) })).status).toBe(201);
+      await upsertCreatorMediaAssets(dataDir, 'project-1', [{
+        rootPath: 'C:\\media', sourcePath: 'C:\\media\\keep.mp4', relativePath: 'keep.mp4', fileName: 'keep.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'missing', thumbnailStatus: 'unavailable',
+      }]);
+      const retained = await patchWith(available!.id);
+      expect(retained.status).toBe(200);
+      await expect(retained.json()).resolves.toMatchObject({ content: { storyboardItems: [{ mediaAssetIds: [available!.id] }] } });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('deletes only content while preserving linked task and media records', async () => {
+    const { server, baseUrl } = await listen(buildApp());
+    try {
+      const content = await createContent(baseUrl);
+      const task = await createCreatorTask(dataDir, 'project-1', { title: '保留的任务' });
+      const [asset] = await upsertCreatorMediaAssets(dataDir, 'project-1', [{
+        rootPath: 'C:\\media', sourcePath: 'C:\\media\\preserve.mp4', relativePath: 'preserve.mp4', fileName: 'preserve.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'available', thumbnailStatus: 'ready',
+      }]);
+      const updated = await fetch(`${baseUrl}/api/projects/project-1/creator-content/${content.content.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storyboardItems: [{ position: 1, purpose: '保留素材' }] }),
+      }).then((response) => response.json()) as { content: { storyboardItems: Array<{ id: string }> } };
+      const itemId = updated.content.storyboardItems[0]!.id;
+      expect((await fetch(`${baseUrl}/api/projects/project-1/creator-content/${content.content.id}/tasks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: task.id }) })).status).toBe(201);
+      expect((await fetch(`${baseUrl}/api/projects/project-1/creator-content/${content.content.id}/storyboard/${itemId}/media-assets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: asset!.id }) })).status).toBe(201);
+
+      expect((await fetch(`${baseUrl}/api/projects/project-1/creator-content/${content.content.id}`, { method: 'DELETE' })).status).toBe(204);
+      await expect(fetch(`${baseUrl}/api/projects/project-1/creator-content`).then((response) => response.json())).resolves.toEqual({ contentProjects: [] });
+      await expect(getCreatorWorkbenchProjectData(dataDir, 'project-1')).resolves.toMatchObject({ tasks: [expect.objectContaining({ id: task.id })] });
+      await expect(getCreatorMediaProjectData(dataDir, 'project-1')).resolves.toMatchObject({ assets: [expect.objectContaining({ id: asset!.id })] });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

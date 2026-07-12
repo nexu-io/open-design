@@ -46,6 +46,32 @@ export function registerCreatorContentRoutes(
   };
   const requireContentId = (contentId: string) => requireId(contentId, 'content id');
   const requireStoryboardItemId = (itemId: string) => requireId(itemId, 'storyboard item id');
+  const validateStoryboardMediaPatch = async (projectId: string, contentId: string, patch: Record<string, unknown>) => {
+    if (patch.storyboardItems === undefined) return;
+    if (!Array.isArray(patch.storyboardItems)) throw new Error('storyboard items must be an array');
+
+    const contentData = await getCreatorContentProjectData(RUNTIME_DATA_DIR, projectId);
+    const current = contentData.contentProjects.find((content) => content.id === contentId);
+    if (!current) {
+      const error = new Error('creator content not found') as Error & { status?: number };
+      error.status = 404;
+      throw error;
+    }
+    const existingMediaAssetIds = new Set(
+      current.storyboardItems.flatMap((item) => item.mediaAssetIds),
+    );
+    const media = await getCreatorMediaProjectData(RUNTIME_DATA_DIR, projectId);
+    for (const item of patch.storyboardItems) {
+      const mediaAssetIds = (item as { mediaAssetIds?: unknown } | null)?.mediaAssetIds;
+      if (mediaAssetIds === undefined || !Array.isArray(mediaAssetIds)) continue;
+      for (const assetId of mediaAssetIds) {
+        const asset = media.assets.find((entry) => entry.id === assetId);
+        if (asset?.availability === 'available') continue;
+        if (asset?.availability === 'missing' && existingMediaAssetIds.has(assetId)) continue;
+        throw new Error('creator media asset must be available in this project');
+      }
+    }
+  };
 
   app.get('/api/projects/:id/creator-content', async (req, res) => {
     try {
@@ -73,11 +99,14 @@ export function registerCreatorContentRoutes(
   app.patch('/api/projects/:id/creator-content/:contentId', async (req, res) => {
     try {
       requireProject(req.params.id);
+      const contentId = requireContentId(req.params.contentId);
+      const patch = (req.body ?? {}) as Record<string, unknown>;
+      await validateStoryboardMediaPatch(req.params.id, contentId, patch);
       const content = await updateCreatorContent(
         RUNTIME_DATA_DIR,
         req.params.id,
-        requireContentId(req.params.contentId),
-        (req.body ?? {}) as UpdateCreatorContentRequest,
+        contentId,
+        patch as UpdateCreatorContentRequest,
       );
       if (!content) return res.status(404).json({ error: 'creator content not found' });
       res.json({ content });
