@@ -108,10 +108,16 @@ import { IntegrationsView } from '../../src/components/IntegrationsView';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
 import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
+import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
-import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
+import type {
+  AgentInfo,
+  AppConfig,
+  AppVersionInfo,
+  ProviderModelOption,
+} from '../../src/types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -269,6 +275,7 @@ function renderSettingsDialog(
     onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
+    providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
   } = {},
 ) {
@@ -284,6 +291,7 @@ function renderSettingsDialog(
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
       initialSection={options.initialSection ?? 'execution'}
+      providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
       onPersist={onPersist}
       onPersistComposioKey={onPersistComposioKey}
@@ -1554,6 +1562,43 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.queryByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeNull();
     });
+  });
+
+  it('does not reuse discovered models for Anthropic full Messages endpoints', () => {
+    const messagesEndpoint = 'https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages';
+    const staleDiscoveryKey = providerModelsCacheKey(
+      'anthropic',
+      messagesEndpoint,
+      'sk-mimo',
+      '',
+    );
+
+    renderSettingsDialog(
+      {
+        apiProtocol: 'anthropic',
+        apiKey: 'sk-mimo',
+        baseUrl: messagesEndpoint,
+        model: 'mimo-v2.5-pro',
+        apiProviderBaseUrl: null,
+      },
+      {
+        providerModelsCache: {
+          [staleDiscoveryKey]: [{ id: 'deepseek-chat', label: 'deepseek-chat' }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+
+    expect(optionNames(modelPopover)).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('deepseek-chat')]),
+    );
+    expect(within(modelPopover).getByRole('option', { name: 'Custom (type below)…' })).toBeTruthy();
+    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe(
+      'mimo-v2.5-pro',
+    );
+    expect(fetchProviderModelsMock).not.toHaveBeenCalled();
   });
 
   it('renders automatic provider auth failures under the API key field', async () => {

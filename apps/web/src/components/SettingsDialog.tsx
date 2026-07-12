@@ -3301,8 +3301,14 @@ export function SettingsDialog({
     ),
     [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
   );
+  const providerModelDiscoveryUnavailable =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
   const fetchedApiModelOptions =
-    activeProviderModelsCache[providerModelsKey] ?? [];
+    providerModelDiscoveryUnavailable
+      ? []
+      : activeProviderModelsCache[providerModelsKey] ?? [];
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3450,12 +3456,19 @@ export function SettingsDialog({
       )
       : null;
   const suggestedApiModelIds = useMemo(
-    () => Array.from(new Set(
-      selectedProvider?.models?.length
-        ? selectedProvider.models
-        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    )),
-    [apiProtocol, selectedProvider],
+    () => {
+      if (providerModelDiscoveryUnavailable) {
+        return selectedProvider?.models?.length
+          ? Array.from(new Set(selectedProvider.models))
+          : [];
+      }
+      return Array.from(new Set(
+        selectedProvider?.models?.length
+          ? selectedProvider.models
+          : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+      ));
+    },
+    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(
