@@ -206,6 +206,10 @@ describe('creator content routes', () => {
       await upsertCreatorMediaAssets(dataDir, 'project-1', [{
         rootPath: 'C:\\media', sourcePath: 'C:\\media\\keep.mp4', relativePath: 'keep.mp4', fileName: 'keep.mp4', extension: '.mp4', kind: 'video', sizeBytes: 100, modifiedAt: new Date().toISOString(), availability: 'missing', thumbnailStatus: 'unavailable',
       }]);
+      const moved = await fetch(contentUrl, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storyboardItems: [{ position: 2, purpose: '另一镜头', mediaAssetIds: [available!.id] }] }),
+      });
+      expect(moved.status).toBe(400);
       const retained = await patchWith(available!.id);
       expect(retained.status).toBe(200);
       await expect(retained.json()).resolves.toMatchObject({ content: { storyboardItems: [{ mediaAssetIds: [available!.id] }] } });

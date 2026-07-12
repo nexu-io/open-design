@@ -57,17 +57,16 @@ export function registerCreatorContentRoutes(
       error.status = 404;
       throw error;
     }
-    const existingMediaAssetIds = new Set(
-      current.storyboardItems.flatMap((item) => item.mediaAssetIds),
-    );
     const media = await getCreatorMediaProjectData(RUNTIME_DATA_DIR, projectId);
     for (const item of patch.storyboardItems) {
-      const mediaAssetIds = (item as { mediaAssetIds?: unknown } | null)?.mediaAssetIds;
+      const inputItem = item as { position?: unknown; mediaAssetIds?: unknown } | null;
+      const mediaAssetIds = inputItem?.mediaAssetIds;
       if (mediaAssetIds === undefined || !Array.isArray(mediaAssetIds)) continue;
+      const existingItem = current.storyboardItems.find((entry) => entry.position === inputItem?.position);
       for (const assetId of mediaAssetIds) {
         const asset = media.assets.find((entry) => entry.id === assetId);
         if (asset?.availability === 'available') continue;
-        if (asset?.availability === 'missing' && existingMediaAssetIds.has(assetId)) continue;
+        if (asset?.availability === 'missing' && existingItem?.mediaAssetIds.includes(assetId)) continue;
         throw new Error('creator media asset must be available in this project');
       }
     }
