@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "creative-director-pass-auf-den-react-prototyp-mridnqbz",
+  "title": "Creative-Director-Pass auf den React-Prototyp",
+  "version": "0.1.0",
+  "description": "**Ziel dieses Dokuments:** Grundlage für eine gezielte Politur-/Kritik-Passage über den bereits gebauten Prototyp (`8-wochen-organizer.html/.css/.js`), bevor tatsächlich etwas verändert wird. Frei editierbar — Abschnitt ",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
