@@ -80,6 +80,27 @@ async function startProjectStubServer(): Promise<StubServer> {
         }));
         return;
       }
+      if (captured.method === 'POST' && captured.url === '/api/workspace/invite') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          results: [{ email: 'teammate@example.com', ok: true, inviteId: 'invite-1' }],
+        }));
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/workspace/projects/team') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          projects: [{ projectId: 'team-project-1', displayName: 'Team Project' }],
+        }));
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/workspace/members') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          members: [{ memberId: 'member-1', displayName: 'Member One', role: 'admin' }],
+        }));
+        return;
+      }
       if (captured.method === 'POST' && captured.url === '/api/workspaces/ws-1/projects/batch-delete') {
         res.statusCode = 200;
         res.end(JSON.stringify({ ok: true, deletedProjectIds: ['project-1', 'project-2'] }));
@@ -223,6 +244,82 @@ describe('od project CLI', () => {
       'x-od-workspace-id': 'ws-1',
       'x-od-workspace-member-id': 'member-1',
       'x-od-workspace-role': 'admin',
+    });
+  });
+
+  it('creates workspace invites through the workspace invite API', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'workspace',
+      'invite',
+      '--email',
+      'teammate@example.com',
+      '--role',
+      'member',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      results: [{ email: 'teammate@example.com', ok: true, inviteId: 'invite-1' }],
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'POST',
+      url: '/api/workspace/invite',
+      body: JSON.stringify({ email: 'teammate@example.com', role: 'member' }),
+    });
+  });
+
+  it('lists team projects through the workspace discovery API', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'workspace',
+      'projects',
+      'team',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      projects: [{ projectId: 'team-project-1', displayName: 'Team Project' }],
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/workspace/projects/team',
+    });
+  });
+
+  it('lists workspace members through the workspace member directory API', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'workspace',
+      'members',
+      'list',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      members: [{ memberId: 'member-1', displayName: 'Member One', role: 'admin' }],
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/workspace/members',
     });
   });
 

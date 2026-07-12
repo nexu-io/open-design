@@ -208,7 +208,7 @@ const PROJECT_STRING_FLAGS = new Set([
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
-  'member', 'role', 'app-user', 'lifecycle-state',
+  'member', 'role', 'email', 'app-user', 'lifecycle-state',
   'member-status', 'can-share-projects', 'can-write-synced-files',
 ]);
 const WORKSPACE_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
@@ -6249,10 +6249,13 @@ Common options:
 async function runWorkspace(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
+  od workspace invite --email <addr> [--role admin|member] [--json]
+  od workspace projects team [--json]
   od workspace projects list --workspace <id> [--view recent|drafts|team|all] [--json]
   od workspace projects move <projectId> --workspace <id> --visibility personal|team [--json]
   od workspace projects batch-delete --workspace <id> --project <id> [--project <id> ...] [--json]
   od workspace projects batch-move --workspace <id> --visibility personal|team --project <id> [--project <id> ...] [--json]
+  od workspace members list [--json]
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -6262,19 +6265,90 @@ Common options:
     process.exit(args.length === 0 ? 2 : 0);
   }
   const area = args[0];
-  if (area !== 'projects') {
+  if (!['invite', 'projects', 'members'].includes(area)) {
     console.error(`unknown subcommand: od workspace ${area}`);
     process.exit(2);
   }
   const sub = args[1] ?? 'list';
-  const rest = args.slice(2);
+  const rest = area === 'invite' ? args.slice(1) : args.slice(2);
   const flags = parseFlags(rest, { string: WORKSPACE_STRING_FLAGS, boolean: WORKSPACE_BOOLEAN_FLAGS });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+
+  async function workspaceContextRequest(path, init) {
+    const resp = await fetch(`${base}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+      },
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      console.error(`${init?.method ?? 'GET'} ${path} failed: ${resp.status} ${JSON.stringify(data)}`);
+      process.exit(1);
+    }
+    return data;
+  }
+
+  if (area === 'invite') {
+    const emails = repeatableFlagValues(rest, 'email');
+    const role = String(flags.role ?? 'member');
+    if (emails.length === 0 || !['admin', 'member'].includes(role)) {
+      console.error('Usage: od workspace invite --email <addr> [--role admin|member] [--json]');
+      process.exit(2);
+    }
+    const body = emails.length === 1
+      ? { email: emails[0], role }
+      : { invites: emails.map((email) => ({ email, role })) };
+    const data = await workspaceContextRequest('/api/workspace/invite', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    const results = Array.isArray(data?.results) ? data.results : [];
+    for (const result of results) {
+      console.log(`${result.email}\t${result.ok ? 'invited' : `failed:${result.error ?? 'unknown'}`}`);
+    }
+    return;
+  }
+
+  if (area === 'members') {
+    if (sub !== 'list') {
+      console.error(`unknown subcommand: od workspace members ${sub}`);
+      process.exit(2);
+    }
+    const data = await workspaceContextRequest('/api/workspace/members');
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    const members = Array.isArray(data?.members) ? data.members : [];
+    if (members.length === 0) {
+      console.log('No workspace members.');
+      return;
+    }
+    for (const member of members) {
+      console.log(`${member.memberId}\t${member.displayName ?? '-'}\t${member.role ?? '-'}`);
+    }
+    return;
+  }
+
+  if (sub === 'team') {
+    const data = await workspaceContextRequest('/api/workspace/projects/team');
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    const projects = Array.isArray(data?.projects) ? data.projects : [];
+    if (projects.length === 0) {
+      console.log('No shared team projects.');
+      return;
+    }
+    for (const project of projects) {
+      console.log(`${project.projectId ?? project.id}\t${project.displayName ?? project.name ?? '-'}`);
+    }
+    return;
+  }
+
   const workspaceId = typeof flags.workspace === 'string' && flags.workspace.trim() ? flags.workspace.trim() : '';
   if (!workspaceId) {
     console.error('--workspace <id> is required');
     process.exit(2);
   }
-  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const projectIds = repeatableFlagValues(rest, 'project');
   const workspaceMemberId = typeof flags.member === 'string' && flags.member.trim() ? flags.member.trim() : '';
   if (!workspaceMemberId) {
