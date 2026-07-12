@@ -49,8 +49,7 @@
      - **`scene`** (신설): 카드 배경 = `background: url(__BRAZE_MEDIA__/scene-<id>.png)
        center / cover` (발송본 placeholder 룰 동일 — **data-URI 삽입 절대
        금지** 불변). 구조 = 텍스트존(상단, 씬의 상단 세이프존 위) → spacer
-       (flex) → CTA존(하단, 씬의 하단 세이프존 위) — 참고 실례:
-       `.tmp/braze-iam-probe/probe-a.html`. `visual-layout-patterns.md` §5
+       (flex) → CTA존(하단, 씬의 하단 세이프존 위). `visual-layout-patterns.md` §5
        "배경 = CSS" 문법은 scene 모드에 적용하지 않는다 (배경이 곧 씬 에셋).
        CSS 장식 오브젝트는 씬에 이미 포함 — 추가 CSS 장식은 최소화. 타이포는
        헤드라인 볼드 실효 위계(DESIGN.md 위계 룰 준수 — weight 4단계 활용),
