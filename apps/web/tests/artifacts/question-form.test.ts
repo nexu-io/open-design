@@ -169,17 +169,22 @@ describe('splitOnQuestionForms', () => {
     // Model mentioned the tag name inside backtick-quoted prose before
     // emitting the real form — the first open match must not consume the real
     // close tag, or the real form is lost.
-    const out = splitOnQuestionForms(
+    const input =
       `my first output should be \`<question-form id="discovery">\`.\n\n` +
       `Let me write a custom form:\n\n` +
       `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
-      `Now I'll proceed.`,
-    );
+      `Now I'll proceed.`;
+    const out = splitOnQuestionForms(input);
     expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
     if (out[2]?.kind === 'form') {
       expect(out[2].form.id).toBe('discovery');
       expect(out[2].form.questions).toHaveLength(1);
     }
+    // Segments must reconstruct the input without gaps or duplication.
+    const reconstructed = out
+      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .join('');
+    expect(reconstructed).toBe(input);
   });
 });
 

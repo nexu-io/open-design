@@ -168,8 +168,12 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
       const inner = OPEN_RE.exec(body);
       if (inner) {
         const resumeAt = openEnd + inner.index;
-        if (resumeAt > cursor) {
-          out.push({ kind: 'text', text: input.slice(cursor, resumeAt) });
+        // Push only the text between the false-positive open tag and the
+        // inner open tag (the prose between lines 152-153 already handled
+        // the text before the false-positive tag). Slicing from openStart
+        // avoids duplicating the leading prose already in the output.
+        if (resumeAt > openStart) {
+          out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
         }
         cursor = resumeAt;
       } else {
