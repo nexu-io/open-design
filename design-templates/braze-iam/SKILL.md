@@ -422,6 +422,8 @@ od braze brief <braze_message_id> --brief-file <path>
    - `"scene"` → 씬 에셋 1건을 imagegen-pipeline.md 씬 생성 경로로 dispatch
      (배경 포함 생성·알파 검증 skip·세이프존 스캐폴드 강제). 캐릭터 포함 시
      이중 앵커(캐릭터 시트 + 해당 복장 고해상 렌더)를 프롬프트에 전달.
+     `scene` 모드는 여기서 종료 — 아래 4~6 skip (씬 에셋을 일반 generate
+     경로로 재dispatch하지 않는다; 실패 시 재시도·강등 보고 규칙은 6과 동일).
    - `"layer"` → 아래 4~6 기존 절차 그대로. 캐릭터-오브제 상호작용 에셋은
      통합 컴포지션 경로(이중 앵커 동일 규칙)로 dispatch — 분리 생성 후 CSS
      조립 금지.
