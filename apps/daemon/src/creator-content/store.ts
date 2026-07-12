@@ -17,7 +17,14 @@ import type {
 const STATUSES = new Set<CreatorContentStatus>(['idea', 'drafting', 'production', 'published', 'archived']);
 
 function storePath(dataDir: string, projectId: string): string {
-  return path.join(dataDir, 'creator-content', `${projectId}.json`);
+  assertProjectId(projectId);
+  const contentDirectory = path.resolve(dataDir, 'creator-content');
+  const file = path.resolve(contentDirectory, `${projectId}.json`);
+  const relative = path.relative(contentDirectory, file);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('invalid project id');
+  }
+  return file;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -26,6 +33,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function assertProjectId(projectId: string): void {
+  if (typeof projectId !== 'string' || projectId.length === 0 || projectId.length > 128
+    || /^\.+$/.test(projectId) || !/^[A-Za-z0-9._-]+$/.test(projectId)) {
+    throw new Error('invalid project id');
+  }
+}
+
+function requireLinkId(value: string, field: string): void {
+  if (!nonEmptyString(value)) throw new Error(`${field} is required`);
 }
 
 function optionalText(value: unknown): string | undefined {
@@ -145,6 +163,7 @@ export async function getCreatorContentProjectData(
   dataDir: string,
   projectId: string,
 ): Promise<CreatorContentProjectData> {
+  assertProjectId(projectId);
   return readProjectData(dataDir, projectId);
 }
 
@@ -153,6 +172,7 @@ export async function createCreatorContent(
   projectId: string,
   input: CreateCreatorContentRequest,
 ): Promise<CreatorContentProject> {
+  assertProjectId(projectId);
   const data = await readProjectData(dataDir, projectId);
   const now = new Date().toISOString();
   const content: CreatorContentProject = {
@@ -179,6 +199,7 @@ export async function updateCreatorContent(
   contentId: string,
   patch: UpdateCreatorContentRequest,
 ): Promise<CreatorContentProject | null> {
+  assertProjectId(projectId);
   if (!isRecord(patch)) throw new Error('content patch is required');
   const data = await readProjectData(dataDir, projectId);
   const index = data.contentProjects.findIndex((content) => content.id === contentId);
@@ -203,6 +224,7 @@ export async function updateCreatorContent(
 }
 
 export async function deleteCreatorContent(dataDir: string, projectId: string, contentId: string): Promise<boolean> {
+  assertProjectId(projectId);
   const data = await readProjectData(dataDir, projectId);
   const next = data.contentProjects.filter((content) => content.id !== contentId);
   if (next.length === data.contentProjects.length) return false;
@@ -216,6 +238,8 @@ export async function linkCreatorContentTask(
   contentId: string,
   taskId: string,
 ): Promise<CreatorContentProject> {
+  assertProjectId(projectId);
+  requireLinkId(taskId, 'task id');
   const data = await readProjectData(dataDir, projectId);
   const content = requireContent(data, contentId);
   if (!content.taskIds.includes(taskId)) content.taskIds.push(taskId);
@@ -230,6 +254,8 @@ export async function unlinkCreatorContentTask(
   contentId: string,
   taskId: string,
 ): Promise<CreatorContentProject> {
+  assertProjectId(projectId);
+  requireLinkId(taskId, 'task id');
   const data = await readProjectData(dataDir, projectId);
   const content = requireContent(data, contentId);
   content.taskIds = content.taskIds.filter((item) => item !== taskId);
@@ -245,6 +271,9 @@ export async function linkCreatorStoryboardMedia(
   itemId: string,
   assetId: string,
 ): Promise<CreatorContentProject> {
+  assertProjectId(projectId);
+  requireLinkId(itemId, 'storyboard item id');
+  requireLinkId(assetId, 'media asset id');
   const data = await readProjectData(dataDir, projectId);
   const content = requireContent(data, contentId);
   const item = content.storyboardItems.find((storyboardItem) => storyboardItem.id === itemId);
@@ -264,6 +293,9 @@ export async function unlinkCreatorStoryboardMedia(
   itemId: string,
   assetId: string,
 ): Promise<CreatorContentProject> {
+  assertProjectId(projectId);
+  requireLinkId(itemId, 'storyboard item id');
+  requireLinkId(assetId, 'media asset id');
   const data = await readProjectData(dataDir, projectId);
   const content = requireContent(data, contentId);
   const item = content.storyboardItems.find((storyboardItem) => storyboardItem.id === itemId);

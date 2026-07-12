@@ -25,6 +25,21 @@ afterEach(async () => {
 });
 
 describe('creator content store', () => {
+  it('returns empty data when the content file is absent or corrupt', async () => {
+    await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
+
+    const file = path.join(dataDir, 'creator-content', 'project-1.json');
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, '{not-json', 'utf8');
+
+    await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
+  });
+
+  it('rejects traversal project ids before reading or writing outside the content directory', async () => {
+    await expect(createCreatorContent(dataDir, '../escape', { title: '不应写入' })).rejects.toThrow('invalid project id');
+    await expect(fsp.access(path.join(dataDir, 'escape.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('persists a complete content chain with ordered, server-owned storyboard metadata', async () => {
     const content = await createCreatorContent(dataDir, 'project-1', { title: '  校园纪录片  ' });
     const updated = await updateCreatorContent(dataDir, 'project-1', content.id, {
@@ -60,6 +75,43 @@ describe('creator content store', () => {
     await expect(updateCreatorContent(dataDir, 'project-1', content.id, {
       storyboardItems: [{ position: 1, purpose: '开场' }, { position: 1, purpose: '结尾' }],
     })).rejects.toThrow('storyboard position must be unique');
+    await expect(updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: [{ position: 1, purpose: '  ' }],
+    })).rejects.toThrow('storyboard purpose is required');
+    await expect(updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: [{ position: 1, purpose: '开场', mediaAssetIds: ['asset-1', 'asset-1'] }],
+    })).rejects.toThrow('storyboard media asset ids must be unique');
+  });
+
+  it('ignores forged storyboard metadata and retains server metadata across updates', async () => {
+    const content = await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+    const first = await updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: [{
+        position: 1,
+        purpose: '开场',
+        id: 'forged-id',
+        createdAt: '2000-01-01T00:00:00.000Z',
+        updatedAt: '2000-01-01T00:00:00.000Z',
+      } as never],
+    });
+    const firstItem = first!.storyboardItems[0]!;
+    const second = await updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: [{
+        position: 1,
+        purpose: '更新后的开场',
+        id: 'forged-id-2',
+        createdAt: '1999-01-01T00:00:00.000Z',
+        updatedAt: '1999-01-01T00:00:00.000Z',
+      } as never],
+    });
+
+    expect(firstItem).toMatchObject({ id: expect.stringMatching(/^creator-storyboard:/), createdAt: expect.any(String) });
+    expect(firstItem.id).not.toBe('forged-id');
+    expect(second!.storyboardItems[0]).toMatchObject({
+      id: firstItem.id,
+      createdAt: firstItem.createdAt,
+      purpose: '更新后的开场',
+    });
   });
 
   it('links tasks and storyboard media idempotently while preserving missing media links', async () => {
@@ -77,6 +129,29 @@ describe('creator content store', () => {
     const stored = (await getCreatorContentProjectData(dataDir, 'project-1')).contentProjects[0]!;
     expect(stored.taskIds).toEqual(['creator-task:1']);
     expect(stored.storyboardItems[0]!.mediaAssetIds).toEqual(['missing-media']);
+  });
+
+  it('rejects blank link identifiers without altering existing content', async () => {
+    const content = await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+    const withStoryboard = await updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: [{ position: 1, purpose: '开场' }],
+    });
+    const itemId = withStoryboard!.storyboardItems[0]!.id;
+
+    await expect(linkCreatorContentTask(dataDir, 'project-1', content.id, '  ')).rejects.toThrow('task id is required');
+    await expect(unlinkCreatorContentTask(dataDir, 'project-1', content.id, '  ')).rejects.toThrow('task id is required');
+    await expect(linkCreatorStoryboardMedia(dataDir, 'project-1', content.id, '  ', 'asset-1')).rejects.toThrow('storyboard item id is required');
+    await expect(unlinkCreatorStoryboardMedia(dataDir, 'project-1', content.id, '  ', 'asset-1')).rejects.toThrow('storyboard item id is required');
+    await expect(linkCreatorStoryboardMedia(dataDir, 'project-1', content.id, itemId, '  ')).rejects.toThrow('media asset id is required');
+    await expect(unlinkCreatorStoryboardMedia(dataDir, 'project-1', content.id, itemId, '  ')).rejects.toThrow('media asset id is required');
+
+    await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({
+      contentProjects: [expect.objectContaining({
+        id: content.id,
+        taskIds: [],
+        storyboardItems: [expect.objectContaining({ id: itemId, mediaAssetIds: [] })],
+      })],
+    });
   });
 
   it('unlinks idempotently, deletes once, and keeps projects isolated', async () => {
