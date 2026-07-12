@@ -1,7 +1,7 @@
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createCreatorContent,
@@ -38,12 +38,32 @@ describe('creator content store', () => {
     await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
   });
 
-  it('writes the final project file atomically without leftover temporary files', async () => {
-    await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+  it('writes create and update data through a temporary file before renaming it into place', async () => {
+    const writeFile = vi.spyOn(fsp, 'writeFile');
+    const rename = vi.spyOn(fsp, 'rename');
+    const finalFile = path.join(dataDir, 'creator-content', 'project-1.json');
 
-    const directory = path.join(dataDir, 'creator-content');
-    await expect(fsp.access(path.join(directory, 'project-1.json'))).resolves.toBeUndefined();
-    expect((await fsp.readdir(directory)).filter((file) => file.endsWith('.tmp'))).toEqual([]);
+    try {
+      const content = await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+      const createTemporaryFile = writeFile.mock.calls[0]![0];
+      expect(String(createTemporaryFile)).toContain('.tmp');
+      expect(createTemporaryFile).not.toBe(finalFile);
+      expect(rename).toHaveBeenCalledWith(createTemporaryFile, finalFile);
+
+      writeFile.mockClear();
+      rename.mockClear();
+      await updateCreatorContent(dataDir, 'project-1', content.id, { title: '更新标题' });
+      const updateTemporaryFile = writeFile.mock.calls[0]![0];
+      expect(String(updateTemporaryFile)).toContain('.tmp');
+      expect(updateTemporaryFile).not.toBe(finalFile);
+      expect(rename).toHaveBeenCalledWith(updateTemporaryFile, finalFile);
+
+      await expect(fsp.access(finalFile)).resolves.toBeUndefined();
+      expect((await fsp.readdir(path.dirname(finalFile))).filter((file) => file.endsWith('.tmp'))).toEqual([]);
+    } finally {
+      writeFile.mockRestore();
+      rename.mockRestore();
+    }
   });
 
   it('rejects traversal project ids before reading or writing outside the content directory', async () => {
