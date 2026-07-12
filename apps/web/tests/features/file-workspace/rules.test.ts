@@ -30,6 +30,7 @@ import {
   shouldKeepCurrentSketchState,
   sketchFileSourceKey,
   tabDropEdgeFromEvent,
+  translateTabBarSyntheticWheel,
 } from '../../../src/features/file-workspace/rules';
 import { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB, QUESTIONS_TAB } from '../../../src/features/file-workspace/constants';
 import type {
@@ -327,6 +328,36 @@ describe('scrollWorkspaceTabsWithWheel', () => {
     const bar = tabBar();
     scrollWorkspaceTabsWithWheel(bar, wheelEvent({ deltaMode: 1, deltaY: 1 }));
     expect(bar.scrollLeft).toBe(16);
+  });
+});
+
+describe('translateTabBarSyntheticWheel', () => {
+  function tabBar(over: Partial<{ clientWidth: number; scrollLeft: number; scrollWidth: number }> = {}) {
+    return { clientWidth: 100, scrollLeft: 0, scrollWidth: 300, ...over };
+  }
+  function wheelEvent(over: Partial<{ deltaX: number; deltaY: number }> = {}) {
+    return { deltaX: 0, deltaY: 20, ...over };
+  }
+
+  it('scrolls horizontally when vertical wheel exceeds horizontal', () => {
+    const bar = tabBar();
+    translateTabBarSyntheticWheel(bar, wheelEvent());
+    expect(bar.scrollLeft).toBe(20);
+  });
+  it('ignores a wheel that is more horizontal than vertical', () => {
+    const bar = tabBar();
+    translateTabBarSyntheticWheel(bar, wheelEvent({ deltaX: 50, deltaY: 10 }));
+    expect(bar.scrollLeft).toBe(0);
+  });
+  it('no-ops when the tab bar has no overflow to scroll', () => {
+    const bar = tabBar({ scrollWidth: 100 });
+    translateTabBarSyntheticWheel(bar, wheelEvent());
+    expect(bar.scrollLeft).toBe(0);
+  });
+  it('does not normalize deltaMode (unlike scrollWorkspaceTabsWithWheel) — raw deltaY is applied', () => {
+    const bar = tabBar();
+    translateTabBarSyntheticWheel(bar, wheelEvent({ deltaY: 1 }));
+    expect(bar.scrollLeft).toBe(1);
   });
 });
 

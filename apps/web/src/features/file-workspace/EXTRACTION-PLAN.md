@@ -169,10 +169,11 @@ cluster (`useWorkspaceKeyboardShortcuts`).
 - **Risk**: high — central hub, largest blast radius if a param is
   threaded wrong (e.g. a stale `tabsStateRef` read). Budget a dedicated pass
   with careful before/after behavior diffing, not a rushed single commit.
-- **Status**: split in progress. Once actually inside this cluster, a real
-  hook-ordering constraint (of the same class cluster 2 and cluster 4 hit)
-  forces it apart into sub-clusters rather than one hook — recorded here so
-  future passes don't have to rediscover it:
+- **Status**: done, split into two sub-clusters (3a and the remaining half,
+  both `DONE` below) rather than one hook, per a real hook-ordering
+  constraint (of the same class cluster 2 and cluster 4 hit) discovered once
+  actually inside this cluster — recorded here so future passes don't have
+  to rediscover it:
   - `workspaceTabsState`/`commitTabsState`/`setPersistedActive`/
     `activatePending`/`openFile`/`openFileReplacing`/`closeTab`/
     `focusWorkspaceTab`/`activateWorkspaceTab*`/`closeActiveWorkspaceTab`/

@@ -73,6 +73,7 @@ import {
   QUESTIONS_TAB,
   scrollWorkspaceTabsWithWheel,
   Tab,
+  translateTabBarSyntheticWheel,
   useBrowserTabs,
   useTabReorderDnd,
   useWiredDesignFilesPanelState,
@@ -768,16 +769,7 @@ export function FileWorkspace({
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
           role="tablist"
           aria-label={t('workspace.designFiles')}
-          onWheel={(event) => {
-            // Translate vertical wheel into horizontal tab scroll so Windows
-            // mouse-wheel users (no horizontal wheel/trackpad) can reach
-            // overflowed tabs. Only act when there's actually horizontal
-            // overflow and the gesture is predominantly vertical.
-            const el = event.currentTarget;
-            if (el.scrollWidth <= el.clientWidth) return;
-            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-            el.scrollLeft += event.deltaY;
-          }}
+          onWheel={(event) => translateTabBarSyntheticWheel(event.currentTarget, event)}
           onDragLeave={handleTabBarDragLeave}
           onDrop={handleTabBarDrop}
         >
