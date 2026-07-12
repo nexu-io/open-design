@@ -1,4 +1,4 @@
-/* Role: 브랜드 상세 리치 페이지 레이아웃 — 히어로/섹션/팔레트/문서 마스터-디테일 */
+/* Role: 브랜드 상세 리치 페이지 레이아웃 — 히어로/섹션/팔레트/문서 마스터-디테일 + 편집 모드(업로드·문서 에디터·채널 폼·위험 구역) */
 /* Full-width scroll container. The view mounts directly inside
  * .workspace-shell__body (overflow:hidden), so it must own its own scroll or the
  * content clips with no scrollbar. Scroll lives on the full-width .page (not the
@@ -40,3 +40,36 @@
 .docItemActive { border-color: var(--border, #e5e5ea); background: var(--bg, #f5f5f5); }
 .docPreview { border: 1px solid var(--border, #e5e5ea); border-radius: 12px; padding: 20px; overflow-x: auto; }
 @media (max-width: 860px) { .dsGrid, .docs { grid-template-columns: 1fr; } }
+
+/* --- 편집 모드 (서브프로젝트 B) --- */
+/* 히어로 우측 액션 — 편집 토글 + 아이콘/로고 업로드 */
+.heroActions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 파일 업로드 버튼 — label이 input[type=file]을 감싸 클릭·라벨 접근성을 동시에 확보 */
+.uploadBtn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border, #e5e5ea); border-radius: 10px; font-size: 13px; cursor: pointer; color: var(--fg, #1d2024); background: none; }
+.uploadBtn:hover { background: var(--bg, #f5f5f5); }
+/* input 자체는 시각적으로 숨기되 label 연결·change 이벤트는 유지 */
+.fileInput { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.errorText { margin: 0; font-size: 13px; color: var(--danger, #d64545); }
+.sectionHeadActions { margin-left: auto; }
+/* 문서 좌측 컬럼 — 리스트 + 채널 추가 폼 스택 */
+.docListCol { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+/* 채널 문서 행 — 탭 버튼 + 제거 버튼 (버튼 중첩 금지라 형제 배치) */
+.docItemRow { display: flex; align-items: center; gap: 4px; }
+.docItemRow .docItem { flex: 1; }
+.docItemRemove { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--fg2, #7d8085); font-size: 15px; line-height: 1; cursor: pointer; }
+.docItemRemove:hover { background: var(--bg, #f5f5f5); color: var(--danger, #d64545); }
+/* 채널 추가 인라인 폼 */
+.channelForm { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border, #e5e5ea); border-radius: 12px; padding: 12px; }
+.channelField { display: flex; flex-direction: column; gap: 4px; }
+.channelLabel { font-size: 12px; font-weight: 600; color: var(--fg, #1d2024); }
+.channelHint { margin: 0; font-size: 11px; color: var(--fg2, #7d8085); }
+.channelActions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 문서 본문 에디터 — 프리뷰 자리 교체 */
+.docEditor { display: flex; flex-direction: column; gap: 10px; }
+.docTextarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.6; resize: vertical; }
+.docEditorActions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 위험 구역 */
+.sectionDotDanger { width: 8px; height: 8px; border-radius: 50%; background: var(--danger, #d64545); }
+.dangerCard { border: 1px solid var(--danger, #d64545); border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dangerBtn { color: var(--danger, #d64545); border-color: var(--danger, #d64545); }
+.dangerHint { margin: 0; font-size: 13px; color: var(--fg2, #7d8085); }

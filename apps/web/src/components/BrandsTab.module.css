@@ -1,6 +1,6 @@
-/* Role: 브랜드 목록 페이지 — 헤더 + 2열 리치 카드 그리드 */
+/* Role: 브랜드 목록 페이지 — 헤더(제목 + 새 브랜드 버튼) + 2열 리치 카드 그리드 */
 .page { padding: 24px 32px; max-width: 1200px; }
-.head { margin-bottom: 24px; }
+.head { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .title { font-size: 24px; font-weight: 700; margin: 0; }
 .subtitle { font-size: 14px; color: var(--fg2, #7d8085); margin: 6px 0 0; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
