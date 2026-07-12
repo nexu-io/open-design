@@ -1,0 +1,47 @@
+/* Role: 브랜드 presentation 편집 폼 레이아웃 — 2열 그리드 필드·힌트·에러·액션 행 */
+.form {
+  border: 1px solid var(--border, #e5e5ea);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fieldWide {
+  grid-column: 1 / -1;
+}
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, #1d2024);
+}
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg2, #7d8085);
+}
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger, #d64545);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
