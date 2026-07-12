@@ -43,7 +43,13 @@ export function registerCreatorMediaRoutes(app: Express, deps: RegisterCreatorMe
     } catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
   });
   app.delete('/api/projects/:id/creator-tasks/:taskId/media-assets/:assetId', async (req, res) => {
-    try { requireProject(req.params.id); await unlinkCreatorTaskMediaAsset(deps.paths.RUNTIME_DATA_DIR, req.params.id, req.params.taskId, req.params.assetId); res.status(204).end(); }
+    try {
+      requireProject(req.params.id);
+      const tasks = await getCreatorWorkbenchProjectData(deps.paths.RUNTIME_DATA_DIR, req.params.id);
+      if (!tasks.tasks.some((task) => task.id === req.params.taskId)) throw new Error('creator task not found');
+      await unlinkCreatorTaskMediaAsset(deps.paths.RUNTIME_DATA_DIR, req.params.id, req.params.taskId, req.params.assetId);
+      res.status(204).end();
+    }
     catch (error) { res.status((error as { status?: number }).status ?? 400).json({ error: String((error as Error).message) }); }
   });
 }

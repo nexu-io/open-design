@@ -42,6 +42,8 @@ describe('creator media routes', () => {
       await expect(projectData.json()).resolves.toMatchObject({ roots: [{ rootPath: mediaDir, lastScannedAt: expect.any(String) }] });
       const linked = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/${taskId}/media-assets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: body.assets[0]!.id }) });
       expect(linked.status).toBe(201);
+      const unknownTaskDelete = await fetch(`${baseUrl}/api/projects/project-1/creator-tasks/creator-task:missing/media-assets/${body.assets[0]!.id}`, { method: 'DELETE' });
+      expect(unknownTaskDelete.status).toBe(400);
       const data = await fetch(`${baseUrl}/api/projects/project-1/creator-media-assets`);
       await expect(data.json()).resolves.toMatchObject({ taskLinks: [expect.objectContaining({ taskId, assetId: body.assets[0]!.id })] });
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
