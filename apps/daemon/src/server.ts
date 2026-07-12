@@ -522,6 +522,7 @@ import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
 import { registerCreatorWorkbenchRoutes } from './routes/creator-workbench.js';
 import { registerCreatorMediaRoutes } from './routes/creator-media.js';
+import { registerCreatorContentRoutes } from './routes/creator-content.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -3749,6 +3750,11 @@ export async function startServer({
     projectStore: { getProject },
   });
   registerCreatorMediaRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    projectStore: { getProject },
+  });
+  registerCreatorContentRoutes(app, {
     db,
     paths: { RUNTIME_DATA_DIR },
     projectStore: { getProject },
