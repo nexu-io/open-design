@@ -38,6 +38,36 @@ describe('creator content store', () => {
     await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
   });
 
+  it('propagates filesystem read errors without writing replacement content', async () => {
+    const readError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    const readFile = vi.spyOn(fsp, 'readFile').mockRejectedValueOnce(readError);
+    const writeFile = vi.spyOn(fsp, 'writeFile');
+
+    try {
+      await expect(createCreatorContent(dataDir, 'project-1', { title: '短片' })).rejects.toBe(readError);
+      expect(writeFile).not.toHaveBeenCalled();
+    } finally {
+      readFile.mockRestore();
+      writeFile.mockRestore();
+    }
+  });
+
+  it('removes the temporary file and preserves the rename error when atomic replacement fails', async () => {
+    const renameError = new Error('rename failed');
+    const rename = vi.spyOn(fsp, 'rename').mockRejectedValueOnce(renameError);
+    const unlink = vi.spyOn(fsp, 'unlink');
+
+    try {
+      await expect(createCreatorContent(dataDir, 'project-1', { title: '短片' })).rejects.toBe(renameError);
+      const temporaryFile = rename.mock.calls[0]![0];
+      expect(String(temporaryFile)).toContain('.tmp');
+      expect(unlink).toHaveBeenCalledWith(temporaryFile);
+    } finally {
+      rename.mockRestore();
+      unlink.mockRestore();
+    }
+  });
+
   it('writes create and update data through a temporary file before renaming it into place', async () => {
     const writeFile = vi.spyOn(fsp, 'writeFile');
     const rename = vi.spyOn(fsp, 'rename');
@@ -112,6 +142,14 @@ describe('creator content store', () => {
     await expect(updateCreatorContent(dataDir, 'project-1', content.id, {
       storyboardItems: [{ position: 1, purpose: '开场', mediaAssetIds: ['asset-1', 'asset-1'] }],
     })).rejects.toThrow('storyboard media asset ids must be unique');
+  });
+
+  it('rejects non-array storyboard item patches', async () => {
+    const content = await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+
+    await expect(updateCreatorContent(dataDir, 'project-1', content.id, {
+      storyboardItems: { position: 1 } as never,
+    })).rejects.toThrow('storyboard items must be an array');
   });
 
   it('ignores forged storyboard metadata and retains server metadata across updates', async () => {

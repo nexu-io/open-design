@@ -69,8 +69,15 @@ function validContentProject(value: unknown): value is CreatorContentProject {
 }
 
 async function readProjectData(dataDir: string, projectId: string): Promise<CreatorContentProjectData> {
+  let source: string;
   try {
-    const raw: unknown = JSON.parse(await fsp.readFile(storePath(dataDir, projectId), 'utf8'));
+    source = await fsp.readFile(storePath(dataDir, projectId), 'utf8');
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code !== 'ENOENT') throw error;
+    return { contentProjects: [] };
+  }
+  try {
+    const raw: unknown = JSON.parse(source);
     if (!isRecord(raw) || !Array.isArray(raw.contentProjects)) return { contentProjects: [] };
     return {
       contentProjects: raw.contentProjects.filter(validContentProject).map((content) => ({
@@ -78,8 +85,9 @@ async function readProjectData(dataDir: string, projectId: string): Promise<Crea
         storyboardItems: [...content.storyboardItems].sort((left, right) => left.position - right.position),
       })),
     };
-  } catch {
-    return { contentProjects: [] };
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) return { contentProjects: [] };
+    throw error;
   }
 }
 
@@ -91,8 +99,17 @@ async function writeProjectData(
   const file = storePath(dataDir, projectId);
   await fsp.mkdir(path.dirname(file), { recursive: true });
   const temporaryFile = `${file}.${process.pid}.${randomUUID()}.tmp`;
-  await fsp.writeFile(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  await fsp.rename(temporaryFile, file);
+  try {
+    await fsp.writeFile(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await fsp.rename(temporaryFile, file);
+  } catch (error) {
+    try {
+      await fsp.unlink(temporaryFile);
+    } catch {
+      // 清理失败不应掩盖原始写入错误。
+    }
+    throw error;
+  }
 }
 
 function requireTitle(value: unknown): string {
@@ -205,6 +222,9 @@ export async function updateCreatorContent(
   const index = data.contentProjects.findIndex((content) => content.id === contentId);
   if (index < 0) return null;
   const current = data.contentProjects[index]!;
+  if (patch.storyboardItems !== undefined && !Array.isArray(patch.storyboardItems)) {
+    throw new Error('storyboard items must be an array');
+  }
   const storyboardItems = patch.storyboardItems === undefined
     ? undefined
     : parseStoryboardItems(patch.storyboardItems as CreatorStoryboardItemInput[], current.storyboardItems);
