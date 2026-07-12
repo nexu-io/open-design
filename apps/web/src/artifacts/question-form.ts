@@ -145,7 +145,22 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     const openEnd = openStart + m[0].length;
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
-      // Unterminated — leave the rest as prose so we don't swallow it.
+      // No matching close tag found for this open tag name. The body may
+      // contain an open tag of the other name (e.g. prose mentioned
+      // <ask-question> but the real form uses <question-form>). Try to
+      // unwind to an inner open before giving up.
+      const remainder = input.slice(openEnd);
+      const nestedOpen = OPEN_RE.exec(remainder);
+      if (nestedOpen) {
+        const resumeAt = openEnd + nestedOpen.index;
+        if (openStart > cursor) {
+          out.push({ kind: 'text', text: input.slice(cursor, openStart) });
+        }
+        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
+        cursor = resumeAt;
+        continue;
+      }
+      // Genuinely unterminated — leave the rest as prose.
       out.push({ kind: 'text', text: slice });
       break;
     }
@@ -164,17 +179,14 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
       // JSON. If the body itself contains another question-form / ask-question
       // open tag, the outer match was a false positive (e.g. the model
       // mentioned the tag name inside backtick-quoted prose). Unwind to the
-      // inner open so it gets a clean parse on the next iteration.
-      const inner = OPEN_RE.exec(body);
-      if (inner) {
-        const resumeAt = openEnd + inner.index;
-        // Push only the text between the false-positive open tag and the
-        // inner open tag (the prose between lines 152-153 already handled
-        // the text before the false-positive tag). Slicing from openStart
-        // avoids duplicating the leading prose already in the output.
-        if (resumeAt > openStart) {
-          out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
-        }
+      // nested open so it gets a clean parse on the next iteration.
+      const nestedOpen = OPEN_RE.exec(body);
+      if (nestedOpen) {
+        const resumeAt = openEnd + nestedOpen.index;
+        // Text before the false-positive tag was already emitted above.
+        // Slice from openStart so only the tag and the gap up to the
+        // nested open are emitted — no duplication.
+        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
         cursor = resumeAt;
       } else {
         out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
