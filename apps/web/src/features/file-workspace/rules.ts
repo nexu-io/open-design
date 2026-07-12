@@ -77,6 +77,25 @@ export function arraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
+// The orchestrator's `ws-tabs-bar` div wires this to React's synthetic
+// `onWheel` prop directly, ALONGSIDE the native `wheel` listener that
+// `subscribeTabBarWheelScroll` (providers/dom.ts) attaches to the same
+// element via `useWorkspaceTabBarDom` — both fire on the same physical
+// gesture. This predates the vertical-slice decomposition (present
+// verbatim in the pre-refactor monolith) and is intentionally left as a
+// pure structural move, not a behavior fix: unifying the two would change
+// runtime behavior (this simpler version ignores `ctrlKey`/`deltaMode`,
+// unlike `scrollWorkspaceTabsWithWheel` above), which is out of scope for
+// a behavior-preserving extraction.
+export function translateTabBarSyntheticWheel(
+  tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
+  event: Pick<globalThis.WheelEvent, 'deltaX' | 'deltaY'>,
+): void {
+  if (tabBar.scrollWidth <= tabBar.clientWidth) return;
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  tabBar.scrollLeft += event.deltaY;
+}
+
 export function scrollWorkspaceTabsWithWheel(
   tabBar: Pick<HTMLDivElement, 'clientWidth' | 'scrollLeft' | 'scrollWidth'>,
   event: Pick<globalThis.WheelEvent, 'ctrlKey' | 'deltaMode' | 'deltaX' | 'deltaY' | 'preventDefault'>,
