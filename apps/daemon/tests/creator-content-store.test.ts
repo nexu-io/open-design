@@ -33,6 +33,17 @@ describe('creator content store', () => {
     await fsp.writeFile(file, '{not-json', 'utf8');
 
     await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
+
+    await fsp.writeFile(file, JSON.stringify({ contentProjects: [{ id: 123 }] }), 'utf8');
+    await expect(getCreatorContentProjectData(dataDir, 'project-1')).resolves.toEqual({ contentProjects: [] });
+  });
+
+  it('writes the final project file atomically without leftover temporary files', async () => {
+    await createCreatorContent(dataDir, 'project-1', { title: '短片' });
+
+    const directory = path.join(dataDir, 'creator-content');
+    await expect(fsp.access(path.join(directory, 'project-1.json'))).resolves.toBeUndefined();
+    expect((await fsp.readdir(directory)).filter((file) => file.endsWith('.tmp'))).toEqual([]);
   });
 
   it('rejects traversal project ids before reading or writing outside the content directory', async () => {
@@ -112,6 +123,9 @@ describe('creator content store', () => {
       createdAt: firstItem.createdAt,
       purpose: '更新后的开场',
     });
+    const persistedItem = (await getCreatorContentProjectData(dataDir, 'project-1')).contentProjects[0]!.storyboardItems[0]!;
+    expect(persistedItem.updatedAt).not.toBe('1999-01-01T00:00:00.000Z');
+    expect(persistedItem.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 
   it('links tasks and storyboard media idempotently while preserving missing media links', async () => {
