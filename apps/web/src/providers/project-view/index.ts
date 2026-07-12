@@ -51,3 +51,13 @@ export { loadOpenTabs, cacheOpenTabsLocally, persistOpenTabsToDaemon } from './o
 export { fetchProjectFiles, fetchLiveArtifacts, writeProjectTextFile } from './project-files';
 export { subscribeProjectFileEvents } from './project-live-events';
 export { fetchProjectFileText } from './project-file-text';
+export {
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
+} from './plugin-folder-agent-action';
+export {
+  finalizeBrandProject,
+  fetchDesignSystemPackageAudit,
+  patchProjectDesignSystemId,
+} from './design-system-workspace';

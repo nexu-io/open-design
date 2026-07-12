@@ -52,6 +52,12 @@ import {
   writeProjectTextFile,
   subscribeProjectFileEvents,
   fetchProjectFileText,
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
+  finalizeBrandProject,
+  fetchDesignSystemPackageAudit,
+  patchProjectDesignSystemId,
 } from '../../providers/project-view';
 import { fetchChatRunStatus } from '../../providers/daemon';
 import type { ProjectViewTransportPort } from './ports';
@@ -108,4 +114,10 @@ export const projectViewTransportPort: ProjectViewTransportPort = {
   writeProjectTextFile,
   subscribeProjectFileEvents,
   fetchProjectFileText,
+  installGeneratedPluginFolder,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
+  finalizeBrandProject,
+  fetchDesignSystemPackageAudit,
+  patchProjectDesignSystemId,
 };

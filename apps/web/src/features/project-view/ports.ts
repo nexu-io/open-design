@@ -5,9 +5,11 @@
 import type {
   AppliedPluginSnapshot,
   ChatSessionMode,
+  DesignSystemPackageAudit,
   ExtractMemoryRequest,
   InstalledPluginRecord,
   PluginDuplicateProjectResponse,
+  PluginInstallOutcome,
   ProjectMetadata,
   RunContextSelection,
 } from '@open-design/contracts';
@@ -26,6 +28,9 @@ import type { ArtifactManifest } from '../../artifacts/types';
 import type {
   BufferedTextFlushHandlers,
   ChatPanelPointerDragHandlers,
+  FinalizeBrandProjectOutcome,
+  PluginShareTaskSnapshot,
+  PluginShareTaskStart,
   ProjectLiveEvent,
   QueuedChatSend,
   RunStatusSnapshot,
@@ -203,4 +208,27 @@ export interface ProjectViewTransportPort {
     name: string,
     options?: { cache?: RequestCache; cacheBustKey?: string | number },
   ): Promise<string | null>;
+  /** Install a generated plugin folder into the plugin registry. */
+  installGeneratedPluginFolder(
+    projectId: string,
+    relativePath: string,
+  ): Promise<PluginInstallOutcome>;
+  /** Start a plugin-folder GitHub share workflow (publish repo / open-design PR). */
+  startGeneratedPluginShareTask(
+    projectId: string,
+    relativePath: string,
+    action: 'publish-github' | 'contribute-open-design',
+  ): Promise<PluginShareTaskStart>;
+  /** Long-poll a plugin-folder share task for new progress/terminal status. */
+  waitGeneratedPluginShareTask(
+    taskId: string,
+    since: number,
+    timeoutMs?: number,
+  ): Promise<PluginShareTaskSnapshot>;
+  /** Finalize a brand project into its derived design-system kit. */
+  finalizeBrandProject(brandId: string, projectId: string): Promise<FinalizeBrandProjectOutcome>;
+  /** Fetch a project's design-system package audit. Resolves `null` on failure. */
+  fetchDesignSystemPackageAudit(projectId: string): Promise<DesignSystemPackageAudit | null>;
+  /** Persist a project's active `designSystemId`. Best-effort: never rejects. */
+  patchProjectDesignSystemId(projectId: string, designSystemId: string | null): Promise<void>;
 }

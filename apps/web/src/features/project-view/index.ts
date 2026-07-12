@@ -38,6 +38,11 @@ export type {
   BrandBrowserSnapshot,
   BrandBrowserSnapshotExtractionResult,
   SaveMessageOptions,
+  PluginShareTaskStart,
+  PluginShareTaskResult,
+  PluginShareTaskError,
+  PluginShareTaskSnapshot,
+  FinalizeBrandProjectOutcome,
 } from './types';
 
 // Pure decision rules.
@@ -239,6 +244,16 @@ export {
   useBrandBrowserSnapshot,
   useWiredBrandBrowserSnapshot,
 } from './hooks/useBrandBrowserSnapshot.hooks';
+export type { PluginFolderAgentActionController } from './hooks/usePluginFolderAgentAction.hooks';
+export {
+  usePluginFolderAgentAction,
+  useWiredPluginFolderAgentAction,
+} from './hooks/usePluginFolderAgentAction.hooks';
+export type { DesignSystemWorkspaceController } from './hooks/useDesignSystemWorkspace.hooks';
+export {
+  useDesignSystemWorkspace,
+  useWiredDesignSystemWorkspace,
+} from './hooks/useDesignSystemWorkspace.hooks';
 
 // Dumb components.
 export type { ExecutionControlsProps } from './components/ExecutionControls';

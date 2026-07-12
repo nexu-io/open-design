@@ -4,6 +4,7 @@
 import type { CSSProperties } from 'react';
 import type { ChatAttachment, ChatCommentAttachment, ChatMessage, ProjectMetadata } from '../../types';
 import type {
+  BrandFinalizeResponse,
   ChatAnalyticsEntryFrom,
   ChatRunStatusResponse,
   ChatSessionMode,
@@ -142,3 +143,54 @@ export interface SaveMessageOptions {
   telemetryFinalized?: boolean;
   keepalive?: boolean;
 }
+
+/** Result of starting a plugin-folder GitHub share workflow (publish repo /
+ *  open-design PR), as returned by `startGeneratedPluginShareTask`. A direct
+ *  structural mirror of `state/projects`' `PluginShareTaskStart` (kept
+ *  in-slice per ADR 0002 — the guard forbids a slice file importing that
+ *  module directly). */
+export interface PluginShareTaskStart {
+  taskId: string;
+  action: 'publish-github' | 'contribute-open-design';
+  path: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  startedAt: number;
+}
+
+/** The terminal success result of a completed plugin-folder share task. */
+export interface PluginShareTaskResult {
+  message: string;
+  url?: string;
+  log?: string[];
+}
+
+/** The terminal error of a failed plugin-folder share task. */
+export interface PluginShareTaskError {
+  message: string;
+  code?: string;
+  log?: string[];
+}
+
+/** A polled snapshot of a plugin-folder share task's progress, as returned by
+ *  `waitGeneratedPluginShareTask`. A direct structural mirror of
+ *  `state/projects`' `PluginShareTaskSnapshot` (kept in-slice per ADR 0002). */
+export interface PluginShareTaskSnapshot {
+  taskId: string;
+  action: 'publish-github' | 'contribute-open-design';
+  path: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  startedAt: number;
+  endedAt?: number | null;
+  progress: string[];
+  nextSince: number;
+  result?: PluginShareTaskResult;
+  error?: PluginShareTaskError;
+}
+
+/** Result of finalizing a brand project into its derived design-system kit,
+ *  as returned by `finalizeBrandProject`. A direct structural mirror of
+ *  `runtime/brands`' `ExtractBrandFromHtmlOutcome` (kept in-slice per ADR
+ *  0002 — the guard forbids a slice file importing that module directly). */
+export type FinalizeBrandProjectOutcome =
+  | { ok: true; result: BrandFinalizeResponse }
+  | { ok: false; error: string };
