@@ -50,7 +50,7 @@ test('[P1] @critical captures CSS hotspot workspace, preview, and settings surfa
   await captureVisual(page, 'visual-critical-workspace-preview');
 
   const dialog = await openSettingsDetailsFromHeader(page);
-  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /Settings|General|Execution mode/i })).toBeVisible();
   await captureVisual(page, 'visual-critical-settings');
 });
 

@@ -22,11 +22,17 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  const settingsButton = page
+    .getByTestId('entry-settings-button')
+    .or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL }))
+    .first();
+  await expect(settingsButton).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
-  return openSettingsDialog(page);
+  const dialog = await openSettingsDialog(page);
+  await dialog.getByTestId('settings-nav-execution').click();
+  return dialog;
 }
 
 async function closeSettingsDialogIfOpen(page: Page) {

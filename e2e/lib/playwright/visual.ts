@@ -645,7 +645,7 @@ export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
 export async function prepareVisualSettingsDialog(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const dialog = await openSettingsDetailsFromHeader(page);
-  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /Settings|General|Execution mode/i })).toBeVisible();
   await waitForVisualStable(page);
   return dialog;
 }
@@ -661,10 +661,6 @@ export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator
   const settingsTrigger = page.locator('.settings-icon-btn');
   await expect(settingsTrigger).toBeVisible({ timeout: T.medium });
   await settingsTrigger.evaluate((element: HTMLElement) => element.click());
-  await expect(page.getByTestId('entry-settings-menu')).toBeVisible({ timeout: T.medium });
-  const openDetails = page.getByTestId('entry-settings-open-details');
-  await expect(openDetails).toBeVisible({ timeout: T.medium });
-  await openDetails.evaluate((element: HTMLElement) => element.click());
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: T.medium });
   return dialog;

@@ -3941,6 +3941,7 @@ export function SettingsDialog({
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
               onClick={() => setActiveSection('execution')}
+              data-testid="settings-nav-execution"
             >
               <Icon name="sliders" size={18} />
               <span>
@@ -4010,6 +4011,7 @@ export function SettingsDialog({
               type="button"
               className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
               onClick={() => setActiveSection('composio')}
+              data-testid="settings-nav-connectors"
             >
               <Icon name="sliders" size={18} />
               <span>

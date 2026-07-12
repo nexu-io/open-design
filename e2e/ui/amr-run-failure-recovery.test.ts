@@ -48,6 +48,12 @@ const ANTIGRAVITY_AGENT = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
+async function openExecutionSettingsDialog(page: Page) {
+  const settings = await openSettingsDialog(page);
+  await settings.getByTestId('settings-nav-execution').click();
+  return settings;
+}
+
 test.describe.configure({ mode: 'serial', timeout: T.xlong });
 
 async function stubCatalogsEmpty(page: Page) {
@@ -342,7 +348,7 @@ test('[P0] @critical Settings reopens AMR with the configured profile, account b
   });
 
   await gotoEntryHome(page);
-  const settings = await openSettingsDialog(page);
+  const settings = await openExecutionSettingsDialog(page);
   const agentCards = settings.locator('[data-testid^="settings-agent-card-"]');
   await expect(agentCards.first()).toHaveAttribute('data-testid', 'settings-agent-card-amr');
   await settings.getByTestId('settings-agent-select-amr').click();
@@ -357,7 +363,7 @@ test('[P0] @critical Settings reopens AMR with the configured profile, account b
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const reopened = await openSettingsDialog(page);
+  const reopened = await openExecutionSettingsDialog(page);
   await expect(reopened.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(reopened.getByTestId('settings-agent-select-amr')).toContainText('settings-amr@example.com');
   await expect(reopened.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
@@ -407,7 +413,7 @@ test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet e
   });
 
   await gotoEntryHome(page);
-  const settings = await openSettingsDialog(page);
+  const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-wallet@example.com');
   await expect(settings.locator('.agent-card-amr-balance-value')).toContainText('$1.00');
@@ -451,7 +457,7 @@ test('[P1] Settings AMR upgrade opens the attributed plans URL for the active pr
   });
 
   await gotoEntryHome(page);
-  const settings = await openSettingsDialog(page);
+  const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-upgrade@example.com');
 
@@ -499,7 +505,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
   });
 
   await gotoEntryHome(page);
-  const settings = await openSettingsDialog(page);
+  const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
@@ -573,7 +579,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   );
   await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
 
-  const settings = await openSettingsDialog(page);
+  const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect
     .poll(async () => {

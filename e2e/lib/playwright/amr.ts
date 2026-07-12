@@ -4,7 +4,6 @@ import { T } from '@/timeouts';
 
 export const STORAGE_KEY = 'open-design:config';
 export const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
-export const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 export async function waitForLoadingToClear(page: Page) {
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
@@ -38,27 +37,33 @@ export async function expectWorkspaceReady(page: Page) {
 export async function openSettingsDialog(page: Page) {
   await waitForLoadingToClear(page);
   const dialog = page.getByRole('dialog');
-  const menu = page
-    .getByTestId('entry-settings-menu')
-    .or(page.getByRole('menu', { name: SETTINGS_MENU_LABEL }))
+  const settingsTrigger = page
+    .getByTestId('entry-settings-button')
+    .or(page.getByTestId('entry-settings-menu-trigger'))
+    .or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL }))
     .first();
-  const settingsTrigger = page.getByTestId('entry-settings-menu-trigger');
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (await dialog.isVisible().catch(() => false)) return dialog;
 
     await dismissPrivacyDialog(page);
     if (await settingsTrigger.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await settingsTrigger.click();
+      await settingsTrigger.evaluate((element: HTMLElement) => element.click());
     } else {
-      await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
+      const fallback = page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first();
+      await expect(fallback).toBeVisible({ timeout: T.medium });
+      await fallback.evaluate((element: HTMLElement) => element.click());
+    }
+
+    const detailsTrigger = page.getByTestId('entry-settings-open-details').first();
+    if (await detailsTrigger.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await detailsTrigger.click();
     }
 
     await expect
       .poll(
         async () => {
           if (await dialog.isVisible().catch(() => false)) return 'dialog';
-          if (await menu.isVisible().catch(() => false)) return 'menu';
           return 'pending';
         },
         { timeout: T.medium },
@@ -67,18 +72,6 @@ export async function openSettingsDialog(page: Page) {
       .catch(() => {});
 
     if (await dialog.isVisible().catch(() => false)) return dialog;
-    if (!(await menu.isVisible().catch(() => false))) continue;
-
-    await dismissPrivacyDialog(page);
-    if (!(await menu.isVisible().catch(() => false))) continue;
-
-    const settingsItem = menu
-      .getByRole('menuitem', { name: SETTINGS_MENU_LABEL })
-      .or(menu.getByRole('button', { name: SETTINGS_MENU_LABEL }))
-      .first();
-    if (!(await settingsItem.isVisible({ timeout: 1_000 }).catch(() => false))) continue;
-    await settingsItem.click();
-    if (await dialog.isVisible({ timeout: T.medium }).catch(() => false)) return dialog;
   }
 
   await expect(dialog).toBeVisible({ timeout: T.medium });

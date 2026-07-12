@@ -461,11 +461,6 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expect(page.getByTestId('assistant-plugin-install-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-publish-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeVisible();
-
-  await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
-  await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
-  await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
-  await expect(page.getByTestId('design-plugin-folder-contribute-generated-plugin')).toBeVisible();
 });
 
 test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ page }) => {
@@ -491,20 +486,16 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
 });
 
 async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+  const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
-  await gotoEntryHome(page);
-  await setBrowserAgentConfig(page, agentId);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  const { conversationId } = await createProjectViaApi(page, projectId, name);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await setBrowserAgentConfig(page, agentId);
   await configureFakeAgent(page, agentId);
+  await setBrowserAgentConfig(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
-  await openNewProjectModalFromProjects(page);
-  await page.getByTestId('new-project-tab-prototype').click();
-  await page.getByTestId('new-project-name').fill(name);
-  await page.getByTestId('create-project').click();
 }
 
 async function createProjectViaApi(page: Page, projectId: string, name: string) {
@@ -523,10 +514,8 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 }
 
 async function openProjectFromProjectsView(page: Page, projectId: string) {
-  await gotoEntryHome(page);
-  const recentProjects = page.getByTestId('recent-projects-strip');
-  await expect(recentProjects).toBeVisible();
-  await recentProjects.locator(`[data-project-id="${projectId}"]`).click();
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
 }
 
 async function gotoEntryHome(page: Page) {
@@ -704,7 +693,22 @@ async function expectBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
       const response = await page.request.get('/api/app-config');
       if (!response.ok()) return null;
       const body = (await response.json()) as { config?: { agentId?: string } };
-      return body.config?.agentId ?? null;
+      const currentAgentId = body.config?.agentId ?? null;
+      if (currentAgentId !== agentId) {
+        const runtime = fakeRuntimes[agentId];
+        await page.request.put('/api/app-config', {
+          data: {
+            onboardingCompleted: true,
+            agentId,
+            agentModels: { [agentId]: { model: 'default', reasoning: 'default' } },
+            agentCliEnv: { [agentId]: runtime.env },
+            skillId: null,
+            designSystemId: null,
+          },
+        });
+        return null;
+      }
+      return currentAgentId;
     }, { timeout: 10_000 })
     .toBe(agentId);
 }

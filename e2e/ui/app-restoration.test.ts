@@ -217,8 +217,8 @@ test('[P0] switching between projects restores each project workspace to its las
   });
   await expect((await alphaSecondaryUpload).ok()).toBeTruthy();
 
-  const alphaPrimaryTab = tabBySuffix(page, 'alpha-primary.png');
-  const alphaSecondaryTab = tabBySuffix(page, 'alpha-secondary.png');
+  const alphaPrimaryTab = await ensureFileTabOpen(page, 'alpha-primary.png');
+  const alphaSecondaryTab = await ensureFileTabOpen(page, 'alpha-secondary.png');
   await expect(alphaPrimaryTab).toBeVisible();
   await expect(alphaSecondaryTab).toBeVisible();
   await alphaPrimaryTab.click();
@@ -252,26 +252,20 @@ test('[P0] switching between projects restores each project workspace to its las
   });
   await expect((await betaSecondaryUpload).ok()).toBeTruthy();
 
-  const betaPrimaryTab = tabBySuffix(page, 'beta-primary.png');
-  const betaSecondaryTab = tabBySuffix(page, 'beta-secondary.png');
+  const betaPrimaryTab = await ensureFileTabOpen(page, 'beta-primary.png');
+  const betaSecondaryTab = await ensureFileTabOpen(page, 'beta-secondary.png');
   await expect(betaPrimaryTab).toBeVisible();
   await expect(betaSecondaryTab).toBeVisible();
   await betaPrimaryTab.click();
   await expect(betaPrimaryTab).toHaveAttribute('aria-selected', 'true');
   await expect(betaSecondaryTab).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
-  await expectProjectsView(page);
-
-  await homeDesignCard(page, alphaName).click();
+  await openWorkspaceTab(page, alphaName);
   await expectWorkspaceReady(page);
   await expect(tabBySuffix(page, 'alpha-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'alpha-secondary.png')).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
-  await expectProjectsView(page);
-
-  await homeDesignCard(page, betaName).click();
+  await openWorkspaceTab(page, betaName);
   await expectWorkspaceReady(page);
   await expect(tabBySuffix(page, 'beta-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
@@ -3514,6 +3508,7 @@ async function seedHtmlArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
+  if (await tabBySuffix(page, fileName).isVisible().catch(() => false)) return;
   await clickDesignFilePreviewOpen(page);
 }
 
@@ -3625,6 +3620,23 @@ function tabBySuffix(page: Page, name: string): Locator {
     .locator('.ws-tab[role="tab"]')
     .filter({ has: page.locator('.ws-tab-label', { hasText: name }) })
     .first();
+}
+
+async function ensureFileTabOpen(page: Page, name: string): Promise<Locator> {
+  const tab = tabBySuffix(page, name);
+  if (await tab.isVisible().catch(() => false)) return tab;
+
+  await page.getByTestId('design-files-tab').click();
+  await openDesignFile(page, name);
+  await expect(tab).toBeVisible();
+  return tab;
+}
+
+async function openWorkspaceTab(page: Page, name: string): Promise<void> {
+  const tab = page.getByRole('tab', { name: new RegExp(escapeRegExp(name)) }).first();
+  await expect(tab).toBeVisible();
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
 }
 
 function escapeRegExp(value: string): string {
@@ -4021,11 +4033,27 @@ function uniqueProjectName(base: string): string {
 }
 
 async function expectProjectsView(page: Page) {
-  if (!(await page.locator('.tab-panel-toolbar').isVisible().catch(() => false))) {
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-projects').click();
+  const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
+  const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
+  if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
+  if (await homeRecentProjects.isVisible().catch(() => false)) return;
+
+  await ensureRailOpen(page);
+  const projectsNav = page.getByTestId('entry-nav-projects');
+  if (await projectsNav.isVisible().catch(() => false)) {
+    await projectsNav.click();
+    await expect(legacyProjectsToolbar).toBeVisible();
+    return;
   }
-  await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
+
+  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
+  if (await allProjectsNav.isVisible().catch(() => false)) {
+    await allProjectsNav.click();
+    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
+    return;
+  }
+
+  await expect(homeRecentProjects).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -4376,7 +4404,7 @@ async function runConversationDeleteRecoveryFlow(
 }
 
 function homeDesignCard(page: Page, name: string): Locator {
-  return page.locator('.design-card', {
+  return page.locator('.design-card:visible', {
     has: page.locator('.design-card-name', { hasText: name }),
-  });
+  }).first();
 }

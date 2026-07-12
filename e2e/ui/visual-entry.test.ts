@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { T } from '@/timeouts';
 import {
   captureVisual,
@@ -60,66 +60,50 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   test.setTimeout(90_000);
 
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  // The redesigned entry shell keeps every view mounted (only the active one
-  // is visible) so tab switches don't reload thumbnails. That means
-  // `plugins-home-section` exists in both the home and plugins views, so
-  // scope the lookup to the home view to keep these strict-mode locators
-  // unambiguous.
-  const home = page.getByTestId('entry-view-home');
-  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-  const community = home.getByTestId('plugins-home-section');
-  await expect(community).toBeVisible();
-  await scrollVisualLocatorIntoStableView(page, community);
-  await expect(home.locator('article.plugins-home__card--gallery').first()).toBeVisible();
-  await expect(home.getByTestId('plugins-home-search')).toBeVisible();
+  const catalog = plugins.locator('.plugin-marketplace__catalog');
+  await expect(catalog).toBeVisible();
+  await scrollVisualLocatorIntoStableView(page, catalog);
+  await expect(pluginMarketplaceCard(plugins, 'Prototype Starter')).toBeVisible();
+  await expect(pluginMarketplaceCard(plugins, 'Deck Writer')).toBeVisible();
+  await expect(plugins.locator('.plugin-marketplace__search input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });
 
 test('[P2] captures the home plugin filtered surface', async ({ page }) => {
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-pill-category-deck').click();
-  await expect(home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]')).toBeVisible();
+  await plugins.locator('.plugin-marketplace__search input').fill('Deck');
+  await expect(pluginMarketplaceCard(plugins, 'Deck Writer')).toBeVisible();
+  await expect(pluginMarketplaceCard(plugins, 'Prototype Starter')).toHaveCount(0);
 
   await captureVisual(page, 'visual-home-plugin-filter');
 });
 
 test('[P2] captures the home plugin detail surface', async ({ page }) => {
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-pill-category-deck').click();
-  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
+  const card = pluginMarketplaceCard(plugins, 'Prototype Starter');
   await expect(card).toBeVisible();
-  await card.hover();
-  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
-  await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
-  await expect(page.getByTestId('plugin-details-use-visual-deck-writer')).toBeVisible();
-  await expect(page.locator('.ds-modal-stage-iframe-scaler iframe')).toBeVisible();
+  await card.locator('.plugin-marketplace__more').click();
+  await expect(card.locator('.plugin-marketplace__menu[role="menu"]')).toBeVisible();
 
   await captureVisual(page, 'visual-plugin-details');
 });
 
 test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-pill-category-deck').click();
-  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
+  const card = pluginMarketplaceCard(plugins, 'Deck Writer');
   await expect(card).toBeVisible();
-  await card.hover();
-  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
-  await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
-  const trigger = page.locator('.template-share-trigger');
+  const trigger = card.locator('.plugin-marketplace__more');
   await trigger.click();
-  const popover = page.locator('.template-share-popover[role="menu"]');
+  const popover = card.locator('.plugin-marketplace__menu[role="menu"]');
   await expect(popover).toBeVisible();
 
   await captureVisual(page, 'visual-plugin-share-menu');
@@ -156,12 +140,9 @@ test('[P2] captures the home staged attachment surface', async ({ page }) => {
 
 test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-details-visual-prototype-starter').click({ force: true });
-  await expect(page.getByRole('dialog', { name: /Prototype Starter details/i })).toBeVisible();
-  await page.getByTestId('plugin-details-use-visual-prototype-starter').click();
+  await pluginMarketplaceCard(plugins, 'Prototype Starter').getByRole('button', { name: 'Try it' }).click();
   await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototype Starter');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
@@ -170,28 +151,14 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
 
 test('[P2] captures the home plugin use with query surface', async ({ page }) => {
   await configureVisualPage(page);
-  await gotoVisualHome(page);
+  const plugins = await openVisualPluginsCatalog(page);
 
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-pill-category-deck').click();
-  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
+  await plugins.locator('.plugin-marketplace__search input').fill('Deck');
+  const card = pluginMarketplaceCard(plugins, 'Deck Writer');
   await expect(card).toBeVisible();
-  // Community gallery tiles carry no inline Use actions — use-with-query
-  // lives behind the detail modal's split Use button.
-  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
-  // Deck Writer ships a previewEntry, so its detail surface is the
-  // PreviewModal (aria-label "Deck Writer preview"), not the scenario
-  // detail's "... details" dialog. Match on the plugin name only.
-  await expect(page.getByRole('dialog', { name: /Deck Writer/i })).toBeVisible();
-  const trigger = page.getByTestId('plugin-details-use-visual-deck-writer-menu');
-  await trigger.click();
-  const menu = page.locator('.ds-modal-primary-action-popover[role="menu"]');
-  await expect(menu).toBeVisible();
-  await captureVisualTarget(page, 'visual-plugin-use-menu-popover', [trigger, menu]);
-  await page.getByTestId('plugin-details-use-with-query-visual-deck-writer').click();
-  // use-with-query now seeds the rendered preset text (placeholders filled in),
-  // not the raw `{{...}}` query — matching the example-prompt card path.
-  await expect(page.getByTestId('home-hero-input')).toContainText('Draft a topic deck.');
+  await card.getByRole('button', { name: 'Try it' }).click();
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Writer');
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');
 });
@@ -205,3 +172,17 @@ test('[P2] captures the new project modal surface', async ({ page }) => {
 
   await captureVisual(page, 'visual-new-project-modal');
 });
+
+async function openVisualPluginsCatalog(page: import('@playwright/test').Page) {
+  await gotoVisualHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-plugins').click();
+  await expect(page).toHaveURL(/\/plugins$/);
+  const plugins = page.getByTestId('entry-view-plugins');
+  await expect(plugins.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible();
+  return plugins;
+}
+
+function pluginMarketplaceCard(root: import('@playwright/test').Locator, title: string) {
+  return root.locator('article.plugin-marketplace__item').filter({ hasText: title }).first();
+}

@@ -75,7 +75,9 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  await expect(
+    page.getByTestId('entry-settings-button').or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).first(),
+  ).toBeVisible();
 }
 
 async function openLocalCliSettings(
@@ -166,6 +168,7 @@ async function openLocalCliSettings(
 
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
+  await dialog.getByTestId('settings-nav-execution').click();
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   const codexCard = dialog
     .locator('[data-testid="settings-agent-select-codex"], .agent-card-select', {

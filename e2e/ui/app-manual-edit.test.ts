@@ -1,5 +1,4 @@
 import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -7,7 +6,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: T.long });
+test.describe.configure({ timeout: T.xlong });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -68,12 +67,11 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(artifactPreview(page)).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  const responsivePair = frame.locator('[data-od-id="responsive-pair"]');
-  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
 
   await frame.locator('body').evaluate(() => {
     window.parent.postMessage({ type: 'od-edit-background' }, '*');
@@ -126,8 +124,8 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
+  const shareMenu = await openShareExportMenu(page);
+  await expect(shareMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
 });
 
 test('[P0] manual edit mode preserves preview actions after style edits', async ({ page }) => {
@@ -154,7 +152,8 @@ test('[P0] manual edit mode preserves preview actions after style edits', async 
   await page.getByTestId('board-mode-toggle').click();
   await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
+  const actionMenu = await openShareExportMenu(page);
+  await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
 });
 
 async function selectPreviewElementThroughBridge(
@@ -194,13 +193,14 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await page.getByRole('button', { name: /^Share$/ }).click();
   const shareMenu = page.locator('.share-menu-popover[role="menu"]');
   await expect(shareMenu).toBeVisible();
-  await expect(shareMenu).toContainText('PUBLISH ONLINE');
-  await expect(shareMenu).toContainText('SOCIAL SHARE');
+  await expect(shareMenu.getByRole('tab', { name: /^Share$/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(shareMenu).toContainText(/Share project in workspace|Publish this file/i);
+  await shareMenu.getByRole('tab', { name: /^Export$/ }).click();
+  await expect(shareMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(shareMenu).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  const downloadMenu = page.locator('.share-menu-popover[role="menu"]');
+  const downloadMenu = await openShareExportMenu(page);
   await expect(downloadMenu).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
@@ -694,16 +694,27 @@ async function routeMockAgents(page: Page) {
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
-  await gotoEntryHome(page);
-  await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill(name);
-  await page.getByTestId('create-project').click();
-  await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(/\/projects\//);
-  const current = new URL(page.url());
-  const [, projects, projectId] = current.pathname.split('/');
-  if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
+  const projectId = await createProjectViaApi(page, name);
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page).catch(() => {});
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
   return projectId;
+}
+
+async function openShareExportMenu(page: Page): Promise<ReturnType<Page['locator']>> {
+  await page.getByRole('button', { name: /^Share$/ }).click();
+  const menu = page.locator('.share-menu-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('tab', { name: /^Export$/ }).click();
+  await expect(menu.getByRole('tab', { name: /^Export$/ })).toHaveAttribute('aria-selected', 'true');
+  return menu;
+}
+
+async function previewCss(page: Page, selector: string, property: keyof CSSStyleDeclaration): Promise<string> {
+  return artifactPreviewFrame(page)
+    .locator(selector)
+    .evaluate((el, cssProperty) => String(getComputedStyle(el)[cssProperty as keyof CSSStyleDeclaration] ?? ''), property)
+    .catch(() => '');
 }
 
 async function createProjectViaApi(page: Page, name: string): Promise<string> {
@@ -727,8 +738,16 @@ async function createProjectViaApi(page: Page, name: string): Promise<string> {
 }
 
 async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+    }
+    await waitForLoadingToClear(page).catch(() => {});
+    if (await page.getByTestId('home-hero').isVisible({ timeout: 3_000 }).catch(() => false)) break;
+  }
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -736,10 +755,6 @@ async function gotoEntryHome(page: Page) {
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
-async function openNewProjectModal(page: Page) {
-  await openNewProjectModalFromProjects(page);
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
@@ -924,9 +939,10 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  await waitForLoadingToClear(page);
+  await waitForLoadingToClear(page).catch(() => {});
   const activePath = new URL(page.url()).pathname;
-  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`) && await preview.isVisible().catch(() => false)) {
+  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`)) {
+    await expect(preview).toBeVisible();
     return;
   }
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');

@@ -26,13 +26,10 @@ test('[P0] @critical home loads with the primary entry controls', async ({ page 
 test('[P0] @critical settings dialog is reachable from home', async ({ page }) => {
   await gotoEntryHome(page);
 
-  // The home settings entry is a menu: open it, then the "Settings" item
-  // opens the full execution-mode dialog.
-  await clickVisible(page.getByTestId('entry-settings-menu-trigger'));
-  await clickVisible(page.getByTestId('entry-settings-open-details'));
+  await clickVisible(page.getByTestId('entry-settings-button'));
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
+  await expect(settingsDialog.getByRole('heading', { name: /Settings|General|Execution mode/i })).toBeVisible();
 });
 
 test('[P0] @critical prototype project creation reaches the workspace shell', async ({ page }) => {

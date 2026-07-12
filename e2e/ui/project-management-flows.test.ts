@@ -1293,7 +1293,7 @@ test('[P0] project detail share menu copies the current share link for uploaded 
   uploadedName = await uploadTinyHtml(page, 'share-link-copy.html', '<!doctype html><html><body><h1>Share link copy</h1></body></html>');
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await page.getByRole('button', { name: /^Share$/i }).click();
+  await openShareExportTab(page);
   await page.getByRole('menuitem', { name: /^Copy share link$/i }).click();
   await expect(page.getByRole('menuitem', { name: /^Copied!$/i })).toBeVisible();
 
@@ -1343,7 +1343,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
   uploadedName = await uploadTinyHtml(page, 'share-page-open.html', '<!doctype html><html><body><h1>Open share page</h1></body></html>');
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await page.getByRole('button', { name: /^Share$/i }).click();
+  await openShareExportTab(page);
   await page.getByRole('menuitem', { name: /Open share page/i }).click();
 
   await expect
@@ -1379,7 +1379,7 @@ test('[P0] @critical project detail share menu publish action opens the deploy f
   const uploadedName = await uploadTinyHtml(page, 'deploy-action.html', '<!doctype html><html><body><h1>Deploy action</h1></body></html>');
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await page.getByRole('button', { name: /^Share$/i }).click();
+  await openShareExportTab(page);
   await page.getByRole('menuitem', { name: /^Deploy to Vercel$/i }).click();
 
   const dialog = page.getByRole('dialog');
@@ -2583,6 +2583,15 @@ function getProjectIdFromApiPath(rawUrl: string) {
   const [, projectId] = url.pathname.match(/\/api\/projects\/([^/]+)/) ?? [];
   if (!projectId) throw new Error(`unexpected project api path: ${url.pathname}`);
   return projectId;
+}
+
+async function openShareExportTab(page: Page) {
+  await page.getByRole('button', { name: /^Share$/i }).click();
+  const menu = page.locator('.share-menu-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('tab', { name: /^Export$/i }).click();
+  await expect(menu.getByRole('tab', { name: /^Export$/i })).toHaveAttribute('aria-selected', 'true');
+  return menu;
 }
 
 function escapeRegExp(value: string): string {

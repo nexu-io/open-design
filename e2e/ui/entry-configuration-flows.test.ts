@@ -370,18 +370,14 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openIntegrationsConnectors(page: Page): Promise<Locator> {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-integrations').click();
-  await expect(page).toHaveURL(/\/integrations$/);
-  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
-  await page.getByTestId('integrations-tab-connectors').click();
-  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  const panel = page.locator('.integrations-view__panel');
-  await expect(panel.getByTestId('connector-grid-wrap')).toBeVisible();
-  return panel;
+  const settingsButton = page.getByTestId('entry-settings-button');
+  await expect(settingsButton).toBeVisible({ timeout: T.medium });
+  await settingsButton.evaluate((element: HTMLElement) => element.click());
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('settings-nav-connectors').click();
+  await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  return dialog;
 }
 
 async function routeComposioConfig(

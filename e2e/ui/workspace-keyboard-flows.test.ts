@@ -461,11 +461,27 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function expectProjectsView(page: Page) {
-  if ((await page.locator('.tab-panel-toolbar').count()) === 0) {
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-projects').click();
+  const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
+  const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
+  if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
+  if (await homeRecentProjects.isVisible().catch(() => false)) return;
+
+  await ensureRailOpen(page);
+  const projectsNav = page.getByTestId('entry-nav-projects');
+  if (await projectsNav.isVisible().catch(() => false)) {
+    await projectsNav.click();
+    await expect(legacyProjectsToolbar).toBeVisible();
+    return;
   }
-  await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
+
+  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
+  if (await allProjectsNav.isVisible().catch(() => false)) {
+    await allProjectsNav.click();
+    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
+    return;
+  }
+
+  await expect(homeRecentProjects).toBeVisible();
 }
 
 async function expectWorkspaceReady(page: Page) {
