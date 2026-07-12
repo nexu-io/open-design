@@ -1260,8 +1260,6 @@
   font-size: 13.5px;
   line-height: 1.6;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   max-width: calc(100% - 8px);
 }
 .composer-input-wrap .home-hero__carousel {
