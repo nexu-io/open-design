@@ -2,11 +2,12 @@
 name: braze-iam
 description: |
   Braze Custom-HTML In-App Message (IAM) producer — brand-agnostic 7-step
-  workflow. Interviews the user, drafts a campaign plan, gates confirmation,
-  produces two design-variant HTML artifacts (A/B), and hands off to the
-  Braze dashboard. Works for any brand whose DESIGN.md is loaded as the
-  active design system. Use when the brief asks for a "Braze IAM",
-  "인앱메시지", "in-app message", "Braze 팝업", "IAM HTML", or "브레이즈 캠페인".
+  workflow with a dual visual mode (layer/scene). Interviews the user, drafts
+  a campaign plan, gates confirmation, produces two design-variant HTML
+  artifacts (A/B), and hands off to the Braze dashboard. Works for any brand
+  whose DESIGN.md is loaded as the active design system. Use when the brief
+  asks for a "Braze IAM", "인앱메시지", "in-app message", "Braze 팝업",
+  "IAM HTML", or "브레이즈 캠페인".
 triggers:
   - "braze iam"
   - "in-app message"
@@ -28,8 +29,8 @@ od:
 ---
 
 <!--
-Role: Braze Custom-HTML IAM 7단계 제작 워크플로우 — brand-agnostic OD 포트
-Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안(image 오브제 컴포지션 확장), od braze CLI 통합, 오브제 imagegen·Variant A/B 빌더·검수 서브에이전트 위임(인라인 폴백), 듀얼 산출(발송본 placeholder/프리뷰 data-URI)
+Role: Braze Custom-HTML IAM 7단계 제작 워크플로우 — brand-agnostic OD 포트, layer/scene 듀얼 비주얼 모드
+Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안(image.mode 듀얼 비주얼 layer/scene 컴포지션 확장), od braze CLI 통합, 오브제 imagegen·Variant A/B 빌더·검수 서브에이전트 위임(인라인 폴백), 듀얼 산출(발송본 placeholder/프리뷰 data-URI)
 Dependencies: 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록), BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide, imagegen-pipeline, variant-builder-subagent, review-subagent, visual-layout-patterns)
 Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 특정 어트리뷰트) 하드코딩 금지. 브랜드 사실은 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드.
 -->
@@ -40,10 +41,10 @@ Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 
 
 Braze Custom-HTML IAM을 **브랜드-어그노스틱 워크플로우**로 제작한다.
 
-- **인터뷰 4축**: 목적 · 타겟 · 형식(사이즈/레이아웃) · 톤
+- **인터뷰 5축**: 목적 · 타겟 · 형식(사이즈/레이아웃) · 톤 · 비주얼 방향
 - **트리거 이벤트는 인터뷰하지 않는다**: Braze 캠페인 콘솔에서 직접 설정 (BRAZE-DOMAIN §5.1-5.2 — IAM은 SDK 커스텀 이벤트로만 발화, API로 발화 불가). 기획안에 후보 1~2개를 명시한다.
 - **Variant 수는 2개 고정 (A/B)**: 인터뷰에서 묻지 않는다.
-- **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
+- **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 5축 중 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. 5번째 축 `q-visual`(비주얼 방향)은 §5.1 필드가 아니다 — CLI 플래그 없이 기획안 `image.mode`로만 기록된다 (Step 3). `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
 - **산출물 = Braze-ready Custom HTML 파일 2개 (Variant A/B)** → 대시보드 붙여넣기 핸드오프 (BRAZE-DOMAIN §4.4)
 
 > **선행 필수 — 활성 브랜드 컨텍스트 확인**: 타겟·페르소나·브랜드 보이스·금지어·딥링크 카탈로그는 Claude 사전 지식에 없는 브랜드-사내 사실이다. 추측 금지. IAM 제작 시작 시 **system prompt의 "Active brand" + "Brand deliverable context" 블록**을 먼저 확인해 정본 컨텍스트를 확보한다 (소스 파일 경로는 그 블록의 Source files 라인).
@@ -99,7 +100,7 @@ Source files 라인이 가리키는 경로를 전달한다)
 
 **`<question-form>` 아티팩트로만 진행한다.** AskUserQuestion 도구·인라인 폼 금지 (AGENTS.md "Asking the user questions").
 
-인터뷰 = **4축만** 물어본다. 트리거 이벤트는 묻지 않는다 (Braze 캠페인 콘솔 설정, BRAZE-DOMAIN §5.1).
+인터뷰 = **5축만** 물어본다. 트리거 이벤트는 묻지 않는다 (Braze 캠페인 콘솔 설정, BRAZE-DOMAIN §5.1).
 
 ```xml
 <question-form id="braze-iam-interview">
@@ -143,6 +144,15 @@ Source files 라인이 가리키는 경로를 전달한다)
       <choice value="custom">직접 입력</choice>
     </choices>
   </question>
+
+  <question id="q-visual" type="single-choice" required="true">
+    <label>디자인 방향을 선택하세요.</label>
+    <choices>
+      <choice value="layer">브랜드 가이드형 — 디자인시스템 룩 + 투명 오브제 (기본)</choice>
+      <choice value="scene">씬 카드형 — 카드 전체가 생성 일러스트 씬 + 텍스트 오버레이</choice>
+      <choice value="recommend">Claude 추천 (목적·톤 기반)</choice>
+    </choices>
+  </question>
 </question-form>
 ```
 
@@ -166,6 +176,11 @@ Source files 라인이 가리키는 경로를 전달한다)
 - BRAZE-DOMAIN §5.2 5종 중 후보 1~2개 명시: Session Start / Push Click / Any Purchase / Specific Purchase / Custom Event
 - 기획안에만 기록, 실제 설정은 Braze 콘솔에서 담당자가 수행
 
+**비주얼 방향 결정** (`q-visual`="recommend"일 때만 — `layer`/`scene`을 직접 선택했으면 그대로 적용):
+- 정보 전달·신뢰·가이드·기능 공지 톤 → `layer` 기본
+- 몰입·시즌 캠페인·임팩트 프로모·축하 → `scene` 권장
+- 기획안 카드에 선택 근거 1줄 명시
+
 인터뷰 응답을 수집한 뒤 아래 CLI로 daemon에 등록한다:
 
 ```bash
@@ -181,7 +196,7 @@ od braze interview <braze_message_id> \
   [--json]
 ```
 
-**플래그 매핑 (인터뷰 4축 → CLI 플래그)**:
+**플래그 매핑 (인터뷰 5축 → CLI 플래그)**:
 
 | 인터뷰 질문 | CLI 플래그 | 비고 |
 |---|---|---|
@@ -189,6 +204,7 @@ od braze interview <braze_message_id> \
 | `q-tone` (톤 &amp; 무드) | `--tone` | 선택 |
 | `q-target` (타겟 세그먼트) | `--segment "<condition>"` | 선택; Braze 세그먼트 조건 문자열 |
 | `q-purpose` (목적) | 기획안 `summary`/`--emphasis` 로 녹인다 | `--purpose`/`--target` 플래그는 존재하지 않음 |
+| `q-visual` (비주얼 방향) | 없음 | CLI 플래그 없음 — 기획안 `image.mode`에만 기록 (Step 3) |
 
 **필수 플래그 기본값 가이드**:
 - `--delivery`: 트리거 기반 발화 = `action_based` (기본 권장), 예약 발송 = `scheduled`
@@ -224,6 +240,7 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
   ],
   "image": {
     "needed": true,
+    "mode": "layer",
     "format": "PNG",
     "assets": [
       { "id": "char",   "source": "library",  "role": "character",
@@ -239,10 +256,21 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
 EOF
 ```
 
+> `mode: "scene"`일 때는 `assets`가 씬 에셋 1건 중심으로 바뀐다: `{ "id":
+> "scene", "source": "generate", "role": "scene", "style": "3d-illust",
+> "concept": "<캐릭터+오브제 상호작용 + 씬 서술>", "ratio": "2:3" }` (+ 선택적
+> `css` 장식 1건). `composition`에는 세이프존 스케치(상단 텍스트존/하단
+> CTA존)를 함께 명시한다.
+
 ### image 필드 결정 규칙 (Claude 자율 — 인터뷰하지 않음)
 
 - `needed`: 공지(announcement)·기능 안내 순수 목적 = `false` 기본, 그 외(혜택·
   전환·리텐션·축하) = `true` 기본. 기획안 카드에 근거 1줄 명시.
+- `mode`: `q-visual` 응답을 그대로 사용 (기본 `"layer"`; `"recommend"`면 위
+  "비주얼 방향 결정" 규칙 적용). **캐릭터-오브제 상호작용 에셋은 통짜 통합
+  생성 1건으로 선언** — 캐릭터 컷 + 오브제를 별도 assets로 나눠 CSS로 조립하는
+  설계 금지 (콜라주 금지 — 도그푸딩 반려 실측 2026-07-10). `scene` 모드는 씬
+  에셋 1건 + (선택) `css` 장식만 구성한다.
 - `assets[].source`: `library`(브랜드 캐릭터 컷 직접 사용 — 캐논 100%·비용 0,
   브랜드 deliverable 컨텍스트의 에셋 라이브러리에서 선택) / `generate`(imagegen —
   메타포 오브제) / `css`(코드 장식 — 생성 없음).
@@ -251,10 +279,12 @@ EOF
 - 오브제 concept = 메시지 메타포 (§4 사례표) — "보여야 하는 것"을 concept에,
   오독 위험 요소를 note에 기록.
 - `composition` = 레이어 배치 스케치 1문장 (텍스트존·오브제존·CTA존 3분할 문법 —
-  visual-layout-patterns.md §1).
+  visual-layout-patterns.md §1). `scene` 모드는 세이프존 스케치(상단 텍스트존/
+  하단 CTA존)를 함께 명시한다.
 - 스키마는 daemon 계약 변경 없음 — `braze_plan_v1`은 JSON blob 저장이라 필드
-  추가는 하위 호환 (검증 = version 체크뿐, braze-routes.ts). 기획안 카드에
-  에셋 표(id/source/style/concept)를 포함해 사용자 컨펌을 받는다.
+  추가는 하위 호환 (검증 = version 체크뿐, braze-routes.ts). `image.mode`
+  필드도 동일 근거로 스키마 변경 없음. 기획안 카드에 에셋 표
+  (id/source/style/concept)를 포함해 사용자 컨펌을 받는다.
 
 ### 카피 작성 원칙 (헤딩·본문)
 
@@ -352,6 +382,7 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
 - 트리거/스케줄, 성과지표
 
 ③-b **컴포지션 플랜** (image.needed=true일 때)
+- `mode`(layer/scene) 명기 + `scene`이면 세이프존 스케치(상단 텍스트존/하단 CTA존) 포함
 - 에셋 표: id / source / style / concept / ratio / placeholder 토큰(`__BRAZE_MEDIA__/obj-<id>.png`)
 - composition 스케치 + 레이아웃 유형 (visual-layout-patterns.md §2 5형 중 선택 근거)
 - library 컷 원본 경로 (브랜드 에셋 라이브러리 기준)
@@ -387,11 +418,18 @@ od braze brief <braze_message_id> --brief-file <path>
 1. `Read: design-templates/braze-iam/references/imagegen-pipeline.md` (dispatch
    계약·프롬프트 스캐폴드·폴백 절차 정본)
 2. `mkdir -p {artifact_dir}/assets`
-3. `source:"generate"` 에셋 전부를 **한 턴 병렬 dispatch** — 에셋별 서브에이전트
+3. **`image.mode` 분기**:
+   - `"scene"` → 씬 에셋 1건을 imagegen-pipeline.md 씬 생성 경로로 dispatch
+     (배경 포함 생성·알파 검증 skip·세이프존 스캐폴드 강제). 캐릭터 포함 시
+     이중 앵커(캐릭터 시트 + 해당 복장 고해상 렌더)를 프롬프트에 전달.
+   - `"layer"` → 아래 4~6 기존 절차 그대로. 캐릭터-오브제 상호작용 에셋은
+     통합 컴포지션 경로(이중 앵커 동일 규칙)로 dispatch — 분리 생성 후 CSS
+     조립 금지.
+4. `source:"generate"` 에셋 전부를 **한 턴 병렬 dispatch** — 에셋별 서브에이전트
    1개, 프롬프트는 메인이 스캐폴드로 조립. 실패분만 순차 재시도 1회(성공분 보존).
-4. `source:"library"` 에셋: 브랜드 에셋 라이브러리 원본을
+5. `source:"library"` 에셋: 브랜드 에셋 라이브러리 원본을
    `{artifact_dir}/assets/obj-<id>.png`로 복사 (생성 호출 없음).
-5. 재시도도 실패한 에셋은 기획안 강등(css/생략) 여부를 사용자에게 보고 —
+6. 재시도도 실패한 에셋은 기획안 강등(css/생략) 여부를 사용자에게 보고 —
    조용한 누락 금지.
 
 dispatch 도구가 없는 런타임 = 인라인 순차로 동일 계약 (imagegen-pipeline.md 절차 그대로).
@@ -402,8 +440,8 @@ dispatch 도구가 없는 런타임 = 인라인 순차로 동일 계약 (imagege
 
 1. `Read: design-templates/braze-iam/references/variant-builder-subagent.md`
 2. Variant A/B **2개 병렬 dispatch** — 입력(brief 경로·기획안 전문·브랜드 컨텍스트
-   소스 경로·DESIGN.md·references 5종+craft·에셋 manifest·composition·산출 디렉토리)을
-   지시문 계약대로 채운다.
+   소스 경로·DESIGN.md·references 5종+craft·에셋 manifest·composition·`{image_mode}`·
+   산출 디렉토리)을 지시문 계약대로 채운다.
 3. 각 빌더 산출 = 발송본 `variant-x.html`(placeholder) + 프리뷰
    `variant-x-preview.html`(make_preview.py 기계 변환). 반환 `OK ...` 2건 확인.
 4. FAIL 반환 시: 사유가 카피/기획 문제면 Step 3 수정 후 재dispatch, 실행 문제면
@@ -491,8 +529,8 @@ brazeBridge.BridgeReady(function() {
 
 1. `Read: design-templates/braze-iam/references/review-subagent.md`
 2. 신선 컨텍스트 검수자 **1 dispatch** — 입력(HTML 4파일·에셋 PNG 전장·brief·
-   기획안·브랜드 컨텍스트·DESIGN.md·craft·references)을 지시문 계약대로 채운다.
-   검수자는 report-only — 채점표·P0/P1 목록만 반환한다.
+   기획안·브랜드 컨텍스트·DESIGN.md·craft·references·`{image_mode}`)을 지시문
+   계약대로 채운다. 검수자는 report-only — 채점표·P0/P1 목록만 반환한다.
 3. **수정 반영은 메인**: P0·감점 항목을 발송본에 수정 → `make_preview.py` 재실행
    (프리뷰 수기 수정 금지) → 재검수 dispatch 1회.
 4. dispatch 불가 런타임 = 아래 체크리스트로 인라인 자가검수 (동일 채점표).
@@ -620,3 +658,5 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - 발송본에 data-URI 금지 (에디터 버퍼링) — placeholder `__BRAZE_MEDIA__/<name>` 유지, 프리뷰만 인라인
 - 이미지 생성 = codex `gpt-5.5` 고정 + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
 - 서브에이전트 위임 실패(도구 없음) 시 인라인 동일 절차 — 단계 생략 금지
+- 캐릭터-오브제 상호작용 에셋 = 통짜 통합 생성 1건. 분리 생성한 PNG를 CSS로 겹쳐 조립하는 콜라주 금지 (도그푸딩 반려 실측 2026-07-10)
+- `scene` 모드 씬 = 텍스트·글자·숫자 절대 금지 + STRICT 세이프존(상단 텍스트존/하단 CTA존) 강제 — references/imagegen-pipeline.md
