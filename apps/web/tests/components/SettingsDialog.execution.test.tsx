@@ -445,6 +445,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const dialog = screen.getByRole('dialog');
     const sidebar = container.querySelector('#settings-sidebar');
 
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeTruthy();
+
     expect(dialog.classList.contains('settings-sidebar-collapsed')).toBe(false);
     expect(sidebar?.getAttribute('aria-hidden')).toBeNull();
 
@@ -3924,10 +3930,11 @@ describe('SettingsDialog language interactions', () => {
   it('shows every locale as a tile and marks the current locale as selected', async () => {
     renderLanguageSettingsDialog('en');
 
-    const tiles = await screen.findAllByRole('radio');
+    const languageGroup = await screen.findByRole('radiogroup', { name: 'Language' });
+    const tiles = within(languageGroup).getAllByRole('radio');
     expect(tiles).toHaveLength(LOCALES.length);
-    expect(screen.getByRole('radio', { name: /English/i }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('false');
+    expect(within(languageGroup).getByRole('radio', { name: /English/i }).getAttribute('aria-checked')).toBe('true');
+    expect(within(languageGroup).getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('false');
   });
 
   it('switches locale immediately and updates localStorage', async () => {

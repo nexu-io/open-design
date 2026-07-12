@@ -321,25 +321,7 @@ describe('EntryShell settings menu', () => {
       expect(screen.getByText('1.2k online')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
-
-    expect(props.onOpenSettings).not.toHaveBeenCalled();
-    expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
-    expect(screen.getByText('Language')).toBeTruthy();
-    expect(screen.getByText('Appearance')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(
-      screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i }).getAttribute('href'),
-    ).toBe('https://x.com/OpenDesignHQ');
-    expect(
-      screen.getByRole('menuitem', { name: /Follow Open Design on Threads/i }).getAttribute('href'),
-    ).toBe('https://www.threads.com/@opendesign.ai');
-    expect(
-      screen.getByRole('menuitem', { name: /Open Design on YouTube/i }).getAttribute('href'),
-    ).toBe('https://www.youtube.com/@Open-Design-ai');
-
-    fireEvent.click(screen.getByTestId('entry-settings-open-details'));
+    fireEvent.click(screen.getByTestId('entry-settings-button'));
 
     expect(props.onOpenSettings).toHaveBeenCalledWith();
   });

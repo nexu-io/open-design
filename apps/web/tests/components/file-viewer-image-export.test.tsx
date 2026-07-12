@@ -86,7 +86,8 @@ function renderHtmlPreview() {
 }
 
 async function openImageExportDialog() {
-  fireEvent.click(screen.getByRole('button', { name: /download/i }));
+  fireEvent.click(screen.getByRole('button', { name: /share/i }));
+  fireEvent.click(await screen.findByRole('tab', { name: /export/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
   expect(await screen.findByRole('dialog', { name: /export as image/i })).toBeTruthy();
 }
@@ -148,7 +149,8 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
     renderHtmlPreview();
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /export/i }));
     expect(screen.getByRole('menu')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
