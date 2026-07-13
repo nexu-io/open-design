@@ -1585,8 +1585,7 @@ function DesignSystemExtractionDemo({
         <>
           <section className="ds-extraction-demo__result-board">
             <header className="ds-extraction-demo__result-heading">
-              <p>Design system ready</p>
-              <h1>{label} foundations</h1>
+              <h1>Design System</h1>
               <span>Generated from {sourceUrl || label}</span>
             </header>
             <div className="ds-extraction-demo__result-grid">
@@ -1618,10 +1617,6 @@ function DesignSystemExtractionDemo({
                     </div>
                   ))}
                 </div>
-              </article>
-              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--source">
-                <span>Source</span>
-                <strong>{sourceUrl || label}</strong>
               </article>
             </div>
           </section>

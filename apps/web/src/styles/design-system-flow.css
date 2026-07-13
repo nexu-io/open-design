@@ -302,20 +302,11 @@
 .ds-extraction-demo__result-heading {
   padding: 4px 2px 20px;
 }
-.ds-extraction-demo__result-heading p,
 .ds-extraction-demo__result-heading h1,
 .ds-extraction-demo__result-heading span {
   margin: 0;
 }
-.ds-extraction-demo__result-heading p {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
 .ds-extraction-demo__result-heading h1 {
-  margin-top: 6px;
   color: var(--text-strong);
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(30px, 4vw, 44px);
@@ -336,7 +327,7 @@
 }
 .ds-extraction-demo__result-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .ds-extraction-demo__result-card {
@@ -399,21 +390,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ds-extraction-demo__result-card--source,
 .ds-extraction-demo__result-card--colors {
   grid-column: auto;
 }
-.ds-extraction-demo__result-card--source span,
 .ds-extraction-demo__result-card--colors span {
   margin: 0 4px 0 0;
   font-size: 13px;
-}
-.ds-extraction-demo__result-card--source strong {
-  overflow: hidden;
-  font-family: var(--sans);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .ds-extraction-demo__palette-list {
   display: flex;
@@ -625,7 +607,6 @@
   .ds-extraction-demo__result-grid {
     grid-template-columns: 1fr;
   }
-  .ds-extraction-demo__result-card--source,
   .ds-extraction-demo__result-card--colors { grid-column: auto; }
   .ds-extraction-demo__kit-grid { grid-template-columns: 1fr; }
   .ds-extraction-demo__next-step { align-items: stretch; flex-direction: column; }
