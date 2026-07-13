@@ -1582,18 +1582,18 @@ function DesignSystemExtractionDemo({
       ) : null}
 
       {stage === 'system-review' ? (
-        <section className="ds-extraction-demo__result-board">
-          <div className="ds-extraction-demo__result-hero">
-            <h1>Brand identity<br />generated</h1>
-            <p>Now everything you create starts on-brand.</p>
-            <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
-            {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
-          </div>
-          <div className="ds-extraction-demo__result-grid">
-            <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
-              <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-            </article>
-            <>
+        <>
+          <section className="ds-extraction-demo__result-board">
+            <div className="ds-extraction-demo__result-hero">
+              <h1>Brand identity<br />generated</h1>
+              <p>Now everything you create starts on-brand.</p>
+              <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
+              {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
+            </div>
+            <div className="ds-extraction-demo__result-grid">
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
+                <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+              </article>
               <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--type">
                 <span>Typography</span>
                 <div className="ds-extraction-demo__font-pair">
@@ -1623,9 +1623,10 @@ function DesignSystemExtractionDemo({
                 <span>Source</span>
                 <strong>{sourceUrl || label}</strong>
               </article>
-            </>
-          </div>
-        </section>
+            </div>
+          </section>
+          <DemoExtractedComponentKit foundation={resultFoundation} brandName={label} />
+        </>
       ) : null}
     </main>
   );
@@ -1695,6 +1696,79 @@ function demoFoundationFromSource(sourceUrl: string): DemoExtractedFoundation {
 
 function fontPreviewStyle(fontFamily: string | null): CSSProperties | undefined {
   return fontFamily ? { fontFamily: cssFontFamily(fontFamily) } : undefined;
+}
+
+function DemoExtractedComponentKit({
+  foundation,
+  brandName,
+}: {
+  foundation: DemoExtractedFoundation;
+  brandName: string;
+}) {
+  const primary = foundation.colors[0]?.hex ?? '#202124';
+  const surface = foundation.colors[1]?.hex ?? '#ffffff';
+  const ink = foundation.colors[2]?.hex ?? '#202124';
+  const style = {
+    '--demo-kit-primary': primary,
+    '--demo-kit-surface': surface,
+    '--demo-kit-ink': ink,
+    '--demo-kit-display': cssFontFamily(foundation.displayFont ?? 'Georgia'),
+    '--demo-kit-body': cssFontFamily(foundation.bodyFont ?? 'system-ui'),
+  } as CSSProperties;
+  const primaryText = readableTextColor(primary);
+
+  return (
+    <section className="ds-extraction-demo__kit" style={style}>
+      <header>
+        <div>
+          <p>Component kit generated</p>
+          <h2>{brandName} UI foundations</h2>
+        </div>
+        <span>Light</span>
+      </header>
+      <div className="ds-extraction-demo__kit-grid">
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--buttons">
+          <h3>Buttons</h3>
+          <div className="ds-extraction-demo__kit-buttons">
+            <button type="button" style={{ backgroundColor: primary, color: primaryText }}>Primary</button>
+            <button type="button">Default</button>
+            <button type="button" className="is-text">Text</button>
+            <button type="button" className="is-link" style={{ color: primary }}>Link</button>
+          </div>
+        </section>
+        <section className="ds-extraction-demo__kit-section">
+          <h3>Form controls</h3>
+          <label>Email<input placeholder="you@example.com" /></label>
+          <label>Project name<input placeholder={brandName} /></label>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--navigation">
+          <h3>Navigation</h3>
+          <nav><span className="is-active" style={{ color: primary }}>Overview</span><span>Activity</span><span>Reports</span><span>Settings</span></nav>
+          <div className="ds-extraction-demo__kit-steps"><b style={{ backgroundColor: primary, color: primaryText }}>1</b><span>Connect</span><b style={{ backgroundColor: primary, color: primaryText }}>2</b><span>Review</span><b>3</b><span>Ship</span></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--cards">
+          <h3>Cards</h3>
+          <div className="ds-extraction-demo__kit-cards"><article><strong>Overview</strong><p>Clear guidance and reusable layouts.</p><a style={{ color: primary }}>Learn more</a></article><article><strong>Usage</strong><p>Components inherit this brand system.</p></article></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--data">
+          <h3>Data display</h3>
+          <div className="ds-extraction-demo__kit-metrics"><strong>10k+<small>Teams reached</small></strong><strong>99.9%<small>Uptime SLA</small></strong><strong>4.9/5<small>Average rating</small></strong></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--alerts">
+          <h3>Alerts &amp; progress</h3>
+          <p className="is-success">✓ Brand system generated</p><p className="is-warning">! Review a missing source</p><div><i style={{ backgroundColor: primary }} /></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--palette">
+          <h3>Color</h3>
+          <div>{foundation.colors.map((color) => <i key={color.hex} title={color.label} style={{ backgroundColor: color.hex }} />)}</div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--scale">
+          <h3>Type scale</h3>
+          <strong>The quick brown fox</strong><span>The quick brown fox</span><small>The quick brown fox</small>
+        </section>
+      </div>
+    </section>
+  );
 }
 
 interface DesignMdPreviewColor {
