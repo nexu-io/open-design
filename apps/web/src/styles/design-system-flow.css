@@ -435,32 +435,16 @@
 }
 .ds-extraction-demo__kit > header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   padding: 3px 2px 16px;
   border-bottom: 1px solid var(--border);
 }
-.ds-extraction-demo__kit > header p,
 .ds-extraction-demo__kit > header h2 {
   margin: 0;
 }
-.ds-extraction-demo__kit > header p,
-.ds-extraction-demo__kit > header > span {
-  color: var(--text-muted);
-  font-size: 11px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
 .ds-extraction-demo__kit > header h2 {
-  margin-top: 4px;
   font-family: var(--demo-kit-display), Georgia, serif;
   font-size: 22px;
   font-weight: 500;
-}
-.ds-extraction-demo__kit > header > span {
-  padding: 5px 8px;
-  border-radius: 99px;
-  background: color-mix(in srgb, var(--demo-kit-primary) 10%, var(--bg-panel));
 }
 .ds-extraction-demo__kit-grid {
   display: grid;

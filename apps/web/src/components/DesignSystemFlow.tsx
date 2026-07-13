@@ -1728,10 +1728,8 @@ function DemoExtractedComponentKit({
     <section className="ds-extraction-demo__kit" style={style}>
       <header>
         <div>
-          <p>Component kit generated</p>
           <h2>{brandName} UI foundations</h2>
         </div>
-        <span>Light</span>
       </header>
       <div className="ds-extraction-demo__kit-grid">
         <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--buttons">
