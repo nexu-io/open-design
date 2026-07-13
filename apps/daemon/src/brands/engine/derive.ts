@@ -91,12 +91,23 @@ function lightThemeTextBase(input: string | undefined): string {
 }
 
 /**
- * A seed whose bg base is confidently dark marks a dark-first brand — seed
- * synthesis only lets a dark canvas through deliberately (see neutralBases in
- * seed.ts), so honoring it here keeps the default theme on-brand.
+ * A seed marks a dark-first brand only when it carries BOTH a confidently dark
+ * canvas AND a light foreground — the exact gate `neutralBases()` in seed.ts
+ * uses (dark bg + light fg → keep the dark canvas). Both must be checked here:
+ * the seed-override path (`rebuildSystem` → `sanitizeSeedOverrides`) can merge a
+ * background-only override such as `{ colorBgBase: "#050505" }` onto an
+ * otherwise light brand. Keying off `colorBgBase` alone would flip derivation to
+ * the dark ladder (forcing a white text base) while the seed still carried a
+ * dark `colorTextBase`, and `tokensToThemeJson(seed, defaultThemeAlgorithm(seed))`
+ * would then export `algorithm:"dark"` over that dark text — the very
+ * ConfigProvider mismatch this predicate exists to prevent. Thresholds mirror
+ * seed.ts (dark ≤ 0.3, light ≥ 0.6).
  */
 function seedPrefersDark(seed: SeedToken): boolean {
-  return luminance(parseHex(seed.colorBgBase || "#ffffff")) <= 0.3;
+  return (
+    luminance(parseHex(seed.colorBgBase || "#ffffff")) <= 0.3 &&
+    luminance(parseHex(seed.colorTextBase || "#000000")) >= 0.6
+  );
 }
 
 /**

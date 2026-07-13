@@ -29,7 +29,15 @@ import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
-import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
+import {
+  buildBrandSystem,
+  defaultSeed,
+  defaultThemeAlgorithm,
+  deriveTokens,
+  seedFromMaterial,
+  tokensToThemeJson,
+} from '../src/brands/engine/index.js';
+import type { SeedToken } from '../src/brands/engine/types.js';
 import {
   adoptExistingImagery,
   findImageRefs,
@@ -250,6 +258,27 @@ describe('agent-driven brand extraction engine', () => {
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
     // ...and the exported ConfigProvider artifact stays on the light algorithm.
     expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
+  });
+
+  it('keeps theme.json algorithm consistent with the derived theme under a background-only seed override', () => {
+    // Locks the rebuildSystem seed-override path (sanitizeSeedOverrides →
+    // reassembleWithSeed → tokensToThemeJson(seed, defaultThemeAlgorithm(seed))):
+    // a background-only override on an otherwise light brand must NOT be treated
+    // as dark-first, or theme.json would export algorithm:"dark" while the seed
+    // still carries a dark colorTextBase — the ConfigProvider mismatch.
+    const bgOnlyDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505' }; // colorTextBase stays #000000
+    expect(defaultThemeAlgorithm(bgOnlyDark)).toBe('default');
+    // The derived default theme clamps back to the light canvas...
+    expect(deriveTokens(bgOnlyDark, 'default').colorBgContainer).toBe('#ffffff');
+    // ...and the exported ConfigProvider algorithm matches it (no dark/light split).
+    expect(JSON.parse(tokensToThemeJson(bgOnlyDark, defaultThemeAlgorithm(bgOnlyDark))).algorithm).toBe('default');
+
+    // A full override supplying BOTH a dark canvas and a light foreground DOES
+    // opt into dark-first — consistently across the derived theme and export.
+    const fullDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505', colorTextBase: '#f4f4f4' };
+    expect(defaultThemeAlgorithm(fullDark)).toBe('dark');
+    expect(deriveTokens(fullDark, 'default').colorBgContainer).toBe('#050505');
+    expect(JSON.parse(tokensToThemeJson(fullDark, defaultThemeAlgorithm(fullDark))).algorithm).toBe('dark');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
