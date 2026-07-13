@@ -1706,8 +1706,11 @@ function DemoExtractedComponentKit({
   brandName: string;
 }) {
   const primary = foundation.colors[0]?.hex ?? '#202124';
-  const surface = foundation.colors[1]?.hex ?? '#ffffff';
-  const ink = foundation.colors[2]?.hex ?? '#202124';
+  const surface = '#ffffff';
+  const ink = foundation.colors.reduce(
+    (darkest, color) => previewLuminance(color.hex) < previewLuminance(darkest) ? color.hex : darkest,
+    '#202124',
+  );
   const style = {
     '--demo-kit-primary': primary,
     '--demo-kit-surface': surface,
