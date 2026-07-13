@@ -197,7 +197,6 @@ interface DetailProps {
   onInitialRevisionJobConsumed?: (jobId: string) => void;
 }
 
-type SetupStep = 'setup' | 'confirm';
 type ReviewTab = 'system' | 'files';
 type DesignMdMode = 'edit' | 'preview';
 type DesignMdPreviewTheme = 'light' | 'dark';
@@ -341,7 +340,6 @@ export function DesignSystemCreationFlow({
   designSystems = [],
 }: CreationProps) {
   const { t } = useI18n();
-  const [step, setStep] = useState<SetupStep>('setup');
   // A Library "create design system from selection" hand-off pre-fills the
   // source material with the chosen assets (single-shot; cleared on read).
   const [state, setState] = useState<SetupState>(() => {
@@ -635,29 +633,32 @@ export function DesignSystemCreationFlow({
     const value = state.company.trim();
     if (!value) return;
     const sourceLike = /^(?:https?:\/\/|www\.|github\.com\/|git@github\.com:)/iu.test(value);
+    const nextState = sourceLike
+      ? {
+          ...state,
+          company: '',
+          sourceUrls: Array.from(new Set([...state.sourceUrls, normalizeSourceUrl(value)])),
+        }
+      : state;
     if (sourceLike) {
-      const sourceUrl = normalizeSourceUrl(value);
-      setState((curr) => ({
-        ...curr,
-        company: '',
-        sourceUrls: Array.from(new Set([...curr.sourceUrls, sourceUrl])),
-      }));
+      setState(nextState);
     }
     emitCreateFormClick('continue_to_generation');
-    setStep('confirm');
+    void generate(nextState);
   }
 
   function handlePrimaryBrandExample(domain: string) {
     const sourceUrl = normalizeSourceUrl(`https://${domain}`);
     if (!sourceUrl) return;
     setError(null);
-    setState((curr) => ({
-      ...curr,
+    const nextState = {
+      ...state,
       company: '',
-      sourceUrls: Array.from(new Set([...curr.sourceUrls, sourceUrl])),
-    }));
+      sourceUrls: Array.from(new Set([...state.sourceUrls, sourceUrl])),
+    };
+    setState(nextState);
     emitCreateFormClick('continue_to_generation');
-    setStep('confirm');
+    void generate(nextState);
   }
 
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -858,7 +859,7 @@ export function DesignSystemCreationFlow({
     }
   }
 
-  async function generate() {
+  async function generate(generationState = state) {
     if (generationStarting) return;
     // Snapshot the user-pinned source state up front. Used for the
     // pre-async ui_click intent signal AND the post-async lifecycle
@@ -867,18 +868,18 @@ export function DesignSystemCreationFlow({
     // sources" → "generate eventually succeeded / failed with the
     // same N". Computed here because OnboardingView can't peek into
     // this flow's setup form.
-    const sourceUrls = sourceUrlsFromState(state);
-    const githubUrls = githubUrlsFromState(state);
+    const sourceUrls = sourceUrlsFromState(generationState);
+    const githubUrls = githubUrlsFromState(generationState);
     const sourceUrlCount = sourceUrls.length;
     const githubRepoCount = githubUrls.length;
-    const localFolderCount = state.codeFolders?.length ?? 0;
-    const figFileCount = (state.figFiles?.length ?? 0) + figmaUrlsFromState(state).length;
-    const assetFileCount = state.assetFiles?.length ?? 0;
-    const hasDesignMd = Boolean(state.designMd.trim());
+    const localFolderCount = generationState.codeFolders?.length ?? 0;
+    const figFileCount = (generationState.figFiles?.length ?? 0) + figmaUrlsFromState(generationState).length;
+    const assetFileCount = generationState.assetFiles?.length ?? 0;
+    const hasDesignMd = Boolean(generationState.designMd.trim());
     const snapshot = {
       sourceCount:
         sourceUrlCount + localFolderCount + figFileCount + assetFileCount + (hasDesignMd ? 1 : 0),
-      hasBrandDescription: Boolean(state.company?.trim()),
+      hasBrandDescription: Boolean(generationState.company?.trim()),
       hasDesignMd,
       sourceUrlCount,
       githubRepoCount,
@@ -920,8 +921,8 @@ export function DesignSystemCreationFlow({
         source_count: snapshot.sourceCount,
         created_as_project: result === 'success',
         has_brand_description: snapshot.hasBrandDescription,
-        brand_description_length_bucket: designSystemLengthBucket(state.company),
-        notes_length_bucket: designSystemLengthBucket(state.notes),
+        brand_description_length_bucket: designSystemLengthBucket(generationState.company),
+        notes_length_bucket: designSystemLengthBucket(generationState.notes),
         error_code: errorCode,
         duration_ms: Math.max(0, Math.round(performance.now() - generateStartedAt)),
       });
@@ -932,25 +933,23 @@ export function DesignSystemCreationFlow({
       // real transcript immediately, then the programmatic pass registers a
       // usable user:<id> design system in the background.
       const extractUrl =
-        nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
+        nonGithubSourceUrlsFromState(generationState)[0] ?? sourceUrlsFromState(generationState)[0] ?? '';
       const fallbackDesignMd = !extractUrl && !hasDesignMd
-        ? buildFallbackDesignMdFromState(state)
+        ? buildFallbackDesignMdFromState(generationState)
         : '';
-      const designMdForExtraction = hasDesignMd ? state.designMd : fallbackDesignMd;
+      const designMdForExtraction = hasDesignMd ? generationState.designMd : fallbackDesignMd;
       if (!extractUrl && !designMdForExtraction) {
         setError(t('dsCreate.missingSourceError'));
-        setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_NO_SOURCE', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_NO_SOURCE' });
         return;
       }
       const result = await brandExtract.run(extractUrl, {
-        description: [state.company.trim(), state.notes.trim()].filter(Boolean).join('\n\n'),
+        description: [generationState.company.trim(), generationState.notes.trim()].filter(Boolean).join('\n\n'),
         designMd: designMdForExtraction,
       });
       if (!result) {
         setError('Could not start the extraction. Check the link and try again.');
-        setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_START_FAILED', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_START_FAILED' });
         return;
@@ -960,10 +959,10 @@ export function DesignSystemCreationFlow({
       // navigating into the live extraction.
       const project = (await getProject(result.projectId).catch(() => undefined)) ?? undefined;
       let projectForCreated = project;
-      if (project && hasProjectStagingSources(state)) {
+      if (project && hasProjectStagingSources(generationState)) {
         await prepareCreatedDesignSystemProject({
           project,
-          state,
+          state: generationState,
           composioConfigured,
           githubConnector,
           onProjectPrepared: (preparedProject) => {
@@ -990,7 +989,6 @@ export function DesignSystemCreationFlow({
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
-      setStep('setup');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
         : 'DS_GENERATE_THREW';
@@ -999,31 +997,6 @@ export function DesignSystemCreationFlow({
     } finally {
       setGenerationStarting(false);
     }
-  }
-
-  if (step === 'confirm') {
-    return (
-      <div className="ds-setup-shell ds-setup-shell--center">
-        <div className="ds-setup-center-card">
-          <h1>Open Design will extract your design system.</h1>
-          <p>You'll land in a project that fills in live — logo, palette, typography, imagery — as it measures your brand. Keep the tab open.</p>
-          <div className="ds-setup-actions">
-            <Button variant="ghost" onClick={() => setStep('setup')}>
-              <Icon name="arrow-left" />
-              Back
-            </Button>
-            <Button
-              variant="primary"
-              disabled={generationStarting}
-              onClick={() => void generate()}
-            >
-              <Icon name="sparkles" />
-              {generationStarting ? 'Starting extraction...' : 'Extract design system'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -1433,7 +1406,7 @@ export function DesignSystemCreationFlow({
                   setError(t('dsCreate.missingSourceError'));
                   return;
                 }
-                setStep('confirm');
+                void generate();
               }}
             >
               {t('dsCreate.generate')}
