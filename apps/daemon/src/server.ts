@@ -1402,11 +1402,16 @@ export function composeChatUserRequestForAgent(
   // of what the upstream CLI already has in memory — and the embedded
   // copy carries the literal `<question-form>` markup the agent emitted
   // on turn 1, which the model then re-emits on turn 2. Send only the
-  // latest user turn (`currentPrompt`) in that case; the upstream
-  // session memory provides the rest. See
+  // latest user turn (`currentPrompt`) in that case; legacy and MCP
+  // callers only provide `message`, so fall back to it when needed. The
+  // upstream session memory provides the rest. See
   // `RuntimeAgentDef.resumesSessionViaCli`.
   const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
+  const resumedTurn =
+    typeof currentPrompt === 'string' && currentPrompt.trim()
+      ? currentPrompt
+      : message;
+  const bodySource = skip ? resumedTurn : message;
   const body =
     typeof bodySource === 'string' && bodySource.trim()
       ? bodySource

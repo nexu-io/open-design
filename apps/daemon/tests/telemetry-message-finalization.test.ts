@@ -231,6 +231,14 @@ describe('Langfuse message finalization gate', () => {
     expect(kept).toBe(transcript);
   });
 
+  it('falls back to message for a resumed turn without currentPrompt', () => {
+    expect(
+      composeChatUserRequestForAgent('MCP follow-up prompt', undefined, {
+        skipTranscript: true,
+      }),
+    ).toBe('MCP follow-up prompt');
+  });
+
   it('invokes Langfuse reporting once when the final message write is marked', () => {
     const run = {
       id: 'run-1',
