@@ -1244,46 +1244,9 @@ export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
 }
 
 
-function githubRepoNameFromPluginName(name) {
-  const slug = String(name)
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/(^[-._]+|[-._]+$)/g, '');
-  return slug || 'open-design-plugin';
-}
-
-const PLUGIN_SHARE_ACTION_LABELS = {
-  'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Design',
-};
-
-const USER_PLUGIN_SOURCE_KINDS = new Set([
-  'user',
-  'project',
-  'marketplace',
-  'github',
-  'url',
-  'local',
-]);
-
-const PLUGIN_CONTEXT_SKIP_DIRS = new Set([
-  '.git',
-  '.next',
-  '.nuxt',
-  '.od',
-  '.output',
-  '.tmp',
-  '.turbo',
-  '.venv',
-  '__pycache__',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-  'out',
-  'target',
-  'vendor',
-]);
+// Helper functions imported from './plugins/share-helpers.js':
+//   githubRepoNameFromPluginName, PLUGIN_SHARE_ACTION_LABELS,
+//   USER_PLUGIN_SOURCE_KINDS, PLUGIN_CONTEXT_SKIP_DIRS
 
 const PLUGIN_CONTEXT_SKIP_FILES = new Set([
   '.DS_Store',
