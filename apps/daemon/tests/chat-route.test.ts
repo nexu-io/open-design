@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { createServer } from 'node:http';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
@@ -68,6 +69,78 @@ async function withFakeAgent<T>(
     process.env.PATH = oldPath;
     killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+interface RecordedHttpRequest {
+  method: string | undefined;
+  url: string | undefined;
+  headers: http.IncomingHttpHeaders;
+  body: string;
+}
+
+async function withJsonHttpServer<T>(
+  responder: (
+    request: RecordedHttpRequest,
+  ) => { status?: number; body?: unknown },
+  run: (args: { url: string; requests: RecordedHttpRequest[] }) => Promise<T>,
+): Promise<T> {
+  const requests: RecordedHttpRequest[] = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      const request = {
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        body,
+      };
+      requests.push(request);
+      const response = responder(request);
+      res.statusCode = response.status ?? 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(response.body ?? { ok: true }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    throw new Error('expected local HTTP server address');
+  }
+  try {
+    return await run({ url: `http://127.0.0.1:${address.port}`, requests });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function withEnv<T>(
+  values: Record<string, string | undefined>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of Object.keys(values)) {
+    previous.set(key, process.env[key]);
+    const value = values[key];
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
 }
 
@@ -461,6 +534,187 @@ process.stdin.on('end', () => {
         });
         expect(JSON.stringify(parsed)).not.toContain('sk-test-byok');
       },
+    );
+  });
+
+  it('bootstraps deployment run sessions before spawning BYOK OpenCode', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-deployment-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const keyFile = join(markerDir, 'byok-key.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Deployment OpenCode fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withJsonHttpServer(
+      (gatewayRequest) => ({
+        body: {
+          gatewayHeaders: gatewayRequest.headers,
+        },
+      }),
+      async (gateway) => withJsonHttpServer(
+        () => ({ body: { run_session_id: 'session-123' } }),
+        async (authority) => withEnv(
+          {
+            OD_PROVIDER_ORCHESTRATOR_BASE_URL: `${gateway.url}/v1`,
+            OD_PROVIDER_ORCHESTRATOR_API_KEY: 'sk-deployment',
+            OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: `${authority.url}/api/runs`,
+            OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+          },
+          async () => {
+            await withFakeAgent(
+              'opencode',
+              `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', async () => {
+  const rawConfig = process.env.OPENCODE_CONFIG_CONTENT || '';
+  fs.writeFileSync(${JSON.stringify(envFile)}, rawConfig);
+  fs.writeFileSync(${JSON.stringify(keyFile)}, process.env.OPEN_DESIGN_BYOK_API_KEY || '');
+  const config = JSON.parse(rawConfig);
+  const provider = config.provider['open-design-byok'];
+  await fetch(provider.options.baseURL.replace(/\\/+$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + (process.env.OPEN_DESIGN_BYOK_API_KEY || ''),
+      ...(provider.options.headers || {}),
+    },
+    body: JSON.stringify({ model: 'gpt-deployment', messages: [] }),
+  });
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'deployment-byok-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+              async () => {
+                const response = await fetch(`${baseUrl}/api/chat`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    agentId: 'byok-opencode',
+                    projectId,
+                    message: 'hello',
+                    model: 'gpt-deployment',
+                    byokProvider: {
+                      protocol: 'openai',
+                      credentialSource: 'deployment',
+                    },
+                  }),
+                });
+                const body = await response.text();
+
+                expect(response.ok).toBe(true);
+                expect(body).toContain('deployment-byok-ok');
+              },
+            );
+
+            expect(await fsp.readFile(keyFile, 'utf8')).toBe('sk-deployment');
+            const runSessionBody = JSON.parse(authority.requests[0]?.body ?? '{}') as {
+              od_project_id?: string;
+              od_run_id?: string;
+              purpose?: string;
+              max_total_cost_usd?: number;
+            };
+            expect(runSessionBody.od_project_id).toBe(projectId);
+            expect(runSessionBody.od_run_id).toEqual(expect.any(String));
+            expect(runSessionBody.od_run_id?.length).toBeGreaterThan(0);
+            expect(runSessionBody.purpose).toBe('chat-completion');
+            expect(runSessionBody.max_total_cost_usd).toBe(0.05);
+
+            const parsed = JSON.parse(await fsp.readFile(envFile, 'utf8')) as {
+              provider?: Record<string, { options?: Record<string, unknown> }>;
+            };
+            const headers = parsed.provider?.['open-design-byok']?.options?.headers as Record<string, string>;
+            expect(headers).toMatchObject({
+              'x-opendesign-run-session-id': 'session-123',
+              'x-opendesign-cost-cap-usd': '0.05',
+            });
+            expect(headers['x-opendesign-idempotency-key']).toBe(`chat:${runSessionBody.od_run_id}`);
+            expect(gateway.requests[0]?.headers.authorization).toBe('Bearer sk-deployment');
+            expect(gateway.requests[0]?.headers['x-opendesign-run-session-id']).toBe('session-123');
+            expect(gateway.requests[0]?.headers['x-opendesign-idempotency-key']).toBe(
+              `chat:${runSessionBody.od_run_id}`,
+            );
+          },
+        ),
+      ),
+    );
+  });
+
+  it('does not spawn BYOK OpenCode when deployment run-session bootstrap fails', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-deployment-denied-'));
+    tempDirs.push(markerDir);
+    const spawnedFile = join(markerDir, 'spawned.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Deployment denied fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withJsonHttpServer(
+      () => ({ body: { ok: true } }),
+      async (gateway) => withJsonHttpServer(
+        () => ({ status: 403, body: { error: 'denied' } }),
+        async (authority) => withEnv(
+          {
+            OD_PROVIDER_ORCHESTRATOR_BASE_URL: `${gateway.url}/v1`,
+            OD_PROVIDER_ORCHESTRATOR_API_KEY: 'sk-deployment',
+            OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: `${authority.url}/api/runs`,
+            OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+          },
+          async () => {
+            await withFakeAgent(
+              'opencode',
+              `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(spawnedFile)}, 'spawned');
+process.exit(0);
+`,
+              async () => {
+                const response = await fetch(`${baseUrl}/api/chat`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    agentId: 'byok-opencode',
+                    projectId,
+                    message: 'hello',
+                    model: 'gpt-deployment',
+                    byokProvider: {
+                      protocol: 'openai',
+                      credentialSource: 'deployment',
+                    },
+                  }),
+                });
+                const body = await response.text();
+
+                expect(response.ok).toBe(true);
+                expect(body).toContain('Deployment provider run session failed: 403');
+              },
+            );
+
+            expect(authority.requests).toHaveLength(1);
+            expect(gateway.requests).toHaveLength(0);
+            await expect(fsp.access(spawnedFile)).rejects.toThrow();
+          },
+        ),
+      ),
     );
   });
 

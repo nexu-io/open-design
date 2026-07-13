@@ -194,6 +194,8 @@ import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
+import { resolveDeploymentProviderProfile } from './deployment-provider.js';
+import { deploymentProviderRunMetadata } from './deployment-provider-run-session.js';
 import {
   persistPlainStreamArtifacts,
   plainStdoutFromRunEvents,
@@ -4206,12 +4208,45 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    const byokOpenCodeProvider = def.id === 'byok-opencode'
-      ? buildOpenCodeByokProviderConfig(
-          byokProvider,
-          typeof model === 'string' ? model : null,
-        )
-      : null;
+    let byokOpenCodeProvider = null;
+    if (def.id === 'byok-opencode') {
+      let effectiveByokProvider = byokProvider;
+      let providerMetadata;
+      if (
+        byokProvider &&
+        typeof byokProvider === 'object' &&
+        byokProvider.credentialSource === 'deployment'
+      ) {
+        const resolved = resolveDeploymentProviderProfile('openai');
+        if (!resolved.ok) {
+          return design.runs.fail(run, resolved.code, resolved.message);
+        }
+        const runMetadata = await deploymentProviderRunMetadata(
+          resolved.profile,
+          {
+            projectId,
+            providerRunId: run.id,
+            providerOperationId: `chat:${run.id}`,
+            providerRunPurpose: 'chat-completion',
+          },
+        );
+        if (!runMetadata.ok) {
+          return design.runs.fail(run, runMetadata.code, runMetadata.message);
+        }
+        providerMetadata = runMetadata.metadata;
+        effectiveByokProvider = {
+          protocol: resolved.profile.protocol,
+          credentialSource: 'user',
+          apiKey: resolved.profile.apiKey,
+          baseUrl: resolved.profile.baseUrl,
+        };
+      }
+      byokOpenCodeProvider = buildOpenCodeByokProviderConfig(
+        effectiveByokProvider,
+        typeof model === 'string' ? model : null,
+        providerMetadata,
+      );
+    }
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
       return design.runs.fail(
         run,
