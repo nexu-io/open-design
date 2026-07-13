@@ -74,11 +74,25 @@ sent to PostHog **even when telemetry is turned off**, so that stability problem
 stay visible to the team — including crashes that happen before the app is
 healthy enough to report anything else.
 
-These reports carry the exception type and message, scrubbed stack frames and
-file paths, the path of the page you were on, your anonymous installation ID, the
-app version, and a session ID. They are not a copy of your conversations or your
-project files, and the redaction described above still applies — API keys, tokens,
-and other secrets are stripped before anything is sent.
+**What a report contains depends on the event.** Every one of them carries your
+anonymous installation ID, the app version, and which build environment you are
+on. Beyond that:
+
+- **Crashes and unhandled errors** in the app window also include the exception
+  type and message, a scrubbed stack trace, the path of the page you were on, and
+  a session ID.
+- **Reliability events** — white screens, stuck runs, long tasks — include the
+  path of the page you were on and details of the event itself, but **no**
+  exception message and **no** stack trace.
+- **Startup failures** in the desktop app include a scrubbed error message and
+  stack trace, the log-file path, and which native module failed to load. Because
+  the app never got far enough to open a window, these carry **no** page path and
+  **no** session ID.
+
+Free-form error text and every file path are scrubbed to strip your home directory
+before send, and the redaction described above still applies — API keys, tokens,
+and other secrets are removed. These reports are not a copy of your conversations
+or your project files.
 
 ## Your anonymous ID
 
