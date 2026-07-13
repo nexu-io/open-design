@@ -1073,7 +1073,7 @@ export function DesignSystemCreationFlow({
                 type="button"
                 onClick={() => handlePrimaryBrandExample(brand.domain)}
               >
-                https://{brand.domain}
+                {brand.domain}
               </button>
             ))}
           </div>
