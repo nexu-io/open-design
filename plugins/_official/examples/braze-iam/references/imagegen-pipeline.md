@@ -1,5 +1,8 @@
 # 오브제 이미지 생성 파이프라인 — codex image_gen 규약 + imagegen 서브에이전트 dispatch 지시
 
+> **dispatch 모델 = Opus 고정** (`model: "opus"` — 사용자 결정 2026-07-13). 이
+> 스킬의 서브에이전트(imagegen·빌더·검수) 전부 동일.
+
 메인 에이전트: 오브제 생성 호출은 **imagegen 서브에이전트에 위임**한다 — 기획안
 `image.assets[]`에서 `source:"generate"`인 에셋 전부를 **한 턴에 병렬 dispatch**
 (에셋 간 스타일 앵커 의존 없음 — cardnews의 표지 선행과 다르다). 실패분만 순차

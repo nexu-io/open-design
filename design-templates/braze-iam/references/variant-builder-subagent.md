@@ -1,5 +1,7 @@
 # Variant 빌더 서브에이전트 — dispatch 지시
 
+> **dispatch 모델 = Opus 고정** (`model: "opus"` — 사용자 결정 2026-07-13).
+
 메인 에이전트: Variant A/B를 **각 1 서브에이전트, 한 턴 병렬 dispatch**로 제작한다.
 메인은 직접 제작하지 않는다. dispatch 도구가 없는 런타임은 인라인 순차로 동일
 절차(산출물 계약 동일). dispatch 프롬프트에 다음 입력을 채워 넣는다:
