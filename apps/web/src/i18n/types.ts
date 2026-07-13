@@ -2788,6 +2788,9 @@ export interface Dict {
   'fileViewer.deployProviderLabel': string;
   'fileViewer.vercelProvider': string;
   'fileViewer.cloudflarePagesProvider': string;
+  'fileViewer.deployTargetLabel': string;
+  'fileViewer.deployTargetPreview': string;
+  'fileViewer.deployTargetProduction': string;
   'fileViewer.deployToProvider': string;
   'fileViewer.redeployToProvider': string;
   'fileViewer.deployingToProvider': string;
