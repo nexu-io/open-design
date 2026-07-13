@@ -99,6 +99,19 @@ function seedPrefersDark(seed: SeedToken): boolean {
   return luminance(parseHex(seed.colorBgBase || "#ffffff")) <= 0.3;
 }
 
+/**
+ * The effective ConfigProvider algorithm for a seed's DEFAULT theme. A
+ * dark-first seed derives its default `tokens.default.json`, `variables.css`,
+ * and `kit.html` with dark palette + neutral math (see `deriveTokens` below),
+ * so the exported `theme.json` must carry `"dark"` to stay consistent with
+ * them — otherwise a ConfigProvider consumer applies the light algorithm to a
+ * dark canvas. Light and ambiguous seeds stay `"default"`. This is the single
+ * shared decision every `theme.json` producer must route through.
+ */
+export function defaultThemeAlgorithm(seed: SeedToken): ThemeAlgorithm {
+  return seedPrefersDark(seed) ? "dark" : "default";
+}
+
 function darkThemeTextBase(input: string | undefined): string {
   const hex = input || "#ffffff";
   return luminance(parseHex(hex)) >= 0.6 ? hex : "#ffffff";

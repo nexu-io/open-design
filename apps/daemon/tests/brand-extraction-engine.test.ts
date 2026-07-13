@@ -225,6 +225,10 @@ describe('agent-driven brand extraction engine', () => {
     expect(system.files['kit.html']).toContain('--brand-color-bg-container: #050505;');
     expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #ffffff;');
     expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #050505;');
+    // The exported ConfigProvider artifact must carry the SAME effective
+    // algorithm as the tokens/CSS/kit above — otherwise a consumer applies the
+    // light algorithm to a dark canvas.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('dark');
   });
 
   it('still falls back to the light default theme when brand neutrals are ambiguous', () => {
@@ -244,6 +248,8 @@ describe('agent-driven brand extraction engine', () => {
     // baseline exactly as before.
     expect(system.themes.default.colorBgContainer).toBe('#ffffff');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
+    // ...and the exported ConfigProvider artifact stays on the light algorithm.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
