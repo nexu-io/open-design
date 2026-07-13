@@ -2004,7 +2004,10 @@ export function SettingsDialog({
   const setByokProvider = (provider: ByokProviderPreset) => {
     const currentDraftKey = byokProviderKeyForConfig(cfg);
     const currentApiConfig = currentApiProtocolConfig(cfg);
-    if ((cfg.apiProviderBaseUrl ?? null) === null) {
+    const currentIsDeploymentCredentialMode =
+      (cfg.apiProtocol ?? 'anthropic') === 'openai' &&
+      cfg.apiCredentialSource === 'deployment';
+    if ((cfg.apiProviderBaseUrl ?? null) === null && !currentIsDeploymentCredentialMode) {
       lastCustomByokProviderDraftKeysRef.current[cfg.apiProtocol ?? 'anthropic'] =
         currentDraftKey;
     }

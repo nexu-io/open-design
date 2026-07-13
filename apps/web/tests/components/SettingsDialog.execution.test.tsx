@@ -700,6 +700,76 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('restores the saved custom OpenAI draft after leaving deployment credentials', async () => {
+    fetchProviderModelsMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [{ id: 'tenant-special-a', label: 'Tenant Special A' }],
+    });
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-custom-openai',
+        baseUrl: 'https://custom-openai.example.test/v1',
+        model: 'custom-model',
+        apiProviderBaseUrl: null,
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-special-a',
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tenant gateway' }));
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom provider' }));
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(
+        'sk-custom-openai',
+      );
+      expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+        'https://custom-openai.example.test/v1',
+      );
+      expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe(
+        'custom-model',
+      );
+    });
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-custom-openai',
+        baseUrl: 'https://custom-openai.example.test/v1',
+        model: 'custom-model',
+        apiProviderBaseUrl: null,
+      }),
+      {},
+    );
+  });
+
   it('does not add stock OpenAI presets to deployment-sourced model lists', async () => {
     fetchProviderModelsMock.mockResolvedValueOnce({
       ok: true,
