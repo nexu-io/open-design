@@ -1028,6 +1028,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 
+  it('offers Atlas Cloud as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('Atlas Cloud');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'qwen/qwen3.5-flash',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://api.atlascloud.ai/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
+    );
+  });
+
   it('keeps Anthropic-compatible gateway presets selectable', () => {
     renderSettingsDialog();
 
@@ -4787,6 +4809,77 @@ describe('IntegrationsView skills tab', () => {
     });
     expect(screen.getByText('sales-deck')).toBeTruthy();
     expect(screen.queryByText('dashboard')).toBeNull();
+  });
+
+  it('updates skill filter counts from the current filter context', async () => {
+    fetchSkillsMock.mockResolvedValue([
+      {
+        id: 'product-image',
+        name: 'product-image',
+        description: 'Product image generation.',
+        mode: 'image',
+        category: 'marketing',
+        previewType: 'PNG',
+        source: 'built-in',
+      },
+      {
+        id: 'document-brief',
+        name: 'document-brief',
+        description: 'Document brief.',
+        mode: 'deck',
+        category: 'documents',
+        previewType: 'HTML',
+        source: 'built-in',
+      },
+      {
+        id: 'landing-page',
+        name: 'landing-page',
+        description: 'Landing page.',
+        mode: 'prototype',
+        category: 'marketing',
+        previewType: 'HTML',
+        source: 'built-in',
+      },
+    ]);
+
+    renderIntegrationsView(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialTab: 'skills' },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('product-image')).toBeTruthy();
+      expect(screen.getByText('document-brief')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Type' }), {
+      target: { value: 'image' },
+    });
+
+    const categorySelect = screen.getByRole('combobox', { name: 'Category' });
+    expect(
+      within(categorySelect).getByRole('option', { name: 'Documents (0)' }),
+    ).toBeTruthy();
+    expect(
+      within(categorySelect).getByRole('option', { name: 'Marketing (1)' }),
+    ).toBeTruthy();
+
+    fireEvent.change(categorySelect, {
+      target: { value: 'documents' },
+    });
+
+    expect(screen.getByText('No items match your search.')).toBeTruthy();
+    expect(
+      within(screen.getByRole('combobox', { name: 'Category' })).getByRole(
+        'option',
+        { name: 'Documents (0)' },
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole('combobox', { name: 'Type' })).getByRole('option', {
+        name: 'image (0)',
+      }),
+    ).toBeTruthy();
   });
 
   it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {

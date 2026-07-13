@@ -309,6 +309,9 @@ export const CHAT_RUN_STATUSES = [
 
 export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
+/** User-facing result delivery, kept separate from agent-process runStatus. */
+export type ResultDeliveryState = 'delivered' | 'no_result' | 'delivery_failed';
+
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
 
 export type ChatMessageFeedbackReasonCode =
@@ -643,6 +646,7 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;
+  resultDeliveryState?: ResultDeliveryState;
   /** True when this message's failed run can be recovered by resuming the
    *  agent's CLI session (transient upstream drop / inactivity on a
    *  session-resuming runtime). Drives the chat's Continue affordance; mirrors

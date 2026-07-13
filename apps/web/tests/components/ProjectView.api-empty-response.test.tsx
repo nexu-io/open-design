@@ -148,7 +148,13 @@ vi.mock('../../src/components/ChatPane', () => ({
     projectHeader?: ReactNode;
   }) => {
     const lastMessage = messages[messages.length - 1];
-    const retryMessage = lastMessage?.role === 'assistant' && lastMessage.runStatus === 'failed'
+    const retryMessage =
+      lastMessage?.role === 'assistant' &&
+      (
+        lastMessage.runStatus === 'failed' ||
+        lastMessage.resultDeliveryState === 'no_result' ||
+        lastMessage.resultDeliveryState === 'delivery_failed'
+      )
       ? lastMessage
       : null;
     return (
@@ -396,7 +402,7 @@ describe('ProjectView API empty response handling', () => {
     });
   });
 
-  it('keeps normal API text completions on the succeeded path', async () => {
+  it('records no_result without downgrading a successful Design run', async () => {
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       const { handlers } = options;
       handlers.onDelta('hello');
@@ -408,9 +414,23 @@ describe('ProjectView API empty response handling', () => {
 
     await waitFor(() => expect(screen.getAllByText('hello').length).toBeGreaterThan(0));
     await waitFor(() => {
-      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+      expect(
+        hasSavedAssistantMessage(
+          (message) =>
+            message.runStatus === 'succeeded' &&
+            message.resultDeliveryState === 'no_result' &&
+            message.events?.some(
+              (event) =>
+                event.kind === 'status' &&
+                event.label === 'error' &&
+                event.code === 'ARTIFACT_NOT_FOUND',
+            ) === true,
+        ),
+      ).toBe(true);
     });
-    expect(screen.queryByText(/provider ended the request/i)).toBeNull();
+    expect(
+      screen.getAllByText(/without producing a deliverable project file/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it('passes attached document paths and preview context to BYOK OpenCode runs', async () => {
@@ -524,7 +544,7 @@ describe('ProjectView API empty response handling', () => {
     expect(view.container.querySelector('.project-instructions-modal-backdrop')).toBeNull();
   });
 
-  it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
+  it('waits for delivery verification before playing the failure sound for a missing result', async () => {
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       const { handlers } = options;
       handlers.onDelta('hello');
@@ -535,9 +555,16 @@ describe('ProjectView API empty response handling', () => {
     await sendTestPrompt();
 
     await waitFor(() => {
-      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+      expect(
+        hasSavedAssistantMessage(
+          (message) =>
+            message.runStatus === 'succeeded' &&
+            message.resultDeliveryState === 'no_result',
+        ),
+      ).toBe(true);
     });
-    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
+    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound'));
+    expect(mockedPlaySound).not.toHaveBeenCalledWith('success-sound');
   });
 
   it('keeps API artifact completions on the succeeded path even when done text is empty', async () => {
@@ -558,8 +585,44 @@ describe('ProjectView API empty response handling', () => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
     });
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
+    expect(mockedPlaySound).not.toHaveBeenCalledWith('failure-sound');
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
+  });
+
+  it('marks a generated artifact as failed when project persistence does not deliver it', async () => {
+    const artifact =
+      '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
+      '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockResolvedValueOnce(null);
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      options.handlers.onDelta(artifact);
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(
+        hasSavedAssistantMessage(
+          (message) =>
+            message.runStatus === 'succeeded' &&
+            message.resultDeliveryState === 'delivery_failed' &&
+            message.events?.some(
+              (event) =>
+                event.kind === 'status' &&
+                event.label === 'error' &&
+                event.code === 'ARTIFACT_NOT_FOUND',
+            ) === true,
+        ),
+      ).toBe(true);
+    });
+    expect(screen.getAllByText(/couldn't save artifact/i).length).toBeGreaterThan(0);
+    await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound'));
+    expect(mockedPlaySound).not.toHaveBeenCalledWith('success-sound');
   });
 
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {

@@ -115,6 +115,7 @@ function migrate(db: SqliteDb): void {
       content TEXT NOT NULL,
       agent_id TEXT,
       agent_name TEXT,
+      result_delivery_state TEXT,
       events_json TEXT,
       attachments_json TEXT,
       produced_files_json TEXT,
@@ -277,6 +278,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'result_delivery_state')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN result_delivery_state TEXT`);
   }
   if (!messageCols.some((c: DbRow) => c.name === 'last_run_event_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
@@ -1390,6 +1394,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -1420,7 +1425,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
-              run_id = ?, run_status = ?, last_run_event_id = ?,
+              run_id = ?, run_status = ?, result_delivery_state = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
@@ -1438,6 +1443,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.agentName ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
+      normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
@@ -1465,8 +1471,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 24 values: id, conversation_id, role, content, agent_id, agent_name,
-    // run_id, run_status, last_run_event_id, events_json, attachments_json,
+    // 25 values: id, conversation_id, role, content, agent_id, agent_name,
+    // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
@@ -1474,12 +1480,12 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
-          run_id, run_status, last_run_event_id, events_json,
+          run_id, run_status, result_delivery_state, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, applied_plugin_snapshot_json,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1489,6 +1495,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.agentName ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
+      normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
@@ -1516,6 +1523,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -1895,6 +1903,7 @@ function normalizeMessage(row: DbRow) {
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
+    resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
     lastRunEventId: row.lastRunEventId ?? undefined,
     events: parseJsonOrUndef(row.eventsJson),
     attachments: parseJsonOrUndef(row.attachmentsJson),
@@ -1914,6 +1923,20 @@ function normalizeMessage(row: DbRow) {
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
   return value === 'chat' || value === 'design' || value === 'plan' ? value : undefined;
+}
+
+function normalizeResultDeliveryState(
+  value: unknown,
+): 'delivered' | 'no_result' | 'delivery_failed' | undefined {
+  return value === 'delivered' || value === 'no_result' || value === 'delivery_failed'
+    ? value
+    : undefined;
+}
+
+function normalizeResultDeliveryStateForStorage(
+  value: unknown,
+): 'delivered' | 'no_result' | 'delivery_failed' | null {
+  return normalizeResultDeliveryState(value) ?? null;
 }
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
