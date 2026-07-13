@@ -1520,7 +1520,7 @@ function DesignSystemExtractionDemo({
   const isLoading = stage === 'extracting-logo' || stage === 'extracting-system';
 
   return (
-    <main className="ds-extraction-demo" aria-live="polite">
+    <main className={`ds-extraction-demo${stage === 'system-review' ? ' ds-extraction-demo--result' : ''}`} aria-live="polite">
       {isLoading ? (
         <section className="ds-extraction-demo__loading">
           <span className="ds-extraction-demo__pulse" aria-hidden="true"><Spinner size={22} /></span>
@@ -1554,30 +1554,39 @@ function DesignSystemExtractionDemo({
       ) : null}
 
       {stage === 'system-review' ? (
-        <section className="ds-extraction-demo__card ds-extraction-demo__card--system">
-          <div className="ds-extraction-demo__success-mark" aria-hidden>✓</div>
-          <p className="ds-extraction-demo__eyebrow">First pass ready</p>
-          <h1>{label} foundations</h1>
-          <p>We used the confirmed logo to extract a focused starting system.</p>
-          <div className="ds-extraction-demo__foundations">
-            <div>
-              <span>Color</span>
-              <i className="is-ink" /><i className="is-signal" /><i className="is-cloud" />
-            </div>
-            <div>
-              <span>Typography</span>
-              <strong>Aa</strong><b>Clean system sans</b>
-            </div>
-            <div>
-              <span>Shape</span>
-              <em>12 px radius</em>
-            </div>
+        <section className="ds-extraction-demo__result-board">
+          <div className="ds-extraction-demo__result-hero">
+            <h1>Brand identity<br />generated</h1>
+            <p>Now everything you create starts on-brand.</p>
+            <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
+            {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
           </div>
-          {canOpenProject ? (
-            <Button variant="ghost" className="ds-extraction-demo__project-link" onClick={onOpenProject}>
-              Open the full project <Icon name="chevron-right" size={14} />
-            </Button>
-          ) : null}
+          <div className="ds-extraction-demo__result-grid">
+            <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
+              <span className="ds-extraction-demo__logo-fallback" aria-hidden>{label.slice(0, 1).toUpperCase()}</span>
+              <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+            </article>
+            <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--about">
+              <p>{label} is now represented by a focused, reusable visual foundation. You can refine every part of it as the work continues.</p>
+            </article>
+            <article className="ds-extraction-demo__result-card">
+              <span>Tagline</span>
+              <strong>“Clear, recognisable, and ready to build from.”</strong>
+            </article>
+            <article className="ds-extraction-demo__result-card">
+              <span>Fonts</span>
+              <div className="ds-extraction-demo__type-sample"><b>Aa Bb Cc</b><b>Aa Bb Cc</b></div>
+              <small>Display serif &nbsp;·&nbsp; Clean sans</small>
+            </article>
+            <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--source">
+              <span>Source</span>
+              <strong>{sourceUrl || label}</strong>
+            </article>
+            <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--colors">
+              <span>Palette</span>
+              <i className="is-ink" /><i className="is-signal" /><i className="is-cloud" />
+            </article>
+          </div>
         </section>
       ) : null}
     </main>

@@ -301,6 +301,174 @@
   margin-top: 18px;
   color: var(--text-muted);
 }
+.ds-extraction-demo--result {
+  width: min(100% - 40px, 940px);
+  padding-top: clamp(92px, 16vh, 160px);
+}
+.ds-extraction-demo__result-board {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(250px, 1.05fr) minmax(0, 2fr);
+  gap: 8px;
+  text-align: left;
+}
+.ds-extraction-demo__result-hero,
+.ds-extraction-demo__result-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-panel);
+}
+.ds-extraction-demo__result-hero {
+  display: flex;
+  min-height: 430px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 28px;
+  text-align: center;
+}
+.ds-extraction-demo__result-hero h1 {
+  font-size: clamp(29px, 3.1vw, 42px);
+}
+.ds-extraction-demo__result-hero p {
+  margin: 12px auto 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.ds-extraction-demo__result-orbit {
+  position: relative;
+  display: grid;
+  width: 150px;
+  height: 150px;
+  place-items: center;
+  margin: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 16px color-mix(in srgb, var(--accent) 5%, transparent), 0 0 0 38px color-mix(in srgb, var(--accent) 3%, transparent);
+}
+.ds-extraction-demo__result-orbit span {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--bg-panel);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+  font-size: 30px;
+}
+.ds-extraction-demo__result-hero button {
+  min-height: 40px;
+}
+.ds-extraction-demo__result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 174px 174px 118px;
+  gap: 8px;
+}
+.ds-extraction-demo__result-card {
+  position: relative;
+  min-width: 0;
+  padding: 22px;
+  overflow: hidden;
+}
+.ds-extraction-demo__result-card > span {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--text-muted);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+}
+.ds-extraction-demo__result-card > strong {
+  display: block;
+  color: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.32;
+}
+.ds-extraction-demo__result-card--logo,
+.ds-extraction-demo__result-card--about {
+  display: grid;
+  place-items: center;
+}
+.ds-extraction-demo__result-card--logo img {
+  position: relative;
+  z-index: 1;
+  max-width: 74%;
+  max-height: 74%;
+  object-fit: contain;
+}
+.ds-extraction-demo__result-card--about p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.ds-extraction-demo__type-sample {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--text-strong);
+  font-size: 22px;
+  line-height: 1;
+}
+.ds-extraction-demo__type-sample b:first-child {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+}
+.ds-extraction-demo__type-sample b:last-child {
+  font-family: var(--sans);
+  font-weight: 500;
+}
+.ds-extraction-demo__result-card small {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ds-extraction-demo__result-card--source,
+.ds-extraction-demo__result-card--colors {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ds-extraction-demo__result-card--source span,
+.ds-extraction-demo__result-card--colors span {
+  margin: 0 4px 0 0;
+  font-size: 13px;
+}
+.ds-extraction-demo__result-card--source strong {
+  overflow: hidden;
+  font-family: var(--sans);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-extraction-demo__result-card--colors i {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+}
+.ds-extraction-demo__result-card--colors .is-ink { background: var(--text-strong); }
+.ds-extraction-demo__result-card--colors .is-signal { background: var(--accent); }
+.ds-extraction-demo__result-card--colors .is-cloud { background: color-mix(in srgb, var(--text-muted) 16%, var(--bg-panel)); }
+@media (max-width: 760px) {
+  .ds-extraction-demo--result {
+    padding-top: 96px;
+  }
+  .ds-extraction-demo__result-board {
+    grid-template-columns: 1fr;
+  }
+  .ds-extraction-demo__result-hero {
+    min-height: 360px;
+  }
+  .ds-extraction-demo__result-grid {
+    grid-template-rows: repeat(3, 152px);
+  }
+}
 @media (max-width: 960px) {
   .ds-setup-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
