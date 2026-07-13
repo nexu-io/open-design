@@ -6,7 +6,11 @@ import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
 const expandedIndexCss = readExpandedIndexCss();
 const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
+
 const artifactsCss = readFileSync(new URL('../../src/styles/workspace/artifacts.css', import.meta.url), 'utf8');
+
+const memoryCss = readFileSync(new URL('../../src/styles/viewer/memory.css', import.meta.url), 'utf8');
+
 
 function cssBlock(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

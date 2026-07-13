@@ -464,7 +464,7 @@
 .library-install-submit:disabled {
   border-color: var(--border-subtle);
   background: var(--bg-subtle);
-  color: var(--text-muted);
+  color: var(--text);
   opacity: 1;
   cursor: not-allowed;
 }
