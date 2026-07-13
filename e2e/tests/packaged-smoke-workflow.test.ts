@@ -343,12 +343,40 @@ describe("packaged smoke workflow", () => {
     expect(dockerTrigger).not.toContain("branches: [main]");
     expect(dockerTrigger).not.toContain("- main");
     expect(commentWorkflow).toContain("workflows: [ci]");
-    expect(commentWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    // comment.atom consumes merge_group runs too, so the needs-validation gate can surface a
+    // queue-ejection notice on the PR; autofix/report stay pull_request-only trusted consumers.
+    expect(commentWorkflow).toContain(
+      "(github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group')",
+    );
     expect(autofixWorkflow).toContain("workflows: [ci]");
     expect(autofixWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).not.toContain("merge_group");
     expect(autofixWorkflow).not.toContain("ci-nix");
     expect(reportWorkflow).toContain("workflows: [ci]");
     expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(reportWorkflow).not.toContain("merge_group");
+  });
+
+  it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
+    const [ciWorkflow, commentWorkflow] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+    ]);
+
+    // Producer: the merge_group gate emits a handoff/comment artifact for the labeled PR when
+    // it blocks, and uploads it on the failure path (the gate exits 1 exactly when it produces).
+    expect(ciWorkflow).toContain("<!-- merge-queue-needs-validation -->");
+    expect(ciWorkflow).toContain("emit_ejection_notice");
+    expect(ciWorkflow).toContain(
+      "if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}",
+    );
+
+    // Consumer: a merge_group run's head_sha is the queue's synthetic merge commit, so the atom
+    // binds merge_group artifacts to their producing run by run_id and skips the base-freshness
+    // check (PRs ahead in the queue move the base while the run completes).
+    expect(commentWorkflow).toContain('"$RUN_EVENT" = "merge_group"');
+    expect(commentWorkflow).toContain('"$artifact_run_id" != "$RUN_ID"');
+    expect(commentWorkflow).toContain('[ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]');
   });
 
   it("[P2] gates the backport auto-merge follow-up as a trusted workflow_run consumer", async () => {
@@ -599,7 +627,6 @@ process.stdin.on("end", () => {
     try {
       await Promise.all([
         mkdir(join(dir, "apps", "web"), { recursive: true }),
-        mkdir(join(dir, "apps", "telemetry-worker"), { recursive: true }),
         mkdir(join(dir, "packages", "platform"), { recursive: true }),
         mkdir(join(dir, "packages", "components"), { recursive: true }),
         mkdir(join(dir, "tools", "dev"), { recursive: true }),
@@ -608,7 +635,6 @@ process.stdin.on("end", () => {
       await Promise.all([
         writeJson("package.json", { name: "root", version: "0.12.0", dependencies: { untouched: "0.12.0" } }),
         writeJson("apps/web/package.json", { name: "@open-design/web", version: "0.12.0" }),
-        writeJson("apps/telemetry-worker/package.json", { name: "telemetry-worker", version: "0.1.0" }),
         writeJson("packages/platform/package.json", { name: "@open-design/platform", version: "0.12.0" }),
         writeJson("packages/components/package.json", { name: "@open-design/components", version: "0.5.0" }),
         writeJson("tools/dev/package.json", { name: "@open-design/dev", version: "0.12.0" }),
@@ -636,9 +662,6 @@ process.stdin.on("end", () => {
       });
       await expect(readFile(join(dir, "e2e", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.12.1",
-      });
-      await expect(readFile(join(dir, "apps", "telemetry-worker", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
-        version: "0.1.0",
       });
       await expect(readFile(join(dir, "packages", "components", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.5.0",
@@ -1265,6 +1288,38 @@ process.stdin.on("end", () => {
 
     expect(prereleaseWorkflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
+  });
+
+  it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {
+    const workflows = await Promise.all([
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releasePreviewWorkflowPath, "utf8"),
+      readFile(releaseStableWorkflowPath, "utf8"),
+    ]);
+
+    for (const workflow of workflows) {
+      expect(workflow).toContain("tools-release prepare-release-note");
+      expect(workflow).toContain("tools-release publish-release-note");
+      expect(workflow).toContain("tools-release verify-release-note");
+      expect(workflow).toContain("RELEASE_NOTE_MANIFEST_PATH:");
+      expect(workflow.indexOf("tools-release prepare-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release publish-release-note"),
+      );
+      expect(workflow.indexOf("tools-release publish-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release verify-release-note"),
+      );
+      expect(workflow.indexOf("tools-release verify-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release publish-metadata"),
+      );
+    }
+
+    const stableWorkflow = workflows[4] ?? "";
+    expect(stableWorkflow).toContain("Validate stable release note policy");
+    expect(stableWorkflow).toContain(
+      "RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}",
+    );
   });
 
   it("[P2] requires stable release dispatch to use the release version branch", async () => {

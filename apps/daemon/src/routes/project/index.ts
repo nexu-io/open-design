@@ -56,6 +56,7 @@ import {
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
+import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation'> {}
 
@@ -1423,8 +1424,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   function projectStatusFromRun(run: any) {
+    const normalized = normalizeProjectDisplayStatus(run.status);
+    // A just-finished in-memory run overrides the DB-derived status for its
+    // project (it is newer), so it must carry the same incomplete signal the
+    // persisted projection derives — otherwise the pill flashes "Completed" for
+    // the ~30 min the run stays in memory before the DB-derived `incomplete`
+    // takes over (#1247 / #1060). run.endedWithUnfinishedWork is set at finish().
+    const value =
+      normalized === 'succeeded' && run.endedWithUnfinishedWork ? 'incomplete' : normalized;
     return {
-      value: normalizeProjectDisplayStatus(run.status),
+      value,
       updatedAt: run.updatedAt,
       runId: run.id,
     };
@@ -2177,6 +2186,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      // Stop any live agent run in this project before its row and directory
+      // are removed, otherwise the CLI subprocess is orphaned — it keeps
+      // billing and writes into a directory that no longer exists (#5468).
+      await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */

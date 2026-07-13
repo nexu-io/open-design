@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@open-design/components';
-import { useI18n, useT } from '../i18n';
+import { useI18n, useT, type Locale } from '../i18n';
 import {
   localizeSkillDescription,
   localizeSkillName,
@@ -78,6 +78,14 @@ function parseTriggers(raw: string): string[] {
     .filter(Boolean);
 }
 
+function skillMatchesSearch(skill: SkillSummary, q: string, locale: Locale): boolean {
+  if (!q) return true;
+  const hay = `${skill.name}\n${localizeSkillName(locale, skill)}\n${skill.description}\n${localizeSkillDescription(locale, skill)}\n${(skill.triggers ?? []).join(
+    ' ',
+  )}\n${skill.category ?? ''}`;
+  return hay.toLowerCase().includes(q);
+}
+
 export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }: Props) {
   const { locale, t } = useI18n();
 
@@ -140,42 +148,94 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
     [cfg.disabledSkills],
   );
 
+  const searchQuery = search.toLowerCase().trim();
+
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<SourceFilter, number>([
+      ['all', 0],
+      ['user', 0],
+      ['built-in', 0],
+    ]);
+    for (const s of skills) {
+      if (modeFilter !== 'all' && s.mode !== modeFilter) continue;
+      if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
+      counts.set('all', (counts.get('all') ?? 0) + 1);
+      if (s.source === 'user' || s.source === 'built-in') {
+        counts.set(s.source, (counts.get(s.source) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [skills, modeFilter, categoryFilter, searchQuery, locale]);
+
   const modeOptions = useMemo(() => {
+    const modes = new Set(skills.map((s) => s.mode));
     const counts = new Map<string, number>();
     for (const s of skills) {
+      if (sourceFilter !== 'all' && s.source !== sourceFilter) continue;
+      if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
       counts.set(s.mode, (counts.get(s.mode) ?? 0) + 1);
     }
-    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [skills]);
+    return Array.from(modes, (mode) => [mode, counts.get(mode) ?? 0] as const).sort(
+      (a, b) => a[0].localeCompare(b[0]),
+    );
+  }, [skills, sourceFilter, categoryFilter, searchQuery, locale]);
+
+  const modeAllCount = useMemo(
+    () =>
+      skills.filter((s) => {
+        if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+        if (categoryFilter !== 'all' && s.category !== categoryFilter)
+          return false;
+        return skillMatchesSearch(s, searchQuery, locale);
+      }).length,
+    [skills, sourceFilter, categoryFilter, searchQuery, locale],
+  );
 
   // Categories are optional per-skill metadata (`od.category` in the
   // SKILL.md frontmatter). The pill row only renders when at least one
   // skill in the listing carries one, so a project that ships only the
   // baseline functional skills doesn't see an empty filter row.
   const categoryOptions = useMemo(() => {
+    const categories = new Set(
+      skills
+        .map((s) => s.category)
+        .filter((cat): cat is string => typeof cat === 'string' && cat.length > 0),
+    );
     const counts = new Map<string, number>();
     for (const s of skills) {
       const cat = s.category;
       if (typeof cat !== 'string' || !cat) continue;
+      if (modeFilter !== 'all' && s.mode !== modeFilter) continue;
+      if (sourceFilter !== 'all' && s.source !== sourceFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
       counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
-    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [skills]);
+    return Array.from(categories, (cat) => [cat, counts.get(cat) ?? 0] as const).sort(
+      (a, b) => a[0].localeCompare(b[0]),
+    );
+  }, [skills, modeFilter, sourceFilter, searchQuery, locale]);
+
+  const categoryAllCount = useMemo(
+    () =>
+      skills.filter((s) => {
+        if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
+        if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+        return skillMatchesSearch(s, searchQuery, locale);
+      }).length,
+    [skills, modeFilter, sourceFilter, searchQuery, locale],
+  );
 
   const filteredSkills = useMemo(() => {
-    const q = search.toLowerCase().trim();
     return skills.filter((s) => {
       if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
       if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
       if (categoryFilter !== 'all' && s.category !== categoryFilter)
         return false;
-      if (!q) return true;
-      const hay = `${s.name}\n${localizeSkillName(locale, s)}\n${s.description}\n${localizeSkillDescription(locale, s)}\n${(s.triggers ?? []).join(
-        ' ',
-      )}\n${s.category ?? ''}`;
-      return hay.toLowerCase().includes(q);
+      return skillMatchesSearch(s, searchQuery, locale);
     });
-  }, [skills, modeFilter, sourceFilter, categoryFilter, search, locale]);
+  }, [skills, modeFilter, sourceFilter, categoryFilter, searchQuery, locale]);
 
   const ensureBody = useCallback(
     async (id: string) => {
@@ -408,10 +468,10 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
               onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
             >
               <option value="all">
-                {t('settings.libraryAll')} ({skills.length})
+                {t('settings.libraryAll')} ({sourceCounts.get('all') ?? 0})
               </option>
               {(['user', 'built-in'] as const).map((s) => {
-                const count = skills.filter((sk) => sk.source === s).length;
+                const count = sourceCounts.get(s) ?? 0;
                 return (
                   <option key={s} value={s}>
                     {s} ({count})
@@ -428,7 +488,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
               onChange={(e) => setModeFilter(e.target.value)}
             >
               <option value="all">
-                {t('settings.libraryAll')} ({skills.length})
+                {t('settings.libraryAll')} ({modeAllCount})
               </option>
               {modeOptions.map(([mode, count]) => (
                 <option key={mode} value={mode}>
@@ -449,7 +509,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
                 onChange={(e) => setCategoryFilter(e.target.value)}
               >
                 <option value="all">
-                  {t('settings.libraryAll')} ({skills.length})
+                  {t('settings.libraryAll')} ({categoryAllCount})
                 </option>
                 {categoryOptions.map(([cat, count]) => (
                   <option key={cat} value={cat}>

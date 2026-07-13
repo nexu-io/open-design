@@ -839,6 +839,8 @@ test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin
   assert.deepEqual(args, [
     '--prompt-file',
     promptFilePath,
+    '--no-plan',
+    '--always-approve',
     '--model',
     'grok-4.3',
   ]);
@@ -847,6 +849,13 @@ test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin
   assert.equal(args.includes('-p'), false);
   assert.equal(args.includes('--single'), false);
   assert.equal(args.filter((entry) => entry === '--prompt-file').length, 1);
+});
+
+test('grok-build disables plan mode and auto-approves headless tool calls (issue #5507)', () => {
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const args = grokBuild.buildArgs('', [], [], { model: 'grok-build' }, { promptFilePath });
+
+  assert.deepEqual(args.slice(2, 4), ['--no-plan', '--always-approve']);
 });
 
 test('grok-build omits effort for default/build models but keeps it for reasoning models', () => {
@@ -861,6 +870,8 @@ test('grok-build omits effort for default/build models but keeps it for reasonin
   assert.deepEqual(reasoningArgs, [
     '--prompt-file',
     promptFilePath,
+    '--no-plan',
+    '--always-approve',
     '--model',
     'grok-4.20-reasoning',
     '--effort',

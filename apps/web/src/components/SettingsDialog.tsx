@@ -2709,7 +2709,7 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
-  const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
+  const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
     {
       id: 'anthropic',
@@ -2724,6 +2724,13 @@ export function SettingsDialog({
       protocol: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
+    },
+    {
+      id: 'atlascloud',
+      title: 'Atlas Cloud',
+      protocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
     },
     {
       id: 'google-ai-studio',
@@ -3194,6 +3201,8 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiKeyConsoleLink =
+    selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
@@ -3301,8 +3310,14 @@ export function SettingsDialog({
     ),
     [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
   );
+  const providerModelDiscoveryUnavailable =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
   const fetchedApiModelOptions =
-    activeProviderModelsCache[providerModelsKey] ?? [];
+    providerModelDiscoveryUnavailable
+      ? []
+      : activeProviderModelsCache[providerModelsKey] ?? [];
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3450,12 +3465,19 @@ export function SettingsDialog({
       )
       : null;
   const suggestedApiModelIds = useMemo(
-    () => Array.from(new Set(
-      selectedProvider?.models?.length
-        ? selectedProvider.models
-        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    )),
-    [apiProtocol, selectedProvider],
+    () => {
+      if (providerModelDiscoveryUnavailable) {
+        return selectedProvider?.models?.length
+          ? Array.from(new Set(selectedProvider.models))
+          : [];
+      }
+      return Array.from(new Set(
+        selectedProvider?.models?.length
+          ? selectedProvider.models
+          : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+      ));
+    },
+    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(

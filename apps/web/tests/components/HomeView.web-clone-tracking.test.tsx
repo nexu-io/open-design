@@ -123,11 +123,10 @@ describe('web-clone example-card tracking', () => {
   });
 
   // Contract lock: the shipped Website-clone example set is intentionally
-  // narrowed to two first-party / partner sites (open-design.ai, kimi.com) to
-  // avoid shipping third-party brand copies (legal review, PR #5178). Assert the
-  // exact count + domains so the rail can't silently drift back to the old
-  // 7-site set or lose a card without updating this contract.
-  it('resolves exactly the two contracted Website-clone site cards (open-design.ai, kimi.com)', async () => {
+  // narrowed to the first-party Open Design site to avoid shipping third-party
+  // brand copies. Assert the exact count + domain so the rail can't silently
+  // drift back to the old multi-site set without updating this contract.
+  it('resolves exactly the contracted Open Design Website-clone site card', async () => {
     writeHomeGuideStage('done');
     stubPlugins();
     renderHome();
@@ -135,7 +134,7 @@ describe('web-clone example-card tracking', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-web-clone'));
     const siteCards = await screen.findAllByTestId('home-hero-prompt-example');
     const domains = siteCards.map((c) => (c.textContent ?? '').trim());
-    expect(domains).toEqual(['open-design.ai', 'kimi.com']);
+    expect(domains).toEqual(['open-design.ai']);
     // Every card must be the site variant (favicon tile + bare domain).
     expect(
       siteCards.every((c) => c.classList.contains('home-hero__prompt-example--site')),

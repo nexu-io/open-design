@@ -325,6 +325,15 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('## Media generation contract');
   });
 
+  it('pins the data chart discipline inside the deck framework (#907)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Data chart discipline');
+    expect(prompt).toContain('calc(var(--v) / var(--max)');
+    expect(prompt).toContain('visible category label AND value label');
+    expect(prompt).toContain('Mentally spot-check two bars');
+  });
+
   it('resolves a non-media primary surface ahead of composed media mentions', () => {
     expect(resolveExclusiveSurface({
       skillMode: 'deck',

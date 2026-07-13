@@ -528,7 +528,8 @@
 .design-card-status-running {
   color: var(--accent);
 }
-.design-card-status-awaiting_input {
+.design-card-status-awaiting_input,
+.design-card-status-incomplete {
   color: var(--amber);
 }
 .design-card-status-queued,

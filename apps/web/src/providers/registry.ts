@@ -71,6 +71,7 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
+import { GENERIC_DEPLOY_ENVELOPE_CODES } from '../analytics/deploy-error-code';
 import {
   isOpenDesignHostAvailable,
   openHostExternalUrl,
@@ -1378,9 +1379,19 @@ export async function deployProjectFile(
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string }; message?: string }
+      | { error?: { message?: string; code?: string }; code?: string; message?: string }
       | null;
-    throw new Error(payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`);
+    const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
+    // Preserve a queryable failure code for analytics (`deployErrorCode` reads
+    // `.code` first). The daemon deploy route (apps/daemon/src/routes/deploy.ts)
+    // collapses every non-404 failure's code to a generic `BAD_REQUEST` (and 404
+    // to `FILE_NOT_FOUND`) while keeping the REAL provider HTTP status on the
+    // response and the real message in the body — so ignore those envelope codes
+    // and fall back to `HTTP_${resp.status}`, which then buckets as HTTP_403 /
+    // HTTP_429 / HTTP_500 instead of collapsing every failure into one code.
+    const rawCode = payload?.error?.code || payload?.code;
+    const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
+    throw Object.assign(new Error(message), { code });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
 }

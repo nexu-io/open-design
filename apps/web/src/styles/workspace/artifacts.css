@@ -503,15 +503,23 @@
 .settings-about-silent-updates {
   align-items: center;
 }
-.settings-about-toggle {
+.settings-about-diagnostics > .settings-about-toggle {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
 }
 .settings-about-toggle input {
-  flex: 0 0 auto;
-  margin-top: 2px;
+  appearance: auto;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  accent-color: var(--accent);
+  margin: 2px 0 0;
 }
 .settings-about-toggle-copy {
   display: flex;

@@ -87,6 +87,20 @@ describe('classifyStartupFailure', () => {
   it('falls back to unknown for an unrecognized error', () => {
     expect(classifyStartupFailure(new Error('boom'), false).failureKind).toBe('unknown');
   });
+
+  it('classifies a status-wait timeout as status-timeout, not unknown', () => {
+    // waitForStatus throws this when the budget expires with the child still
+    // ALIVE (the win32 first-launch AV-scan case) — the pipe never bound in
+    // time, so there is no exit code, signal, or daemon log to read. Splitting
+    // it out of `unknown` is what makes the win32 budget-raise measurable.
+    const winPipe =
+      'timed out waiting for sidecar status at \\\\.\\pipe\\open-design-release-stable-win-daemon (connect ENOENT \\\\.\\pipe\\open-design-release-stable-win-daemon)';
+    const c = classifyStartupFailure(new Error(winPipe), false);
+    expect(c.failureKind).toBe('status-timeout');
+    expect(c.exitCode).toBeNull();
+    expect(c.signal).toBeNull();
+    expect(c.logPath).toBeNull();
+  });
 });
 
 describe('scrubUserPaths', () => {

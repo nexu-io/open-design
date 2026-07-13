@@ -86,6 +86,7 @@ export type StartupFailureKind =
   | "daemon-start"
   | "web-start"
   | "path-access"
+  | "status-timeout"
   | "unknown";
 
 export interface StartupFailureClassification {
@@ -102,6 +103,12 @@ export interface StartupFailureClassification {
 const EXIT_RE =
   /exited before reporting status \(code=(.*?), signal=(.*?)\); see (.*?) for details/;
 
+// `waitForStatus` (apps/packaged/src/sidecars.ts) throws this when the wait
+// budget expires with the child still ALIVE — the daemon/web pipe never bound in
+// time (the win32 first-launch AV-scan case), as opposed to EXIT_RE's dead
+// child. There is no daemon log path in this message, so no log tail is read.
+const STATUS_TIMEOUT_RE = /^timed out waiting for sidecar status at /;
+
 export function classifyStartupFailure(
   error: unknown,
   isPathAccess: boolean,
@@ -112,6 +119,12 @@ export function classifyStartupFailure(
   const message = error instanceof Error ? error.message : String(error ?? "");
   const match = EXIT_RE.exec(message);
   if (!match) {
+    // Distinguish a slow-but-alive sidecar (budget exhausted) from a truly
+    // opaque failure so the status-timeout bucket is measurable on its own —
+    // it is the signal for whether the win32 budget raise drained these.
+    if (STATUS_TIMEOUT_RE.test(message)) {
+      return { failureKind: "status-timeout", exitCode: null, signal: null, logPath: null };
+    }
     return { failureKind: "unknown", exitCode: null, signal: null, logPath: null };
   }
   const rawCode = match[1];

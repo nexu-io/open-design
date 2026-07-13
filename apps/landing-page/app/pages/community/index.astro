@@ -21,6 +21,16 @@ const cardHrefs = [
   href('/community/contributors/'),
   href('/community/ambassadors/'),
   href('/community/moderators/'),
+  href('/community/events/'),
+];
+const hubCards = [
+  ...t.cards,
+  {
+    ord: 'IV',
+    title: 'Events',
+    sub: 'Local rooms where <em>Open Design</em> becomes practical.',
+    body: 'Browse community events: read the Osaka recap, then see upcoming hands-on sessions like the Shanghai AI workshop.',
+  },
 ];
 
 const jsonLd = {
@@ -54,7 +64,7 @@ const jsonLd = {
 
       <div class="wrap">
         <div class="hub-cards">
-          {t.cards.map((card, i) => (
+          {hubCards.map((card, i) => (
             <a class="hub-card" href={cardHrefs[i]}>
               <span class="ord">{card.ord}</span>
               <h3>{card.title}</h3>

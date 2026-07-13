@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
+import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   renderConnectedExternalMcpDirective,
@@ -68,7 +69,7 @@ import {
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
-} from './browser-use-diagnostics.js';
+} from './browser/index.js';
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -412,7 +413,7 @@ import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './p
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { openBrowser } from './browser-open.js';
+import { openBrowser } from './browser/index.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -1157,6 +1158,38 @@ export function createAgentRuntimeToolPrompt(
   ].join('\n');
 }
 
+export function createOpenDesignToolEnv({
+  daemonUrl,
+  projectDir,
+  projectId,
+}: {
+  daemonUrl: string;
+  projectDir?: string | null;
+  projectId?: string | null;
+}): NodeJS.ProcessEnv {
+  return {
+    OD_BIN,
+    OD_DATA_DIR: RUNTIME_DATA_DIR,
+    OD_NODE_BIN,
+    OD_DAEMON_URL: daemonUrl,
+    ...(typeof projectId === 'string' && projectId && projectDir
+      ? {
+          OD_PROJECT_ID: projectId,
+          OD_PROJECT_DIR: projectDir,
+        }
+      : {}),
+  };
+}
+
+export function createDaemonDataDirConfiguredAgentEnv(
+  configuredAgentEnv: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    ...configuredAgentEnv,
+    OD_DATA_DIR: RUNTIME_DATA_DIR,
+  };
+}
+
 export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
 }
@@ -1180,6 +1213,27 @@ export function composeProjectDisplayStatus(
 
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
+
+// Fold per-run work-completeness signals off the agent event stream (#1247 /
+// #1060). Invoked for EVERY agent event via the single emitAgentEvent choke
+// point, so it covers every runtime (Claude stream, qoder, pi-rpc, ACP, …), not
+// just Claude:
+//   - the most recent TodoWrite snapshot's `todos` become run.lastTodoSnapshot,
+//     so finish() can judge whether declared work was left unfinished;
+//   - a turn-terminal event cut off by max_tokens sets run.truncatedMidTurn, so
+//     a truncated generation is flagged incomplete regardless of its todos.
+// Never keys off a mid-turn `tool_use` pause — only turn_end / usage terminals.
+function captureRunWorkCompletenessSignals(run, ev) {
+  if (!run || !ev || typeof ev !== 'object') return;
+  if (ev.type === 'tool_use' && isTodoWriteToolName(ev.name)) {
+    const todos = todoItemsFromTodoWriteInput(ev.input);
+    if (Array.isArray(todos)) run.lastTodoSnapshot = todos;
+    return;
+  }
+  if ((ev.type === 'turn_end' || ev.type === 'usage') && stopReasonIsTruncation(ev.stopReason)) {
+    run.truncatedMidTurn = true;
+  }
+}
 
 function fileNameFromToolInputPath(value) {
   if (typeof value !== 'string') return null;
@@ -5033,20 +5087,34 @@ export async function startServer({
     // drive a second close-handler pass that finalizes the run as failed before
     // the retry ever spawns.
     const tearDownAttemptForRetry = () => {
+      // Snapshot the failing attempt's child + process group BEFORE we detach
+      // them, so the reap targets THIS attempt's group and never the next one.
+      const priorChild = run.child;
+      const priorProcessGroupId = run.processGroupId;
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
-      destroyChildStdio(run.child);
+      destroyChildStdio(priorChild);
+      // Disband the WHOLE process group of the failed attempt, not just the
+      // direct child. A same-run retry that only SIGTERMs run.child leaves the
+      // CLI's spawned descendants (MCP servers, tool subprocesses) orphaned
+      // (re-parented to PID 1), accumulating one leaked group per retry. Reap by
+      // the CAPTURED pgid — the SIGKILL escalation is bound to it, so it can
+      // never hit the next attempt's group (the cross-generation kill fixed in
+      // #5202). On win32 / no pgid, fall back to signalling the direct child.
+      const reaped = design.runs.reapProcessGroup(priorProcessGroupId);
       if (
-        run.child &&
-        typeof run.child.kill === 'function' &&
-        run.child.exitCode === null &&
-        !run.child.killed
+        !reaped &&
+        priorChild &&
+        typeof priorChild.kill === 'function' &&
+        priorChild.exitCode === null &&
+        !priorChild.killed
       ) {
-        try { run.child.kill('SIGTERM'); } catch {}
+        try { priorChild.kill('SIGTERM'); } catch {}
       }
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
+      run.processGroupId = null;
       run.acpSession = null;
       run.exitCode = null;
       run.signal = null;
@@ -6052,6 +6120,7 @@ export async function startServer({
           OD_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
         }
       : {};
+    const configuredAgentSpawnEnv = createDaemonDataDirConfiguredAgentEnv(configuredAgentEnv);
     const agentSpawnEnv = spawnEnvForAgent(
       def.id,
       {
@@ -6059,12 +6128,12 @@ export async function startServer({
         ...(def.env || {}),
         ...browserUseRuntimeEnv,
       },
-      configuredAgentEnv,
+      configuredAgentSpawnEnv,
       undefined,
       { resolvedBin: agentLaunch.selectedPath },
     );
     if (def.id === 'amr') {
-      const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
+      const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentSpawnEnv);
       if (!loginStatus.loggedIn) {
         cleanupPromptFile();
         revokeToolToken('child_exit');
@@ -6077,17 +6146,11 @@ export async function startServer({
         return design.runs.finish(run, 'failed', 1, null);
       }
     }
-    const odMediaEnv = {
-      OD_BIN,
-      OD_NODE_BIN,
-      OD_DAEMON_URL: daemonUrl,
-      ...(typeof projectId === 'string' && projectId && cwd
-        ? {
-            OD_PROJECT_ID: projectId,
-            OD_PROJECT_DIR: cwd,
-          }
-        : {}),
-    };
+    const odMediaEnv = createOpenDesignToolEnv({
+      daemonUrl,
+      projectDir: cwd,
+      projectId: typeof projectId === 'string' ? projectId : null,
+    });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
       revokeToolToken('child_exit');
@@ -6754,6 +6817,10 @@ export async function startServer({
     // follows the result that triggered it in the stream. (PR #3375 review:
     // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
     function emitAgentEvent(ev: any) {
+      // Fold work-completeness signals (TodoWrite snapshot / truncation) off the
+      // stream BEFORE the send, so run.lastTodoSnapshot / run.truncatedMidTurn are
+      // set by the time finish() derives run.endedWithUnfinishedWork (#1247/#1060).
+      captureRunWorkCompletenessSignals(run, ev);
       send('agent', ev);
       observeToolEventForLoop(ev);
     }
@@ -7311,7 +7378,7 @@ export async function startServer({
         markRpcCloseReason('empty_output');
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.',
           { retryable: true },
         ));
         return finishWithRetryDecision('failed', code, signal);

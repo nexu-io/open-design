@@ -181,6 +181,34 @@ async function emitRun(promptText) {
     await emitPlanDocumentRun();
     return;
   }
+  // Work-completeness fixtures (#1247 / #1060): drive a Claude run that ends its
+  // turn while its TodoWrite plan still has unfinished tasks (or is truncated by
+  // max_tokens), so tests can assert the run reports endedWithUnfinishedWork.
+  if (promptText.includes('Emit an unfinished-todo run')) {
+    emitClaudeTodoRun([
+      { content: 'Draft layout', status: 'completed' },
+      { content: 'Build components', status: 'in_progress' },
+      { content: 'Run QA', status: 'pending' },
+    ], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Emit a stopped-todo run')) {
+    emitClaudeTodoRun([{ content: 'Build components', status: 'stopped' }], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Emit a max-tokens truncated run')) {
+    // All todos look done, but the turn was cut off — truncation alone must flag
+    // the run incomplete.
+    emitClaudeTodoRun([{ content: 'Draft layout', status: 'completed' }], 'max_tokens');
+    return;
+  }
+  if (promptText.includes('Emit an all-completed-todo run')) {
+    emitClaudeTodoRun([
+      { content: 'Draft layout', status: 'completed' },
+      { content: 'Build components', status: 'completed' },
+    ], 'end_turn');
+    return;
+  }
   if (promptText.includes('Edit the existing deterministic smoke artifact')) {
     await emitExistingArtifactEditRun(promptText);
     return;
@@ -330,6 +358,32 @@ function writeJson(value) {
 
 function exitSoon(code) {
   setTimeout(() => process.exit(code), 10);
+}
+
+// Emit a Claude stream-json turn that carries a TodoWrite tool_use snapshot and
+// a chosen terminal stop_reason. The turn ends cleanly (exit 0 -> succeeded), but
+// its declared work is left in whatever state the todos describe — the fixture the
+// #1247 / #1060 completeness tests drive. Only the claude runtime models a
+// content-level tool_use + per-turn stop_reason, so these fixtures use it.
+function emitClaudeTodoRun(todos, stopReason) {
+  if (agentId !== 'claude') {
+    throw new Error('emitClaudeTodoRun fixtures require the claude fake runtime, got ' + agentId);
+  }
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-1',
+      stop_reason: stopReason,
+      content: [
+        { type: 'tool_use', id: 'tw-1', name: 'TodoWrite', input: { todos } },
+        { type: 'text', text: 'Here is the plan.' },
+      ],
+    },
+  });
+  writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: stopReason });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 function emitSuccess(artifact, isChunked, includeThinking) {

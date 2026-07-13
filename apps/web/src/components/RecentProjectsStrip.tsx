@@ -257,7 +257,12 @@ export function RecentProjectsStrip({
           const publishedDesignSystem = isPublishedDesignSystemProject(project, designSystems);
           const isActive =
             !publishedDesignSystem &&
-            (status === 'running' || status === 'queued' || status === 'awaiting_input');
+            (status === 'running' ||
+              status === 'queued' ||
+              status === 'awaiting_input' ||
+              // Incomplete is terminal but needs attention; show the status dot so
+              // it reads as "not done", not a static success pill (#1247 / #1060).
+              status === 'incomplete');
           return (
             <div
               key={project.id}

@@ -70,7 +70,6 @@ const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
   { href: '/solutions/design-to-code/', key: 'designToCode' },
   { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
   { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
-  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
 ];
 
 // Agent column — the coding agents with a dedicated long-form design page
@@ -459,7 +458,7 @@ export function Header({
               </ul>
             </li>
 
-            {/* Community — Contributors / Ambassadors / Moderators. These
+            {/* Community — Contributors / Ambassadors / Moderators / Events. These
                 pages are now localized Astro routes, so link through `href()`
                 to keep visitors on their language variant. */}
             <li className='has-dropdown'>
@@ -490,6 +489,11 @@ export function Header({
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.moderators}
                     </span>
+                  </a>
+                </li>
+                <li>
+                  <a href={href('/community/events/')}>
+                    <span className='dropdown-name'>Events</span>
                   </a>
                 </li>
                 <li>

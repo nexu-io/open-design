@@ -2110,6 +2110,7 @@ export interface Dict {
   'designs.status.queued': string;
   'designs.status.running': string;
   'designs.status.awaitingInput': string;
+  'designs.status.incomplete': string;
   'designs.status.succeeded': string;
   'designs.status.failed': string;
   'designs.status.canceled': string;
@@ -2486,6 +2487,10 @@ export interface Dict {
   'chat.runError.title.outputInvalid': string;
   'chat.runError.title.runtimeConfig': string;
   'chat.runError.title.quotaExhausted': string;
+  'chat.runError.title.timedOut': string;
+  'chat.runError.title.emptyOutput': string;
+  'chat.runError.title.sessionExpired': string;
+  'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.generic': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
@@ -2499,6 +2504,11 @@ export interface Dict {
   'chat.runError.runtimeConfigMessage': string;
   'chat.runError.quotaExhaustedMessage': string;
   'chat.runError.workspaceCreditsMessage': string;
+  'chat.runError.timedOutMessage': string;
+  'chat.runError.inactivityTimeoutMessage': string;
+  'chat.runError.emptyOutputMessage': string;
+  'chat.runError.sessionExpiredMessage': string;
+  'chat.runError.gitBashMissingMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;

@@ -39,6 +39,7 @@ const href = (path: string) => localizedHref(path, locale);
 const tutorials = (await getCollection('tutorials')).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime(),
 );
+const videoTutorials = tutorials.filter((entry) => entry.id !== 'open-design-ai-ppt-tutorial');
 
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
@@ -110,9 +111,13 @@ const localizedTutorial = (entry: (typeof tutorials)[number]) => {
 };
 
 const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+const tutorialThumb = (entry: (typeof tutorials)[number]) =>
+  entry.data.thumbnail ?? (entry.data.youtubeId ? ytThumb(entry.data.youtubeId) : '/tutorials/open-design-ai-ppt-tutorial-cover.webp');
+const tutorialCta = (entry: (typeof tutorials)[number]) =>
+  entry.data.youtubeId ? ui.tutorials.watchCta : 'Read ->';
 
-const featuredTutorial = tutorials[0];
-const cardTutorials = tutorials.slice(1);
+const featuredTutorial = videoTutorials[0];
+const cardTutorials = videoTutorials.slice(1);
 const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : undefined;
 ---
 
@@ -145,6 +150,34 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
           </div>
         </section>
 
+        <section class='tut-written-entry'>
+          <div class='container'>
+            <a class='tut-written-card' href='/tutorials/open-design-ai-ppt-tutorial/'>
+              <span class='tut-written-media'>
+                <video
+                  src='/tutorials/open-design-ai-ppt-motion-demo.mp4'
+                  poster='/tutorials/open-design-ai-ppt-tutorial-cover.webp'
+                  autoplay
+                  muted
+                  loop
+                  playsinline
+                  preload='metadata'
+                  aria-label='Open Design AI PPT tutorial preview'
+                />
+              </span>
+              <span class='tut-written-copy'>
+                <span class='tut-written-label'>Written workshop</span>
+                <strong>Create an AI-powered PPT with Open Design</strong>
+                <span>
+                  A copy-ready text tutorial for turning raw notes into an editable deck, then
+                  refining it with assets, charts, motion, comments, and final QA.
+                </span>
+              </span>
+              <span class='tut-written-cta'>Read tutorial -></span>
+            </a>
+          </div>
+        </section>
+
         {
           featuredTutorial && featuredCopy && (
             <section
@@ -160,14 +193,16 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
                 >
                   <span class='tut-feature-thumb'>
                     <img
-                      src={featuredTutorial.data.thumbnail ?? ytThumb(featuredTutorial.data.youtubeId)}
+                      src={tutorialThumb(featuredTutorial)}
                       alt={ui.tutorials.thumbnailAlt(featuredCopy.title)}
                       loading='eager'
                     />
-                    <span class='tut-play' aria-hidden='true'>▶</span>
-                    <span class='tut-duration-pill'>
-                      {fmtDuration(featuredTutorial.data.durationSeconds)}
-                    </span>
+                    {featuredTutorial.data.youtubeId && <span class='tut-play' aria-hidden='true'>▶</span>}
+                    {featuredTutorial.data.durationSeconds && (
+                      <span class='tut-duration-pill'>
+                        {fmtDuration(featuredTutorial.data.durationSeconds)}
+                      </span>
+                    )}
                   </span>
                   <span class='tut-feature-copy'>
                     <span class='tut-card-cat'>
@@ -182,7 +217,7 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
                       <span>{featuredTutorial.data.author}</span>
                       <span>·</span>
                       <span>{fmtDate(featuredTutorial.data.date)}</span>
-                      <span class='tut-feature-cta'>{ui.tutorials.watchCta}</span>
+                      <span class='tut-feature-cta'>{tutorialCta(featuredTutorial)}</span>
                     </span>
                   </span>
                 </a>
@@ -234,14 +269,16 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
                         >
                           <span class='tut-card-thumb'>
                             <img
-                              src={entry.data.thumbnail ?? ytThumb(entry.data.youtubeId)}
+                              src={tutorialThumb(entry)}
                               alt={ui.tutorials.thumbnailAlt(copy.title)}
                               loading='lazy'
                             />
-                            <span class='tut-play' aria-hidden='true'>▶</span>
-                            <span class='tut-duration-pill'>
-                              {fmtDuration(entry.data.durationSeconds)}
-                            </span>
+                            {entry.data.youtubeId && <span class='tut-play' aria-hidden='true'>▶</span>}
+                            {entry.data.durationSeconds && (
+                              <span class='tut-duration-pill'>
+                                {fmtDuration(entry.data.durationSeconds)}
+                              </span>
+                            )}
                           </span>
                           <span class='tut-card-body'>
                             <span class='tut-card-cat'>
@@ -255,7 +292,7 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
                             <span class='tut-card-foot'>
                               <span class='tut-card-author'>{entry.data.author}</span>
                               <span class='tut-card-date'>{fmtDate(entry.data.date)}</span>
-                              <span class='tut-card-cta'>{ui.tutorials.watchCta}</span>
+                              <span class='tut-card-cta'>{tutorialCta(entry)}</span>
                             </span>
                           </span>
                         </a>
@@ -368,6 +405,73 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
         color: var(--ui-text-soft);
         max-width: none;
         margin-bottom: 0;
+        white-space: nowrap;
+      }
+      .tut-written-entry {
+        padding: 0 0 var(--spacing-24);
+      }
+      .tut-written-card {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.44fr) minmax(0, 1fr) auto;
+        gap: var(--spacing-20);
+        align-items: center;
+        padding: var(--spacing-12) var(--spacing-24) var(--spacing-12) var(--spacing-12);
+        border: 1px solid var(--ui-border);
+        border-radius: 8px;
+        background: var(--ui-white);
+        color: var(--ui-strong);
+        text-decoration: none;
+        transition: border-color 160ms ease, background 160ms ease;
+      }
+      .tut-written-card:hover {
+        border-color: var(--ui-border-strong);
+        background: var(--ui-surface);
+      }
+      .tut-written-media {
+        position: relative;
+        display: block;
+        overflow: hidden;
+        aspect-ratio: 16 / 9;
+        border: 1px solid var(--ui-border);
+        border-radius: 6px;
+        background: var(--ui-soft);
+      }
+      .tut-written-media video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .tut-written-label {
+        font-family: var(--mono);
+        font-size: var(--font-size-12);
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ui-brand-text);
+      }
+      .tut-written-copy {
+        display: grid;
+        gap: var(--spacing-6);
+        min-width: 0;
+      }
+      .tut-written-copy strong {
+        font-family: var(--sans);
+        font-size: var(--font-size-20);
+        line-height: 125%;
+        color: var(--ui-strong);
+      }
+      .tut-written-copy span {
+        font-family: var(--sans);
+        font-size: var(--font-size-14);
+        line-height: 145%;
+        color: var(--ui-text-soft);
+      }
+      .tut-written-cta {
+        font-family: var(--sans);
+        font-size: var(--font-size-14);
+        font-weight: 700;
+        color: var(--ui-brand-text);
         white-space: nowrap;
       }
       .tut-categories {
@@ -667,6 +771,11 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
         border-top: 1px solid var(--ui-border);
       }
       @media (max-width: 980px) {
+        .tut-written-card {
+          grid-template-columns: 1fr;
+          gap: var(--spacing-12);
+          padding: var(--spacing-12);
+        }
         .tut-feature-card {
           grid-template-columns: 1fr;
         }
@@ -718,6 +827,9 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
         .tut-feature-title,
         .tut-card-title {
           font-size: var(--font-size-24);
+        }
+        .tut-written-copy strong {
+          font-size: var(--font-size-18);
         }
         .tut-card-foot,
         .tut-feature-meta {

@@ -39,12 +39,21 @@ function slashPath(value: string): string {
 }
 
 describe('resolveDaemonStatusTimeoutMs', () => {
-  it('uses the default 35-second budget for normal cold boots', () => {
-    expect(resolveDaemonStatusTimeoutMs({})).toBe(35_000);
+  it('uses the 35-second baseline budget on non-win32 for normal cold boots', () => {
+    expect(resolveDaemonStatusTimeoutMs({}, 'linux')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on win32 for AV-scan-slow first launches', () => {
+    // Windows Defender scanning freshly-written packaged binaries inflates the
+    // daemon cold start (native better-sqlite3 load + first SQLite open + pipe
+    // bind) past 35s; PostHog showed ~90% of the status-timeout devices did open
+    // on a later launch, so the wider budget lets the first launch succeed.
+    expect(resolveDaemonStatusTimeoutMs({}, 'win32')).toBe(90_000);
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' })).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'linux')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -53,18 +62,22 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     // minutes was historically observed to time out on real installs.
     const value = resolveDaemonStatusTimeoutMs({
       OD_LEGACY_DATA_DIR: '/path/to/old/.od',
-    });
+    }, 'linux');
     expect(value).toBeGreaterThanOrEqual(10 * 60 * 1000);
     expect(value).toBe(30 * 60 * 1000);
+    // The migration override beats the widened win32 baseline too.
+    expect(
+      resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '/path/to/old/.od' }, 'win32'),
+    ).toBe(30 * 60 * 1000);
   });
 
   it('falls back to process.env when called with no argument', () => {
     const original = process.env.OD_LEGACY_DATA_DIR;
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
-      expect(resolveDaemonStatusTimeoutMs()).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(35_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
-      expect(resolveDaemonStatusTimeoutMs()).toBe(30 * 60 * 1000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
       if (original == null) delete process.env.OD_LEGACY_DATA_DIR;
       else process.env.OD_LEGACY_DATA_DIR = original;
