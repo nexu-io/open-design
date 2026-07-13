@@ -86,4 +86,15 @@ describe('settings polish CSS', () => {
     expect(ruleValue(actions, 'flex')).toBe('0 0 auto');
     expect(ruleValue(actions, 'flex-wrap')).toBe('nowrap');
   });
+
+  it('keeps the disabled design-system import submit button label readable (issue #2685)', () => {
+    const disabled = cssBlock(memoryCss, '.library-install-submit:disabled');
+
+    // Prior treatment used var(--text-muted) on var(--bg-subtle), which
+    // produced a contrast ratio below WCAG AA 4.5:1 in both light
+    // (#74716b/#f4f5f7 ≈ 4.0:1) and dark (#9a9690/#252321 ≈ 3.6:1)
+    // modes — the label was too faint to read when the path was empty.
+    expect(ruleValue(disabled, 'color')).toBe('var(--text)');
+    expect(ruleValue(disabled, 'background')).toBe('var(--bg-subtle)');
+  });
 });
