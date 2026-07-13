@@ -228,6 +228,7 @@ interface ByokProviderPreset {
   baseUrl: string;
   model: string;
   custom?: boolean;
+  deployment?: boolean;
 }
 
 // One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
@@ -1349,9 +1350,18 @@ export function switchApiProtocolConfig(
 }
 
 export function byokProviderSelectionPatch(
-  provider: { custom?: boolean; baseUrl: string; model: string },
+  provider: { custom?: boolean; deployment?: boolean; baseUrl: string; model: string },
   providerChanged: boolean,
 ): Partial<ApiProtocolConfig> {
+  if (provider.deployment) {
+    return {
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: provider.model,
+      apiProviderBaseUrl: null,
+    };
+  }
   if (provider.custom) {
     return {
       apiCredentialSource: 'user',
@@ -2008,17 +2018,18 @@ export function SettingsDialog({
       apiModelCustomEditing,
       apiModelUserSelected: apiModelUserSelectedRef.current,
     };
-    const nextProviderBaseUrlForCurrent = provider.custom ? null : provider.baseUrl;
-    const providerChangedBeforeSwitch = provider.custom
+    const providerUsesCustomStorage = provider.custom || provider.deployment;
+    const nextProviderBaseUrlForCurrent = providerUsesCustomStorage ? null : provider.baseUrl;
+    const providerChangedBeforeSwitch = providerUsesCustomStorage
       ? (cfg.apiProviderBaseUrl ?? null) !== null
       : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
         (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
-    focusByokRequiredFieldAfterProtocolSwitchRef.current = !provider.custom;
+    focusByokRequiredFieldAfterProtocolSwitchRef.current = !providerUsesCustomStorage;
     providerModelsSkipNextResetRef.current = providerChangedBeforeSwitch;
     setCfg((current) => {
       const currentProtocol = current.apiProtocol ?? 'anthropic';
-      const nextProviderBaseUrl = provider.custom ? null : provider.baseUrl;
-      const providerChanged = provider.custom
+      const nextProviderBaseUrl = providerUsesCustomStorage ? null : provider.baseUrl;
+      const providerChanged = providerUsesCustomStorage
         ? (current.apiProviderBaseUrl ?? null) !== null
         : currentProtocol !== provider.protocol ||
           (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
@@ -2085,7 +2096,7 @@ export function SettingsDialog({
         currentDraftKey,
         currentApiProtocolConfig(current),
       );
-      if (provider.custom) {
+      if (providerUsesCustomStorage) {
         applyDraftUiState(undefined);
         return updateCurrentApiProtocolConfig(
           switchedWithCurrentDraft,
@@ -2976,6 +2987,18 @@ export function SettingsDialog({
   );
   const byokProviderOptions: ReadonlyArray<ByokProviderPreset> = [
     ...byokProviderPresets.filter((provider) => !provider.custom),
+    ...(deploymentProviderConfig?.available && deploymentProviderConfig.protocol === 'openai'
+      ? [{
+        id: 'deployment',
+        title: deploymentProviderConfig.label,
+        protocol: 'openai' as const,
+        baseUrl: '',
+        model: deploymentProviderConfig.defaultModel?.trim() || (
+          isDeploymentCredentialMode ? cfg.model : ''
+        ),
+        deployment: true,
+      }]
+      : []),
     ...API_PROTOCOL_TABS.filter((tab) => !byokPresetProtocols.has(tab.id)).map((tab) => {
       const fallback = defaultApiProtocolConfig(tab.id);
       return {
@@ -2989,7 +3012,9 @@ export function SettingsDialog({
     customByokProvider,
   ];
   const selectedByokProvider =
-    cfg.apiProviderBaseUrl === null
+    isDeploymentCredentialMode
+      ? byokProviderOptions.find((provider) => provider.deployment) ?? customByokProvider
+      : cfg.apiProviderBaseUrl === null
       ? customByokProvider
       : byokProviderOptions.find(
         (provider) =>
@@ -3288,6 +3313,9 @@ export function SettingsDialog({
     cfg.baseUrl,
   ) && !isDeploymentCredentialMode;
   const byokProviderConfigured = (provider: ByokProviderPreset): boolean => {
+    if (provider.deployment) {
+      return isDeploymentCredentialMode && Boolean(cfg.model.trim());
+    }
     if (provider.custom) {
       return canRunProviderConnectionTest(currentApiProtocolConfig(cfg), {
         requiresApiKey: byokRequiresApiKey,

@@ -628,6 +628,78 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(request).not.toHaveProperty('baseUrl');
   });
 
+  it('lets Settings switch existing OpenAI installs to deployment credentials', async () => {
+    fetchProviderModelsMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [{ id: 'tenant-special-a', label: 'Tenant Special A' }],
+    });
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-user-openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-special-a',
+        },
+      },
+    );
+
+    fetchProviderModelsMock.mockClear();
+    fireEvent.click(screen.getByRole('tab', { name: 'Tenant gateway' }));
+
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect(screen.queryByLabelText('Base URL')).toBeNull();
+
+    await waitFor(() => {
+      expect(fetchProviderModelsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    const [request] = fetchProviderModelsMock.mock.calls.at(-1) ?? [];
+    expect(request).not.toHaveProperty('apiKey');
+    expect(request).not.toHaveProperty('baseUrl');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+        apiProviderBaseUrl: null,
+        apiProtocolConfigs: expect.objectContaining({
+          openai: expect.objectContaining({
+            apiCredentialSource: 'user',
+            apiKey: 'sk-user-openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4o',
+            apiProviderBaseUrl: 'https://api.openai.com/v1',
+          }),
+        }),
+      }),
+      {},
+    );
+  });
+
   it('does not add stock OpenAI presets to deployment-sourced model lists', async () => {
     fetchProviderModelsMock.mockResolvedValueOnce({
       ok: true,
