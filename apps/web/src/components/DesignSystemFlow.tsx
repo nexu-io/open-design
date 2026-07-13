@@ -215,8 +215,16 @@ interface DemoExtractedFoundation {
   colors: Array<{ label: string; hex: string }>;
 }
 
+const DEMO_ARTIFACT_OMIT = new Set([
+  'create-brand-kit',
+  'live-artifact',
+  'image',
+  'video',
+  'audio',
+]);
+
 const DEMO_ARTIFACT_CHOICES = orderedCreateChips()
-  .filter((artifact) => artifact.id !== 'create-brand-kit');
+  .filter((artifact) => !DEMO_ARTIFACT_OMIT.has(artifact.id));
 
 const DEMO_ARTIFACT_PROMPT_EXAMPLES = [
   'Launch a new product',
