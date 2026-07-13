@@ -3662,6 +3662,9 @@ export interface Dict {
   'dsCreate.continueToGeneration': string;
   'dsCreate.embeddedTitle': string;
   'dsCreate.embeddedBody': string;
+  'dsCreate.focusedTitle': string;
+  'dsCreate.focusedBody': string;
+  'dsCreate.primaryInputPlaceholder': string;
   'dsCreate.sourceSectionTitle': string;
   'dsCreate.sourceSectionBody': string;
   'dsCreate.githubWebsiteLabel': string;

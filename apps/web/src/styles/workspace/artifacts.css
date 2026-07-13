@@ -1095,6 +1095,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.settings-newsletter {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+.settings-newsletter .settings-general-field {
+  flex: 1 1 auto;
+}
+.settings-newsletter__input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 0 14px;
+  font: inherit;
+  outline: none;
+  transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.settings-newsletter__input:focus-visible {
+  border-color: var(--accent);
+}
+@media (max-width: 640px) {
+  .settings-newsletter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .settings-newsletter > button {
+    width: 100%;
+  }
+}
 .settings-cloud-signin-callout {
   display: flex;
   align-items: center;

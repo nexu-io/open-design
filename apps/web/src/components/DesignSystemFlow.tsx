@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button, Textarea } from '@open-design/components';
 import type {
   ConnectorConnectResponse,
@@ -48,7 +48,7 @@ import {
 } from '../runtime/design-system-package-audit';
 import { deriveFileOps } from '../runtime/file-ops';
 import { latestTodosFromEvents } from '../runtime/todos';
-import { brandFaviconUrl } from '../runtime/brand-references';
+import { BRAND_REFERENCES, brandFaviconUrl } from '../runtime/brand-references';
 import { useBrandExtract } from '../runtime/useBrandExtract';
 import {
   createFileSystemReadError,
@@ -73,12 +73,12 @@ import type {
   ProjectFile,
   ProjectMetadata,
 } from '../types';
+
 import { takeDesignSystemAssetSeed } from '../state/libraryHandoff';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
 import { DesignSystemAssetDropzone } from './DesignSystemAssetDropzone';
 import { BrandPickerModal } from './BrandPickerModal';
-import { DesignSystemCreateHero } from './DesignSystemCreateHero';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
@@ -127,6 +127,11 @@ import type {
   TrackingDesignSystemsEntryFrom,
 } from '@open-design/contracts/analytics';
 import { useI18n } from '../i18n';
+
+const PRIMARY_BRAND_EXAMPLE_NAMES = new Set(['Apple', 'Nike', 'Spotify', 'Airbnb']);
+const PRIMARY_BRAND_EXAMPLES = BRAND_REFERENCES.filter((brand) =>
+  PRIMARY_BRAND_EXAMPLE_NAMES.has(brand.name),
+);
 
 // Source counts the embedded DS creation flow can report back to its
 // wrapper at Generate-click time. OnboardingView uses this to emit the
@@ -192,10 +197,22 @@ interface DetailProps {
   onInitialRevisionJobConsumed?: (jobId: string) => void;
 }
 
-type SetupStep = 'setup' | 'confirm';
 type ReviewTab = 'system' | 'files';
 type DesignMdMode = 'edit' | 'preview';
 type DesignMdPreviewTheme = 'light' | 'dark';
+type DemoExtractionStage = 'form' | 'extracting-logo' | 'logo-review' | 'extracting-system' | 'system-review';
+
+interface DemoExtractionProject {
+  projectId: string;
+  project?: Project;
+  conversationId?: string | null;
+}
+
+interface DemoExtractedFoundation {
+  displayFont: string | null;
+  bodyFont: string | null;
+  colors: Array<{ label: string; hex: string }>;
+}
 
 interface ResolvedDesignSystemWorkspaceProject {
   projectId: string;
@@ -336,7 +353,6 @@ export function DesignSystemCreationFlow({
   designSystems = [],
 }: CreationProps) {
   const { t } = useI18n();
-  const [step, setStep] = useState<SetupStep>('setup');
   // A Library "create design system from selection" hand-off pre-fills the
   // source material with the chosen assets (single-shot; cleared on read).
   const [state, setState] = useState<SetupState>(() => {
@@ -363,6 +379,15 @@ export function DesignSystemCreationFlow({
   // disclosure that hides the lower-frequency source inputs.
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [demoExtractionStage, setDemoExtractionStage] = useState<DemoExtractionStage>('form');
+  const [demoSourceUrl, setDemoSourceUrl] = useState('');
+  const [demoBrandName, setDemoBrandName] = useState('');
+  const [demoUploadedLogoUrl, setDemoUploadedLogoUrl] = useState<string | null>(null);
+  const [demoProject, setDemoProject] = useState<DemoExtractionProject | null>(null);
+  const [demoFoundation, setDemoFoundation] = useState<DemoExtractedFoundation | null>(null);
+  const demoLogoUploadRef = useRef<HTMLInputElement>(null);
+  const demoExtractionStartedAtRef = useRef<number | null>(null);
+  const demoLogoRevealTimerRef = useRef<number | null>(null);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
   // the daemon creates the project + real transcript immediately, then the
   // programmatic pass registers a usable user:<id> design system in the
@@ -380,6 +405,27 @@ export function DesignSystemCreationFlow({
   const githubConnectorRef = useRef<ConnectorDetail | null>(null);
   const githubConnectorLoadedRef = useRef(false);
   const embedded = chrome === 'embedded';
+  // Keep this demo intake focused on a single website source.
+  const showAdvancedSources = false;
+
+  useEffect(() => () => {
+    if (demoUploadedLogoUrl?.startsWith('blob:')) URL.revokeObjectURL(demoUploadedLogoUrl);
+  }, [demoUploadedLogoUrl]);
+
+  useEffect(() => () => {
+    if (demoLogoRevealTimerRef.current != null) window.clearTimeout(demoLogoRevealTimerRef.current);
+  }, []);
+
+  function handleApproveDemoLogo() {
+    setDemoFoundation(demoFoundationFromSource(demoSourceUrl));
+    setDemoExtractionStage('extracting-system');
+  }
+
+  useEffect(() => {
+    if (demoExtractionStage !== 'extracting-system') return;
+    const timeout = window.setTimeout(() => setDemoExtractionStage('system-review'), 1_000);
+    return () => window.clearTimeout(timeout);
+  }, [demoExtractionStage]);
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -626,6 +672,39 @@ export function DesignSystemCreationFlow({
     }));
   }
 
+  function handlePrimaryIntakeSubmit() {
+    const value = state.company.trim();
+    if (!value) return;
+    const sourceLike = /^(?:https?:\/\/|www\.|github\.com\/|git@github\.com:|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]|$))/iu.test(value);
+    const nextState = sourceLike
+      ? {
+          ...state,
+          company: '',
+          sourceUrls: Array.from(new Set([...state.sourceUrls, normalizeSourceUrl(value)])),
+        }
+      : state;
+    if (sourceLike) {
+      setState(nextState);
+    }
+    emitCreateFormClick('continue_to_generation');
+    void generate(nextState);
+  }
+
+  function handlePrimaryBrandExample(domain: string) {
+    setError(null);
+    setState((curr) => ({ ...curr, company: domain }));
+  }
+
+  function handleDemoLogoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setDemoUploadedLogoUrl((current) => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+      return URL.createObjectURL(file);
+    });
+    event.target.value = '';
+  }
+
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (isImeComposing(event)) return;
     if (event.key !== 'Enter') return;
@@ -824,7 +903,7 @@ export function DesignSystemCreationFlow({
     }
   }
 
-  async function generate() {
+  async function generate(generationState = state) {
     if (generationStarting) return;
     // Snapshot the user-pinned source state up front. Used for the
     // pre-async ui_click intent signal AND the post-async lifecycle
@@ -833,18 +912,18 @@ export function DesignSystemCreationFlow({
     // sources" → "generate eventually succeeded / failed with the
     // same N". Computed here because OnboardingView can't peek into
     // this flow's setup form.
-    const sourceUrls = sourceUrlsFromState(state);
-    const githubUrls = githubUrlsFromState(state);
+    const sourceUrls = sourceUrlsFromState(generationState);
+    const githubUrls = githubUrlsFromState(generationState);
     const sourceUrlCount = sourceUrls.length;
     const githubRepoCount = githubUrls.length;
-    const localFolderCount = state.codeFolders?.length ?? 0;
-    const figFileCount = (state.figFiles?.length ?? 0) + figmaUrlsFromState(state).length;
-    const assetFileCount = state.assetFiles?.length ?? 0;
-    const hasDesignMd = Boolean(state.designMd.trim());
+    const localFolderCount = generationState.codeFolders?.length ?? 0;
+    const figFileCount = (generationState.figFiles?.length ?? 0) + figmaUrlsFromState(generationState).length;
+    const assetFileCount = generationState.assetFiles?.length ?? 0;
+    const hasDesignMd = Boolean(generationState.designMd.trim());
     const snapshot = {
       sourceCount:
         sourceUrlCount + localFolderCount + figFileCount + assetFileCount + (hasDesignMd ? 1 : 0),
-      hasBrandDescription: Boolean(state.company?.trim()),
+      hasBrandDescription: Boolean(generationState.company?.trim()),
       hasDesignMd,
       sourceUrlCount,
       githubRepoCount,
@@ -852,6 +931,15 @@ export function DesignSystemCreationFlow({
       figFileCount,
       assetFileCount,
     };
+    const demoSource = nonGithubSourceUrlsFromState(generationState)[0]
+      ?? sourceUrlsFromState(generationState)[0]
+      ?? generationState.company.trim();
+    demoExtractionStartedAtRef.current = performance.now();
+    setDemoSourceUrl(demoSource);
+    setDemoBrandName(designSystemDemoLabel(demoSource));
+    setDemoUploadedLogoUrl(null);
+    setDemoFoundation(null);
+    setDemoExtractionStage('extracting-logo');
     onBeforeGenerate?.(snapshot);
     setGenerationStarting(true);
     setError(null);
@@ -886,8 +974,8 @@ export function DesignSystemCreationFlow({
         source_count: snapshot.sourceCount,
         created_as_project: result === 'success',
         has_brand_description: snapshot.hasBrandDescription,
-        brand_description_length_bucket: designSystemLengthBucket(state.company),
-        notes_length_bucket: designSystemLengthBucket(state.notes),
+        brand_description_length_bucket: designSystemLengthBucket(generationState.company),
+        notes_length_bucket: designSystemLengthBucket(generationState.notes),
         error_code: errorCode,
         duration_ms: Math.max(0, Math.round(performance.now() - generateStartedAt)),
       });
@@ -898,25 +986,25 @@ export function DesignSystemCreationFlow({
       // real transcript immediately, then the programmatic pass registers a
       // usable user:<id> design system in the background.
       const extractUrl =
-        nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
+        nonGithubSourceUrlsFromState(generationState)[0] ?? sourceUrlsFromState(generationState)[0] ?? '';
       const fallbackDesignMd = !extractUrl && !hasDesignMd
-        ? buildFallbackDesignMdFromState(state)
+        ? buildFallbackDesignMdFromState(generationState)
         : '';
-      const designMdForExtraction = hasDesignMd ? state.designMd : fallbackDesignMd;
+      const designMdForExtraction = hasDesignMd ? generationState.designMd : fallbackDesignMd;
       if (!extractUrl && !designMdForExtraction) {
+        setDemoExtractionStage('form');
         setError(t('dsCreate.missingSourceError'));
-        setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_NO_SOURCE', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_NO_SOURCE' });
         return;
       }
       const result = await brandExtract.run(extractUrl, {
-        description: [state.company.trim(), state.notes.trim()].filter(Boolean).join('\n\n'),
+        description: [generationState.company.trim(), generationState.notes.trim()].filter(Boolean).join('\n\n'),
         designMd: designMdForExtraction,
       });
       if (!result) {
+        setDemoExtractionStage('form');
         setError('Could not start the extraction. Check the link and try again.');
-        setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_START_FAILED', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_START_FAILED' });
         return;
@@ -926,10 +1014,10 @@ export function DesignSystemCreationFlow({
       // navigating into the live extraction.
       const project = (await getProject(result.projectId).catch(() => undefined)) ?? undefined;
       let projectForCreated = project;
-      if (project && hasProjectStagingSources(state)) {
+      if (project && hasProjectStagingSources(generationState)) {
         await prepareCreatedDesignSystemProject({
           project,
-          state,
+          state: generationState,
           composioConfigured,
           githubConnector,
           onProjectPrepared: (preparedProject) => {
@@ -951,12 +1039,23 @@ export function DesignSystemCreationFlow({
       } else {
         void onSystemsRefresh?.();
       }
-      onCreated(result.projectId, projectForCreated, result.conversationId);
+      setDemoSourceUrl(extractUrl || demoSource);
+      setDemoBrandName(result.brandName?.trim() || designSystemDemoLabel(extractUrl || demoSource));
+      setDemoProject({
+        projectId: result.projectId,
+        project: projectForCreated,
+        conversationId: result.conversationId,
+      });
+      const elapsed = performance.now() - (demoExtractionStartedAtRef.current ?? performance.now());
+      demoLogoRevealTimerRef.current = window.setTimeout(() => {
+        setDemoExtractionStage('logo-review');
+        demoLogoRevealTimerRef.current = null;
+      }, Math.max(0, 1_000 - elapsed));
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
+      setDemoExtractionStage('form');
       setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
-      setStep('setup');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
         : 'DS_GENERATE_THREW';
@@ -965,31 +1064,6 @@ export function DesignSystemCreationFlow({
     } finally {
       setGenerationStarting(false);
     }
-  }
-
-  if (step === 'confirm') {
-    return (
-      <div className="ds-setup-shell ds-setup-shell--center">
-        <div className="ds-setup-center-card">
-          <h1>Open Design will extract your design system.</h1>
-          <p>You'll land in a project that fills in live — logo, palette, typography, imagery — as it measures your brand. Keep the tab open.</p>
-          <div className="ds-setup-actions">
-            <Button variant="ghost" onClick={() => setStep('setup')}>
-              <Icon name="arrow-left" />
-              Back
-            </Button>
-            <Button
-              variant="primary"
-              disabled={generationStarting}
-              onClick={() => void generate()}
-            >
-              <Icon name="sparkles" />
-              {generationStarting ? 'Starting extraction...' : 'Extract design system'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -1010,57 +1084,78 @@ export function DesignSystemCreationFlow({
         </div>
       ) : null}
       {embedded ? null : (
-        <header className="ds-setup-topbar">
-          <div className="ds-setup-topbar-left">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                emitCreateFormClick('back');
-                onBack();
-              }}
-            >
-              <Icon name="arrow-left" />
-              Back
-            </Button>
-          </div>
-          <span className="ds-setup-mark">
-            <Icon name="blocks" />
-          </span>
+        <div className="ds-setup-back">
           <Button
-            variant="primary"
-            disabled={!hasCreationSource(state)}
+            variant="ghost"
             onClick={() => {
-              emitCreateFormClick('continue_to_generation');
-              if (!hasCreationSource(state)) {
-                setError(t('dsCreate.missingSourceError'));
-                return;
-              }
-              setStep('confirm');
+              emitCreateFormClick('back');
+              onBack();
             }}
           >
-            {t('dsCreate.continueToGeneration')}
-            <Icon name="chevron-right" />
+            <Icon name="arrow-left" />
+            Back
           </Button>
-        </header>
+        </div>
       )}
 
+      {demoExtractionStage === 'form' ? (
       <main className="ds-setup-form">
         {embedded ? (
           <>
             <h1>{t('dsCreate.embeddedTitle')}</h1>
             <p>{t('dsCreate.embeddedBody')}</p>
           </>
-        ) : (
-          <aside className="ds-setup-hero-col">
-            <DesignSystemCreateHero stacked />
-          </aside>
-        )}
+        ) : null}
 
         <div className="ds-setup-form-col">
-        <section className="ds-resource-section">
-          <h2>{t('dsCreate.sourceSectionTitle')}</h2>
-          <p>{t('dsCreate.sourceSectionBody')}</p>
-          <div className="ds-resource-card">
+        <section className="ds-resource-section ds-resource-section--focused">
+          <h2>{t('dsCreate.focusedTitle')}</h2>
+          <p>{t('dsCreate.focusedBody')}</p>
+          <div className="ds-primary-intake">
+            <input
+              type="url"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={state.company}
+              onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
+              placeholder={t('dsCreate.primaryInputPlaceholder')}
+            />
+            <button
+              type="button"
+              className="ds-primary-intake__submit"
+              aria-label={t('dsCreate.continueToGeneration')}
+              disabled={!state.company.trim()}
+              onClick={handlePrimaryIntakeSubmit}
+            >
+              <Icon name="arrow-up" size={18} />
+            </button>
+          </div>
+          <div className="ds-primary-examples">
+            {PRIMARY_BRAND_EXAMPLES.map((brand) => (
+              <button
+                key={brand.domain}
+                type="button"
+                onClick={() => handlePrimaryBrandExample(brand.domain)}
+              >
+                {brand.domain}
+              </button>
+            ))}
+          </div>
+          {showAdvancedSources ? (
+            <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
+            <div className="ds-resource-advanced">
+              <button
+                type="button"
+                className="ghost ds-resource-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((open) => !open)}
+              >
+                <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} />
+                {t('dsCreate.advancedToggle')}
+              </button>
+            </div>
             <div className="ds-resource-row">
               <strong>{t('dsCreate.githubWebsiteLabel')}</strong>
               <div className="ds-resource-inline">
@@ -1163,18 +1258,6 @@ export function DesignSystemCreationFlow({
                 }}
               />
             </div>
-            <div className="ds-resource-row ds-resource-row--description">
-              <strong>{t('dsCreate.describeBrand')} <span>{t('dsCreate.optional')}</span></strong>
-              <label className="ds-resource-description">
-                <span>{t('dsCreate.describeBrandHelp')}</span>
-                <textarea
-                  rows={3}
-                  value={state.company}
-                  onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-                  placeholder={t('dsCreate.companyPlaceholder')}
-                />
-              </label>
-            </div>
             <div className="ds-resource-row ds-resource-row--design-md">
               <strong>{t('dsCreate.pasteDesignMd')} <span>{t('dsCreate.optional')}</span></strong>
               <div className="ds-design-md-field">
@@ -1248,16 +1331,7 @@ export function DesignSystemCreationFlow({
                 )}
               </div>
             </div>
-            <div className="ds-resource-advanced">
-              <button
-                type="button"
-                className="ghost ds-resource-advanced-toggle"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((open) => !open)}
-              >
-                <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} />
-                {t('dsCreate.advancedToggle')}
-              </button>
+            <div className="ds-resource-advanced-content">
               <div className={`accordion-collapsible${advancedOpen ? ' open' : ''}`}>
                 <div className="accordion-collapsible-inner">
                   <div className="ds-resource-row">
@@ -1382,7 +1456,8 @@ export function DesignSystemCreationFlow({
                 </div>
               </div>
             </div>
-          </div>
+            </div>
+          ) : null}
         </section>
 
         {error ? <div className="ds-editor-error">{error}</div> : null}
@@ -1407,7 +1482,7 @@ export function DesignSystemCreationFlow({
                   setError(t('dsCreate.missingSourceError'));
                   return;
                 }
-                setStep('confirm');
+                void generate();
               }}
             >
               {t('dsCreate.generate')}
@@ -1417,6 +1492,23 @@ export function DesignSystemCreationFlow({
         ) : null}
         </div>
       </main>
+      ) : (
+        <DesignSystemExtractionDemo
+          stage={demoExtractionStage}
+          brandName={demoBrandName}
+          sourceUrl={demoSourceUrl}
+          logoUrl={demoUploadedLogoUrl ?? brandFaviconUrl(demoSourceUrl, 256)}
+          foundation={demoFoundation}
+          logoUploadRef={demoLogoUploadRef}
+          onUpload={handleDemoLogoUpload}
+          onApproveLogo={handleApproveDemoLogo}
+          onOpenProject={() => {
+            if (!demoProject) return;
+            onCreated(demoProject.projectId, demoProject.project, demoProject.conversationId);
+          }}
+          canOpenProject={demoProject !== null}
+        />
+      )}
       {libraryPickerOpen ? (
         <LibraryPicker
           title={t('dsCreate.libraryPickerTitle')}
@@ -1426,6 +1518,256 @@ export function DesignSystemCreationFlow({
         />
       ) : null}
     </div>
+  );
+}
+
+function DesignSystemExtractionDemo({
+  stage,
+  brandName,
+  sourceUrl,
+  logoUrl,
+  foundation,
+  logoUploadRef,
+  onUpload,
+  onApproveLogo,
+  onOpenProject,
+  canOpenProject,
+}: {
+  stage: Exclude<DemoExtractionStage, 'form'>;
+  brandName: string;
+  sourceUrl: string;
+  logoUrl: string;
+  foundation: DemoExtractedFoundation | null;
+  logoUploadRef: RefObject<HTMLInputElement>;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApproveLogo: () => void;
+  onOpenProject: () => void;
+  canOpenProject: boolean;
+}) {
+  const label = brandName || 'your brand';
+  const isLoading = stage === 'extracting-logo' || stage === 'extracting-system';
+  const resultFoundation = foundation ?? demoFoundationFromSource(sourceUrl);
+
+  return (
+    <main className={`ds-extraction-demo${stage === 'system-review' ? ' ds-extraction-demo--result' : ''}`} aria-live="polite">
+      {isLoading ? (
+        <section className="ds-extraction-demo__loading">
+          <span className="ds-extraction-demo__pulse" aria-hidden="true"><Spinner size={22} /></span>
+          <p className="ds-extraction-demo__eyebrow">{stage === 'extracting-logo' ? 'First, your logo' : 'Building the foundations'}</p>
+          <h1>{stage === 'extracting-logo' ? 'Finding the most likely logo' : 'Extracting color, type, and shape'}</h1>
+          <p>Open Design is reading <strong>{sourceUrl || label}</strong> and assembling the first pass.</p>
+        </section>
+      ) : null}
+
+      {stage === 'logo-review' ? (
+        <section className="ds-extraction-demo__card">
+          <div className="ds-extraction-demo__logo-tile">
+            <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+          </div>
+          <p className="ds-extraction-demo__eyebrow">Logo detected</p>
+          <h1>Does this logo look accurate?</h1>
+          <p>If not, upload the right mark and we will use that instead.</p>
+          <input
+            ref={logoUploadRef}
+            className="ds-extraction-demo__file-input"
+            type="file"
+            accept="image/*"
+            onChange={onUpload}
+          />
+          <div className="ds-extraction-demo__actions">
+            <Button variant="default" onClick={() => logoUploadRef.current?.click()}>Upload another</Button>
+            <Button variant="primary" onClick={onApproveLogo}>Looks good</Button>
+          </div>
+        </section>
+      ) : null}
+
+      {stage === 'system-review' ? (
+        <>
+          <section className="ds-extraction-demo__result-board">
+            <div className="ds-extraction-demo__result-hero">
+              <h1>Brand identity<br />generated</h1>
+              <p>Now everything you create starts on-brand.</p>
+              <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
+              {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
+            </div>
+            <div className="ds-extraction-demo__result-grid">
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
+                <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+              </article>
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--type">
+                <span>Typography</span>
+                <div className="ds-extraction-demo__font-pair">
+                  <div>
+                    <small>Display</small>
+                    <strong style={fontPreviewStyle(resultFoundation.displayFont)}>{resultFoundation.displayFont}</strong>
+                  </div>
+                  <div>
+                    <small>Body</small>
+                    <strong style={fontPreviewStyle(resultFoundation.bodyFont)}>{resultFoundation.bodyFont}</strong>
+                  </div>
+                </div>
+              </article>
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--colors">
+                <span>Palette</span>
+                <div className="ds-extraction-demo__palette-list">
+                  {resultFoundation.colors.map((color) => (
+                    <div className="ds-extraction-demo__palette-item" key={`${color.label}-${color.hex}`}>
+                      <i style={{ backgroundColor: color.hex }} />
+                      <span>{color.label}</span>
+                      <small>{color.hex}</small>
+                    </div>
+                  ))}
+                </div>
+              </article>
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--source">
+                <span>Source</span>
+                <strong>{sourceUrl || label}</strong>
+              </article>
+            </div>
+          </section>
+          <DemoExtractedComponentKit foundation={resultFoundation} brandName={label} />
+        </>
+      ) : null}
+    </main>
+  );
+}
+
+function designSystemDemoLabel(value: string): string {
+  const label = value.trim().replace(/^https?:\/\//iu, '').replace(/^www\./iu, '').split('/')[0] ?? '';
+  return label || 'your brand';
+}
+
+function demoFoundationFromSource(sourceUrl: string): DemoExtractedFoundation {
+  const hostname = designSystemDemoLabel(sourceUrl).toLowerCase();
+  if (hostname.includes('spotify')) {
+    return {
+      displayFont: 'Circular Std',
+      bodyFont: 'Circular Std',
+      colors: [
+        { label: 'Spotify green', hex: '#1ed760' },
+        { label: 'Black', hex: '#191414' },
+        { label: 'White', hex: '#ffffff' },
+      ],
+    };
+  }
+  if (hostname.includes('nike')) {
+    return {
+      displayFont: 'Helvetica Neue',
+      bodyFont: 'Helvetica Neue',
+      colors: [
+        { label: 'Black', hex: '#111111' },
+        { label: 'White', hex: '#ffffff' },
+        { label: 'Stone', hex: '#f5f5f5' },
+      ],
+    };
+  }
+  if (hostname.includes('airbnb')) {
+    return {
+      displayFont: 'Airbnb Cereal',
+      bodyFont: 'Airbnb Cereal',
+      colors: [
+        { label: 'Rausch', hex: '#ff385c' },
+        { label: 'Black', hex: '#222222' },
+        { label: 'White', hex: '#ffffff' },
+      ],
+    };
+  }
+  if (hostname.includes('apple')) {
+    return {
+      displayFont: 'SF Pro Display',
+      bodyFont: 'SF Pro Text',
+      colors: [
+        { label: 'Black', hex: '#000000' },
+        { label: 'White', hex: '#ffffff' },
+        { label: 'Gray', hex: '#86868b' },
+      ],
+    };
+  }
+  return {
+    displayFont: 'DM Sans',
+    bodyFont: 'DM Sans',
+    colors: [
+      { label: 'Ink', hex: '#202124' },
+      { label: 'Canvas', hex: '#ffffff' },
+      { label: 'Accent', hex: '#1a73e8' },
+    ],
+  };
+}
+
+function fontPreviewStyle(fontFamily: string | null): CSSProperties | undefined {
+  return fontFamily ? { fontFamily: cssFontFamily(fontFamily) } : undefined;
+}
+
+function DemoExtractedComponentKit({
+  foundation,
+  brandName,
+}: {
+  foundation: DemoExtractedFoundation;
+  brandName: string;
+}) {
+  const primary = foundation.colors[0]?.hex ?? '#202124';
+  const surface = foundation.colors[1]?.hex ?? '#ffffff';
+  const ink = foundation.colors[2]?.hex ?? '#202124';
+  const style = {
+    '--demo-kit-primary': primary,
+    '--demo-kit-surface': surface,
+    '--demo-kit-ink': ink,
+    '--demo-kit-display': cssFontFamily(foundation.displayFont ?? 'Georgia'),
+    '--demo-kit-body': cssFontFamily(foundation.bodyFont ?? 'system-ui'),
+  } as CSSProperties;
+  const primaryText = readableTextColor(primary);
+
+  return (
+    <section className="ds-extraction-demo__kit" style={style}>
+      <header>
+        <div>
+          <p>Component kit generated</p>
+          <h2>{brandName} UI foundations</h2>
+        </div>
+        <span>Light</span>
+      </header>
+      <div className="ds-extraction-demo__kit-grid">
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--buttons">
+          <h3>Buttons</h3>
+          <div className="ds-extraction-demo__kit-buttons">
+            <button type="button" style={{ backgroundColor: primary, color: primaryText }}>Primary</button>
+            <button type="button">Default</button>
+            <button type="button" className="is-text">Text</button>
+            <button type="button" className="is-link" style={{ color: primary }}>Link</button>
+          </div>
+        </section>
+        <section className="ds-extraction-demo__kit-section">
+          <h3>Form controls</h3>
+          <label>Email<input placeholder="you@example.com" /></label>
+          <label>Project name<input placeholder={brandName} /></label>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--navigation">
+          <h3>Navigation</h3>
+          <nav><span className="is-active" style={{ color: primary }}>Overview</span><span>Activity</span><span>Reports</span><span>Settings</span></nav>
+          <div className="ds-extraction-demo__kit-steps"><b style={{ backgroundColor: primary, color: primaryText }}>1</b><span>Connect</span><b style={{ backgroundColor: primary, color: primaryText }}>2</b><span>Review</span><b>3</b><span>Ship</span></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--cards">
+          <h3>Cards</h3>
+          <div className="ds-extraction-demo__kit-cards"><article><strong>Overview</strong><p>Clear guidance and reusable layouts.</p><a style={{ color: primary }}>Learn more</a></article><article><strong>Usage</strong><p>Components inherit this brand system.</p></article></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--data">
+          <h3>Data display</h3>
+          <div className="ds-extraction-demo__kit-metrics"><strong>10k+<small>Teams reached</small></strong><strong>99.9%<small>Uptime SLA</small></strong><strong>4.9/5<small>Average rating</small></strong></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--alerts">
+          <h3>Alerts &amp; progress</h3>
+          <p className="is-success">✓ Brand system generated</p><p className="is-warning">! Review a missing source</p><div><i style={{ backgroundColor: primary }} /></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--palette">
+          <h3>Color</h3>
+          <div>{foundation.colors.map((color) => <i key={color.hex} title={color.label} style={{ backgroundColor: color.hex }} />)}</div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--scale">
+          <h3>Type scale</h3>
+          <strong>The quick brown fox</strong><span>The quick brown fox</span><small>The quick brown fox</small>
+        </section>
+      </div>
+    </section>
   );
 }
 
