@@ -3038,6 +3038,10 @@ export const ko: Dict = {
   'assistant.feedbackReasonOther': '기타',
   'assistant.feedbackReasonPlaceholder': '간단한 메모 추가...',
   'assistant.feedbackReasonSubmit': '제출',
+  'assistant.feedbackDiscordPositive':
+    '만든 결과물을 {discord} 커뮤니티에 공유하거나 스크린샷과 함께 잘된 점을 알려 주세요.',
+  'assistant.feedbackDiscordNegative':
+    '팀이 문제를 파악하고 직접 후속 조치를 할 수 있도록 {discord}에 자세한 상황을 공유해 주세요.',
   'assistant.emptyResponseLabel': '출력 없음',
   'assistant.emptyResponseMessage': '제공자가 텍스트나 아티팩트를 반환하지 않고 요청을 종료했습니다. 다른 모델이나 제공자를 사용하거나, 할당량을 확인하거나, 다시 시도하세요.',
   'assistant.unfinishedLabel': '작업을 마치지 못하고 중지됨',

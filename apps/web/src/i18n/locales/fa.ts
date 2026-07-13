@@ -3038,6 +3038,10 @@ export const fa: Dict = {
   'assistant.feedbackReasonOther': 'سایر موارد',
   'assistant.feedbackReasonPlaceholder': 'یک یادداشت کوتاه اضافه کنید...',
   'assistant.feedbackReasonSubmit': 'ارسال',
+  'assistant.feedbackDiscordPositive':
+    'آنچه ساخته‌اید را با انجمن {discord} به اشتراک بگذارید، یا یک تصویر از صفحه ارسال کنید و بگویید چه چیزی خوب کار کرد.',
+  'assistant.feedbackDiscordNegative':
+    'جزئیات بیشتری در {discord} به اشتراک بگذارید تا تیم بتواند مشکل را درک کند و مستقیماً پیگیری کند.',
   'assistant.emptyResponseLabel': 'بدون خروجی',
   'assistant.emptyResponseMessage': 'ارائه‌دهنده درخواست را بدون بازگرداندن متن یا آرتیفکت پایان داد. مدل یا ارائه‌دهنده دیگری را امتحان کنید، سهمیه را بررسی کنید یا دوباره تلاش کنید.',
   'assistant.unfinishedLabel': 'با کار ناتمام متوقف شد',

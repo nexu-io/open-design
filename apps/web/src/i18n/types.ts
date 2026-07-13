@@ -3826,6 +3826,8 @@ export interface Dict {
   'assistant.feedbackReasonOther': string;
   'assistant.feedbackReasonPlaceholder': string;
   'assistant.feedbackReasonSubmit': string;
+  'assistant.feedbackDiscordPositive': string;
+  'assistant.feedbackDiscordNegative': string;
   'assistant.emptyResponseLabel': string;
   'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;

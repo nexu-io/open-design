@@ -3274,6 +3274,10 @@ export const zhCN: Dict = {
   "assistant.feedbackReasonOther": "其他",
   "assistant.feedbackReasonPlaceholder": "补充说明...",
   "assistant.feedbackReasonSubmit": "提交",
+  "assistant.feedbackDiscordPositive":
+    "在 {discord} 社区分享你的作品，或发布截图并告诉我们哪些方面做得不错。",
+  "assistant.feedbackDiscordNegative":
+    "在 {discord} 中分享更多信息，帮助团队了解问题并直接跟进。",
   "assistant.emptyResponseLabel": "无输出",
   "assistant.emptyResponseMessage":
     "服务商结束了请求，但没有返回文本或设计产物。请尝试更换模型或服务商、检查额度，或重试。",

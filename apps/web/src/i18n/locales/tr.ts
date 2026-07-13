@@ -3038,6 +3038,10 @@ export const tr: Dict = {
   'assistant.feedbackReasonOther': 'Diğer',
   'assistant.feedbackReasonPlaceholder': 'Kısa bir not ekleyin...',
   'assistant.feedbackReasonSubmit': 'Gönder',
+  'assistant.feedbackDiscordPositive':
+    'Oluşturduğunuz çalışmayı {discord} topluluğuyla paylaşın veya bir ekran görüntüsü gönderip nelerin iyi çalıştığını anlatın.',
+  'assistant.feedbackDiscordNegative':
+    'Ekibin neyin yanlış gittiğini anlayıp doğrudan takip edebilmesi için {discord} üzerinde daha fazla ayrıntı paylaşın.',
   'assistant.emptyResponseLabel': 'Çıktı yok',
   'assistant.emptyResponseMessage': 'Sağlayıcı, metin veya yapı döndürmeden isteği sonlandırdı. Başka bir model ya da sağlayıcı deneyin, kotanızı kontrol edin veya yeniden deneyin.',
   'assistant.unfinishedLabel': 'Bitmemiş işlerle durduruldu',

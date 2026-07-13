@@ -3038,6 +3038,10 @@ export const it: Dict = {
   'assistant.feedbackReasonOther': 'Altro',
   'assistant.feedbackReasonPlaceholder': 'Aggiungi una breve nota...',
   'assistant.feedbackReasonSubmit': 'Invia',
+  'assistant.feedbackDiscordPositive':
+    'Condividi ciò che hai creato con la community di {discord}, oppure pubblica uno screenshot e raccontaci cosa ha funzionato bene.',
+  'assistant.feedbackDiscordNegative':
+    'Condividi maggiori dettagli su {discord}, così il team potrà capire cosa non ha funzionato e contattarti direttamente.',
   'assistant.emptyResponseLabel': 'Nessun output',
   'assistant.emptyResponseMessage': 'Il provider ha terminato la richiesta senza restituire testo o un artefatto. Prova un altro modello o provider, controlla la quota o riprova.',
   'assistant.unfinishedLabel': 'Fermato con lavoro non completato',

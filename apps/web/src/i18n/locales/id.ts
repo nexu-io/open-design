@@ -3038,6 +3038,10 @@ export const id: Dict = {
   'assistant.feedbackReasonOther': 'Other',
   'assistant.feedbackReasonPlaceholder': 'Add a short note...',
   'assistant.feedbackReasonSubmit': 'Submit',
+  'assistant.feedbackDiscordPositive':
+    'Bagikan hasil karya Anda dengan komunitas {discord}, atau kirim tangkapan layar dan ceritakan apa yang berjalan dengan baik.',
+  'assistant.feedbackDiscordNegative':
+    'Bagikan konteks lebih lanjut di {discord} agar tim dapat memahami apa yang salah dan menindaklanjutinya secara langsung.',
   'assistant.emptyResponseLabel': 'No output',
   'assistant.emptyResponseMessage': 'The provider ended the request without returning text or an artifact. Try another model or provider, check quota, or retry.',
   'assistant.unfinishedLabel': 'Belum selesai',

@@ -89,6 +89,25 @@ export type QuestionFormOpenRequest = {
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 
+function DiscordFeedbackNote({
+  message,
+  testId,
+}: {
+  message: string;
+  testId: string;
+}) {
+  const [before, after] = message.split("{discord}");
+  return (
+    <>
+      {before}
+      <a href={DISCORD_INVITE_URL} data-testid={testId}>
+        Discord
+      </a>
+      {after}
+    </>
+  );
+}
+
 interface ActionNotice {
   message: string;
   url?: string;
@@ -1923,25 +1942,17 @@ function AssistantFeedback({
           ) : null}
           {reasonRating === "positive" ? (
             <p className="assistant-feedback-discord-note">
-              Share what you made with the{" "}
-              <a
-                href={DISCORD_INVITE_URL}
-                data-testid="assistant-feedback-discord-positive"
-              >
-                Discord
-              </a>{" "}
-              community, or drop a screenshot and tell us what worked well.
+              <DiscordFeedbackNote
+                message={t("assistant.feedbackDiscordPositive")}
+                testId="assistant-feedback-discord-positive"
+              />
             </p>
           ) : (
             <p className="assistant-feedback-discord-note">
-              Share more context in{" "}
-              <a
-                href={DISCORD_INVITE_URL}
-                data-testid="assistant-feedback-discord-negative"
-              >
-                Discord
-              </a>{" "}
-              so the team can understand what went wrong and follow up directly.
+              <DiscordFeedbackNote
+                message={t("assistant.feedbackDiscordNegative")}
+                testId="assistant-feedback-discord-negative"
+              />
             </p>
           )}
           <div className="assistant-feedback-actions">

@@ -3038,6 +3038,10 @@ export const pl: Dict = {
   'assistant.feedbackReasonOther': 'Inne',
   'assistant.feedbackReasonPlaceholder': 'Dodaj krótką notatkę...',
   'assistant.feedbackReasonSubmit': 'Wyślij',
+  'assistant.feedbackDiscordPositive':
+    'Udostępnij swoją pracę społeczności {discord} albo opublikuj zrzut ekranu i powiedz nam, co zadziałało dobrze.',
+  'assistant.feedbackDiscordNegative':
+    'Udostępnij więcej informacji na {discord}, aby zespół mógł zrozumieć, co poszło nie tak, i bezpośrednio się z Tobą skontaktować.',
   'assistant.emptyResponseLabel': 'Brak wyniku',
   'assistant.emptyResponseMessage': 'Dostawca zakończył żądanie bez zwrócenia tekstu ani artefaktu. Wypróbuj inny model lub dostawcę, sprawdź limit albo spróbuj ponownie.',
   'assistant.unfinishedLabel': 'Zatrzymano z niedokończonymi zadaniami',

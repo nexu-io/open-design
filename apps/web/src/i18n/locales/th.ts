@@ -3038,6 +3038,10 @@ export const th: Dict = {
   'assistant.feedbackReasonOther': 'อื่น ๆ',
   'assistant.feedbackReasonPlaceholder': 'เพิ่มหมายเหตุสั้น ๆ...',
   'assistant.feedbackReasonSubmit': 'ส่ง',
+  'assistant.feedbackDiscordPositive':
+    'แชร์สิ่งที่คุณสร้างกับชุมชน {discord} หรือโพสต์ภาพหน้าจอแล้วบอกเราว่าส่วนใดทำงานได้ดี',
+  'assistant.feedbackDiscordNegative':
+    'แชร์รายละเอียดเพิ่มเติมใน {discord} เพื่อให้ทีมเข้าใจว่าเกิดปัญหาอะไรและติดตามผลกับคุณได้โดยตรง',
   'assistant.emptyResponseLabel': 'ไม่มีผลลัพธ์',
   'assistant.emptyResponseMessage': 'ผู้ให้บริการสิ้นสุดคำขอโดยไม่ส่งคืนข้อความหรืออาร์ติแฟกต์ ลองใช้โมเดลหรือผู้ให้บริการอื่น ตรวจสอบโควต้า หรือลองใหม่อีกครั้ง',
   'assistant.unfinishedLabel': 'พ้นจากโหมดเพราะงานตกค้าง',

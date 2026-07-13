@@ -3285,6 +3285,10 @@ export const zhTW: Dict = {
   "assistant.feedbackReasonOther": "其他",
   "assistant.feedbackReasonPlaceholder": "補充說明...",
   "assistant.feedbackReasonSubmit": "提交",
+  "assistant.feedbackDiscordPositive":
+    "在 {discord} 社群分享你的作品，或貼上螢幕截圖並告訴我們哪些地方做得不錯。",
+  "assistant.feedbackDiscordNegative":
+    "在 {discord} 分享更多資訊，協助團隊了解問題並直接跟進。",
   "assistant.emptyResponseLabel": "無輸出",
   "assistant.emptyResponseMessage":
     "服務商結束了請求，但沒有返回文字或設計產物。請嘗試更換模型或服務商、檢查額度，或重試。",

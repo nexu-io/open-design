@@ -3038,6 +3038,10 @@ export const ptBR: Dict = {
   'assistant.feedbackReasonOther': 'Outro',
   'assistant.feedbackReasonPlaceholder': 'Adicione uma nota curta...',
   'assistant.feedbackReasonSubmit': 'Enviar',
+  'assistant.feedbackDiscordPositive':
+    'Compartilhe o que você criou com a comunidade do {discord} ou publique uma captura de tela e conte o que funcionou bem.',
+  'assistant.feedbackDiscordNegative':
+    'Compartilhe mais detalhes no {discord} para que a equipe entenda o que deu errado e possa falar diretamente com você.',
   'assistant.emptyResponseLabel': 'Sem saída',
   'assistant.emptyResponseMessage': 'O provedor encerrou a solicitação sem retornar texto ou artefato. Tente outro modelo ou provedor, verifique a cota ou tente novamente.',
   'assistant.unfinishedLabel': 'Interrompido com trabalho pendente',

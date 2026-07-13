@@ -3038,6 +3038,10 @@ export const ru: Dict = {
   'assistant.feedbackReasonOther': 'Другое',
   'assistant.feedbackReasonPlaceholder': 'Добавьте короткую заметку...',
   'assistant.feedbackReasonSubmit': 'Отправить',
+  'assistant.feedbackDiscordPositive':
+    'Поделитесь тем, что вы создали, с сообществом {discord} или опубликуйте снимок экрана и расскажите, что получилось хорошо.',
+  'assistant.feedbackDiscordNegative':
+    'Расскажите подробнее в {discord}, чтобы команда могла понять, что пошло не так, и связаться с вами напрямую.',
   'assistant.emptyResponseLabel': 'Нет результата',
   'assistant.emptyResponseMessage': 'Провайдер завершил запрос, не вернув текст или артефакт. Попробуйте другую модель или провайдера, проверьте квоту или повторите попытку.',
   'assistant.unfinishedLabel': 'Остановлено с незавершенной работой',

@@ -3038,6 +3038,10 @@ export const hu: Dict = {
   'assistant.feedbackReasonOther': 'Egyéb',
   'assistant.feedbackReasonPlaceholder': 'Adj hozzá egy rövid megjegyzést...',
   'assistant.feedbackReasonSubmit': 'Küldés',
+  'assistant.feedbackDiscordPositive':
+    'Oszd meg, mit készítettél a {discord} közösséggel, vagy küldj egy képernyőképet, és mondd el, mi működött jól.',
+  'assistant.feedbackDiscordNegative':
+    'Ossz meg további részleteket a {discord} felületén, hogy a csapat megérthesse, mi ment félre, és közvetlenül reagálhasson.',
   'assistant.emptyResponseLabel': 'Nincs kimenet',
   'assistant.emptyResponseMessage': 'A szolgáltató szöveg vagy műtermék visszaadása nélkül zárta le a kérést. Próbálj másik modellt vagy szolgáltatót, ellenőrizd a kvótát, vagy próbáld újra.',
   'assistant.unfinishedLabel': 'Befejezetlen munkával állt le',

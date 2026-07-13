@@ -15,6 +15,7 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
+import { I18nProvider, type Locale } from '../../src/i18n';
 import type { ChatMessage, ChatMessageFeedbackChange } from '../../src/types';
 
 const originalScrollIntoView = Element.prototype.scrollIntoView;
@@ -100,6 +101,7 @@ function renderChatPane({
   streaming = false,
   onAssistantFeedback = vi.fn(),
   hasActiveDesignSystem = false,
+  locale = 'en',
 }: {
   messages: ChatMessage[];
   streaming?: boolean;
@@ -108,27 +110,30 @@ function renderChatPane({
     change: ChatMessageFeedbackChange,
   ) => void;
   hasActiveDesignSystem?: boolean;
+  locale?: Locale;
 }) {
   return {
     onAssistantFeedback,
     ...render(
-      <ChatPane
-        projectKindForTracking="prototype"
-        messages={messages}
-        streaming={streaming}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        hasActiveDesignSystem={hasActiveDesignSystem}
-        onEnsureProject={async () => 'project-1'}
-        onSend={() => {}}
-        onStop={() => {}}
-        conversations={[]}
-        activeConversationId="conversation-1"
-        onSelectConversation={() => {}}
-        onDeleteConversation={() => {}}
-        onAssistantFeedback={onAssistantFeedback}
-      />,
+      <I18nProvider initial={locale}>
+        <ChatPane
+          projectKindForTracking="prototype"
+          messages={messages}
+          streaming={streaming}
+          error={null}
+          projectId="project-1"
+          projectFiles={[]}
+          hasActiveDesignSystem={hasActiveDesignSystem}
+          onEnsureProject={async () => 'project-1'}
+          onSend={() => {}}
+          onStop={() => {}}
+          conversations={[]}
+          activeConversationId="conversation-1"
+          onSelectConversation={() => {}}
+          onDeleteConversation={() => {}}
+          onAssistantFeedback={onAssistantFeedback}
+        />
+      </I18nProvider>,
     ),
   };
 }
@@ -295,6 +300,21 @@ describe('chat assistant feedback', () => {
       }),
     );
     expect(screen.queryByText('Tell us why')).toBeNull();
+  });
+
+  it('localizes the Discord guidance in the feedback panel', () => {
+    renderChatPane({
+      messages: [completedArtifactAssistant()],
+      locale: 'zh-CN',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '有帮助' }));
+
+    const discordLink = screen.getByTestId('assistant-feedback-discord-positive');
+    expect(discordLink.parentElement?.textContent).toBe(
+      '在 Discord 社区分享你的作品，或发布截图并告诉我们哪些方面做得不错。',
+    );
+    expect(discordLink.getAttribute('href')).toBe('https://discord.gg/mHAjSMV6gz');
   });
 
   it('adds design-system feedback reasons only when a design system is active', () => {

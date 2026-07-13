@@ -3038,6 +3038,10 @@ export const ar: Dict = {
   'assistant.feedbackReasonOther': 'أخرى',
   'assistant.feedbackReasonPlaceholder': 'أضف ملاحظة قصيرة...',
   'assistant.feedbackReasonSubmit': 'إرسال',
+  'assistant.feedbackDiscordPositive':
+    'شارك ما أنشأته مع مجتمع {discord}، أو أرسل لقطة شاشة وأخبرنا بما نجح بشكل جيد.',
+  'assistant.feedbackDiscordNegative':
+    'شارك مزيدًا من التفاصيل في {discord} حتى يتمكن الفريق من فهم الخطأ والمتابعة معك مباشرةً.',
   'assistant.emptyResponseLabel': 'لا توجد مخرجات',
   'assistant.emptyResponseMessage': 'أنهى المزوّد الطلب دون إرجاع نص أو عنصر. جرّب نموذجًا أو مزوّدًا آخر، أو تحقّق من الحصة، أو أعد المحاولة.',
   'assistant.unfinishedLabel': 'توقف مع عمل غير مكتمل',

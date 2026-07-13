@@ -3038,6 +3038,10 @@ export const fr: Dict = {
   'assistant.feedbackReasonOther': 'Autre',
   'assistant.feedbackReasonPlaceholder': 'Ajoutez une courte note...',
   'assistant.feedbackReasonSubmit': 'Envoyer',
+  'assistant.feedbackDiscordPositive':
+    'Partagez votre création avec la communauté {discord}, ou publiez une capture d’écran et dites-nous ce qui a bien fonctionné.',
+  'assistant.feedbackDiscordNegative':
+    'Partagez davantage de contexte sur {discord} pour que l’équipe comprenne ce qui s’est mal passé et puisse vous répondre directement.',
   'assistant.emptyResponseLabel': 'Aucune sortie',
   'assistant.emptyResponseMessage': 'Le fournisseur a terminé la requête sans renvoyer de texte ni d’artefact. Essayez un autre modèle ou fournisseur, vérifiez le quota, ou réessayez.',
   'assistant.unfinishedLabel': 'Arrêté avec du travail non terminé',

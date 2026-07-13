@@ -3052,6 +3052,10 @@ export const en: Dict = {
   'assistant.feedbackReasonOther': 'Other',
   'assistant.feedbackReasonPlaceholder': 'Add a short note...',
   'assistant.feedbackReasonSubmit': 'Submit',
+  'assistant.feedbackDiscordPositive':
+    'Share what you made with the {discord} community, or drop a screenshot and tell us what worked well.',
+  'assistant.feedbackDiscordNegative':
+    'Share more context in {discord} so the team can understand what went wrong and follow up directly.',
   'assistant.emptyResponseLabel': 'No output',
   'assistant.emptyResponseMessage': 'The provider ended the request without returning text or an artifact. Try another model or provider, check quota, or retry.',
   'assistant.unfinishedLabel': 'Stopped with unfinished work',

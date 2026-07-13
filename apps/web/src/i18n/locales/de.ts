@@ -3038,6 +3038,10 @@ export const de: Dict = {
   'assistant.feedbackReasonOther': 'Sonstiges',
   'assistant.feedbackReasonPlaceholder': 'Eine kurze Anmerkung hinzufügen...',
   'assistant.feedbackReasonSubmit': 'Absenden',
+  'assistant.feedbackDiscordPositive':
+    'Teile dein Ergebnis mit der {discord}-Community oder poste einen Screenshot und erzähle uns, was gut funktioniert hat.',
+  'assistant.feedbackDiscordNegative':
+    'Teile mehr Kontext auf {discord}, damit das Team verstehen kann, was schiefgelaufen ist, und direkt nachfassen kann.',
   'assistant.emptyResponseLabel': 'Keine Ausgabe',
   'assistant.emptyResponseMessage': 'Der Anbieter hat die Anfrage beendet, ohne Text oder ein Artefakt zurückzugeben. Versuche ein anderes Modell oder einen anderen Anbieter, prüfe dein Kontingent oder versuche es erneut.',
   'assistant.unfinishedLabel': 'Mit unerledigter Arbeit gestoppt',

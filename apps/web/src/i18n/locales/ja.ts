@@ -3038,6 +3038,10 @@ export const ja: Dict = {
   'assistant.feedbackReasonOther': 'その他',
   'assistant.feedbackReasonPlaceholder': '短いメモを追加...',
   'assistant.feedbackReasonSubmit': '送信',
+  'assistant.feedbackDiscordPositive':
+    '作成したものを {discord} コミュニティで共有するか、スクリーンショットを投稿して、うまくいった点を教えてください。',
+  'assistant.feedbackDiscordNegative':
+    '問題の内容をチームが把握し、直接フォローできるよう、{discord} で詳しい状況を共有してください。',
   'assistant.emptyResponseLabel': '出力なし',
   'assistant.emptyResponseMessage': 'プロバイダーがテキストやアーティファクトを返さずにリクエストを終了しました。別のモデルやプロバイダーを試す、クォータを確認する、または再試行してください。',
   'assistant.unfinishedLabel': '未完了の作業があります',

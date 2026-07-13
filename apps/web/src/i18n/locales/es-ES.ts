@@ -3038,6 +3038,10 @@ export const esES: Dict = {
   'assistant.feedbackReasonOther': 'Otro',
   'assistant.feedbackReasonPlaceholder': 'Añade una nota breve...',
   'assistant.feedbackReasonSubmit': 'Enviar',
+  'assistant.feedbackDiscordPositive':
+    'Comparte lo que creaste con la comunidad de {discord}, o publica una captura de pantalla y cuéntanos qué funcionó bien.',
+  'assistant.feedbackDiscordNegative':
+    'Comparte más contexto en {discord} para que el equipo pueda entender qué salió mal y hacer un seguimiento directamente.',
   'assistant.emptyResponseLabel': 'Sin salida',
   'assistant.emptyResponseMessage': 'El proveedor finalizó la solicitud sin devolver texto ni un artefacto. Prueba con otro modelo o proveedor, comprueba la cuota o vuelve a intentarlo.',
   'assistant.unfinishedLabel': 'Detenido con tareas pendientes',
