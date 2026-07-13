@@ -137,7 +137,7 @@
   min-height: 100%;
   place-items: center;
   margin: 0 auto;
-  padding: clamp(112px, 18vh, 190px) 0 64px;
+  padding: clamp(72px, 12vh, 112px) 0 64px;
   text-align: center;
 }
 .ds-extraction-demo__loading,
