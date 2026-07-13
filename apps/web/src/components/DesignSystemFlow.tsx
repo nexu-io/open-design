@@ -78,7 +78,6 @@ import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
 import { DesignSystemAssetDropzone } from './DesignSystemAssetDropzone';
 import { BrandPickerModal } from './BrandPickerModal';
-import { DesignSystemCreateHero } from './DesignSystemCreateHero';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
@@ -626,6 +625,22 @@ export function DesignSystemCreationFlow({
     }));
   }
 
+  function handlePrimaryIntakeSubmit() {
+    const value = state.company.trim();
+    if (!value) return;
+    const sourceLike = /^(?:https?:\/\/|www\.|github\.com\/|git@github\.com:)/iu.test(value);
+    if (sourceLike) {
+      const sourceUrl = normalizeSourceUrl(value);
+      setState((curr) => ({
+        ...curr,
+        company: '',
+        sourceUrls: Array.from(new Set([...curr.sourceUrls, sourceUrl])),
+      }));
+    }
+    emitCreateFormClick('continue_to_generation');
+    setStep('confirm');
+  }
+
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (isImeComposing(event)) return;
     if (event.key !== 'Enter') return;
@@ -1050,17 +1065,30 @@ export function DesignSystemCreationFlow({
             <h1>{t('dsCreate.embeddedTitle')}</h1>
             <p>{t('dsCreate.embeddedBody')}</p>
           </>
-        ) : (
-          <aside className="ds-setup-hero-col">
-            <DesignSystemCreateHero stacked />
-          </aside>
-        )}
+        ) : null}
 
         <div className="ds-setup-form-col">
-        <section className="ds-resource-section">
+        <section className="ds-resource-section ds-resource-section--focused">
           <h2>{t('dsCreate.sourceSectionTitle')}</h2>
           <p>{t('dsCreate.sourceSectionBody')}</p>
-          <div className="ds-resource-card">
+          <div className="ds-primary-intake">
+            <textarea
+              rows={2}
+              value={state.company}
+              onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
+              placeholder={t('dsCreate.companyPlaceholder')}
+            />
+            <button
+              type="button"
+              className="ds-primary-intake__submit"
+              aria-label={t('dsCreate.continueToGeneration')}
+              disabled={!state.company.trim()}
+              onClick={handlePrimaryIntakeSubmit}
+            >
+              <Icon name="arrow-up" size={18} />
+            </button>
+          </div>
+          <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
             <div className="ds-resource-row">
               <strong>{t('dsCreate.githubWebsiteLabel')}</strong>
               <div className="ds-resource-inline">
@@ -1162,18 +1190,6 @@ export function DesignSystemCreationFlow({
                   setLibraryPickerOpen(true);
                 }}
               />
-            </div>
-            <div className="ds-resource-row ds-resource-row--description">
-              <strong>{t('dsCreate.describeBrand')} <span>{t('dsCreate.optional')}</span></strong>
-              <label className="ds-resource-description">
-                <span>{t('dsCreate.describeBrandHelp')}</span>
-                <textarea
-                  rows={3}
-                  value={state.company}
-                  onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-                  placeholder={t('dsCreate.companyPlaceholder')}
-                />
-              </label>
             </div>
             <div className="ds-resource-row ds-resource-row--design-md">
               <strong>{t('dsCreate.pasteDesignMd')} <span>{t('dsCreate.optional')}</span></strong>

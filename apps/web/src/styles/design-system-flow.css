@@ -111,35 +111,17 @@
   margin: 0 auto;
   padding: 36px 0 64px;
 }
-/* Standalone create page: pin the intro hero on the left while the form
-   scrolls on the right. The shell (.ds-setup-shell) is the scroll container,
-   so the hero column sticks just beneath the sticky top bar. The embedded
-   onboarding variant keeps its single-column stack. */
+/* Standalone creation starts with one calm, focused intake rather than a
+   marketing split-layout. More specialised source methods remain available
+   in the disclosure beneath it. */
 .ds-setup-shell:not(.ds-setup-shell--embedded) .ds-setup-form {
-  width: min(1280px, calc(100vw - 56px));
-  display: grid;
-  /* Hero column is intro/marketing — keep it compact so the working form
-     column on the right gets the room its labels and inputs need. */
-  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
-  gap: 48px;
-  align-items: start;
-}
-.ds-setup-hero-col {
-  position: sticky;
-  top: 84px;
-  align-self: start;
+  width: min(720px, calc(100vw - 40px));
+  padding: clamp(56px, 12vh, 148px) 0 64px;
 }
 .ds-setup-form-col {
   min-width: 0;
 }
 @media (max-width: 960px) {
-  .ds-setup-shell:not(.ds-setup-shell--embedded) .ds-setup-form {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-  }
-  .ds-setup-hero-col {
-    position: static;
-  }
   .ds-setup-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -223,6 +205,24 @@
 .ds-resource-section {
   margin-bottom: 18px;
 }
+.ds-resource-section--focused {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+}
+.ds-resource-section--focused > h2 {
+  max-width: 22ch;
+  text-align: center;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+.ds-resource-section--focused > p {
+  max-width: 54ch;
+  margin: 14px auto 28px;
+  text-align: center;
+  line-height: 1.55;
+}
 .ds-resource-section h2 {
   margin: 0 0 8px;
   font-family: var(--sans);
@@ -244,6 +244,71 @@
   background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
   box-shadow: 0 14px 36px color-mix(in srgb, var(--shadow-color, #000) 5%, transparent), var(--shadow-xs);
   overflow: hidden;
+}
+.ds-resource-card.is-collapsed > .ds-resource-row {
+  display: none;
+}
+.ds-resource-card.is-collapsed .ds-resource-advanced {
+  border-top: 0;
+}
+.ds-primary-intake {
+  position: relative;
+  width: min(100%, 580px);
+  margin-bottom: 12px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, var(--accent));
+  border-radius: calc(var(--radius-large, 8px) + 5px);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--shadow-color, #000) 9%, transparent), var(--shadow-xs);
+}
+.ds-primary-intake:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-sm);
+}
+.ds-primary-intake textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 54px 14px 15px;
+  resize: vertical;
+  border: 0;
+  border-radius: var(--radius-large, 8px);
+  outline: 0;
+  color: var(--text-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.ds-primary-intake textarea::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 68%, transparent);
+}
+.ds-primary-intake__submit {
+  position: absolute;
+  right: 11px;
+  bottom: 11px;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 32%, transparent);
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-primary-intake__submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.ds-primary-intake__submit:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+.ds-primary-intake__submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .ds-resource-row {
   display: grid;
@@ -698,13 +763,16 @@
   border-top: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 2px;
 }
 .ds-resource-advanced-toggle {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 28px;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 .ds-resource-advanced .ds-resource-row {
   padding-left: 0;
