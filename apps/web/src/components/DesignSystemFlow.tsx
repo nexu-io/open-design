@@ -1761,10 +1761,6 @@ function DemoExtractedComponentKit({
           <h3>Alerts &amp; progress</h3>
           <p className="is-success">✓ Brand system generated</p><p className="is-warning">! Review a missing source</p><div><i style={{ backgroundColor: primary }} /></div>
         </section>
-        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--palette">
-          <h3>Color</h3>
-          <div>{foundation.colors.map((color) => <i key={color.hex} title={color.label} style={{ backgroundColor: color.hex }} />)}</div>
-        </section>
         <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--scale">
           <h3>Type scale</h3>
           <strong>The quick brown fox</strong><span>The quick brown fox</span><small>The quick brown fox</small>

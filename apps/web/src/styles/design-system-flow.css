@@ -527,8 +527,7 @@
 .ds-extraction-demo__kit-buttons,
 .ds-extraction-demo__kit-section--navigation nav,
 .ds-extraction-demo__kit-steps,
-.ds-extraction-demo__kit-metrics,
-.ds-extraction-demo__kit-section--palette > div {
+.ds-extraction-demo__kit-metrics {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -590,8 +589,6 @@
 .ds-extraction-demo__kit-section--alerts .is-warning { background: color-mix(in srgb, #f39c12 13%, var(--bg-panel)); color: #a76400; }
 .ds-extraction-demo__kit-section--alerts > div { height: 4px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--text-muted) 14%, var(--bg-panel)); }
 .ds-extraction-demo__kit-section--alerts > div i { display: block; width: 72%; height: 100%; }
-.ds-extraction-demo__kit-section--palette > div { gap: 8px; }
-.ds-extraction-demo__kit-section--palette i { width: 44px; height: 34px; border: 1px solid var(--border); border-radius: 6px; }
 .ds-extraction-demo__kit-section--scale { display: grid; gap: 7px; }
 .ds-extraction-demo__kit-section--scale strong { font-family: var(--demo-kit-display), Georgia, serif; font-size: 24px; font-weight: 500; }
 .ds-extraction-demo__kit-section--scale span { font-size: 15px; }
