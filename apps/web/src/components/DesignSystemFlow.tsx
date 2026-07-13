@@ -1025,7 +1025,7 @@ export function DesignSystemCreationFlow({
         </div>
       ) : null}
       {embedded ? null : (
-        <header className="ds-setup-topbar">
+        <header className="ds-setup-topbar ds-setup-topbar--minimal">
           <div className="ds-setup-topbar-left">
             <Button
               variant="ghost"
@@ -1038,24 +1038,6 @@ export function DesignSystemCreationFlow({
               Back
             </Button>
           </div>
-          <span className="ds-setup-mark">
-            <Icon name="blocks" />
-          </span>
-          <Button
-            variant="primary"
-            disabled={!hasCreationSource(state)}
-            onClick={() => {
-              emitCreateFormClick('continue_to_generation');
-              if (!hasCreationSource(state)) {
-                setError(t('dsCreate.missingSourceError'));
-                return;
-              }
-              setStep('confirm');
-            }}
-          >
-            {t('dsCreate.continueToGeneration')}
-            <Icon name="chevron-right" />
-          </Button>
         </header>
       )}
 
@@ -1069,14 +1051,14 @@ export function DesignSystemCreationFlow({
 
         <div className="ds-setup-form-col">
         <section className="ds-resource-section ds-resource-section--focused">
-          <h2>{t('dsCreate.sourceSectionTitle')}</h2>
-          <p>{t('dsCreate.sourceSectionBody')}</p>
+          <h2>{t('dsCreate.focusedTitle')}</h2>
+          <p>{t('dsCreate.focusedBody')}</p>
           <div className="ds-primary-intake">
             <textarea
               rows={2}
               value={state.company}
               onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-              placeholder={t('dsCreate.companyPlaceholder')}
+              placeholder={t('dsCreate.primaryInputPlaceholder')}
             />
             <button
               type="button"
