@@ -755,7 +755,15 @@ export function loadConfig(): AppConfig {
     }
 
     if (migratedConfig || downgradedUnsupportedChatProtocol) {
-      saveConfig(merged);
+      // Best-effort re-persist of the migrated / downgraded config. A localStorage
+      // write failure here (quota exceeded, private-mode storage disabled) must not
+      // fall through to the outer catch and discard the valid config we just
+      // parsed — that would silently reset the user to defaults for the session.
+      try {
+        saveConfig(merged);
+      } catch {
+        // keep the parsed config even if it could not be written back
+      }
     }
 
     return merged;
