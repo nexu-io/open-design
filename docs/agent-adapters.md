@@ -19,7 +19,7 @@ An adapter is **not** a class that implements the agent loop. It is a **plain da
 Where the pieces live (all under `apps/daemon/src/`):
 
 - **The contract (the data spec):** [`runtimes/types.ts`](../apps/daemon/src/runtimes/types.ts) — the `RuntimeAgentDef` type.
-- **One def per CLI:** [`runtimes/defs/*.ts`](../apps/daemon/src/runtimes/defs) — `claude.ts`, `codex.ts`, `gemini.ts`, `devin.ts`, … each exports a single object literal.
+- **One def per CLI:** [`runtimes/defs/*.ts`](../apps/daemon/src/runtimes/defs) — `claude.ts`, `codex.ts`, `cursor-agent.ts`, `devin.ts`, … each exports a single object literal.
 - **The registry (a unique-id array):** [`runtimes/registry.ts`](../apps/daemon/src/runtimes/registry.ts) — `BASE_AGENT_DEFS` collects every def into `AGENT_DEFS`; a boot-time loop throws on any duplicate `id`.
 - **The generic engine (zero per-agent code):** `detection.ts`, `capabilities.ts`, `executables.ts` / `resolution.ts`, `launch.ts`, `invocation.ts`, `env.ts`, `mcp.ts`, `models.ts`, `prompt-budget.ts` under `runtimes/`, plus the stream dispatch in [`server.ts`](../apps/daemon/src/server.ts) that routes each def's `streamFormat` / `eventParser` to the matching `*-stream.ts` parser.
 - **The public barrel:** [`agents.ts`](../apps/daemon/src/agents.ts) re-exports `AGENT_DEFS`, `getAgentDef`, `detectAgents`, `resolveAgentLaunch`, … from `runtimes/`. It defines nothing itself — import from it for convenience, but read `runtimes/` for the contract.
@@ -49,8 +49,8 @@ type RuntimeAgentDef = {
   ) => string[];
 
   // How it talks back: the engine dispatches these to the matching parser.
-  streamFormat: string;               // e.g. "stream-json" | "acp-json-rpc" | "text"
-  eventParser?: string;               // named parser, e.g. "claude-stream" | "qoder-stream"
+  streamFormat: string;               // e.g. "claude-stream-json" | "acp-json-rpc" | "plain"
+  eventParser?: string;               // named parser, e.g. "codex" | "cursor-agent" | "opencode"
 
   // How the prompt is delivered.
   promptViaStdin?: boolean;
@@ -71,14 +71,14 @@ Every field is **data or a pure arg-builder** — there is no `run()`, no `cance
 ### A concrete def (shape)
 
 ```ts
-// runtimes/defs/gemini.ts (illustrative)
-export const geminiAgentDef: RuntimeAgentDef = {
-  id: 'gemini',
-  name: 'Gemini CLI',
-  bin: 'gemini',
+// runtimes/defs/acme.ts (illustrative — a made-up CLI, not a shipped def)
+export const acmeAgentDef: RuntimeAgentDef = {
+  id: 'acme',
+  name: 'Acme CLI',
+  bin: 'acme',
   versionArgs: ['--version'],
-  fallbackModels: [{ id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }],
-  streamFormat: 'stream-json',
+  fallbackModels: [{ id: 'acme-pro', label: 'Acme Pro' }],
+  streamFormat: 'claude-stream-json',   // reuse an existing parser — no engine change
   promptViaStdin: true,
   buildArgs: (prompt, imagePaths, extraDirs, opts) => [
     '--output-format', 'stream-json',
@@ -92,7 +92,7 @@ export const geminiAgentDef: RuntimeAgentDef = {
 ```ts
 // runtimes/registry.ts
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
-  claudeAgentDef, codexAgentDef, devinAgentDef, geminiAgentDef,
+  claudeAgentDef, codexAgentDef, devinAgentDef, cursorAgentDef,
   /* … one entry per CLI (roughly two dozen today) … */
 ];
 
@@ -380,9 +380,9 @@ apps/daemon/src/
 │   ├── defs/               # one object literal per CLI — the file you add for a new agent
 │   │   ├── claude.ts
 │   │   ├── codex.ts
-│   │   ├── gemini.ts
+│   │   ├── cursor-agent.ts
 │   │   ├── devin.ts
-│   │   ├── …               # ~two dozen defs (opencode, hermes, cursor-agent, qoder, copilot,
+│   │   ├── …               # ~two dozen defs (opencode, hermes, qoder, copilot,
 │   │   │                   #   amp, pi, kiro, kilo, vibe, deepseek, aider, antigravity, qwen,
 │   │   │                   #   grok-build, kimi, reasonix, codebuddy, trae-cli, …)
 │   │   └── shared.ts       # helpers reused across defs (not a registered agent)
