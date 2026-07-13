@@ -48,7 +48,7 @@ import {
 } from '../runtime/design-system-package-audit';
 import { deriveFileOps } from '../runtime/file-ops';
 import { latestTodosFromEvents } from '../runtime/todos';
-import { brandFaviconUrl } from '../runtime/brand-references';
+import { BRAND_REFERENCES, brandFaviconUrl } from '../runtime/brand-references';
 import { useBrandExtract } from '../runtime/useBrandExtract';
 import {
   createFileSystemReadError,
@@ -73,6 +73,7 @@ import type {
   ProjectFile,
   ProjectMetadata,
 } from '../types';
+
 import { takeDesignSystemAssetSeed } from '../state/libraryHandoff';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
@@ -126,6 +127,11 @@ import type {
   TrackingDesignSystemsEntryFrom,
 } from '@open-design/contracts/analytics';
 import { useI18n } from '../i18n';
+
+const PRIMARY_BRAND_EXAMPLE_NAMES = new Set(['Apple', 'Nike', 'Spotify', 'Airbnb']);
+const PRIMARY_BRAND_EXAMPLES = BRAND_REFERENCES.filter((brand) =>
+  PRIMARY_BRAND_EXAMPLE_NAMES.has(brand.name),
+);
 
 // Source counts the embedded DS creation flow can report back to its
 // wrapper at Generate-click time. OnboardingView uses this to emit the
@@ -641,6 +647,19 @@ export function DesignSystemCreationFlow({
     setStep('confirm');
   }
 
+  function handlePrimaryBrandExample(domain: string) {
+    const sourceUrl = normalizeSourceUrl(`https://${domain}`);
+    if (!sourceUrl) return;
+    setError(null);
+    setState((curr) => ({
+      ...curr,
+      company: '',
+      sourceUrls: Array.from(new Set([...curr.sourceUrls, sourceUrl])),
+    }));
+    emitCreateFormClick('continue_to_generation');
+    setStep('confirm');
+  }
+
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (isImeComposing(event)) return;
     if (event.key !== 'Enter') return;
@@ -1025,20 +1044,18 @@ export function DesignSystemCreationFlow({
         </div>
       ) : null}
       {embedded ? null : (
-        <header className="ds-setup-topbar ds-setup-topbar--minimal">
-          <div className="ds-setup-topbar-left">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                emitCreateFormClick('back');
-                onBack();
-              }}
-            >
-              <Icon name="arrow-left" />
-              Back
-            </Button>
-          </div>
-        </header>
+        <div className="ds-setup-back">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              emitCreateFormClick('back');
+              onBack();
+            }}
+          >
+            <Icon name="arrow-left" />
+            Back
+          </Button>
+        </div>
       )}
 
       <main className="ds-setup-form">
@@ -1069,6 +1086,17 @@ export function DesignSystemCreationFlow({
             >
               <Icon name="arrow-up" size={18} />
             </button>
+          </div>
+          <div className="ds-primary-examples">
+            {PRIMARY_BRAND_EXAMPLES.map((brand) => (
+              <button
+                key={brand.domain}
+                type="button"
+                onClick={() => handlePrimaryBrandExample(brand.domain)}
+              >
+                https://{brand.domain}
+              </button>
+            ))}
           </div>
           <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
             <div className="ds-resource-row">

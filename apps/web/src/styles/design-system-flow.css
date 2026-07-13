@@ -20,6 +20,12 @@
   overflow: visible;
   background: transparent;
 }
+.ds-setup-back {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  z-index: 20;
+}
 .ds-setup-topbar {
   position: sticky;
   top: 0;
@@ -276,6 +282,35 @@
 .ds-primary-intake:focus-within {
   border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-sm);
+}
+.ds-primary-examples {
+  display: flex;
+  width: min(100%, 580px);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 12px;
+  margin: -2px 0 12px;
+}
+.ds-primary-examples button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-muted) 68%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-primary-examples button:hover,
+.ds-primary-examples button:focus-visible {
+  color: var(--text);
+}
+.ds-primary-examples button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 .ds-primary-intake textarea {
   display: block;
@@ -778,15 +813,15 @@
   gap: 2px;
 }
 .ds-resource-advanced-toggle {
-  align-self: flex-start;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 28px;
-  color: var(--text-muted);
-  opacity: 0.68;
+  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
+  opacity: 0.62;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1), opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .ds-resource-advanced-toggle:hover {
