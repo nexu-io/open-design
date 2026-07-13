@@ -1961,15 +1961,28 @@ export interface StartServerResult {
 }
 
 /** Mount the canonical daemon app at the public prefix and retain root API compatibility. */
+function isDeploymentBasePathRequest(originalUrl: string, basePath: string): boolean {
+  const requestPath = originalUrl.split('?', 1)[0];
+  return requestPath === basePath || requestPath.startsWith(`${basePath}/`);
+}
+
 export function mountDeploymentApp(listenerApp: Express, routeApp: Express, basePath: string): void {
-  if (basePath !== '') {
-    // Mount the prefixed listener first so its SPA fallback cannot be swallowed
-    // by the compatibility root mount. Express removes the mount path before
-    // dispatching to the existing route app.
-    listenerApp.use(basePath, routeApp);
+  if (basePath === '') {
+    // CLI clients and prefix-stripping reverse proxies continue to use root paths.
+    listenerApp.use(routeApp);
+    return;
   }
-  // CLI clients and prefix-stripping reverse proxies continue to use root paths.
-  listenerApp.use(routeApp);
+
+  // Mount the prefixed listener first so its SPA fallback sees the path with the
+  // public prefix removed. Express restores the original URL after this mount
+  // calls next(), so the compatibility mount below must not process the same
+  // prefixed request a second time.
+  listenerApp.use(basePath, routeApp);
+  listenerApp.use((req, res, next) => {
+    if (isDeploymentBasePathRequest(req.originalUrl, basePath)) return next();
+    // CLI clients and prefix-stripping reverse proxies continue to use root paths.
+    return routeApp(req, res, next);
+  });
 }
 
 export async function startServer({
