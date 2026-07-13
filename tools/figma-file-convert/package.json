@@ -11,8 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "kiwi-schema": "^0.5.0",
-    "pako": "^3.0.1"
+    "openfig-core": "^0.3.7"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

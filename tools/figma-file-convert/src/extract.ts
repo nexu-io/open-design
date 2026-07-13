@@ -33,15 +33,15 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
   const componentNames: string[] = [];
 
   walkAllNodes(file, (node) => {
-    // Colors from fills and strokes
+    // Colors from fillPaints and strokePaints (openfig-core naming)
     const paints: ParsedPaint[] = [
-      ...(node.fills ?? []),
-      ...(node.strokes ?? []),
+      ...((node as any).fillPaints ?? []),
+      ...((node as any).strokePaints ?? []),
     ];
     for (const paint of paints) {
       if (paint.type === 'SOLID' && paint.color) {
         const hex = rgbaToHex(paint.color.r, paint.color.g, paint.color.b);
-        const key = `${hex}_${paint.color.a.toFixed(2)}`;
+        const key = `${hex}_${(paint.color.a ?? 1).toFixed(2)}`;
         const entry = colorMap.get(key);
         if (entry) {
           entry.count++;
@@ -51,30 +51,10 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
             r: paint.color.r,
             g: paint.color.g,
             b: paint.color.b,
-            a: paint.color.a,
+            a: paint.color.a ?? 1,
             count: 1,
             role: inferColorRole(node, paint),
           });
-        }
-      }
-      // Extract colors from gradient stops
-      if (paint.gradientStops) {
-        for (const stop of paint.gradientStops) {
-          if (stop.color) {
-            const hex = rgbaToHex(stop.color.r, stop.color.g, stop.color.b);
-            const key = `grad_${hex}_${stop.color.a.toFixed(2)}`;
-            if (!colorMap.has(key)) {
-              colorMap.set(key, {
-                hex,
-                r: stop.color.r,
-                g: stop.color.g,
-                b: stop.color.b,
-                a: stop.color.a,
-                count: 1,
-                role: 'gradient',
-              });
-            }
-          }
         }
       }
     }
@@ -84,14 +64,14 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
       for (const effect of node.effects) {
         if (effect.color) {
           const hex = rgbaToHex(effect.color.r, effect.color.g, effect.color.b);
-          const key = `fx_${hex}_${effect.color.a.toFixed(2)}`;
+          const key = `fx_${hex}_${(effect.color.a ?? 1).toFixed(2)}`;
           if (!colorMap.has(key)) {
             colorMap.set(key, {
               hex,
               r: effect.color.r,
               g: effect.color.g,
               b: effect.color.b,
-              a: effect.color.a,
+              a: effect.color.a ?? 1,
               count: 1,
               role: 'effect',
             });
@@ -132,7 +112,7 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
     if (cr && cr > 0 && !radii.includes(Math.round(cr))) radii.push(Math.round(cr));
 
     // Component names
-    if (node.type === 'COMPONENT' || node.type === 'SYMBOL' || node.componentId) {
+    if (node.type === 'COMPONENT' || node.type === 'SYMBOL' || (node as any).componentId) {
       const name = node.name || '';
       if (name && !componentNames.includes(name)) componentNames.push(name);
     }
@@ -152,8 +132,8 @@ function rgbaToHex(r: number, g: number, b: number): string {
 }
 
 function inferColorRole(node: ParsedNode, paint: ParsedPaint): string {
-  if (node.strokes?.includes(paint)) return 'stroke';
+  if (((node as any).strokePaints ?? []).includes(paint)) return 'stroke';
   if (node.type === 'TEXT') return 'text';
-  if (node.fills?.includes(paint)) return 'fill';
+  if (((node as any).fillPaints ?? []).includes(paint)) return 'fill';
   return 'unknown';
 }
