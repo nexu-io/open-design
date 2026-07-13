@@ -62,6 +62,7 @@
     "@types/node": "20.19.39",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
+    "@vitest/coverage-v8": "4.1.6",
     "jsdom": "29.1.1",
     "postcss": "8.5.15",
     "tailwindcss": "4.3.0",

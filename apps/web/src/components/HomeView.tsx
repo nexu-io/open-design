@@ -46,7 +46,7 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { FigmaImportModal } from './FigmaImportModal';
-import { fetchMcpServers } from '../state/mcp';
+import { fetchMcpServers } from '../providers/mcp';
 import { takeHomeComposerAssetSeed } from '../state/libraryHandoff';
 import { useI18n, useT } from '../i18n';
 import {

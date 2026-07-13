@@ -40,8 +40,8 @@ import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedD
 import { WorkingDirPicker } from './WorkingDirPicker';
 import { duplicatePluginAsProject, patchProject } from "../state/projects";
 import { navigate } from '../router';
-import { fetchMcpServers } from "../state/mcp";
-import type { McpServerConfig, McpTemplate } from "../state/mcp";
+import { fetchMcpServers } from "../providers/mcp";
+import type { McpServerConfig, McpTemplate } from "../providers/mcp";
 import { listPlugins } from "../state/projects";
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, Project, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
 import type {
