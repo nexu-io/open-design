@@ -634,7 +634,7 @@ export function DesignSystemCreationFlow({
   function handlePrimaryIntakeSubmit() {
     const value = state.company.trim();
     if (!value) return;
-    const sourceLike = /^(?:https?:\/\/|www\.|github\.com\/|git@github\.com:)/iu.test(value);
+    const sourceLike = /^(?:https?:\/\/|www\.|github\.com\/|git@github\.com:|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]|$))/iu.test(value);
     const nextState = sourceLike
       ? {
           ...state,
@@ -650,17 +650,8 @@ export function DesignSystemCreationFlow({
   }
 
   function handlePrimaryBrandExample(domain: string) {
-    const sourceUrl = normalizeSourceUrl(`https://${domain}`);
-    if (!sourceUrl) return;
     setError(null);
-    const nextState = {
-      ...state,
-      company: '',
-      sourceUrls: Array.from(new Set([...state.sourceUrls, sourceUrl])),
-    };
-    setState(nextState);
-    emitCreateFormClick('continue_to_generation');
-    void generate(nextState);
+    setState((curr) => ({ ...curr, company: domain }));
   }
 
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
