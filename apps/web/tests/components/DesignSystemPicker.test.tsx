@@ -124,6 +124,38 @@ describe('DesignSystemPicker', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('drops the sticky hover preview when the user moves to the search input (#2695)', async () => {
+    renderPicker();
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    await screen.findByTestId('project-ds-picker-preview-kit-view');
+
+    // Hover a non-selected system so the preview targets it.
+    fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
+    await waitFor(() => {
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay');
+    });
+    expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
+
+    // Typing in the search input must drop the stale hover target and fall back
+    // to the selected system ('noir'), not keep previewing the hovered 'clay'.
+    fireEvent.change(screen.getByTestId('project-ds-picker-search'), {
+      target: { value: 'e' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
+    });
+    expect(screen.queryByText('Friendly tactile product UI.')).toBeNull();
+
+    // Clearing on typing must be transient: hovering a (still-filtered) result
+    // after searching should update the preview to it as usual.
+    fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
+    await waitFor(() => {
+      expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
+    });
+  });
+
   it('selects a design system option with keyboard activation', async () => {
     const onChange = vi.fn();
     renderPicker({ onChange });
