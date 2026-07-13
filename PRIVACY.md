@@ -44,12 +44,22 @@ team. Each category is independently controllable in Settings.
 
 ## How telemetry is sent
 
-Redacted telemetry batches are sent to a Cloudflare Worker relay operated by
-the Open Design team, which forwards them to [Langfuse](https://langfuse.com)
-for analysis. The relay holds the Langfuse write credentials server-side, so
-packaged clients only ever ship a public relay URL — no secret keys. If the
-relay is unavailable the app retries quietly and keeps working; telemetry
-never blocks your workflow.
+Telemetry reaches us over two separate paths, depending on the category.
+
+**Anonymous metrics and stability events** are sent to
+[PostHog](https://posthog.com) (`https://us.i.posthog.com`), a third-party
+product-analytics provider, using a public project key. The web app, the local
+daemon, and the packaged desktop app each send these directly to PostHog rather
+than through the relay described below.
+
+**Conversation and tool content**, when that category is enabled, is sent as
+redacted batches to a Cloudflare Worker relay operated by the Open Design team,
+which forwards them to [Langfuse](https://langfuse.com) for analysis. The relay
+holds the Langfuse write credentials server-side, so packaged clients only ever
+ship a public relay URL — no secret keys.
+
+If either endpoint is unavailable the app retries quietly and keeps working;
+telemetry never blocks your workflow.
 
 ## Your anonymous ID
 
