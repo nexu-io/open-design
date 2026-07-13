@@ -3641,26 +3641,10 @@
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-.onboarding-question-flow__progress {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.onboarding-question-flow__progress span:last-child {
-  font-variant-numeric: tabular-nums;
-}
-
 .onboarding-question-flow__segments {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
-  margin-top: -10px;
 }
 
 .onboarding-question-flow__segments i {
