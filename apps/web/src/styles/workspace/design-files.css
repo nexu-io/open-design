@@ -163,6 +163,17 @@
   .df-actions button > span { display: none; }
   .df-actions button { padding: 6px; }
 }
+/* Toolbar action icons pick up the same semantic colors as the empty-state
+   CTAs on hover (sketch = red, paste = green, upload = blue). */
+.df-actions .df-action-sketch:hover:not(:disabled) .od-icon {
+  color: var(--red);
+}
+.df-actions .df-action-paste:hover:not(:disabled) .od-icon {
+  color: var(--green);
+}
+.df-actions .df-action-upload:hover:not(:disabled) .od-icon {
+  color: var(--blue);
+}
 /* Upload error banner. */
 .df-upload-banner {
   margin: 0 20px 8px;
@@ -668,35 +679,24 @@
   width: 70px;
   height: 88px;
   margin-left: -35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  /* Borderless white cards — the shadow alone lifts the fan off the page.
+     Each card carries its CTA's icon (pencil / globe / blocks) instead of
+     skeleton shapes; the icon takes the CTA's accent on the paired hover. */
+  border: 0;
   background: var(--bg-app, #fff);
   box-shadow: 0 6px 16px -9px rgba(15, 15, 15, 0.28);
+  color: var(--text-faint);
   transform-origin: bottom center;
   transition:
     transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 280ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 280ms cubic-bezier(0.23, 1, 0.32, 1);
+    box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* A faint thumbnail bar + caption line so each card reads as a design file. */
-.df-empty-stack-card::before {
-  content: '';
-  position: absolute;
-  inset: 9px 9px auto 9px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--bg-subtle);
-}
-.df-empty-stack-card::after {
-  content: '';
-  position: absolute;
-  left: 9px;
-  right: 22px;
-  bottom: 12px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--bg-subtle);
+.df-empty-stack-card .od-icon {
+  transition: color 280ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .df-empty-stack-card--left {
   transform: translateX(-30px) rotate(-13deg);
@@ -729,42 +729,33 @@
   z-index: 3;
   box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
 }
-/* Hovering a CTA below lights up its counterpart card in the fan — left /
-   front / right ↔ New sketch (red) / New Browser (green) / Create design
-   system (blue) — echoing each button's icon accent so the pairing reads
-   one-to-one. The card also pops like a direct hover. */
+/* Hovering a CTA below pops its counterpart card in the fan — left / front /
+   right ↔ New sketch (red) / New Browser (green) / Create design system
+   (blue) — and its icon takes the CTA's accent. No border or wash: the pop +
+   icon color alone carry the pairing. */
 .df-empty-pill:has(.df-empty-cta-primary:hover) .df-empty-stack-card--left {
-  border-color: var(--red);
-  background: var(--red-bg);
   transform: translateX(-30px) rotate(-13deg) scale(1.12);
   z-index: 3;
   box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
 }
 .df-empty-pill:has(.df-empty-cta-secondary:hover) .df-empty-stack-card--front {
-  border-color: var(--green);
-  background: var(--green-bg);
   transform: rotate(0deg) scale(1.12);
   z-index: 3;
   box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
 }
 .df-empty-pill:has(.df-empty-cta-tertiary:hover) .df-empty-stack-card--right {
-  border-color: var(--blue);
-  background: var(--blue-bg);
   transform: translateX(30px) rotate(13deg) scale(1.12);
   z-index: 3;
   box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
 }
-.df-empty-pill:has(.df-empty-cta-primary:hover) .df-empty-stack-card--left::before,
-.df-empty-pill:has(.df-empty-cta-primary:hover) .df-empty-stack-card--left::after {
-  background: color-mix(in srgb, var(--red) 16%, var(--bg-subtle));
+.df-empty-pill:has(.df-empty-cta-primary:hover) .df-empty-stack-card--left .od-icon {
+  color: var(--red);
 }
-.df-empty-pill:has(.df-empty-cta-secondary:hover) .df-empty-stack-card--front::before,
-.df-empty-pill:has(.df-empty-cta-secondary:hover) .df-empty-stack-card--front::after {
-  background: color-mix(in srgb, var(--green) 16%, var(--bg-subtle));
+.df-empty-pill:has(.df-empty-cta-secondary:hover) .df-empty-stack-card--front .od-icon {
+  color: var(--green);
 }
-.df-empty-pill:has(.df-empty-cta-tertiary:hover) .df-empty-stack-card--right::before,
-.df-empty-pill:has(.df-empty-cta-tertiary:hover) .df-empty-stack-card--right::after {
-  background: color-mix(in srgb, var(--blue) 16%, var(--bg-subtle));
+.df-empty-pill:has(.df-empty-cta-tertiary:hover) .df-empty-stack-card--right .od-icon {
+  color: var(--blue);
 }
 @media (prefers-reduced-motion: reduce) {
   .df-empty-stack-card {
@@ -831,15 +822,20 @@
 .df-empty-cta-tertiary .od-icon {
   color: var(--blue);
 }
+/* Hover: only the pill's stroke takes the icon's color — the surface stays
+   white and the label stays neutral. */
 .df-empty-cta:hover {
   background: var(--bg);
-  border-color: var(--border);
   color: var(--text);
 }
 .df-empty-cta-primary:hover {
-  background: var(--bg);
-  border-color: var(--border);
-  color: var(--text);
+  border-color: var(--red);
+}
+.df-empty-cta-secondary:hover {
+  border-color: var(--green);
+}
+.df-empty-cta-tertiary:hover {
+  border-color: var(--blue);
 }
 .df-empty-cta:focus-visible {
   outline: 2px solid var(--accent);
@@ -899,6 +895,54 @@
   /* Horizontal inset comes from .df-body's own padding; adding more here
      would misalign the cards with the section label and file rows. */
   padding: 2px 0 14px;
+}
+/* Masonry waterfall for the Images section: column-width driven CSS columns,
+   cards keep their natural image aspect so column heights interleave. */
+.df-image-masonry {
+  columns: 220px;
+  column-gap: 14px;
+  padding: 2px 0 14px;
+}
+.df-image-masonry .df-card {
+  display: inline-flex;
+  width: 100%;
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
+.df-card--image .df-card-thumb {
+  aspect-ratio: auto;
+  /* No meta strip below — the image is the whole card. */
+  border-bottom: 0;
+}
+.df-card--image .df-card-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Row menu floats over the image's top-right corner (mirrors the check chip
+   top-left): hover-revealed chip so the bare image stays clean. */
+.df-card--image .df-card-menu-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, #fff 92%, transparent);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out);
+}
+.df-card--image:hover .df-card-menu-overlay,
+.df-card--image .df-card-menu-overlay:focus-visible {
+  opacity: 1;
+}
+.df-card--image .df-card-menu-overlay:hover {
+  background: var(--bg-subtle);
 }
 .df-card {
   position: relative;

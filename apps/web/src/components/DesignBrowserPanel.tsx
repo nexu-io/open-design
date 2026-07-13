@@ -259,10 +259,11 @@ const BROWSER_IMAGE_HOVER_SCRIPT = String.raw`(() => {
     position: 'fixed',
     zIndex: '2147483646',
     display: 'none',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    padding: '10px',
     // No dim/frost wash over the image — the layer is an invisible flex
-    // frame whose only job is centering the button on the hovered image.
+    // frame that pins the button to the hovered image's top-right corner.
     background: 'transparent',
     pointerEvents: 'none',
     borderRadius: '6px',

@@ -97,10 +97,11 @@
 .sectionHeader {
   padding: 8px 12px 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  /* --text-faint washed out on the frosted popover; 辅助文字 tier reads. */
+  color: var(--text-muted);
 }
 
 .scrollBody {

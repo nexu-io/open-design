@@ -1404,10 +1404,9 @@
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  /* Functional toolbar → Liquid Glass regular (材质规范). */
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
+  /* Solid, matching the panel below (材质规范 exception: nothing scrolls
+     under this strip, so glass only produced a tone mismatch). */
+  background: var(--bg);
   /* 44px (matches the top workspace chrome) rather than 38px: the active tab
      pill carries a 1px inset border now, and at 38px the pill filled almost
      the whole row so `.ws-tabs-bar`'s `overflow-y: hidden` shaved its top and

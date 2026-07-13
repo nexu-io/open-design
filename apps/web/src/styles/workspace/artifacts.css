@@ -278,8 +278,9 @@
 }
 .settings-notify-card {
   padding: 12px;
+  /* Borderless: the panel fill alone separates the card from the page. */
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
 }
 .settings-notify-card-header {
@@ -3396,6 +3397,9 @@
   align-items: center;
   gap: 12px;
   width: 100%;
+  /* Buttons inherit nowrap from the shared button base; the hint copy must
+     wrap or it clips under the switch on narrow panes. */
+  white-space: normal;
   padding: 12px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border);

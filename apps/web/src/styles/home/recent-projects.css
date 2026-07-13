@@ -100,8 +100,8 @@
   grid-auto-rows: auto;
   align-items: stretch;
   /* Cards have no base-card surface or padding, so the grid gap alone is the
-     visible spacing between cards: fixed at 24px. */
-  gap: var(--spacing-24);
+     visible spacing between cards: fixed at 16px (compact rhythm). */
+  gap: var(--spacing-16);
 }
 @container recent-projects (max-width: 947px) {
   .recent-projects__row--grid {

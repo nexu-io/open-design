@@ -268,9 +268,6 @@ export function TabLauncherMenu({
                     </span>
                     <span className={styles.rowBody}>
                       <span className={styles.rowName}>{t(action.labelKey)}</span>
-                      {action.descriptionKey ? (
-                        <span className={styles.rowMeta}>{t(action.descriptionKey)}</span>
-                      ) : null}
                     </span>
                   </button>
                 </li>
@@ -301,10 +298,6 @@ export function TabLauncherMenu({
                       </span>
                       <span className={styles.rowBody}>
                         <span className={styles.rowName}>{file.name}</span>
-                        <span className={styles.rowMeta}>
-                          {kindLabel(file.kind, t)} · {formatBytes(file.size)} ·{' '}
-                          {formatRelativeTime(file.mtime, t)}
-                        </span>
                       </span>
                       {isOpen ? <span className={styles.rowOpen}>{t('workspace.tabOpen')}</span> : null}
                     </button>
@@ -336,9 +329,6 @@ export function TabLauncherMenu({
                       </span>
                       <span className={styles.rowBody}>
                         <span className={styles.rowName}>{item.label}</span>
-                        <span className={styles.rowMeta}>
-                          {workspaceContextKindLabel(item.kind)} · {workspaceContextMeta(item)}
-                        </span>
                       </span>
                       <span className={styles.rowOpen}>{t('workspace.tabOpen')}</span>
                     </button>

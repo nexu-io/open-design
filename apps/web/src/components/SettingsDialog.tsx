@@ -3448,7 +3448,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
               onClick={() => setActiveSection('execution')}
             >
-              <Icon name="sliders" size={18} />
+              <Icon name="sliders-filled" size={18} />
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
@@ -3459,7 +3459,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'general' ? ' active' : ''}`}
               onClick={() => setActiveSection('general')}
             >
-              <Icon name="settings" size={18} />
+              <Icon name="settings-filled" size={18} />
               <span>
                 <strong>通用</strong>
                 <small>语言、外观与个性化</small>
@@ -3470,7 +3470,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'instructions' ? ' active' : ''}`}
               onClick={() => setActiveSection('instructions')}
             >
-              <Icon name="edit" size={18} />
+              <Icon name="edit-filled" size={18} />
               <span>
                 <strong>{t('settings.instructionsTitle')}</strong>
                 <small>{t('settings.instructionsNavSub')}</small>
@@ -3481,7 +3481,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
               onClick={() => setActiveSection('memory')}
             >
-              <Icon name="history" size={18} />
+              <Icon name="history-filled" size={18} />
               <span>
                 <strong>{t('settings.memory')}</strong>
                 <small>{t('settings.memoryHint')}</small>
@@ -3492,7 +3492,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
               onClick={() => setActiveSection('media')}
             >
-              <Icon name="image" size={18} />
+              <Icon name="image-filled" size={18} />
               <span>
                 <strong>{t('settings.mediaProviders')}</strong>
                 <small>Image / video / audio</small>
@@ -3503,7 +3503,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
-              <Icon name="link" size={18} />
+              <Icon name="link-filled" size={18} />
               <span>
                 <strong>{t('settings.mcpServerTitle')}</strong>
                 <small>{t('settings.mcpServerHint')}</small>
@@ -3514,7 +3514,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
               onClick={() => setActiveSection('privacy')}
             >
-              <Icon name="eye" size={18} />
+              <Icon name="eye-filled" size={18} />
               <span>
                 <strong>{t('settings.privacy')}</strong>
                 <small>{t('settings.privacyHint')}</small>
@@ -3525,7 +3525,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
               onClick={() => setActiveSection('about')}
             >
-              <Icon name="settings" size={18} />
+              <Icon name="settings-filled" size={18} />
               <span>
                 <strong>{t('settings.about')}</strong>
                 <small>{t('settings.aboutHint')}</small>

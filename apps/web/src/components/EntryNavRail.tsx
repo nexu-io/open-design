@@ -338,7 +338,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
           onClick={() => selectView('home')}
           testId="entry-nav-home"
         >
-          <Icon name="history" size={18} />
+          <Icon name="file-history-filled" size={18} />
         </NavButton>
         <NavButton
           active={view === 'community'}
@@ -347,7 +347,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
           onClick={() => selectView('community')}
           testId="entry-nav-community"
         >
-          <Icon name="globe" size={18} />
+          <Icon name="globe-filled" size={18} />
         </NavButton>
 
         {cloudWorkspace ? (
@@ -414,7 +414,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('drafts')}
               testId="entry-nav-drafts"
             >
-              <Icon name="file" size={18} />
+              <Icon name="file-filled" size={18} />
             </NavButton>
             <NavButton
               active={view === 'all-projects'}
@@ -423,7 +423,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('all-projects')}
               testId="entry-nav-all-projects"
             >
-              <Icon name="grid" size={18} />
+              <Icon name="grid-filled" size={18} />
             </NavButton>
             <NavButton
               active={view === 'design-systems'}
@@ -432,7 +432,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('design-systems')}
               testId="entry-nav-design-systems"
             >
-              <Icon name="palette" size={18} />
+              <Icon name="palette-filled" size={18} />
             </NavButton>
             <NavButton
               active={view === 'plugins'}
@@ -441,7 +441,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('plugins')}
               testId="entry-nav-plugins"
             >
-              <Icon name="grid" size={18} />
+              <Icon name="grid-filled" size={18} />
             </NavButton>
             {canManageWorkspace ? (
               <>
@@ -452,7 +452,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
                   onClick={() => selectView('members')}
                   testId="entry-nav-members"
                 >
-                  <Icon name="share" size={18} />
+                  <Icon name="share-filled" size={18} />
                 </NavButton>
                 <NavButton
                   active={view === 'dashboard'}
@@ -461,7 +461,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
                   onClick={() => selectView('dashboard')}
                   testId="entry-nav-dashboard"
                 >
-                  <Icon name="kanban" size={18} />
+                  <Icon name="dashboard-filled" size={18} />
                 </NavButton>
                 {canOwnWorkspace ? (
                   <NavButton
@@ -471,7 +471,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
                     onClick={() => selectView('workspace-settings')}
                     testId="entry-nav-workspace-settings"
                   >
-                    <Icon name="settings" size={18} />
+                    <Icon name="settings-filled" size={18} />
                   </NavButton>
                 ) : null}
               </>
@@ -489,7 +489,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('design-systems')}
               testId="entry-nav-design-systems"
             >
-              <Icon name="palette" size={18} />
+              <Icon name="palette-filled" size={18} />
             </NavButton>
             <NavButton
               active={view === 'plugins'}
@@ -498,7 +498,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('plugins')}
               testId="entry-nav-plugins"
             >
-              <Icon name="grid" size={18} />
+              <Icon name="grid-filled" size={18} />
             </NavButton>
           </>
         ) : null}

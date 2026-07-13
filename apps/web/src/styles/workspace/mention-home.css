@@ -616,7 +616,9 @@
   height: 100%;
   overflow: hidden;
   overflow-x: hidden;
-  background: var(--bg);
+  /* Translucent over the app wash, matching the home ground (app-wash.css
+     veil token restores the solid page in degraded modes). */
+  background: var(--veil-page);
 }
 .settings-page-shell .modal-settings.settings-page-surface {
   width: 100%;
@@ -628,7 +630,7 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  background: var(--bg);
+  background: transparent;
 }
 .settings-page-shell .settings-chrome,
 .settings-page-shell .settings-sidebar-toggle {
@@ -678,7 +680,11 @@
   min-height: 0;
   overflow: hidden;
   overflow-x: hidden;
-  background: #fff;
+  /* Same ground as the home board: the page-level veil token from
+     app-wash.css (currently fully transparent, so the wash shows straight
+     through, exactly like the home scroll surface). The reduced-transparency
+     and no-backdrop-filter fallbacks restore it to solid --bg. */
+  background: var(--veil-page, var(--bg));
 }
 .modal-settings.settings-sidebar-collapsed .modal-body {
   grid-template-columns: minmax(0, 1fr);
@@ -1152,7 +1158,6 @@
   gap: 2px;
   padding: 16px 10px;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border);
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1162,8 +1167,20 @@
   grid-row: 1;
   gap: 3px;
   padding: 28px 10px 18px;
-  background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
-  border-right: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  /* Same treatment as the top tab strip: fully transparent, riding the
+     shell's translucent ground so the wash/wallpaper shows identically —
+     no extra white layer, no blur. */
+  background: transparent;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .settings-page-shell .settings-sidebar {
+    background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .settings-page-shell .settings-sidebar {
+    background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
+  }
 }
 .settings-page-nav-head {
   display: flex;
@@ -1329,8 +1346,12 @@
   text-align: left;
   cursor: pointer;
 }
-.settings-nav-item:hover {
-  background: rgba(0, 0, 0, 0.04);
+.settings-nav-item:hover:not(:disabled) {
+  /* Same fill as .active; the :not(:disabled) bumps specificity above the
+     generic `button:hover:not(:disabled)` in primitives.css, which was
+     leaking its bg-subtle fill and border ring onto these pills. */
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: transparent;
 }
 .settings-page-shell .settings-nav-item {
   border-radius: var(--radius-large, 8px);
@@ -1346,6 +1367,13 @@
 .settings-nav-item svg {
   justify-self: center;
   opacity: 0.75;
+}
+/* Selected item: the filled Remix glyph uses the spec's strongest
+   text/icon tone (#202020 light / #fafafa dark via --text-strong) at full
+   opacity. */
+.settings-nav-item.active .od-icon {
+  opacity: 1;
+  color: var(--text-strong);
 }
 .settings-nav-item span {
   min-width: 0;
@@ -1385,16 +1413,21 @@
 .settings-page-shell .settings-content {
   grid-column: 2;
   grid-row: 1;
-  width: min(760px, calc(100% - 72px));
-  max-width: calc(100% - 72px);
+  width: min(848px, calc(100% - 56px));
+  max-width: calc(100% - 56px);
   justify-self: center;
   align-self: start;
-  height: 100%;
-  padding: 54px 2px 64px;
+  margin: 24px 0 28px;
+  height: calc(100% - 52px);
+  padding: 36px 44px 56px;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  background: #fff;
+  /* The whole content block rides one white card (spec: white surface +
+     #dbdbdb hairline + large radius) floating on the shell ground. */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 .modal-settings.settings-sidebar-collapsed .settings-content {
   padding-left: calc(var(--modal-padding) + 16px);
@@ -1462,8 +1495,9 @@
   grid-template-columns: repeat(var(--seg-cols, 2), minmax(0, 1fr));
   gap: 2px;
   padding: 3px;
+  /* Borderless: the subtle track fill alone delineates the control. */
   background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius);
   /* Height-match the active sidebar nav-item across the gutter so the
      top of the content area lines up neatly with the picked section. */

@@ -7,6 +7,12 @@ export type IconName =
   | 'attach'
   | 'bell'
   | 'blocks'
+  | 'globe-filled'
+  | 'file-history-filled'
+  | 'file-filled'
+  | 'grid-filled'
+  | 'share-filled'
+  | 'dashboard-filled'
   | 'check'
   | 'chevron-down'
   | 'chevron-left'
@@ -18,8 +24,10 @@ export type IconName =
   | 'download'
   | 'draw'
   | 'edit'
+  | 'edit-filled'
   | 'external-link'
   | 'eye'
+  | 'eye-filled'
   | 'eye-off'
   | 'file'
   | 'file-code'
@@ -35,9 +43,11 @@ export type IconName =
   | 'hammer'
   | 'help-circle'
   | 'history'
+  | 'history-filled'
   | 'home'
   | 'home-filled'
   | 'image'
+  | 'image-filled'
   | 'import'
   | 'info'
   | 'kanban'
@@ -46,6 +56,7 @@ export type IconName =
   | 'layout'
   | 'lightbulb'
   | 'link'
+  | 'link-filled'
   | 'log-out'
   | 'integrations-filled'
   | 'maximize'
@@ -71,9 +82,11 @@ export type IconName =
   | 'search'
   | 'send'
   | 'settings'
+  | 'settings-filled'
   | 'battery-charge'
   | 'share'
   | 'sliders'
+  | 'sliders-filled'
   | 'smartphone'
   | 'spinner'
   | 'sparkles'
@@ -104,6 +117,12 @@ const REMIX_ICON: Record<IconName, string> = {
   attach: 'attachment-2',
   bell: 'notification-3-line',
   blocks: 'layout-grid-line',
+  'globe-filled': 'global-fill',
+  'file-history-filled': 'file-history-fill',
+  'file-filled': 'file-fill',
+  'grid-filled': 'grid-fill',
+  'share-filled': 'share-forward-fill',
+  'dashboard-filled': 'dashboard-fill',
   check: 'check-line',
   'chevron-down': 'arrow-down-s-line',
   'chevron-left': 'arrow-left-s-line',
@@ -115,8 +134,10 @@ const REMIX_ICON: Record<IconName, string> = {
   download: 'download-2-line',
   draw: 'brush-line',
   edit: 'edit-line',
+  'edit-filled': 'edit-fill',
   'external-link': 'external-link-line',
   eye: 'eye-line',
+  'eye-filled': 'eye-fill',
   'eye-off': 'eye-off-line',
   file: 'file-line',
   'file-code': 'file-code-line',
@@ -132,9 +153,11 @@ const REMIX_ICON: Record<IconName, string> = {
   hammer: 'hammer-line',
   'help-circle': 'question-line',
   history: 'history-line',
+  'history-filled': 'history-fill',
   home: 'home-5-line',
   'home-filled': 'home-5-fill',
   image: 'image-line',
+  'image-filled': 'image-fill',
   import: 'upload-2-line',
   info: 'information-line',
   kanban: 'kanban-view',
@@ -143,6 +166,7 @@ const REMIX_ICON: Record<IconName, string> = {
   layout: 'layout-line',
   lightbulb: 'lightbulb-line',
   link: 'link',
+  'link-filled': 'links-fill',
   'log-out': 'logout-box-r-line',
   'integrations-filled': 'puzzle-fill',
   maximize: 'fullscreen-line',
@@ -168,9 +192,11 @@ const REMIX_ICON: Record<IconName, string> = {
   search: 'search-line',
   send: 'send-plane-2-line',
   settings: 'settings-3-line',
+  'settings-filled': 'settings-3-fill',
   'battery-charge': 'battery-charge-line',
   share: 'share-forward-line',
   sliders: 'equalizer-line',
+  'sliders-filled': 'equalizer-fill',
   smartphone: 'smartphone-line',
   spinner: 'loader-4-line',
   sparkles: 'sparkling-line',

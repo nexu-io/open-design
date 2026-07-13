@@ -2158,7 +2158,7 @@
      dark the blocks below pin the surface to the lifted dark tint instead —
      brand green stays legible on both. */
   --home-hero-submit-bg: var(--text-strong);
-  --home-hero-submit-fg: #00ff04;
+  --home-hero-submit-fg: #87ea5c;
 
   appearance: none;
   display: inline-flex;
@@ -2207,10 +2207,12 @@
 }
 
 .home-hero__submit:disabled {
-  opacity: 0.42;
+  /* Idle (nothing typed): gray ground + deep-green arrow, mirroring the
+     chat composer's idle send button. */
+  opacity: 1;
   cursor: default;
   background: var(--bg-muted);
-  color: var(--text-muted);
+  color: #2f781d;
   box-shadow: none;
 }
 .home-hero__error {

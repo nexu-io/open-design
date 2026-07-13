@@ -277,7 +277,13 @@
   flex-direction: column;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Frosted Thick standard material (材质规范): mostly-opaque + backdrop blur
+     across all four sides, so the card reads as frosted glass on the wash
+     instead of a starkly see-through panel. Theme-aware and degradation-safe
+     via material.css (falls back to a solid --bg-elevated). */
+  background: var(--material-thick);
+  -webkit-backdrop-filter: var(--material-thick-backdrop);
+  backdrop-filter: var(--material-thick-backdrop);
   overflow: hidden;
 }
 .file-ops.is-streaming {

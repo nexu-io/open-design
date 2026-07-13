@@ -813,8 +813,10 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
 
   function activateTab(tab: WorkspaceChromeTab) {
     setState((current) => ({
+      // Persist the caller's copy of the tab (openTab may have rewritten the
+      // entry tab's view back to 'home'), not just the activation timestamp.
       tabs: normalizeTabsState(current).tabs.map((item) =>
-        item.id === tab.id ? { ...item, lastActiveAt: Date.now() } : item,
+        item.id === tab.id ? { ...tab, lastActiveAt: Date.now() } : item,
       ),
       activeTabId: tab.id,
     }));
@@ -849,6 +851,14 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   function openTab(tab: WorkspaceChromeTab) {
     if (dragSuppressClickRef.current) {
       dragSuppressClickRef.current = false;
+      return;
+    }
+    // Clicking the pinned Home tab always lands on the home page, whatever
+    // entry section (projects / design-systems / …) the tab last showed.
+    // Keyboard tab-cycling goes through activateTab directly and keeps the
+    // remembered section.
+    if (tab.kind === 'entry' && tab.view !== 'home') {
+      activateTab({ ...tab, view: 'home' });
       return;
     }
     activateTab(tab);

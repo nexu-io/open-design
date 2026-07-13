@@ -888,7 +888,8 @@
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: var(--text);
+  /* Unselected items read at the first text tier (颜色规范 标题、最强文字). */
+  color: var(--text-strong);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -923,7 +924,13 @@
   text-overflow: ellipsis;
 }
 .entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon {
-  color: var(--text-strong);
+  color: #2f781d;
+  /* Remix glyphs are font outlines — a whisper of text-stroke nudges the
+     icon's weight up to sit with the medium label without going chunky. */
+  -webkit-text-stroke: 0.2px currentColor;
+}
+.entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
+  font-weight: 500;
 }
 
 /* Search box */
@@ -1062,15 +1069,14 @@
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active {
-  /* Selected = a translucent ink fill one step stronger than hover: it tints
-     whatever surface the glass rail sits on, instead of an opaque gray pill
-     that ignores the warm wash behind the panel. */
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text-strong);
+  /* Selected = 极浅品牌背景 (#F5FFEE) under the deep brand green label/icon
+     (颜色规范 品牌色对). */
+  background: #f9fff4;
+  color: #2f781d;
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
+  background: #f9fff4;
   border-color: transparent;
 }
 .entry-nav-rail__btn:focus-visible {
@@ -1153,10 +1159,12 @@
      instead of leaving a large centered left margin on wide screens. */
   max-width: 1600px;
   margin: 0 auto;
-  padding: 16px 24px 64px;
+  /* Compact rhythm: tighter side inset toward the rail and smaller section
+     gaps so list views read denser. */
+  padding: 12px 16px 48px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 20px;
 }
 /* Wider variant retained for the Projects / Design systems
    sub-views that historically opted into a wider canvas. The
@@ -5446,7 +5454,9 @@
   gap: 2px;
   padding: 8px 10px;
   border-radius: var(--radius-md);
-  background: var(--vibrancy-fill-tertiary);
+  /* Inverted card: ink-black ground, white-tier text (颜色规范 #202020 /
+     #fafafa 反白文字). */
+  background: #202020;
   margin-bottom: 6px;
 }
 .entry-nav-rail__menu-credits-head {
@@ -5461,7 +5471,7 @@
   gap: 6px;
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-strong);
+  color: #fafafa;
 }
 .entry-nav-rail__menu-credits-upgrade {
   appearance: none;
@@ -5472,19 +5482,19 @@
   height: 22px;
   padding: 0 10px;
   border-radius: var(--radius-pill);
-  background: var(--text-strong);
-  color: var(--bg);
+  /* Light pill on the inverted black card (浅底深字 per 按钮规范). */
+  background: #fafafa;
+  color: #202020;
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
 }
-/* :not(:disabled) lifts specificity above the global button:hover reset,
-   which would otherwise wash the dark pill to --bg-subtle (white-on-white). */
+/* :not(:disabled) lifts specificity above the global button:hover reset. */
 .entry-nav-rail__menu-credits-upgrade:hover:not(:disabled),
 .entry-nav-rail__menu-credits-upgrade:focus-visible {
-  background: #353535;
-  color: var(--bg);
+  background: #fff;
+  color: #202020;
 }
 .entry-nav-rail__menu-credits-row {
   display: flex;
@@ -5492,21 +5502,21 @@
   justify-content: space-between;
   min-height: 26px;
   font-size: 13px;
-  color: var(--text);
+  color: #fafafa;
 }
 .entry-nav-rail__menu-credits-label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
-.entry-nav-rail__menu-credits-label .od-icon { color: var(--text-soft); }
+.entry-nav-rail__menu-credits-label .od-icon { color: rgba(250, 250, 250, 0.72); }
 .entry-nav-rail__menu-credits-value {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   font-variant-numeric: tabular-nums;
 }
-.entry-nav-rail__menu-credits-value .od-icon { color: var(--text-soft); }
+.entry-nav-rail__menu-credits-value .od-icon { color: rgba(250, 250, 250, 0.72); }
 .entry-nav-rail__menu-item {
   appearance: none;
   border: 0;

@@ -1928,7 +1928,7 @@
 .app .composer-send:not(.stop),
 .chat-composer-fixed-layer .composer-send:not(.stop) {
   --composer-send-bg: var(--text-strong);
-  --composer-send-fg: #00ff04;
+  --composer-send-fg: #87ea5c;
 
   position: relative;
   overflow: hidden;
@@ -1959,10 +1959,12 @@
 }
 .app .composer-send:disabled,
 .chat-composer-fixed-layer .composer-send:disabled {
-  opacity: 0.42;
+  /* Idle (nothing typed): gray ground with the deep-green arrow; typing
+     flips to the ink-black ground with the bright #87ea5c arrow. */
+  opacity: 1;
   background: var(--bg-muted);
   border-color: transparent;
-  color: var(--text-muted);
+  color: #2f781d;
   box-shadow: none;
 }
 .composer-send:not(.stop) .od-icon {
@@ -2175,6 +2177,10 @@
 .app .ws-tabs-shell {
   padding: 6px 14px;
   border-bottom: none;
+  /* Match the solid panel below instead of the shared chat-header glass. */
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .app .ws-focus-expand {
   width: 32px;

@@ -743,6 +743,78 @@ export function DesignFilesPanel({
     );
   }
 
+  // Images in the masonry waterfall: bare image cards — no name/meta strip,
+  // the picture IS the card. Check chip floats top-left and the row menu
+  // (rename/delete live there) floats top-right, both hover-revealed.
+  function renderImageCard(f: ProjectFile, _category: FileCategory) {
+    const isSelected = selected.has(f.name);
+    const openLabel = `${t('designFiles.previewOpen')} ${f.name}`;
+    return (
+      <div
+        key={f.name}
+        data-testid={`design-file-row-${f.name}`}
+        className={`df-card df-card--image ${isSelected ? 'selected' : ''}`}
+      >
+        <span
+          className="df-card-check"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (viewerOnly) return;
+            toggleSelect(f.name);
+          }}
+          role={viewerOnly ? undefined : 'checkbox'}
+          aria-checked={viewerOnly ? undefined : isSelected}
+          aria-disabled={viewerOnly ? 'true' : undefined}
+          tabIndex={viewerOnly ? -1 : 0}
+          onKeyDown={(e) => {
+            if (viewerOnly) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSelect(f.name);
+            }
+          }}
+        >
+          {viewerOnly ? null : (
+            <RemixIcon name={isSelected ? 'checkbox-line' : 'checkbox-blank-line'} size={14} />
+          )}
+        </span>
+        <span
+          data-testid={`design-file-menu-${f.name}`}
+          className={`df-row-menu df-card-menu-overlay ${viewerOnly ? 'df-row-menu-disabled' : ''}`}
+          role={viewerOnly ? undefined : 'button'}
+          tabIndex={viewerOnly ? -1 : 0}
+          aria-hidden={viewerOnly ? true : undefined}
+          aria-label={t('designFiles.rowMenu')}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (viewerOnly) return;
+            openMenuFor(f.name, e.target as HTMLElement);
+          }}
+          onKeyDown={(e) => {
+            if (viewerOnly) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              openMenuFor(f.name, e.currentTarget as HTMLElement);
+            }
+          }}
+        >
+          ⋯
+        </span>
+        <button
+          type="button"
+          className="df-card-thumb"
+          onClick={() => onOpenFile(f.name)}
+          title={openLabel}
+          aria-label={openLabel}
+        >
+          <img src={projectRawUrl(projectId, f.name)} alt="" loading="lazy" />
+        </button>
+      </div>
+    );
+  }
+
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
     const prefix = `${fullPath}/`;
@@ -863,16 +935,17 @@ export function DesignFilesPanel({
       ) : null}
       {!viewerOnly ? (
         <>
-          <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
+          <button type="button" className="df-action-sketch" onClick={onNewSketch} title={t('designFiles.newSketch')}>
             <Icon name="pencil" size={13} />
             <span>{t('designFiles.newSketch')}</span>
           </button>
-          <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
+          <button type="button" className="df-action-paste" onClick={onPaste} title={t('designFiles.paste.title')}>
             <Icon name="copy" size={13} />
             <span>{t('designFiles.paste.label')}</span>
           </button>
           <button
             type="button"
+            className="df-action-upload"
             data-testid="design-files-upload-trigger"
             onClick={onUpload}
             title={t('designFiles.upload.title')}
@@ -1024,9 +1097,17 @@ export function DesignFilesPanel({
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
                 <div className="df-empty-stack" aria-hidden="true">
-                  <span className="df-empty-stack-card df-empty-stack-card--left" />
-                  <span className="df-empty-stack-card df-empty-stack-card--right" />
-                  <span className="df-empty-stack-card df-empty-stack-card--front" />
+                  {/* Each fan card carries its CTA's icon — left/front/right ↔
+                      New sketch / New Browser / Create design system. */}
+                  <span className="df-empty-stack-card df-empty-stack-card--left">
+                    <Icon name="pencil" size={22} />
+                  </span>
+                  <span className="df-empty-stack-card df-empty-stack-card--right">
+                    <Icon name="blocks" size={22} />
+                  </span>
+                  <span className="df-empty-stack-card df-empty-stack-card--front">
+                    <Icon name="globe" size={22} />
+                  </span>
                 </div>
                 <span className="df-empty-title">
                   {t('designFiles.empty')}
@@ -1211,6 +1292,12 @@ export function DesignFilesPanel({
                       // under the tab bar.
                       <div className="df-card-grid">
                         {sectionFiles.map((f) => renderPageCard(f, category))}
+                      </div>
+                    ) : category === 'image' ? (
+                      // Images read as their own preview — a masonry waterfall
+                      // of natural-aspect thumbnails instead of list rows.
+                      <div className="df-image-masonry" data-testid="design-files-image-masonry">
+                        {sectionFiles.map((f) => renderImageCard(f, category))}
                       </div>
                     ) : (
                       sectionFiles.map((f) => renderFileRow(f, category))

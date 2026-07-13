@@ -182,12 +182,14 @@ describe('DesignFilesPanel sections', () => {
     expect(tsRow.querySelector('.df-row-sub')?.textContent).toBe('Script');
   });
 
-  it('shows the type as the row subtitle instead of file size', () => {
+  it('renders image cards as the bare picture without a name/meta strip', () => {
     renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
 
-    const row = screen.getByTestId('design-file-row-chart.png');
-    expect(row.querySelector('.df-row-sub')?.textContent).toBe('Image');
-    expect(row.textContent).not.toContain('KB');
+    const card = screen.getByTestId('design-file-row-chart.png');
+    expect(card.querySelector('img')).toBeTruthy();
+    expect(card.querySelector('.df-card-meta')).toBeNull();
+    expect(card.querySelector('.df-card-name')).toBeNull();
+    expect(card.textContent).not.toContain('KB');
   });
 
 });
@@ -227,16 +229,17 @@ describe('DesignFilesPanel selection', () => {
   it('shows the batch bar and passes every selected file to batch delete', () => {
     const files = generateFiles(3);
     const { container, onDeleteFiles } = renderPanel(files);
-    // generateFiles(3) yields one HTML page (card, default tab) and two row
-    // kinds behind their own tabs. Selection must survive tab switches.
+    // generateFiles(3) yields one HTML page (card, default tab), one image
+    // (masonry card) and one sketch behind their own tabs. Selection must
+    // survive tab switches.
     const card = container.querySelector('.df-card')!;
     const cardName = card.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
     fireEvent.click(card.querySelector('.df-card-check')!);
 
     clickTab('cat:image');
-    const row = container.querySelector('.df-file-row')!;
-    const rowName = row.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
-    fireEvent.click(row.querySelector('.df-row-check')!);
+    const imageCard = container.querySelector('.df-card--image')!;
+    const rowName = imageCard.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
+    fireEvent.click(imageCard.querySelector('.df-card-check')!);
 
     expect(container.querySelector('[data-testid="design-files-batch-bar"]')).toBeTruthy();
 
@@ -254,9 +257,9 @@ describe('DesignFilesPanel selection', () => {
     expect(onOpenFile).not.toHaveBeenCalled();
 
     clickTab('cat:image');
-    const row = container.querySelector('.df-file-row')!;
-    fireEvent.click(row.querySelector('.df-row-check')!);
-    fireEvent.click(row.querySelector('.df-row-menu')!);
+    const imageCard = container.querySelector('.df-card--image')!;
+    fireEvent.click(imageCard.querySelector('.df-card-check')!);
+    fireEvent.click(imageCard.querySelector('.df-row-menu')!);
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
@@ -270,12 +273,8 @@ describe('DesignFilesPanel selection', () => {
     onOpenFile.mockClear();
 
     clickTab('cat:image');
-    const row = container.querySelector('.df-file-row')!;
-    fireEvent.click(row.querySelector('.df-row-name-btn')!);
-    expect(onOpenFile).toHaveBeenCalledWith('file-2.png');
-    onOpenFile.mockClear();
-
-    fireEvent.click(row.querySelector('.df-row-time')!);
+    const imageCard = container.querySelector('.df-card--image')!;
+    fireEvent.click(imageCard.querySelector('.df-card-thumb')!);
     expect(onOpenFile).toHaveBeenCalledWith('file-2.png');
   });
 
@@ -340,9 +339,10 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(dirRows[0]!.textContent).toContain('icons');
 
     clickTab('cat:image');
-    const fileRow = screen.getByTestId('design-file-row-assets/logo.png');
-    expect(fileRow.querySelector('.df-row-name')?.textContent).toBe('logo.png');
-    expect(fileRow.querySelector('.df-row-name')?.textContent).not.toContain('assets/');
+    // Image cards are name-less; the nested file still renders inside the
+    // folder via its full project-relative path.
+    const fileCard = screen.getByTestId('design-file-row-assets/logo.png');
+    expect(fileCard.querySelector('img')?.getAttribute('src')).toContain('assets/logo.png');
   });
 
   it('always renders the root breadcrumb on the default-root view', () => {
