@@ -284,12 +284,10 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 
 \`\`\`bash
 # POSIX bash — do NOT convert to PowerShell
-# Set image_model to the actual model (e.g. "flux-pro-ultra") before running
-image_model=image-model
 out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
-  --model "${image_model}" \\
+  --model "flux-pro-ultra" \\
   --prompt "..." \\
   --aspect 16:9)
 ec=\$?
