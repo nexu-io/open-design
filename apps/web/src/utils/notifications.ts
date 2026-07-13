@@ -1,4 +1,5 @@
 import type { Dict } from '../i18n/types';
+import { publicPath } from '@/runtime/web-path';
 
 export type SoundId = string;
 
@@ -30,7 +31,7 @@ type NotificationOptionsWithBrowserExtensions = NotificationOptions & {
 
 let ctx: AudioContext | null = null;
 const activeNotifications = new Set<Notification>();
-const SERVICE_WORKER_URL = '/od-notifications-sw.js';
+const SERVICE_WORKER_URL = publicPath('/od-notifications-sw.js');
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -196,7 +197,7 @@ function notificationOptionsFor(
     renotify: true,
     data: {
       status: opts.status,
-      url: typeof window === 'undefined' ? '/' : window.location.href,
+      url: typeof window === 'undefined' ? publicPath('/') : window.location.href,
     },
   };
 }

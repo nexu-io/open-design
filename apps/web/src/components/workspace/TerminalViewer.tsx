@@ -1,3 +1,4 @@
+import { apiEventSource } from '@/runtime/web-path';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ITheme, Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
@@ -284,7 +285,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
 
       // SSE down. EventSource auto-reconnects with Last-Event-ID, so the daemon
       // replays buffered output we missed during a transient gap.
-      const es = new EventSource(terminalStreamUrl(projectId, sessionId));
+      const es = apiEventSource(terminalStreamUrl(projectId, sessionId));
       source = es;
       es.addEventListener('open', () => {
         setPhase((prev) => (prev === 'ended' ? prev : 'live'));

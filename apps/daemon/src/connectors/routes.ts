@@ -56,6 +56,7 @@ export interface RegisterConnectorRoutesOptions {
   projectsRoot?: string;
   authorizeToolRequest?: (req: Request, res: Response, operation: string) => ToolTokenGrant | null;
   requireLocalDaemonRequest?: RequestHandler;
+  getPublicUrl?: (req: Request, path: string) => string;
   composio?: {
     clearDiscoveryCache: () => void;
   };
@@ -238,7 +239,8 @@ async function proxyComposioLogo(req: Request, res: Response): Promise<void> {
   sendComposioLogo(res, logo);
 }
 
-function connectorCallbackUrl(req: Request): string {
+function connectorCallbackUrl(req: Request, getPublicUrl?: (req: Request, path: string) => string): string {
+  if (getPublicUrl != null) return getPublicUrl(req, '/api/connectors/oauth/callback');
   const host = req.get('host') ?? 'localhost';
   let hostname = 'localhost';
   try {
@@ -646,7 +648,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         ...(await service.connect(connectorId, {
           ...(accountLabel === undefined ? {} : { accountLabel }),
           ...(credentials === undefined ? {} : { credentials }),
-          callbackUrl: `${connectorCallbackUrl(req)}/${encodeURIComponent(connectorId)}`,
+          callbackUrl: `${connectorCallbackUrl(req, options.getPublicUrl)}/${encodeURIComponent(connectorId)}`,
         })),
       });
     } catch (err) {

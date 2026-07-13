@@ -1,8 +1,10 @@
+{{- $webBasePath := include "open-design.webBasePath" . -}}
 {{- if .Values.ingress.enabled -}}
 {{- range .Values.ingress.hosts }}
   {{- range .paths }}
-    {{- if ne .path "/" }}
-      {{- fail "CRITICAL ERROR: Non-root ingress path prefixes (sub-paths) are not supported by the proxy routing stack. Ingress paths must be fixed to '/'." }}
+    {{- $configuredPath := .path | trimSuffix "/" -}}
+    {{- if and $webBasePath $configuredPath (ne $configuredPath $webBasePath) }}
+      {{- fail "ingress path must match config.webBasePath when a fixed Web base path is configured" }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -36,7 +38,8 @@ spec:
       http:
         paths:
           {{- range .paths }}
-          - path: {{ .path }}
+          {{- $configuredPath := .path | trimSuffix "/" -}}
+          - path: {{ if and $webBasePath (eq $configuredPath "") }}{{ $webBasePath }}{{ else }}{{ .path }}{{ end }}
             pathType: {{ .pathType }}
             backend:
               service:

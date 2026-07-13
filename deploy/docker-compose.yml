@@ -7,12 +7,16 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        OD_WEB_BASE_PATH: ${OPEN_DESIGN_WEB_BASE_PATH:-}
     restart: always
     environment:
       NODE_ENV: production
       NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=192}
       OD_BIND_HOST: 0.0.0.0
       OD_ALLOWED_ORIGINS: ${OPEN_DESIGN_ALLOWED_ORIGINS:-}
+      OD_WEB_BASE_PATH: ${OPEN_DESIGN_WEB_BASE_PATH:-}
+      OD_PUBLIC_BASE_URL: ${OPEN_DESIGN_PUBLIC_BASE_URL:-}
       OD_PORT: 7456
       OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
       OD_API_TOKEN: ${OD_API_TOKEN:-}

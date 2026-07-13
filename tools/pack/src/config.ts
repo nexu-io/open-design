@@ -9,10 +9,21 @@ import {
 } from "@open-design/sidecar-proto";
 import { resolveNamespace } from "@open-design/sidecar";
 import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
+import { normalizeBasePath } from "@open-design/path-config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
+
+export function assertToolPackRootWebBasePath(env: NodeJS.ProcessEnv = process.env): void {
+  const basePath = normalizeBasePath(env.OD_WEB_BASE_PATH);
+  if (basePath !== "") {
+    throw new Error(
+      `OD_WEB_BASE_PATH=${basePath} is not supported by tools-pack; ` +
+      "tools-pack builds the packaged desktop runtime, which is root-only",
+    );
+  }
+}
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
@@ -306,6 +317,7 @@ export function resolveToolPackConfig(
   platform: ToolPackPlatform,
   options: ToolPackCliOptions = {},
 ): ToolPackConfig {
+  assertToolPackRootWebBasePath();
   const appVersion = resolveToolPackAppVersion(options.appVersion);
   const namespace = resolveNamespace({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,

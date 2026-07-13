@@ -1,3 +1,4 @@
+import { apiEventSource, apiFetch } from '@/runtime/web-path';
 // OD Library tab — the global asset registry grid.
 //
 // Shows every asset that has entered the system (clipper capture, manual
@@ -644,7 +645,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
     };
 
     try {
-      es = new EventSource('/api/library/events');
+      es = apiEventSource('/api/library/events');
       const onIngest = (ev: MessageEvent) => {
         const id = parseEventAssetId(ev.data);
         if (id) pendingIngest.add(id);

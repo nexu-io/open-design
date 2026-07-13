@@ -1,6 +1,8 @@
+import { apiFetch, webPathConfig } from '@/runtime/web-path';
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
+import { rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   buildSocialSharePayload,
@@ -8935,7 +8937,7 @@ function HtmlViewer({
     try {
       const css = serializeInspectOverrides(inspectOverrides).trim();
       const next = applyInspectOverridesToSource(source, css);
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
+      const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -13061,7 +13063,7 @@ async function fetchProjectRelativeText(
   const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
   try {
-    const resp = await fetch(projectRawUrl(projectId, filePath));
+    const resp = await apiFetch(projectRawUrl(projectId, filePath));
     if (!resp.ok) return null;
     return { filePath, text: await resp.text() };
   } catch {
@@ -13883,7 +13885,15 @@ function MarkdownViewer({
   const baseHtml = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return rewriteMarkdownImageSources(decorateMarkdownCodeBlocks(renderPartial(text)), projectId, file.name);
+    const rendered = rewriteMarkdownImageSources(
+      decorateMarkdownCodeBlocks(renderPartial(text)),
+      projectId,
+      file.name,
+    );
+    // Markdown preview is rendered directly into the app document rather than
+    // through the srcDoc pipeline, so root-relative daemon/static references
+    // need the same fixed-prefix treatment here.
+    return rewriteKnownInternalBrowserPaths(rendered, webPathConfig.basePath);
   }, [file.name, projectId, text]);
   const html = highlightedHtml?.source === baseHtml && highlightedHtml.themeRevision === highlightThemeRevision
     ? highlightedHtml.html

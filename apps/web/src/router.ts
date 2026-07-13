@@ -5,6 +5,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { LIBRARY_UI_VISIBLE } from './features/libraryUi';
+import { stripWebBasePath, withWebBasePath } from './runtime/web-path';
 
 // Entry-shell sub-views. The home/project landing renders one of three
 // columns and each sub-view now owns a top-level path so the browser
@@ -53,7 +54,9 @@ export type Route =
   | { kind: 'marketplace-detail'; pluginId: string };
 
 export function parseRoute(pathname: string): Route {
-  const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+  const appPathname = stripWebBasePath(pathname);
+  if (appPathname == null) return { kind: 'home', view: 'home' };
+  const parts = appPathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'home', view: 'home' };
   if (parts[0] === 'onboarding') {
     return { kind: 'home', view: 'onboarding' };
@@ -128,7 +131,7 @@ export function parseRoute(pathname: string): Route {
   return { kind: 'home', view: 'home' };
 }
 
-export function buildPath(route: Route): string {
+function buildCanonicalPath(route: Route): string {
   if (route.kind === 'home') {
     if (route.view === 'onboarding') return '/onboarding';
     if (route.view === 'projects') return '/projects';
@@ -159,6 +162,10 @@ export function buildPath(route: Route): string {
       : `/projects/${id}/conversations/${cid}`;
   }
   return file ? `/projects/${id}/files/${file}` : `/projects/${id}`;
+}
+
+export function buildPath(route: Route): string {
+  return withWebBasePath(buildCanonicalPath(route));
 }
 
 // Centralized navigation. Components call this instead of mutating

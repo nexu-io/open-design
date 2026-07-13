@@ -4,6 +4,7 @@ import type {
   LiveArtifactSsePayload,
   ProjectConversationCreatedSsePayload,
 } from '@open-design/contracts';
+import { apiPath } from '@/runtime/web-path';
 export interface ProjectFileChangeEvent {
   type: 'file-changed';
   path: string;
@@ -39,7 +40,7 @@ const DEFAULT_INITIAL_BACKOFF = 1000;
 const DEFAULT_MAX_BACKOFF = 30_000;
 
 export function projectEventsUrl(projectId: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}/events`;
+  return apiPath(`/projects/${encodeURIComponent(projectId)}/events`);
 }
 
 export interface ProjectEventsConnection {

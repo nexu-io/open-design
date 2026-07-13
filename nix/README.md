@@ -98,6 +98,38 @@ Open Design's frontend is a static SPA that issues relative `/api/*`,
 The two services are independent. `autoStart` controls the daemon;
 `webFrontend.enable` controls the static server. Mix freely.
 
+### Serving below a fixed browser-visible path
+
+Self-hosted Web/daemon deployments can use one fixed prefix, for example
+`/open-design`:
+
+```nix
+services.open-design = {
+  enable = true;
+  autoStart = true;
+  webFrontend = {
+    enable = true;
+    basePath = "/open-design";
+  };
+  # Include the same path when a canonical public URL is needed for callbacks
+  # and browser-facing daemon payloads.
+  extraEnv.OD_PUBLIC_BASE_URL = "https://example.com/open-design";
+};
+```
+
+`basePath` is normalized to one prefix. The bundled Caddy server strips it
+before serving the static package and proxying `/api`, `/artifacts`, and
+`/frames`; SSE keeps the same no-buffering settings. A custom reverse proxy may
+preserve or strip the prefix, but must route the complete browser-visible
+prefix consistently.
+
+The Web package is compiled with its path at build time. The default flake
+package is root-based; for a non-root deployment override it with a Web package
+built with the matching `OD_WEB_BASE_PATH` value, for example by overriding the
+derivation's `env` in a flake overlay. The daemon checks the generated Web
+manifest and fails early when the package and service setting disagree.
+Packaged desktop remains root-path only.
+
 > **Bring-your-own-server gotcha:** if your proxy listens on any
 > origin that differs from the daemon's bind (different host _or_
 > different port — even loopback split-port like

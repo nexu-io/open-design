@@ -585,6 +585,9 @@ export interface ComposeInput {
   // native tools; text_artifact runs (BYOK/plain) deliver source through
   // assistant-text <artifact> blocks.
   executionProfile?: ExecutionProfile | undefined;
+  // Browser-visible deployment prefix used when generated HTML needs to link
+  // back to daemon-served static assets such as shared device frames.
+  webBasePath?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -623,6 +626,7 @@ export function composeSystemPrompt({
   mediaExecution,
   byokMediaDefaults,
   executionProfile,
+  webBasePath,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -701,7 +705,7 @@ export function composeSystemPrompt({
   }
 
   if (!isMediaSurfaceEarly && !isAskMode) {
-    parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
+    parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile, webBasePath), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
     // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
@@ -724,7 +728,7 @@ export function composeSystemPrompt({
       metadata?.platformTargets?.includes('responsive') ||
       (metadata?.platformTargets?.length ?? 0) > 1;
     if (isMultiTargetProject) {
-      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+      parts.push(renderSharedFramesBlock(webBasePath), '\n\n---\n\n');
     }
   }
 

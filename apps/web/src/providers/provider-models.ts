@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
@@ -9,7 +10,7 @@ async function postProviderModels(
 ): Promise<ProviderModelsResponse> {
   const start = Date.now();
   try {
-    const response = await fetch('/api/provider/models', {
+    const response = await apiFetch('/api/provider/models', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

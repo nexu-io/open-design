@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 // Project / conversation / message / tab persistence — backed by the
 // daemon's SQLite store. All writes round-trip through HTTP so projects
 // stay coherent across multiple browser tabs and across restarts.
@@ -38,7 +39,7 @@ export type { PluginShareAction } from '@open-design/contracts';
 
 export async function listProjects(options?: { throwOnError?: boolean }): Promise<Project[]> {
   try {
-    const resp = await fetch('/api/projects');
+    const resp = await apiFetch('/api/projects');
     if (!resp.ok) {
       if (options?.throwOnError) throw new Error(`projects ${resp.status}`);
       return [];
@@ -53,7 +54,7 @@ export async function listProjects(options?: { throwOnError?: boolean }): Promis
 
 export async function getProject(id: string): Promise<Project | null> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`);
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(id)}`);
     if (!resp.ok) return null;
     const json = (await resp.json()) as { project: Project };
     return json.project;
@@ -71,7 +72,7 @@ export async function getProjectDetail(
     // before resolving it, so referencing a brand-new (empty) project yields a
     // real on-disk directory instead of a path that fails existence checks.
     const query = opts?.ensureDir ? '?ensureDir=1' : '';
-    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}${query}`);
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(id)}${query}`);
     if (!resp.ok) return null;
     const json = (await resp.json()) as { project: Project; resolvedDir?: unknown };
     return {
@@ -106,7 +107,7 @@ export async function createProject(input: {
     // calling it directly throws — the surrounding try/catch then turns
     // the Create button into a silent no-op (issue #849).
     const id = randomUUID();
-    const resp = await fetch('/api/projects', {
+    const resp = await apiFetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...input }),
@@ -144,7 +145,7 @@ export async function createDesignSystemProjectFromProject(
   input: { name?: string; pendingPrompt?: string } = {},
 ): Promise<CreateDesignSystemProjectFromProjectResponse> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/design-system-copy`, {
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/design-system-copy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -180,7 +181,7 @@ export async function duplicateProject(
   input: { name?: string } = {},
 ): Promise<DuplicateProjectResponse> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/duplicate`, {
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/duplicate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -212,7 +213,7 @@ export async function duplicateProject(
 }
 
 export async function pickLocalFolderPath(): Promise<string | null> {
-  const resp = await fetch('/api/dialog/open-folder', {
+  const resp = await apiFetch('/api/dialog/open-folder', {
     method: 'POST',
   });
   if (!resp.ok) {
@@ -245,7 +246,7 @@ export async function pickLocalFolderPath(): Promise<string | null> {
 export async function importFolderProject(
   input: ImportFolderRequest,
 ): Promise<ImportFolderResponse> {
-  const resp = await fetch('/api/import/folder', {
+  const resp = await apiFetch('/api/import/folder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -266,7 +267,7 @@ export async function importClaudeDesignZip(
 ): Promise<{ project: Project; conversationId: string; entryFile: string }> {
   const form = new FormData();
   form.append('file', file);
-  const resp = await fetch('/api/import/claude-design', {
+  const resp = await apiFetch('/api/import/claude-design', {
     method: 'POST',
     body: form,
   });
@@ -291,7 +292,7 @@ export async function importClaudeDesignZip(
 
 export async function listTemplates(): Promise<ProjectTemplate[]> {
   try {
-    const resp = await fetch('/api/templates');
+    const resp = await apiFetch('/api/templates');
     if (!resp.ok) return [];
     const json = (await resp.json()) as { templates: ProjectTemplate[] };
     return json.templates ?? [];
@@ -302,7 +303,7 @@ export async function listTemplates(): Promise<ProjectTemplate[]> {
 
 export async function getTemplate(id: string): Promise<ProjectTemplate | null> {
   try {
-    const resp = await fetch(`/api/templates/${encodeURIComponent(id)}`);
+    const resp = await apiFetch(`/api/templates/${encodeURIComponent(id)}`);
     if (!resp.ok) return null;
     const json = (await resp.json()) as { template: ProjectTemplate };
     return json.template;
@@ -317,7 +318,7 @@ export async function saveTemplate(input: {
   sourceProjectId: string;
 }): Promise<ProjectTemplate | null> {
   try {
-    const resp = await fetch('/api/templates', {
+    const resp = await apiFetch('/api/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -332,7 +333,7 @@ export async function saveTemplate(input: {
 
 export async function deleteTemplate(id: string): Promise<boolean> {
   try {
-    const resp = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
+    const resp = await apiFetch(`/api/templates/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     return resp.ok;
@@ -351,7 +352,7 @@ export async function patchProject(
   patch: ProjectPatch,
 ): Promise<Project | null> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -366,7 +367,7 @@ export async function patchProject(
 
 export async function deleteProject(id: string): Promise<boolean> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     return resp.ok;
@@ -381,7 +382,7 @@ export async function listConversations(
   projectId: string,
 ): Promise<Conversation[]> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations`,
     );
     if (!resp.ok) return [];
@@ -423,7 +424,7 @@ export async function createConversation(
     if (opts?.seedMessages && opts.seedMessages.length > 0) {
       body.seedMessages = opts.seedMessages;
     }
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations`,
       {
         method: 'POST',
@@ -445,7 +446,7 @@ export async function patchConversation(
   patch: Partial<Conversation>,
 ): Promise<Conversation | null> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: 'PATCH',
@@ -466,7 +467,7 @@ export async function deleteConversation(
   conversationId: string,
 ): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
       { method: 'DELETE' },
     );
@@ -483,7 +484,7 @@ export async function listMessages(
   conversationId: string,
 ): Promise<ChatMessage[]> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
     );
     if (!resp.ok) return [];
@@ -513,7 +514,7 @@ export async function saveMessage(
     const body = options.telemetryFinalized
       ? { ...message, telemetryFinalized: true }
       : message;
-    await fetch(
+    await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(message.id)}`,
       {
         method: 'PUT',
@@ -540,7 +541,7 @@ export async function createTerminal(
   init?: CreateTerminalRequest,
 ): Promise<TerminalSession | null> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/terminals`,
       {
         method: 'POST',
@@ -558,7 +559,7 @@ export async function createTerminal(
 
 /** SSE endpoint a `<TerminalViewer>` subscribes to for raw PTY output. */
 export function terminalStreamUrl(projectId: string, terminalId: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stream`;
+  return apiPath(`/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stream`);
 }
 
 export async function sendTerminalStdin(
@@ -567,7 +568,7 @@ export async function sendTerminalStdin(
   data: string,
 ): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stdin`,
       {
         method: 'POST',
@@ -588,7 +589,7 @@ export async function resizeTerminal(
   rows: number,
 ): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/resize`,
       {
         method: 'POST',
@@ -611,7 +612,7 @@ export async function killTerminal(
   options: { keepalive?: boolean } = {},
 ): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/kill`,
       {
         method: 'POST',
@@ -695,7 +696,7 @@ function newestTabsState(
 }
 
 async function persistTabsToDaemon(projectId: string, state: OpenTabsState): Promise<void> {
-  await fetch(`/api/projects/${encodeURIComponent(projectId)}/tabs`, {
+  await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/tabs`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(state),
@@ -706,7 +707,7 @@ async function persistTabsToDaemon(projectId: string, state: OpenTabsState): Pro
 export async function loadTabs(projectId: string): Promise<OpenTabsState> {
   const cached = readCachedTabs(projectId);
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/tabs`,
     );
     if (!resp.ok) return cached ?? { tabs: [], active: null };
@@ -788,7 +789,7 @@ export async function listPlugins(
   options: ListPluginsOptions = {},
 ): Promise<InstalledPluginRecord[]> {
   try {
-    const resp = await fetch('/api/plugins');
+    const resp = await apiFetch('/api/plugins');
     if (!resp.ok) return [];
     const json = (await resp.json()) as { plugins?: InstalledPluginRecord[] };
     const plugins = json.plugins ?? [];
@@ -802,8 +803,8 @@ export async function listPlugins(
 }
 
 // Return the cached visible plugins without hitting the network when the cache
-// is still within its TTL; otherwise fetch (which refreshes the cache). Used by
-// surfaces that mount often (Home) where a slightly stale list is fine and the
+// is still within its TTL; otherwise call apiFetch (which refreshes the cache).
+// Used by surfaces that mount often (Home) where a slightly stale list is fine and the
 // heavy `/api/plugins` round trip per mount is not.
 export async function listPluginsFresh(): Promise<InstalledPluginRecord[]> {
   if (cachedVisiblePlugins !== null && Date.now() - cachedVisibleAt < PLUGINS_CACHE_TTL_MS) {
@@ -831,7 +832,7 @@ export async function duplicatePluginAsProject(
   pluginId: string,
   input: { name?: string } = {},
 ): Promise<PluginDuplicateProjectResponse> {
-  const resp = await fetch(
+  const resp = await apiFetch(
     `/api/plugins/${encodeURIComponent(pluginId)}/duplicate-project`,
     {
       method: 'POST',
@@ -860,7 +861,7 @@ interface PluginInstallEvent {
 export async function installPluginSource(source: string): Promise<PluginInstallOutcome> {
   const log: string[] = [];
   try {
-    const resp = await fetch('/api/plugins/install', {
+    const resp = await apiFetch('/api/plugins/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source }),
@@ -926,7 +927,7 @@ export async function installGeneratedPluginFolder(
 ): Promise<PluginInstallOutcome> {
   try {
     const request: ProjectPluginFolderInstallRequest = { path: relativePath };
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/plugins/install-folder`,
       {
         method: 'POST',
@@ -1009,7 +1010,7 @@ export async function startGeneratedPluginShareTask(
   relativePath: string,
   action: 'publish-github' | 'contribute-open-design',
 ): Promise<PluginShareTaskStart> {
-  const resp = await fetch(
+  const resp = await apiFetch(
     `/api/projects/${encodeURIComponent(projectId)}/plugins/share-tasks`,
     {
       method: 'POST',
@@ -1042,7 +1043,7 @@ export async function waitGeneratedPluginShareTask(
   since: number,
   timeoutMs = 25_000,
 ): Promise<PluginShareTaskSnapshot> {
-  const resp = await fetch(`/api/plugins/share-tasks/${encodeURIComponent(taskId)}/wait`, {
+  const resp = await apiFetch(`/api/plugins/share-tasks/${encodeURIComponent(taskId)}/wait`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ since, timeoutMs }),
@@ -1075,7 +1076,7 @@ export async function createPluginShareProject(
   locale?: string,
 ): Promise<PluginShareProjectOutcome> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/share-project`,
       {
         method: 'POST',
@@ -1120,7 +1121,7 @@ async function postGeneratedPluginShareAction(
   action: 'publish-github' | 'contribute-open-design',
 ): Promise<PluginShareOutcome> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/projects/${encodeURIComponent(projectId)}/plugins/${action}`,
       {
         method: 'POST',
@@ -1148,7 +1149,7 @@ async function postGeneratedPluginShareAction(
 export async function upgradePlugin(id: string): Promise<PluginInstallOutcome> {
   const log: string[] = [];
   try {
-    const resp = await fetch(`/api/plugins/${encodeURIComponent(id)}/upgrade`, {
+    const resp = await apiFetch(`/api/plugins/${encodeURIComponent(id)}/upgrade`, {
       method: 'POST',
     });
     if (!resp.ok) {
@@ -1191,7 +1192,7 @@ export async function upgradePlugin(id: string): Promise<PluginInstallOutcome> {
 
 async function postPluginUpload(url: string, form: FormData): Promise<PluginInstallOutcome> {
   try {
-    const resp = await fetch(url, {
+    const resp = await apiFetch(url, {
       method: 'POST',
       body: form,
     });
@@ -1260,7 +1261,7 @@ function getUploadRelativePath(file: File): string {
 
 export async function uninstallPlugin(id: string): Promise<boolean> {
   try {
-    const resp = await fetch(`/api/plugins/${encodeURIComponent(id)}/uninstall`, {
+    const resp = await apiFetch(`/api/plugins/${encodeURIComponent(id)}/uninstall`, {
       method: 'POST',
     });
     return resp.ok;
@@ -1346,7 +1347,7 @@ export interface PluginMarketplaceMutationOutcome {
 
 export async function listPluginMarketplaces(): Promise<PluginMarketplace[]> {
   try {
-    const resp = await fetch('/api/marketplaces');
+    const resp = await apiFetch('/api/marketplaces');
     if (!resp.ok) return [];
     const json = (await resp.json()) as { marketplaces?: PluginMarketplace[] };
     return json.marketplaces ?? [];
@@ -1360,7 +1361,7 @@ export async function addPluginMarketplace(input: {
   trust: PluginMarketplaceTrust;
 }): Promise<PluginMarketplaceMutationOutcome> {
   try {
-    const resp = await fetch('/api/marketplaces', {
+    const resp = await apiFetch('/api/marketplaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -1375,7 +1376,7 @@ export async function refreshPluginMarketplace(
   id: string,
 ): Promise<PluginMarketplaceMutationOutcome> {
   try {
-    const resp = await fetch(`/api/marketplaces/${encodeURIComponent(id)}/refresh`, {
+    const resp = await apiFetch(`/api/marketplaces/${encodeURIComponent(id)}/refresh`, {
       method: 'POST',
     });
     return readPluginMarketplaceOutcome(resp, 'Marketplace source refreshed.');
@@ -1388,7 +1389,7 @@ export async function removePluginMarketplace(
   id: string,
 ): Promise<PluginMarketplaceMutationOutcome> {
   try {
-    const resp = await fetch(`/api/marketplaces/${encodeURIComponent(id)}`, {
+    const resp = await apiFetch(`/api/marketplaces/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     if (!resp.ok) {
@@ -1405,7 +1406,7 @@ export async function setPluginMarketplaceTrust(
   trust: PluginMarketplaceTrust,
 ): Promise<PluginMarketplaceMutationOutcome> {
   try {
-    const resp = await fetch(`/api/marketplaces/${encodeURIComponent(id)}/trust`, {
+    const resp = await apiFetch(`/api/marketplaces/${encodeURIComponent(id)}/trust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trust }),
@@ -1441,7 +1442,7 @@ export async function applyPlugin(
   } = {},
 ): Promise<ApplyResult | null> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/apply`,
       {
         method: 'POST',
@@ -1546,7 +1547,7 @@ export async function fetchAppliedPluginSnapshot(
   snapshotId: string,
 ): Promise<AppliedPluginSnapshot | null> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/applied-plugins/${encodeURIComponent(snapshotId)}`,
     );
     if (!resp.ok) return null;

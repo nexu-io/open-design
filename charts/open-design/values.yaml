@@ -16,6 +16,9 @@ config:
   nodeEnv: "production"
   allowedOrigins: ""
   publicBaseUrl: ""
+  # Fixed browser-visible path. The frontend image must be built with the
+  # same OD_WEB_BASE_PATH value, for example /open-design.
+  webBasePath: ""
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
   bindHost: "127.0.0.1"

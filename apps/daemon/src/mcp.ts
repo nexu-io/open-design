@@ -770,11 +770,11 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
         const declaredEntry = project?.metadata?.entryFile ?? null;
         const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry);
-        const previewUrl = rawPreviewUrl(baseUrl, id, entryFile);
+        const webBase = await getWebBaseUrl(baseUrl);
+        const previewUrl = rawPreviewUrl(webBase ?? baseUrl, id, entryFile);
         // Build the studio deep link too — needs the project's
         // default conversation, which we look up once. Cheap to skip
         // when the daemon has no webBaseUrl configured.
-        const webBase = await getWebBaseUrl(baseUrl);
         const conversationId = webBase ? await getDefaultConversationId(baseUrl, id) : null;
         const studioUrl = buildStudioUrl(webBase, id, conversationId, entryFile);
         return ok(
@@ -1328,7 +1328,8 @@ async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<s
     const project = data?.project ?? data;
     const declared = (project as { metadata?: JsonObject } | undefined)?.metadata?.entryFile;
     const entry = await resolveProjectEntry(baseUrl, projectId, declared);
-    return rawPreviewUrl(baseUrl, projectId, entry);
+    const webBase = await getWebBaseUrl(baseUrl);
+    return rawPreviewUrl(webBase ?? baseUrl, projectId, entry);
   } catch {
     return null;
   }

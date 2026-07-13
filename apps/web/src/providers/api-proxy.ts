@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import type {
@@ -49,7 +50,7 @@ export async function streamProxyEndpoint(
 
   try {
     const messages = await buildProxyMessages(endpoint, history, context);
-    const resp = await fetch(endpoint, {
+    const resp = await apiFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -204,7 +205,7 @@ async function readAnthropicImageBlock(
   path: string,
 ): Promise<ProxyImageContentBlock | null> {
   try {
-    const resp = await fetch(projectFileUrl(projectId, path), { cache: 'no-store' });
+    const resp = await apiFetch(projectFileUrl(projectId, path), { cache: 'no-store' });
     if (!resp.ok) return null;
 
     const mediaType = supportedAnthropicImageMediaType(

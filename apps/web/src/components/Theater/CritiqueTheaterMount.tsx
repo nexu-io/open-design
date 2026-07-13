@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useCritiqueStream } from './hooks/useCritiqueStream';
@@ -91,7 +92,7 @@ export function CritiqueTheaterMount({
     // mark the run interrupted locally. On rejection or non-2xx we clear
     // `interruptPending` so the user can retry, and the real SSE
     // terminal event the daemon emits later still wins.
-    const fetcher = fetchInterrupt ?? ((url, init) => fetch(url, init));
+    const fetcher = fetchInterrupt ?? ((url, init) => apiFetch(url, init));
     const url = `/api/projects/${encodeURIComponent(projectId)}/critique/${encodeURIComponent(runId)}/interrupt`;
     fetcher(url, { method: 'POST' }).then((res) => {
       if (res.ok) {

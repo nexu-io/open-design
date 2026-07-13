@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Live AIHubMix model catalogues for the media pickers.
 //
 // The static IMAGE_MODELS / VIDEO_MODELS / AUDIO_MODELS_BY_KIND registries only
@@ -42,7 +43,7 @@ export async function fetchAIHubMixModels(
   type: AIHubMixCatalogType,
   signal?: AbortSignal,
 ): Promise<MediaModel[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/media/providers/aihubmix/models?type=${type}`,
     { signal },
   );

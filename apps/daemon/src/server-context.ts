@@ -7,6 +7,7 @@ import type { OpenDesignPublicMetadataService } from './services/open-design-pub
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
   getPublicBaseUrl?: (...args: any[]) => string;
+  getPublicUrl?: (...args: any[]) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };
@@ -39,6 +40,7 @@ export interface PathDeps {
   // Mirror of USER_SKILLS_DIR rooted at DESIGN_TEMPLATES_DIR so user
   // imports of templates do not collide with imports of functional skills.
   USER_DESIGN_TEMPLATES_DIR: string;
+  WEB_BASE_PATH?: string;
   USER_SKILLS_DIR: string;
 }
 

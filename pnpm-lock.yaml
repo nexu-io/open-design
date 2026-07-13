@@ -62,6 +62,9 @@ importers:
       '@open-design/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@open-design/path-config':
+        specifier: workspace:*
+        version: link:../../packages/path-config
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -260,6 +263,9 @@ importers:
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
+      '@open-design/path-config':
+        specifier: workspace:*
+        version: link:../../packages/path-config
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -327,6 +333,9 @@ importers:
       '@open-design/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@open-design/path-config':
+        specifier: workspace:*
+        version: link:../../packages/path-config
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -503,6 +512,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@open-design/path-config':
+        specifier: workspace:*
+        version: link:../path-config
       '@open-design/release':
         specifier: workspace:*
         version: link:../release
@@ -604,6 +616,21 @@ importers:
       zod:
         specifier: 3.25.76
         version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  packages/path-config:
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -762,6 +789,9 @@ importers:
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
+      '@open-design/path-config':
+        specifier: workspace:*
+        version: link:../../packages/path-config
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform

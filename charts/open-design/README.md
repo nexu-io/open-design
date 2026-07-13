@@ -39,7 +39,26 @@ nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
-**Path Constraints**: Non-root ingress path prefixes (sub-paths) are explicitly **unsupported** by the proxy routing stack. Ingress paths must be configured as `/`.
+**Path configuration**: Set `config.webBasePath` to one fixed browser-visible
+prefix such as `/open-design`. When the default ingress path is `/`, the chart
+uses that configured prefix automatically; custom ingress paths must match it.
+Build the frontend image with the same `OD_WEB_BASE_PATH` value. Set
+`config.publicBaseUrl` to the full canonical URL, including the prefix.
+
+Example:
+
+```bash
+helm upgrade --install open-design ./charts/open-design \
+  --set config.webBasePath=/open-design \
+  --set config.publicBaseUrl=https://example.com/open-design \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=example.com \
+  --set ingress.hosts[0].paths[0].path=/open-design
+```
+
+The chart keeps the root API routes for compatibility while adding the
+prefix-aware proxy location. Ingress and proxy buffering must remain disabled
+for SSE, as shown in the default annotations.
 
 #### Authentication Proxy
 An authentication proxy (NGINX) is introduced to front the application. This proxy runs as a mandatory sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
@@ -69,6 +88,7 @@ This chart adheres to strict security defaults:
 | `config.nodeEnv`       | Node.js environment (`production` or `development`)                                                           | `production`                         |
 | `config.allowedOrigins`| CORS allowed origins. Mandatory if service.type is LoadBalancer or NodePort to prevent 403 render failures.   | `""`                                 |
 | `config.publicBaseUrl` | Public base URL used by the application (derived dynamically if empty)                                        | `""`                                 |
+| `config.webBasePath` | Fixed browser-visible Web path; the image must be built with the same `OD_WEB_BASE_PATH` | `""` |
 | `config.nodeOptions`   | V8 engine memory optimizations                                                                                | `--max-old-space-size=192`           |
 | `config.webPort`       | Web server listening port                                                                                     | `7456`                               |
 | `config.bindHost`      | Host to bind the web server to                                                                                | `"127.0.0.1"`                        |

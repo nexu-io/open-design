@@ -11,6 +11,7 @@ import {
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
   resolveNextBundlerOptions,
+  resolveWebBasePath,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
   startWebSidecar,
@@ -34,6 +35,23 @@ describe('resolveDaemonProxyTarget', () => {
 
   it('rejects non-daemon paths', () => {
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/settings')).toBeNull();
+  });
+
+  it('strips the configured browser base path before forwarding daemon requests', () => {
+    const target = resolveDaemonProxyTarget(
+      'http://127.0.0.1:7456',
+      '/open-design/api/projects?limit=10',
+      '/open-design',
+    );
+
+    expect(target?.href).toBe('http://127.0.0.1:7456/api/projects?limit=10');
+    expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/api/projects', '/open-design')).toBeNull();
+    expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/open-design/settings', '/open-design')).toBeNull();
+  });
+
+  it('normalizes the sidecar base path from its environment', () => {
+    expect(resolveWebBasePath({ OD_WEB_BASE_PATH: 'open-design/' })).toBe('/open-design');
+    expect(() => resolveWebBasePath({ OD_WEB_BASE_PATH: 'https://example.test/open-design' })).toThrow();
   });
 });
 

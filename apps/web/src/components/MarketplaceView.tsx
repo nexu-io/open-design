@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Plan G4 / spec §11.6 — Marketplace catalog grid.
 //
 // Lists every installed plugin as a card grid (the most reliable
@@ -34,7 +35,7 @@ export function MarketplaceView() {
     let cancelled = false;
     void Promise.all([
       listPlugins(),
-      fetch('/api/marketplaces')
+      apiFetch('/api/marketplaces')
         .then((r) => (r.ok ? r.json() : { marketplaces: [] }))
         .then((d) => (d?.marketplaces ?? []) as Marketplace[]),
     ]).then(([rows, mps]) => {

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { publicPath } from '../src/runtime/web-path';
 import { I18nProvider } from '../src/i18n';
 import { AnalyticsProvider } from '../src/analytics/provider';
 import '@excalidraw/excalidraw/index.css';
@@ -9,8 +10,8 @@ import '../src/styles/home/index.css';
 export const metadata: Metadata = {
   title: 'Open Design',
   icons: {
-    icon: '/app-icon.png',
-    apple: '/app-icon.png',
+    icon: publicPath('/app-icon.png'),
+    apple: publicPath('/app-icon.png'),
   },
 };
 

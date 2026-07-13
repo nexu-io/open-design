@@ -18,6 +18,7 @@ import type {
 } from '../design-systems/generation-jobs.js';
 import type { openDatabase } from '../db.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
+import { createPathConfig, rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 
 type DbHandle = ReturnType<typeof openDatabase>;
 
@@ -247,6 +248,7 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
             packaged.bytes.toString('utf8'),
             req.params.id,
             path.posix.dirname(PACKAGED_SHOWCASE_PATH),
+            ctx.paths.WEB_BASE_PATH,
           ),
         );
       }
@@ -426,23 +428,27 @@ export function rewriteDesignSystemShowcaseAssetUrls(
   html: string,
   designSystemId: string,
   baseDir: string,
+  webBasePath = '',
 ): string {
   if (!html) return html;
-  return html
+  const publicPath = createPathConfig(webBasePath).withBasePath;
+  const rewritten = html
     .replace(/\b(src|href)=(["'])([^"']+)\2/gi, (match, attr: string, quote: string, raw: string) => {
-      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir);
+      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir, publicPath);
       return rewritten === raw ? match : `${attr}=${quote}${rewritten}${quote}`;
     })
     .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (match, quote: string, raw: string) => {
-      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir);
+      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir, publicPath);
       return rewritten === raw ? match : `url(${quote}${rewritten}${quote})`;
     });
+  return rewriteKnownInternalBrowserPaths(rewritten, webBasePath);
 }
 
 function rewriteDesignSystemShowcaseAssetUrl(
   rawUrl: string,
   designSystemId: string,
   baseDir: string,
+  publicPath: (path: string) => string = (value) => value,
 ): string {
   const value = rawUrl.trim();
   if (
@@ -467,7 +473,7 @@ function rewriteDesignSystemShowcaseAssetUrl(
     return rawUrl;
   }
 
-  const staticUrl = `/api/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(relativePath)}`;
+  const staticUrl = publicPath(`/api/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(relativePath)}`);
   if (suffix.startsWith('?')) return `${staticUrl}&${suffix.slice(1)}`;
   return `${staticUrl}${suffix}`;
 }

@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
@@ -6216,7 +6217,7 @@ export async function persistConfigAndRunOrbit(
     });
   }
   await syncConfigToDaemon(config, { throwOnError: true });
-  const response = await fetch('/api/orbit/run', {
+  const response = await apiFetch('/api/orbit/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ locale: options?.locale ?? null }),
@@ -6331,7 +6332,7 @@ function OrbitSection({
 
   const refreshStatus = async () => {
     try {
-      const response = await fetch('/api/orbit/status');
+      const response = await apiFetch('/api/orbit/status');
       if (!response.ok) return;
       if (!isMountedRef.current) return;
       setStatus(await response.json() as OrbitStatusResponse);
@@ -6480,7 +6481,7 @@ function OrbitSection({
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
   const liveArtifactHref = lastRun?.artifactId && lastRun?.artifactProjectId
-    ? `/api/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`
+    ? apiPath(`/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`)
     : null;
   const isBusy = running || Boolean(status?.running);
 
@@ -7597,7 +7598,7 @@ function CodexInstallToggle(): JSX.Element | null {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/mcp/install/codex/status');
+      const res = await apiFetch('/api/mcp/install/codex/status');
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = (await res.json()) as { available: boolean; installed: boolean };
       setAvailable(Boolean(data.available));
@@ -7619,7 +7620,7 @@ function CodexInstallToggle(): JSX.Element | null {
       setBusy(true);
       setMessage(null);
       try {
-        const res = await fetch('/api/mcp/install/codex', { method });
+        const res = await apiFetch('/api/mcp/install/codex', { method });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
           throw new Error(body?.error?.message || `HTTP ${res.status}`);
@@ -7825,7 +7826,7 @@ function IntegrationsSection() {
   // snippet that would silently fail when pasted.
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/mcp/install-info')
+    apiFetch('/api/mcp/install-info')
       .then(async (res) => {
         if (!res.ok) throw new Error(`daemon ${res.status}`);
         return (await res.json()) as McpInstallInfo;

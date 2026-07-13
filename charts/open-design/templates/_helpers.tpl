@@ -50,3 +50,16 @@ Selector labels used by Services and HPAs.
 app.kubernetes.io/name: {{ include "open-design.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Normalize and validate the one fixed browser-visible Web prefix. Keep this
+restricted to URL-safe path segments because the value is also rendered into
+the auth-proxy nginx configuration.
+*/}}
+{{- define "open-design.webBasePath" -}}
+{{- $path := .Values.config.webBasePath | default "" | trimSuffix "/" -}}
+{{- if and $path (not (regexMatch "^/[A-Za-z0-9][A-Za-z0-9._~-]*(/[A-Za-z0-9][A-Za-z0-9._~-]*)*$" $path)) -}}
+{{- fail "config.webBasePath must be empty or a slash-prefixed path made of URL-safe segments, for example /open-design" -}}
+{{- end -}}
+{{- $path -}}
+{{- end }}

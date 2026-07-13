@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // EntryShell — the centered-hero entry layout.
 //
 // This component owns the entire JSX render and local UI state for
@@ -1831,7 +1832,7 @@ function OnboardingView({
       body,
     };
     try {
-      const resp = await fetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
+      const resp = await apiFetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -2293,7 +2294,7 @@ function OnboardingView({
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 5000);
     try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
+      await apiFetch(NEWSLETTER_SUBSCRIBE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, source: 'client' }),

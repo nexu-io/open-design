@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -660,7 +661,7 @@ export async function streamViaDaemon({
   const body = JSON.stringify(request);
 
   try {
-    const createResp = await fetch('/api/runs', {
+    const createResp = await apiFetch('/api/runs', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -723,7 +724,7 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
 
 export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const resp = await apiFetch(`/api/runs/${encodeURIComponent(runId)}`);
     if (!resp.ok) return null;
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
@@ -747,7 +748,7 @@ export interface LaunchAntigravityOauthResult {
 }
 export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthResult> {
   try {
-    const resp = await fetch('/api/agents/antigravity/oauth-launch', {
+    const resp = await apiFetch('/api/agents/antigravity/oauth-launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
@@ -847,7 +848,7 @@ export interface VelaLoginStatus {
 export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}): Promise<VelaLoginStatus | null> {
   try {
     const query = options.refresh ? '?refresh=1' : '';
-    const resp = await fetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
+    const resp = await apiFetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as VelaLoginStatus;
   } catch {
@@ -858,7 +859,7 @@ export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}):
 export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}): Promise<AmrWalletSnapshot | null> {
   try {
     const query = options.refresh ? '?refresh=1' : '';
-    const resp = await fetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
+    const resp = await apiFetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrWalletSnapshot;
   } catch {
@@ -868,7 +869,7 @@ export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}
 
 export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
   try {
-    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    const resp = await apiFetch('/api/amr/models', { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrModelsResponse;
   } catch {
@@ -891,7 +892,7 @@ export async function startVelaLogin(
   try {
     const loginAttribution =
       attribution && odDeviceId ? { ...attribution, odDeviceId } : attribution;
-    const resp = await fetch('/api/integrations/vela/login', {
+    const resp = await apiFetch('/api/integrations/vela/login', {
       method: 'POST',
       headers: loginAttribution ? { 'Content-Type': 'application/json' } : undefined,
       body: loginAttribution ? JSON.stringify({ attribution: loginAttribution }) : undefined,
@@ -914,7 +915,7 @@ export async function startVelaLogin(
 
 export async function cancelVelaLogin(): Promise<{ ok: boolean; canceled?: boolean }> {
   try {
-    const resp = await fetch('/api/integrations/vela/login/cancel', { method: 'POST' });
+    const resp = await apiFetch('/api/integrations/vela/login/cancel', { method: 'POST' });
     if (!resp.ok) return { ok: false };
     const body = (await resp.json().catch(() => null)) as { canceled?: boolean } | null;
     return { ok: true, canceled: body?.canceled };
@@ -925,7 +926,7 @@ export async function cancelVelaLogin(): Promise<{ ok: boolean; canceled?: boole
 
 export async function velaLogout(): Promise<{ ok: boolean }> {
   try {
-    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST' });
+    const resp = await apiFetch('/api/integrations/vela/logout', { method: 'POST' });
     return { ok: resp.ok };
   } catch {
     return { ok: false };
@@ -947,7 +948,7 @@ export async function reportChatRunFeedback(req: {
   customReason: string;
 }): Promise<void> {
   try {
-    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+    await apiFetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -963,7 +964,7 @@ export async function listActiveChatRuns(
 ): Promise<ChatRunStatusResponse[]> {
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
-    const resp = await fetch(`/api/runs?${qs.toString()}`);
+    const resp = await apiFetch(`/api/runs?${qs.toString()}`);
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -974,7 +975,7 @@ export async function listActiveChatRuns(
 
 export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
   try {
-    const resp = await fetch('/api/runs');
+    const resp = await apiFetch('/api/runs');
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1024,7 +1025,7 @@ async function consumeDaemonRun({
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    void apiFetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
   };
 
   cancelSignal?.addEventListener('abort', cancelRun, { once: true });
@@ -1038,7 +1039,7 @@ async function consumeDaemonRun({
       const qs = lastEventId ? `?after=${encodeURIComponent(lastEventId)}` : '';
       let resp: Response;
       try {
-        resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
+        resp = await apiFetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
           method: 'GET',
           signal,
         });
@@ -1443,7 +1444,7 @@ export async function saveArtifact(
   html: string,
 ): Promise<{ url: string; path: string } | null> {
   try {
-    const resp = await fetch('/api/artifacts/save', {
+    const resp = await apiFetch('/api/artifacts/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, title, html }),

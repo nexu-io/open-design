@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { isVisualStabilityMode } from '../../../utils/visualStability';
+import { apiPath } from '@/runtime/web-path';
 import type { DesignPreviewSpec } from '../preview';
 
 interface Props {
@@ -39,7 +40,7 @@ export function DesignSystemSurface({ preview, inView }: Props) {
           {ready ? (
             <iframe
               title={`${preview.brand} showcase preview`}
-              src={`/api/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`}
+              src={apiPath(`/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`)}
               sandbox="allow-scripts"
               loading="lazy"
               tabIndex={-1}

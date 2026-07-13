@@ -13,6 +13,7 @@ import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
+import { publicPath } from '../runtime/web-path';
 
 export type EntryView =
   | 'home'
@@ -116,7 +117,7 @@ export function EntryNavRail({
             data-testid="entry-nav-logo"
           >
             <img
-              src="/logo.svg"
+              src={publicPath('/logo.svg')}
               alt=""
               className="entry-nav-rail__logo-img"
               draggable={false}

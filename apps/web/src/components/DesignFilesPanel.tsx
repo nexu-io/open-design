@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
@@ -807,7 +808,7 @@ export function DesignFilesPanel({
     const fileList = [...selected];
     if (fileList.length === 0) return;
     try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
+      const resp = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: fileList }),
@@ -1496,7 +1497,7 @@ function HtmlPreviewThumbnail({
     if (tooLargeForThumbnail) return;
     const controller = new AbortController();
     let cancelled = false;
-    void fetch(`${url}?v=${Math.round(file.mtime)}`, { signal: controller.signal })
+    void apiFetch(`${url}?v=${Math.round(file.mtime)}`, { signal: controller.signal })
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         if (cancelled || html === null) return;

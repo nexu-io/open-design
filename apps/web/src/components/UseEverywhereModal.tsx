@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Use Open Design Everywhere — modal entry that documents Open Design's
 // non-UI surfaces (CLI, MCP, HTTP, Skills) and ships a one-click "copy
 // guide for an agent" payload. Reachable from the entry top-bar and
@@ -156,7 +157,7 @@ export function UseEverywhereGuidePanel({
 
   function loadMcpInstallInfo(): Promise<AgentGuideMcpInstallInfo | null> {
     if (!mcpInstallInfoRequestRef.current) {
-      mcpInstallInfoRequestRef.current = fetch('/api/mcp/install-info')
+      mcpInstallInfoRequestRef.current = apiFetch('/api/mcp/install-info')
         .then(async (res) => {
           if (!res.ok) throw new Error(`daemon ${res.status}`);
           const data = (await res.json()) as unknown;

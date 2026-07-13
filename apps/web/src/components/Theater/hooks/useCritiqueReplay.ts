@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 
@@ -251,7 +252,7 @@ function parseTranscript(raw: string): PanelEvent[] {
 }
 
 async function defaultFetch(url: string): Promise<string | ArrayBuffer> {
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`transcript fetch failed: ${res.status}`);
   return url.endsWith('.gz') ? await res.arrayBuffer() : await res.text();
 }

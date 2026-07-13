@@ -450,6 +450,12 @@ export interface BYOKToolContext {
    *  signal into every upstream/download fetch the BYOK tool executor
    *  performs, so a disconnected client stops the tool loop's paid work. */
   requestInit?: Pick<RequestInit, 'dispatcher' | 'signal'>;
+  /** Browser-visible URL serializer for generated project media. */
+  browserUrl?: (path: string) => string;
+}
+
+function browserUrl(ctx: BYOKToolContext, path: string): string {
+  return ctx.browserUrl?.(path) ?? path;
 }
 
 export interface ImageToolResult {
@@ -563,7 +569,7 @@ export async function executeGenerateSpeech(
 
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }
 
@@ -735,7 +741,7 @@ export async function executeGenerateImage(
   // blob:`) without any CORS plumbing.
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }
 
@@ -951,7 +957,7 @@ export async function executeGenerateVideo(
 
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }
 
@@ -1092,7 +1098,7 @@ export async function executeAIHubMixGenerateImage(
   await writeFile(path.join(dir, filename), bytes);
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }
 
@@ -1262,7 +1268,7 @@ export async function executeAIHubMixGenerateSpeech(
   await writeFile(path.join(dir, filename), bytes);
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }
 
@@ -1686,6 +1692,6 @@ export async function executeAIHubMixGenerateVideo(
   await writeFile(path.join(dir, filename), bytes);
   return {
     ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+    url: browserUrl(ctx, `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`),
   };
 }

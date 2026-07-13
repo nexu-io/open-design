@@ -7,7 +7,7 @@ import type {
   DesktopRenderSlidesInput,
   DesktopRenderSlidesResult,
 } from '@open-design/sidecar-proto';
-import express from 'express';
+import express, { type Express } from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
@@ -54,6 +54,11 @@ import {
   createCompatApiErrorResponse,
   sendApiError,
 } from './http/api-errors.js';
+import {
+  assertStaticBuildMatchesBasePath,
+  forwardedPrefixMatchesBasePath,
+  resolveDeploymentPathConfig,
+} from './http/deployment-path.js';
 export {
   createCompatApiError,
   createCompatApiErrorResponse,
@@ -880,36 +885,6 @@ let routineService = null;
 // to the verifier + endpoint info needed to finish the exchange when the
 // browser hits /api/mcp/oauth/callback.
 const mcpPendingAuth = new PendingAuthCache();
-
-/**
- * Resolve the daemon's public base URL — the origin the user's browser
- * (or the OAuth provider) reaches us at. Order of precedence:
- *
- *   1. `OD_PUBLIC_BASE_URL` env var. Cloud and packaged-electron deployments
- *      set this to the externally-routable URL (e.g. `https://app.example.com`).
- *   2. `req.protocol://req.get('host')` from the inbound request. Works in
- *      local dev and most reverse-proxy setups (Express respects
- *      `trust proxy` so X-Forwarded-* headers are honored).
- *
- * The OAuth callback URI is derived from this — it MUST be reachable from
- * the user's browser, otherwise the redirect after auth lands on
- * ERR_CONNECTION_REFUSED. Misconfiguration is loud: the OAuth provider
- * will reject `redirect_uri` mismatches.
- */
-function getPublicBaseUrl(req) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
-  if (env && /^https?:\/\//i.test(env)) {
-    return env.replace(/\/+$/u, '');
-  }
-  const proto = req.protocol || 'http';
-  const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
-  return `${proto}://${host}`;
-}
-
-function mcpOAuthCallbackUrl(req) {
-  return `${getPublicBaseUrl(req)}/api/mcp/oauth/callback`;
-}
 
 /**
  * Refresh an expired token using the OAuth client context that the original
@@ -1985,6 +1960,18 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
+/** Mount the canonical daemon app at the public prefix and retain root API compatibility. */
+export function mountDeploymentApp(listenerApp: Express, routeApp: Express, basePath: string): void {
+  if (basePath !== '') {
+    // Mount the prefixed listener first so its SPA fallback cannot be swallowed
+    // by the compatibility root mount. Express removes the mount path before
+    // dispatching to the existing route app.
+    listenerApp.use(basePath, routeApp);
+  }
+  // CLI clients and prefix-stripping reverse proxies continue to use root paths.
+  listenerApp.use(routeApp);
+}
+
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
@@ -1995,6 +1982,8 @@ export async function startServer({
   runtime = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
+  const deploymentPaths = resolveDeploymentPathConfig();
+  assertStaticBuildMatchesBasePath(STATIC_DIR, deploymentPaths.basePath);
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
@@ -2024,6 +2013,16 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  app.use((req, res, next) => {
+    const forwardedPrefix = req.get('x-forwarded-prefix');
+    if (forwardedPrefixMatchesBasePath(forwardedPrefix, deploymentPaths.basePath)) return next();
+    return res.status(400).json({
+      error: {
+        code: 'INVALID_FORWARDED_PREFIX',
+        message: `X-Forwarded-Prefix must match ${deploymentPaths.basePath || '/'} when set`,
+      },
+    });
+  });
   // Clipper page captures are self-contained HTML with inlined images plus a
   // Figma IR, which for an image-heavy site (The Economist, news front pages)
   // runs to tens of MB — far past a normal JSON body. Give the ingest route a
@@ -2561,7 +2560,8 @@ export async function startServer({
     sendMulterError,
     sendLiveArtifactRouteError,
     createSseResponse,
-    getPublicBaseUrl,
+    getPublicBaseUrl: deploymentPaths.publicOrigin,
+    getPublicUrl: deploymentPaths.publicUrl,
     requireLocalDaemonRequest,
     isLocalSameOrigin,
     resolvedPortRef,
@@ -2578,6 +2578,7 @@ export async function startServer({
     USER_DESIGN_SYSTEMS_DIR,
     DESIGN_TEMPLATES_DIR,
     USER_DESIGN_TEMPLATES_DIR,
+    WEB_BASE_PATH: deploymentPaths.basePath,
     CRAFT_DIR,
     SKILLS_DIR,
     USER_SKILLS_DIR,
@@ -2655,6 +2656,7 @@ export async function startServer({
     authorizeToolRequest,
     projectsRoot: PROJECTS_DIR,
     requireLocalDaemonRequest,
+    getPublicUrl: deploymentPaths.publicUrl,
     composio: composioConnectorProvider,
   });
 
@@ -3144,7 +3146,7 @@ export async function startServer({
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
-    http: { getPublicBaseUrl },
+    http: { getPublicBaseUrl: deploymentPaths.publicOrigin, getPublicUrl: deploymentPaths.publicUrl },
     env: process.env,
   });
 
@@ -3404,6 +3406,8 @@ export async function startServer({
     pluginAssetCache,
     AssetCacheError,
     assetCacheRewriteUrl,
+    publicPath: deploymentPaths.paths.withBasePath,
+    webBasePath: deploymentPaths.basePath,
     isCacheableExternalUrl,
     assembleExample,
   });
@@ -4021,6 +4025,7 @@ export async function startServer({
       byokMediaDefaults,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
+      webBasePath: deploymentPaths.basePath,
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
@@ -8461,7 +8466,9 @@ export async function startServer({
     };
     let server;
     try {
-      server = app.listen(port, host);
+      const listenerApp = express();
+      mountDeploymentApp(listenerApp, app, deploymentPaths.basePath);
+      server = listenerApp.listen(port, host);
       server.once('listening', () => {
         // Widen the between-request idle window so kept-alive sockets
         // belonging to chat/SSE clients survive the gaps between bursts.

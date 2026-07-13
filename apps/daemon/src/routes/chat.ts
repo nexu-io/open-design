@@ -1559,6 +1559,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       upstreamApiKey: apiKey,
       upstreamBaseUrl: effectiveBaseUrl,
       requestInit: {},
+      browserUrl: (path: string) => ctx.http.getPublicUrl?.(req, path) ?? path,
       // Spread-conditional because tsconfig's exactOptionalPropertyTypes
       // forbids `field: undefined` on an optional slot. The byok-tools
       // executor re-validates `ctx.defaultImageModel` against the provider's

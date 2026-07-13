@@ -15,6 +15,10 @@
  * after every navigation so the host can render its own counter / dots.
  */
 import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import { rewriteKnownInternalBrowserPaths as rewriteDeploymentPaths } from '@open-design/path-config';
+import { webPathConfig } from './web-path';
+
+export { rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 
 import {
   buildManualEditBridge,
@@ -274,7 +278,12 @@ export function buildSrcdoc(
   // sanitized title as the default filename — one that Microsoft Teams will
   // accept. Only the title text changes; visible page content is untouched.
   const withSafeTitle = sanitizeTitleInDoc(wrapped);
-  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  // `<base href>` only affects relative URLs. Prefix the small, known set of
+  // Open Design-owned root-relative namespaces as well, so generated preview
+  // HTML cannot escape a fixed browser base path. Arbitrary document paths and
+  // executable JavaScript are deliberately left untouched.
+  const withDeploymentPaths = rewriteDeploymentPaths(withSafeTitle, webPathConfig.basePath);
+  const withOdIds = annotateMissingOdIds(withDeploymentPaths);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);

@@ -15,6 +15,7 @@ const buildTargets = [
   "packages/platform",
   "packages/download",
   "packages/host",
+  "packages/path-config",
   "packages/registry-protocol",
   "packages/agui-adapter",
   "packages/plugin-runtime",

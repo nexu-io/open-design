@@ -21,6 +21,7 @@
   ...
 }: let
   cfg = config.services.open-design;
+  webBasePath = lib.removeSuffix "/" cfg.webFrontend.basePath;
 
   commonOpts = moduleCommon {
     inherit lib pkgs flake;
@@ -29,6 +30,16 @@
 
   daemonExe = lib.getExe cfg.package;
   caddy = pkgs.caddy;
+
+  apiProxy = ''
+    reverse_proxy 127.0.0.1:${toString cfg.port} {
+      flush_interval -1
+      transport http {
+        read_timeout 86400s
+        write_timeout 86400s
+      }
+    }
+  '';
 
   # See nix/home-manager.nix for the rationale behind these handle
   # blocks. The static SPA calls `/api/*`, `/artifacts/*`, `/frames/*`
@@ -42,27 +53,42 @@
     }
 
     http://${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
-      handle /api/* {
-        reverse_proxy 127.0.0.1:${toString cfg.port} {
-          flush_interval -1
-          transport http {
-            read_timeout 86400s
-            write_timeout 86400s
+      ${if webBasePath == "" then ''
+        handle /api/* {
+          ${apiProxy}
+        }
+        handle /artifacts/* {
+          reverse_proxy 127.0.0.1:${toString cfg.port}
+        }
+        handle /frames/* {
+          reverse_proxy 127.0.0.1:${toString cfg.port}
+        }
+        handle {
+          root * ${cfg.webFrontend.package}
+          try_files {path} {path}/ /index.html
+          file_server
+          encode gzip
+        }
+      '' else ''
+        redir ${webBasePath} ${webBasePath}/ permanent
+        handle_path ${webBasePath}/* {
+          handle /api/* {
+            ${apiProxy}
+          }
+          handle /artifacts/* {
+            reverse_proxy 127.0.0.1:${toString cfg.port}
+          }
+          handle /frames/* {
+            reverse_proxy 127.0.0.1:${toString cfg.port}
+          }
+          handle {
+            root * ${cfg.webFrontend.package}
+            try_files {path} {path}/ /index.html
+            file_server
+            encode gzip
           }
         }
-      }
-      handle /artifacts/* {
-        reverse_proxy 127.0.0.1:${toString cfg.port}
-      }
-      handle /frames/* {
-        reverse_proxy 127.0.0.1:${toString cfg.port}
-      }
-      handle {
-        root * ${cfg.webFrontend.package}
-        try_files {path} {path}/ /index.html
-        file_server
-        encode gzip
-      }
+      ''}
     }
   '';
 
@@ -109,6 +135,7 @@
     {
       OD_PORT = toString cfg.port;
       OD_DATA_DIR = toString cfg.dataDir;
+      OD_WEB_BASE_PATH = webBasePath;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
     // lib.optionalAttrs cfg.webFrontend.enable {

@@ -1,3 +1,4 @@
+import { apiFetch, withWebBasePath } from '@/runtime/web-path';
 // Client-side export helpers used by the Share menu in the HTML viewer.
 // Export formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
@@ -91,7 +92,7 @@ export async function exportProjectAsHtml(opts: {
   if (opts.versionId) query.set('versionId', opts.versionId);
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`;
   try {
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
@@ -764,7 +765,7 @@ export async function exportProjectAsPdf(opts: {
   versionId?: string;
 }): Promise<ProjectPdfExportResult> {
   try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/pdf`, {
+    const resp = await apiFetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/pdf`, {
       body: JSON.stringify({
         deck: opts.deck,
         fileName: opts.filePath,
@@ -857,7 +858,7 @@ export async function exportProjectAsZip(opts: {
       .join('/');
     const query = new URLSearchParams({ inline: '1', versionId: opts.versionId });
     try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`);
+      const resp = await apiFetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`);
       if (!resp.ok) throw new Error(`version html export request failed (${resp.status})`);
       exportAsZip(await resp.text(), opts.fallbackTitle);
       return;
@@ -872,7 +873,7 @@ export async function exportProjectAsZip(opts: {
     root ? `?root=${encodeURIComponent(root)}` : ''
   }`;
   try {
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
@@ -915,7 +916,7 @@ export async function exportProjectAsPptx(opts: {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/${path}`;
   let resp: Response;
   try {
-    resp = await fetch(url, {
+    resp = await apiFetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -1043,7 +1044,7 @@ export async function exportProjectImageDataUrl(opts: {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/image`;
   let resp: Response;
   try {
-    resp = await fetch(url, {
+    resp = await apiFetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -1116,7 +1117,7 @@ export async function downloadDesignSystemArchive(opts: {
 }): Promise<boolean> {
   const url = `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`;
   try {
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));
@@ -1137,7 +1138,7 @@ export async function downloadProjectArchive(opts: {
     root ? `?root=${encodeURIComponent(root)}` : ''
   }`;
   try {
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
@@ -1215,7 +1216,7 @@ export function buildSandboxedPreviewDocument(
 
 function currentOriginBaseHref(): string | undefined {
   if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
-    return `${window.location.origin.replace(/\/+$/, '')}/`;
+    return new URL(withWebBasePath('/'), window.location.origin).href;
   }
   const base =
     typeof document !== 'undefined' && typeof document.baseURI === 'string'
@@ -1225,7 +1226,7 @@ function currentOriginBaseHref(): string | undefined {
         : undefined;
   if (!base) return undefined;
   try {
-    return new URL('/', base).href;
+    return new URL(withWebBasePath('/'), base).href;
   } catch {
     return undefined;
   }

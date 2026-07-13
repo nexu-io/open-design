@@ -15,6 +15,8 @@
  * Returns the normalized file path when the href looks like an
  * in-project link, or `null` to let the default link behavior win.
  */
+import { stripWebBasePath } from './web-path';
+
 export function asInProjectFilePath(
   href: string | null | undefined,
   projectFileNames?: ReadonlySet<string>,
@@ -25,7 +27,7 @@ export function asInProjectFilePath(
   if (!trimmed) return null;
   if (trimmed.startsWith('#')) return null;
   const normalizedHref = normalizeSameOriginHref(trimmed);
-  const appRoute = extractAppProjectFileRoute(normalizedHref);
+  const appRoute = extractAppProjectFileRoute(stripWebBasePath(normalizedHref) ?? normalizedHref);
   if (appRoute) {
     if (projectId && appRoute.projectId !== projectId) return null;
     return normalizeProjectFilePath(appRoute.filePath);

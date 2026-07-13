@@ -57,6 +57,7 @@ export interface RegisterVelaRoutesDeps {
   };
   http: {
     getPublicBaseUrl?: PublicBaseUrlResolver;
+    getPublicUrl?: (req: Request, path: string) => string;
   };
   env?: NodeJS.ProcessEnv;
 }
@@ -68,8 +69,12 @@ interface AmrModelProbe {
   cacheKey: string;
 }
 
-function velaApiProxyBaseUrl(req: Request, getPublicBaseUrl: PublicBaseUrlResolver): string {
-  return `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
+function velaApiProxyBaseUrl(
+  req: Request,
+  getPublicBaseUrl: PublicBaseUrlResolver,
+  getPublicUrl?: (req: Request, path: string) => string,
+): string {
+  return getPublicUrl?.(req, AMR_API_PROXY_PREFIX) ?? `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
 }
 
 function velaProxyRequestBody(req: Request): Buffer | null {
@@ -177,6 +182,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     const host = req.get('host');
     return host ? `${proto}://${host}` : 'http://localhost:7456';
   });
+  const getPublicUrl = deps.http.getPublicUrl;
 
   function resolveAmrModelProbeForEnv(configuredEnv: Record<string, string>): AmrModelProbe {
     const def = getAgentDef('amr');
@@ -398,7 +404,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         spawned = await spawnVelaLogin({
           configuredEnv,
           attribution: loginAttribution,
-          defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
+          defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl, getPublicUrl),
           waitForActivation: true,
         });
       }

@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 // Plan G4 / spec §11.6 — Marketplace plugin detail.
 //
 // Renders one plugin's manifest, capability checklist, declared GenUI
@@ -35,7 +36,7 @@ export function PluginDetailView(props: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`)
+    void apiFetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -183,7 +184,7 @@ export function PluginDetailView(props: Props) {
           <h2>Preview</h2>
           <iframe
             title={`${localizedTitle} preview`}
-            src={`/api/plugins/${encodeURIComponent(plugin.id)}/preview`}
+            src={apiPath(`/plugins/${encodeURIComponent(plugin.id)}/preview`)}
             sandbox="allow-scripts"
             className="plugin-detail__preview-frame"
             data-testid="plugin-detail-preview-iframe"
@@ -209,7 +210,7 @@ export function PluginDetailView(props: Props) {
               return (
                 <li key={`${e.path}-${idx}`}>
                   <a
-                    href={`/api/plugins/${encodeURIComponent(plugin.id)}/example/${encodeURIComponent(stem)}`}
+                    href={apiPath(`/plugins/${encodeURIComponent(plugin.id)}/example/${encodeURIComponent(stem)}`)}
                     target="_blank"
                     rel="noreferrer"
                     data-testid={`plugin-detail-example-${stem}`}

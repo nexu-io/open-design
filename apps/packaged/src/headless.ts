@@ -15,7 +15,7 @@ import {
 } from "@open-design/sidecar-proto";
 import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
 
-import { PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
+import { assertPackagedRootWebBasePath, PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -97,6 +97,7 @@ function colorize(text: string): string {
 }
 
 async function main(): Promise<void> {
+  assertPackagedRootWebBasePath();
   const config = resolveHeadlessConfig();
   const initialPaths = resolvePackagedNamespacePaths(config);
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
