@@ -377,6 +377,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.z.ai/api/paas/v4',
     model: 'glm-5.1',
     models: [
+      'glm-5.2',
       'glm-5.1',
       'glm-5-turbo',
       'glm-5',

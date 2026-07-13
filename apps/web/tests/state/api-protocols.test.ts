@@ -58,6 +58,7 @@ describe('apiProtocols table consistency', () => {
       protocol: 'openai',
       model: 'glm-5.1',
     });
+    expect(zaiGlobalProvider?.models).toContain('glm-5.2');
     expect(zaiGlobalProvider?.models).toContain('glm-5');
     expect(zaiGlobalProvider?.models).toContain('glm-4.7-flash');
 
