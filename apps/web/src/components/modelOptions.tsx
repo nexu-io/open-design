@@ -171,6 +171,8 @@ export const SearchableModelSelect = forwardRef<
     return Array.from(merged.values()).sort((a, b) => {
       if (a.id === 'default') return -1;
       if (b.id === 'default') return 1;
+      if (a.id === CUSTOM_MODEL_SENTINEL) return 1;
+      if (b.id === CUSTOM_MODEL_SENTINEL) return -1;
       const la = a.label.toLowerCase();
       const lb = b.label.toLowerCase();
       return la < lb ? -1 : la > lb ? 1 : 0;
@@ -197,7 +199,6 @@ export const SearchableModelSelect = forwardRef<
     if (!normalizedQuery) return allOptions;
     return allOptions.filter(
       (option) =>
-        option.id === 'default' ||
         option.id === value ||
         option.id === CUSTOM_MODEL_SENTINEL ||
         matchesModelSearch(option, normalizedQuery),
