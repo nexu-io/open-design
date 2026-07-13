@@ -1,3 +1,8 @@
+/** @module showcase
+ * Renders a full product marketing page from a design system's DESIGN.md tokens.
+ * Extracts palette, typography, and brand signals to produce a live showcase with nav, hero, features, pricing, and footer sections.
+ */
+
 /**
  * Build a fully-formed product webpage that demonstrates a design system in
  * action — not just a list of tokens, but a real-feeling marketing /
@@ -13,6 +18,7 @@ type ColorToken = { name: string; value: string; role: string };
 type FontHints = { display?: string; heading?: string; body?: string; mono?: string };
 type RowStatus = 'up' | '';
 
+/** Renders a full product marketing showcase page from a design system's tokens. Extracts color palette, typography hints, and brand signals to compose an HTML document with nav, hero, features, pricing, and footer sections. */
 export function renderDesignSystemShowcase(id: string, raw: string): string {
   const titleMatch = /^#\s+(.+?)\s*$/m.exec(raw);
   const rawTitle = titleMatch?.[1] ?? id;
@@ -549,6 +555,7 @@ export function renderDesignSystemShowcase(id: string, raw: string): string {
 </html>`;
 }
 
+/** Renders an HTML feature card with an icon, title, and description. Escapes all text content for safe HTML injection. */
 function featureCard(icon: string, title: string, body: string): string {
   return `<div class="feature">
     <div class="feature-icon">${escapeHtml(icon)}</div>
@@ -557,6 +564,7 @@ function featureCard(icon: string, title: string, body: string): string {
   </div>`;
 }
 
+/** Renders a KPI card displaying a label, value, and delta (change indicator). Used in the dashboard preview section. */
 function kpi(label: string, value: string, delta: string): string {
   return `<div class="kpi">
     <div class="label">${escapeHtml(label)}</div>
@@ -565,6 +573,7 @@ function kpi(label: string, value: string, delta: string): string {
   </div>`;
 }
 
+/** Renders a row in a data list with name, metadata, value, and optional status badge. The status controls whether an upward-pointing indicator is shown. */
 function listRow(name: string, meta: string, value: string, status: RowStatus): string {
   const badge = status === 'up' ? '<span class="badge up">↑</span>' : '<span class="badge">·</span>';
   return `<div class="list-row">
@@ -577,6 +586,7 @@ function listRow(name: string, meta: string, value: string, status: RowStatus): 
   </div>`;
 }
 
+/** Renders a row in an activity feed with a name, metadata, and a live indicator. Used in the workspace preview sidebar. */
 function activityRow(name: string, meta: string): string {
   return `<div class="list-row">
     <div>
@@ -588,6 +598,7 @@ function activityRow(name: string, meta: string): string {
   </div>`;
 }
 
+/** Renders a pricing tier card with name, price, feature list, and action button. Optionally marks a card as featured (prominent styling). */
 function priceCard(name: string, price: string, sub: string, features: string[], featured = false): string {
   return `<div class="price-card${featured ? ' featured' : ''}">
     <div class="tier-name">${escapeHtml(name)}</div>
@@ -597,6 +608,7 @@ function priceCard(name: string, price: string, sub: string, features: string[],
   </div>`;
 }
 
+/** Renders a testimonial quote card with text, author name, and role. Includes a placeholder avatar circle. */
 function quote(text: string, name: string, role: string): string {
   return `<div class="quote">
     <p>${escapeHtml(text)}</p>
@@ -610,6 +622,7 @@ function quote(text: string, name: string, role: string): string {
   </div>`;
 }
 
+/** Renders a single FAQ item with a question heading and answer paragraph. */
 function faq(q: string, a: string): string {
   return `<div class="faq-item">
     <h4>${escapeHtml(q)}</h4>
@@ -617,6 +630,7 @@ function faq(q: string, a: string): string {
   </div>`;
 }
 
+/** Generates an inline SVG line chart with 12 deterministic weekly data points. Includes a gradient fill under the line and a marker on the final point. */
 function inlineLineChart(): string {
   // Deterministic numbers so the chart looks specific (12 weekly data points).
   const data = [38, 44, 41, 52, 49, 61, 58, 67, 71, 76, 82, 88];
@@ -643,6 +657,7 @@ function inlineLineChart(): string {
   </svg>`;
 }
 
+/** Extracts the subtitle description from DESIGN.md by finding the first paragraph after the title. Strips category blockquotes and limits to 240 characters. */
 function extractSubtitle(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const h1 = lines.findIndex((l) => /^#\s+/.test(l));
@@ -657,6 +672,10 @@ function extractSubtitle(raw: string): string {
   return window.split(/\n\n/)[0]?.slice(0, 240) ?? '';
 }
 
+/**
+ * Parse color tokens from DESIGN.md raw text using multiple pattern matching strategies.
+ * Deduplicates by name and hex value, upgrading role descriptions when a token appears multiple times.
+ */
 export function extractColors(raw: string): ColorToken[] {
   const colors: ColorToken[] = [];
   const seen = new Set<string>();
@@ -729,6 +748,7 @@ export function extractColors(raw: string): ColorToken[] {
   return colors;
 }
 
+/** Extracts font family hints from DESIGN.md by scanning for label-value pairs. Returns up to four font families (display, heading, body, mono); only the first match for each label type is kept. */
 function extractFonts(raw: string): FontHints {
   const out: FontHints = {};
   const re = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z /]{1,30}?)\s*\**\s*[:：]\s*`?([^`\n]+?)`?$/gm;
@@ -745,6 +765,7 @@ function extractFonts(raw: string): FontHints {
   return out;
 }
 
+/** Escapes special regex metacharacters in a string to make it safe for use in a RegExp constructor. */
 function escapeRegex(s: string): string {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -753,6 +774,7 @@ function escapeRegex(s: string): string {
 // boundaries so descriptive color names like "Cardinal Red" don't satisfy a
 // "card" hint, and "Gem Pink" doesn't satisfy "ink" — both real bugs the
 // substring-based version produced for the Duolingo and Canva showcases.
+/** Tests whether a hint phrase appears as a whole word in text (case-insensitive). Uses word boundaries to avoid false matches on partial words. */
 function matchesHint(text: string, hint: string): boolean {
   if (!text) return false;
   const needle = hint.toLowerCase().trim();
@@ -761,6 +783,7 @@ function matchesHint(text: string, hint: string): boolean {
   return re.test(text);
 }
 
+/** Selects a color token matching one of the provided hints. Checks hints against role descriptions first, then against color names; optionally excludes colors by hex value. */
 function pickColor(colors: ColorToken[], hints: string[], exclude: string[] = []): string | null {
   // Two-pass lookup: each hint is first checked against every color's role
   // description (the prose authors use to explain how the color is used)
@@ -785,6 +808,7 @@ function pickColor(colors: ColorToken[], hints: string[], exclude: string[] = []
   return null;
 }
 
+/** Computes the HSL saturation value of a hex color. Returns 0 for invalid input or grayscale colors. */
 function colorSaturation(hex: string): number {
   const v = String(hex).replace('#', '').toLowerCase();
   if (v.length !== 6) return 0;
@@ -796,6 +820,7 @@ function colorSaturation(hex: string): number {
   return max === 0 ? 0 : (max - min) / max;
 }
 
+/** Computes relative luminance of a hex color using the standard CIE formula. Returns 0.5 for invalid input. */
 function colorLuminance(hex: string): number {
   const v = String(hex).replace('#', '').toLowerCase();
   if (v.length !== 6) return 0.5;
@@ -805,6 +830,7 @@ function colorLuminance(hex: string): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
+/** Finds the first color in a list that is desaturated and very light (luminance >= 0.92). Used as a fallback background color. */
 function firstLightish(colors: ColorToken[]): string | null {
   for (const c of colors) {
     if (colorSaturation(c.value) > 0.15) continue;
@@ -813,6 +839,7 @@ function firstLightish(colors: ColorToken[]): string | null {
   return null;
 }
 
+/** Finds the first color with saturation > 0.25 that is not in the exclude list. Used to select the primary accent color. */
 function firstNonNeutral(colors: ColorToken[], exclude: string[] = []): string | null {
   const set = new Set(exclude.map((v) => String(v || '').toLowerCase()));
   for (const c of colors) {
@@ -822,6 +849,7 @@ function firstNonNeutral(colors: ColorToken[], exclude: string[] = []): string |
   return null;
 }
 
+/** Finds a second saturated color not in the exclude list. Used to select the secondary accent color. */
 function secondNonNeutral(colors: ColorToken[], exclude: string[] = []): string | null {
   const set = new Set(exclude.map((v) => String(v || '').toLowerCase()));
   for (const c of colors) {
@@ -831,6 +859,7 @@ function secondNonNeutral(colors: ColorToken[], exclude: string[] = []): string 
   return null;
 }
 
+/** Returns either dark (#0a0a0a) or light (#ffffff) text based on the luminance of a background hex color. Ensures readability on any background. */
 function pickReadableForeground(hex: string): string {
   const n = normalizeHex(hex);
   if (n.length !== 7) return '#ffffff';
@@ -841,6 +870,7 @@ function pickReadableForeground(hex: string): string {
   return lum > 0.6 ? '#0a0a0a' : '#ffffff';
 }
 
+/** Derives a surface/secondary background color from a primary background by adjusting luminance. Lifts dark backgrounds and tints light backgrounds slightly cooler. */
 function mixSurface(bg: string): string {
   const n = normalizeHex(bg);
   if (n.length !== 7) return '#fafafa';
@@ -854,6 +884,7 @@ function mixSurface(bg: string): string {
   return `#${fix(r)}${fix(g)}${fix(b)}`;
 }
 
+/** Converts a hex color to lowercase and expands 3-digit hex codes to 6 digits. Returns the normalized result. */
 function normalizeHex(hex: string): string {
   let h = hex.toLowerCase();
   if (h.length === 4) {
@@ -862,14 +893,17 @@ function normalizeHex(hex: string): string {
   return h;
 }
 
+/** Removes design system boilerplate prefixes from a title. Strips leading "Design System Inspired by" or "Design System for" phrases. */
 function cleanTitle(raw: string): string {
   return String(raw).replace(/^Design System (Inspired by|for)\s+/i, '').trim();
 }
 
+/** Collapses all whitespace sequences to single spaces and trims leading/trailing whitespace. */
 function oneLine(s: string): string {
   return String(s).replace(/\s+/g, ' ').trim();
 }
 
+/** Escapes HTML special characters (&, <, >, ", ') to their entity equivalents for safe text injection into HTML content. */
 function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',

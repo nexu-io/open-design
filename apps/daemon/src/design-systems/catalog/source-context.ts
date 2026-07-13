@@ -1,4 +1,10 @@
-import type { UserDesignSystemInput } from './index.js';
+/** @module source-context
+ * Fetches GitHub repository metadata (description, README excerpt, package.json) for user design system inputs.
+ * Used to enrich generation prompts with upstream source context before creating or revising a design system.
+ * All network calls are timeout-bounded and failures are non-fatal — callers receive empty context on error.
+ */
+
+import type { UserDesignSystemInput } from '../core/index.js';
 
 export type DesignSystemSourceContext = {
   github: GitHubRepositoryContext[];
@@ -48,6 +54,10 @@ const DEFAULT_MAX_REPOS = 3;
 const DEFAULT_MAX_README_CHARS = 720;
 const DEFAULT_FETCH_TIMEOUT_MS = 3500;
 
+/**
+ * Fetches GitHub repository metadata (description, README, package.json) for design system source URLs.
+ * Returns empty context on network errors; all failures are non-fatal.
+ */
 export async function collectDesignSystemSourceContext(
   input: UserDesignSystemInput,
   options: SourceContextOptions = {},
@@ -71,6 +81,10 @@ export async function collectDesignSystemSourceContext(
   };
 }
 
+/**
+ * Merges fetched GitHub context (description, README excerpt, package metadata) into the user input's source notes.
+ * Deduplicates repeated context blocks and preserves existing user notes.
+ */
 export function mergeSourceContextIntoInput(
   input: UserDesignSystemInput,
   context: DesignSystemSourceContext,
@@ -98,6 +112,10 @@ export function mergeSourceContextIntoInput(
   };
 }
 
+/**
+ * Extracts provenance-level source notes when they differ from top-level notes.
+ * Returns an empty string if provenance notes are absent or identical to top-level notes.
+ */
 function provenanceOnlySourceNotes(input: UserDesignSystemInput): string {
   const provenanceSourceNotes = cleanMultiline(input.provenance?.sourceNotes);
   const topLevelSourceNotes = cleanMultiline(input.sourceNotes);
@@ -105,6 +123,10 @@ function provenanceOnlySourceNotes(input: UserDesignSystemInput): string {
   return provenanceSourceNotes;
 }
 
+/**
+ * Fetches GitHub repository metadata (description, README excerpt, package.json) for a single repository.
+ * Returns error details when API calls fail; all failures are non-fatal.
+ */
 async function readGitHubRepositoryContext(
   repo: ParsedGitHubRepo,
   options: { fetch: FetchLike; maxReadmeChars: number; timeoutMs: number },
@@ -145,6 +167,10 @@ async function readGitHubRepositoryContext(
   };
 }
 
+/**
+ * Deduplicates and parses GitHub repository URLs, returning a list of unique repositories.
+ * Duplicate URLs are silently skipped; unparseable URLs are ignored.
+ */
 function uniqueRepositories(urls: string[]): ParsedGitHubRepo[] {
   const seen = new Set<string>();
   const repos: ParsedGitHubRepo[] = [];
@@ -159,6 +185,10 @@ function uniqueRepositories(urls: string[]): ParsedGitHubRepo[] {
   return repos;
 }
 
+/**
+ * Parses GitHub repository URLs (both SSH and HTTPS formats) into owner/repo/url components.
+ * Returns null when the URL cannot be parsed or does not match a GitHub domain.
+ */
 function parseGitHubRepositoryUrl(raw: string): ParsedGitHubRepo | null {
   const clean = raw.trim();
   const ssh = /^git@github\.com:([^/\s]+)\/([^/\s]+?)(?:\.git)?(?:[#?].*)?$/.exec(clean);
@@ -186,6 +216,10 @@ function parseGitHubRepositoryUrl(raw: string): ParsedGitHubRepo | null {
   };
 }
 
+/**
+ * Fetches and parses JSON from a URL with a timeout constraint.
+ * Returns a success envelope with parsed JSON or an error envelope with HTTP status or exception message.
+ */
 async function fetchJson(
   fetchFn: FetchLike,
   url: string,
@@ -205,6 +239,10 @@ async function fetchJson(
   }
 }
 
+/**
+ * Attempts to fetch a raw file from GitHub across multiple branches and file paths.
+ * Returns the file content on first success; returns an empty string if all attempts fail.
+ */
 async function readRawFile(
   fetchFn: FetchLike,
   repo: ParsedGitHubRepo,
@@ -231,6 +269,10 @@ async function readRawFile(
   return '';
 }
 
+/**
+ * Wraps a fetch call with an AbortSignal timeout.
+ * Aborts the request if it exceeds timeoutMs; always clears the timeout in a finally block.
+ */
 async function fetchWithTimeout(
   fetchFn: FetchLike,
   url: string,
@@ -249,6 +291,10 @@ async function fetchWithTimeout(
   }
 }
 
+/**
+ * Constructs a raw.githubusercontent.com URL for fetching a file from a GitHub repository.
+ * All path components are URL-encoded to ensure safe transmission.
+ */
 function rawGithubUrl(repo: ParsedGitHubRepo, branch: string, filePath: string): string {
   const parts = [
     encodeURIComponent(repo.owner),
@@ -259,6 +305,10 @@ function rawGithubUrl(repo: ParsedGitHubRepo, branch: string, filePath: string):
   return `https://raw.githubusercontent.com/${parts.join('/')}`;
 }
 
+/**
+ * Returns a list of candidate branch names, starting with the default branch and falling back to common names.
+ * Deduplicates branches and skips empty values.
+ */
 function branchCandidates(defaultBranch: string): string[] {
   const out: string[] = [];
   for (const branch of [defaultBranch, 'main', 'master']) {
@@ -268,6 +318,10 @@ function branchCandidates(defaultBranch: string): string[] {
   return out;
 }
 
+/**
+ * Extracts name and description fields from a package.json content string.
+ * Returns an empty object when parsing fails or input is empty.
+ */
 function parsePackageInfo(raw: string): { name?: string; description?: string } {
   if (!raw) return {};
   try {
@@ -284,6 +338,10 @@ function parsePackageInfo(raw: string): { name?: string; description?: string } 
   }
 }
 
+/**
+ * Formats fetched GitHub repository metadata into a human-readable text block.
+ * Returns an empty string when there are no repositories; includes error messages when API calls fail.
+ */
 function formatGithubContextNotes(repos: GitHubRepositoryContext[]): string {
   if (repos.length === 0) return '';
   const lines = ['Fetched GitHub context:'];
@@ -306,6 +364,10 @@ function formatGithubContextNotes(repos: GitHubRepositoryContext[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Strips Markdown formatting (images, links, headings, code) and truncates to a maximum character count.
+ * Adds ellipsis when the content exceeds maxChars.
+ */
 function excerptMarkdown(raw: string, maxChars: number): string {
   const cleaned = raw
     .replace(/!\[[^\]]*]\([^)]*\)/g, '')
@@ -322,6 +384,10 @@ function excerptMarkdown(raw: string, maxChars: number): string {
   return cleaned.length > maxChars ? `${cleaned.slice(0, Math.max(0, maxChars - 3)).trim()}...` : cleaned;
 }
 
+/**
+ * Normalizes whitespace in multiline strings: collapses extra spaces, removes empty lines, standardizes line endings.
+ * Returns an empty string when input is not a string.
+ */
 function cleanMultiline(raw: string | undefined): string {
   if (typeof raw !== 'string') return '';
   return raw
@@ -333,6 +399,10 @@ function cleanMultiline(raw: string | undefined): string {
     .trim();
 }
 
+/**
+ * Merges multiline text blocks, deduplicating identical blocks after whitespace normalization.
+ * Skips empty blocks and joins non-empty unique blocks with double newlines.
+ */
 function joinUniqueBlocks(blocks: Array<string | undefined>): string {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -345,10 +415,18 @@ function joinUniqueBlocks(blocks: Array<string | undefined>): string {
   return out.join('\n\n');
 }
 
+/**
+ * Removes the `.git` suffix from a string (case-insensitive).
+ * Returns the original string if it does not end with `.git`.
+ */
 function stripGitSuffix(value: string): string {
   return value.replace(/\.git$/i, '');
 }
 
+/**
+ * Extracts an array of trimmed topic strings from raw input, capping at 12 items.
+ * Returns an empty array when input is not an array; filters out non-string and empty values.
+ */
 function parseTopics(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -358,18 +436,30 @@ function parseTopics(raw: unknown): string[] {
     .slice(0, 12);
 }
 
+/**
+ * Coerces a value to a trimmed string if it is a non-empty string; returns undefined otherwise.
+ */
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * Coerces a value to a number if it is finite; returns undefined if non-numeric or not finite.
+ */
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Coerces a value to a record object if it is an object (not array); returns an empty object otherwise.
+ */
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+/**
+ * Wrapper around the global `fetch` function, allowing dependency injection for testing.
+ */
 function defaultFetch(url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) {
   return fetch(url, init);
 }

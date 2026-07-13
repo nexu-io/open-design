@@ -15,15 +15,15 @@ import {
 } from '../skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
-import { readDesignSystem } from '../design-systems/index.js';
 import {
+  readDesignSystem,
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
-} from '../design-systems/import.js';
-import { importGitHubDesignSystemProject } from '../design-systems/github-import.js';
-import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import.js';
-import { renderDesignSystemPreview } from '../design-systems/preview.js';
-import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
+  importGitHubDesignSystemProject,
+  importShadcnDesignSystemProject,
+  renderDesignSystemPreview,
+  renderDesignSystemShowcase,
+} from '../design-systems/index.js';
 import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';

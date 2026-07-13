@@ -1,14 +1,8 @@
-// Parse SwiftUI Color(...) declarations into named hex swatches.
-//
-// SwiftUI repos express palette tokens in source rather than CSS, e.g.
-//   static let grey50 = Color(hue: 220 / 360, saturation: 0.02, brightness: 0.99)
-//   static let appShellLight = Color(red: 0xF4 / 255, green: 0xF4 / 255, blue: 0xF4 / 255)
-// so the design-system swatch extraction needs to read these forms and convert
-// them to hex. Component values can be plain decimals (0.99), hex bytes (0xF4),
-// or simple divisions (0xF4 / 255, 220 / 360).
-//
-// Note: Color(hue:saturation:brightness:) is HSB (brightness/value), not HSL,
-// so the conversion uses the HSV math.
+/** @module swift-colors
+ * Parses SwiftUI `Color(...)` declarations into named hex swatches.
+ * Handles `red:green:blue:`, `hue:saturation:brightness:`, and `white:` initializers
+ * with component values expressed as decimals, hex bytes, or simple divisions.
+ */
 
 export interface SwiftColorToken {
   name: string;
@@ -36,10 +30,16 @@ export function evalSwiftNumber(expr: string): number | null {
   return values[0]! / values[1]!;
 }
 
+/**
+ * Clamps a numeric value to the range [0, 1]. Used to normalize color component values that may slightly exceed bounds due to floating-point arithmetic.
+ */
 function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+/**
+ * Converts a 0..1 unit float to a two-character hex byte string (e.g., 0.5 becomes 'ff' rounded, padded with leading zero if needed).
+ */
 function byteHex(unit: number): string {
   return Math.round(clampUnit(unit) * 255)
     .toString(16)
@@ -75,12 +75,18 @@ export function hsbToHex(hue: number, saturation: number, brightness: number): s
   return rgbUnitToHex(red, green, blue);
 }
 
+/**
+ * Extracts a named argument value (e.g., `red: 0.5`) from a SwiftUI Color initializer string and evaluates it to a number or null if not found.
+ */
 function namedArg(args: string, key: string): number | null {
   const match = args.match(new RegExp(`\\b${key}\\s*:\\s*([^,)]+)`, 'u'));
   if (!match) return null;
   return evalSwiftNumber(match[1]!.trim());
 }
 
+/**
+ * Parses SwiftUI Color initializer arguments and converts them to #rrggbb hex. Tries RGB first, then HSB, then white (grayscale); returns null if none match.
+ */
 function swiftColorArgsToHex(args: string): string | null {
   const red = namedArg(args, 'red');
   const green = namedArg(args, 'green');

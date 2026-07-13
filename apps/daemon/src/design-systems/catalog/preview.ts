@@ -1,3 +1,8 @@
+/** @module preview
+ * Renders a DESIGN.md preview page showing palette swatches, typography, component samples, and the full rendered markdown.
+ * Used as the "before generate" design-system viewer in the UI.
+ */
+
 /**
  * Build a showcase HTML page from a DESIGN.md so the user can see what each
  * design system looks like *before* generating anything. We don't try to
@@ -301,6 +306,10 @@ export function renderDesignSystemPreview(id: string, raw: string): string {
 </html>`;
 }
 
+/**
+ * Extracts the first paragraph or subtitle text immediately after the main H1 heading.
+ * Strips blockquote markers and limits output to 240 characters.
+ */
 function extractSubtitle(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const h1 = lines.findIndex((l) => /^#\s+/.test(l));
@@ -315,10 +324,18 @@ function extractSubtitle(raw: string): string {
   return window.split(/\n\n/)[0]?.slice(0, 240) ?? '';
 }
 
+/**
+ * Parses DESIGN.md content using loose regexes to extract color tokens in two common formats.
+ * Deduplicates by lowercase name + normalized hex and returns up to all found colors.
+ */
 function extractColors(raw: string): ColorToken[] {
   const colors: ColorToken[] = [];
   const seen = new Set<string>();
 
+  /**
+   * Adds a color token to the collection if it passes validation and deduplication.
+   * Normalizes the name by stripping markdown and whitespace, validates length and hex format.
+   */
   function push(name: string, value: string): void {
     const cleanName = name.replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
     if (!cleanName || cleanName.length > 60) return;
@@ -342,6 +359,10 @@ function extractColors(raw: string): ColorToken[] {
   return colors;
 }
 
+/**
+ * Parses DESIGN.md content to extract font stack hints for display, body, and monospace.
+ * Stops after finding the first match for each category to avoid duplicates.
+ */
 function extractFonts(raw: string): FontHints {
   const out: FontHints = {};
   // "- **Display / headings:** `'GT Sectra', ...`"
@@ -360,6 +381,10 @@ function extractFonts(raw: string): FontHints {
   return out;
 }
 
+/**
+ * Searches for a color token by trying hints in order; returns the first match or null.
+ * Matching is case-insensitive substring search on color names.
+ */
 function pickColor(colors: ColorToken[], hints: string[]): string | null {
   for (const hint of hints) {
     const needle = hint.toLowerCase();
@@ -369,6 +394,10 @@ function pickColor(colors: ColorToken[], hints: string[]): string | null {
   return null;
 }
 
+/**
+ * Finds the first color with saturation above 0.25, filtering out grays and desaturated tones.
+ * Returns null if no sufficiently saturated color is found.
+ */
 function firstNonNeutral(colors: ColorToken[]): string | null {
   for (const c of colors) {
     const v = c.value.replace('#', '').toLowerCase();
@@ -384,6 +413,10 @@ function firstNonNeutral(colors: ColorToken[]): string | null {
   return null;
 }
 
+/**
+ * Chooses white or dark text color based on the luminance of the input hex color.
+ * Returns dark text for light backgrounds and white text for dark backgrounds.
+ */
 function pickReadableForeground(hex: string): string {
   const n = normalizeHex(hex);
   if (n.length !== 7) return '#ffffff';
@@ -395,6 +428,10 @@ function pickReadableForeground(hex: string): string {
   return lum > 0.6 ? '#0a0a0a' : '#ffffff';
 }
 
+/**
+ * Normalizes hex color codes to 7-character format (#RRGGBB).
+ * Expands 4-character hex codes (#RGB) to full format.
+ */
 function normalizeHex(hex: string): string {
   let h = hex.toLowerCase();
   if (h.length === 4) {
@@ -403,20 +440,28 @@ function normalizeHex(hex: string): string {
   return h;
 }
 
+/**
+ * Removes common prefixes like "Design System Inspired by" or "Design System for" from a title.
+ * Used to clean up extracted heading text.
+ */
 function cleanTitle(raw: string): string {
   return String(raw).replace(/^Design System (Inspired by|for)\s+/i, '').trim();
 }
 
+/**
+ * Escapes HTML special characters to prevent injection.
+ * Converts &, <, >, ", and ' to their entity equivalents.
+ */
 function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
   );
 }
 
-// Tiny markdown renderer — enough for our DESIGN.md prose: H1–H4, paragraphs,
-// bullet/ordered lists, blockquotes, fenced code, GFM pipe tables, horizontal
-// rules, inline `code` / **bold** / *italic* / [link](url). Not a full markdown
-// implementation but covers everything the DESIGN.md files actually use.
+/**
+ * Renders a lightweight markdown to HTML, supporting headings, lists, blockquotes, code blocks, tables, and inline formatting.
+ * Designed for DESIGN.md content and intentionally omits full markdown spec coverage to match real-world usage.
+ */
 function renderMarkdownLite(src: string): string {
   const lines = src.split(/\r?\n/);
   const out: string[] = [];
@@ -425,12 +470,18 @@ function renderMarkdownLite(src: string): string {
   let inCode = false;
   let i = 0;
 
+  /**
+   * Closes an open list tag and resets list state if one is active.
+   */
   function closeList() {
     if (inList) {
       out.push(`</${inList}>`);
       inList = null;
     }
   }
+  /**
+   * Closes an open blockquote tag and resets blockquote state if one is active.
+   */
   function closeBlockquote() {
     if (inBlockquote) {
       out.push('</blockquote>');
@@ -553,6 +604,10 @@ function renderMarkdownLite(src: string): string {
   return out.join('\n');
 }
 
+/**
+ * Checks if a line looks like a GFM table header by detecting pipes with content between them.
+ * Returns true if at least one pipe separates non-pipe content.
+ */
 function looksLikeTableHeader(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.includes('|')) return false;
@@ -560,6 +615,10 @@ function looksLikeTableHeader(line: string): boolean {
   return /\|/.test(trimmed.replace(/^\||\|$/g, ''));
 }
 
+/**
+ * Checks if a line is a GFM table separator (cells containing only dashes, optional colons, and whitespace).
+ * Returns false if no pipes are found or cells don't match the separator pattern.
+ */
 function isTableSeparator(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.includes('|')) return false;
@@ -567,6 +626,10 @@ function isTableSeparator(line: string): boolean {
   return splitTableRow(trimmed).every((cell) => /^:?-{1,}:?$/.test(cell.trim()));
 }
 
+/**
+ * Splits a GFM table row by pipes and trims each cell.
+ * Removes leading and trailing pipe characters before splitting.
+ */
 function splitTableRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith('|')) s = s.slice(1);
@@ -574,6 +637,10 @@ function splitTableRow(line: string): string[] {
   return s.split('|').map((c) => c.trim());
 }
 
+/**
+ * Parses alignment hints from a GFM table separator row (colons indicate left, right, or center alignment).
+ * Returns an array of alignment values matching the expected column count.
+ */
 function parseAlignments(separatorLine: string, count: number): TableAlign[] {
   const cells = splitTableRow(separatorLine);
   const aligns: TableAlign[] = [];
@@ -588,6 +655,10 @@ function parseAlignments(separatorLine: string, count: number): TableAlign[] {
   return aligns;
 }
 
+/**
+ * Renders a GFM table as HTML with proper alignment attributes applied to header and body cells.
+ * Returns a complete table wrapped in a div for horizontal scrolling if needed.
+ */
 function renderTable(header: string[], rows: string[][], aligns: TableAlign[]): string {
   const th = header
     .map((cell, k) => {
@@ -611,6 +682,10 @@ function renderTable(header: string[], rows: string[][], aligns: TableAlign[]): 
   return `<div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+/**
+ * Processes inline markdown formatting: code spans, bold, italic, and links in order.
+ * Order matters: code first so its content is not further parsed, then bold/italic, then links.
+ */
 function inline(s: string): string {
   // Process inline tokens. Order matters: code spans first so their content
   // isn't further parsed; then bold/italic; then links; finally bare URLs.

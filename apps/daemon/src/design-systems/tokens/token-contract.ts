@@ -1,3 +1,9 @@
+/** @module token-contract
+ * Builds an OD TOKEN_SCHEMA-aligned design token contract from extracted CSS custom properties.
+ * Maps source tokens to schema slots via exact-name matching and role/name heuristics, then emits
+ * a graded quality report and a ready-to-use tokens.css string.
+ */
+
 import {
   TOKEN_SCHEMA,
   type TokenLayer,
@@ -139,6 +145,10 @@ const ROLE_HINTS: Partial<Record<string, RoleHint>> = {
 
 const SCHEMA_NAMES = new Set(TOKEN_SCHEMA.map((spec) => spec.name));
 
+/**
+ * Builds a TOKEN_SCHEMA-aligned design token contract by matching source tokens to schema slots via exact names and role heuristics.
+ * Returns bindings, a quality report with grading, and ready-to-use CSS output.
+ */
 export function buildDesignTokenContract(input: {
   sourceTokens: SourceDesignToken[];
   generatedAt?: Date;
@@ -156,6 +166,10 @@ export function buildDesignTokenContract(input: {
   return { bindings, report, tokensCss };
 }
 
+/**
+ * Renders design token bindings as a CSS :root rule with custom property declarations.
+ * Each binding becomes a `--name: value;` declaration within the `:root { }` block.
+ */
 export function renderDesignTokenContractCss(bindings: readonly DesignTokenBinding[]): string {
   const lines = [
     ':root {',
@@ -168,6 +182,10 @@ export function renderDesignTokenContractCss(bindings: readonly DesignTokenBindi
   return lines.join('\n');
 }
 
+/**
+ * Validates token CSS declarations against the TOKEN_SCHEMA: checks all schema tokens are declared, no extra tokens exist, and var() references are valid.
+ * Returns a report with any errors or warnings found.
+ */
 export function validateDesignTokenOutputs(input: {
   tokensCss: string;
   fixtureHtml?: string;
@@ -200,6 +218,10 @@ export function validateDesignTokenOutputs(input: {
   return { ok: errors.length === 0, errors, warnings };
 }
 
+/**
+ * Rebuilds a design token report with updated self-check results, preserving all other fields from the original report.
+ * Useful for re-validating a report after CSS changes.
+ */
 export function buildReportWithSelfCheck(
   report: DesignTokenContractReport,
   selfCheck: DesignTokenContractReport['selfCheck'],
@@ -207,6 +229,10 @@ export function buildReportWithSelfCheck(
   return buildReport(report.tokens, report.generatedAt, selfCheck);
 }
 
+/**
+ * Binds a single TOKEN_SCHEMA token to the best available source value: exact match, role-hinted candidate, schema alias, or fallback.
+ * Returns a binding with confidence level and reasoning for downstream validation and quality reporting.
+ */
 function bindSchemaToken(spec: TokenSpec, sourceTokens: readonly SourceDesignToken[]): DesignTokenBinding {
   const exact = sourceTokens.find((token) => token.name === spec.name && valueIsUsableForSchema(token.value));
   if (exact !== undefined) {
@@ -245,6 +271,10 @@ function bindSchemaToken(spec: TokenSpec, sourceTokens: readonly SourceDesignTok
   return binding(spec, 'initial', 'low', 'No source-backed value or schema fallback found.', []);
 }
 
+/**
+ * Finds the highest-scoring source token candidate for a role hint by matching name needles and validating the value type.
+ * Returns undefined if no valid candidates exist; otherwise picks the lexicographically first token on ties.
+ */
 function bestCandidate(tokens: readonly SourceDesignToken[], hint: RoleHint): SourceDesignToken | undefined {
   const validator = hint.validator ?? (() => true);
   return tokens
@@ -256,6 +286,10 @@ function bestCandidate(tokens: readonly SourceDesignToken[], hint: RoleHint): So
     .sort((a, b) => b.score - a.score || a.token.name.localeCompare(b.token.name))[0]?.token;
 }
 
+/**
+ * Scores a token name against a list of role-hint needles: 100 for exact match, 80 for suffix, 40 for substring.
+ * Case-insensitive and strips leading dashes for normalized comparison.
+ */
 function scoreTokenName(name: string, needles: readonly string[]): number {
   const normalized = name.toLowerCase().replace(/^--/, '');
   let best = 0;
@@ -268,6 +302,10 @@ function scoreTokenName(name: string, needles: readonly string[]): number {
   return best;
 }
 
+/**
+ * Constructs a comprehensive token quality report from bindings, calculating per-layer stats, A1 coverage, and a confidence-based quality score.
+ * Grades the contract as excellent/usable/needs-review/needs-rebuild based on source-backed ratios and self-check results.
+ */
 function buildReport(
   bindings: readonly DesignTokenBinding[],
   generatedAt: string,
@@ -319,6 +357,10 @@ function buildReport(
   };
 }
 
+/**
+ * Constructs a design token binding object with schema name, layer, value, confidence level, and audit trail.
+ * Optionally includes the source token name for traceability and debugging.
+ */
 function binding(
   spec: TokenSpec,
   value: string,
@@ -338,16 +380,28 @@ function binding(
   };
 }
 
+/**
+ * Constructs a deduplicated list of source references: primary source with optional line number, plus usage file basenames.
+ * Ensures unique references for accurate source attribution in the token contract.
+ */
 function sourceRefs(token: SourceDesignToken): string[] {
   const primary = token.line === undefined ? token.source : `${token.source}:${token.line}`;
   const usage = token.usage ?? [];
   return Array.from(new Set([primary, ...usage]));
 }
 
+/**
+ * Checks whether a binding is grounded in extracted source evidence (high or medium confidence).
+ * Used to distinguish source-backed tokens from fallback or alias assignments.
+ */
 function isSourceBacked(binding: DesignTokenBinding): boolean {
   return binding.confidence === 'high' || binding.confidence === 'medium';
 }
 
+/**
+ * Extracts CSS custom property declarations from a :root rule, returning a map of name to normalized value.
+ * Strips comments and normalizes whitespace; returns empty map if no :root block is found.
+ */
 function parseTokenDeclarations(css: string): Map<string, string> {
   const rootBody = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/:root(?!\[)\s*\{([\s\S]*?)\}/)?.[1];
   const declarations = new Map<string, string>();
@@ -362,34 +416,66 @@ function parseTokenDeclarations(css: string): Map<string, string> {
   return declarations;
 }
 
+/**
+ * Extracts all CSS var() custom property references from a string, returning their names.
+ * Used to validate that referenced tokens exist in the declared schema.
+ */
 function extractVarReferences(value: string): string[] {
   return Array.from(value.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)).map((match) => match[1]!).filter(Boolean);
 }
 
+/**
+ * Checks whether a token value is safe to use in the schema: all var() references must point to declared schema tokens.
+ * Prevents circular or external token references from propagating through the contract.
+ */
 function valueIsUsableForSchema(value: string): boolean {
   return extractVarReferences(value).every((ref) => SCHEMA_NAMES.has(ref));
 }
 
+/**
+ * Tests whether a string is a valid CSS color format (hex, RGB, HSL, oklch, color-mix, or var reference).
+ * Used in role-hint validators to screen color token candidates.
+ */
 function isColorValue(value: string): boolean {
   return /^(#(?:[0-9a-f]{3,8})|rgb[a]?\(|hsl[a]?\(|oklch\(|color-mix\(|var\()/i.test(value.trim());
 }
 
+/**
+ * Tests whether a string is a plausible font value: contains letters and is reasonably length-constrained.
+ * Accepts any font name format within a practical length limit.
+ */
 function isFontValue(value: string): boolean {
   return /[A-Za-z]/.test(value) && value.length <= 180;
 }
 
+/**
+ * Tests whether a string is a valid CSS length format (pixels, rem, em, viewport units, clamp, calc, or var reference).
+ * Used in role-hint validators to screen spacing and radius token candidates.
+ */
 function isLengthLike(value: string): boolean {
   return /^(?:\d+(?:\.\d+)?(?:px|rem|em|ch|vw|vh|%)|clamp\(|calc\(|var\()/i.test(value.trim());
 }
 
+/**
+ * Tests whether a string is a valid CSS duration format (milliseconds, seconds, or var reference).
+ * Used in role-hint validators to screen motion/timing token candidates.
+ */
 function isDurationValue(value: string): boolean {
   return /^(?:\d+(?:\.\d+)?m?s|var\()/i.test(value.trim());
 }
 
+/**
+ * Tests whether a string is a valid CSS easing/animation function (cubic-bezier, ease keywords, or var reference).
+ * Used in role-hint validators to screen motion-easing token candidates.
+ */
 function isEasingValue(value: string): boolean {
   return /^(?:cubic-bezier\(|linear|ease(?:-in|-out|-in-out)?|var\()/i.test(value.trim());
 }
 
+/**
+ * Tests whether a string is a valid CSS shadow format ('none', numeric shadow values, color-mix, or var reference).
+ * Accepts any value with spacing to accommodate complex multi-layer shadows.
+ */
 function isShadowValue(value: string): boolean {
   const trimmed = value.trim();
   return trimmed === 'none' || /^(?:\d|0\s|var\(|color-mix\()/i.test(trimmed) || trimmed.includes(' ');
