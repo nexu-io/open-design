@@ -4,7 +4,7 @@ import {
   resolveAgentLaunch,
   spawnEnvForAgent,
 } from '../agents.js';
-import { agentCliEnvForAgent, type readAppConfig } from '../app-config.js';
+import { agentCliEnvForAgent, type readAppConfig } from '../config/index.js';
 import { readVelaCredentialRevision } from '../integrations/vela.js';
 import type { VelaCredentialRevision } from '../integrations/vela.js';
 

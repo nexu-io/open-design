@@ -5,7 +5,7 @@ import {
   createAnalyticsService,
   readPublicConfigResponse,
 } from '../analytics.js';
-import type { readAppConfig } from '../app-config.js';
+import type { readAppConfig } from '../config/index.js';
 import { readCurrentAppVersionInfo } from '../app-version.js';
 import { reportRunFeedbackFromDaemon } from '../langfuse-bridge.js';
 import { observePendingInstallerApplyAttempts } from '../migration/index.js';

@@ -24,7 +24,7 @@ import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
-import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
+import { agentCliEnvForAgent, readAppConfig } from '../config/index.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,

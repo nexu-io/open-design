@@ -15,7 +15,7 @@ import {
 
 import type { AnalyticsContext, AnalyticsService } from '../analytics.js';
 import { readPosthogConfig } from '../analytics.js';
-import { readAppConfig, type AppConfigPrefs } from '../app-config.js';
+import { readAppConfig, type AppConfigPrefs } from '../config/index.js';
 
 const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';

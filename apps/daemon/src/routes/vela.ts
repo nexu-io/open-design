@@ -9,7 +9,7 @@ import {
   spawnEnvForAgent,
 } from '../agents.js';
 import { readAnalyticsContext } from '../analytics.js';
-import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig } from '../app-config.js';
+import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig } from '../config/index.js';
 import {
   cancelVelaLogin,
   forgetVelaLogin,

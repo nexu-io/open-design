@@ -25,7 +25,7 @@ import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import
 import { renderDesignSystemPreview } from '../design-systems/preview.js';
 import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
 import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
-import { readAppConfig } from '../app-config.js';
+import { readAppConfig } from '../config/index.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
 import type { RouteDeps } from '../server-context.js';
 

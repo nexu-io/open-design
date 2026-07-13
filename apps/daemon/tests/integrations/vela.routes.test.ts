@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../../src/server.js';
-import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
+import { readAppConfig, writeAppConfig } from '../../src/config/index.js';
 import {
   clearAllVelaLiveAccounts,
   clearVelaLiveAccountRefreshThrottle,

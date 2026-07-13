@@ -39,7 +39,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './models.js';
-import { agentCliEnvForAgent, appConfigDir, readAppConfig } from '../app-config.js';
+import { agentCliEnvForAgent, appConfigDir, readAppConfig } from '../config/index.js';
 import { expandHomePrefix } from '../home-expansion.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { resolveXAIBearer } from '../integrations/xai-credentials.js';

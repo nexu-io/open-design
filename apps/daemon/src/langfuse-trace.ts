@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { TelemetryPrefs } from './app-config.js';
+import type { TelemetryPrefs } from './config/index.js';
 import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,

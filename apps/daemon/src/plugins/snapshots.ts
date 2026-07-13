@@ -14,7 +14,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import { readPluginEnvKnobs } from '../app-config.js';
+import { readPluginEnvKnobs } from '../config/index.js';
 import {
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   type AppliedPluginSnapshot,
