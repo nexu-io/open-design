@@ -1242,6 +1242,12 @@ function byokMediaDefaultsForRun(input: {
 function byokOpenCodeProviderFromConfig(
   config: AppConfig,
 ): ByokChatProviderConfig | undefined {
+  if (config.apiProtocol === 'openai' && config.apiCredentialSource === 'deployment') {
+    return {
+      protocol: 'openai',
+      credentialSource: 'deployment',
+    };
+  }
   const selectedProvider = selectedKnownProviderForConfig(config);
   if (
     !isOpenCodeByokChatProtocol(config.apiProtocol) ||

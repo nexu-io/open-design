@@ -39,14 +39,28 @@ export type ByokChatProtocol =
   | 'senseaudio'
   | 'aihubmix';
 
-export interface ByokChatProviderConfig {
+export interface UserByokChatProviderConfig {
   protocol: ByokChatProtocol;
+  credentialSource?: 'user';
   apiKey: string;
   baseUrl?: string;
   apiVersion?: string;
   /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
   requiresApiKey?: boolean;
 }
+
+export interface DeploymentByokChatProviderConfig {
+  protocol: 'openai';
+  credentialSource: 'deployment';
+  apiKey?: never;
+  baseUrl?: never;
+  apiVersion?: never;
+  requiresApiKey?: never;
+}
+
+export type ByokChatProviderConfig =
+  | UserByokChatProviderConfig
+  | DeploymentByokChatProviderConfig;
 
 export interface ByokMediaDefaults {
   imageModel?: string;

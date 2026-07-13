@@ -74,6 +74,46 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
+  it('resolves deployment-owned OpenAI provider credentials for OpenCode', () => {
+    const previousBaseUrl = process.env.OD_PROVIDER_ORCHESTRATOR_BASE_URL;
+    const previousApiKey = process.env.OD_PROVIDER_ORCHESTRATOR_API_KEY;
+    try {
+      process.env.OD_PROVIDER_ORCHESTRATOR_BASE_URL = 'https://gateway.example.com/v1';
+      process.env.OD_PROVIDER_ORCHESTRATOR_API_KEY = 'sk-deployment';
+
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol: 'openai', credentialSource: 'deployment' },
+        'gpt-5.5',
+      );
+
+      expect(out?.modelId).toBe('open-design-byok/gpt-5.5');
+      expect(out?.env).toEqual({ [BYOK_OPENCODE_API_KEY_ENV]: 'sk-deployment' });
+      expect(JSON.stringify(out?.config)).not.toContain('sk-deployment');
+      expect(out?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            npm: '@ai-sdk/openai-compatible',
+            options: {
+              baseURL: 'https://gateway.example.com/v1',
+              apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}`,
+            },
+          },
+        },
+      });
+    } finally {
+      if (previousBaseUrl === undefined) {
+        delete process.env.OD_PROVIDER_ORCHESTRATOR_BASE_URL;
+      } else {
+        process.env.OD_PROVIDER_ORCHESTRATOR_BASE_URL = previousBaseUrl;
+      }
+      if (previousApiKey === undefined) {
+        delete process.env.OD_PROVIDER_ORCHESTRATOR_API_KEY;
+      } else {
+        process.env.OD_PROVIDER_ORCHESTRATOR_API_KEY = previousApiKey;
+      }
+    }
+  });
+
   it('routes OpenAI-protocol BYOK with a non-OpenAI base URL to the OpenAI-compatible provider package', () => {
     expect(buildOpenCodeByokProviderConfig(
       { protocol: 'openai', apiKey: 'sk-deepseek', baseUrl: 'https://api.deepseek.com' },

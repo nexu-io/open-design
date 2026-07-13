@@ -1,4 +1,5 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { resolveDeploymentProviderProfile } from '../deployment-provider.js';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -42,6 +43,19 @@ export function buildOpenCodeByokProviderConfig(
   model: string | null | undefined,
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
+  if (provider.credentialSource === 'deployment') {
+    const resolved = resolveDeploymentProviderProfile(provider.protocol);
+    if (!resolved.ok) return null;
+    return buildOpenCodeByokProviderConfig(
+      {
+        protocol: resolved.profile.protocol,
+        credentialSource: 'user',
+        apiKey: resolved.profile.apiKey,
+        baseUrl: resolved.profile.baseUrl,
+      },
+      model,
+    );
+  }
   const protocol = provider.protocol;
   if (!Object.prototype.hasOwnProperty.call(DEFAULT_BASE_URL_BY_PROTOCOL, protocol)) {
     return null;
