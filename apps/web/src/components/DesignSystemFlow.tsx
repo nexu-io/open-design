@@ -1584,14 +1584,14 @@ function DesignSystemExtractionDemo({
       {stage === 'system-review' ? (
         <>
           <section className="ds-extraction-demo__result-board">
-            <div className="ds-extraction-demo__result-hero">
-              <h1>Brand identity<br />generated</h1>
-              <p>Now everything you create starts on-brand.</p>
-              <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
-              {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
-            </div>
+            <header className="ds-extraction-demo__result-heading">
+              <p>Design system ready</p>
+              <h1>{label} foundations</h1>
+              <span>Generated from {sourceUrl || label}</span>
+            </header>
             <div className="ds-extraction-demo__result-grid">
               <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
+                <span>Logo</span>
                 <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
               </article>
               <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--type">
@@ -1626,6 +1626,15 @@ function DesignSystemExtractionDemo({
             </div>
           </section>
           <DemoExtractedComponentKit foundation={resultFoundation} brandName={label} />
+          {canOpenProject ? (
+            <footer className="ds-extraction-demo__next-step">
+              <div>
+                <p>Ready for the next step?</p>
+                <span>Use this design system to create your first artifact.</span>
+              </div>
+              <Button variant="primary" onClick={onOpenProject}>Create with this design system</Button>
+            </footer>
+          ) : null}
         </>
       ) : null}
     </main>
