@@ -287,7 +287,7 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
-  --model "flux-pro-ultra" \\
+  --model "${IMAGE_MODEL:-flux-pro-ultra}" \\
   --prompt "..." \\
   --aspect 16:9)
 ec=\$?
@@ -310,6 +310,8 @@ while [ -n "\$task_id" ]; do
 done
 printf '%s\\n' "\$last"
 \`\`\`
+
+The example uses the shell parameter expansion \`${IMAGE_MODEL:-flux-pro-ultra}\` so the agent falls back to \`flux-pro-ultra\` when no BYOK image model was selected. The daemon sets \`IMAGE_MODEL\` (and \`VIDEO_MODEL\` / \`AUDIO_MODEL\` for the other surfaces) when BYOK defaults are configured — substitute the matching env var when you switch surfaces.
 
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 

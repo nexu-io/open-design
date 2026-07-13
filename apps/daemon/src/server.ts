@@ -5937,6 +5937,10 @@ export async function startServer({
         return design.runs.finish(run, 'failed', 1, null);
       }
     }
+    const byokImageModel = typeof byokMediaDefaults?.imageModel === 'string' ? byokMediaDefaults.imageModel.trim() : '';
+    const byokVideoModel = typeof byokMediaDefaults?.videoModel === 'string' ? byokMediaDefaults.videoModel.trim() : '';
+    const byokSpeechModel = typeof byokMediaDefaults?.speechModel === 'string' ? byokMediaDefaults.speechModel.trim() : '';
+    const byokSpeechVoice = typeof byokMediaDefaults?.speechVoice === 'string' ? byokMediaDefaults.speechVoice.trim() : '';
     const odMediaEnv = {
       OD_BIN,
       OD_NODE_BIN,
@@ -5947,6 +5951,10 @@ export async function startServer({
             OD_PROJECT_DIR: cwd,
           }
         : {}),
+      ...(byokImageModel ? { IMAGE_MODEL: byokImageModel } : {}),
+      ...(byokVideoModel ? { VIDEO_MODEL: byokVideoModel } : {}),
+      ...(byokSpeechModel ? { AUDIO_MODEL: byokSpeechModel } : {}),
+      ...(byokSpeechVoice ? { SPEECH_VOICE: byokSpeechVoice } : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
