@@ -3641,24 +3641,6 @@
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-.onboarding-question-flow__segments {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.onboarding-question-flow__segments i {
-  display: block;
-  height: 3px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--border) 78%, transparent);
-  transition: background-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-question-flow__segments i.is-complete {
-  background: var(--accent);
-}
-
 .onboarding-question-flow__options {
   min-width: 0;
 }

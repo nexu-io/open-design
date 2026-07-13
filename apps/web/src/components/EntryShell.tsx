@@ -2765,11 +2765,6 @@ function OnboardingView({
                 <Icon name="chevron-left" size={14} />
                 <span>{t('settings.onboardingBack')}</span>
               </button>
-              <div className="onboarding-question-flow__segments" aria-hidden="true">
-                {profileQuestionIds.map((id, index) => (
-                  <i key={id} className={index <= profileQuestionIndex ? 'is-complete' : ''} />
-                ))}
-              </div>
               <OnboardingPanelHeader title={profileQuestion.label} body={t('settings.onboardingProfileBody')} />
               <div className="onboarding-question-flow__options">
                 <OnboardingQuestionChoices
