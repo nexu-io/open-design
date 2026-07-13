@@ -131,43 +131,43 @@ export function createValidatingLookup(lookupImpl: DnsLookupCb = dnsLookupCb): L
 
 const MAX_BRAND_REDIRECTS = 5;
 
+// Pin SSRF validation to the actual outbound connection: the Agent resolves each
+// host once at connect time and refuses the socket if that exact address is
+// non-public. This is what defeats DNS rebinding — there is no separate
+// pre-validation resolve to race. A single long-lived dispatcher (like
+// plugins/plugin-asset-cache.ts) is reused across calls: it must NOT be closed
+// per-request, since closing an undici Agent waits for the in-flight request,
+// which only finishes once the caller has consumed the returned response body.
+const brandAssetDispatcher = new Agent({
+  connect: { lookup: createValidatingLookup() },
+});
+
 export async function fetchExternalBrandAsset(
   url: string,
   init: RequestInit = {},
-  lookupImpl: DnsLookupCb = dnsLookupCb,
 ): Promise<Response> {
-  // Pin SSRF validation to the actual outbound connection: the Agent resolves
-  // each host once at connect time and refuses the socket if that exact address
-  // is non-public. This is what defeats DNS rebinding — there is no separate
-  // pre-validation resolve to race. `assertPublicBrandUrl` still runs per hop as
-  // a cheap URL-level pre-check (protocol, literal private IPs, redirect target).
-  const dispatcher = new Agent({
-    connect: { lookup: createValidatingLookup(lookupImpl) },
-  });
-  try {
-    let target = url;
-    for (let hop = 0; ; hop += 1) {
-      // Re-validate every hop's host (initial URL and each redirect target)
-      // before the request, so a public site can't 3xx us into private space.
-      await assertPublicBrandUrl(target);
-      const res = await fetch(target, {
-        ...init,
-        redirect: 'manual',
-        dispatcher: dispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
-      });
-      const location =
-        res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
-      if (!location) return res;
-      // Drain the redirect response body before following it or bailing out.
-      if (res.body) await res.body.cancel().catch(() => {});
-      if (hop >= MAX_BRAND_REDIRECTS) {
-        throw new Error(`too many brand asset redirects (> ${MAX_BRAND_REDIRECTS})`);
-      }
-      // Resolve a possibly-relative Location; the next loop re-validates it and
-      // the same pinned dispatcher re-binds the new connection.
-      target = new URL(location, target).toString();
+  let target = url;
+  for (let hop = 0; ; hop += 1) {
+    // Re-validate every hop's host (initial URL and each redirect target) before
+    // the request, so a public site can't 3xx us into private space. The real
+    // SSRF stop is the pinned dispatcher below; this is a cheap URL-level
+    // pre-check (protocol, literal private IPs, redirect target).
+    await assertPublicBrandUrl(target);
+    const res = await fetch(target, {
+      ...init,
+      redirect: 'manual',
+      dispatcher: brandAssetDispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
+    });
+    const location =
+      res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!location) return res;
+    // Drain the redirect response body before following it or bailing out.
+    if (res.body) await res.body.cancel().catch(() => {});
+    if (hop >= MAX_BRAND_REDIRECTS) {
+      throw new Error(`too many brand asset redirects (> ${MAX_BRAND_REDIRECTS})`);
     }
-  } finally {
-    await dispatcher.close().catch(() => {});
+    // Resolve a possibly-relative Location; the next loop re-validates it and the
+    // same pinned dispatcher re-binds the new connection.
+    target = new URL(location, target).toString();
   }
 }
