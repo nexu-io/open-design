@@ -1,6 +1,6 @@
 # Creative-Director-Pass auf den React-Prototyp
 
-**Ziel dieses Dokuments:** Grundlage für eine gezielte Politur-/Kritik-Passage über den bereits gebauten Prototyp (`8-wochen-organizer.html/.css/.js`), bevor tatsächlich etwas verändert wird. Frei editierbar — Abschnitt 6 (offene Fragen) ist der wichtigste Ort zum Reagieren.
+**Ziel dieses Dokuments:** Gezielte Creative-Director-Politur und Kritik für einen bestehenden React-Prototyp vor der Umsetzung, bevor tatsächlich etwas verändert wird. Frei editierbar — Abschnitt 6 (offene Fragen) ist der wichtigste Ort zum Reagieren.
 
 **Aktueller Pass:** Der produktive Einstieg `src/main.jsx` rendert die Oberfläche aus `src/App.jsx` und `src/styles.css`. Der nächste bestehende Schritt ist aus der unteren Heute-Landung direkt editierbar; dieser Pass vereinheitlicht zusätzlich Touchziele und Motion-Rhythmus.
 
