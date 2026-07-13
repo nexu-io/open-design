@@ -1,12 +1,43 @@
 import type { FigmaFileData, ParsedNode, ParsedPaint } from './parser';
 import { walkAllNodes } from './parser';
 
+// Weight mapping from font style names → numeric weight (article § 富文本)
+const WEIGHT_MAP: Record<string, number> = {
+  thin: 100, hairline: 100,
+  extralight: 200, 'extra light': 200, ultralight: 200,
+  light: 300,
+  regular: 400, normal: 400, book: 400,
+  medium: 500,
+  semibold: 600, 'semi bold': 600, demibold: 600,
+  bold: 700,
+  extrabold: 800, 'extra bold': 800, ultrabold: 800, heavy: 800,
+  black: 900,
+};
+
+function parseWeightFromStyle(style?: string): number | null {
+  if (!style) return null;
+  const lower = style.toLowerCase();
+  for (const [name, weight] of Object.entries(WEIGHT_MAP)) {
+    if (lower.includes(name)) return weight;
+  }
+  // Try to parse numeric suffix like "SFProDisplay-Semibold" → extract "Semibold"
+  const parts = lower.split(/[-_\s]+/);
+  for (const part of parts) {
+    const w = WEIGHT_MAP[part];
+    if (w) return w;
+  }
+  return null;
+}
+
 export interface ExtractedTokens {
   colors: ColorEntry[];
   fonts: FontEntry[];
   spacings: number[];
   radii: number[];
   componentNames: string[];
+  gradientAngles: number[];
+  textTransforms: string[];
+  imageFills: string[];  // hash or blob references found
 }
 
 interface ColorEntry {
@@ -15,6 +46,7 @@ interface ColorEntry {
   a: number;
   count: number;
   role: string;
+  gradientAngle?: number;
 }
 
 interface FontEntry {
@@ -31,8 +63,14 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
   const spacings: number[] = [];
   const radii: number[] = [];
   const componentNames: string[] = [];
+  const gradientAngles: number[] = [];
+  const textTransforms: string[] = [];
+  const imageFills: string[] = [];
 
   walkAllNodes(file, (node) => {
+    // Filter out "Internal Only" pages (article § 踩坑记录 #3)
+    if (node.type === 'CANVAS' && node.name === 'Internal Only Canvas') return;
+
     // Colors from fillPaints and strokePaints (openfig-core naming)
     const paints: ParsedPaint[] = [
       ...((node as any).fillPaints ?? []),
@@ -56,6 +94,19 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
             role: inferColorRole(node, paint),
           });
         }
+      }
+      // Gradient fill — extract angle from transform matrix (article § 渐变角度)
+      if (paint.type?.includes('GRADIENT') && (node as any).transform) {
+        const t = (node as any).transform;
+        // angle = atan2(m10, m00) * 180/π
+        const angle = Math.atan2(t.m10 ?? 0, t.m00 ?? 1) * (180 / Math.PI);
+        const rounded = Math.round(angle * 10) / 10;
+        if (!gradientAngles.includes(rounded)) gradientAngles.push(rounded);
+      }
+      // Image fill — record hash/blob reference (article § 图片延迟解析)
+      if (paint.type === 'IMAGE' && (paint as any).imageRef) {
+        const ref = (paint as any).imageRef;
+        if (!imageFills.includes(ref)) imageFills.push(ref);
       }
     }
 
@@ -84,20 +135,29 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
     if (node.type === 'TEXT' && node.fontName) {
       const family = node.fontName.family || 'Inter';
       const key = `${family}_${node.fontName.style || 'Regular'}`;
+      // Extract numeric weight from font style name (article § 富文本 weight mapping)
+      const parsedWeight = parseWeightFromStyle(node.fontName.style)
+        ?? node.fontWeight
+        ?? parseWeightFromStyle(node.fontName.postscript)
+        ?? 400;
       const entry = fontMap.get(key);
       if (entry) {
         if (node.fontSize && !entry.sizes.includes(node.fontSize)) entry.sizes.push(node.fontSize);
-        if (node.fontWeight && !entry.weights.includes(node.fontWeight)) entry.weights.push(node.fontWeight);
+        if (!entry.weights.includes(parsedWeight)) entry.weights.push(parsedWeight);
         entry.count++;
       } else {
         fontMap.set(key, {
           family,
           sizes: node.fontSize ? [node.fontSize] : [],
-          weights: node.fontWeight ? [node.fontWeight] : [],
+          weights: [parsedWeight],
           style: node.fontName.style || 'Regular',
           count: 1,
         });
       }
+
+      // Text transform (article § 大小写变换)
+      const xform = (node as any).textCase;
+      if (xform && !textTransforms.includes(xform)) textTransforms.push(xform);
     }
 
     // Spacings (from auto layout)
@@ -124,6 +184,9 @@ export function extractTokens(file: FigmaFileData): ExtractedTokens {
     spacings: [...new Set(spacings)].sort((a, b) => a - b),
     radii: radii.sort((a, b) => a - b),
     componentNames,
+    gradientAngles,
+    textTransforms,
+    imageFills,
   };
 }
 

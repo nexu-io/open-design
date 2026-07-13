@@ -45,11 +45,16 @@ function findAccentColor(colors: ExtractedTokens['colors']): string {
 }
 
 function writeDESIGNmd(dir: string, name: string, tokens: ExtractedTokens, p: Record<string, string>): void {
-  const palette = tokens.colors.slice(0, 16).map((c) => `- ${c.hex} (${c.role}, ${c.count} uses)`).join('\n');
-  const fontList = tokens.fonts.slice(0, 8).map((f) => `- **${f.family}**: ${f.sizes.sort((a, b) => a - b).map((s) => `${s}px`).join(', ')} | weights: ${f.weights.join(', ')} | ${f.count} uses`).join('\n');
+  const palette = tokens.colors.slice(0, 16).map((c) => `- ${c.hex} (${c.role}${c.gradientAngle != null ? `, ${c.gradientAngle}deg gradient` : ''}, ${c.count} uses)`).join('\n');
+  const fontList = tokens.fonts.slice(0, 8).map((f) => `- **${f.family}**: ${f.sizes.sort((a, b) => a - b).map((s) => `${s}px`).join(', ')} | weights: ${f.weights.sort((a, b) => a - b).join(', ')} | ${f.count} uses`).join('\n');
   const spacing = tokens.spacings.slice(0, 10).map((s) => `${s}px`).join(', ');
   const radii = tokens.radii.slice(0, 5).map((r) => `${r}px`).join(', ');
   const components = tokens.componentNames.slice(0, 20).map((c) => `- ${c}`).join('\n');
+  const gradientInfo = tokens.gradientAngles.length > 0
+    ? `- Gradient angles found: ${tokens.gradientAngles.map((a) => `${a}deg`).join(', ')}\n- ${tokens.imageFills.length} image fills detected`
+    : (tokens.imageFills.length > 0 ? `- ${tokens.imageFills.length} image fills detected in the design` : '- No gradients or image fills detected');
+  const textInfo = tokens.textTransforms.length > 0
+    ? `- Text transforms used: ${tokens.textTransforms.join(', ')}` : '';
 
   const md = `# Design System: ${name}
 
@@ -98,6 +103,11 @@ ${components || '(No named components found)'}
 - Border: 1px solid ${p.textColor}44
 - Focus: 2px solid ${p.accent}
 
+### Gradients & Images
+${gradientInfo}
+
+${textInfo ? `### Text Transforms\n${textInfo}\n` : ''}
+
 ## 5. Layout & Spacing
 
 - Auto-layout spacings found: ${spacing}
@@ -137,16 +147,19 @@ function writeTokens(dir: string, tokens: ExtractedTokens, p: Record<string, str
       text: p.textColor,
       background: p.background,
       surface: p.surface,
-      palette: tokens.colors.slice(0, 16).map((c) => ({ hex: c.hex, role: c.role, usage: c.count })),
+      palette: tokens.colors.slice(0, 16).map((c) => ({ hex: c.hex, role: c.role, usage: c.count, gradientAngle: c.gradientAngle ?? undefined })),
     },
     typography: {
       fonts: tokens.fonts.slice(0, 8).map((f) => ({
         family: f.family,
         style: f.style,
         sizes: f.sizes.sort((a, b) => a - b),
-        weights: f.weights,
+        weights: f.weights.sort((a, b) => a - b),
       })),
+      textTransforms: tokens.textTransforms,
     },
+    gradients: tokens.gradientAngles,
+    imageFills: tokens.imageFills,
     spacing: tokens.spacings.slice(0, 10),
     radii: tokens.radii.slice(0, 5),
     components: tokens.componentNames.slice(0, 30),
