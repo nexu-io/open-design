@@ -441,7 +441,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('plugins')}
               testId="entry-nav-plugins"
             >
-              <Icon name="grid-filled" size={18} />
+              <Icon name="puzzle-filled" size={18} />
             </NavButton>
             {canManageWorkspace ? (
               <>
@@ -498,7 +498,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
               onClick={() => selectView('plugins')}
               testId="entry-nav-plugins"
             >
-              <Icon name="grid-filled" size={18} />
+              <Icon name="puzzle-filled" size={18} />
             </NavButton>
           </>
         ) : null}

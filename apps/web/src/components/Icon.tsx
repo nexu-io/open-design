@@ -9,6 +9,7 @@ export type IconName =
   | 'blocks'
   | 'globe-filled'
   | 'file-history-filled'
+  | 'puzzle-filled'
   | 'file-filled'
   | 'grid-filled'
   | 'share-filled'
@@ -119,6 +120,7 @@ const REMIX_ICON: Record<IconName, string> = {
   blocks: 'layout-grid-line',
   'globe-filled': 'global-fill',
   'file-history-filled': 'file-history-fill',
+  'puzzle-filled': 'puzzle-fill',
   'file-filled': 'file-fill',
   'grid-filled': 'grid-fill',
   'share-filled': 'share-forward-fill',
