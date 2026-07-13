@@ -1072,6 +1072,17 @@ export function DesignSystemCreationFlow({
             ))}
           </div>
           <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
+            <div className="ds-resource-advanced">
+              <button
+                type="button"
+                className="ghost ds-resource-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((open) => !open)}
+              >
+                <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} />
+                {t('dsCreate.advancedToggle')}
+              </button>
+            </div>
             <div className="ds-resource-row">
               <strong>{t('dsCreate.githubWebsiteLabel')}</strong>
               <div className="ds-resource-inline">
@@ -1247,16 +1258,7 @@ export function DesignSystemCreationFlow({
                 )}
               </div>
             </div>
-            <div className="ds-resource-advanced">
-              <button
-                type="button"
-                className="ghost ds-resource-advanced-toggle"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((open) => !open)}
-              >
-                <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} />
-                {t('dsCreate.advancedToggle')}
-              </button>
+            <div className="ds-resource-advanced-content">
               <div className={`accordion-collapsible${advancedOpen ? ' open' : ''}`}>
                 <div className="accordion-collapsible-inner">
                   <div className="ds-resource-row">

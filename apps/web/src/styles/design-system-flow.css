@@ -828,7 +828,7 @@
   color: var(--text);
   opacity: 1;
 }
-.ds-resource-advanced .ds-resource-row {
+.ds-resource-advanced-content .ds-resource-row {
   padding-left: 0;
   padding-right: 0;
 }
