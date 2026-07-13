@@ -2395,6 +2395,9 @@ export interface Dict {
   'chat.fillInputTitle': string;
   'chat.jumpToLatest': string;
   'chat.scrollToLatest': string;
+  'chat.messageRail.aria': string;
+  'chat.messageRail.jumpAria': string;
+  'chat.messageRail.empty': string;
   'chat.you': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
@@ -2907,6 +2910,7 @@ export interface Dict {
   'fileViewer.markTool': string;
   'fileViewer.boxSelect': string;
   'fileViewer.screenshot': string;
+  'fileViewer.editScreenshotToChat': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;
@@ -2948,6 +2952,9 @@ export interface Dict {
   'manualEdit.fontSize': string;
   'manualEdit.weight': string;
   'manualEdit.align': string;
+  'manualEdit.textAlignLeft': string;
+  'manualEdit.textAlignCenter': string;
+  'manualEdit.textAlignRight': string;
   'manualEdit.padding': string;
   'manualEdit.margin': string;
   'manualEdit.radius': string;

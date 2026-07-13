@@ -2091,6 +2091,10 @@ export interface ArtifactToolbarClickProps {
     // Copies a screenshot of the current preview to the clipboard (does not
     // start a run). Tracked so the preview-export tool's usage is measurable.
     | 'screenshot'
+    // Stages a manual-edit-mode workspace screenshot — including edit guides
+    // and the floating inspector panel — into the chat composer; does not
+    // start a run.
+    | 'edit_screenshot'
     | 'tweaks'
     // The Mark (mark-pen) annotation tool. Renamed from `draw` to match the
     // product label users see; the draw-overlay sub-toolbar keeps area

@@ -7,7 +7,8 @@
   inset: 0;
   z-index: 920;
   background: rgba(28, 27, 26, 0.42);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   align-items: flex-start;
   justify-content: center;

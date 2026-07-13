@@ -9,7 +9,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   height: 100vh;
-  background: var(--bg-app);
+  background: var(--veil-shell);
   overflow: hidden;
 }
 .app > .split {
@@ -26,7 +26,15 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 44px minmax(0, 1fr);
-  background: var(--bg-app);
+  /* Same ground as the home page: paint nothing, let the body app-wash
+     (browser) / wallpaper vibrancy + cream scrim (desktop) show through —
+     the project view and home share one identical frosted ground by
+     construction. --veil-shell restores the solid --bg-app under reduced
+     transparency / missing backdrop-filter (app-wash.css), so degradation
+     stays intact. */
+  background: var(--veil-shell);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
 }
 .workspace-shell__body {
@@ -55,27 +63,14 @@
   height: 44px;
   padding: 0 10px 0 8px;
   gap: 0;
-  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-panel));
+  /* Flush with the content below: same surface, no bottom hairline. */
+  background: var(--bg);
   border-bottom: 0;
-  box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 72%, transparent) inset;
   user-select: none;
   -webkit-app-region: drag;
   overflow: hidden;
   position: relative;
   z-index: 120;
-}
-.workspace-tabs-chrome.app-chrome-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: color-mix(in srgb, var(--border) 78%, transparent);
-  transform: scaleY(0.5);
-  transform-origin: center bottom;
-  pointer-events: none;
-  z-index: 0;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -162,6 +157,44 @@
   height: 0;
   display: none;
 }
+/* Sliding liquid-glass active-tab indicator. Positioned in the strip's
+   CONTENT coordinates (absolute child of the scroll container) so it scrolls
+   together with the tabs. All paint lives on the inner __pill; this shell
+   only carries transform/width so the glass filter never re-attaches while
+   moving. Sits under every .workspace-tab (they are z-index: 1). The
+   overshoot bezier (y1 > 1) is the elastic "snap" on arrival. */
+.workspace-tabs-glide {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  /* Hidden until useGlideIndicator has measured once (prevents a flash of a
+     zero-width pill at x=0 on first paint). */
+  opacity: 0;
+  will-change: transform, width;
+  transition:
+    transform 300ms cubic-bezier(0.32, 1.28, 0.36, 1),
+    width 300ms cubic-bezier(0.32, 1.28, 0.36, 1);
+}
+.workspace-tabs-glide[data-ready] {
+  opacity: 1;
+}
+.workspace-tabs-glide__pill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tabs-glide {
+    transition: none;
+  }
+  .workspace-tabs-glide__pill {
+    animation: none !important;
+  }
+}
 .workspace-tab {
   position: relative;
   height: 34px;
@@ -239,12 +272,11 @@
   background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
   border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
   color: var(--text);
-}
-.workspace-tab.is-drag-over-before {
-  transform: translateX(6px);
-}
-.workspace-tab.is-drag-over-after {
-  transform: translateX(-6px);
+  /* No translateX nudge here: tabs live-reorder while dragging, so the row
+     itself already shows the result — and a transform on the hovered tab
+     used to shift the very rects the drop hit-testing read, making the
+     before/after edge flip-flop (visible jitter). Reorder motion comes from
+     the FLIP animation in WorkspaceTabsBar instead. */
 }
 .workspace-tab + .workspace-tab::before {
   display: none;
@@ -313,6 +345,37 @@
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
+}
+/* Hairline between the home icon and the sidebar toggle in the pinned pill. */
+.workspace-tab__divider {
+  width: 1px;
+  height: 16px;
+  align-self: center;
+  background: var(--material-separator, var(--border));
+  flex: 0 0 auto;
+}
+/* Sidebar toggle inside the pinned Home pill — expands/collapses the entry
+   rail (visible only while the Home tab is active, where the rail lives). */
+.workspace-tab__rail-toggle {
+  width: 20px;
+  height: 20px;
+  margin-right: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.workspace-tab__rail-toggle:hover:not(:disabled) {
+  background: var(--bg-fill-secondary);
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: none;
 }
 .workspace-tab__close {
   width: 18px;
@@ -1427,8 +1490,10 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
      280px min-width kept forcing the menu wide. */
   min-width: 0;
   padding: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1686,7 +1751,9 @@ a.avatar-item:visited {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  background: var(--bg);
+  /* Translucent: the app wash peeks through the resize gutter between the
+     chat pane and workspace, so panels read as floating on the wash. */
+  background: var(--veil-page);
 }
 .split.is-resizing-chat {
   cursor: col-resize;
@@ -1784,7 +1851,10 @@ a.avatar-item:visited {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg-panel);
+  /* Content-layer panel: Regular standard material (材质规范). */
+  background: var(--material-regular);
+  -webkit-backdrop-filter: var(--material-regular-backdrop);
+  backdrop-filter: var(--material-regular-backdrop);
   overflow: hidden;
 }
 .split-resize-handle {

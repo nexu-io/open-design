@@ -1675,15 +1675,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
               aria-busy={submitting}
             >
-              <video
-                className="composer-send__video"
-                src="/composer-send.mp4"
-                autoPlay
-                loop
-                muted
-                playsInline
-                aria-hidden
-              />
               <Icon name={submitting ? 'spinner' : 'arrow-up'} size={17} />
             </button>
           </div>

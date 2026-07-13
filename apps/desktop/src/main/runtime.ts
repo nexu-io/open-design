@@ -686,18 +686,34 @@ const MAC_WINDOW_CHROME =
     ? ({
         titleBarStyle: "hiddenInset" as const,
         trafficLightPosition: { x: 12, y: 10 },
+        // Frosted-glass window: the desktop wallpaper blurs through the whole
+        // window (NSVisualEffectView). The web shell keeps html/body
+        // transparent in desktop mode (see apps/web app-wash.css) so the
+        // vibrancy is actually visible; 'active' keeps the blur when the
+        // window loses focus instead of flattening to gray.
+        vibrancy: "under-window" as const,
+        visualEffectState: "active" as const,
+        backgroundColor: "#00000000",
       })
     : {};
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 96px !important;
-    --app-chrome-traffic-margin: 12px !important;
+    /* Windowed: the home pill sits 4px after the traffic lights (lights span
+       x:12 + 52px = 64px). Fullscreen (class synced from main below): the
+       lights are hidden, so the pill left-aligns with the nav-rail card's
+       10px inset instead. */
+    --app-chrome-traffic-space: 64px !important;
+    --app-chrome-traffic-margin: 4px !important;
     -webkit-app-region: drag;
   }
+  html.is-window-fullscreen .app-chrome-header {
+    --app-chrome-traffic-space: 10px !important;
+    --app-chrome-traffic-margin: 0px !important;
+  }
   .app-chrome-traffic-space {
-    flex: 0 0 96px !important;
-    width: 96px !important;
+    flex: 0 0 var(--app-chrome-traffic-space) !important;
+    width: var(--app-chrome-traffic-space) !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -1238,7 +1254,25 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
     void applyWindowChromeCss(window).catch((error: unknown) => {
       console.error("desktop window chrome CSS injection failed", error);
     });
+    void syncWindowFullscreenClass(window);
   });
+  window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));
+  window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));
+}
+
+/** Mirrors the macOS fullscreen state onto <html> so the injected window
+ *  chrome CSS can reposition the tab-strip home pill (the traffic lights
+ *  disappear in fullscreen). */
+async function syncWindowFullscreenClass(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  const flag = window.isFullScreen();
+  try {
+    await window.webContents.executeJavaScript(
+      `document.documentElement.classList.toggle('is-window-fullscreen', ${flag ? "true" : "false"});`,
+    );
+  } catch (error: unknown) {
+    console.error("desktop fullscreen class sync failed", error);
+  }
 }
 
 function desktopPetUrl(baseUrl: string): string {

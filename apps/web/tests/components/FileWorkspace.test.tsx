@@ -271,7 +271,7 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('accept=');
   });
 
-  it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
+  it('keeps upload failure details visible until dismissed', async () => {
     mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
 
     render(
@@ -290,22 +290,6 @@ describe('FileWorkspace upload input', () => {
     fireEvent.change(screen.getByTestId('design-files-upload-input'), {
       target: { files: [new File(['mock'], 'mock.png', { type: 'image/png' })] },
     });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
-        'storage offline',
-      );
-    });
-
-    const row = screen.getByTestId('design-file-row-mock.png');
-    const nameButton = row.querySelector<HTMLButtonElement>('.df-row-name-btn');
-    if (!nameButton) throw new Error('Could not find file name button');
-    fireEvent.click(nameButton);
-
-    expect(screen.getByTestId('design-file-preview')).toBeTruthy();
-    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('upload-error-banner').textContent).toContain(

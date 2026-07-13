@@ -4,8 +4,8 @@
   inset: 0;
   z-index: 100;
   background: color-mix(in srgb, #111827 18%, transparent);
-  backdrop-filter: blur(1px);
-  -webkit-backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   justify-content: flex-end;
   align-items: flex-end;
@@ -467,6 +467,9 @@
   color: var(--text-faint);
   font-size: 36px;
   position: relative;
+  /* Clip the hover cover zoom below so scaled media never bleeds onto the
+     meta block. */
+  overflow: hidden;
 }
 .design-card-thumb::before {
   /* Folder-shape icon */
@@ -773,6 +776,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .design-card-thumb .thumb-iframe {
   position: absolute;
@@ -780,11 +784,22 @@
   left: 0;
   width: 250%;
   height: 250%;
-  transform: scale(0.4);
+  /* --thumb-zoom multiplies the fixed fit scale so the hover zoom composes
+     with (never replaces) it. */
+  --thumb-zoom: 1;
+  transform: scale(calc(0.4 * var(--thumb-zoom)));
   transform-origin: top left;
   border: 0;
   background: var(--bg-panel);
   pointer-events: none;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Subtle cover zoom on hover. */
+.design-card:hover .design-card-thumb .thumb-media {
+  transform: scale(1.04);
+}
+.design-card:hover .design-card-thumb .thumb-iframe {
+  --thumb-zoom: 1.04;
 }
 .project-thumb-image,
 .project-thumb-video,
@@ -1380,7 +1395,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg);
+  background: var(--veil-canvas);
   flex: 1;
   overflow: hidden;
 }
@@ -1389,7 +1404,10 @@
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  background: #fff;
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   /* 44px (matches the top workspace chrome) rather than 38px: the active tab
      pill carries a 1px inset border now, and at 38px the pill filled almost
      the whole row so `.ws-tabs-bar`'s `overflow-y: hidden` shaved its top and
@@ -1452,13 +1470,12 @@
   display: inline-flex;
   align-items: center;
 }
-/* Divider only before the project-actions (settings) cluster. The leading
-   divider before the file-actions group (present / 历史版本 / 分享) was removed
-   per design. */
+/* Settings cluster sits after the file-actions group with a small gap and no
+   divider (both the leading divider before file-actions and this one after
+   分享 were removed per design). */
 .ws-tabs-file-actions:not(:empty) + .ws-tabs-project-actions {
   margin-inline-start: 2px;
-  padding-inline-start: 8px;
-  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 4px;
 }
 /* The Design Files row is 44px tall, so shrink the action cluster's buttons
    (present / share / handoff / avatar) to sit comfortably within it without
@@ -1479,6 +1496,20 @@
   min-height: 28px;
   padding: 0;
   justify-content: center;
+  /* Borderless soft grey-white icon buttons: drop the outline and sit on a
+     light grey fill so present / 历史版本 read as one quiet cluster next to the
+     dark 分享 button. */
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+.app .ws-tabs-actions .chrome-action-icon:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: transparent;
+}
+.app .ws-tabs-actions .chrome-action-icon.is-active,
+.app .ws-tabs-actions .chrome-action-icon[aria-expanded='true'] {
+  background: var(--bg-muted);
+  border-color: transparent;
 }
 .app .ws-tabs-actions .handoff-trigger {
   height: 28px;

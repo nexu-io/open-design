@@ -493,8 +493,21 @@ export function buildManualEditBridge(enabled: boolean): string {
     window.parent.postMessage({ type: 'od-edit-targets', targets: allTargets() }, '*');
   }
   var lastHoverId = null;
+  var lastHoverEl = null;
+  // Hover-guides memory: which element's guides were rendered last and when
+  // the hover was cleared. Survives od-edit-hover-reset so the host can ask
+  // for the guides back (od-edit-guides-restore) right before a capture —
+  // reaching a toolbar button always clears the live hover first.
+  var guidesMemoryEl = null;
+  var guidesMemoryId = null;
+  var guidesMemoryClearedAt = 0;
   var guidesEnabled = true;
   var selectedTargetId = null;
+  function clearHoverTracking(){
+    if (lastHoverEl) guidesMemoryClearedAt = Date.now();
+    lastHoverId = null;
+    lastHoverEl = null;
+  }
   function ensureGuidesLayer(){
     var layer = document.querySelector('[data-od-edit-guides-layer]');
     if (layer) return layer;
@@ -524,6 +537,41 @@ export function buildManualEditBridge(enabled: boolean): string {
       width: rect.width + 'px',
       height: rect.height + 'px'
     });
+  }
+  function renderSelectedChrome(layer, target){
+    if (!target || !target.rect) return;
+    renderBox(layer, target, 'selected');
+    var rect = target.rect;
+    var points = [
+      [rect.x, rect.y],
+      [rect.x + rect.width / 2, rect.y],
+      [rect.x + rect.width, rect.y],
+      [rect.x, rect.y + rect.height / 2],
+      [rect.x + rect.width, rect.y + rect.height / 2],
+      [rect.x, rect.y + rect.height],
+      [rect.x + rect.width / 2, rect.y + rect.height],
+      [rect.x + rect.width, rect.y + rect.height]
+    ];
+    for (var i = 0; i < points.length; i++) {
+      addGuideNode(layer, 'od-edit-guide-handle', {
+        left: Math.round(points[i][0]) + 'px',
+        top: Math.round(points[i][1]) + 'px'
+      });
+    }
+  }
+  function renderSelectedChromeForCurrent(){
+    if (!enabled || !guidesEnabled || !selectedTargetId) {
+      clearGuidesLayer();
+      return;
+    }
+    var selectedEl = findById(selectedTargetId);
+    if (!selectedEl) {
+      clearGuidesLayer();
+      return;
+    }
+    var layer = ensureGuidesLayer();
+    layer.replaceChildren();
+    renderSelectedChrome(layer, targetFrom(selectedEl, false));
   }
   function rectCenter(rect){
     return {
@@ -572,20 +620,6 @@ export function buildManualEditBridge(enabled: boolean): string {
         ? { orientation: 'vertical', gap: verticalGap }
         : null;
     if (!chosen) {
-      addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-v od-edit-guide-line-reference', {
-        left: hoverCenter.x + 'px',
-        top: Math.min(selectedRect.y, hoverRect.y) + 'px',
-        height: Math.max(selectedRect.y + selectedRect.height, hoverRect.y + hoverRect.height) - Math.min(selectedRect.y, hoverRect.y) + 'px'
-      });
-      addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-h od-edit-guide-line-reference', {
-        top: hoverCenter.y + 'px',
-        left: Math.min(selectedRect.x, hoverRect.x) + 'px',
-        width: Math.max(selectedRect.x + selectedRect.width, hoverRect.x + hoverRect.width) - Math.min(selectedRect.x, hoverRect.x) + 'px'
-      });
-      addGuideNode(layer, 'od-edit-guide-measure', {
-        left: Math.max(6, Math.min(window.innerWidth - 72, hoverCenter.x + 8)) + 'px',
-        top: Math.max(6, Math.min(window.innerHeight - 24, hoverCenter.y + 8)) + 'px'
-      }, 'overlap');
       return;
     }
     if (chosen.orientation === 'horizontal') {
@@ -611,15 +645,21 @@ export function buildManualEditBridge(enabled: boolean): string {
         top: Math.max(6, Math.min(window.innerHeight - 24, Math.min(vg.y1, vg.y2) + Math.abs(vg.y2 - vg.y1) / 2 - 10)) + 'px'
       }, vg.value + 'px');
     }
-    addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-v od-edit-guide-line-reference', {
-      left: selectedCenter.x + 'px',
-      top: Math.min(selectedRect.y, hoverRect.y) + 'px',
-      height: Math.max(selectedRect.y + selectedRect.height, hoverRect.y + hoverRect.height) - Math.min(selectedRect.y, hoverRect.y) + 'px'
+  }
+  function renderReferenceGuides(layer, rect){
+    [rect.x, rect.x + rect.width].forEach(function(x){
+      addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-v od-edit-guide-line-reference', {
+        left: x + 'px',
+        top: '0px',
+        height: window.innerHeight + 'px'
+      });
     });
-    addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-h od-edit-guide-line-reference', {
-      top: selectedCenter.y + 'px',
-      left: Math.min(selectedRect.x, hoverRect.x) + 'px',
-      width: Math.max(selectedRect.x + selectedRect.width, hoverRect.x + hoverRect.width) - Math.min(selectedRect.x, hoverRect.x) + 'px'
+    [rect.y, rect.y + rect.height].forEach(function(y){
+      addGuideNode(layer, 'od-edit-guide-line od-edit-guide-line-h od-edit-guide-line-reference', {
+        left: '0px',
+        top: y + 'px',
+        width: window.innerWidth + 'px'
+      });
     });
   }
   function renderHoverRelation(hoverTarget){
@@ -628,22 +668,31 @@ export function buildManualEditBridge(enabled: boolean): string {
       return;
     }
     var selectedEl = selectedTargetId ? findById(selectedTargetId) : null;
-    if (!selectedEl || stableId(selectedEl) === hoverTarget.id) {
-      clearGuidesLayer();
+    if (selectedEl && stableId(selectedEl) === hoverTarget.id) {
+      // Hovering the selected element itself: the selection outline already
+      // marks it, and self-relative guides would only double-draw.
+      renderSelectedChromeForCurrent();
       return;
     }
     var layer = ensureGuidesLayer();
     layer.replaceChildren();
-    var selectedTarget = targetFrom(selectedEl, false);
-    renderBox(layer, selectedTarget, 'selected');
+    renderReferenceGuides(layer, hoverTarget.rect);
+    if (selectedEl) {
+      renderSelectedChrome(layer, targetFrom(selectedEl, false));
+    }
     renderBox(layer, hoverTarget, 'hover');
-    addRelationMeasurement(layer, selectedTarget.rect, hoverTarget.rect);
+    if (selectedEl) {
+      addRelationMeasurement(layer, targetFrom(selectedEl, false).rect, hoverTarget.rect);
+    }
   }
   function postHoverTarget(el){
     if (!enabled || !el) return;
     var id = stableId(el);
     if (id === lastHoverId) return;
     lastHoverId = id;
+    lastHoverEl = el;
+    guidesMemoryEl = el;
+    guidesMemoryId = id;
     var target = targetFrom(el, true);
     renderHoverRelation(target);
     window.parent.postMessage({ type: 'od-edit-hover', target: target }, '*');
@@ -654,6 +703,9 @@ export function buildManualEditBridge(enabled: boolean): string {
     var id = stableId(el);
     if (id === lastHoverId) return;
     lastHoverId = id;
+    lastHoverEl = el;
+    guidesMemoryEl = el;
+    guidesMemoryId = id;
     renderHoverRelation(targetFrom(el, false));
   }
   function clearSelectedTarget(){
@@ -666,6 +718,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!id) return;
     var el = findById(id);
     if (el) el.setAttribute('data-od-edit-selected', 'true');
+    renderSelectedChromeForCurrent();
   }
   function closestTarget(event){
     annotateBrandKitRuntimeTargets();
@@ -830,6 +883,9 @@ export function buildManualEditBridge(enabled: boolean): string {
         finishActiveTextEdit(true);
         clearSelectedTarget();
         clearGuidesLayer();
+        guidesMemoryEl = null;
+        guidesMemoryId = null;
+        guidesMemoryClearedAt = 0;
       }
       if (enabled) setTimeout(postTargets, 0);
       return;
@@ -838,7 +894,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       setSelectedTarget(ev.data.id || null);
       if (!ev.data.id) clearGuidesLayer();
       else {
-        clearGuidesLayer();
+        renderSelectedChromeForCurrent();
       }
       return;
     }
@@ -853,8 +909,44 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (ev.data.type === 'od-edit-hover-reset') {
       // Host signals the cursor truly left the canvas, so the next pointerover
-      // re-announces the hovered element (defeats the per-element dedupe).
-      lastHoverId = null;
+      // re-announces the hovered element (defeats the per-element dedupe) and
+      // any hover guides stop lingering over the preview.
+      clearHoverTracking();
+      renderSelectedChromeForCurrent();
+      return;
+    }
+    if (ev.data.type === 'od-edit-guides-restore') {
+      // Re-renders the hover guides the user was looking at before the cursor
+      // left the canvas (e.g. to reach a toolbar button) so a capture can
+      // include them. Deliberately does NOT touch lastHoverEl and does NOT
+      // post od-edit-hover: the host hover affordance stays dismissed and the
+      // next od-edit-hover-reset cleanly clears the restored guides.
+      var maxAge = Number(ev.data.maxAgeMs) || 0;
+      var restored = false;
+      var liveHoverEl = null;
+      if (enabled && guidesEnabled) {
+        liveHoverEl = lastHoverEl && lastHoverEl.isConnected ? lastHoverEl : null;
+        var memoryEl = null;
+        if (!liveHoverEl && guidesMemoryClearedAt && (!maxAge || Date.now() - guidesMemoryClearedAt <= maxAge)) {
+          memoryEl = guidesMemoryEl && guidesMemoryEl.isConnected
+            ? guidesMemoryEl
+            : (guidesMemoryId ? findById(guidesMemoryId) : null);
+        }
+        var restoreEl = liveHoverEl || memoryEl;
+        if (restoreEl) {
+          renderHoverRelation(targetFrom(restoreEl, false));
+          restored = true;
+        }
+      }
+      // "live" tells the host the guides belong to a still-active hover (e.g.
+      // a keyboard-triggered capture): clearing them afterwards would blank
+      // the guides under the user's cursor, so the host must skip the clear.
+      window.parent.postMessage({
+        type: 'od-edit-guides-restore:result',
+        id: ev.data.id || null,
+        restored: restored,
+        live: !!(restored && liveHoverEl)
+      }, '*');
       return;
     }
     if (ev.data.type === 'od-edit-preview-style') {
@@ -887,7 +979,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     var kind = inferKind(el);
     var selectedTarget = targetFrom(el, true);
     setSelectedTarget(selectedTarget.id);
-    clearGuidesLayer();
+    renderSelectedChromeForCurrent();
     window.parent.postMessage({ type: 'od-edit-select', target: selectedTarget }, '*');
     window.parent.postMessage({ type: 'od-edit-inspect-select', target: selectedTarget }, '*');
     if (kind === 'text' || kind === 'link') {
@@ -903,8 +995,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (activeTextEdit) {
       var hoverEditEl = closestTarget(ev);
       if (!hoverEditEl) {
-        lastHoverId = null;
-        clearGuidesLayer();
+        clearHoverTracking();
+        renderSelectedChromeForCurrent();
         return;
       }
       renderHoverRelationOnly(hoverEditEl);
@@ -920,17 +1012,78 @@ export function buildManualEditBridge(enabled: boolean): string {
     var hoveredEl = closestTarget(ev);
     if (activeTextEdit) {
       if (!hoveredEl || (activeTextEdit.el && stableId(activeTextEdit.el) === stableId(hoveredEl))) {
-        lastHoverId = null;
-        clearGuidesLayer();
+        clearHoverTracking();
+        renderSelectedChromeForCurrent();
       }
       return;
     }
     if (!hoveredEl) {
-      lastHoverId = null;
-      clearGuidesLayer();
+      clearHoverTracking();
+      renderSelectedChromeForCurrent();
     }
   }, true);
   window.addEventListener('resize', postTargets);
+  var hoverGuidesScrollScheduled = false;
+  var scheduleGuideFrame = window.requestAnimationFrame
+    ? window.requestAnimationFrame.bind(window)
+    : function(cb){ return setTimeout(cb, 16); };
+  // Guides are drawn in viewport (fixed) coordinates, so any scroll — page or
+  // inner container — invalidates them; re-measure the tracked hover element.
+  window.addEventListener('scroll', function(){
+    if (!enabled || hoverGuidesScrollScheduled) return;
+    hoverGuidesScrollScheduled = true;
+    scheduleGuideFrame(function(){
+      hoverGuidesScrollScheduled = false;
+      if (!lastHoverEl) return;
+      if (!lastHoverEl.isConnected) {
+        lastHoverEl = null;
+        clearGuidesLayer();
+        return;
+      }
+      renderHoverRelation(targetFrom(lastHoverEl, false));
+    });
+  }, true);
+  // Double-tap Command screenshot hotkey (edit mode only). Keyboard focus can
+  // live inside the sandboxed iframe, where the host's window listener never
+  // hears the keys — detect here and delegate the capture to the host. Two
+  // quick bare Meta taps trigger; any non-Meta key cancels (so ⌘C never
+  // fires), and holding BOTH Meta keys is the module-capture chord owned by
+  // the snapshot bridge, so it resets instead of triggering.
+  // Registered on documentElement, NOT window/document: the keyboard guard
+  // wraps window/document keydown listeners and suppresses them during inline
+  // text editing, which would silently eat the hotkey exactly when the user
+  // is editing a text element.
+  var screenshotTap = { at: 0, left: false, right: false };
+  document.documentElement.addEventListener('keydown', function(ev){
+    if (!enabled) return;
+    if (ev.key !== 'Meta') {
+      screenshotTap.at = 0;
+      return;
+    }
+    if (ev.code === 'MetaLeft') screenshotTap.left = true;
+    if (ev.code === 'MetaRight') screenshotTap.right = true;
+    if (ev.repeat) return;
+    if (screenshotTap.left && screenshotTap.right) {
+      screenshotTap.at = 0;
+      return;
+    }
+    var now = Date.now();
+    if (screenshotTap.at && now - screenshotTap.at <= 600) {
+      screenshotTap.at = 0;
+      window.parent.postMessage({ type: 'od-edit-screenshot-hotkey' }, '*');
+    } else {
+      screenshotTap.at = now;
+    }
+  }, true);
+  document.documentElement.addEventListener('keyup', function(ev){
+    if (ev.code === 'MetaLeft') screenshotTap.left = false;
+    if (ev.code === 'MetaRight') screenshotTap.right = false;
+  }, true);
+  window.addEventListener('blur', function(){
+    screenshotTap.at = 0;
+    screenshotTap.left = false;
+    screenshotTap.right = false;
+  });
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();
@@ -950,13 +1103,10 @@ export function buildManualEditBridgeStyle(): string {
   return `<style data-od-edit-bridge-style>
 html[data-od-edit-mode] body * { cursor: pointer !important; }
 html[data-od-edit-mode] [data-od-edit-selected] {
-  outline: 2px solid var(--selected, var(--accent, CanvasText)) !important;
-  outline-offset: 4px;
+  outline: none !important;
 }
 html[data-od-edit-mode] [data-od-editing="true"] {
-  outline: 2px solid var(--selected, var(--accent, CanvasText)) !important;
-  outline-offset: 4px;
-  background: color-mix(in srgb, var(--selected, var(--accent, CanvasText)) 8%, transparent);
+  outline: none !important;
   cursor: text !important;
 }
 [data-od-edit-guides-layer] {
@@ -969,10 +1119,24 @@ html[data-od-edit-mode] [data-od-editing="true"] {
 [data-od-edit-guides-layer] .od-edit-guide-box {
   position: fixed;
   border: 1px solid var(--selected, var(--accent, CanvasText));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--selected, var(--accent, CanvasText)) 14%, transparent);
+  box-sizing: border-box;
 }
 [data-od-edit-guides-layer] .od-edit-guide-box-hover {
   border-style: dashed;
+}
+[data-od-edit-guides-layer] .od-edit-guide-box-selected {
+  border-style: solid;
+}
+[data-od-edit-guides-layer] .od-edit-guide-handle {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border: 2px solid var(--selected, var(--accent, CanvasText));
+  border-radius: 999px;
+  background: Canvas;
+  box-sizing: border-box;
 }
 [data-od-edit-guides-layer] .od-edit-guide-line {
   position: fixed;

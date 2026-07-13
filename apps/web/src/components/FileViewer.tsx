@@ -81,6 +81,7 @@ import {
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   captureHostIframeSnapshot,
+  captureHostRegionSnapshot,
   imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -89,6 +90,14 @@ import {
   type ImageExportFormat,
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { isOpenDesignHostAvailable } from '@open-design/host';
+import { capturePreviewModuleSnapshot, registerPreviewModuleCaptureProvider } from '../runtime/module-capture';
+import {
+  compositeManualEditWorkspace,
+  requestManualEditGuidesRestore,
+  type RectLike,
+} from '../runtime/edit-screenshot';
+import { CaptureFlash, ScreenshotFlight } from './ScreenshotFlight';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -117,7 +126,7 @@ import { HandoffButton } from './HandoffButton';
 import type { DemoUseMode } from './DemoControlBar';
 import { SocialShareGrid } from './SocialShareGrid';
 import { Toast } from './Toast';
-import { PreviewDrawOverlay, type DrawToolbarElement } from './PreviewDrawOverlay';
+import { ANNOTATION_EVENT, PreviewDrawOverlay, type AnnotationEventDetail, type DrawToolbarElement } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
   commentSnapshotEqual,
@@ -815,7 +824,7 @@ function manualEditFloatingPanelStyle(
 ): CSSProperties {
   const scale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
   const panelWidth = 320;
-  const preferredPanelHeight = 380;
+  const preferredPanelHeight = 620;
   const pad = 12;
   const canvasWidth = canvasSize?.width ?? 1200;
   const canvasHeight = canvasSize?.height ?? 800;
@@ -4767,6 +4776,7 @@ function HtmlViewer({
       | 'preview'
       | 'source'
       | 'screenshot'
+      | 'edit_screenshot'
       | 'tweaks'
       | 'mark'
       | 'comment'
@@ -4955,6 +4965,7 @@ function HtmlViewer({
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const manualEditWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -4977,6 +4988,75 @@ function HtmlViewer({
       source === srcDocPreviewIframeRef.current?.contentWindow
     );
   }, []);
+  // Double-Command module capture: screenshot the design-file module the user
+  // is pointing at and stage it in the chat composer as a 'draft' annotation.
+  // Reached from two triggers that never fire together (keyboard focus is
+  // either in the host or in the iframe): the composer's window-level
+  // double-Meta listener via registerPreviewModuleCaptureProvider, and the
+  // snapshot bridge's in-frame detector via od:module-capture-hotkey.
+  const moduleCaptureInFlightRef = useRef(false);
+  const captureModuleToComposer = useCallback(async (): Promise<boolean> => {
+    const iframe = iframeRef.current;
+    if (!iframe) return false;
+    // A second trigger while a capture is staging is the same user gesture
+    // (key repeat / both listeners racing) — report handled, don't duplicate.
+    if (moduleCaptureInFlightRef.current) return true;
+    moduleCaptureInFlightRef.current = true;
+    try {
+      const snap = await capturePreviewModuleSnapshot(iframe);
+      if (!snap) return false;
+      const blob = await fetch(snap.dataUrl).then((response) => response.blob());
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const nameSeed = (snap.elementId || 'view').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 40) || 'view';
+      const shot = new File([blob], `module-${nameSeed}-${ts}.png`, { type: 'image/png' });
+      return await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const finish = (result: { ok: boolean }) => {
+          if (settled) return;
+          settled = true;
+          resolve(result.ok);
+        };
+        window.setTimeout(() => finish({ ok: false }), 60000);
+        const detail: AnnotationEventDetail = {
+          file: shot,
+          note: '',
+          action: 'draft',
+          filePath: file.name,
+          ...(snap.elementId && snap.rect
+            ? {
+                markKind: 'click' as const,
+                bounds: snap.rect,
+                target: {
+                  filePath: file.name,
+                  elementId: snap.elementId,
+                  label: snap.label,
+                  position: snap.rect,
+                },
+              }
+            : {}),
+          ack: finish,
+        };
+        window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      });
+    } catch {
+      return false;
+    } finally {
+      moduleCaptureInFlightRef.current = false;
+    }
+  }, [file.name]);
+  useEffect(() => registerPreviewModuleCaptureProvider(captureModuleToComposer), [captureModuleToComposer]);
+  useEffect(() => {
+    function onModuleCaptureHotkey(ev: MessageEvent) {
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:module-capture-hotkey') return;
+      // Only the visible frame may trigger a capture — the hidden twin frame
+      // stays mounted and its bridge also listens for the hotkey.
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      void captureModuleToComposer();
+    }
+    window.addEventListener('message', onModuleCaptureHotkey);
+    return () => window.removeEventListener('message', onModuleCaptureHotkey);
+  }, [captureModuleToComposer]);
   const previewScrollRestoreRef = useRef<{
     hostLeft: number;
     hostTop: number;
@@ -5262,6 +5342,11 @@ function HtmlViewer({
   // cancelled, whether it ends in a save or a modal dismiss.
   const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
+  const editScreenshotInFlightRef = useRef(false);
+  const [screenshotFlight, setScreenshotFlight] = useState<
+    { dataUrl: string; from: RectLike; to: RectLike; showFlash: boolean } | null
+  >(null);
+  const [captureFlash, setCaptureFlash] = useState<RectLike | null>(null);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
@@ -8276,6 +8361,164 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
+  // Quick edit-mode screenshot: capture the whole workspace exactly as the
+  // user sees it — preview content, the in-iframe guides/measurements, and the
+  // floating inspector panel — and stage it into the chat composer as a draft
+  // attachment (never auto-sends). Unlike captureExportImageSnapshot this must
+  // NOT hide the edit chrome; the guides are the point of the shot.
+  const handleManualEditScreenshotToChat = useCallback(async () => {
+    if (editScreenshotInFlightRef.current) return;
+    editScreenshotInFlightRef.current = true;
+    try {
+      const workspaceEl = manualEditWorkspaceRef.current;
+      const iframe = iframeRef.current;
+      if (!manualEditMode || !workspaceEl || !iframe) return;
+      const desktopHost = isOpenDesignHostAvailable();
+      const wsRect = workspaceEl.getBoundingClientRect();
+      const wsRectLike: RectLike = {
+        left: wsRect.left,
+        top: wsRect.top,
+        width: wsRect.width,
+        height: wsRect.height,
+      };
+      // Instant acknowledgment: the capture pipeline (guides restore +
+      // rasterize + upload) can take seconds, so flash the shutter NOW. Web
+      // only — the DOM compositor never sees host overlays, but the desktop
+      // compositor capture would record the flash into the screenshot itself,
+      // so there the flash plays with the flight after the (fast) capture.
+      if (!desktopHost) setCaptureFlash(wsRectLike);
+      // Let the button's tooltip/hover chrome dismiss before pixels are read.
+      await waitForAnimationFrame();
+      await waitForAnimationFrame();
+      // Reaching the toolbar cleared the hover guides — bring back the ones
+      // the user was just looking at, then wait for them to actually paint.
+      // (On a keyboard-triggered capture the hover may still be live; the
+      // bridge reports that via `live` so the post-capture clear is skipped.)
+      const { restored, live } = await requestManualEditGuidesRestore(iframe, { maxAgeMs: 4000 });
+      if (restored) {
+        await waitForAnimationFrame();
+        await waitForAnimationFrame();
+      }
+      // Desktop compositor grabs iframe + guides + host overlays in one shot;
+      // pure web composites the iframe snapshot with overlay rasterizations.
+      let snap = await captureHostRegionSnapshot(wsRectLike);
+      if (!snap) {
+        const iframeSnap = await requestPreviewSnapshotWithRetry(iframe);
+        if (iframeSnap) {
+          snap = await compositeManualEditWorkspace({
+            workspaceEl,
+            iframeEl: iframe,
+            iframeSnapshot: iframeSnap,
+          });
+        }
+      }
+      if (restored && !live) clearManualEditHover();
+      if (!snap) {
+        setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
+        return;
+      }
+      const blob = await fetch(snap.dataUrl).then((response) => response.blob());
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const shot = new File([blob], `edit-screenshot-${ts}.png`, { type: 'image/png' });
+      const detail: AnnotationEventDetail = {
+        file: shot,
+        note: '',
+        action: 'draft',
+        filePath: file.name,
+        ack: (result) => {
+          if (!result.ok) {
+            setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
+          }
+        },
+      };
+      window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      const composerEl = document.querySelector('[data-testid="chat-composer"]');
+      if (composerEl) {
+        const composerRect = composerEl.getBoundingClientRect();
+        const toWidth = 120;
+        const toHeight = Math.max(1, toWidth * (wsRect.height / Math.max(1, wsRect.width)));
+        setScreenshotFlight({
+          dataUrl: snap.dataUrl,
+          from: wsRectLike,
+          to: {
+            left: composerRect.left + 16,
+            top: composerRect.top + 10,
+            width: toWidth,
+            height: toHeight,
+          },
+          showFlash: desktopHost,
+        });
+      }
+    } catch (err) {
+      console.warn('[handleManualEditScreenshotToChat] failed:', err);
+      setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
+    } finally {
+      editScreenshotInFlightRef.current = false;
+    }
+  }, [manualEditMode, file.name, t]);
+
+  // Double-tap Command hotkey for the edit-mode screenshot — host-focus half.
+  // The edit bridge detects the same gesture when keyboard focus sits inside
+  // the sandboxed iframe (od-edit-screenshot-hotkey below). Any non-Meta key
+  // cancels the pending tap (⌘C never fires it) and holding BOTH Meta keys is
+  // the module-capture chord owned by the composer flow, so it resets too.
+  useEffect(() => {
+    if (!manualEditMode) return;
+    const tap = { at: 0, left: false, right: false };
+    const reset = () => {
+      tap.at = 0;
+      tap.left = false;
+      tap.right = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Meta') {
+        tap.at = 0;
+        return;
+      }
+      if (event.code === 'MetaLeft') tap.left = true;
+      if (event.code === 'MetaRight') tap.right = true;
+      if (event.repeat) return;
+      if (tap.left && tap.right) {
+        tap.at = 0;
+        return;
+      }
+      const now = Date.now();
+      if (tap.at && now - tap.at <= 600) {
+        tap.at = 0;
+        void handleManualEditScreenshotToChat();
+      } else {
+        tap.at = now;
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'MetaLeft') tap.left = false;
+      if (event.code === 'MetaRight') tap.right = false;
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', reset);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', reset);
+    };
+  }, [manualEditMode, handleManualEditScreenshotToChat]);
+
+  // Iframe-focus half of the double-tap Command hotkey: the edit bridge posts
+  // od-edit-screenshot-hotkey because key events inside the sandboxed frame
+  // never reach the host window. Only the visible frame may trigger.
+  useEffect(() => {
+    if (!manualEditMode) return;
+    function onEditScreenshotHotkey(ev: MessageEvent) {
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od-edit-screenshot-hotkey') return;
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      void handleManualEditScreenshotToChat();
+    }
+    window.addEventListener('message', onEditScreenshotHotkey);
+    return () => window.removeEventListener('message', onEditScreenshotHotkey);
+  }, [manualEditMode, handleManualEditScreenshotToChat]);
+
   const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
     const prepareId = imageExportPrepareIdRef.current + 1;
     imageExportPrepareIdRef.current = prepareId;
@@ -9107,6 +9350,24 @@ function HtmlViewer({
                   <RemixIcon name="screenshot-2-line" size={15} />
                 </button>
               ) : null}
+              {mode === 'preview' && manualEditMode ? (
+                <button
+                  type="button"
+                  className="viewer-action viewer-action-icon od-tooltip"
+                  data-testid="edit-screenshot-to-chat-button"
+                  data-tooltip={t('fileViewer.editScreenshotToChat')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.editScreenshotToChat')}
+                  aria-label={t('fileViewer.editScreenshotToChat')}
+                  disabled={viewerOnly}
+                  onClick={() => {
+                    fireArtifactToolbarClick('edit_screenshot');
+                    void handleManualEditScreenshotToChat();
+                  }}
+                >
+                  <RemixIcon name="camera-line" size={15} />
+                </button>
+              ) : null}
               <div className="artifact-tool-menu-anchor">
                 <button
                   type="button"
@@ -9657,6 +9918,7 @@ function HtmlViewer({
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div
+            ref={manualEditWorkspaceRef}
             className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
@@ -9832,6 +10094,18 @@ function HtmlViewer({
                     setQueuedBoardNotes([]);
                     setActiveCommentExistingAttachments(comment.attachments ?? []);
                   }}
+                />
+              ) : null}
+              {captureFlash ? (
+                <CaptureFlash rect={captureFlash} onDone={() => setCaptureFlash(null)} />
+              ) : null}
+              {screenshotFlight ? (
+                <ScreenshotFlight
+                  dataUrl={screenshotFlight.dataUrl}
+                  from={screenshotFlight.from}
+                  to={screenshotFlight.to}
+                  showFlash={screenshotFlight.showFlash}
+                  onDone={() => setScreenshotFlight(null)}
                 />
               ) : null}
               {/* Portaled to <body> so the screenshot/export toast escapes the

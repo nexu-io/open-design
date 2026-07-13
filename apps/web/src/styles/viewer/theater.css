@@ -725,12 +725,14 @@
    transparent here (hover feedback is the gray fill only). `:not(:disabled)`
    lifts each selector to (0,3,0) so it beats the global rule. */
 .viewer-action:hover:not(:disabled),
-.viewer-tab:hover:not(:disabled),
+.viewer-tab:hover:not(:disabled):not(.active),
 .viewer-viewport-menu-item:hover:not(:disabled) {
   border-color: transparent;
 }
-/* Selected tab / row: plain --bg-subtle pill, no stroke. */
-.viewer-tab.active { border-color: transparent; }
+/* Selected tab = the segmented switch thumb: keep its thin border (the
+   global button:hover override above must not strip it). */
+.viewer-tab.active,
+.viewer-tab.active:hover:not(:disabled) { border-color: var(--border); }
 
 /* ============================================================
    Composer — settings/upload icons consistent sizing + spacing
@@ -878,8 +880,8 @@
   padding: 3px 7px;
   border-radius: var(--radius-pill);
   letter-spacing: 0.02em;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   max-width: calc(100% - 16px);
   white-space: nowrap;
   overflow: hidden;
@@ -1073,8 +1075,8 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   opacity: 0.78;
   transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out);
 }
@@ -1125,8 +1127,8 @@
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   transition: background 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .prompt-template-lightbox-close:hover,

@@ -6,6 +6,12 @@
   flex-direction: column;
   gap: 12px;
 }
+/* Empty workspace: no recent projects rendered below, so the hero column
+   centers vertically in the scroll viewport instead of hugging the top. */
+.home-view--centered {
+  min-height: 100%;
+  justify-content: center;
+}
 /* The hero block self-constrains to a readable column even though
    its parent now stretches to ~1440px so the plugin gallery can
    spread out. Recent projects + plugins-home keep full width. */
@@ -22,9 +28,11 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-6);
-  /* Top padding raised 60px → 104px so the total gap from the tab bar to the
-     logo goes ~76px → ~120px (the parent contributes the remaining ~16px). */
-  padding: 104px 0 var(--spacing-4);
+  /* Top padding tuned so that at the reference working window (~1333×960)
+     the fold lands exactly on the second project-card row's image bottom
+     (304px left the fold cutting mid-image; -52px aligns it). The parent
+     still contributes ~16px above. */
+  padding: 281px 0 var(--spacing-4);
 }
 .home-hero__brand {
   position: relative;
@@ -392,12 +400,20 @@
   flex-direction: column;
   gap: var(--spacing-8);
   padding: var(--spacing-4) var(--spacing-4) var(--spacing-8);
-  background: color-mix(in srgb, var(--bg-panel) 70%, var(--bg-subtle));
-  border: var(--stroke-thin) solid var(--border);
+  background: var(--bg-subtle);
+  transition: background-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
+  /* Borderless: the tinted surface alone provides the grouping; the inner
+     input card keeps the only stroke. */
+  border: none;
   /* Rounder, and concentric with the inner input card: outer radius = inner
      radius (16px) + the 4px gap (this card's side padding), so the two corners
      run parallel and read as consistent. */
   border-radius: 20px;
+}
+/* While the composer is engaged (input focused) the grouping surface steps
+   one level heavier on the neutral ladder so the active state reads. */
+.home-hero__composer-card:focus-within {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--bg-muted));
 }
 .home-hero__composer-card .home-hero__input-card,
 .home-hero__composer-card .home-hero__workdir-row {
@@ -415,7 +431,9 @@
   /* Inner prompt surface stays white; the outer composer card provides the
      subtle selected-gray grouping. */
   background: var(--bg-app);
-  border: var(--stroke-thin) solid var(--border);
+  /* Stroke only appears once the user engages the field (focus-within
+     below); idle state stays borderless. */
+  border: var(--stroke-thin) solid transparent;
   /* Concentric with the outer composer card (20px) minus its 4px inset. */
   border-radius: 16px;
   box-shadow: none;
@@ -631,11 +649,13 @@
   min-width: 0;
 }
 .home-hero__lexical .composer-input-editor {
-  min-height: 34px;
+  /* Taller resting field (~3 lines) so the prompt area reads as a canvas,
+     not a single-line search box. */
+  min-height: 66px;
   max-height: var(--home-hero-prompt-max-height, 180px);
 }
 .home-hero__lexical .composer-editable {
-  min-height: 34px;
+  min-height: 66px;
   padding: 0;
   font-size: var(--font-size-14);
   font-weight: 500;
@@ -2133,20 +2153,26 @@
   }
 }
 .home-hero__submit {
-  --home-hero-submit-bg: var(--brand, #87ea5c);
+  /* Black send pill with brand-green arrow + label. One tier deeper than
+     --accent (#353535) per design: ink-black ground so the green pops. In
+     dark the blocks below pin the surface to the lifted dark tint instead —
+     brand green stays legible on both. */
+  --home-hero-submit-bg: var(--text-strong);
+  --home-hero-submit-fg: #00ff04;
 
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  /* Icon-only round send (label removed): equal sides make a circle. */
   width: 40px;
-  min-width: 40px;
   height: 40px;
   padding: 0;
-  border-radius: var(--radius-circular);
+  border-radius: var(--radius-pill);
   border: var(--stroke-thin) solid transparent;
   background: var(--home-hero-submit-bg);
-  color: #202020;
+  color: var(--home-hero-submit-fg);
   box-shadow: none;
   cursor: pointer;
   font: inherit;
@@ -2157,12 +2183,20 @@
   backdrop-filter: none;
   transition: none;
 }
+[data-theme="dark"] .home-hero__submit {
+  --home-hero-submit-bg: var(--accent-tint);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .home-hero__submit {
+    --home-hero-submit-bg: var(--accent-tint);
+  }
+}
 
 .home-hero__submit:hover:not(:disabled),
 .home-hero__submit:active:not(:disabled) {
   border-color: transparent;
-  background: var(--home-hero-submit-bg);
-  color: #202020;
+  background: color-mix(in srgb, var(--home-hero-submit-bg) 86%, #fff);
+  color: var(--home-hero-submit-fg);
   box-shadow: none;
   transform: none;
 }
@@ -2175,8 +2209,8 @@
 .home-hero__submit:disabled {
   opacity: 0.42;
   cursor: default;
-  background: var(--surface-secondary);
-  color: var(--text-tertiary);
+  background: var(--bg-muted);
+  color: var(--text-muted);
   box-shadow: none;
 }
 .home-hero__error {
@@ -2199,7 +2233,8 @@
   justify-content: center;
   padding: 24px;
   background: rgba(16, 12, 10, 0.34);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .home-hero-confirm {
   width: min(420px, 100%);
@@ -3003,13 +3038,20 @@
   width: min(380px, calc(100vw - 32px));
   max-height: min(440px, calc(100vh - 200px));
   overflow-y: auto;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-panel) 98%, white);
+  padding: 12px;
+  /* Craft-style frosted sheet: near-opaque frost + the project glass blur.
+     The high opacity is deliberate — Chromium fails to sample the backdrop
+     for this popover's ancestor chain (verified empirically), so a low-alpha
+     glass would show sharp bleed-through. At 94% the panel reads as Craft's
+     frosted sheet with or without a working sampler. */
+  border: 1px solid var(--material-separator);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   box-shadow:
-    0 16px 38px rgba(15, 23, 42, 0.14),
-    0 2px 6px rgba(15, 23, 42, 0.08);
+    0 24px 60px rgba(15, 23, 42, 0.16),
+    0 2px 8px rgba(15, 23, 42, 0.06);
   isolation: isolate;
 }
 .home-hero__template-menu-head {
@@ -3022,20 +3064,21 @@
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  height: 34px;
+  height: 40px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  /* Quiet Craft-style row: no boxed field — the input sits directly on the
+     glass; a translucent fill only appears on focus. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: transparent;
   color: var(--text-muted);
   transition:
-    border-color 120ms var(--ease-out),
-    box-shadow 120ms var(--ease-out);
+    background-color 120ms var(--ease-out);
 }
 .home-hero__template-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: var(--vibrancy-fill-tertiary);
 }
 .home-hero__template-search input {
   flex: 1 1 auto;
@@ -3044,7 +3087,7 @@
   background: transparent;
   outline: none;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
 }
 .home-hero__template-search input:focus,
@@ -3103,9 +3146,10 @@
   min-width: 0;
   min-height: 136px;
   padding: 8px 8px 10px;
-  border: 1px solid var(--border);
+  /* Vibrancy fills so the cards read as part of the frosted sheet. */
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-md);
-  background: var(--bg-panel);
+  background: var(--vibrancy-fill-tertiary);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -3118,7 +3162,7 @@
 .home-hero__template-card:focus-visible {
   outline: none;
   border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  background: var(--vibrancy-fill-secondary);
   transform: translateY(-1px);
 }
 .home-hero__template-card:disabled {

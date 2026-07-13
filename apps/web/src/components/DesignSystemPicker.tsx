@@ -535,6 +535,9 @@ export function DesignSystemPicker({
           onClick={() => setOpen((v) => !v)}
         >
           <Icon name="palette" size={16} />
+          {selected ? (
+            <span className="composer-ds-icon-trigger-label">{selected.title}</span>
+          ) : null}
         </button>
         {popover}
         {previewModal}

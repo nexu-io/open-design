@@ -1,0 +1,43 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  pointer-events: none;
+}
+
+.flash {
+  position: fixed;
+  background: #fff;
+  opacity: 0;
+  animation: screenshot-flash 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes screenshot-flash {
+  from { opacity: 0.85; }
+  to { opacity: 0; }
+}
+
+.clone {
+  position: fixed;
+  object-fit: cover;
+  border-radius: var(--radius, 6px);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  background: var(--bg-panel, #fff);
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+}
+
+.landing {
+  transition:
+    transform 420ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash,
+  .landing {
+    animation: none;
+    transition: none;
+  }
+}

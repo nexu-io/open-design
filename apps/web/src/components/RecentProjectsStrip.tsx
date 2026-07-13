@@ -628,8 +628,8 @@ export function RecentProjectsStrip({
         className={`recent-projects__row recent-projects__row--${view}${menuOpenId ? ' recent-projects__row--menu-open' : ''}${activeSelectionMode ? ' is-selecting' : ''}`}
         role="list"
       >
-        {visibleProjectCards.map(({ project, meta }) => {
-          const cover = projectCover(project, coverByProject[project.id] ?? null);
+        {visibleProjectCards.map(({ project, meta }, cardIndex) => {
+          const cover = projectCover(project, coverByProject[project.id] ?? null, cardIndex);
           const projectMoveAction: 'to-team' | 'to-personal' =
             meta.badge === 'shared' ? 'to-personal' : 'to-team';
           const designSystemProject = isDesignSystemProject(project);
@@ -1129,9 +1129,19 @@ function relativeTime(ts: number, t: ReturnType<typeof useT>): string {
   return new Date(ts).toLocaleDateString();
 }
 
+// Temporary placeholder covers for projects without a real cover: 12 mock
+// images under public/mock-covers, cycled by the card's list position so
+// neighboring cards never repeat. Remove once real covers exist for all
+// projects.
+const MOCK_COVER_COUNT = 12;
+function mockCoverUrl(cardIndex: number): string {
+  return `/mock-covers/cover-${cardIndex % MOCK_COVER_COUNT}.jpg`;
+}
+
 function projectCover(
   project: Project,
   override: { kind: 'html' | 'image' | 'video' | 'logo'; name: string } | null,
+  cardIndex: number,
 ): {
   kind: 'image' | 'video' | 'html' | 'logo' | 'fallback';
   src?: string;
@@ -1159,7 +1169,7 @@ function projectCover(
     if (meta?.kind === 'video') return { kind: 'video', src, style, initial };
     if (/\.html?$/i.test(entry)) return { kind: 'html', src, style, initial };
   }
-  return { kind: 'fallback', style, initial };
+  return { kind: 'image', src: mockCoverUrl(cardIndex), style, initial };
 }
 
 type ProjectCategory = 'prototype' | 'live-artifact' | 'slide' | 'media' | 'brand';

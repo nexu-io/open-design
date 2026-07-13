@@ -131,11 +131,15 @@ button:disabled {
   z-index: 4000;
   max-width: min(260px, calc(100vw - 16px));
   padding: 5px 8px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  /* Thick material: tooltips are small precise text, which per the material
+     spec takes the highest-contrast (most opaque) tier. */
+  background: var(--material-thick);
+  -webkit-backdrop-filter: var(--material-thick-backdrop);
+  backdrop-filter: var(--material-thick-backdrop);
   box-shadow: var(--shadow-sm);
-  color: var(--text-strong);
+  color: var(--vibrancy-label);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
@@ -264,8 +268,10 @@ textarea { resize: vertical; font-family: inherit; }
   overflow-x: hidden;
   overscroll-behavior: contain;
   max-width: calc(100vw - 24px);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
 }
@@ -299,7 +305,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .od-select-option:hover:not(:disabled),
 .od-select-option.active:not(:disabled) {
-  background: var(--bg-subtle);
+  background: var(--vibrancy-fill-secondary);
 }
 .od-select-option.selected {
   color: var(--text);

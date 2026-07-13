@@ -1024,13 +1024,6 @@ function AssistantFooter({
 }: AssistantFooterProps) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
-  const formattedCost =
-    typeof usage?.costUsd === "number" &&
-    Number.isFinite(usage.costUsd) &&
-    usage.costUsd > 0
-      ? usage.costUsd.toFixed(4)
-      : "";
-  const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
   if (
     !forceVisible &&
     !streaming &&
@@ -1063,13 +1056,9 @@ function AssistantFooter({
           ? t("assistant.unfinishedLabel")
           : t("assistant.doneLabel")}
       </span>
-      <span className="assistant-stats">
-        {elapsed}
-        {usage?.outputTokens != null
-          ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
-          : ""}
-        {costLabel}
-      </span>
+      {/* Stats stay time-only: token counts and cost are deliberately not
+          surfaced here. */}
+      <span className="assistant-stats">{elapsed}</span>
       {copyMarkdown || onFork || feedbackControls ? (
         <span className="assistant-footer-controls">
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}

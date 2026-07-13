@@ -546,10 +546,10 @@
   letter-spacing: -0.02em;
 }
 .prose-block .md-h:first-child { margin-top: 2px; }
-.prose-block .md-h1 { font-size: 24px; }
-.prose-block .md-h2 { font-size: 20px; }
-.prose-block .md-h3 { font-size: 16px; }
-.prose-block .md-h4 { font-size: 16px; text-transform: none; }
+.prose-block .md-h1 { font-size: 16px; }
+.prose-block .md-h2 { font-size: 14px; }
+.prose-block .md-h3 { font-size: 14px; }
+.prose-block .md-h4 { font-size: 14px; text-transform: none; }
 .prose-block .md-ul, .prose-block .md-ol {
   margin: 12px 0;
   padding-left: 24px;

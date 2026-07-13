@@ -243,7 +243,8 @@
   color: var(--kind-tint, #374151);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 /* Selection check sits top-left so it never overlaps the top-right kind badge. */

@@ -309,7 +309,8 @@
   place-items: center;
   padding: 32px;
   background: color-mix(in srgb, #000 64%, transparent);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: ds-asset-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .lightboxInner {

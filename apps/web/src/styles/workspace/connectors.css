@@ -126,8 +126,10 @@
   z-index: 30;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
@@ -1733,8 +1735,8 @@ button.connector-action.is-loading {
   background:
     radial-gradient(ellipse at top, color-mix(in srgb, var(--bg-panel) 78%, transparent) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 65%),
     color-mix(in srgb, var(--bg) 45%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
   border-radius: var(--radius);
   animation: connector-gate-fade 220ms ease-out;
   pointer-events: auto;

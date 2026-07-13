@@ -93,11 +93,6 @@ import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
-import { GithubStarBadge } from './GithubStarBadge';
-import {
-  formatDiscordPresenceCount,
-  useDiscordPresence,
-} from './useDiscordPresence';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -171,6 +166,10 @@ import {
 
 // Demo shell: the entry nav rail is always open for the workspace review flow.
 const RAIL_OPEN_STORAGE_KEY = 'od.entry.railOpen';
+
+// Window event dispatched by chrome outside this tree (the pinned Home tab's
+// sidebar toggle in WorkspaceTabsBar) to expand/collapse the entry rail.
+export const ENTRY_RAIL_TOGGLE_EVENT = 'od:entry-rail-toggle';
 const LOCAL_MODE_TIP_DISMISSED_KEY = 'od.demo.localModeTip.dismissed';
 
 function readStoredRailOpen(): boolean {
@@ -204,8 +203,6 @@ function writeLocalModeTipDismissed(dismissed: boolean): void {
   }
 }
 
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
-const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
@@ -504,7 +501,6 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
-  const discordPresence = useDiscordPresence();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -580,6 +576,14 @@ export function EntryShell({
   useEffect(() => {
     writeStoredRailOpen(railOpen);
   }, [railOpen]);
+
+  // The pinned Home tab (WorkspaceTabsBar) carries a sidebar toggle; it lives
+  // in a sibling tree, so the request arrives as a window event.
+  useEffect(() => {
+    const onToggle = () => setRailOpen((v) => !v);
+    window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+    return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+  }, []);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =
@@ -598,14 +602,6 @@ export function EntryShell({
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
   const analytics = useAnalytics();
-  const discordOnlineLabel = discordPresence
-    ? t('entry.discordOnlineLabel', {
-        count: formatDiscordPresenceCount(discordPresence.onlineCount),
-      })
-    : null;
-  const discordAriaLabel = discordOnlineLabel
-    ? t('entry.discordAriaWithOnline', { online: discordOnlineLabel })
-    : t('entry.discordAria');
   function changeView(next: EntryViewKind) {
     const navElement = navElementForView(next);
     if (navElement) {
@@ -846,59 +842,10 @@ export function EntryShell({
     changeView('home');
   }
 
-  // The GitHub star / Discord / Use-everywhere / settings cluster used to sit in
-  // the top-right bar. Moved to the bottom-left of the nav rail so the home hero
-  // and content can rise up a row.
-  const railFooterActions = (
-    <>
-      <div className="entry-rail-actions__settings-group" aria-label="社区与设置快捷入口">
-        <button
-          type="button"
-          className="entry-settings-chip"
-          onClick={() => onOpenSettings()}
-          aria-label="设置"
-          data-testid="entry-settings-button"
-        >
-          <span className="entry-settings-chip__icon" aria-hidden>
-            <Icon name="settings" size={13} />
-          </span>
-          <span className="entry-settings-chip__label">设置</span>
-        </button>
-        <GithubStarBadge />
-        <a
-          className="entry-discord-badge od-tooltip"
-          href={DISCORD_URL}
-          aria-label={discordAriaLabel}
-          data-tooltip={discordAriaLabel}
-          data-tooltip-placement="right"
-          data-testid="entry-discord-badge"
-        >
-          <Icon name="discord" size={14} className="entry-discord-badge__icon" />
-          <span className="entry-discord-badge__label">{t('entry.discordLabel')}</span>
-          {discordOnlineLabel ? (
-            <>
-              <span className="entry-discord-badge__sep" aria-hidden>·</span>
-              <span className="entry-discord-badge__online">{discordOnlineLabel}</span>
-            </>
-          ) : null}
-        </a>
-        <a
-          className="entry-x-badge od-tooltip"
-          href={X_URL}
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label="在 X 上关注 Open Design"
-          data-tooltip="在 X 上关注 Open Design"
-          data-tooltip-placement="right"
-          data-testid="entry-x-badge"
-        >
-          <span className="entry-x-badge__icon" aria-hidden>X</span>
-          <span className="entry-x-badge__label">@OpenDesignHQ</span>
-        </a>
-      </div>
-      <UpdaterPopup />
-    </>
-  );
+  // The rail footer carries no inline actions anymore — settings and the
+  // community links all live in the account hover menu (EntryNavRail). Only
+  // the updater popup host remains.
+  const railFooterActions = <UpdaterPopup />;
 
   const railFooterNotice = demoUseMode === 'local' && !localModeTipDismissed ? (
     <section

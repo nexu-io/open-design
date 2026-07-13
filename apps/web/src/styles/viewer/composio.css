@@ -469,8 +469,10 @@
   width: 320px;
   max-height: 420px;
   overflow-y: auto;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   z-index: 200;
@@ -893,6 +895,13 @@
 .qf-textarea {
   font-size: 13px;
 }
+/* Quiet neutral focus for form fields: the global --selected focus border is
+   near-black and reads like the chosen-chip state sitting right above. */
+.qf-input:focus,
+.qf-select:focus,
+.qf-textarea:focus {
+  border-color: var(--border-strong);
+}
 .question-form-foot {
   display: flex;
   align-items: center;
@@ -1271,7 +1280,8 @@
   inset: 0;
   z-index: 1700;
   background: rgba(28, 27, 26, 0.42);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
@@ -2209,8 +2219,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 0;
   min-width: 240px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   padding: 6px;
@@ -2298,8 +2310,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   max-height: min(360px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  /* Solid panel, not glass: this menu lives inside .chat-project-header,
+     whose own backdrop-filter makes it a backdrop root — a descendant's
+     backdrop-filter cannot sample the chat content behind the header, so a
+     translucent fill just lets un-blurred text bleed through. Solid matches
+     the app's other anchored menus (working-dir picker, plus menu). */
+  background: var(--bg-panel);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow:
     0 18px 48px color-mix(in srgb, #000 12%, transparent),
@@ -2555,8 +2572,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
   padding: 6px 12px;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
+  /* Surface comes from .od-glass-refract (frosted base, SDF refraction on
+     Chromium via useLiquidGlass in ChatPane). */
+  border: 1px solid var(--material-separator);
   color: var(--text);
   font-size: 12px;
   box-shadow: var(--shadow-sm);

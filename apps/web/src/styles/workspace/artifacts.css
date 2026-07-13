@@ -2793,7 +2793,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
-  background: var(--bg);
+  background: var(--veil-page);
 }
 /* Note: `.entry-shell--no-header` and the rest of the entry-view
    redesign live in `src/styles/home/`. Keeping that bundle out of
@@ -2804,7 +2804,7 @@
   grid-template-columns: var(--entry-rail-width, 64px) 1fr;
   height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: var(--veil-page);
 }
 
 .entry-side {

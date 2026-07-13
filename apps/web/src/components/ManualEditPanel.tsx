@@ -990,7 +990,14 @@ function StyleInspector({ target, styles, onChange, onApply }: {
         </PairRow>
         <PairRow>
           <UnitRow label={t('manualEdit.gap')} value={styles.gap} onChange={(v) => u('gap', v)} unit="px" autoUnit disabled={layoutDisabled} />
-          <DropdownRow label={t('manualEdit.align')} value={styles.alignItems} onChange={(v) => u('alignItems', v)} options={itemAlignOptions(t)} disabled={layoutDisabled} />
+          {layoutDisabled ? (
+            // Non-flex/grid targets still get a live alignment dropdown — it
+            // drives text-align (left / center / right) instead of the flex
+            // cross-axis, so the control is never a dead grey box.
+            <DropdownRow label={t('manualEdit.align')} value={styles.textAlign} onChange={(v) => u('textAlign', v)} options={textAlignOptions(t)} />
+          ) : (
+            <DropdownRow label={t('manualEdit.align')} value={styles.alignItems} onChange={(v) => u('alignItems', v)} options={itemAlignOptions(t)} />
+          )}
         </PairRow>
         {layoutDisabled ? <p className="cc-section-hint">{t('manualEdit.layoutUnavailable')}</p> : null}
       </Section>
@@ -1020,6 +1027,15 @@ function justifyOptions(t: ManualEditTranslator): DropdownOption[] {
     { value: 'space-between', label: t('manualEdit.justifyBetween') },
     { value: 'space-around', label: t('manualEdit.justifyAround') },
     { value: 'space-evenly', label: t('manualEdit.justifyEvenly') },
+  ];
+}
+
+function textAlignOptions(t: ManualEditTranslator): DropdownOption[] {
+  return [
+    { value: '', label: '–' },
+    { value: 'left', label: t('manualEdit.textAlignLeft') },
+    { value: 'center', label: t('manualEdit.textAlignCenter') },
+    { value: 'right', label: t('manualEdit.textAlignRight') },
   ];
 }
 

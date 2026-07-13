@@ -666,8 +666,8 @@
   --trust-border: rgba(255, 255, 255, 0.24);
   --trust-dot: #fff;
 
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
 }
 
 /* xAI OAuth paste-back: shown while a Sign in flow is in flight, in case
@@ -1038,7 +1038,8 @@
   inset: 0;
   z-index: 920;
   background: rgba(28, 27, 26, 0.42);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;

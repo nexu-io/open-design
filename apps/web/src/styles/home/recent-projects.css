@@ -29,6 +29,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Named size container so the grid below can drop columns based on the
+     strip's own width (sidebar state included), not the viewport. */
+  container: recent-projects / inline-size;
 }
 .recent-projects__head {
   display: flex;
@@ -87,13 +90,38 @@
   gap: var(--spacing-12);
 }
 .recent-projects__row--grid {
-  /* Fixed 5-across grid: each card is exactly 1/5 of the module width and the
-     row's right edge aligns with the header/filters. The card gap stays on the
-     base row rule; extra items wrap downward. */
+  /* Equal-width grid, 5-across at full width: each card is an exact fraction
+     of the module width so the row's right edge aligns with the header/
+     filters. Extra items wrap downward. Column count steps down with the
+     strip's container width (breakpoints ≈ 180px min card width + gaps) so
+     cards never get crushed when the window narrows. */
   grid-auto-flow: row;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-auto-rows: auto;
   align-items: stretch;
+  /* Cards have no base-card surface or padding, so the grid gap alone is the
+     visible spacing between cards: fixed at 24px. */
+  gap: var(--spacing-24);
+}
+@container recent-projects (max-width: 947px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 755px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 563px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 371px) {
+  .recent-projects__row--grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .recent-projects__row--grid .recent-projects__card {
   min-height: 0;
@@ -113,9 +141,14 @@
   flex-direction: column;
   gap: 0;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  /* Borderless card: the transparent 1px keeps the box size stable for the
+     selection / design-system rings that do draw a border. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Surfaceless: no fill, blur, or shadow — the thumbnail and meta sit
+     directly on the page wash. Selection / design-system states still draw
+     their rings via border/box-shadow. */
+  background: transparent;
   text-align: left;
   overflow: hidden;
   transition: border-color 120ms var(--ease-out);
@@ -146,9 +179,9 @@
   justify-content: flex-start;
   height: auto;
   min-height: 0;
-  padding-block-start: var(--spacing-8);
-  padding-block-end: var(--spacing-16);
-  padding-inline: var(--spacing-8);
+  /* No inner fill: the thumbnail spans the full card width and the 32px grid
+     gap is the only spacing between cards. */
+  padding: 0;
 }
 .recent-projects__card-main:hover:not(:disabled),
 .recent-projects__card-main:active:not(:disabled) {
@@ -157,11 +190,15 @@
   transform: none;
 }
 .recent-projects__card:hover {
-  border-color: var(--border-strong);
+  border-color: transparent;
 }
 .recent-projects__card.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-tint), var(--shadow-sm);
+  /* Selection ring floats 4px outside the card on all sides (outline follows
+     the border-radius), instead of hugging the card edge. Hairline light
+     gray, not the near-black accent — the check badge already carries the
+     selected state. */
+  outline: 1px solid var(--border-strong);
+  outline-offset: 4px;
 }
 .recent-projects__row.is-selecting .recent-projects__card-main {
   cursor: default;
@@ -191,6 +228,18 @@
    * collapsing at the narrow card width. */
   container-type: inline-size;
 }
+/* Hairline ring over the cover media so light covers don't melt into the
+   page. Drawn as an overlay (not a border) so layout and the media crop
+   stay untouched. */
+.recent-projects__card-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
 .recent-projects__card-thumb-html,
 .recent-projects__card-thumb-image,
 .recent-projects__card-thumb-video,
@@ -207,6 +256,21 @@
 }
 .recent-projects__thumb-media {
   object-fit: cover;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Subtle cover zoom on hover — the thumb container clips (overflow hidden),
+   so the media scales in place without touching layout. */
+.recent-projects__card-main:hover:not(:disabled) .recent-projects__thumb-media {
+  transform: scale(1.04);
+}
+.recent-projects__card-main:hover:not(:disabled) .recent-projects__thumb-iframe {
+  --thumb-zoom: 1.04;
+}
+.recent-projects__row.is-selecting .recent-projects__thumb-media {
+  transform: none;
+}
+.recent-projects__row.is-selecting .recent-projects__thumb-iframe {
+  --thumb-zoom: 1;
 }
 .recent-projects__card-thumb-logo .recent-projects__thumb-media {
   inset: 22%;
@@ -227,7 +291,11 @@
   width: 1280px;
   height: 720px;
   transform-origin: 0 0;
-  transform: scale(calc(100cqw / 1280px));
+  /* --thumb-zoom multiplies the fit scale so the hover zoom below composes
+     with (never replaces) the responsive fitting transform. */
+  --thumb-zoom: 1;
+  transform: scale(calc(100cqw / 1280px * var(--thumb-zoom)));
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .recent-projects__deck-frame,
 .recent-projects__deck-iframe,
@@ -265,7 +333,9 @@
 .recent-projects__card-meta {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-8);
+  /* Tight gap so the title and its owner·time/tag line read as one grouped
+     caption under the thumbnail (thumbnail→title spacing stays via margin-top). */
+  gap: var(--spacing-4);
   width: 100%;
   margin-top: var(--spacing-8);
   padding: 0;
@@ -721,6 +791,11 @@
 .recent-projects__row--list .recent-projects__card {
   min-height: 68px;
 }
+/* List rows pad their content 8px, so pulling the ring 4px inside the card
+   edge leaves exactly 4px between the stroke and the content. */
+.recent-projects__row--list .recent-projects__card.is-selected {
+  outline-offset: -4px;
+}
 .recent-projects__row--list .recent-projects__card-main {
   flex-direction: row;
   align-items: center;
@@ -896,12 +971,16 @@
 
 /* Shared badge on the thumbnail + creator avatar in the meta row. Private projects stay unbadged. */
 .recent-projects__card-badge {
-  /* Anchored flush to the thumb's top-left corner (the thumb is the positioned
-     ancestor), pill-shaped. */
+  /* 4px inside the thumb's top-left corner (the thumb is the positioned
+     ancestor), pill-shaped. Hidden at rest — it fades in on card hover so
+     covers stay clean. */
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 4px;
+  left: 4px;
   z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease-out);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -913,6 +992,10 @@
   color: color-mix(in srgb, var(--green) 72%, var(--text-strong));
   font-size: 12px;
   font-weight: 600;
+}
+.recent-projects__card:hover .recent-projects__card-badge,
+.recent-projects__card:focus-within .recent-projects__card-badge {
+  opacity: 1;
 }
 /* Title + inline shared badge. In list view the thumbnail is only 96px wide,
    so the overlay badge is dropped from the thumb and rendered inline here
@@ -933,6 +1016,8 @@
   left: auto;
   flex: 0 0 auto;
   height: 18px;
+  /* Inline (list view) badge is part of the name row — always visible. */
+  opacity: 1;
 }
 .recent-projects__card-owner {
   width: 16px;

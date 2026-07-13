@@ -27,6 +27,7 @@ import {
 } from '../runtime/design-toolbox';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { useLiquidGlass } from '../hooks/useLiquidGlass';
 import { projectRawUrl } from '../providers/registry';
 import { takeComposerSeedFor } from '../state/libraryHandoff';
 import type { TodoItem } from '../runtime/todos';
@@ -124,6 +125,27 @@ const DEFAULT_STARTER_KEYS: Array<{
 
 const IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT = 5;
 const IMPORTED_ARTIFACTS_REVEAL_COUNT = 5;
+const CHAT_RAIL_MIN_USER_MESSAGES = 2;
+// Above this the rail becomes a compact rolling wheel with faded extremes;
+// at or below it the full column shows with no mask occlusion.
+const CHAT_RAIL_WHEEL_MIN_USER_MESSAGES = 40;
+const CHAT_RAIL_HIGHLIGHT_MS = 1200;
+
+// Dock-style proximity effect: every dash rests at the same base length;
+// the hovered dash grows to the full module width and only its 4 neighbors
+// on each side are pulled along, easing off with distance.
+const CHAT_RAIL_DASH_BASE_PX = 8;
+const CHAT_RAIL_DASH_HOVER_PX = 16;
+const CHAT_RAIL_DASH_NEIGHBOR_SPAN = 4;
+
+function chatRailDashWidth(distance: number): number {
+  if (distance > CHAT_RAIL_DASH_NEIGHBOR_SPAN) return CHAT_RAIL_DASH_BASE_PX;
+  const falloff = 1 - distance / (CHAT_RAIL_DASH_NEIGHBOR_SPAN + 1);
+  return (
+    CHAT_RAIL_DASH_BASE_PX +
+    (CHAT_RAIL_DASH_HOVER_PX - CHAT_RAIL_DASH_BASE_PX) * falloff * falloff
+  );
+}
 
 const IMAGE_STARTERS: StarterPrompt[] = [
   {
@@ -626,6 +648,10 @@ interface Props {
   // renders these as slots rather than ChatPane re-deriving the data.
   onBack?: () => void;
   backLabel?: string;
+  /** Collapses the chat pane (workspace focus mode). When provided, the
+      header's leading button becomes this toggle instead of the back nav —
+      re-expanding happens from the workspace's own show-chat button. */
+  onCollapse?: () => void;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
   config?: AppConfig;
@@ -779,6 +805,7 @@ export function ChatPane({
   onShowToast,
   onBack,
   backLabel,
+  onCollapse,
   projectHeader,
   designSystemPicker,
   config,
@@ -847,6 +874,9 @@ export function ChatPane({
   const anchorPendingRef = useRef(false);
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
+  const chatRailHighlightTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [chatRailHighlightedMessageId, setChatRailHighlightedMessageId] =
+    useState<string | null>(null);
   const prevStreamingRef = useRef(streaming);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
   // AssistantMessage's interaction callbacks are re-created per render and
@@ -878,6 +908,36 @@ export function ChatPane({
   }, []);
   const handleNextStepPromptAction = useCallback((prompt: string) => {
     composerRef.current?.setDraft(prompt);
+  }, []);
+
+  const handleChatRailNavigate = useCallback(
+    (message: ChatMessage, messageIndex: number) => {
+      const log = logRef.current;
+      if (!log) return;
+      pinnedToBottomRef.current = false;
+      anchorActiveRef.current = false;
+      setScrolledFromBottom(true);
+      scrollChatLogToMessage(log, displayMessages, message.id, messageIndex);
+      setChatRailHighlightedMessageId(message.id);
+      if (chatRailHighlightTimerRef.current) {
+        clearTimeout(chatRailHighlightTimerRef.current);
+      }
+      chatRailHighlightTimerRef.current = setTimeout(() => {
+        setChatRailHighlightedMessageId((current) =>
+          current === message.id ? null : current,
+        );
+        chatRailHighlightTimerRef.current = undefined;
+      }, CHAT_RAIL_HIGHLIGHT_MS);
+    },
+    [displayMessages],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (chatRailHighlightTimerRef.current) {
+        clearTimeout(chatRailHighlightTimerRef.current);
+      }
+    };
   }, []);
   const handlePickSkill = useCallback((skillId: string) => {
     composerRef.current?.applyDesignToolboxSkill(skillId);
@@ -944,6 +1004,8 @@ export function ChatPane({
   const [conversationSearch, setConversationSearch] = useState('');
   const deferredConversationSearch = useDeferredValue(conversationSearch);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  // SDF liquid-glass refraction on the jump pill (frosted fallback via CSS).
+  const jumpBtnGlassRef = useLiquidGlass<HTMLButtonElement>({ strength: 0.2 });
   const [chatLogScrollable, setChatLogScrollable] = useState(false);
   const [chatLogScrolling, setChatLogScrolling] = useState(false);
   const [composerPortalTarget, setComposerPortalTarget] = useState<HTMLElement | null>(null);
@@ -1889,7 +1951,20 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-project-header">
-        {onBack ? (
+        {onCollapse ? (
+          <button
+            type="button"
+            className="chat-project-back od-tooltip"
+            onClick={onCollapse}
+            title="收起对话栏"
+            aria-label="收起对话栏"
+            data-tooltip="收起对话栏"
+            data-tooltip-placement="bottom"
+            data-testid="chat-collapse-toggle"
+          >
+            <Icon name="panel-left" size={16} />
+          </button>
+        ) : onBack ? (
           <button
             type="button"
             className="chat-project-back"
@@ -2023,6 +2098,14 @@ export function ChatPane({
       {tab === 'chat' ? (
         <>
           <div className="chat-log-wrap">
+            <ChatMessageRail
+              messages={displayMessages}
+              loading={loading}
+              logRef={logRef}
+              activeConversationKey={activeConversationId ?? 'no-conversation'}
+              onNavigate={handleChatRailNavigate}
+              t={t}
+            />
             <div
               className={[
                 'chat-log',
@@ -2136,6 +2219,7 @@ export function ChatPane({
                 t={t}
                 onOpenQuestions={onOpenQuestions}
                 scrollContainerRef={logRef}
+                highlightedUserMessageId={chatRailHighlightedMessageId}
               />
               {displayError ? (
                 <div className="run-error" data-tone={runErrorTone}>
@@ -2366,7 +2450,8 @@ export function ChatPane({
                 without this the button bleeds through it (#4123). */}
             <button
               type="button"
-              className={`chat-jump-btn${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
+              ref={jumpBtnGlassRef}
+              className={`chat-jump-btn od-glass-refract${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
               onClick={jumpToBottom}
               title={t('chat.scrollToLatest')}
               aria-hidden={!scrolledFromBottom || showConvList}
@@ -2459,6 +2544,256 @@ interface AssistantCallbacks {
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
 }
 
+type ChatRailMessage = {
+  message: ChatMessage;
+  messageIndex: number;
+  userIndex: number;
+};
+
+function ChatMessageRail({
+  messages,
+  loading,
+  logRef,
+  activeConversationKey,
+  onNavigate,
+  t,
+}: {
+  messages: ChatMessage[];
+  loading: boolean;
+  logRef: MutableRefObject<HTMLDivElement | null>;
+  activeConversationKey: string;
+  onNavigate: (message: ChatMessage, messageIndex: number) => void;
+  t: TranslateFn;
+}) {
+  const userMessages = useMemo<ChatRailMessage[]>(
+    () =>
+      messages.reduce<ChatRailMessage[]>((items, message, messageIndex) => {
+        if (message.role !== 'user') return items;
+        items.push({
+          message,
+          messageIndex,
+          userIndex: items.length,
+        });
+        return items;
+      }, []),
+    [messages],
+  );
+  const [preview, setPreview] = useState<{ id: string; y: number } | null>(null);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  // Picking a message retracts the module until the pointer leaves it, so the
+  // jump lands without the rail lingering over the destination.
+  const [retracted, setRetracted] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPreview(null);
+    setRetracted(false);
+    setActiveMessageId(userMessages[0]?.message.id ?? null);
+  }, [activeConversationKey, userMessages]);
+
+  // Roll the wheel: keep the active dot at the vertical middle of the track
+  // viewport, so the dot column scrolls under the top/bottom fade masks as
+  // the chat scrolls. The browser clamps the target at both extremes.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || !activeMessageId) return;
+    // While the pointer is on the rail the user may be wheel-scrolling it
+    // manually; auto-follow would yank their position, so it yields until
+    // the pointer leaves.
+    if (navRef.current?.matches(':hover')) return;
+    const index = userMessages.findIndex(
+      (item) => item.message.id === activeMessageId,
+    );
+    if (index < 0) return;
+    // Marker pitch is 11px (8px marker + 3px gap); +4 targets the dot center.
+    const top = index * 11 + 4 - track.clientHeight / 2;
+    if (typeof track.scrollTo === 'function') {
+      track.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      track.scrollTop = top;
+    }
+  }, [activeMessageId, userMessages]);
+
+  // The track scrolls, so the preview anchor is measured from the marker's
+  // on-screen position at hover time instead of derived from its index.
+  const showPreview = (id: string, marker: HTMLElement) => {
+    if (retracted) return;
+    const nav = navRef.current;
+    const y = nav
+      ? marker.getBoundingClientRect().top - nav.getBoundingClientRect().top + 4
+      : 0;
+    setPreview({ id, y });
+  };
+
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log || userMessages.length < CHAT_RAIL_MIN_USER_MESSAGES) return;
+    let frame = 0;
+    const updateActiveMessage = () => {
+      frame = 0;
+      const visible = userMessages
+        .map((item) => {
+          const node = findChatMessageElement(log, item.message.id);
+          if (!node) return null;
+          return {
+            id: item.message.id,
+            distance: Math.abs(node.offsetTop - log.scrollTop),
+          };
+        })
+        .filter((item): item is { id: string; distance: number } => item != null)
+        .sort((a, b) => a.distance - b.distance)[0];
+
+      if (visible) {
+        setActiveMessageId(visible.id);
+        return;
+      }
+
+      const maxScrollTop = Math.max(1, log.scrollHeight - log.clientHeight);
+      const index = Math.round(
+        (log.scrollTop / maxScrollTop) * (userMessages.length - 1),
+      );
+      const boundedIndex = Math.min(
+        userMessages.length - 1,
+        Math.max(0, index),
+      );
+      setActiveMessageId(userMessages[boundedIndex]?.message.id ?? null);
+    };
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveMessage);
+    };
+    scheduleUpdate();
+    log.addEventListener('scroll', scheduleUpdate, { passive: true });
+    return () => {
+      log.removeEventListener('scroll', scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [logRef, userMessages]);
+
+  if (loading || userMessages.length < CHAT_RAIL_MIN_USER_MESSAGES) {
+    return null;
+  }
+
+  const previewItem =
+    userMessages.find((item) => item.message.id === preview?.id) ?? null;
+  const hoverIndex =
+    !retracted && preview
+      ? userMessages.findIndex((item) => item.message.id === preview.id)
+      : -1;
+
+  return (
+    <nav
+      ref={navRef}
+      className={`chat-message-rail${retracted ? ' is-retracted' : ''}`}
+      aria-label={t('chat.messageRail.aria')}
+      onMouseLeave={() => {
+        setPreview(null);
+        setRetracted(false);
+      }}
+      onWheel={(ev) => {
+        // The nav is a full-height hit zone; wheeling over its empty parts
+        // (outside the track, which scrolls natively) still rolls the wheel.
+        const track = trackRef.current;
+        if (!track || track.contains(ev.target as Node)) return;
+        track.scrollTop += ev.deltaY;
+      }}
+      data-wheel={userMessages.length > CHAT_RAIL_WHEEL_MIN_USER_MESSAGES ? 'true' : 'false'}
+      data-testid="chat-message-rail"
+    >
+      <div className="chat-message-rail__track" ref={trackRef}>
+        {userMessages.map((item) => {
+          const active = item.message.id === activeMessageId;
+          const previewing = item.message.id === preview?.id;
+          return (
+            <button
+              key={item.message.id}
+              type="button"
+              className={[
+                'chat-message-rail__marker',
+                active ? 'is-active' : '',
+                previewing ? 'is-previewing' : '',
+              ].filter(Boolean).join(' ')}
+              aria-label={t('chat.messageRail.jumpAria', {
+                index: item.userIndex + 1,
+              })}
+              style={{
+                '--chat-rail-dash': `${
+                  hoverIndex < 0
+                    ? CHAT_RAIL_DASH_BASE_PX
+                    : chatRailDashWidth(Math.abs(item.userIndex - hoverIndex))
+                }px`,
+              } as CSSProperties}
+              onMouseEnter={(ev) => showPreview(item.message.id, ev.currentTarget)}
+              onFocus={(ev) => showPreview(item.message.id, ev.currentTarget)}
+              onBlur={() => setPreview(null)}
+              onClick={() => {
+                setPreview(null);
+                setRetracted(true);
+                onNavigate(item.message, item.messageIndex);
+              }}
+            >
+              <span aria-hidden />
+            </button>
+          );
+        })}
+      </div>
+      {/* Sibling of the track, not a child: the track fades its extremes with
+          a mask, which must not wash out the hover preview card. */}
+      {previewItem && preview ? (
+        <div
+          className="chat-message-rail__preview"
+          style={{
+            '--chat-message-rail-y': `${preview.y}px`,
+          } as CSSProperties}
+          role="tooltip"
+        >
+          <p>
+            {previewItem.message.content.trim() || t('chat.messageRail.empty')}
+          </p>
+        </div>
+      ) : null}
+    </nav>
+  );
+}
+
+function findChatMessageElement(
+  log: HTMLElement,
+  messageId: string,
+): HTMLElement | null {
+  const nodes = log.querySelectorAll<HTMLElement>('[data-chat-message-id]');
+  for (const node of nodes) {
+    if (node.dataset.chatMessageId === messageId) return node;
+  }
+  return null;
+}
+
+function scrollChatLogToMessage(
+  log: HTMLElement,
+  messages: ChatMessage[],
+  messageId: string,
+  messageIndex: number,
+) {
+  const target = findChatMessageElement(log, messageId);
+  if (target) {
+    target.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  const maxScrollTop = Math.max(0, log.scrollHeight - log.clientHeight);
+  const ratio =
+    messages.length <= 1
+      ? 0
+      : Math.min(1, Math.max(0, messageIndex / (messages.length - 1)));
+  log.scrollTo({ top: maxScrollTop * ratio, behavior: 'smooth' });
+  window.requestAnimationFrame(() => {
+    findChatMessageElement(log, messageId)?.scrollIntoView?.({
+      block: 'center',
+      behavior: 'smooth',
+    });
+  });
+}
+
 type ChatRenderItem = {
   kind: 'message';
   key: string;
@@ -2530,6 +2865,7 @@ function ChatRows({
   t,
   onOpenQuestions,
   scrollContainerRef,
+  highlightedUserMessageId,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
@@ -2577,6 +2913,7 @@ function ChatRows({
   t: TranslateFn;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
+  highlightedUserMessageId?: string | null;
 }) {
   const conversationTodoInput = useMemo(
     () => latestTodoWriteInputForPinnedCard(messages),
@@ -2632,6 +2969,7 @@ function ChatRows({
               ? activeDesignSystem ?? null
               : null
           }
+          highlighted={highlightedUserMessageId === m.id}
         />
       );
     }
@@ -3560,6 +3898,7 @@ function UserMessageImpl({
   t,
   activePluginSnapshot,
   activeDesignSystem,
+  highlighted,
 }: {
   message: ChatMessage;
   projectId: string | null;
@@ -3570,6 +3909,7 @@ function UserMessageImpl({
   t: TranslateFn;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   activeDesignSystem?: DesignSystemSummary | null;
+  highlighted?: boolean;
 }) {
   const attachments = sortChatAttachmentsForDisplay(message.attachments ?? []);
   const commentAttachments = message.commentAttachments ?? [];
@@ -3605,7 +3945,10 @@ function UserMessageImpl({
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
 
   return (
-    <div className="msg user">
+    <div
+      className={`msg user${highlighted ? ' is-chat-rail-highlighted' : ''}`}
+      data-chat-message-id={message.id}
+    >
       <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">

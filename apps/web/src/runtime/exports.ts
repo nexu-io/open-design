@@ -366,6 +366,7 @@ export type PreviewSnapshotResult =
 export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
   timeout = 8000,
+  opts?: { full?: boolean },
 ): Promise<PreviewSnapshotResult> {
   const win = iframe.contentWindow;
   if (!win) return Promise.resolve({ ok: false, reason: 'loading' });
@@ -391,7 +392,10 @@ export function requestPreviewSnapshotResult(
     }
     window.addEventListener('message', onMsg);
     try {
-      win.postMessage({ type: 'od:snapshot', id }, '*');
+      // The srcDoc snapshot bridge honors `full` (whole-document raster); the
+      // daemon's URL-load bridge ignores it and returns the viewport — callers
+      // that crop must reconcile via the od:module-rect doc/viewport reply.
+      win.postMessage({ type: 'od:snapshot', id, full: !!opts?.full }, '*');
     } catch {
       done = true;
       window.removeEventListener('message', onMsg);

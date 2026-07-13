@@ -31,34 +31,23 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('Design Files preview list styles', () => {
-  it('keeps preview-mode rows readable instead of collapsing the name cell', () => {
-    const previewNameCell = cssDeclarations(
-      routinesCss,
-      '.app .df-panel:not(.no-preview) .df-cell-name',
-    );
+  it('keeps list rows readable instead of collapsing the name cell', () => {
+    // The right-side preview pane was removed (page cards ARE the preview),
+    // so the panel is single-column: no :not(.no-preview) split rules exist.
+    expect(routinesCss).not.toContain(':not(.no-preview)');
     const rowSub = cssDeclarations(designFilesCss, '.df-row-sub');
     const rowSubPart = cssDeclarations(designFilesCss, '.df-row-sub > span');
 
-    expect(ruleValue(previewNameCell, 'max-width')).toBe('none');
     expect(ruleValue(rowSub, 'flex-wrap')).toBe('nowrap');
     expect(ruleValue(rowSub, 'overflow')).toBe('hidden');
     expect(ruleValue(rowSubPart, 'text-overflow')).toBe('ellipsis');
   });
 
-  it('keeps the preview split from squeezing the file list toolbar', () => {
-    const previewGrid = cssDeclarations(routinesCss, '.app .df-panel:not(.no-preview)');
+  it('keeps the file list toolbar on a single row', () => {
     const topbar = cssDeclarations(designFilesCss, '.df-topbar');
     const actions = cssDeclarations(designFilesCss, '.df-actions');
     const topbarLeft = cssDeclarations(designFilesCss, '.df-topbar-left');
 
-    const cols = ruleValue(previewGrid, 'grid-template-columns');
-    // The file list keeps a usable minimum so its toolbar + names stay
-    // clickable on a narrow split…
-    expect(cols).toContain('minmax(280px, 1fr)');
-    // …while the preview pane YIELDS (minmax(0, …)) instead of pinning a
-    // rigid track, so the two columns never sum past the panel width and
-    // push the toolbar / preview off-screen.
-    expect(cols).toMatch(/minmax\(0,\s*\d+px\)/);
     // The toolbar stays on a single row: it does NOT wrap; instead the
     // breadcrumb (the growable/shrinkable side) yields while the action
     // cluster holds its place on the right.
@@ -66,6 +55,14 @@ describe('Design Files preview list styles', () => {
     expect(ruleValue(actions, 'flex-wrap')).toBe('nowrap');
     expect(ruleValue(actions, 'flex-shrink')).toBe('0');
     expect(ruleValue(topbarLeft, 'min-width')).toBe('0');
+  });
+
+  it('aligns the category tabs with the project heading and file content', () => {
+    const tabs = cssDeclarations(designFilesCss, '.df-tabs');
+
+    // The scrolling body already supplies the shared 20px page inset, so the
+    // sticky tab bar must not add a second horizontal offset.
+    expect(ruleValue(tabs, 'padding')).toBe('8px 0 10px');
   });
 
   it('collapses toolbar actions to icons-only on a narrow list column', () => {

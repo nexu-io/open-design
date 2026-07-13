@@ -439,7 +439,8 @@
   position: absolute;
   inset: 0;
   background: rgba(16, 16, 16, 0.42);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .team-dashboard__recharge-panel {

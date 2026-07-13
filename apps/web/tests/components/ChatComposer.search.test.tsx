@@ -105,7 +105,9 @@ describe('ChatComposer /search command', () => {
       target: { files: [new File(['pasted'], 'pasted.png', { type: 'image/png' })] },
     });
 
-    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('pasted.png'));
+    // Image chips are thumbnail-only; the name is exposed through the
+    // preview trigger's aria-label rather than chip text.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Preview pasted.png' })).toBeTruthy());
     fireEvent.click(screen.getByTestId('chat-send'));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
@@ -349,7 +351,7 @@ describe('ChatComposer /search command', () => {
 
     await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(composerText()).toContain('review this before sending'));
-    expect(screen.getByText('drawing.png')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Preview drawing.png' })).toBeTruthy();
     expect(screen.queryByText('Visual mark')).toBeNull();
     expect(onSend).not.toHaveBeenCalled();
 
@@ -504,7 +506,11 @@ describe('ChatComposer /search command', () => {
     expect(chip?.contains(previewTrigger)).toBe(true);
     expect(chip?.contains(screen.getByRole('button', { name: `Remove ${longName}` }))).toBe(true);
     expect(previewTrigger.querySelector('img')).toBeTruthy();
-    expect(previewTrigger.querySelector('.staged-name')?.textContent).toBe(longName);
+    // Image chips are thumbnail-only (mirroring the home composer); the
+    // filename lives in the tooltip instead of chip text.
+    expect(previewTrigger.querySelector('.staged-name')).toBeNull();
+    expect(previewTrigger.getAttribute('title')).toBe(longName);
+    expect(chip?.classList.contains('staged-chip--image-file')).toBe(true);
 
     fireEvent.click(previewTrigger);
 

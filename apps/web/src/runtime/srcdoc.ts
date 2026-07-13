@@ -575,6 +575,110 @@ function injectSnapshotBridge(doc: string): string {
       window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
     });
   });
+  // --- Module capture (double-Command -> screenshot of the pointed module) ---
+  // The host asks "which module is the user pointing at" via od:module-rect;
+  // it then captures a snapshot and crops to the returned rect on its side.
+  // Works without comment/inspect mode: the pointer is tracked passively so
+  // plain browsing already knows the hovered module. Sectional containers win
+  // over inner annotated nodes so the reply matches what a designer calls a
+  // "module" (hero, features, footer...), not the button under the cursor.
+  // Keep in sync with the daemon's URL-load snapshot bridge
+  // (apps/daemon/src/routes/project/index.ts URL_PREVIEW_SNAPSHOT_BRIDGE).
+  var MODULE_SECTIONAL = { SECTION: 1, ARTICLE: 1, HEADER: 1, FOOTER: 1, NAV: 1, ASIDE: 1 };
+  var modulePointer = null;
+  document.addEventListener('mousemove', function(ev){
+    modulePointer = { x: ev.clientX, y: ev.clientY };
+  }, { passive: true, capture: true });
+  document.documentElement.addEventListener('mouseleave', function(){ modulePointer = null; });
+  function moduleAnnotated(el){
+    return !!(el && el.nodeType === 1 && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')));
+  }
+  function moduleVisible(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    } catch (_) {}
+    var rect = el.getBoundingClientRect();
+    return rect.width > 1 && rect.height > 1;
+  }
+  function moduleFromElement(start){
+    var annotated = [];
+    var node = start;
+    while (node && node !== document.documentElement && node !== document.body) {
+      if (moduleAnnotated(node) && moduleVisible(node)) {
+        if (MODULE_SECTIONAL[node.tagName]) return node;
+        annotated.push(node);
+      }
+      node = node.parentElement;
+    }
+    // No sectional ancestor: the outermost annotated block, so a tag on an
+    // inner card/button still resolves to its top-level module wrapper.
+    return annotated.length ? annotated[annotated.length - 1] : null;
+  }
+  function resolveModuleTarget(){
+    var w = Math.max(1, window.innerWidth || 0);
+    var h = Math.max(1, window.innerHeight || 0);
+    var points = [];
+    if (modulePointer) points.push(modulePointer);
+    // Pointer outside the frame (or never moved): fall back to whatever
+    // module dominates the current view.
+    points.push({ x: w / 2, y: h / 2 }, { x: w / 2, y: h / 3 }, { x: w / 2, y: (h * 2) / 3 });
+    for (var i = 0; i < points.length; i++) {
+      var hit = document.elementFromPoint(points[i].x, points[i].y);
+      var target = hit ? moduleFromElement(hit) : null;
+      if (target) return target;
+    }
+    return null;
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:module-rect' || !data.id) return;
+    var doc = document.documentElement;
+    var payload = {
+      type: 'od:module-rect:result',
+      id: String(data.id),
+      dpr: window.devicePixelRatio || 1,
+      viewport: {
+        w: Math.max(1, window.innerWidth || doc.clientWidth || 1),
+        h: Math.max(1, window.innerHeight || doc.clientHeight || 1)
+      },
+      doc: {
+        w: Math.max(doc.scrollWidth || 0, document.body ? document.body.scrollWidth : 0, window.innerWidth || 0),
+        h: Math.max(doc.scrollHeight || 0, document.body ? document.body.scrollHeight : 0, window.innerHeight || 0)
+      },
+      scroll: scrollOffset()
+    };
+    var el = resolveModuleTarget();
+    if (el) {
+      var rect = el.getBoundingClientRect();
+      var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+      var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+      payload.elementId = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label') || '';
+      payload.label = tag + cls;
+      payload.rect = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    }
+    window.parent.postMessage(payload, '*');
+  });
+  // Double-Command detection must also live inside the frame: once the user
+  // clicks into the preview the iframe owns keyboard focus and the host's
+  // window-level listener never sees the Meta keys.
+  var moduleMeta = { left: false, right: false, handled: false };
+  function resetModuleMeta(){ moduleMeta.left = false; moduleMeta.right = false; moduleMeta.handled = false; }
+  window.addEventListener('keydown', function(ev){
+    if (ev.code !== 'MetaLeft' && ev.code !== 'MetaRight') return;
+    if (ev.code === 'MetaLeft') moduleMeta.left = true;
+    if (ev.code === 'MetaRight') moduleMeta.right = true;
+    if (!moduleMeta.left || !moduleMeta.right || moduleMeta.handled) return;
+    moduleMeta.handled = true;
+    ev.preventDefault();
+    try { window.parent.postMessage({ type: 'od:module-capture-hotkey' }, '*'); } catch (_) {}
+  }, true);
+  window.addEventListener('keyup', function(ev){
+    if (ev.code === 'MetaLeft') moduleMeta.left = false;
+    if (ev.code === 'MetaRight') moduleMeta.right = false;
+    if (!moduleMeta.left || !moduleMeta.right) moduleMeta.handled = false;
+  }, true);
+  window.addEventListener('blur', resetModuleMeta);
 })();</script>`;
   return injectBeforeBodyEnd(doc, script);
 }

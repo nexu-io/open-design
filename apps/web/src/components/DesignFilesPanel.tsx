@@ -12,13 +12,11 @@ import {
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
-import { isVisualStabilityMode } from '../utils/visualStability';
-import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
+import { RemixIcon } from './RemixIcon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
-import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -38,9 +36,6 @@ interface Props {
   // True while the host is reindexing a freshly replaced working dir. Drives
   // a loading overlay so the panel doesn't sit silently on the stale tree.
   reloading?: boolean;
-  // True while the chat agent is generating. The footer swaps its idle
-  // drop/upload hint for the typewriter "tip" line while a run is in flight.
-  running?: boolean;
   files: ProjectFile[];
   // Persisted folders from `/api/projects/:id/folders`, including empty ones
   // that no file lives under. Without these, a folder only appears once a file
@@ -68,8 +63,6 @@ interface Props {
   onCurrentDirChange?: (dir: string) => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
-  preferredPreviewFile?: string | null;
-  autoPreviewDesignArtifacts?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -161,121 +154,18 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
-// Useful-info tips that rotate one at a time in the panel footer, ordered as
-// a loose journey: file basics → feeding context → generating → iterating →
-// exporting/sharing → community. A tip with a `url` renders its typed line as
-// a link to that destination.
-const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
-  { key: 'designFiles.usefulInfoTip' },
-  { key: 'designFiles.usefulInfoTip2' },
-  { key: 'designFiles.usefulInfoTip9' },
-  { key: 'designFiles.usefulInfoTip10' },
-  { key: 'designFiles.usefulInfoTip4' },
-  { key: 'designFiles.usefulInfoTip11' },
-  { key: 'designFiles.usefulInfoTip12' },
-  { key: 'designFiles.usefulInfoTip13' },
-  { key: 'designFiles.usefulInfoTip14' },
-  { key: 'designFiles.usefulInfoTip15' },
-  { key: 'designFiles.usefulInfoTip5' },
-  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/9ptkbbqRu' },
-  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
-  { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/OpenDesignHQ' },
-];
-const TIP_TYPE_MS = 32; // per-character typing speed
-const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
-
-// Footer "tip" line that types out one tip at a time (typewriter), holds, then
-// advances to the next — mirroring Claude Design's empty-state hint. Under
-// prefers-reduced-motion the full tip is shown immediately and just cycles.
-function RotatingTip() {
-  const t = useT();
-  const [index, setIndex] = useState(0);
-  const [typed, setTyped] = useState('');
-  // Resolve tips each render but read them through a ref so the typing effect
-  // depends only on `index` — depending on the (re-created) array would reset
-  // the typewriter on every render and never advance.
-  const tipsRef = useRef<string[]>([]);
-  tipsRef.current = USEFUL_TIPS.map(({ key }) => t(key));
-
-  useEffect(() => {
-    const tips = tipsRef.current;
-    const full = tips[index] ?? '';
-    if (isVisualStabilityMode()) {
-      setIndex(0);
-      setTyped(tips[0] ?? '');
-      return;
-    }
-    if (prefersReducedMotion()) {
-      setTyped(full);
-      if (tips.length < 2) return;
-      const hold = window.setTimeout(
-        () => setIndex((i) => (i + 1) % tips.length),
-        TIP_HOLD_MS,
-      );
-      return () => window.clearTimeout(hold);
-    }
-    setTyped('');
-    let i = 0;
-    let holdTimer = 0;
-    const typeTimer = window.setInterval(() => {
-      i += 1;
-      setTyped(full.slice(0, i));
-      if (i >= full.length) {
-        window.clearInterval(typeTimer);
-        if (tips.length < 2) return;
-        holdTimer = window.setTimeout(
-          () => setIndex((p) => (p + 1) % tips.length),
-          TIP_HOLD_MS,
-        );
-      }
-    }, TIP_TYPE_MS);
-    return () => {
-      window.clearInterval(typeTimer);
-      window.clearTimeout(holdTimer);
-    };
-  }, [index]);
-
-  return (
-    <div className="df-useful-info">
-      <div className="df-useful-info-head">
-        <Icon name="sparkles" size={12} />
-        <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
-      </div>
-      <span className="df-useful-info-tip">
-        {USEFUL_TIPS[index]?.url ? (
-          <a className="df-tip-link" href={USEFUL_TIPS[index].url} target="_blank" rel="noreferrer">
-            {typed}
-          </a>
-        ) : (
-          typed
-        )}
-        <span className="df-tip-caret" aria-hidden />
-      </span>
-    </div>
-  );
-}
-
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: a single-line toolbar (up / refresh
  * / breadcrumbs + actions), semantic sections (Folders, Stylesheets, Scripts,
- * Documents, Images …), hover-revealed row checkbox + menu, a right-side
- * preview pane, and a static "useful info" footer. Triggered as a sticky
- * first tab in FileWorkspace.
+ * Documents, Images …), and hover-revealed row checkbox + menu. HTML pages
+ * render as a thumbnail-card grid (live preview + meta) instead of rows.
+ * Triggered as a sticky first tab in FileWorkspace.
  */
 export function DesignFilesPanel({
   projectId,
   rootDirName,
   reloading,
-  running = false,
   files,
   folders,
   liveArtifacts,
@@ -293,8 +183,6 @@ export function DesignFilesPanel({
   onSelectFromLibrary,
   uploadError = null,
   onClearUploadError,
-  preferredPreviewFile = null,
-  autoPreviewDesignArtifacts = false,
   onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -312,10 +200,7 @@ export function DesignFilesPanel({
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
-  const [preview, setPreview] = useState<string | null>(null);
-  const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
@@ -390,11 +275,16 @@ export function DesignFilesPanel({
     );
   }, [filesAtCurrentDir]);
 
-  // Reset selection and renaming state when the user navigates into or out of
-  // a directory.
+  // Active category tab (null = default). Declared before the reset effect
+  // below that clears it on directory change.
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+
+  // Reset selection, renaming, and the picked tab when the user navigates
+  // into or out of a directory — each level has its own set of groups.
   useEffect(() => {
     setSelected(new Set());
     setRenaming(null);
+    setActiveTab(null);
   }, [currentDir]);
 
   // Navigate up to the nearest ancestor that still exists when the current
@@ -421,6 +311,47 @@ export function DesignFilesPanel({
 
   const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
 
+  // Category tabs: the panel shows one group at a time behind a tab bar
+  // instead of stacking every section into one long list. A tab exists only
+  // when its group has content at the current level, so an empty category
+  // simply has no tab.
+  const availableTabs = useMemo(() => {
+    const tabs: Array<{ id: string; label: string; count: number }> = [];
+    if (liveArtifacts.length > 0) {
+      tabs.push({
+        id: 'live-artifacts',
+        label: t('designFiles.sectionLiveArtifacts'),
+        count: liveArtifacts.length,
+      });
+    }
+    if (pluginFolders.length > 0) {
+      tabs.push({ id: 'plugin-folders', label: 'Plugin folders', count: pluginFolders.length });
+    }
+    if (dirsAtCurrentDir.length > 0) {
+      tabs.push({
+        id: 'folders',
+        label: t('designFiles.sectionFolders'),
+        count: dirsAtCurrentDir.length,
+      });
+    }
+    for (const [category, sectionFiles] of sections) {
+      tabs.push({
+        id: `cat:${category}`,
+        label: sectionLabel(category, t),
+        count: sectionFiles.length,
+      });
+    }
+    return tabs;
+  }, [liveArtifacts, pluginFolders, dirsAtCurrentDir, sections, t]);
+  // Pages are the primary artifact — land on them by default. Derived (not
+  // synced through an effect) so a picked tab that empties out (last file
+  // deleted, directory change) falls back instantly without a stale frame.
+  const resolvedTab = useMemo(() => {
+    if (activeTab && availableTabs.some((tab) => tab.id === activeTab)) return activeTab;
+    const pages = availableTabs.find((tab) => tab.id === 'cat:html');
+    return (pages ?? availableTabs[0])?.id ?? null;
+  }, [activeTab, availableTabs]);
+
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
   // Cross-project leaks are handled by the parent remounting this
@@ -440,32 +371,6 @@ export function DesignFilesPanel({
       return changed ? next : prev;
     });
   }, [files]);
-
-  const previewFile = useMemo(
-    () => files.find((f) => f.name === preview) ?? null,
-    [preview, files],
-  );
-
-  const initialPreviewFile = useMemo(
-    () =>
-      autoPreviewDesignArtifacts
-        ? selectInitialDesignPreviewFile(files, preferredPreviewFile)
-        : null,
-    [autoPreviewDesignArtifacts, files, preferredPreviewFile],
-  );
-
-  useEffect(() => {
-    if (autoPreviewAppliedRef.current) return;
-    if (!initialPreviewFile) return;
-    autoPreviewAppliedRef.current = true;
-    setPreview(initialPreviewFile.name);
-  }, [initialPreviewFile]);
-
-  useEffect(() => {
-    if (!preview) return;
-    if (files.some((f) => f.name === preview)) return;
-    setPreview(null);
-  }, [files, preview]);
 
   useEffect(() => {
     if (!viewerOnly) return;
@@ -537,7 +442,6 @@ export function DesignFilesPanel({
   function startRename(name: string) {
     if (viewerOnly) return;
     setMenuPos(null);
-    setPreview(name);
     const draft = currentDir === '' ? name : name.slice(currentDir.length + 1);
     setRenaming({ name, draft, saving: false });
   }
@@ -557,7 +461,6 @@ export function DesignFilesPanel({
     try {
       const renamed = await onRenameFile(name, nextName);
       if (!renamed) throw new Error('Rename failed');
-      setPreview((curr) => (curr === name ? renamed.name : curr));
       setSelected((prev) => {
         if (!prev.has(name)) return prev;
         const next = new Set(prev);
@@ -590,7 +493,6 @@ export function DesignFilesPanel({
   }
 
   function renderFileRow(f: ProjectFile, category: FileCategory) {
-    const active = preview === f.name;
     const isSelected = selected.has(f.name);
     const isHovered = hover === f.name;
     const renameState = renaming?.name === f.name ? renaming : null;
@@ -598,7 +500,7 @@ export function DesignFilesPanel({
       <div
         key={f.name}
         data-testid={`design-file-row-${f.name}`}
-        className={`df-row df-file-row ${active ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
+        className={`df-row df-file-row ${isSelected ? 'selected' : ''}`}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
       >
@@ -622,14 +524,15 @@ export function DesignFilesPanel({
             }
           }}
         >
-          {viewerOnly ? '' : isSelected ? '☑' : '☐'}
+          {viewerOnly ? null : (
+            <RemixIcon name={isSelected ? 'checkbox-line' : 'checkbox-blank-line'} size={14} />
+          )}
         </span>
         <span
           className="df-row-icon df-row-openable"
           data-kind={category}
           aria-hidden
-          onClick={() => setPreview(f.name)}
-          onDoubleClick={() => onOpenFile(f.name)}
+          onClick={() => onOpenFile(f.name)}
         >
           {categoryGlyph(category)}
         </span>
@@ -663,20 +566,11 @@ export function DesignFilesPanel({
             <button
               type="button"
               className="df-row-name-btn"
-              onClick={() => setPreview(f.name)}
-              onDoubleClick={() => onOpenFile(f.name)}
+              onClick={() => onOpenFile(f.name)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  const now = Date.now();
-                  const last = lastKeyPress.current.get(f.name) ?? 0;
-                  if (now - last < 300) {
-                    lastKeyPress.current.delete(f.name);
-                    onOpenFile(f.name);
-                  } else {
-                    lastKeyPress.current.set(f.name, now);
-                    setPreview(f.name);
-                  }
+                  onOpenFile(f.name);
                 }
               }}
             >
@@ -694,15 +588,14 @@ export function DesignFilesPanel({
         </div>
         <span
           className="df-row-time df-row-openable"
-          onClick={() => setPreview(f.name)}
-          onDoubleClick={() => onOpenFile(f.name)}
+          onClick={() => onOpenFile(f.name)}
         >
           {relativeTime(f.mtime, t)}
         </span>
         <span
           data-testid={`design-file-menu-${f.name}`}
           className={`df-row-menu ${viewerOnly ? 'df-row-menu-disabled' : ''}`}
-          style={isHovered || active ? { opacity: 1 } : undefined}
+          style={isHovered ? { opacity: 1 } : undefined}
           role={viewerOnly ? undefined : 'button'}
           tabIndex={viewerOnly ? -1 : 0}
           aria-hidden={viewerOnly ? true : undefined}
@@ -723,6 +616,129 @@ export function DesignFilesPanel({
         >
           ⋯
         </span>
+      </div>
+    );
+  }
+
+  // HTML pages render as thumbnail cards (live page preview + meta strip)
+  // instead of compact list rows — the grid IS the preview surface, so the
+  // panel has no separate detail pane. Clicking anywhere on the card opens
+  // the page in a workspace tab.
+  function renderPageCard(f: ProjectFile, category: FileCategory) {
+    const isSelected = selected.has(f.name);
+    const renameState = renaming?.name === f.name ? renaming : null;
+    const displayName = currentDir === '' ? f.name : f.name.slice(currentDir.length + 1);
+    const openLabel = `${t('designFiles.previewOpen')} ${f.name}`;
+    return (
+      <div
+        key={f.name}
+        data-testid={`design-file-row-${f.name}`}
+        className={`df-card ${isSelected ? 'selected' : ''}`}
+      >
+        <span
+          className="df-card-check"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (viewerOnly) return;
+            toggleSelect(f.name);
+          }}
+          role={viewerOnly ? undefined : 'checkbox'}
+          aria-checked={viewerOnly ? undefined : isSelected}
+          aria-disabled={viewerOnly ? 'true' : undefined}
+          tabIndex={viewerOnly ? -1 : 0}
+          onKeyDown={(e) => {
+            if (viewerOnly) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleSelect(f.name);
+            }
+          }}
+        >
+          {viewerOnly ? null : (
+            <RemixIcon name={isSelected ? 'checkbox-line' : 'checkbox-blank-line'} size={14} />
+          )}
+        </span>
+        <button
+          type="button"
+          className="df-card-thumb"
+          onClick={() => onOpenFile(f.name)}
+          title={openLabel}
+          aria-label={openLabel}
+        >
+          <HtmlPreviewThumbnail projectId={projectId} file={f} />
+        </button>
+        <div className="df-card-meta">
+          <div className="df-card-meta-text">
+            {renameState ? (
+              <input
+                autoFocus
+                className="df-rename-input"
+                value={renameState.draft}
+                disabled={renameState.saving}
+                onChange={(e) => setRenaming({ ...renameState, draft: e.target.value })}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  if (e.currentTarget.dataset.skipRenameCommit === '1') return;
+                  void commitRename(f.name, renameState.draft);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.dataset.skipRenameCommit = '1';
+                    void commitRename(f.name, renameState.draft);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.currentTarget.dataset.skipRenameCommit = '1';
+                    setRenaming(null);
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className={`df-card-name-btn ${viewerOnly ? '' : 'is-renamable'}`}
+                title={viewerOnly ? openLabel : t('common.rename')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (viewerOnly) {
+                    onOpenFile(f.name);
+                    return;
+                  }
+                  startRename(f.name);
+                }}
+              >
+                <span className="df-card-name" title={displayName}>{displayName}</span>
+              </button>
+            )}
+            <span className="df-card-sub">
+              {categoryLabel(category, t)} · {relativeTime(f.mtime, t)}
+            </span>
+          </div>
+          <span
+            data-testid={`design-file-menu-${f.name}`}
+            className={`df-row-menu ${viewerOnly ? 'df-row-menu-disabled' : ''}`}
+            role={viewerOnly ? undefined : 'button'}
+            tabIndex={viewerOnly ? -1 : 0}
+            aria-hidden={viewerOnly ? true : undefined}
+            aria-label={t('designFiles.rowMenu')}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (viewerOnly) return;
+              openMenuFor(f.name, e.target as HTMLElement);
+            }}
+            onKeyDown={(e) => {
+              if (viewerOnly) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                openMenuFor(f.name, e.currentTarget as HTMLElement);
+              }
+            }}
+          >
+            ⋯
+          </span>
+        </div>
       </div>
     );
   }
@@ -911,7 +927,7 @@ export function DesignFilesPanel({
   const hasSelection = !viewerOnly && selected.size > 0;
 
   return (
-    <div className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}>
+    <div className={`df-panel ${hasSelection ? 'has-selection' : ''}`}>
       {reloading ? (
         <div className="df-reloading-overlay" data-testid="design-files-reloading">
           <span className="loading-spinner">
@@ -950,7 +966,7 @@ export function DesignFilesPanel({
           }}
           onDrop={handleDrop}
         >
-          {visibleUploadError && !preview ? (
+          {visibleUploadError ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
               <span>{visibleUploadError}</span>
               {onClearUploadError || dropReadError ? (
@@ -1058,9 +1074,26 @@ export function DesignFilesPanel({
             </div>
           ) : (
             <>
-              {liveArtifacts.length > 0 ? (
+              {availableTabs.length > 0 ? (
+                <div className="df-tabs" role="tablist" data-testid="design-files-tabs">
+                  {availableTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={resolvedTab === tab.id}
+                      className={`df-tab ${resolvedTab === tab.id ? 'active' : ''}`}
+                      data-testid={`design-files-tab-${tab.id}`}
+                      onClick={() => setActiveTab(tab.id)}
+                    >
+                      {tab.label}
+                      <span className="df-tab-count">{tab.count}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {resolvedTab === 'live-artifacts' ? (
                 <div className="df-section" key="live-artifacts">
-                  <div className="df-section-label">{t('designFiles.sectionLiveArtifacts')}</div>
                   {liveArtifacts.map((artifact) => (
                     <button
                       key={artifact.artifactId}
@@ -1093,12 +1126,8 @@ export function DesignFilesPanel({
                   ))}
                 </div>
               ) : null}
-              {pluginFolders.length > 0 ? (
+              {resolvedTab === 'plugin-folders' ? (
                 <div className="df-section" key="plugin-folders">
-                  <div className="df-section-label">
-                    Plugin folders
-                    <span className="df-section-count">{pluginFolders.length}</span>
-                  </div>
                   {installNotice ? (
                     <div className="df-inline-notice" role="status">
                       <ActionNoticeView notice={installNotice} />
@@ -1115,7 +1144,7 @@ export function DesignFilesPanel({
                       <button
                         type="button"
                         className="df-row-folder-main"
-                        onClick={() => setPreview(folder.manifestPath)}
+                        onClick={() => onOpenFile(folder.manifestPath)}
                       >
                         <span className="df-row-icon" data-kind="folder" aria-hidden>
                           DIR
@@ -1169,39 +1198,28 @@ export function DesignFilesPanel({
                   )})}
                 </div>
               ) : null}
-              {dirsAtCurrentDir.length > 0 ? (
+              {resolvedTab === 'folders' ? (
                 <div className="df-section" key="folders">
-                  <div className="df-section-label">
-                    {t('designFiles.sectionFolders')}
-                    <span className="df-section-count">{dirsAtCurrentDir.length}</span>
-                  </div>
                   {dirsAtCurrentDir.map((d) => renderDirRow(d))}
                 </div>
               ) : null}
-              {sections.map(([category, sectionFiles]) => (
-                <div className="df-section" key={`cat:${category}`}>
-                  <div className="df-section-label">
-                    {sectionLabel(category, t)}
-                    <span className="df-section-count">{sectionFiles.length}</span>
+              {sections.map(([category, sectionFiles]) =>
+                resolvedTab === `cat:${category}` ? (
+                  <div className="df-section" key={`cat:${category}`}>
+                    {category === 'html' ? (
+                      // Page cards are self-describing — a straight grid
+                      // under the tab bar.
+                      <div className="df-card-grid">
+                        {sectionFiles.map((f) => renderPageCard(f, category))}
+                      </div>
+                    ) : (
+                      sectionFiles.map((f) => renderFileRow(f, category))
+                    )}
                   </div>
-                  {sectionFiles.map((f) => renderFileRow(f, category))}
-                </div>
-              ))}
+                ) : null,
+              )}
             </>
           )}
-          <div className="df-footer-info">
-            {running ? (
-              <RotatingTip />
-            ) : (
-              <div className="df-drop-hint">
-                <span className="df-drop-hint-label">
-                  <Icon name="upload" size={12} />
-                  {t('designFiles.dropLabel')}
-                </span>
-                <span className="df-drop-hint-desc">{t('designFiles.dropDesc')}</span>
-              </div>
-            )}
-          </div>
         </div>
         {draggingFiles ? (
           <div className="df-drop-overlay" aria-hidden>
@@ -1213,21 +1231,6 @@ export function DesignFilesPanel({
           </div>
         ) : null}
       </div>
-      {preview && previewFile ? (
-        // Key on the file name so React unmounts the previous DfPreview
-        // (and its iframe / image element) when the user clicks a
-        // different file. Without this, React diffing reuses the same
-        // iframe DOM node and the browser keeps showing the first
-        // file's contents — only the `src` prop changes but the iframe
-        // never actually navigates.
-        <DfPreview
-          key={previewFile.name}
-          projectId={projectId}
-          file={previewFile}
-          onOpen={() => onOpenFile(previewFile.name)}
-          onClose={() => setPreview(null)}
-        />
-      ) : null}
       {!viewerOnly && menuPos ? (
         <div
           data-testid="design-file-menu-popover"
@@ -1291,96 +1294,12 @@ export function DesignFilesPanel({
   );
 }
 
-function DfPreview({
-  projectId,
-  file,
-  onOpen,
-  onClose,
-}: {
-  projectId: string;
-  file: ProjectFile;
-  onOpen: () => void;
-  onClose: () => void;
-}) {
-  const t = useT();
-  const url = projectFileUrl(projectId, file.name);
-  const rendersSketchJson = isRenderableSketchJson(file);
-  const openPreviewLabel = `${t('designFiles.previewOpen')} ${file.name}`;
-  const thumbCanOpen = file.kind !== 'audio' && file.kind !== 'video';
-  return (
-    <aside className="df-preview">
-      <button
-        type="button"
-        className="df-preview-close"
-        onClick={onClose}
-        title={t('designFiles.previewClose')}
-        aria-label={t('designFiles.previewClose')}
-      >
-        <Icon name="close" size={13} />
-      </button>
-      <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
-        {rendersSketchJson ? (
-          <SketchPreview projectId={projectId} file={file} />
-        ) : file.kind === 'image' || file.kind === 'sketch' ? (
-          <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
-        ) : file.kind === 'html' ? (
-          <HtmlPreviewThumbnail projectId={projectId} file={file} />
-        ) : file.kind === 'video' ? (
-          <video
-            src={`${url}?v=${Math.round(file.mtime)}`}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        ) : file.kind === 'audio' ? (
-          <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-faint)',
-              fontSize: 36,
-            }}
-          >
-            {categoryGlyph(fileCategory(file))}
-          </div>
-        )}
-        {thumbCanOpen ? (
-          <button
-            type="button"
-            className="df-preview-thumb-open"
-            onClick={onOpen}
-            title={openPreviewLabel}
-            aria-label={openPreviewLabel}
-          />
-        ) : null}
-      </div>
-      <div className="df-preview-meta" data-testid="design-file-preview">
-        <button type="button" className="df-preview-open-cta" onClick={onOpen}>
-          <Icon name="eye" size={14} />
-          <span>{t('designFiles.previewOpen')}</span>
-        </button>
-        <div className="df-preview-name">{file.name}</div>
-        <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
-        <div className="df-preview-stats">
-          {t('designFiles.modifiedExt', {
-            time: relativeTime(file.mtime, t),
-            size: humanBytes(file.size),
-            ext: fileExtensionLabel(file.name),
-          })}
-        </div>
-        <a className="df-preview-download" href={url} download={file.name}>
-          <Icon name="download" size={13} />
-          <span>{t('designFiles.download')}</span>
-        </a>
-      </div>
-    </aside>
-  );
-}
+// Pages are laid out at a desktop-ish width and scaled down to the card, so
+// the thumbnail reads as a zoomed-out page preview instead of the page's
+// narrow mobile layout cropped to the card's top-left corner.
+const PAGE_THUMB_LAYOUT_WIDTH = 1200;
+// Matches the card thumb's 16/9 aspect-ratio box.
+const PAGE_THUMB_LAYOUT_HEIGHT = Math.round(PAGE_THUMB_LAYOUT_WIDTH * (9 / 16));
 
 function HtmlPreviewThumbnail({
   projectId,
@@ -1391,6 +1310,8 @@ function HtmlPreviewThumbnail({
 }) {
   const url = projectFileUrl(projectId, file.name);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     void fetch(`${url}?v=${Math.round(file.mtime)}`)
@@ -1407,25 +1328,47 @@ function HtmlPreviewThumbnail({
     };
   }, [file.mtime, file.name, projectId, url]);
 
+  // Track the host width so the fixed-layout iframe scales with the card.
+  // Environments without ResizeObserver (jsdom) fall back to an unscaled
+  // fill-the-box iframe.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const update = () => {
+      const width = host.clientWidth;
+      if (width > 0) setScale(width / PAGE_THUMB_LAYOUT_WIDTH);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <iframe
-      title={file.name}
-      src={srcDoc ? undefined : url}
-      srcDoc={srcDoc ?? undefined}
-      sandbox="allow-scripts allow-downloads"
-    />
+    <div ref={hostRef} className="df-thumb-scale-host">
+      <iframe
+        title={file.name}
+        src={srcDoc ? undefined : url}
+        srcDoc={srcDoc ?? undefined}
+        sandbox="allow-scripts allow-downloads"
+        style={
+          scale
+            ? {
+                width: PAGE_THUMB_LAYOUT_WIDTH,
+                height: PAGE_THUMB_LAYOUT_HEIGHT,
+                transform: `scale(${scale})`,
+                transformOrigin: '0 0',
+              }
+            : undefined
+        }
+      />
+    </div>
   );
 }
 
 function baseDirForFile(name: string): string {
   const index = name.lastIndexOf('/');
   return index >= 0 ? name.slice(0, index + 1) : '';
-}
-
-function fileExtensionLabel(name: string): string {
-  const dot = name.lastIndexOf('.');
-  if (dot < 0 || dot === name.length - 1) return '';
-  return name.slice(dot + 1).toUpperCase();
 }
 
 // Plural section header for a category. Reuses existing plural labels where a
@@ -1558,10 +1501,4 @@ function relativeTime(ts: number, t: TranslateFn): string {
   if (diff < 30 * day)
     return t('designFiles.weeksAgo', { n: Math.floor(diff / (7 * day)) });
   return new Date(ts).toLocaleDateString();
-}
-
-function humanBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

@@ -271,30 +271,31 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
-  border: 1px solid transparent;
+  /* +1px over the old bordered padding: the border is gone entirely (width 0)
+     so the global button:hover border-color primitive has nothing to paint. */
+  padding: 4px 10px;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
+  /* Colorless at rest: gray on hover, solid white when selected — anything
+     else muddles the three states against the grayish page wash. */
+  background: transparent;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color var(--dur-quick) var(--ease-out),
-    background-color var(--dur-quick) var(--ease-out),
+  transition: background-color var(--dur-quick) var(--ease-out),
     color var(--dur-quick) var(--ease-out);
 }
 
 .surfacePill:hover {
-  border-color: transparent;
   background: var(--bg-subtle);
   color: var(--text);
 }
 
 .surfacePillActive,
 .surfacePillActive:hover {
-  border-color: transparent;
-  background: var(--accent-tint);
+  background: var(--bg);
   color: var(--text-strong);
 }
 

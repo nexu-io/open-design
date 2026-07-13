@@ -440,7 +440,8 @@
   border-radius: 999px;
   background: rgba(17, 24, 39, 0.78);
   color: #fff;
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--material-ultrathin-blur));
+  backdrop-filter: blur(var(--material-ultrathin-blur));
 }
 .badge[data-source='clipper'] {
   background: color-mix(in srgb, var(--accent) 88%, transparent);
@@ -472,7 +473,8 @@
   color: var(--kind-tint, #374151);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--material-ultrathin-blur));
+  backdrop-filter: blur(var(--material-ultrathin-blur));
 }
 
 .meta {
@@ -717,7 +719,8 @@
   pointer-events: none;
   border-radius: 16px;
   background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.7));
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: libraryDropFade 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .dropOverlayInner {

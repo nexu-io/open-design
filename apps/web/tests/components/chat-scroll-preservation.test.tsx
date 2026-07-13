@@ -190,6 +190,72 @@ describe('chat scroll behavior', () => {
     expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
   });
 
+  it('renders a user-message rail with hover previews for user turns only', () => {
+    renderChatPane(sampleMessages);
+
+    const rail = screen.getByTestId('chat-message-rail');
+    const markers = screen.getAllByRole('button', {
+      name: /Jump to user message/i,
+    });
+    expect(markers).toHaveLength(2);
+    expect(rail.contains(markers[0]!)).toBe(true);
+    expect(rail.contains(markers[1]!)).toBe(true);
+
+    fireEvent.mouseEnter(markers[1]!);
+
+    expect(screen.getByRole('tooltip').textContent).toContain('second request');
+    expect(markers[1]!.getAttribute('title')).toBeNull();
+    expect(screen.queryByText('first reply')).toBeNull();
+  });
+
+  it('uses the empty message fallback in the user-message rail preview', () => {
+    renderChatPane([
+      { id: 'u1', role: 'user', content: '', createdAt: Date.now() },
+      { id: 'a1', role: 'assistant', content: 'first reply', createdAt: Date.now() },
+      { id: 'u2', role: 'user', content: 'second request', createdAt: Date.now() },
+    ]);
+
+    fireEvent.focus(screen.getByRole('button', {
+      name: /Jump to user message 1/i,
+    }));
+
+    expect(screen.getByRole('tooltip').textContent).toContain('(No content)');
+  });
+
+  it('scrolls to a user message when a rail marker is clicked', () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderChatPane(sampleMessages);
+
+      fireEvent.click(screen.getByRole('button', {
+        name: /Jump to user message 2/i,
+      }));
+
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: 'center',
+        behavior: 'smooth',
+      });
+      expect(
+        screen.getByText('second request').closest('.msg')?.classList.contains(
+          'is-chat-rail-highlighted',
+        ),
+      ).toBe(true);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
+  it('hides the user-message rail when there is only one user turn', () => {
+    renderChatPane([
+      { id: 'u1', role: 'user', content: 'single request', createdAt: Date.now() },
+      { id: 'a1', role: 'assistant', content: 'first reply', createdAt: Date.now() },
+    ]);
+
+    expect(screen.queryByTestId('chat-message-rail')).toBeNull();
+  });
+
   it('does not auto-scroll a short scrollback (~90px above bottom) when new content streams in', async () => {
     setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
     const { rerender } = render(chatPaneEl(sampleMessages, null));

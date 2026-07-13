@@ -10,7 +10,8 @@
   width: min(372px, calc(100vw - 32px));
   padding: 8px;
   background: rgba(25, 25, 25, 0.94);
-  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur)) saturate(1.08);
+  backdrop-filter: blur(var(--glass-regular-blur)) saturate(1.08);
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 18px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);

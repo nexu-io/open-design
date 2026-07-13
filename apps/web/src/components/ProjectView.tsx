@@ -6787,6 +6787,7 @@ export function ProjectView({
               }}
               onBack={onBack}
               backLabel={t('project.backToProjects')}
+              onCollapse={() => setWorkspaceFocused(true)}
               composerFooterAccessory={executionControls}
               projectHeader={(
                 <span className="chat-project-title-line">
@@ -6885,8 +6886,6 @@ export function ProjectView({
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
-          preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}

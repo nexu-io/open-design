@@ -707,8 +707,8 @@
   background: rgba(0, 0, 0, 0.32);
   color: rgba(255, 255, 255, 0.78);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
 }
 
 /* Design-system showcase tile */
@@ -853,8 +853,8 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.18);
   color: white;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
 }
 .plugins-home__card-overlay-body {
   display: flex;
@@ -892,8 +892,8 @@
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.18);
   color: white;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
 }
 .plugins-home__overlay-actions {
   display: flex;
@@ -1135,8 +1135,8 @@ button.plugins-home__use-menu-item:focus-visible {
   background: rgba(255, 255, 255, 0.14);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
 }
 .plugins-home__action--secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.24);

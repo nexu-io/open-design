@@ -14,8 +14,8 @@ describe('default app background colors', () => {
   it('uses the release light background color by default', () => {
     const root = cssBlock(':root');
 
-    expect(root).toContain('--bg: #fafafa;');
-    expect(root).toContain('--bg-app: #f7f7f7;');
+    expect(root).toContain('--bg: #fff;');
+    expect(root).toContain('--bg-app: #fff;');
   });
 
   it('keeps the dark theme background unchanged', () => {

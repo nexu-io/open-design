@@ -149,14 +149,15 @@
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
-/* Scope tabs + category chips sit directly on the page (no grey track behind
-   them like the segmented switch), so a white fill reads as barely-there. Give
-   their selected state a neutral light-grey solid fill instead. */
+/* Selected scope tab / category chip: white fill matching the segmented
+   switch's active thumb — the pastel app wash behind the page gives the
+   white enough contrast to read as a fill, with a whisper shadow to lift it. */
 .plugin-marketplace__filters button.is-active,
 .plugin-marketplace__category-tags button.is-active {
   border-color: transparent;
-  background: var(--bg-subtle);
+  background: #fff;
   color: var(--text-strong);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
 
 .plugin-marketplace__search,
@@ -623,8 +624,8 @@
   place-items: center;
   padding: 28px;
   background: color-mix(in srgb, #000 28%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .plugin-marketplace__create-panel {
@@ -1313,9 +1314,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  /* No horizontal gap — each pill's own padding is the only spacing; the
+     row gap keeps wrapped lines apart. */
+  row-gap: 8px;
+  column-gap: 0;
 }
 
+/* Three flat states: colorless at rest, gray on hover, solid white when
+   selected. Border removed entirely (width 0) so the global button:hover
+   border-color primitive has nothing to paint. */
 .community-template-view__type-tabs button,
 .community-template-view__subtabs button {
   appearance: none;
@@ -1324,22 +1331,21 @@
   gap: 6px;
   min-height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--bg);
+  background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .community-template-view__subtabs button {
   min-height: 28px;
   padding: 0 11px;
   font-size: 12px;
-  box-shadow: none;
 }
 
 .community-template-view__type-tabs button small {
@@ -1350,19 +1356,18 @@
 
 .community-template-view__type-tabs button:hover,
 .community-template-view__subtabs button:hover {
-  border-color: var(--border-strong);
+  background: var(--bg-subtle);
   color: var(--text-strong);
 }
 
 .community-template-view__type-tabs button.is-active,
 .community-template-view__subtabs button.is-active {
-  border-color: transparent;
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
+  background: var(--bg);
+  color: var(--text-strong);
 }
 
 .community-template-view__type-tabs button.is-active small {
-  color: color-mix(in srgb, var(--accent-contrast, #fff) 72%, transparent);
+  color: var(--text-faint);
 }
 
 .community-template-grid {
@@ -1530,8 +1535,8 @@
   place-items: center;
   padding: 28px;
   background: color-mix(in srgb, #000 30%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .community-template-preview__panel {

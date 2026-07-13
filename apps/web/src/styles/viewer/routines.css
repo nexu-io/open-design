@@ -109,7 +109,9 @@
   max-width: 480px;
   padding: 10px 14px;
   border-radius: var(--radius-sm, 4px);
-  background: var(--text-strong, #1f2328);
+  background: color-mix(in srgb, var(--text-strong, #1f2328) 78%, transparent);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   color: var(--bg, white);
   font-size: 13px;
   line-height: 1.4;
@@ -751,7 +753,8 @@
 }
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
   --workspace-tabs-chrome-height: 40px;
-  --workspace-tab-bar-bg: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-subtle));
+  /* Flush with the page below it — the bar shares the app surface. */
+  --workspace-tab-bar-bg: var(--bg);
   --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 38%, transparent);
   height: 40px;
   min-height: 40px;
@@ -806,6 +809,20 @@
   z-index: 3;
   background: var(--workspace-tab-bar-bg);
 }
+/* With the sidebar toggle present (active Home tab): 8px group padding on
+   both sides; symmetric halves (1fr | divider | 1fr) so each icon centers
+   in its half and the hairline sits exactly mid-pill. */
+.workspace-shell .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle) {
+  /* The base tab is a flex row; symmetric halves need a real grid. */
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 0;
+  padding: 0 8px;
+}
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle {
+  justify-self: center;
+}
 .workspace-shell .workspace-tab.is-active {
   border-radius: var(--radius-pill, 999px);
   background: #ffffff;
@@ -843,6 +860,93 @@
   box-shadow: 0 14px 30px color-mix(in srgb, var(--text) 16%, transparent);
   z-index: 4;
 }
+/* ── Liquid-glass glide indicator ─────────────────────────────────────────
+   One persistent frosted pill (structure in shell.css) replaces the static
+   white active pill above: it glides between tabs with an elastic snap and,
+   on Chromium, refracts its backdrop via useLiquidGlass (SDF displacement).
+   The un-gated .is-active rule above stays as the SSR / pre-hydration
+   fallback until the hook stamps data-glide-ready on the strip. */
+.workspace-shell .workspace-tabs-chrome {
+  /* Light mode leans whiter than raw --glass-regular so the pill reads as
+     "the active tab", close to the solid #fff it replaces. Dark mode uses
+     the glass token as-is (also fixes the old hardcoded-#fff dark pill). */
+  --workspace-glide-frost: color-mix(in srgb, #ffffff 34%, var(--glass-regular));
+}
+[data-theme="dark"] .workspace-shell .workspace-tabs-chrome {
+  --workspace-glide-frost: var(--glass-regular);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome {
+    --workspace-glide-frost: var(--glass-regular);
+  }
+}
+.workspace-shell .workspace-tabs-glide {
+  top: calc(50% - 16px);
+  height: 32px; /* matches .workspace-shell .workspace-tab */
+  border-radius: var(--radius-pill, 999px);
+}
+.workspace-shell .workspace-tabs-glide__pill {
+  border: 1px solid var(--workspace-active-tab-border);
+  background: var(--workspace-glide-frost);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 0 0 0.5px color-mix(in srgb, var(--bg-panel) 82%, transparent) inset;
+}
+/* Chromium SDF state: keep the tint for label legibility, add the refraction
+   ring, and replace material.css's heavy 0 6px 18px shadow — wrong scale for
+   a 32px pill. (routines.css imports after material.css; the attribute
+   selector also out-specifies the base .od-glass-refract rule.) */
+.workspace-shell .workspace-tabs-glide__pill[data-od-glass-sdf] {
+  background: var(--workspace-glide-frost);
+  -webkit-backdrop-filter: var(--flt) blur(12px) saturate(1.35);
+  backdrop-filter: var(--flt) blur(12px) saturate(1.35);
+  box-shadow:
+    inset 0 1px 0.5px var(--glass-refract-ring-top),
+    inset 0 0 0 1px var(--glass-refract-ring-edge),
+    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+/* Liquid stretch: the pill elongates toward the travel direction and settles.
+   data-dir is stamped per activation by useGlideIndicator, which also replays
+   the animation (style.animation reset), so it fires once per switch. */
+.workspace-shell .workspace-tabs-glide[data-dir="right"] .workspace-tabs-glide__pill {
+  transform-origin: left center;
+}
+.workspace-shell .workspace-tabs-glide[data-dir="left"] .workspace-tabs-glide__pill {
+  transform-origin: right center;
+}
+.workspace-shell .workspace-tabs-glide[data-dir] .workspace-tabs-glide__pill {
+  animation: od-glide-stretch 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes od-glide-stretch {
+  0% {
+    transform: scale(1, 1);
+  }
+  38% {
+    transform: scale(1.07, 0.965);
+  }
+  72% {
+    transform: scale(0.99, 1.005);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+/* Once the indicator is live the active tab stops painting its own pill —
+   the glass pill underneath is now the active marker. */
+.workspace-shell .workspace-tabs-strip[data-glide-ready] .workspace-tab.is-active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Reduced transparency: our skin rule above would out-cascade material.css's
+   token-level fallback, so pin an explicit solid pill here. */
+@media (prefers-reduced-transparency: reduce) {
+  .workspace-shell .workspace-tabs-glide__pill {
+    background: var(--bg-elevated);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 .workspace-shell .workspace-tab__main {
   position: relative;
   z-index: 2;
@@ -859,11 +963,11 @@
   z-index: 2;
 }
 .workspace-shell .workspace-tab__label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
 }
 .workspace-shell .workspace-tab.is-active .workspace-tab__label {
-  font-size: var(--font-size-12, 12px);
+  font-size: var(--font-size-13, 13px);
 }
 .workspace-shell .workspace-tab__close {
   width: 18px;
@@ -881,7 +985,11 @@
 }
 
 .app {
-  background: var(--bg-panel);
+  /* Transparent like the home page's containers — the project view rides
+     the same shared ground (app-wash / wallpaper vibrancy) instead of
+     re-painting a solid panel over it. Restores --bg-app under reduced
+     transparency via the veil token (app-wash.css). */
+  background: var(--veil-shell, var(--bg-panel));
 }
 .app > .app-chrome-header {
   height: 44px;
@@ -921,7 +1029,9 @@
 }
 
 .app .split {
-  background: var(--bg-panel);
+  /* Same material as the tab strip above: nothing painted here, the app
+     wash / window vibrancy shows through (veil tokens in app-wash.css). */
+  background: var(--veil-page, transparent);
 }
 .app .split:not(.split-focus) {
   grid-template-columns: minmax(320px, var(--chat-panel-width, 460px)) 8px minmax(400px, 1fr);
@@ -938,26 +1048,25 @@
      Right side is 0 so the gap to the workspace card is just the 8px
      resize-handle column (not 8+8+8=24px). */
   padding: 8px 0 8px 8px;
-  background: #fff;
+  background: var(--veil-page, transparent);
 }
 .app .split-chat-slot > .pane {
-  /* Floating layer — mirrors the home sidebar panel: white surface, soft
-     border, large radius, md elevation. overflow:hidden rounds the content
-     (the composer is a separate fixed/portaled layer, so it isn't clipped and
+  /* Matches the top tab strip's effect exactly — see the material note in
+     the shared body below. overflow:hidden still rounds the content (the
+     composer is a separate fixed/portaled layer, so it isn't clipped and
      auto-follows the inset via composerPortalRect). */
-  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  background: #fff;
+  box-shadow: none;
+  /* Same effect as the top tab strip: no fill, no frost of its own — the
+     ground (app wash in the browser, wallpaper vibrancy on desktop) shows
+     through identically in the strip, the gutter, and these cards, so the
+     whole shell reads as one continuous material. Veil tokens return to
+     solid surfaces under reduced transparency (app-wash.css). */
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
-}
-[data-theme="dark"] .app .split-chat-slot > .pane {
-  background: var(--bg-panel);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .split-chat-slot > .pane {
-    background: var(--bg-panel);
-  }
 }
 .app .split-resize-handle {
   --split-resize-gradient-surface: #fff;
@@ -967,38 +1076,16 @@
 }
 
 .app .split-resize-handle::after {
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 8px;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--split-resize-gradient-surface) 96%, transparent) 0%,
-    color-mix(in srgb, var(--split-resize-gradient-surface) 62%, transparent) 54%,
-    transparent 100%
-  );
-  opacity: 0.52;
-  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* No painted strip in any state (rest, hover, or drag) — the gutter always
+     shows the shared ground. The col-resize cursor on the handle remains the
+     drag affordance. */
+  display: none;
 }
 
 .app .split-resize-handle:hover,
 .app .split-resize-handle:focus-visible,
 .app .split.is-resizing-chat .split-resize-handle {
   background: transparent;
-}
-
-.app .split-resize-handle:hover::after,
-.app .split-resize-handle:focus-visible::after,
-.app .split.is-resizing-chat .split-resize-handle::after {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--split-resize-gradient-surface) 96%, transparent) 0%,
-    color-mix(in srgb, var(--split-resize-gradient-surface) 62%, transparent) 54%,
-    transparent 100%
-  );
-  box-shadow: none;
-  opacity: 0.9;
 }
 
 [data-theme="dark"] .app .split-resize-handle {
@@ -1018,7 +1105,9 @@
   border-radius: 0;
   border: none;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  background: var(--glass-regular);
   box-shadow: none;
 }
 .app .chat-header {
@@ -1049,7 +1138,9 @@
 .app .chat-log {
   gap: 14px;
   padding: 18px 18px 20px;
-  background: #fff;
+  /* Let the pane's clear glass show — the card material stays uniform with
+     the tab strip instead of re-painting an opaque transcript slab. */
+  background: transparent;
 }
 /* Cancel the 14px flex gap so the idle spacer adds no trailing space. */
 .app .chat-log-tail-spacer {
@@ -1831,72 +1922,54 @@
 .chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark {
   display: none;
 }
-.app .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
-}
-.chat-composer-fixed-layer .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
-}
-/* Send buttons (chat composer + home hero): the looping video is ALWAYS shown —
-   focused or blurred, empty or not (no gray disabled fill, no outer stroke, no
-   button-level opacity fade). Only the arrow icon fades: 40% when there's no
-   input, 100% once the user starts typing. */
-.composer-send,
-.home-hero__submit {
+/* Keep the project composer send action visually aligned with the Home
+   composer: deep neutral surface, brand-green foreground, and the same
+   theme-aware disabled treatment. */
+.app .composer-send:not(.stop),
+.chat-composer-fixed-layer .composer-send:not(.stop) {
+  --composer-send-bg: var(--text-strong);
+  --composer-send-fg: #00ff04;
+
   position: relative;
   overflow: hidden;
-  border: none;
+  border: var(--stroke-thin) solid transparent;
+  background: var(--composer-send-bg);
+  color: var(--composer-send-fg);
+  box-shadow: none;
 }
-/* Empty/disabled: strip the gray fill / border / opacity fade so the video
-   stays full. The home selectors are extra-specific to beat home-hero.css,
-   which is imported after this file. */
+[data-theme="dark"] .app .composer-send:not(.stop),
+[data-theme="dark"] .chat-composer-fixed-layer .composer-send:not(.stop) {
+  --composer-send-bg: var(--accent-tint);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .app .composer-send:not(.stop),
+  html:not([data-theme="light"]) .chat-composer-fixed-layer .composer-send:not(.stop) {
+    --composer-send-bg: var(--accent-tint);
+  }
+}
+.app .composer-send:not(.stop):hover:not(:disabled),
+.app .composer-send:not(.stop):active:not(:disabled),
+.chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled),
+.chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--composer-send-bg) 86%, #fff);
+  color: var(--composer-send-fg);
+  box-shadow: none;
+  transform: none;
+}
 .app .composer-send:disabled,
-.chat-composer-fixed-layer .composer-send:disabled,
-.home-hero__input-card .home-hero__submit:disabled {
-  opacity: 1;
-  background: transparent;
-  border: none;
+.chat-composer-fixed-layer .composer-send:disabled {
+  opacity: 0.42;
+  background: var(--bg-muted);
+  border-color: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
 }
-.composer-send__video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-  pointer-events: none;
-  /* Zoom the video content in ~30% (clipped by the button's overflow:hidden). */
-  transform: scale(1.3);
-}
-/* Light arrow over the video; its opacity conveys the input state. */
-.composer-send .od-icon,
-.home-hero__submit .od-icon {
+.composer-send:not(.stop) .od-icon {
   position: relative;
   z-index: 1;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
-  transition: opacity 160ms var(--ease-out, ease);
-}
-.composer-send:disabled .od-icon,
-.home-hero__input-card .home-hero__submit:disabled .od-icon {
-  opacity: 0.4;
-}
-.composer-send:not(:disabled) .od-icon,
-.home-hero__submit:not(:disabled) .od-icon {
-  opacity: 1;
-}
-/* Kill the green ring on the home submit button: its --brand background was
-   showing through the 1px border (home-hero.css sets border:1px solid
-   transparent, which outranks the base rule above). The video covers the
-   button, so remove the border entirely. Extra-specific to beat home-hero.css. */
-.home-hero__input-card .home-hero__submit {
-  border: none;
+  color: currentColor;
+  filter: none;
 }
 /* The pill renders under `.app` (legacy header host) and under
    `.chat-composer-fixed-layer` (its current home in the composer toolbar).
@@ -2072,18 +2145,25 @@
 }
 
 .app .workspace {
-  /* Floating card — same treatment as the chat pane (.split-chat-slot > .pane):
-     inset 8px, white surface, soft border, large radius, md elevation. Rounded
-     via overflow:hidden; the toolbar dropdowns open downward into the preview
-     (away from the edges) so they aren't clipped. Left side is 0 so the gap to
-     the chat card is just the 8px resize-handle column (focus mode restores it
-     below, since there's no chat card then). */
+  /* Matches the top tab strip's effect exactly, same as the chat card
+     (.split-chat-slot > .pane). Inset 8px keeps the ground gutter between
+     the cards; overflow:hidden rounds the content and the toolbar dropdowns
+     open downward into the preview so they aren't clipped. Left side is 0 so
+     the gap to the chat card is just the 8px resize-handle column (focus
+     mode restores it below). */
   margin: 8px 8px 8px 0;
   padding: 0;
-  background: #fff;
-  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
+  /* Same effect as the top tab strip: no fill, no frost of its own — the
+     ground (app wash in the browser, wallpaper vibrancy on desktop) shows
+     through identically in the strip, the gutter, and these cards, so the
+     whole shell reads as one continuous material. Veil tokens return to
+     solid surfaces under reduced transparency (app-wash.css). */
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
 }
 /* Focus mode hides the chat card, so the workspace is the only card — give it
@@ -2091,14 +2171,6 @@
    at 8px). */
 .app .split.split-focus .workspace {
   margin-left: 8px;
-}
-[data-theme="dark"] .app .workspace {
-  background: var(--bg-panel);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .workspace {
-    background: var(--bg-panel);
-  }
 }
 .app .ws-tabs-shell {
   padding: 6px 14px;
@@ -2160,15 +2232,6 @@
 .app .df-panel,
 .app .df-main {
   background: #fff;
-}
-.app .df-panel:not(.no-preview) {
-  /* Keep a usable minimum for the file list (toolbar + names stay
-     clickable) but let the preview pane YIELD instead of forcing a rigid
-     320px track. A rigid min on both columns overflowed the panel on
-     narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
-     buttons and the preview off-screen. With `minmax(0, …)` the preview
-     shrinks first so the panel never exceeds its container width. */
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
 }
 .app .df-main {
   border-right-color: var(--border);
@@ -2306,37 +2369,6 @@
   width: 34px;
   padding-right: 6px;
 }
-.app .df-panel:not(.no-preview) .df-th-kind,
-.app .df-panel:not(.no-preview) .df-cell-kind,
-.app .df-panel:not(.no-preview) .df-th-time,
-.app .df-panel:not(.no-preview) .df-cell-time {
-  display: none;
-}
-.app .df-panel:not(.no-preview) .df-table {
-  table-layout: auto;
-}
-.app .df-panel:not(.no-preview) .df-th-name,
-.app .df-panel:not(.no-preview) .df-cell-name {
-  width: auto;
-}
-.app .df-panel:not(.no-preview) .df-cell-name {
-  min-width: 0;
-  max-width: none;
-}
-.app .df-panel:not(.no-preview) .df-row-name-btn,
-.app .df-panel:not(.no-preview) .df-row-name-wrap,
-.app .df-panel:not(.no-preview) .df-row-name {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-.app .df-panel:not(.no-preview) .df-row-sub-kind,
-.app .df-panel:not(.no-preview) .df-row-sub-time {
-  display: inline;
-}
-.app .df-panel:not(.no-preview) .df-row-name {
-  display: block;
-}
 .app .df-th-sortable {
   padding: 10px 8px 8px;
   font-size: 12px;
@@ -2347,7 +2379,9 @@
 }
 .app .df-section-label {
   padding: 0;
-  font-size: 12px;
+  /* Match the "项目" breadcrumb header size so section titles read as one
+     heading family. */
+  font-size: 14px;
 }
 .app .df-cell-name,
 .app .df-cell-kind,
@@ -2498,6 +2532,25 @@
   overflow: hidden;
   flex: 0 0 auto;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent) inset;
+}
+/* Bundled brand artwork (public/editor-icons/*.png) paints its own tile —
+   no tinted bg or inset ring on top of it. */
+.app .editor-icon-img {
+  background: transparent;
+  box-shadow: none;
+  object-fit: contain;
+}
+/* Bare single-color marks (e.g. Windsurf's wave) follow the theme's text
+   color through a mask, same pattern as .agent-icon-mono. */
+.app .editor-icon-mask {
+  background-color: currentColor;
+  box-shadow: none;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 .app .handoff-menu {
   position: absolute;
@@ -2893,7 +2946,7 @@
      within the viewport. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16));
   display: flex;
   flex-direction: column;
@@ -2906,7 +2959,6 @@
   gap: 6px;
   padding: 0 10px;
   height: 34px;
-  border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   flex: 0 0 auto;
 }
@@ -2940,7 +2992,7 @@
   gap: 4px;
   height: 24px;
   padding: 0 8px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-panel);
   color: var(--text-muted);
@@ -2952,25 +3004,21 @@
   cursor: pointer;
   transition:
     background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
 .project-ds-picker-action:hover,
 .project-ds-picker-action:focus-visible {
   outline: none;
   background: var(--bg-subtle);
-  border-color: var(--border-strong);
   color: var(--text-strong);
 }
 .project-ds-picker-action--primary {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-tint);
   color: var(--accent);
 }
 .project-ds-picker-action--primary:hover,
 .project-ds-picker-action--primary:focus-visible {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
-  border-color: var(--accent);
   color: var(--accent);
 }
 .project-ds-picker-body {
@@ -2986,7 +3034,6 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-right: 1px solid var(--border);
 }
 /* Group heading separating "your systems" from "official presets", matching the
    Design Systems tab split. Sticks to the top while scrolling the list. */
@@ -3000,7 +3047,10 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-faint);
-  background: var(--bg, var(--surface, #fff));
+  /* Match the popover surface: an off-tone band here reads as a divider line
+     against the panel background. Still opaque so the sticky label masks the
+     list rows scrolling beneath it. */
+  background: var(--bg-panel, var(--surface, #fff));
 }
 .project-ds-picker-group-label:first-child {
   padding-top: 4px;
@@ -3144,10 +3194,10 @@
   height: 28px;
   padding: 0 12px;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
-  -webkit-backdrop-filter: saturate(1.1) blur(8px);
-  backdrop-filter: saturate(1.1) blur(8px);
+  border: 1px solid var(--material-separator);
+  background: var(--material-thin);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
   color: var(--text-strong, var(--text));
   font-size: 12px;
   font-weight: 600;
@@ -3236,7 +3286,8 @@
   inset: 0;
   z-index: 1800;
   background: color-mix(in srgb, var(--text) 38%, transparent);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;

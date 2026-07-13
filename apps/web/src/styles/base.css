@@ -87,7 +87,7 @@ pre,
   display: grid;
   place-items: center;
   color: var(--text-muted);
-  background: var(--bg-app);
+  background: var(--veil-shell);
   font: 500 var(--font-size-13)/125% var(--sans);
 }
 

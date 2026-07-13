@@ -71,6 +71,7 @@ export type IconName =
   | 'search'
   | 'send'
   | 'settings'
+  | 'battery-charge'
   | 'share'
   | 'sliders'
   | 'smartphone'
@@ -167,6 +168,7 @@ const REMIX_ICON: Record<IconName, string> = {
   search: 'search-line',
   send: 'send-plane-2-line',
   settings: 'settings-3-line',
+  'battery-charge': 'battery-charge-line',
   share: 'share-forward-line',
   sliders: 'equalizer-line',
   smartphone: 'smartphone-line',

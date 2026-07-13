@@ -1985,8 +1985,16 @@ export function HomeView({
     }
   }
 
+  // Empty workspace: with no recent projects to show, the hero (logo +
+  // heading + composer) centers vertically instead of hugging the top.
+  const recentProjectsEmpty = !projectsLoading && projects.length === 0;
+
   return (
-    <div className="home-view" data-testid="home-view" ref={homeViewRef}>
+    <div
+      className={`home-view${recentProjectsEmpty ? ' home-view--centered' : ''}`}
+      data-testid="home-view"
+      ref={homeViewRef}
+    >
       <HomeHero
         ref={inputRef}
         active={isActive}
@@ -2080,7 +2088,7 @@ export function HomeView({
         demoScenario={demoScenario}
       />
 
-      {demoScenario === 'onboarding-new' ? null : <RecentProjectsStrip
+      {demoScenario === 'onboarding-new' || recentProjectsEmpty ? null : <RecentProjectsStrip
         projects={demoPresetProjects}
         designSystems={designSystems}
         promptTemplates={promptTemplates}

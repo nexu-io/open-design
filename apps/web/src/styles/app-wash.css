@@ -1,0 +1,150 @@
+/* -------- App wash: Craft-style frosted-glass ground ------------------- */
+/* A single pre-blurred pastel wash painted once at the body level, plus
+   "veil" tokens that let the page containers above it go translucent so the
+   wash glows through. The wash is blurred BY CONSTRUCTION (soft radial
+   gradients) — it costs one composited paint and zero backdrop-filter.
+   Real backdrop-filter stays reserved for the few small sticky/floating
+   strips that must frost scrolling content (nav rail, sticky headers).
+
+   Degradation contract: under prefers-reduced-transparency or without
+   backdrop-filter support, the wash turns off and every veil token returns
+   to the exact solid token it replaced, restoring the flat look. */
+
+:root {
+  /* Pastel wash palette. Alphas run a touch hot because the veils above
+     mute them. */
+  --wash-base: #ffffff; /* pure white ground */
+  --wash-blue: rgba(168, 196, 236, 0.55); /* pale sky blue */
+  --wash-pink: rgba(240, 197, 216, 0.45); /* pale rose */
+  --wash-peach: rgba(247, 224, 196, 0.5); /* warm cream light */
+  --wash-mist: rgba(213, 229, 248, 0.38); /* cool secondary blue */
+  /* Percent-sized ellipses scale with the viewport — no seams on resize. */
+  --app-wash:
+    radial-gradient(52% 44% at 12% -4%, var(--wash-blue) 0%, transparent 68%),
+    radial-gradient(44% 38% at 90% 6%, var(--wash-pink) 0%, transparent 66%),
+    radial-gradient(48% 42% at 82% 94%, var(--wash-peach) 0%, transparent 64%),
+    radial-gradient(56% 48% at 14% 102%, var(--wash-mist) 0%, transparent 70%),
+    linear-gradient(var(--wash-base), var(--wash-base));
+
+  /* Veils: translucent stand-ins for the solid backgrounds of the page
+     containers between body and the content surfaces. One token per
+     original solid value so the fallback blocks can restore each exactly. */
+  --veil-shell: transparent; /* was var(--bg-app): .app, .workspace-shell, .od-loading-shell */
+  --veil-page: transparent; /* was var(--bg): .entry-shell, .entry, .split */
+  /* Fully transparent, matching the tab strip above: the two split cards
+     wear the strip's exact material (scrim + vibrancy/wash showing through)
+     with nothing extra painted inside. The reduced-transparency and
+     no-backdrop-filter blocks below still restore solid surfaces. */
+  --veil-canvas: transparent; /* was var(--bg)/#fff: .workspace, .viewer, .df-panel, .df-main */
+  --veil-panel: transparent; /* was var(--bg-panel): chat .pane */
+}
+
+/* Whisper-level wash in dark: the same design language, but the blobs sit
+   at ≤0.14 alpha on the unchanged app black so dark translucency has
+   something to show without tinting the workspace. Veil tokens derive from
+   --bg/--bg-panel and flip with the theme on their own. */
+[data-theme='dark'] {
+  --wash-base: #202020;
+  --wash-blue: rgba(96, 126, 178, 0.14);
+  --wash-pink: rgba(168, 110, 142, 0.1);
+  --wash-peach: rgba(178, 142, 100, 0.09);
+  --wash-mist: rgba(100, 130, 172, 0.09);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --wash-base: #202020;
+    --wash-blue: rgba(96, 126, 178, 0.14);
+    --wash-pink: rgba(168, 110, 142, 0.1);
+    --wash-peach: rgba(178, 142, 100, 0.09);
+    --wash-mist: rgba(100, 130, 172, 0.09);
+  }
+}
+
+/* The wash layer itself. body keeps painting var(--bg-app) (base.css) as the
+   canvas base; this fixed pseudo paints above it and below all content.
+   Never repaints on scroll; no will-change, no animation. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--app-wash);
+}
+
+/* Desktop shell (Electron on macOS with window vibrancy): the REAL desktop
+   wallpaper blurs through the window, so the painted pastel blobs step aside.
+   html/body go fully transparent and the wash collapses to a translucent
+   cream scrim that keeps content readable over arbitrary wallpapers — the
+   Craft look. The .workspace-shell--desktop marker comes from the host
+   bridge (App.tsx data-client-type). Browsers never match this block. */
+html:has(.workspace-shell--desktop) {
+  /* Focused window: a firm scrim so content sits on a mostly solid ground.
+     The unfocused state below thins this back to ~21% (0.34 × 62%), which
+     preserves the airy see-through look while the window is in the back. */
+  --app-wash: linear-gradient(
+    color-mix(in srgb, var(--wash-base) 62%, transparent),
+    color-mix(in srgb, var(--wash-base) 62%, transparent)
+  );
+  background: transparent;
+}
+html:has(.workspace-shell--desktop) body {
+  background: transparent;
+}
+/* Focus response: while the window is unfocused (App.tsx toggles
+   .is-window-blurred on <html> in desktop mode) the scrim thins out so the
+   wallpaper reads clearly through the glass; regaining focus fades it back
+   to full strength. Browsers never get the class, so web mode is untouched. */
+html:has(.workspace-shell--desktop) body::before {
+  transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+html.is-window-blurred:has(.workspace-shell--desktop) body::before {
+  opacity: 0.34;
+}
+/* The top project tab strip stays flush and seamless with the page below it:
+   a transparent surface shows the exact same app wash as the content (one
+   continuous color, pinned Home tab mask included) and takes NO
+   backdrop-filter — nothing scrolls under this top strip, so a frost would
+   serve no function and its blur edge drew a visible seam under the tab row.
+   (Deliberate 材质规范 exception: no material at all, the strip rides the
+   ground.) The [data-client-type] hook only bumps specificity above
+   routines.css's `.workspace-tabs-chrome` base rule. */
+.workspace-shell[data-client-type] .workspace-tabs-chrome.app-chrome-header {
+  --workspace-tab-bar-bg: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Token-level degradation, mirroring material.css: the html:root selector
+   (0,1,1) matches the dark-mode html:not([data-theme]) specificity and wins
+   by source order, so every consumer degrades together. */
+@media (prefers-reduced-transparency: reduce) {
+  html:root {
+    --app-wash: none;
+    --veil-shell: var(--bg-app);
+    --veil-page: var(--bg);
+    --veil-canvas: var(--bg);
+    --veil-panel: var(--bg-panel);
+  }
+  html:has(.workspace-shell--desktop),
+  html:has(.workspace-shell--desktop) body {
+    background: var(--bg-app);
+  }
+}
+
+/* The wash itself needs no backdrop-filter, but flattening it here keeps the
+   whole material system degrading as one unit — otherwise flattened glass
+   strips would float on a pastel they can no longer frost. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html:root {
+    --app-wash: none;
+    --veil-shell: var(--bg-app);
+    --veil-page: var(--bg);
+    --veil-canvas: var(--bg);
+    --veil-panel: var(--bg-panel);
+  }
+  html:has(.workspace-shell--desktop),
+  html:has(.workspace-shell--desktop) body {
+    background: var(--bg-app);
+  }
+}

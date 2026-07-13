@@ -13,6 +13,16 @@
   --bg-fill-secondary: rgba(0, 0, 0, 0.06);
   --bg-fill: rgba(0, 0, 0, 0.12);
   --bg-elevated: #fafafa;
+  /* Liquid Glass — frosted "regular" material for floating functional layers
+     (nav rail, toolbars, popovers) per the material spec. Translucent surface
+     + backdrop blur; falls back to a solid --bg-panel where unsupported. */
+  --glass-regular: rgba(250, 250, 250, 0.66);
+  --glass-regular-blur: 28px;
+  /* Bright top-edge sheen that reads as glass thickness on a frosted pane. */
+  --glass-edge-highlight: color-mix(in srgb, #fff 65%, transparent);
+  /* Entry ground shares the app surface — the nav rail is a solid panel now,
+     so the page behind it no longer needs a tinted ground to float on. */
+  --entry-ground: var(--bg);
   --border: #dbdbdb;
   --border-strong: #bdbdbd;
   --border-selected: #a3a3a3;
@@ -108,8 +118,10 @@
   --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
 
-  --prose-font-size: 16px;
-  --prose-line-height: 1.75;
+  /* Chat prose scale: body 13, headings 14, top-level emphasis 16 — the
+     whole message module stays inside the 12–16px band. */
+  --prose-font-size: 13px;
+  --prose-line-height: 1.7;
   --code-header-bg: #ededed;
   --code-body-bg: #fafafa;
   --code-font-size: 13px;
@@ -129,6 +141,8 @@
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
   --bg-elevated: #353535;
+  --glass-regular: rgba(53, 53, 53, 0.66);
+  --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
   --border: #5c5c5c;
   --border-strong: #848484;
   --border-selected: #a3a3a3;
@@ -188,6 +202,8 @@
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
     --bg-elevated: #353535;
+    --glass-regular: rgba(53, 53, 53, 0.66);
+    --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
     --border: #5c5c5c;
     --border-strong: #848484;
     --border-selected: #a3a3a3;

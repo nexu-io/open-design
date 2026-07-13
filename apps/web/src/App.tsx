@@ -353,6 +353,22 @@ function AppInner() {
       document.querySelectorAll('.od-loading-shell').forEach((node) => node.remove());
     }
   }, []);
+  // Desktop vibrancy focus response: an unfocused window drops the cream
+  // scrim to let the wallpaper show through more clearly; on focus the scrim
+  // returns to full strength (app-wash.css keys off this class).
+  useEffect(() => {
+    if (clientType !== 'desktop' || typeof window === 'undefined') return undefined;
+    const root = document.documentElement;
+    const sync = () => root.classList.toggle('is-window-blurred', !document.hasFocus());
+    sync();
+    window.addEventListener('focus', sync);
+    window.addEventListener('blur', sync);
+    return () => {
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('blur', sync);
+      root.classList.remove('is-window-blurred');
+    };
+  }, [clientType]);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;

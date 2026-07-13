@@ -105,7 +105,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 6px;
-  border: 1px solid var(--border-strong, var(--border));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
@@ -202,7 +202,7 @@
   display: flex;
   flex-direction: column;
   padding: 5px;
-  border: 1px solid var(--border-strong, var(--border));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:

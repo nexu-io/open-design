@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
+import { captureHostPage, isOpenDesignHostAvailable } from '@open-design/host';
 import { useI18n, useT } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
@@ -68,6 +69,7 @@ import {
   type DesignToolboxAction,
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
+import { requestPreviewModuleCapture } from '../runtime/module-capture';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { computeToolboxDetailPosition } from './composer-detail-position';
 import { PluginDetailsModal } from "./PluginDetailsModal";
@@ -85,6 +87,18 @@ import {
 } from './composer/LexicalComposerInput';
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
+
+/**
+ * Window event for staging attachments that are ALREADY uploaded to the
+ * project (ChatAttachment shape, not File). Mirrors ANNOTATION_EVENT's
+ * pattern; used by surfaces that materialize files themselves — e.g. the
+ * design browser's hover "添加到 Chat" capture, which writes the PNG via
+ * writeProjectBase64File before notifying the composer.
+ */
+export const STAGE_ATTACHMENT_EVENT = 'opendesign:stage-attachment';
+export interface StageAttachmentEventDetail {
+  attachments: ChatAttachment[];
+}
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 import { listenForConnectorsChanged } from './connectors-events';
 import { fetchConnectorCatalogSnapshot } from './connectors-state';
@@ -105,6 +119,8 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'url',
   'local',
 ]);
+
+let hostCommandScreenshotUploadInFlight = false;
 
 interface SlashCommand {
   id: string;
@@ -406,11 +422,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // entries rather than ChatComposer remounts. See PR #2285 review
     // 2026-05-20 04:08 for the rationale.
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
+    // Manual editor height set by dragging the shell's gray backdrop up/down.
+    // null = the default auto-grow min/max behavior.
+    const [manualEditorHeight, setManualEditorHeight] = useState<number | null>(null);
     const nextAttachmentOrderRef = useRef(0);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
     const [figmaModalOpen, setFigmaModalOpen] = useState(false);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
     const streamingAnnotationSendPendingRef = useRef(false);
+    const hostCommandScreenshotUploadRef = useRef<() => Promise<boolean>>(async () => false);
     // Remembers the entry_from that the deferred streaming send must carry once
     // it flushes. The Mark draw-overlay tags 'mark' synchronously; without this
     // the flush effect would report the run as the default composer entry.
@@ -1471,6 +1491,100 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    async function uploadHostCommandScreenshot() {
+      if (!isOpenDesignHostAvailable()) return false;
+      if (hostCommandScreenshotUploadInFlight) return false;
+      hostCommandScreenshotUploadInFlight = true;
+      try {
+        const result = await captureHostPage();
+        if (!result.ok) {
+          setUploadError(`Screenshot capture failed (${result.reason}).`);
+          return false;
+        }
+        const blob = await fetch(result.dataUrl).then((response) => response.blob());
+        const file = new File([blob], `command-screenshot-${Date.now()}.png`, {
+          type: blob.type || 'image/png',
+        });
+        await uploadFiles([file]);
+        return true;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setUploadError(`Screenshot capture failed (${detail}).`);
+        console.warn('Could not capture host screenshot', err);
+        return false;
+      } finally {
+        hostCommandScreenshotUploadInFlight = false;
+      }
+    }
+
+    hostCommandScreenshotUploadRef.current = uploadHostCommandScreenshot;
+
+    useEffect(() => {
+      const pressed = {
+        left: false,
+        right: false,
+        handled: false,
+      };
+      const reset = () => {
+        pressed.left = false;
+        pressed.right = false;
+        pressed.handled = false;
+      };
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (inputDisabled) return;
+        if (event.code !== 'MetaLeft' && event.code !== 'MetaRight') return;
+        if (event.code === 'MetaLeft') pressed.left = true;
+        if (event.code === 'MetaRight') pressed.right = true;
+        if (!pressed.left || !pressed.right || pressed.handled) return;
+        pressed.handled = true;
+        event.preventDefault();
+        event.stopPropagation();
+        void (async () => {
+          // With a design-file preview open, double-Command captures the
+          // module the pointer is on (works on web too); the desktop host
+          // page screenshot remains the fallback everywhere else.
+          if (await requestPreviewModuleCapture()) return;
+          await hostCommandScreenshotUploadRef.current();
+        })();
+      };
+      const onKeyUp = (event: KeyboardEvent) => {
+        if (event.code === 'MetaLeft') pressed.left = false;
+        if (event.code === 'MetaRight') pressed.right = false;
+        if (!pressed.left || !pressed.right) pressed.handled = false;
+      };
+      const onVisibilityChange = () => {
+        if (document.visibilityState !== 'visible') reset();
+      };
+
+      window.addEventListener('keydown', onKeyDown, true);
+      window.addEventListener('keyup', onKeyUp, true);
+      window.addEventListener('blur', reset);
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      return () => {
+        window.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('keyup', onKeyUp, true);
+        window.removeEventListener('blur', reset);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      };
+    }, [inputDisabled]);
+
+    useEffect(() => {
+      // Already-uploaded attachments (ChatAttachment, not File) staged by
+      // other surfaces — e.g. the design browser's hover "添加到 Chat".
+      function onStageAttachment(e: Event) {
+        const detail = (e as CustomEvent<StageAttachmentEventDetail>).detail;
+        const attachments = detail?.attachments?.filter(
+          (item): item is ChatAttachment => Boolean(item && item.path && item.name),
+        );
+        if (!attachments || attachments.length === 0) return;
+        const orderStart = reserveAttachmentOrders(attachments.length);
+        appendOrderedStagedAttachments(assignChatAttachmentOrders(attachments, orderStart));
+        editorRef.current?.focus();
+      }
+      window.addEventListener(STAGE_ATTACHMENT_EVENT, onStageAttachment);
+      return () => window.removeEventListener(STAGE_ATTACHMENT_EVENT, onStageAttachment);
+    });
+
     useEffect(() => {
       function onAnnotation(e: Event) {
         const detail = (e as CustomEvent<AnnotationEventDetail>).detail;
@@ -1692,6 +1806,36 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setDragActive(false);
       const files = Array.from(e.dataTransfer.files ?? []);
       if (files.length > 0) void uploadFiles(files);
+    }
+
+    // Dragging the shell's gray backdrop (not its children) vertically
+    // resizes the editor: up = taller. Dragging back at/below the default
+    // height clears the override and returns to auto-grow.
+    function handleShellResizeMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+      if (e.target !== e.currentTarget) return;
+      if (e.button !== 0) return;
+      const editorEl = e.currentTarget.querySelector<HTMLElement>('.composer-input-editor');
+      if (!editorEl) return;
+      e.preventDefault();
+      const startY = e.clientY;
+      const startHeight = editorEl.getBoundingClientRect().height;
+      const DEFAULT_MIN = 72;
+      const onMove = (ev: MouseEvent) => {
+        const delta = startY - ev.clientY;
+        const max = Math.round(window.innerHeight * 0.6);
+        const next = Math.min(max, Math.max(DEFAULT_MIN, Math.round(startHeight + delta)));
+        setManualEditorHeight(next <= DEFAULT_MIN + 4 ? null : next);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        document.body.style.removeProperty('cursor');
+        document.body.style.removeProperty('user-select');
+      };
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
     }
 
     async function handleLinkFolder() {
@@ -2215,7 +2359,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         onDragLeave={() => setDragActive(false)}
         onDrop={inputDisabled ? undefined : handleDrop}
       >
-        <div className="composer-shell">
+        <div
+          className={`composer-shell${manualEditorHeight != null ? ' composer-shell--manual-height' : ''}`}
+          style={
+            manualEditorHeight != null
+              ? ({ '--composer-manual-h': `${manualEditorHeight}px` } as React.CSSProperties)
+              : undefined
+          }
+          onMouseDown={handleShellResizeMouseDown}
+        >
           {/*
             Spec §8.4 — context bar above the composer input. The
             section now behaves as a pure context bar: it renders the
@@ -2605,15 +2757,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 title={t('chat.send')}
                 data-tooltip={t('chat.send')}
               >
-                <video
-                  className="composer-send__video"
-                  src="/composer-send.mp4"
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  aria-hidden
-                />
                 <Icon name="arrow-up" size={17} />
               </button>
             ) : null}
@@ -3162,20 +3305,24 @@ function StagedRunContexts({
         const canPreview = a.kind === 'image' && Boolean(projectId);
         const imageUrl = canPreview ? projectRawUrl(projectId!, a.path) : null;
         return (
-          <div key={a.path} className={`staged-chip staged-${a.kind}`}>
+          <div
+            key={a.path}
+            className={`staged-chip staged-${a.kind}${canPreview && imageUrl ? ' staged-chip--image-file' : ''}`}
+          >
             <span className="staged-order" aria-label={`Attachment ${index + 1}`}>
               {index + 1}
             </span>
             {canPreview && imageUrl ? (
+              // Mirrors the home composer's image chips: thumbnail only, the
+              // filename lives in the tooltip / aria-label.
               <button
                 type="button"
                 className="staged-preview-trigger"
                 onClick={() => setPreview(a)}
-                title={a.path}
+                title={a.name}
                 aria-label={`Preview ${a.name}`}
               >
                 <img src={imageUrl} alt="" aria-hidden />
-                <span className="staged-name">{a.name}</span>
               </button>
             ) : (
               <>

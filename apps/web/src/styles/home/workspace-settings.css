@@ -184,7 +184,8 @@
   justify-content: center;
   padding: 24px;
   background: color-mix(in srgb, #000 26%, transparent);
-  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .workspace-settings__modal {

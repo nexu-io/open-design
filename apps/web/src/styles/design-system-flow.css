@@ -32,7 +32,8 @@
   padding: 0 28px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
 }
 .ds-setup-topbar .primary,
 .ds-setup-topbar .ghost,
@@ -968,7 +969,8 @@ a.ds-source-link-open:focus-visible {
   justify-content: center;
   padding: 24px;
   background: color-mix(in srgb, var(--bg) 68%, transparent);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .ds-source-upload-loading__card {
   display: inline-flex;

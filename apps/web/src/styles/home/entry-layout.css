@@ -39,6 +39,9 @@
 .entry-shell--no-header .entry {
   grid-template-columns: 0 minmax(0, 1fr);
   transition: grid-template-columns 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* Translucent over the app-wash pastel ground (app-wash.css): the frosted
+     rail and content cards float on the wash instead of a flat tone. */
+  background: var(--veil-page);
 }
 .entry-shell--no-header .entry.entry--rail-open {
   grid-template-columns: var(--entry-rail-width, 56px) minmax(0, 1fr);
@@ -81,23 +84,73 @@
   gap: 8px;
   margin: 10px;
   padding: 10px 0 12px;
-  /* Pure white surface (explicit request; there is no white token, and
-     --bg-panel is #fafafa). Exposed as --rail-surface so the search box and
-     active nav item can match it. Dark-mode surface is restored below. */
-  --rail-surface: #fff;
+  position: relative;
+  /* Craft-style milky frost (material.css thin tier): soft white surface over
+     the wash/wallpaper with a saturated blur, instead of fully clear glass. */
+  /* White frost: pure-white base at the Thin tier's 60% alpha, so the card
+     reads white but keeps the frosted-glass translucency (the panel's
+     material-thin backdrop blur below does the frosting). */
+  --rail-surface: rgba(255, 255, 255, 0.6);
   background: var(--rail-surface);
-  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  /* The stroke is the gradient ring painted by ::after below — the real
+     border stays transparent so the box metrics don't change. */
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  /* Whisper elevation: the floating panel only needs a hairline lift — the
+     md shadow read as a wide gray halo on the light ground. */
+  box-shadow: var(--shadow-sm);
 }
-/* Keep the dark theme's surface (both explicit and OS-driven) instead of a
-   blinding white panel. */
-[data-theme="dark"] .entry-nav-rail__panel {
-  --rail-surface: var(--bg-panel);
+/* Gradient rim, Craft-style: a light edge that is brightest along the top
+   and fades down the sides (glass-refract ring tokens, so dark mode halves
+   it automatically). Painted as a masked overlay so only the 1px ring shows
+   and the frosted surface underneath stays untouched. */
+.entry-nav-rail__panel::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--glass-refract-ring-top) 0%,
+    var(--glass-refract-ring-edge) 42%,
+    var(--glass-refract-ring-edge) 68%,
+    var(--glass-refract-ring-bottom) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .entry-nav-rail__panel {
-    --rail-surface: var(--bg-panel);
+/* Material spec fallbacks: drop the translucency to a solid per-theme surface
+   when the user reduces transparency or the browser lacks backdrop-filter. */
+@media (prefers-reduced-transparency: reduce) {
+  .entry-nav-rail__panel {
+    --rail-surface: var(--bg);
+    background: var(--rail-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+  }
+  .entry-nav-rail__panel::after {
+    display: none;
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .entry-nav-rail__panel {
+    --rail-surface: var(--bg);
+    background: var(--rail-surface);
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+  }
+  .entry-nav-rail__panel::after {
+    display: none;
   }
 }
 .entry-nav-rail.is-open {
@@ -263,6 +316,8 @@
 }
 .entry-nav-rail__footer .entry-rail-actions {
   order: 1;
+  /* Settings row rides higher, clear of the credits + account stack. */
+  margin-bottom: 12px;
 }
 .entry-nav-rail__footer .entry-nav-rail__account {
   order: 2;
@@ -467,8 +522,10 @@
   z-index: 70;
   min-width: 220px;
   padding: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
   display: flex;
@@ -870,6 +927,17 @@
 }
 
 /* Search box */
+.entry-nav-rail__search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.entry-nav-rail__search-row .entry-nav-rail__search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
 .entry-nav-rail__search {
   display: flex;
   align-items: center;
@@ -994,13 +1062,15 @@
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active {
-  /* Selected = one softer neutral step than the hover fill, no border. */
-  background: color-mix(in srgb, var(--bg-panel) 70%, var(--bg-subtle));
+  /* Selected = a translucent ink fill one step stronger than hover: it tints
+     whatever surface the glass rail sits on, instead of an opaque gray pill
+     that ignores the warm wash behind the panel. */
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-strong);
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active:hover {
-  background: color-mix(in srgb, var(--bg-panel) 70%, var(--bg-subtle));
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   border-color: transparent;
 }
 .entry-nav-rail__btn:focus-visible {
@@ -1047,7 +1117,30 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background: #fff;
+}
+/* Frosted top edge: content scrolling up toward the (transparent) tab strip
+   melts into a progressive blur instead of hard-clipping at the row
+   boundary. Sticky first-child band + gradient mask; the material token
+   degrades it away under reduced transparency / no backdrop-filter. */
+.entry-main--scroll::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: block;
+  height: 32px;
+  margin-bottom: -32px;
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--material-ultrathin-backdrop, none);
+  backdrop-filter: var(--material-ultrathin-backdrop, none);
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent);
+  mask-image: linear-gradient(to bottom, #000 30%, transparent);
+}
+.entry-main--scroll {
+  /* Transparent: the UltraThin ground now lives on .workspace-shell
+     (shell.css) so the strip / rail gutter / content read as one continuous
+     surface with no gray frame around the scroll area. */
+  background: transparent;
   padding: 0;
   /* Used by descendants (e.g. the plugins-home Scenario row) to
      pin themselves directly below the sticky topbar. Mirrors the
@@ -1077,10 +1170,9 @@
 /* Sticky top-right control strip inside the main scroll area.
    Stays visually pinned regardless of scroll position so the
    avatar / settings menu and the chip cluster are always
-   reachable. The strip is fully opaque so any content scrolling
-   underneath (plugin tiles, project cards, hero card) stays
-   clipped behind it instead of bleeding through the chip
-   gutter. The strip's height is mirrored by --entry-topbar-h on
+   reachable. The strip frosts (glass material) any content scrolling
+   underneath — plugin tiles, project cards, hero card — so they blur
+   behind it instead of bleeding through the chip gutter. The strip's height is mirrored by --entry-topbar-h on
    .entry-main--scroll so descendants like the plugins-home
    Scenario row can pin themselves immediately below it. */
 .entry-main__topbar {
@@ -1092,7 +1184,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px 0;
-  background: var(--bg);
+  background: transparent;
   isolation: isolate;
 }
 .entry-main__topbar:has(.entry-settings-menu__popover) {
@@ -1104,7 +1196,9 @@
   inset: -1px 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--bg);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
 }
 /* Chip group — the GitHub star, inline model switcher, and Use
    everywhere chip live inside this wrapper so the responsive
@@ -1637,9 +1731,12 @@
   width: 320px;
   max-width: calc(100vw - 24px);
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Solid, not material: the translucent glass read as content bleeding
+     straight through the popover, so text-dense agent rows sit on an opaque
+     elevated surface instead. */
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.08));
   display: flex;
   flex-direction: column;
@@ -1969,6 +2066,9 @@
   padding: 8px 4px;
   display: inline-flex;
   align-items: center;
+  /* Left-align the icon + label (the button primitive centers content). */
+  justify-content: flex-start;
+  text-align: left;
   gap: 6px;
   color: var(--text-muted);
   font-size: 12px;
@@ -4881,7 +4981,9 @@
 .entry-nav-rail__account {
   position: relative;
   display: flex;
-  align-items: center;
+  /* Credits chip stacks above the avatar row (chip is order: -1 below). */
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   order: 99;
   margin: auto 0 0;
@@ -4904,10 +5006,20 @@
   color: var(--text-strong);
 }
 .entry-nav-rail__account-trigger:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+/* The menu opens on hover, so the global blue focus ring reads as a stray
+   "selected" state after any click on the row. Keep focus feedback as the
+   same quiet tint instead. */
+.entry-nav-rail__account-trigger:focus,
+.entry-nav-rail__account-trigger:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
 .entry-nav-rail__account-avatar {
   width: 25px;
   height: 25px;
-  border-radius: var(--radius-pill);
+  /* Squircle silhouette (superellipse defined in EntryNavRail's SVG defs);
+     no border-radius on top — a circle would clip tighter than the squircle. */
+  clip-path: url(#od-avatar-squircle);
   background: linear-gradient(135deg, #87ea5c, #0d5400);
   color: #fff;
   display: grid;
@@ -4926,6 +5038,8 @@
   text-overflow: ellipsis;
 }
 .entry-nav-rail__account-trigger svg { color: var(--text-soft); }
+/* The membership wordmark reads as a solid black mark, not a muted glyph. */
+.entry-nav-rail__account-trigger .plan-badge { color: var(--text-strong); }
 
 .entry-nav-rail__local-logo {
   appearance: none;
@@ -4966,15 +5080,18 @@
 /* ── Credits chip (✨ N) — separate region from the account dropdown ── */
 .entry-nav-rail__credits-chip {
   flex: 0 0 auto;
+  /* Sits above the avatar row, aligned with the trigger's inner padding. */
+  order: -1;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-4);
   min-height: 28px;
   padding: var(--spacing-2) var(--spacing-8);
-  margin-left: var(--spacing-2);
+  margin-left: 0;
   border-radius: var(--radius-pill);
-  border: var(--stroke-thin) solid var(--border);
-  background: var(--bg-panel);
+  border: 0;
+  background: transparent;
   color: var(--text);
   font-size: var(--font-size-12);
   font-weight: 500;
@@ -4983,13 +5100,11 @@
   cursor: pointer;
   transition:
     background-color var(--duration-faster) var(--curve-easy-ease),
-    border-color var(--duration-faster) var(--curve-easy-ease),
     box-shadow var(--duration-faster) var(--curve-easy-ease);
 }
 .entry-nav-rail__credits-chip:hover,
 .entry-nav-rail__credits-chip[aria-expanded='true'] {
   background: var(--bg-subtle);
-  border-color: var(--border-strong);
 }
 .entry-nav-rail__credits-chip:focus-visible {
   outline: none;
@@ -5011,7 +5126,11 @@
   flex-direction: column;
   padding: var(--spacing-16);
   border-radius: var(--radius-xlarge);
-  background: var(--bg-panel);
+  /* Solid, not material: the nav-rail panel's own backdrop-filter makes it
+     a backdrop root, so descendants' blur cannot sample through it in
+     Chromium — any translucency here reads as sharp bleed-through of the
+     nav items behind the popover. */
+  background: var(--bg-elevated);
   border: var(--stroke-thin) solid var(--border);
   box-shadow: var(--shadow-sm);
   animation: entry-invite-in var(--duration-fast) var(--curve-decelerate-mid);
@@ -5185,8 +5304,12 @@
   z-index: 41;
   top: calc(100% + 4px);
   padding: 6px;
+  /* Solid, not material: the nav-rail panel's own backdrop-filter makes it
+     a backdrop root, so descendants' blur cannot sample through it in
+     Chromium — any translucency here reads as sharp bleed-through of the
+     nav items behind the popover. */
   background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
 }
@@ -5203,28 +5326,187 @@
   width: auto;
   box-sizing: border-box;
 }
-.entry-nav-rail__account-menu { min-width: 236px; }
+.entry-nav-rail__account-menu {
+  padding: 6px;
+  border-radius: var(--radius-lg);
+}
+/* Same width as the avatar trigger row: span the account container. */
+.entry-nav-rail__account .entry-nav-rail__account-menu {
+  left: 0;
+  right: 0;
+  width: auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Invisible hover bridge over the 4px float gap, so moving the pointer from
+   the avatar row up into the menu never leaves the hover region. */
+.entry-nav-rail__account .entry-nav-rail__account-menu::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
 .entry-nav-rail__team-menu { min-width: 0; }
+/* Left-aligned identity header (small avatar beside the name/email stack),
+   closed off by a dashed rule — mirrors the reference account menu. */
 .entry-nav-rail__account-head {
   display: grid;
-  justify-items: center;
-  gap: 3px;
-  padding: 12px 8px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 9px;
+  row-gap: 2px;
+  align-items: center;
+  justify-items: start;
+  padding: 6px 6px 10px;
+  border-bottom: 1px dashed var(--material-separator);
+  margin-bottom: 6px;
 }
 .entry-nav-rail__account-head-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-pill);
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  clip-path: url(#od-avatar-squircle);
   background: linear-gradient(135deg, #87ea5c, #0d5400);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  margin-bottom: 2px;
 }
-.entry-nav-rail__account-head-name { font-size: 13px; font-weight: 600; color: var(--text-strong); }
-.entry-nav-rail__account-head-email { font-size: 12px; color: var(--text-muted); }
+.entry-nav-rail__account-head-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.entry-nav-rail__account-head-email {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-nav-rail__account-menu .entry-nav-rail__menu-item {
+  height: 34px;
+  gap: 9px;
+  padding: 0 8px;
+  /* 13px + nowrap: the longest item (GitHub help) must hold one line at the
+     trigger-row width the menu now matches. */
+  font-size: 13px;
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+}
+.entry-nav-rail__menu-meta {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Text glyph standing in for the X (Twitter) icon; sized like the 19px icon
+   slot so the label column stays aligned with icon rows. */
+.entry-nav-rail__menu-x {
+  flex: 0 0 19px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+/* Icon-only social row (Discord / X) below the GitHub Star row: the labels
+   are dropped and the two links sit side by side as compact icon buttons.
+   Zero side padding keeps the first icon centered on the same column as the
+   19px icon slot of the full rows above. */
+.entry-nav-rail__menu-social {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.entry-nav-rail__menu-social-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  text-decoration: none;
+}
+.entry-nav-rail__menu-social-btn:hover {
+  background: var(--vibrancy-fill-secondary);
+  color: var(--text);
+}
+.entry-nav-rail__menu-social-btn svg,
+.entry-nav-rail__menu-social-btn .od-icon { color: inherit; }
+.entry-nav-rail__menu-social-btn .entry-nav-rail__menu-x {
+  flex: 0 0 auto;
+  color: inherit;
+}
+/* Plan + credits block under the identity header (upgrade CTA on the plan
+   row, then remaining/bonus credit rows), mirroring the reference card. */
+.entry-nav-rail__menu-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--vibrancy-fill-tertiary);
+  margin-bottom: 6px;
+}
+.entry-nav-rail__menu-credits-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 6px;
+}
+.entry-nav-rail__menu-credits-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.entry-nav-rail__menu-credits-upgrade {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--text-strong);
+  color: var(--bg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* :not(:disabled) lifts specificity above the global button:hover reset,
+   which would otherwise wash the dark pill to --bg-subtle (white-on-white). */
+.entry-nav-rail__menu-credits-upgrade:hover:not(:disabled),
+.entry-nav-rail__menu-credits-upgrade:focus-visible {
+  background: #353535;
+  color: var(--bg);
+}
+.entry-nav-rail__menu-credits-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  font-size: 13px;
+  color: var(--text);
+}
+.entry-nav-rail__menu-credits-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.entry-nav-rail__menu-credits-label .od-icon { color: var(--text-soft); }
+.entry-nav-rail__menu-credits-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.entry-nav-rail__menu-credits-value .od-icon { color: var(--text-soft); }
 .entry-nav-rail__menu-item {
   appearance: none;
   border: 0;
@@ -5244,32 +5526,11 @@
   text-align: left;
   text-decoration: none;
 }
-.entry-nav-rail__menu-item:hover { background: var(--bg-subtle); }
+.entry-nav-rail__menu-item:hover { background: var(--vibrancy-fill-secondary); }
 .entry-nav-rail__menu-item svg,
 .entry-nav-rail__menu-item .od-icon { color: var(--text-soft); flex: 0 0 auto; }
 .entry-nav-rail__menu-item > svg:first-child,
 .entry-nav-rail__menu-item > .od-icon:first-child { flex-basis: 19px; }
-.entry-nav-rail__menu-item.is-primary { background: var(--text-strong); color: var(--bg); }
-.entry-nav-rail__menu-item.is-primary svg,
-.entry-nav-rail__menu-item.is-primary .od-icon { color: var(--bg); }
-.entry-nav-rail__menu-item.is-primary:hover,
-.entry-nav-rail__menu-item.is-primary:focus-visible {
-  background: #353535;
-  color: var(--bg);
-}
-.entry-nav-rail__menu-item.is-primary:hover svg,
-.entry-nav-rail__menu-item.is-primary:focus-visible svg,
-.entry-nav-rail__menu-item.is-primary:hover .od-icon,
-.entry-nav-rail__menu-item.is-primary:focus-visible .od-icon {
-  color: var(--bg);
-}
-.entry-nav-rail__menu-chevron { margin-left: auto; display: inline-flex; }
-.entry-nav-rail__menu-meta {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
 .entry-nav-rail__menu-section {
   padding: 8px 9px 2px;
   font-size: 12px;
@@ -5277,7 +5538,7 @@
   color: var(--text-faint);
   letter-spacing: 0.03em;
 }
-.entry-nav-rail__menu-divider { height: 1px; background: var(--border-soft); margin: 5px 4px; }
+.entry-nav-rail__menu-divider { height: 1px; background: var(--material-separator); margin: 5px 4px; }
 
 /* ---- Team switcher button + menu ---- */
 .entry-nav-rail__team-wrap { position: relative; }
@@ -5335,7 +5596,9 @@
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .ds-top-scope-chip:hover { color: var(--text); background: var(--bg-subtle); }
-.ds-top-scope-chip.is-active { background: var(--accent-tint); color: var(--accent); }
+/* Selected = solid white pill: --accent-tint was near-invisible against the
+   grayish page wash, so selected and unselected read the same. */
+.ds-top-scope-chip.is-active { background: var(--bg); color: var(--accent); }
 .ds-top-scope-count { font-size: 12px; color: var(--text-faint); font-weight: 600; }
 .ds-top-scope-chip.is-active .ds-top-scope-count { color: var(--accent); }
 
@@ -5901,8 +6164,8 @@
   position: absolute;
   inset: 0;
   background: color-mix(in srgb, var(--text-strong) 34%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .entry-invite__panel {
   position: relative;

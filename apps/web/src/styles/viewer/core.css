@@ -5,7 +5,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg);
+  background: var(--veil-canvas);
   overflow: hidden;
 }
 .workspace:has(.share-menu-popover, .present-menu),
@@ -20,7 +20,10 @@
   align-items: center;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   font-size: 13px;
   color: var(--text-muted);
   gap: 8px;
@@ -223,8 +226,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-md, 10px);
   box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
 }
@@ -311,7 +316,17 @@
 .viewer-toggle.active .switch { background: var(--text); border-color: var(--text); }
 .viewer-toggle.on .switch::after,
 .viewer-toggle.active .switch::after { transform: translateX(12px); }
-.viewer-tabs { display: inline-flex; gap: 2px; }
+/* Switch-style segmented control (opendesign spec): a recessed neutral
+   track holding pill segments; the active segment reads as a raised light
+   thumb — 极浅背景 fill + thin default border on the 次级浅背景 track. */
+.viewer-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
 .viewer-mode-menu {
   position: relative;
   display: inline-flex;
@@ -377,20 +392,26 @@
 }
 .viewer-tab {
   background: transparent;
-  border: none;
-  padding: 4px 12px;
+  border: var(--stroke-thin, 1px) solid transparent;
+  padding: 3px 12px;
   font-size: 12px;
-  /* Capsule button — matches the opened file tab reading as a pill. */
+  /* Segment stays a capsule inside the switch track. */
   border-radius: var(--radius-pill);
-  color: var(--text-muted);
+  color: var(--text-soft);
   white-space: nowrap;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    color var(--duration-faster) var(--curve-easy-ease),
+    border-color var(--duration-faster) var(--curve-easy-ease);
 }
-.viewer-tab:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
-/* Active state is a plain --bg-subtle pill with no stroke — the border stays
-   transparent (see .viewer-tab.active in theater.css). */
+/* Inactive segment hover: text deepens only — a fill would fight the track. */
+.viewer-tab:hover:not(:disabled):not(.active) { background: transparent; color: var(--text); }
+/* Active segment = the switch thumb: light fill + thin border lifts it off
+   the recessed track (border kept alive in theater.css). */
 .viewer-tab.active {
-  background: var(--bg-subtle);
-  color: var(--text);
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text-strong);
   font-weight: 500;
 }
 .viewer-meta { font-size: 12px; color: var(--text-muted); }
@@ -1239,9 +1260,11 @@
   max-height: calc(100% - 28px);
   overflow: auto;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   box-shadow: var(--shadow-lg);
 }
 .comment-popover-section {

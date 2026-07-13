@@ -142,56 +142,13 @@ describe('AssistantMessage unfinished todo state', () => {
     );
 
     expect(screen.getByText(/32s/)).toBeTruthy();
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
   });
 
-  it('hides zero cost because it is not reliable billing data', () => {
+  it('keeps the footer stats time-only (no token counts or cost)', () => {
     render(
       <AssistantMessage
         message={{
-          id: 'assistant-zero-cost',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000, costUsd: 0 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
-  });
-
-  it('hides costs that round to zero in the current display precision', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-rounded-zero-cost',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000, costUsd: 0.00001 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
-  });
-
-  it('shows positive usage cost when billing data is present', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-positive-cost',
+          id: 'assistant-time-only',
           role: 'assistant',
           content: 'Done',
           startedAt: 1_000,
@@ -204,7 +161,9 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/\$0\.0123/)).toBeTruthy();
+    expect(screen.getByText(/32s/)).toBeTruthy();
+    expect(screen.queryByText(/1439 out/)).toBeNull();
+    expect(screen.queryByText(/\$0\.0123/)).toBeNull();
   });
 
   it('does not synthesize a growing elapsed time for completed messages without endedAt', () => {
@@ -224,7 +183,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
+    expect(screen.getByText('Done', { selector: '.assistant-label' })).toBeTruthy();
     expect(screen.queryByText(/\d+m \d{2}s/)).toBeNull();
   });
 
