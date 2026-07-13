@@ -2051,6 +2051,7 @@ async function testAgentConnectionInternal(
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
   let promptFile: PreparedPromptFile | null = null;
+  let connectionTestAgentLogPath: string | undefined;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
@@ -2204,6 +2205,16 @@ async function testAgentConnectionInternal(
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
+      // Antigravity: allocate a per-run --log-file path so the silent-
+      // exit guard below can read the actual upstream error (e.g.
+      // Windows path issue, missing brain directory) and surface it in
+      // the test result detail. Mirrors the chat-route pattern at
+      // apps/daemon/src/server.ts:6693.
+      const agentLogFilePath =
+        def.id === 'antigravity'
+          ? path.join(os.tmpdir(), `od-agy-conn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`)
+          : undefined;
+      if (agentLogFilePath) connectionTestAgentLogPath = agentLogFilePath;
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
@@ -2212,6 +2223,7 @@ async function testAgentConnectionInternal(
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
+          ...(agentLogFilePath ? { agentLogFilePath } : {}),
         },
       );
       // Connection tests should validate the adapter's core CLI path, not
@@ -2421,6 +2433,36 @@ async function testAgentConnectionInternal(
         );
       const exitedCleanly =
         (winner.code === 0 && !winner.signal) || acpForcedShutdown || claudeCompletedTurn;
+      const stderrTail = sink.getStderrTail().trim();
+      const rawStdoutTail = sink.getRawStdoutTail().trim();
+      // Antigravity `no_text` handoff-drop guard: must run BEFORE the
+      // visible-text success path, because the connection probe's
+      // visible-text path would otherwise treat the bare `no_text`
+      // token as successful assistant output. Exact trim match — not
+      // a regex — so legitimate stdout mentioning the token does not
+      // false-fire. (issue #3536; mirrors the chat-route guard in
+      // apps/daemon/src/server.ts:8367+.)
+      const noTextHandoff =
+        rawStdoutTail === 'no_text' || stderrTail === 'no_text';
+      if (input.agentId === 'antigravity' && exitedCleanly && noTextHandoff) {
+        console.warn(
+          `[test:agent] ${def.name} → antigravity_no_text_handoff: stdout=${redactSecrets(rawStdoutTail)} stderr=${redactSecrets(stderrTail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail:
+            'Antigravity CLI exited with a `no_text` handoff signal — the upstream result was dropped. Retry the test, switch models in agy\'s TUI, or update agy to the latest version.',
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
       if (visibleText) {
         const rawSample = truncateSample(visibleText);
         const exitInfo = { code: winner.code, signal: winner.signal };
@@ -2429,8 +2471,6 @@ async function testAgentConnectionInternal(
         }
         if (exitedCleanly) return resultFromAgentText(visibleText, exitInfo);
       }
-      const stderrTail = sink.getStderrTail().trim();
-      const rawStdoutTail = sink.getRawStdoutTail().trim();
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && exitedCleanly && rawStdoutTail) {
         const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
         if (recoveredText) {
@@ -2511,6 +2551,67 @@ async function testAgentConnectionInternal(
           detail: claudeDiagnostic.detail,
           diagnostics: buildDiagnostics({
             phase: 'spawn',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
+      // Antigravity silent-exit guard: real agy 1.0.13+ exits cleanly
+      // with no stdout / no stderr for many reasons (missing brain
+      // folder, upstream timeout, model-not-selected). Without a
+      // typed classification the smoke probe falls through to
+      // `kind: 'unknown'` with a bare "exit 0" detail — the Settings
+      // UI renders that as "Test failed: exit 0" (English) or
+      // "Échec du test : exit 0" (French), the exact text from the
+      // issue screenshot. Surface an antigravity-specific actionable
+      // detail instead. The `no_text` handoff-drop shape is handled
+      // earlier in this function (BEFORE the visible-text success
+      // path); the auth path is still reachable when stdout or the
+      // log file carries the actual auth signal (handled above by
+      // classifyAgentAuthFailure). (issue #3536; mirrors the
+      // chat-route guard in apps/daemon/src/server.ts:8367+.)
+      if (
+        input.agentId === 'antigravity' &&
+        exitedCleanly &&
+        !visibleText &&
+        !auth &&
+        !claudeDiagnostic &&
+        !rawStdoutTail &&
+        !stderrTail
+      ) {
+        // Read the agy --log-file to extract the actual upstream error
+        // (e.g. Windows path issue, missing brain directory) and
+        // surface it in the test result detail. Strip the agy Go log
+        // prefix (timestamp / pid / source-file) so the user sees just
+        // the actionable message.
+        let agyLogError = '';
+        if (connectionTestAgentLogPath) {
+          try {
+            const logContent = await fsp.readFile(connectionTestAgentLogPath, 'utf8');
+            const lines = logContent.split('\n');
+            const lastError = lines.filter((l) => /^E\d{4}\s/.test(l)).pop();
+            if (lastError) {
+              agyLogError = lastError.replace(
+                /^E\d{4}\s+[\d:.]+?\s+\d+\s+[\w._-]+:\d+\]\s*/,
+                '',
+              );
+            }
+          } catch { /* log file missing or unreadable — fall through */ }
+        }
+        console.warn(
+          `[test:agent] ${def.name} → antigravity_silent_exit: ${redactSecrets(rawDetail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail: agyLogError
+            ? `Antigravity CLI exited without producing output.\n\nagy: ${agyLogError}`
+            : 'Antigravity CLI exited without producing output. Run `agy` alone in a terminal to verify the CLI is functional, then retry the test.',
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
             exitCode: winner.code,
             signal: winner.signal,
           }),
@@ -2652,6 +2753,11 @@ async function testAgentConnectionInternal(
     await promptFile?.cleanup().catch(() => {
       // Best-effort cleanup; the OS reaps /tmp eventually.
     });
+    if (connectionTestAgentLogPath) {
+      await fsp.unlink(connectionTestAgentLogPath).catch(() => {
+        // Best-effort cleanup.
+      });
+    }
   }
 }
 

@@ -3855,6 +3855,117 @@ process.exit(0);
     );
   });
 
+  it('reports Antigravity silent exits with an actionable detail instead of a bare "exit 0" (issue #3536)', async () => {
+    // Real agy 1.0.13+ exits cleanly with no stdout, no stderr, and a
+    // log file with no recoverable auth / quota / upstream signal
+    // when the brain folder is missing, the selected model is
+    // unreachable, or the upstream times out. The previous fallback
+    // surfaced this as a bare "exit 0" detail, which the Settings UI
+    // renders as "Test failed: exit 0" (English) / "Échec du test :
+    // exit 0" (French) — the exact text from the issue screenshot.
+    // After the fix the smoke probe returns an actionable detail
+    // telling the user to inspect agy / switch models / update agy,
+    // and the auth-required guidance is reserved for actual auth
+    // signals. (issue #3536.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+// No stdout, no stderr, exit 0 — matches the real agy -p - "hello"
+// shape on machines where the brain folder or upstream is
+// unreachable.
+process.exit(0);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Antigravity',
+        });
+        expect(result.detail).toContain(
+          'Antigravity CLI exited without producing output',
+        );
+        // Must NOT surface the auth guidance when there is no auth
+        // signal in stdout/stderr/log.
+        expect(result.detail).not.toContain('open a terminal and run `agy` once');
+      },
+    );
+  });
+
+  it('reports Antigravity bare `no_text` handoff drops with an actionable detail (issue #3536)', async () => {
+    // Antigravity CLI versions can emit a bare `no_text` token on
+    // stdout when the upstream handoff drops the result. Without a
+    // typed classification the smoke probe returns a bare "exit 0 ·
+    // stdout: no_text" detail. After the fix the probe reports the
+    // same handoff-drop message the chat close path uses. Exact trim
+    // match — not a regex — so legitimate stdout mentioning the
+    // token does not false-fire. (PR #3840 reviewer feedback.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('no_text\\n');
+process.exit(0);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Antigravity',
+        });
+        expect(result.detail).toContain('handoff signal');
+        expect(result.detail).toContain('no_text');
+      },
+    );
+  });
+
+  it('does not classify Antigravity stdout auth prompts through the silent-exit branch (issue #3536)', async () => {
+    // Negative test: when agy prints visible stdout (e.g. an auth
+    // prompt), the connection probe's existing visible-text path
+    // runs first and returns success — the new antigravity
+    // silent-exit branch must NOT fire and must NOT add the
+    // "Antigravity CLI exited without producing output" detail.
+    // (The connection probe's auth-prompt handling differs from
+    // the chat route's: the probe treats any visible stdout as
+    // success because the agent did run; auth-prompt suppression
+    // is the chat route's job. That's pre-existing behavior, not
+    // in scope here.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=12345\\n');
+process.stdout.write('Waiting for authentication (timeout 30s)...\\n');
+process.stdout.write('Error: authentication timed out.\\n');
+process.exit(0);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        // Visible-text path: agent ran, probe returns success.
+        expect(result.ok).toBe(true);
+        // The new silent-exit detail must NOT be attached.
+        expect(result.detail ?? '').not.toContain(
+          'Antigravity CLI exited without producing output',
+        );
+        expect(result.detail ?? '').not.toContain('handoff signal');
+      },
+    );
+  });
+
   it('keeps non-auth Cursor Agent runtime failures on the generic spawn path', async () => {
     await withFakeCursorAgent(
       `
