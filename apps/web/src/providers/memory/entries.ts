@@ -20,25 +20,13 @@ export interface SaveMemoryEntryInput {
 
 export async function fetchMemoryList(): Promise<MemoryListResponse> {
   const resp = await fetch('/api/memory');
-  if (!resp.ok) {
-    return {
-      enabled: true,
-      chatExtractionEnabled: true,
-      profileEnabled: true,
-      rewriteEnabled: true,
-      verifyEnabled: true,
-      rootDir: '',
-      index: '',
-      entries: [],
-      extraction: null,
-    };
-  }
+  if (!resp.ok) throw new Error(`Memory list request failed (${resp.status})`);
   return (await resp.json()) as MemoryListResponse;
 }
 
 export async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {
   const resp = await fetch('/api/memory/tree');
-  if (!resp.ok) return [];
+  if (!resp.ok) throw new Error(`Memory tree request failed (${resp.status})`);
   const json = (await resp.json()) as MemoryTreeListResponse;
   return json.tree ?? [];
 }

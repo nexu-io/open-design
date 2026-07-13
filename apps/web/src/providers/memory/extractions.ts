@@ -8,7 +8,7 @@ import type {
 
 export async function fetchExtractions(): Promise<MemoryExtractionRecord[]> {
   const resp = await fetch('/api/memory/extractions');
-  if (!resp.ok) return [];
+  if (!resp.ok) throw new Error(`Memory extractions request failed (${resp.status})`);
   const json = (await resp.json()) as MemoryExtractionsResponse;
   return json.extractions ?? [];
 }

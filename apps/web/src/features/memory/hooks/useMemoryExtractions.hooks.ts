@@ -12,6 +12,8 @@ import { memoryExtractionsPort } from '../dependencies';
 import type { MemoryExtractionsPort } from '../ports';
 
 export interface MemoryExtractionsController {
+  /** Non-null when the extraction-history read failed. */
+  loadError?: string | null;
   extractions: MemoryExtractionRecord[];
   isRefreshing: boolean;
   /** Wall clock refreshed every 30s so relative ages don't freeze. */
@@ -33,6 +35,7 @@ export function useMemoryExtractions(
   // mount + live SSE updates merged by id so phase transitions
   // (running → success) replace the row in place.
   const [extractions, setExtractions] = useState<MemoryExtractionRecord[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const reloadExtractions = useCallback(async () => {
@@ -40,7 +43,13 @@ export function useMemoryExtractions(
     try {
       const next = await port.fetchExtractions();
       setExtractions(next);
+      setLoadError(null);
       return next;
+    } catch {
+      // Keep the last confirmed history instead of presenting a synthetic empty
+      // list when the daemon cannot be reached.
+      setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
+      return [];
     } finally {
       setIsRefreshing(false);
     }
@@ -130,6 +139,7 @@ export function useMemoryExtractions(
   );
 
   return {
+    loadError,
     extractions,
     isRefreshing,
     nowClock,

@@ -48,6 +48,19 @@ describe('useMemoryExtractions — load + derived', () => {
     expect(result.current.isRefreshing).toBe(false);
   });
 
+  it('keeps the prior rows and exposes a failure when the history reload rejects', async () => {
+    const port = makePort({ fetchExtractions: vi.fn(async () => { throw new Error('offline'); }) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('saved')));
+
+    await act(async () => {
+      await result.current.reloadExtractions();
+    });
+
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['saved']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
   it('shows the no-provider banner only for the latest skipped/no-provider record', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));

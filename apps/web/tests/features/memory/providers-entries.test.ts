@@ -1,6 +1,6 @@
 // Transport adapters for the memory-entry, tree, and index routes. These mock
 // the global `fetch` to pin the ok/non-ok branches, the create-vs-update URL/verb
-// split, and the `?? []` / `?? null` fallbacks.
+// split, and the `?? []` / `?? null` payload fallbacks.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -32,21 +32,18 @@ describe('entries transport', () => {
     expect((await fetchMemoryList()).enabled).toBe(false);
   });
 
-  it('returns a safe default shape when the list fetch fails', async () => {
+  it('rejects rather than fabricating a list when the list fetch fails', async () => {
     mockFetch(() => ({ ok: false }));
-    const list = await fetchMemoryList();
-    expect(list.enabled).toBe(true);
-    expect(list.entries).toEqual([]);
-    expect(list.extraction).toBeNull();
+    await expect(fetchMemoryList()).rejects.toThrow('Memory list request failed');
   });
 
-  it('returns the tree, [] when absent, and [] on failure', async () => {
+  it('returns the tree, [] when absent, and rejects on failure', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({ tree: [{ id: 't' }] }) }));
     expect(await fetchMemoryTree()).toEqual([{ id: 't' }]);
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
     expect(await fetchMemoryTree()).toEqual([]);
     mockFetch(() => ({ ok: false }));
-    expect(await fetchMemoryTree()).toEqual([]);
+    await expect(fetchMemoryTree()).rejects.toThrow('Memory tree request failed');
   });
 
   it('returns the entry, null when absent, and null on failure', async () => {

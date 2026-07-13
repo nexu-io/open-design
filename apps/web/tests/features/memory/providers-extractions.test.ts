@@ -33,9 +33,9 @@ describe('extractions transport', () => {
     expect(await fetchExtractions()).toEqual([]);
   });
 
-  it('returns [] when the list fetch fails', async () => {
+  it('rejects rather than fabricating an empty list when the fetch fails', async () => {
     mockFetch(() => ({ ok: false }));
-    expect(await fetchExtractions()).toEqual([]);
+    await expect(fetchExtractions()).rejects.toThrow('Memory extractions request failed');
   });
 
   it('reports delete success from the response ok flag', async () => {

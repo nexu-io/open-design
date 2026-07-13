@@ -39,6 +39,8 @@ export interface MemoryEntriesCoordination {
 }
 
 export interface MemoryEntriesController {
+  /** Non-null when the list/tree transport failed; callers retain prior state. */
+  loadError?: string | null;
   entries: MemoryEntrySummary[];
   filtered: MemoryEntrySummary[];
   memoryTree: MemoryTreeNode[];
@@ -78,6 +80,7 @@ export function useMemoryEntries(
   const [index, setIndex] = useState('');
   const [indexDraft, setIndexDraft] = useState<string | null>(null);
   const [entries, setEntries] = useState<MemoryEntrySummary[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [memoryTree, setMemoryTree] = useState<MemoryTreeNode[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewBody, setPreviewBody] = useState<string | null>(null);
@@ -101,15 +104,22 @@ export function useMemoryEntries(
   }, [rootDir, fireFlash]);
 
   const reload = useCallback(async () => {
-    const [list, tree] = await Promise.all([
-      port.fetchMemoryList(),
-      port.fetchMemoryTree(),
-    ]);
-    hydrateConfig(list);
-    setRootDir(list.rootDir);
-    setIndex(list.index);
-    setEntries(list.entries);
-    setMemoryTree(tree);
+    try {
+      const [list, tree] = await Promise.all([
+        port.fetchMemoryList(),
+        port.fetchMemoryTree(),
+      ]);
+      hydrateConfig(list);
+      setRootDir(list.rootDir);
+      setIndex(list.index);
+      setEntries(list.entries);
+      setMemoryTree(tree);
+      setLoadError(null);
+    } catch {
+      // Do not invent an empty "success" response: leave the last confirmed
+      // state intact and let the shell render this explicit failure instead.
+      setLoadError("Memory data couldn't be loaded. Try again shortly.");
+    }
   }, [port, hydrateConfig]);
 
   const filtered = useMemo(() => {
@@ -218,6 +228,7 @@ export function useMemoryEntries(
   }, [indexDraft, fireFlash, port]);
 
   return {
+    loadError,
     entries,
     filtered,
     memoryTree,

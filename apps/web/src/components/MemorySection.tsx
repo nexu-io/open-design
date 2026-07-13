@@ -92,6 +92,7 @@ export function MemorySection({
 
   const {
     entries,
+    loadError: entriesLoadError = null,
     filtered,
     memoryTree,
     treeFolders,
@@ -126,6 +127,7 @@ export function MemorySection({
   // confirm prompt.
   const {
     extractions,
+    loadError: extractionsLoadError = null,
     isRefreshing,
     nowClock,
     showNoProviderBanner,
@@ -353,6 +355,12 @@ export function MemorySection({
         <div role="status" className="memory-disabled-banner">
           <strong>{t('settings.memoryDisabled')}</strong> —{' '}
           {t('settings.memoryDisabledBanner')}
+        </div>
+      ) : null}
+
+      {entriesLoadError ?? extractionsLoadError ? (
+        <div role="alert" className="memory-disabled-banner">
+          {entriesLoadError ?? extractionsLoadError}
         </div>
       ) : null}
 
