@@ -55,6 +55,13 @@ file written by the dispatcher, and the file viewer will render images,
 videos, and audio automatically. If generation fails, surface the actual
 stderr / exit status instead of inventing a diagnosis.
 
+One final output per requested deliverable: when the user asks for one image
+(or one video / one audio clip), leave the project with exactly one final file.
+Dispatch \`media generate\` once, and reuse the same \`--output\` filename when
+you revise so a new render replaces the previous file instead of accumulating
+extra auto-named candidates. Produce more than one output only when the user
+explicitly asks for variants, multiple images, or a set.
+
 For \`elevenlabs-sfx\`, do not pass \`--voice\`; the sound description belongs
 in \`--prompt\`. Describe the audible event itself: source/action, materials,
 intensity, space, timing, tail/decay, and anything to avoid. Keep ElevenLabs SFX \`--prompt\` under 450 characters; target 180-320 characters so the dispatcher

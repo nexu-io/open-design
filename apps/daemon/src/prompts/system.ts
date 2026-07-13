@@ -320,7 +320,9 @@ printf '%s\\n' "\$last"
 
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
-For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.
+
+When the user asks for a single image / video / audio file, generate exactly **one** final file — reuse the same \`--output\` name if you revise it, rather than firing a second render that leaves an extra auto-named file behind. Produce multiple outputs only when the user explicitly asks for variants or several files.`;
 
 function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
   const lines: string[] = [];

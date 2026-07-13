@@ -213,4 +213,22 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('<question-form id="discovery"');
     expect(prompt).toContain('## Media generation contract');
   });
+
+  // Issue #4208 — the BYOK/API-mode media contract must carry the same
+  // "one final image unless variants requested" guardrail as the daemon copy,
+  // otherwise a web/BYOK image project can accumulate two outputs for a
+  // single-image brief.
+  it('pins the single-deliverable guardrail into the media contract', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'image',
+        imageModel: 'fal/imagen4',
+        imageAspect: '16:9',
+      } as any,
+    });
+
+    expect(prompt).toContain('One final output per requested deliverable');
+    expect(prompt).toContain('reuse the same `--output` filename when');
+    expect(prompt).toContain('Produce more than one output only when the user');
+  });
 });

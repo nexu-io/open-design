@@ -616,3 +616,57 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     ).toBe('');
   });
 });
+
+// Issue #4208 — "我想要一张可爱小鹿的星空图" produced two `image-gpt-image-*.png`
+// files. The dispatcher writes exactly one file per call, so the extra file
+// comes from the agent dispatching `media generate` twice. The only "one final
+// image" guardrail used to live in the image-poster skill body and the
+// Codex-only imagegen override — NOT in the load-bearing media contract that
+// applies to every agent and every media project, and NOT in the non-media
+// dispatch hint. These specs pin the single-deliverable invariant into those
+// always-on surfaces so a plain image project no longer accumulates variants.
+describe('single-deliverable guardrail (issue #4208)', () => {
+  it('pins a one-final-output invariant into the media contract for image projects', () => {
+    const out = composeSystemPrompt({
+      agentId: 'claude',
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+      },
+    });
+
+    expect(out).toContain('## Media generation contract');
+    expect(out).toContain('One final output per requested deliverable');
+    expect(out).toContain('one file, not two');
+    // The dispatcher never adds a collision suffix (writeFile overwrites), so
+    // "reuse the same --output" leaves a single current file when iterating.
+    expect(out).toContain("Iterate by re-running (replace, don't accumulate)");
+    expect(out).toContain('overwrites the previous file');
+    // Multiple outputs stay allowed when the user explicitly asks for them.
+    expect(out).toContain('Produce more than one output only when the user explicitly');
+  });
+
+  it('applies the single-deliverable invariant regardless of image model', () => {
+    const out = composeSystemPrompt({
+      agentId: 'gemini',
+      metadata: {
+        kind: 'image',
+        imageModel: 'flux-pro-ultra',
+        imageAspect: '16:9',
+      },
+    });
+
+    expect(out).toContain('One final output per requested deliverable');
+  });
+
+  it('adds the single-image guardrail to the non-media dispatch hint too', () => {
+    const out = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+    });
+
+    expect(out).toContain('## Media generation (if asked)');
+    expect(out).toContain('generate exactly **one** final file');
+    expect(out).toContain('Produce multiple outputs only when the user explicitly asks');
+  });
+});
