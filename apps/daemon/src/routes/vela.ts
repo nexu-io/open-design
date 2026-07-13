@@ -84,6 +84,27 @@ function shouldStreamVelaProxyRequest(req: Request, body: Buffer | null): boolea
   return req.method !== 'GET' && req.method !== 'HEAD' && body == null;
 }
 
+/**
+ * Pipe one leg of the AMR proxy with an explicit source-error guard.
+ *
+ * `.pipe()` does NOT forward a source `'error'` to the destination, and a
+ * stream that emits `'error'` with no listener throws — crashing the privileged
+ * daemon. Both legs of this proxy have real-world error paths: the upstream
+ * response body can `ECONNRESET` mid-stream (a network drop, routine), and the
+ * inbound request body errors when a client aborts an upload. Routing the
+ * source error to `onSourceError` (which tears the proxy down) instead of
+ * leaving it unhandled is the invariant that keeps the daemon alive. Exported
+ * for test.
+ */
+export function pipeProxyStreamWithGuard(
+  source: NodeJS.ReadableStream,
+  dest: NodeJS.WritableStream,
+  onSourceError: (err: Error) => void,
+): void {
+  source.on('error', onSourceError);
+  source.pipe(dest);
+}
+
 function proxyAmrApiRequest(req: Request, res: Response): void {
   const suffix = req.originalUrl.slice(AMR_API_PROXY_PREFIX.length);
   if (!suffix.startsWith('/api/v1/')) {
@@ -122,7 +143,13 @@ function proxyAmrApiRequest(req: Request, res: Response): void {
       for (const [key, value] of Object.entries(upstreamRes.headers)) {
         if (value !== undefined) res.setHeader(key, value);
       }
-      upstreamRes.pipe(res);
+      pipeProxyStreamWithGuard(upstreamRes, res, (err) => {
+        if (!res.headersSent) {
+          res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+        } else {
+          res.destroy();
+        }
+      });
     },
   );
   upstream.setTimeout(30_000, () => upstream.destroy(new Error('AMR API proxy timed out')));
@@ -135,7 +162,7 @@ function proxyAmrApiRequest(req: Request, res: Response): void {
   });
   if (body) upstream.write(body);
   if (streamBody) {
-    req.pipe(upstream);
+    pipeProxyStreamWithGuard(req, upstream, () => upstream.destroy());
   } else {
     upstream.end();
   }
