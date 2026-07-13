@@ -3964,6 +3964,35 @@ export function ProjectView({
         let replayedContent = needsFullReplay ? '' : message.content;
         let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
+        const updateReattachConversationLatestRun = (
+          nextStatus: NonNullable<ChatMessage['runStatus']>,
+          endedAt?: number,
+        ) => {
+          setConversations((curr) =>
+            curr.map((conversation) => {
+              if (conversation.id !== reattachConversationId) return conversation;
+              const startedAt =
+                conversation.latestRun?.startedAt
+                ?? status.createdAt
+                ?? message.startedAt
+                ?? message.createdAt;
+              return {
+                ...conversation,
+                updatedAt: endedAt ?? conversation.updatedAt,
+                latestRun: {
+                  status: nextStatus,
+                  startedAt,
+                  ...(endedAt === undefined
+                    ? {}
+                    : {
+                        endedAt,
+                        durationMs: Math.max(0, endedAt - startedAt),
+                      }),
+                },
+              };
+            }),
+          );
+        };
         const applyContentDelta = (delta: string) => {
           for (const ev of parser.feed(delta)) {
             if (ev.type === 'artifact:start') {
@@ -4108,6 +4137,10 @@ export function ProjectView({
                 latestReattachRunStatus === 'canceled'
                   ? { telemetryFinalized: true }
                   : undefined,
+              );
+              updateReattachConversationLatestRun(
+                latestReattachRunStatus === 'canceled' ? 'canceled' : 'succeeded',
+                endedAt,
               );
               if (latestReattachRunStatus === 'canceled') return;
               void (async () => {
@@ -4424,6 +4457,7 @@ export function ProjectView({
               true,
             );
             latestReattachRunStatus = runStatus;
+            updateReattachConversationLatestRun(runStatus);
             if (runStatus === 'canceled') {
               textBuffer.cancel();
               unregisterTextBuffer();
@@ -5016,6 +5050,8 @@ export function ProjectView({
       // that just failed in the current session (the daemon status fetch is only
       // needed on reload, not for runs that are already known to have failed).
       let currentRunId: string | undefined = undefined;
+      let latestLiveDaemonRunStatus: ChatMessage['runStatus'] =
+        config.mode === 'daemon' ? 'running' : undefined;
       const updateConversationLatestRun = (
         status: NonNullable<ChatMessage['runStatus']>,
         endedAt?: number,
@@ -5200,6 +5236,23 @@ export function ProjectView({
         }
         persistMessageById(assistantId, { keepalive: true });
       };
+      const resolveLiveDaemonTerminalRun = async (
+        fallbackStatus?: TerminalRunStatus | null,
+        options?: { allowFallbackOnActiveProbe?: boolean },
+      ): Promise<TerminalRunResolution | null> => {
+        if (!currentRunId) {
+          if (!fallbackStatus) return null;
+          return {
+            status: fallbackStatus,
+            endedAt: Date.now(),
+            authoritative: false,
+          };
+        }
+        return resolveDaemonTerminalRunCompletion(currentRunId, {
+          fallbackStatus,
+          allowFallbackOnActiveProbe: options?.allowFallbackOnActiveProbe,
+        });
+      };
       const pushEvent = (ev: AgentEvent) => {
         textBuffer.flush();
         updateAssistant((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
@@ -5371,7 +5424,7 @@ export function ProjectView({
             },
           }));
         },
-        onDone: (fullText = '') => {
+        onDone: async (fullText = '') => {
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -5439,18 +5492,50 @@ export function ProjectView({
             clearTraceTouchedFilePaths();
             return;
           }
-          const endedAt = Date.now();
+          let endedAt = Date.now();
           let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
-          updateAssistant((prev) => {
-            finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
-            return {
+          if (config.mode === 'daemon') {
+            const terminalFallbackStatus =
+              asTerminalRunStatus(latestLiveDaemonRunStatus)
+              ?? asTerminalRunStatus(resolveSucceededRunStatus(latestLiveDaemonRunStatus));
+            const terminalRun = await resolveLiveDaemonTerminalRun(
+              terminalFallbackStatus,
+              {
+                allowFallbackOnActiveProbe: asTerminalRunStatus(latestLiveDaemonRunStatus) !== null,
+              },
+            );
+            if (!terminalRun) {
+              const ownsCurrentRun = clearCurrentRunStreamingMarker(
+                runConversationId,
+                controller,
+                cancelController,
+              );
+              if (ownsCurrentRun) setRecoveryTick((t) => t + 1);
+              scheduleConversationMessageRefresh(runConversationId);
+              clearTraceTouchedFilePaths();
+              return;
+            }
+            endedAt = terminalRun.endedAt;
+            finalRunStatus = terminalRun.status;
+            latestLiveDaemonRunStatus = finalRunStatus;
+            if (finalRunStatus === 'canceled') setError(null);
+            updateAssistant((prev) => ({
               ...prev,
               endedAt,
               runStatus: finalRunStatus,
-            };
-          });
-          if (runCommentAttachments.length > 0) {
-            void patchAttachedStatuses(runCommentAttachments, 'needs_review');
+              ...(terminalRun.resumable !== undefined
+                ? { resumable: terminalRun.resumable }
+                : {}),
+            }));
+          } else {
+            updateAssistant((prev) => {
+              finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
+              return {
+                ...prev,
+                endedAt,
+                runStatus: finalRunStatus,
+              };
+            });
           }
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
             runConversationId,
@@ -5458,6 +5543,14 @@ export function ProjectView({
             cancelController,
           );
           if (ownsCurrentRun) updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
+          if (finalRunStatus !== 'succeeded') {
+            scheduleConversationMessageRefresh(runConversationId);
+            clearTraceTouchedFilePaths();
+            return;
+          }
+          if (runCommentAttachments.length > 0) {
+            void patchAttachedStatuses(runCommentAttachments, 'needs_review');
+          }
           // Refetch the file list directly (rather than just bumping the
           // refresh signal) so we can diff against the pre-turn snapshot
           // and attach the new files to the assistant message as download
@@ -5857,32 +5950,62 @@ export function ProjectView({
             };
             latestAssistantMsg = pinnedAssistant;
             currentRunId = runId;
+            latestLiveDaemonRunStatus = 'queued';
             // The view may already be on a different project/conversation;
             // pin the daemon run to the original row so returning can reattach.
             void saveMessage(project.id, runConversationId, pinnedAssistant);
             updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
           },
           onRunStatus: (runStatus) => {
-            const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
-            updateMessageById(
-              assistantId,
-              (prev) => ({
-                ...prev,
-                runStatus,
-                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
-              }),
-              true,
-              runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
-            );
-            if (!runMayFinalize) return;
-            updateConversationLatestRun(runStatus, endedAt);
-            if (isTerminalRunStatus(runStatus)) {
+            latestLiveDaemonRunStatus = runStatus;
+            if (!isTerminalRunStatus(runStatus)) {
+              updateMessageById(
+                assistantId,
+                (prev) => ({
+                  ...prev,
+                  runStatus,
+                  endedAt: prev.endedAt,
+                }),
+                true,
+              );
+              if (!runMayFinalize) return;
+              updateConversationLatestRun(runStatus);
+              return;
+            }
+            void (async () => {
+              const fallbackStatus = asTerminalRunStatus(runStatus) ?? 'succeeded';
+              const terminalRun = await resolveLiveDaemonTerminalRun(fallbackStatus, {
+                allowFallbackOnActiveProbe: true,
+              }) ?? {
+                status: fallbackStatus,
+                endedAt: Date.now(),
+                authoritative: false,
+              };
+              latestLiveDaemonRunStatus = terminalRun.status;
+              if (terminalRun.status === 'canceled') setError(null);
+              updateMessageById(
+                assistantId,
+                (prev) => ({
+                  ...prev,
+                  runStatus: terminalRun.status,
+                  endedAt: terminalRun.endedAt,
+                  ...(terminalRun.resumable !== undefined
+                    ? { resumable: terminalRun.resumable }
+                    : {}),
+                }),
+                true,
+                terminalRun.status === 'canceled'
+                  ? { telemetryFinalized: true }
+                  : undefined,
+              );
+              if (!runMayFinalize) return;
+              updateConversationLatestRun(terminalRun.status, terminalRun.endedAt);
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
-              if (runStatus !== 'succeeded') clearTraceTouchedFilePaths();
-            }
+              if (terminalRun.status !== 'succeeded') clearTraceTouchedFilePaths();
+            })();
           },
           onRunEventId: (lastRunEventId) => {
             updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
@@ -9114,6 +9237,65 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
 
 /** A daemon run-status snapshot, as returned by `fetchChatRunStatus`/`listActiveChatRuns`. */
 type RunStatusSnapshot = Awaited<ReturnType<typeof fetchChatRunStatus>>;
+type TerminalRunStatus = Extract<NonNullable<ChatMessage['runStatus']>, 'succeeded' | 'failed' | 'canceled'>;
+
+type TerminalRunResolution = {
+  status: TerminalRunStatus;
+  endedAt: number;
+  authoritative: boolean;
+  resumable?: boolean;
+};
+
+function asTerminalRunStatus(status: ChatMessage['runStatus']): TerminalRunStatus | null {
+  if (status === 'succeeded' || status === 'failed' || status === 'canceled') {
+    return status;
+  }
+  return null;
+}
+
+async function resolveDaemonTerminalRunCompletion(
+  runId: string,
+  options: {
+    candidate?: RunStatusSnapshot | null;
+    fallbackStatus?: TerminalRunStatus | null;
+    allowFallbackOnActiveProbe?: boolean;
+  } = {},
+): Promise<TerminalRunResolution | null> {
+  const { candidate, fallbackStatus, allowFallbackOnActiveProbe = false } = options;
+  const candidateStatus = candidate ? asTerminalRunStatus(candidate.status) : null;
+  if (candidate && candidateStatus) {
+    return {
+      status: candidateStatus,
+      endedAt: candidate.updatedAt,
+      authoritative: true,
+      ...(candidate.resumable !== undefined ? { resumable: candidate.resumable } : {}),
+    };
+  }
+  let probed: RunStatusSnapshot | null = null;
+  try {
+    probed = await fetchChatRunStatus(runId);
+  } catch {
+    probed = null;
+  }
+  const probedStatus = probed ? asTerminalRunStatus(probed.status) : null;
+  if (probed && probedStatus) {
+    return {
+      status: probedStatus,
+      endedAt: probed.updatedAt,
+      authoritative: true,
+      ...(probed.resumable !== undefined ? { resumable: probed.resumable } : {}),
+    };
+  }
+  if (!fallbackStatus) return null;
+  if (!probed || allowFallbackOnActiveProbe) {
+    return {
+      status: fallbackStatus,
+      endedAt: Date.now(),
+      authoritative: false,
+    };
+  }
+  return null;
+}
 
 /**
  * Resolves the authoritative `endedAt` for a terminal-recovery branch.
@@ -9139,14 +9321,8 @@ async function resolveTerminalEndedAt(
   runId: string,
   candidate: RunStatusSnapshot | null | undefined,
 ): Promise<number> {
-  if (candidate && !isActiveRunStatus(candidate.status)) {
-    return candidate.updatedAt;
-  }
-  const probed = await fetchChatRunStatus(runId).catch(() => null);
-  if (probed && !isActiveRunStatus(probed.status)) {
-    return probed.updatedAt;
-  }
-  return Date.now();
+  const resolved = await resolveDaemonTerminalRunCompletion(runId, { candidate });
+  return resolved?.endedAt ?? Date.now();
 }
 
 function isProgrammaticBrandExtractionStatusMessage(

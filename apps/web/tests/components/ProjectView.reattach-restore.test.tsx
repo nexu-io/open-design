@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
@@ -59,29 +59,41 @@ vi.mock('../../src/providers/anthropic', () => ({
   streamMessage: vi.fn(),
 }));
 
-vi.mock('../../src/providers/daemon', () => ({
-  GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
-  GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
-  fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
-  listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
-  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
-  reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
-  streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
-}));
+vi.mock('../../src/providers/daemon', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/daemon')>(
+    '../../src/providers/daemon',
+  );
+  return {
+    ...actual,
+    GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
+    GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
+    fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+    listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+    listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
+    reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
+    streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
+  };
+});
 
-vi.mock('../../src/providers/registry', () => ({
-  deletePreviewComment: vi.fn(),
-  fetchPreviewComments: (...args: unknown[]) => fetchPreviewComments(...args),
-  fetchDesignSystem: (...args: unknown[]) => fetchDesignSystem(...args),
-  fetchProjectDesignSystemPackageAudit: (...args: unknown[]) =>
-    fetchProjectDesignSystemPackageAudit(...args),
-  fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
-  fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
-  fetchSkill: (...args: unknown[]) => fetchSkill(...args),
-  patchPreviewCommentStatus: vi.fn(),
-  upsertPreviewComment: vi.fn(),
-  writeProjectTextFile: vi.fn(),
-}));
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    deletePreviewComment: vi.fn(),
+    fetchPreviewComments: (...args: unknown[]) => fetchPreviewComments(...args),
+    fetchDesignSystem: (...args: unknown[]) => fetchDesignSystem(...args),
+    fetchProjectDesignSystemPackageAudit: (...args: unknown[]) =>
+      fetchProjectDesignSystemPackageAudit(...args),
+    fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
+    fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
+    fetchSkill: (...args: unknown[]) => fetchSkill(...args),
+    patchPreviewCommentStatus: vi.fn(),
+    upsertPreviewComment: vi.fn(),
+    writeProjectTextFile: vi.fn(),
+  };
+});
 
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
@@ -409,9 +421,17 @@ describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
 });
 
 describe('ProjectView daemon reattach restore', () => {
+  beforeEach(() => {
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+    streamViaDaemon.mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     cleanup();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
     window.sessionStorage.clear();
