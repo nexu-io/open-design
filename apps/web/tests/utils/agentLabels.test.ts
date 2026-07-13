@@ -57,9 +57,9 @@ describe('exactAgentDisplayName', () => {
     expect(exactAgentDisplayName('Kiro')).toBe('Kiro');
   });
 
-  it('returns null for kiro-related aliases that are not exact agent ids', () => {
-    expect(exactAgentDisplayName('kiro cli')).toBeNull();
-    expect(exactAgentDisplayName('kiro-cli')).toBeNull();
+  it('resolves kiro-related aliases through exactAgentDisplayName (consistent with Qoder CLI)', () => {
+    expect(exactAgentDisplayName('kiro cli')).toBe('Kiro');
+    expect(exactAgentDisplayName('kiro-cli')).toBe('Kiro');
   });
 });
 
