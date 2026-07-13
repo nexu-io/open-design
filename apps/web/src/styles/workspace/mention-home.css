@@ -687,8 +687,8 @@
    save settles. */
 .settings-chrome {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 24px;
+  right: 24px;
   z-index: 10;
   display: flex;
   align-items: center;
