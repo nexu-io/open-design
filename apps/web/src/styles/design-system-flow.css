@@ -270,7 +270,7 @@
 }
 .ds-primary-intake {
   position: relative;
-  width: min(100%, 580px);
+  width: min(100%, 480px);
   margin-bottom: 12px;
   padding: 5px;
   border: 1px solid color-mix(in srgb, var(--border) 86%, var(--accent));
@@ -284,7 +284,7 @@
 }
 .ds-primary-examples {
   display: flex;
-  width: min(100%, 580px);
+  width: min(100%, 480px);
   flex-wrap: wrap;
   justify-content: center;
   gap: 5px 12px;
