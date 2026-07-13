@@ -3648,18 +3648,19 @@
 .onboarding-question-flow__choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .onboarding-chip {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
-  padding: 7px 14px;
+  padding: 10px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition:
