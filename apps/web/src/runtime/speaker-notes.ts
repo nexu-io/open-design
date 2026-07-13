@@ -244,15 +244,15 @@ export function buildSpeakerNotesPresenterHtml(options: {
       <button type="button" id="reset"></button>
       <div class="counter" id="counter"></div>
     </div>
-    <div class="current"><iframe id="current" title="Current slide"></iframe></div>
+    <div class="current"><iframe id="current" title="Current slide" sandbox="allow-scripts"></iframe></div>
     <div class="filmstrip">
       <section id="previous-section">
         <div class="thumb-label" id="previous-label"></div>
-        <div class="thumb-frame"><iframe id="previous" title="Previous slide"></iframe></div>
+        <div class="thumb-frame"><iframe id="previous" title="Previous slide" sandbox="allow-scripts"></iframe></div>
       </section>
       <section id="next-section">
         <div class="thumb-label" id="next-label"></div>
-        <div class="thumb-frame"><iframe id="next" title="Next slide"></iframe></div>
+        <div class="thumb-frame"><iframe id="next" title="Next slide" sandbox="allow-scripts"></iframe></div>
       </section>
     </div>
   </main>
