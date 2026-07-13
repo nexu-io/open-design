@@ -54,7 +54,13 @@
 
    `<지시문>` 조립: `{anchor_paths}`가 "없음"이 아니면 `먼저 view_image로 다음
    이미지를 확인하라: {anchor_paths}` 를 앞에 붙이고, `{prompt}` 전문 + `생성된
-   이미지를 {cwd}/{out_name} 으로 복사하라` 로 마감한다.
+   이미지를 어떤 편집·마스킹·후처리도 없이 그대로 {cwd}/{out_name} 으로
+   복사하라` 로 마감한다.
+
+   **행 감시** (stdin을 닫아도 행이 발생한다 — 22분 CPU 0% 실측 2026-07-13):
+   1차 생성 기준시간 ~5-7분. 기준 2배 경과 + CPU 0%면 프로세스 kill 후 재실행.
+   재실행 전 기존 검증 통과본이 있으면 `.verified.bak`로 백업하고 잔여 codex
+   프로세스를 kill한다 (병렬 재실행 레이스가 검증본을 덮어쓴 실측).
 2. `{cwd}/{out_name}` 존재 확인. 없으면 codex stdout에서 저장 경로
    (`~/.codex/generated_images/<uuid>/ig_*.png`)를 찾아 직접 복사한다.
 3. **알파 검증**: 투명 배경 요청 에셋이면 아래로 판정한다(**layer 모드 에셋
@@ -97,7 +103,8 @@ Palette: [브랜드 DESIGN.md 토큰 색상 명시]
 Composition: single object (or specified cluster) centered, generous margin,
   object fully inside frame. [ratio 지정 시: square 1:1 canvas 등]
 Constraints: no text, no letters, no numbers, no watermark, no photorealistic
-  rendering, no human photography.
+  rendering, no human photography, no full illustrated scene, no storybook
+  style, no character, no mascot holding the object, no pastel-on-pastel wash.
 ```
 
 ### 오브제 스타일 스캐폴드 4종 — Style 라인
@@ -106,8 +113,12 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
 |---|---|
 | `flat-icon` | flat graphic object, bold geometric shapes, solid fills, crisp edges |
 | `2d-illust` | flat 2D vector illustration, clean shapes, subtle texture, friendly rounded forms |
-| `3d-illust` | soft 3D rendered object cluster, matte materials, gentle studio lighting |
-| `3d-icon` | single glossy 3D object, centered, studio lighting, subtle reflections |
+| `3d-illust` | soft clay 3D rendered object cluster (main object + max 2 satellites), single-hue color family, matte finish with one glossy highlight, soft studio lighting, slight tilt, floating |
+| `3d-icon` | single soft clay 3D object, single-hue color family, matte finish with one glossy highlight, soft studio lighting, slight tilt, floating, centered |
+
+`3d-illust`/`3d-icon`의 클레이 렌더 문구는 레퍼런스 보드 25핀 지배 질감의 고정
+계약 (2026-07-13) — 임의 축약·재해석 금지. 컨페티 장식이 기획안에 있으면
+`a few small confetti pieces (5-6 max)` 를 Style 라인 뒤에 덧붙인다.
 
 **실사 전면 금지** — 4종 밖 style 값은 조립 거부하고 기획안 수정을 요구한다.
 어떤 스타일·오브제를 쓸지는 기획안(Step 3)에서 Claude가 목적·톤 기반으로 이미
@@ -121,6 +132,12 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
 안 되는 것"으로 명시한다 (cardnews 소품-의미 룰과 동일 원리).
 
 ## 캐릭터 포함 통짜 컴포지션 경로
+
+> **⛔ IAM 사용 금지 — 2026-07-13 사용자 결정.** 생성 캐릭터의 캐논 얼굴 재현
+> 불가 실측 (등신비 강제 + 이중 앵커 + 헤어 핀에도 3연속 얼굴 드리프트,
+> 재도그푸딩 v2~v4). 라이브러리 컷 직사용 포함 캐릭터 자체를 IAM에 넣지
+> 않는다 — 히어로는 의미-지시 소품(visual-layout-patterns.md §4)으로.
+> 아래 기술 절차는 타 채널 재사용 대비 기록용으로만 존치.
 
 캐릭터와 오브제의 **물리 상호작용**(안기·끌기·올라타기 등)이 메시지에 필수면
 **통짜 통합 생성이 기본**이다 — "물리 상호작용 필요 시만" 예외적으로 쓰는 경로가
@@ -148,11 +165,20 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
   뒤에 복장을 문장으로 고정하는 지시를 이어 붙인다 (예: "Outfit MUST match the
   second reference image: white doctor lab coat over a light blue shirt with
   a yellow tie").
+- **등신비 강제 문구 필수** (재도그푸딩 반려 실측 2026-07-13 — "identical
+  proportions"만으로는 gpt-5.5가 4등신 치비 마스코트로 재해석한다): Character
+  절에 "Preserve the sheet's adult proportions exactly — same head-to-body
+  ratio (about 6 heads tall), slim build. Do NOT chibify, do NOT shorten the
+  body, do NOT enlarge the head." 를 반드시 포함한다.
 - layer 모드에서는 이 경로도 배경은 투명 — 배경은 여전히 CSS다. scene 모드의
   히어로 컴포지션은 아래 "씬 생성 경로 (scene 모드)" § 를 따른다(같은 이중
   앵커 룰을 공유).
 
 ## 씬 생성 경로 (scene 모드)
+
+> **존치 보류 (2026-07-13)**: 레퍼런스 보드 25핀에 카드 전체 생성 씬 문법 0핀 —
+> scene 모드는 개정 문법 재도그푸딩(소품 히어로) 실무 판정 후 존치/축소/폐지를
+> 결정한다. 그 전까지 신규 캠페인 기본은 layer.
 
 산출 = `assets/scene-<id>.png`, 세로 1024×1536 (모달 카드 aspect). **배경 포함
 생성** — 위 "투명 배경 계약"과 서브에이전트 임무 3의 알파 검증·크로마 폴백은
@@ -164,26 +190,41 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
 Use case: full-card background scene illustration for a mobile in-app
   message modal (headline text at top and a full-width button at bottom
   will be overlaid in HTML later).
-Subject: [캐릭터 + 메타포 오브제 물리 상호작용 + 위성 소품 — 기획안 concept]
-Style: [스타일 4종 표의 라인 — 캐릭터 있으면 "identical rendering style to
-  the reference character" 추가]
-Background: full illustrated scene — [브랜드 토큰 팔레트 서술]; decorative
-  elements bleeding in from the frame edges (cropped by the frame edge).
-Layout — STRICT safe zones: the TOP ~28% of the canvas is calm empty
+Subject: [단일 의미-지시 소품 히어로 — 기획안 concept. 위성 소품은
+  의미 있는 것만 ≤2. 캐릭터 금지 — IAM 전면 미포함 2026-07-13]
+Style: [스타일 4종 표의 라인] — clean minimal fintech illustration,
+  generous negative space.
+Background: minimal abstract color field — [브랜드 토큰 팔레트 서술, 허용 3형
+  (단색 솔리드/동일 색상군 톤온톤/다크+스포트라이트)]. The backdrop is a
+  studio-like color field, NOT a place: no sky, no clouds, no foliage, no
+  bushes, no trees, no hills, no horizon line, no sparkles, no confetti.
+Layout — STRICT safe zones: the TOP ~32% of the canvas is calm empty
   negative space (pure background, no objects) for headline overlay. The
   BOTTOM ~22% contains ONLY flat ground color and low decoration edges —
-  no character parts, no key object. The hero cluster sits entirely inside
-  the middle band, about 60% of canvas width.
+  no hero parts, no key object. The hero cluster sits entirely inside
+  the middle band, about 60% of canvas width. Achieve the safe zones through
+  NATIVE composition only — do NOT satisfy them by masking or overlaying
+  flat rectangles in post-processing; the character must be fully visible
+  head to feet.
 Palette: [브랜드 토큰 색상 명시]
-Character: [이중 앵커 + 복장 명시 — 위 § 룰 동일]
 Constraints: no text, no letters, no numbers, no watermark, no
-  photorealistic rendering, no human photography.
+  photorealistic rendering, no human photography, no character, no mascot,
+  no storybook or children's-book illustration style, no fairy-tale scenery,
+  no pastel-on-pastel wash.
 ```
 
-- 히어로(캐릭터-오브제 물리 상호작용)는 위 "캐릭터 포함 통짜 컴포지션 경로" §와
-  동일한 이중 앵커 룰을 따른다 (시트 통째 1장 + 해당 복장 고해상 렌더 1장,
-  Character 절에 복장 문장 명시). 장식은 폴리지·구름·컨페티 등이 프레임
-  경계에 걸치는 엣지 블리드로 조립한다.
+- 히어로 = 단일 의미-지시 소품 (visual-layout-patterns.md §3·§4). 캐릭터는
+  씬에서도 IAM 전면 미포함 (2026-07-13 사용자 결정) — Character 절 없이 조립한다.
+- **미니멀 씬 미학** (재도그푸딩 반려 실측 2026-07-13 — 근거표 참조): 배경은
+  "장소"가 아니라 추상 컬러 필드다. 환경 묘사(하늘·구름·수풀·나무·언덕·지평선·
+  스파클 씬) 금지, 스토리북/유아 일러스트 톤 금지, 위성 소품은 의미 있는 것만
+  ≤2. 구 계약의 "엣지 블리드 장식(폴리지·구름·컨페티)"은 이 반려로 폐기 —
+  프레임 경계 장식이 필요하면 브랜드 토큰 색 추상 도형(블러 오브·기하 실루엣)만.
+- **사후 마스킹 금지**: 세이프존은 네이티브 구도로만 충족한다. 프롬프트만으로
+  세이프존을 주면 codex가 일러스트 위에 플랫 사각 오버레이를 덮어 "충족"시킨다
+  (캐릭터 허리 절단 실측 2026-07-13). 스캐폴드의 NATIVE composition 문구를
+  유지하고, 복사 마감 지시문도 `생성된 이미지를 어떤 편집·마스킹·후처리도 없이
+  그대로 {cwd}/{out_name} 으로 복사하라`로 조립한다.
 - **그라디언트 취향 룰**: Background 라인 조립 시 웜→쿨 투컬러 수직 스윕은
   금지한다(프로브 1차 실측 — 크림→블루 스윕을 사용자가 "촌스러움"으로 판정,
   근거표 참조). 허용 = ① 단색 솔리드 ② 동일 색상군 톤온톤 그라디언트 ③ 다크 +
@@ -216,3 +257,22 @@ Constraints: no text, no letters, no numbers, no watermark, no
 | 1차 | 하단 세이프존 미지정 → CTA가 히어로를 덮음 | 씬 프롬프트에 STRICT 세이프존 강제, 세이프존 미준수 산출은 재생성 1회 |
 | 2차 | 시트에 복장 여러 벌 공존 → 가운 소실 (캐논 드리프트) | 캐릭터 생성 앵커 = 이중(시트 통째 1장 + 해당 복장 고해상 렌더 1장), Character 절에 복장 문장 명시 |
 | 3차 | 통과 (채택) | 캐릭터-오브제 상호작용 시 통짜 통합 생성을 예외가 아닌 기본 경로로 승격 |
+
+재도그푸딩 반려 실측 (2026-07-13, 동일 캠페인 scene 모드):
+
+| 결함 | 이 문서 반영 |
+|---|---|
+| 엣지 블리드 계약(폴리지·구름·컨페티)이 스토리북/유아 일러스트 배경을 유도 — 사용자 "동화책 같다" 반려 | 씬 스캐폴드 Background를 미니멀 추상 컬러 필드로 재정의, 환경 묘사·스토리북 스타일 금지 상수화, 엣지 블리드 폐기 |
+| "identical proportions" 문구에도 캐릭터가 4등신 치비로 드리프트 (양 모드 공통) | Character 절에 등신비 강제 문구(6 heads tall / no chibify) 필수화 |
+| 세이프존을 프롬프트만 주면 codex가 사후 사각 오버레이로 "충족" (캐릭터 허리 절단) | 스캐폴드 NATIVE composition 문구 + 복사 지시문 "편집·마스킹·후처리 없이" 상수화 |
+| codex exec 행 — stdin 닫아도 22분 CPU 0% | 서브에이전트 임무 1에 행 감시(기준 2배+CPU 0% → kill 재실행, .verified.bak 백업) 명문화 |
+
+레퍼런스 보드 전수 분석 반영 (2026-07-13, 재도그푸딩 3차 반려 후 — 실사용 IAM
+25핀, `visual-layout-patterns.md` 헤더 참조):
+
+| 관찰 | 이 문서 반영 |
+|---|---|
+| 등신비 강제·이중 앵커·헤어 핀에도 v2~v4 3연속 얼굴 캐논 드리프트 — gpt-5.5 얼굴 재현 불가 실측, 사용자 캐릭터 전면 미포함 확정 | 캐릭터 통짜 컴포지션 경로 ⛔, 씬 스캐폴드에서 Character 절 제거, Constraints에 no character/no mascot 상수 |
+| 보드 지배 질감 = 소프트 클레이 3D, 단일 색군, 매트+글로시 하이라이트 1, 살짝 기울여 부양 | `3d-icon`/`3d-illust` Style 라인을 클레이 렌더 고정 문구로 재정의 |
+| 보드 0핀 문법 = 풀 일러스트 씬·스토리북·캐릭터 행동·파스텔-온-파스텔 | 오브제 스캐폴드 Constraints에 금지어 4종 상수 추가 |
+| 상단 세이프존 28% < 실소요 ~32% (아이브로우+헤딩+본문 3줄, 본문-히어로 충돌 실측) | 씬 스캐폴드 TOP ~28% → ~32% 캘리브레이션 |

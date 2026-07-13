@@ -37,8 +37,8 @@
        또는 CSS `url(__BRAZE_MEDIA__/<name>)`. **data-URI 삽입 절대 금지** (Braze
        에디터 버퍼링 실측 — 발송본 룰). 히어로는 manifest의 **투명 PNG 정확히
        1장** 배치 — **콜라주 조립 금지**: 분리 생성된 복수 PNG를 물리 상호작용
-       처럼 겹쳐 배치하지 않는다 (캐릭터-오브제 상호작용은 생성 단계에서 이미
-       통합된 통짜 PNG로 manifest에 들어온다). CSS 장식(`source:"css"`)은 허용.
+       처럼 겹쳐 배치하지 않는다 (물리적으로 맞물린 복합 오브제는 생성 단계에서
+       이미 통합된 통짜 PNG로 manifest에 들어온다). CSS 장식(`source:"css"`)은 허용.
        컴포지션 = `{composition}` 스케치대로 레이어 배치 — position/z-index/
        scale/겹침. 히어로 스케일·기울임·부유감·시선 흐름은
        `visual-layout-patterns.md` §6. **존 순서 = brief ③-b composition

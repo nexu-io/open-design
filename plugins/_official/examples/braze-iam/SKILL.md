@@ -177,8 +177,9 @@ Source files 라인이 가리키는 경로를 전달한다)
 - 기획안에만 기록, 실제 설정은 Braze 콘솔에서 담당자가 수행
 
 **비주얼 방향 결정** (`q-visual`="recommend"일 때만 — `layer`/`scene`을 직접 선택했으면 그대로 적용):
-- 정보 전달·신뢰·가이드·기능 공지 톤 → `layer` 기본
-- 몰입·시즌 캠페인·임팩트 프로모·축하 → `scene` 권장
+- `layer` 기본 — scene 모드는 **존치 보류 중** (2026-07-13, 레퍼런스 보드 25핀에
+  카드 전체 씬 0핀 — `references/visual-layout-patterns.md` §10). 임팩트·프리미엄
+  연출은 layer 배경 변형 (c) 다크+오브제 글로우로 먼저 검토
 - 기획안 카드에 선택 근거 1줄 명시
 
 인터뷰 응답을 수집한 뒤 아래 CLI로 daemon에 등록한다:
@@ -243,13 +244,11 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
     "mode": "layer",
     "format": "PNG",
     "assets": [
-      { "id": "char",   "source": "library",  "role": "character",
-        "ref": "clock/consult.png", "note": "가운+클립보드 — 상담 톤" },
-      { "id": "ticket", "source": "generate", "role": "object",
-        "style": "3d-icon", "concept": "보험 진단 리포트 카드, 체크마크", "ratio": "1:1" },
-      { "id": "orb",    "source": "css",      "role": "decor", "note": "파스텔 말풍선 오브 2개" }
+      { "id": "clipboard", "source": "generate", "role": "object",
+        "style": "3d-icon", "concept": "체크마크 찍힌 진단 클립보드 — 클레이 3D, 브랜드 비비드", "ratio": "1:1" },
+      { "id": "orb",       "source": "css",      "role": "decor", "note": "브랜드 톤 블러 오브 2개" }
     ],
-    "composition": "클락 중앙 우측, 리포트 카드 좌측 겹침, 오브는 상단 배경"
+    "composition": "화이트 카드 — 아이브로우 필 → 헤드라인 → 서브 → 클립보드 히어로(카드 높이 ~40%) → 풀폭 CTA → dismissal, 존 수직 분리"
   },
   "rejections": []
 }
@@ -258,7 +257,7 @@ EOF
 
 > `mode: "scene"`일 때는 `assets`가 씬 에셋 1건 중심으로 바뀐다: `{ "id":
 > "scene", "source": "generate", "role": "scene", "style": "3d-illust",
-> "concept": "<캐릭터+오브제 상호작용 + 씬 서술>", "ratio": "2:3" }` (+ 선택적
+> "concept": "<단일 소품 히어로 + 추상 컬러 필드 배경 서술>", "ratio": "2:3" }` (+ 선택적
 > `css` 장식 1건). `composition`에는 세이프존 스케치(상단 텍스트존/하단
 > CTA존)를 함께 명시한다.
 
@@ -267,20 +266,24 @@ EOF
 - `needed`: 공지(announcement)·기능 안내 순수 목적 = `false` 기본, 그 외(혜택·
   전환·리텐션·축하) = `true` 기본. 기획안 카드에 근거 1줄 명시.
 - `mode`: `q-visual` 응답을 그대로 사용 (기본 `"layer"`; `"recommend"`면 위
-  "비주얼 방향 결정" 규칙 적용). **캐릭터-오브제 상호작용 에셋은 통짜 통합
-  생성 1건으로 선언** — 캐릭터 컷 + 오브제를 별도 assets로 나눠 CSS로 조립하는
-  설계 금지 (콜라주 금지 — 도그푸딩 반려 실측 2026-07-10). `scene` 모드는 씬
-  에셋 1건 + (선택) `css` 장식만 구성한다.
-- `assets[].source`: `library`(브랜드 캐릭터 컷 직접 사용 — 캐논 100%·비용 0,
-  브랜드 deliverable 컨텍스트의 에셋 라이브러리에서 선택) / `generate`(imagegen —
-  메타포 오브제) / `css`(코드 장식 — 생성 없음).
+  "비주얼 방향 결정" 규칙 적용). **물리적으로 맞물린 복합 오브제는 통짜 통합
+  생성 1건으로 선언** — 별도 assets로 나눠 CSS로 조립하는 설계 금지 (콜라주
+  금지 — 도그푸딩 반려 실측 2026-07-10). **캐릭터는 IAM 전면 미포함**
+  (2026-07-13 사용자 결정 — 라이브러리 컷 포함. `references/visual-layout-patterns.md`
+  §3). `scene` 모드는 씬 에셋 1건 + (선택) `css` 장식만 구성한다.
+- `assets[].source`: `library`(브랜드 제공 에셋 직접 사용 — 실물 사진·UI
+  스크린샷 등, 브랜드 deliverable 컨텍스트의 에셋 라이브러리에서 선택. 캐릭터
+  컷은 IAM 미포함) / `generate`(imagegen — 메타포 오브제) / `css`(코드 장식 —
+  생성 없음).
 - `assets[].style`: `flat-icon` | `2d-illust` | `3d-illust` | `3d-icon` — **실사
   없음**. 목적·톤 기반 선택 근거는 `references/visual-layout-patterns.md` §3.
 - 오브제 concept = 메시지 메타포 (§4 사례표) — "보여야 하는 것"을 concept에,
   오독 위험 요소를 note에 기록.
-- `composition` = 레이어 배치 스케치 1문장 (텍스트존·오브제존·CTA존 3분할 문법 —
-  visual-layout-patterns.md §1). `scene` 모드는 세이프존 스케치(상단 텍스트존/
-  하단 CTA존)를 함께 명시한다.
+- `composition` = 레이어 배치 스케치 1문장 — **7단 존 스택 전 존 나열**
+  (아이브로우 필→헤드라인→서브→히어로→가격·조건→풀폭 CTA→dismissal, 선택
+  슬롯은 접되 순서 불변 — visual-layout-patterns.md §1. 존 누락 시 병렬 빌더
+  발산 실측). `scene` 모드는 세이프존 스케치(상단 텍스트존/하단 CTA존)를 함께
+  명시한다.
 - 스키마는 daemon 계약 변경 없음 — `braze_plan_v1`은 JSON blob 저장이라 필드
   추가는 하위 호환 (검증 = version 체크뿐, braze-routes.ts). `image.mode`
   필드도 동일 근거로 스키마 변경 없음. 기획안 카드에 에셋 표
@@ -420,13 +423,12 @@ od braze brief <braze_message_id> --brief-file <path>
 2. `mkdir -p {artifact_dir}/assets`
 3. **`image.mode` 분기**:
    - `"scene"` → 씬 에셋 1건을 imagegen-pipeline.md 씬 생성 경로로 dispatch
-     (배경 포함 생성·알파 검증 skip·세이프존 스캐폴드 강제). 캐릭터 포함 시
-     이중 앵커(캐릭터 시트 + 해당 복장 고해상 렌더)를 프롬프트에 전달.
-     `scene` 모드는 여기서 종료 — 아래 4~6 skip (씬 에셋을 일반 generate
-     경로로 재dispatch하지 않는다; 실패 시 재시도·강등 보고 규칙은 6과 동일).
-   - `"layer"` → 아래 4~6 기존 절차 그대로. 캐릭터-오브제 상호작용 에셋은
-     통합 컴포지션 경로(이중 앵커 동일 규칙)로 dispatch — 분리 생성 후 CSS
-     조립 금지.
+     (배경 포함 생성·알파 검증 skip·세이프존 스캐폴드 강제. 히어로는 단일
+     소품 — 캐릭터 미포함). `scene` 모드는 여기서 종료 — 아래 4~6 skip (씬
+     에셋을 일반 generate 경로로 재dispatch하지 않는다; 실패 시 재시도·강등
+     보고 규칙은 6과 동일).
+   - `"layer"` → 아래 4~6 기존 절차 그대로. 물리적으로 맞물린 복합 오브제는
+     통합 컴포지션 경로로 dispatch — 분리 생성 후 CSS 조립 금지.
 4. `source:"generate"` 에셋 전부를 **한 턴 병렬 dispatch** — 에셋별 서브에이전트
    1개, 프롬프트는 메인이 스캐폴드로 조립. 실패분만 순차 재시도 1회(성공분 보존).
 5. `source:"library"` 에셋: 브랜드 에셋 라이브러리 원본을
@@ -660,5 +662,6 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - 발송본에 data-URI 금지 (에디터 버퍼링) — placeholder `__BRAZE_MEDIA__/<name>` 유지, 프리뷰만 인라인
 - 이미지 생성 = codex `gpt-5.5` 고정 + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
 - 서브에이전트 위임 실패(도구 없음) 시 인라인 동일 절차 — 단계 생략 금지
-- 캐릭터-오브제 상호작용 에셋 = 통짜 통합 생성 1건. 분리 생성한 PNG를 CSS로 겹쳐 조립하는 콜라주 금지 (도그푸딩 반려 실측 2026-07-10)
+- 캐릭터 IAM 전면 미포함 (2026-07-13 사용자 결정, 라이브러리 컷 포함) — 히어로는 의미-지시 소품 or HTML 숫자 타이포 (references/visual-layout-patterns.md §3)
+- 물리적으로 맞물린 복합 오브제 = 통짜 통합 생성 1건. 분리 생성한 PNG를 CSS로 겹쳐 조립하는 콜라주 금지 (도그푸딩 반려 실측 2026-07-10)
 - `scene` 모드 씬 = 텍스트·글자·숫자 절대 금지 + STRICT 세이프존(상단 텍스트존/하단 CTA존) 강제 — references/imagegen-pipeline.md
