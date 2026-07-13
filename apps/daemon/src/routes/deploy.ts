@@ -76,6 +76,21 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid target: expected "preview" or "production"');
       }
       const target: 'preview' | 'production' = rawTarget === 'preview' ? 'preview' : 'production';
+      // Vercel production-target deploys are out of scope for this PR (P2 review
+      // finding on PR #4576) — deployToVercel() never receives `target` and
+      // always behaves as preview, so an explicit target=production request
+      // must be rejected before any deploy call instead of silently deploying
+      // as preview. Only the explicitly-supplied raw value gates this: the
+      // omitted-target default (which resolves to 'production' above for
+      // Cloudflare Pages parity) must keep deploying Vercel as before.
+      if (providerId === VERCEL_PROVIDER_ID && rawTarget === 'production') {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'Vercel does not support target=production yet; use target=preview or omit target',
+        );
+      }
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,

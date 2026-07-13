@@ -1169,4 +1169,205 @@ describe('deploy provider routes', () => {
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
+
+  // --- Vercel production-target rejection tests (P2 review finding on PR #4576) ---
+  //
+  // Vercel production-target deploys are out of scope for this PR (which only
+  // adds target support for Cloudflare Pages). The route must reject
+  // providerId === VERCEL_PROVIDER_ID + resolved target === 'production' with
+  // HTTP 400 / BAD_REQUEST *before* attempting any deploy call, instead of
+  // silently deploying as preview.
+
+  /**
+   * Helper: minimal project + Vercel config setup, no fetch mock needed.
+   * Returns the projectId so callers can POST to /deploy.
+   */
+  async function setupProjectAndVercelConfig(
+    projectIdPrefix: string,
+    projectName: string,
+  ): Promise<string> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `${projectIdPrefix}-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: projectName, skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResp.status).toBe(200);
+    const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: VERCEL_PROVIDER_ID,
+        token: 'vercel-token-secret',
+      }),
+    });
+    expect(saveResp.status).toBe(200);
+    return projectId;
+  }
+
+  function makeVercelDeployMock() {
+    const realFetch = globalThis.fetch;
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url.includes('/v13/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'vercel-dep-still-works',
+          readyState: 'READY',
+          url: 'vercel-still-works.example',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/v13/deployments/vercel-dep-still-works') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'vercel-dep-still-works',
+          readyState: 'READY',
+          url: 'vercel-still-works.example',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://vercel-still-works.example' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+  }
+
+  it('rejects vercel-self target=production with 400 BAD_REQUEST before attempting a deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-prod-reject-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-prod-reject', 'Vercel production reject test');
+
+      // Use a fetch mock that WOULD happily complete a Vercel deploy if the
+      // route called it — this is the same mock the "still works" companion
+      // tests use for a legitimate preview deploy. If the route's guard is
+      // missing (today's bug), the deploy proceeds and this mock lets it
+      // succeed with 200, which is exactly the silent-preview-deploy bug
+      // this test must catch. A correct fix never reaches this mock at all.
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            target: 'production',
+          }),
+        });
+        const bodyText = await deployResp.text();
+        // Must reject with 400, not silently deploy as preview (the bug: this
+        // currently returns 200 with a deployment that is actually 'preview').
+        expect(deployResp.status, bodyText).toBe(400);
+        const body = JSON.parse(bodyText) as { error?: { code?: string; message?: string } };
+        expect(body.error?.code).toBe('BAD_REQUEST');
+        expect(body.error?.message).toMatch(/production|target/i);
+
+        // The Vercel deploy endpoint must never have been called — the route
+        // must reject before attempting any deploy call.
+        const vercelDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(vercelDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('still deploys vercel-self successfully when target=preview is explicit (no regression)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-preview-ok-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-preview-ok', 'Vercel preview still works test');
+
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            target: 'preview',
+          }),
+        });
+        const bodyText = await deployResp.text();
+        expect(deployResp.status, bodyText).toBe(200);
+        const deployment = JSON.parse(bodyText) as { providerId: string; url: string; status: string };
+        expect(deployment).toMatchObject({
+          providerId: VERCEL_PROVIDER_ID,
+          url: 'https://vercel-still-works.example',
+          status: 'ready',
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('still deploys vercel-self successfully when target is omitted (no regression)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-omitted-ok-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-omitted-ok', 'Vercel omitted target still works test');
+
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            // no target field — must keep working exactly as before the fix.
+          }),
+        });
+        const bodyText = await deployResp.text();
+        expect(deployResp.status, bodyText).toBe(200);
+        const deployment = JSON.parse(bodyText) as { providerId: string; url: string; status: string };
+        expect(deployment).toMatchObject({
+          providerId: VERCEL_PROVIDER_ID,
+          url: 'https://vercel-still-works.example',
+          status: 'ready',
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
 });
