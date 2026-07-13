@@ -383,6 +383,7 @@ export function DesignSystemCreationFlow({
   const githubConnectorRef = useRef<ConnectorDetail | null>(null);
   const githubConnectorLoadedRef = useRef(false);
   const embedded = chrome === 'embedded';
+  const showAdvancedSources = !embedded && !peekOnboardingSessionId();
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -1071,7 +1072,8 @@ export function DesignSystemCreationFlow({
               </button>
             ))}
           </div>
-          <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
+          {showAdvancedSources ? (
+            <div className={`ds-resource-card${advancedOpen ? ' is-expanded' : ' is-collapsed'}`}>
             <div className="ds-resource-advanced">
               <button
                 type="button"
@@ -1383,7 +1385,8 @@ export function DesignSystemCreationFlow({
                 </div>
               </div>
             </div>
-          </div>
+            </div>
+          ) : null}
         </section>
 
         {error ? <div className="ds-editor-error">{error}</div> : null}
