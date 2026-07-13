@@ -245,7 +245,7 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
     "format": "PNG",
     "assets": [
       { "id": "clipboard", "source": "generate", "role": "object",
-        "style": "3d-icon", "concept": "체크마크 찍힌 진단 클립보드 — 클레이 3D, 브랜드 비비드", "ratio": "1:1" },
+        "style": "3d-icon", "concept": "체크마크 찍힌 진단 클립보드 — 글로시 3D, 브랜드 비비드", "ratio": "1:1" },
       { "id": "orb",       "source": "css",      "role": "decor", "note": "브랜드 톤 블러 오브 2개" }
     ],
     "composition": "화이트 카드 — 아이브로우 필 → 헤드라인 → 서브 → 클립보드 히어로(카드 높이 ~40%) → 풀폭 CTA → dismissal, 존 수직 분리"

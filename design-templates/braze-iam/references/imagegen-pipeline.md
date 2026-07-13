@@ -100,9 +100,13 @@
    exit 3(알파 없음 — 배경을 회색 체커보드 "투명 흉내"로 페인팅해 반환하는
    실측 포함, gti 파일럿 2026-07-13)이면 크로마키 폴백을 **이 서브에이전트
    안에서 1회** 수행: 같은 프롬프트의 Background 라인을 `solid pure green
-   background (#00FF00), object does not touch the frame edges. NO
-   checkerboard pattern, NO transparency simulation — one flat color fill
-   only.`로 교체해 재생성한다. **단 오브제 주
+   background (#00FF00), one flat color fill covering the entire canvas.
+   The object floats with NO floor shadow, NO contact shadow, NO reflection
+   below it. Object does not touch the frame edges. NO checkerboard pattern,
+   NO transparency simulation.`로 교체해 재생성한다 — 그림자 금지를 반드시
+   포함한다: 원문 Background 라인의 "no floor shadow"가 교체로 유실되면
+   그림자가 베이크되고, 키잉·디스필 후 암색 얼룩으로 남는다 (글로시 파일럿
+   실측 2026-07-14). **단 오브제 주
    색군이 그린 계열이면 크로마 색을 `#FF00FF`(마젠타)로 교체한다** — Background
    라인과 아래 `--color` 인자 동일 적용 (키 색상-오브제 충돌 방지, 복제 파일럿
    2026-07-13 선반영). 재생성은 `--output {cwd}/{out_name}.chroma.png` 로 직접
@@ -135,6 +139,11 @@ skip한다(아래 "씬 생성 경로 (scene 모드)" § 참조). 기본 경로 =
    캔버스 콘텐츠 fill ~58% 실측 — 트림 없이는 HTML 표시 폭 ≠ 실효 폭이라
    히어로 스케일 계약(visual-layout-patterns.md §6 프레임 폭 40~60%)이
    어긋난다. 빌더는 트림된 실효 콘텐츠 폭 기준으로 표시 폭을 계산한다.
+   **트림 전 정리 (크로마 폴백 산출 전용)**: ① 에지 밴드(캔버스 둘레 ~30px)
+   알파 0 처리 ② 저알파(<64) 픽셀 제거 ③ 디스필 후 암색 스펙클(최대채널<70
+   & 알파>0) 제거. 키잉이 놓친 코너 비네트 스트레이 ~10px가 bbox를
+   풀캔버스로 오염해 트림이 조용히 no-op되고, 소프트 섀도 에지가 디스필로
+   암색 헤일로가 된 실측 (2026-07-14). 투명 직생성 산출은 이 정리를 skip.
 3. **다운스케일은 프리멀티 필수**: 리사이즈가 필요하면 프리멀티플라이드
    (RGB×A) → LANCZOS → 언프리멀티 순서로만. PIL은 채널 독립 리샘플이라
    비프리멀티 리사이즈는 투명 픽셀의 잔존 RGB(크로마 그린 등)를 에지로
@@ -169,17 +178,18 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
 |---|---|
 | `flat-icon` | flat graphic object, bold geometric shapes, solid fills, crisp edges |
 | `2d-illust` | flat 2D vector illustration, clean shapes, subtle texture, friendly rounded forms |
-| `3d-illust` | soft clay 3D rendered object cluster (main object + max 2 satellites), single-hue color family, matte finish with one glossy highlight, soft studio lighting, slight tilt, floating |
-| `3d-icon` | single soft clay 3D object, single-hue color family, matte finish with one glossy highlight, soft studio lighting, slight tilt, floating, centered |
+| `3d-illust` | high-end 3D icon render of an object cluster (main object + max 2 satellites), glossy soft-touch plastic material, vibrant saturated colors, clean studio lighting, soft reflections, subtle ambient occlusion between volumes, crisp silhouette, floating at a slight playful tilt |
+| `3d-icon` | high-end 3D icon render of a single object, glossy soft-touch plastic material, vibrant saturated colors, clean studio lighting, soft reflections, subtle ambient occlusion between volumes, crisp silhouette, floating at a slight playful tilt, centered |
 
-`3d-illust`/`3d-icon`의 클레이 렌더 문구는 레퍼런스 보드 25핀 지배 질감의 고정
-계약 (2026-07-13) — 임의 축약·재해석 금지. **Style 라인은 표 원문 그대로 쓰고,
-재질·형태 강화 어휘(thick rounded clay volumes, matte plasticine, 스쿼클
-front-on 등)는 원문 뒤에 덧붙이기만 한다** — 원문 일부("single-hue color
-family" 등)를 빼고 조립하면 gpt-5.5가 플랫 벡터/글로시 스티커로 수렴한다
-(복제 파일럿 반려 실측 2026-07-13, 원문 복원으로 즉시 해소). 컨페티 장식이
-기획안에 있으면 `a few small confetti pieces (5-6 max)` 를 Style 라인 뒤에
-덧붙인다.
+`3d-illust`/`3d-icon`의 글로시 렌더 문구는 사용자 지정 고정 계약 (2026-07-14 —
+클레이 질감 품질 사유로 보드 25핀 클레이 계약을 대체, gti 토글 파일럿 게이트
+통과로 검증). 임의 축약·재해석 금지. **Style 라인은 표 원문 그대로 쓰고,
+재질·형태 강화 어휘(NOT flat vector, NOT clay, NOT plasticine texture, 스쿼클
+front-on 등)는 원문 뒤에 덧붙이기만 한다** — 질감 어휘를 빼거나 약화해 조립하면
+gpt-5.5가 플랫 벡터/스티커로 수렴한다 (복제 파일럿 반려 실측 2026-07-13 —
+클레이 시절 실측이나 원리는 스타일 무관, 글로시 재생성에서도 재재현). 컨페티
+장식이 기획안에 있으면 `a few small confetti pieces (5-6 max)` 를 Style 라인
+뒤에 덧붙인다.
 
 **실사 전면 금지** — 4종 밖 style 값은 조립 거부하고 기획안 수정을 요구한다.
 어떤 스타일·오브제를 쓸지는 기획안(Step 3)에서 Claude가 목적·톤 기반으로 이미
@@ -367,7 +377,7 @@ Constraints: no text, no letters, no numbers, no watermark, no
 | 관찰 | 이 문서 반영 |
 |---|---|
 | 등신비 강제·이중 앵커·헤어 핀에도 v2~v4 3연속 얼굴 캐논 드리프트 — gpt-5.5 얼굴 재현 불가 실측, 사용자 캐릭터 전면 미포함 확정 | 캐릭터 통짜 컴포지션 경로 ⛔, 씬 스캐폴드에서 Character 절 제거, Constraints에 no character/no mascot 상수 |
-| 보드 지배 질감 = 소프트 클레이 3D, 단일 색군, 매트+글로시 하이라이트 1, 살짝 기울여 부양 | `3d-icon`/`3d-illust` Style 라인을 클레이 렌더 고정 문구로 재정의 |
+| 보드 지배 질감 = 소프트 클레이 3D, 단일 색군, 매트+글로시 하이라이트 1, 살짝 기울여 부양 | `3d-icon`/`3d-illust` Style 라인을 클레이 렌더 고정 문구로 재정의 — **2026-07-14 사용자 결정으로 글로시 라인 대체됨 (말미 글로시 전환 실측 참조)** |
 | 보드 0핀 문법 = 풀 일러스트 씬·스토리북·캐릭터 행동·파스텔-온-파스텔 | 오브제 스캐폴드 Constraints에 금지어 4종 상수 추가 |
 
 복제 파일럿 실측 (2026-07-13, pin-22 메달 모달 + 벨 하단시트 2건 — 레퍼런스
@@ -394,3 +404,12 @@ gti 파일럿 실측 (2026-07-13, signup `obj-lock` 3d-icon 동일 스캐폴드 
 | gti 기본 모델 = gpt-5.4 — 플래그 누락 시 에러 없이 다른 모델로 생성 | `--model gpt-5.5` 명시 필수 (임무 1) |
 | 1024x1024 요청 → 1254² 반환 (캔버스 크기 비보장) | bbox 트림(후처리 표준 2)이 흡수 — 게이트 아님으로 명기 |
 | 투명 직생성이 회색 체커보드 "투명 흉내" 페인팅으로 반환 (알파 0%) — 알파 검증이 적발, 마젠타 크로마 폴백 + cut_character.py + 풀 디스필(프린지 3,277px→0) 정상 동작 | 알파 검증·크로마 폴백 계약은 전송 계층 무관 존치 재확인. 폴백 Background 교체문에 체커보드·투명 시뮬레이션 금지 문구 추가 |
+
+글로시 전환 실측 (2026-07-14, 토글 오브제 — 클레이/글로시 대조 파일럿):
+
+| 실측 | 이 문서 반영 |
+|---|---|
+| 사용자 클레이 질감 품질 불만 → 글로시 소프트터치 플라스틱 라인 지정, gti 파일럿 크롭 게이트 통과 (AO·크리스프 실루엣·그레인 0) | Style 표 `3d-illust`/`3d-icon`을 사용자 지정 글로시 라인으로 교체 — 보드 25핀 클레이 질감 계약 대체 (사용자 결정 2026-07-14). visual-layout-patterns.md·SKILL.md의 클레이 서술 동시 갱신 |
+| 크로마 폴백 Background 교체가 원문 "no floor shadow"를 유실 → 그림자 베이크 → 키잉·디스필 후 암색 얼룩 | 크로마 교체문에 NO floor shadow / NO contact shadow / NO reflection 상수화 (임무 3) |
+| 키잉이 놓친 코너 비네트 스트레이 ~10px → bbox 풀캔버스 오염 → 트림 조용히 no-op. 소프트 섀도 에지 = 디스필 후 다크 스펙클 헤일로 2,225px | 후처리 표준 2에 "트림 전 정리" 3종(에지 밴드·저알파·암색 스펙클) 신설 — 크로마 폴백 산출 전용 |
+| 크로마 배경색 런 분산 — 동일 지시에 (247,14,220) 등으로 반환, 1회는 키잉 톨러런스 밖 전실패 (transparent 0%) | 키잉 후 투명율 검사(<30%면 재생성 1회) 필요 — cut_character.py 반환 transparent 수치로 판정 |
