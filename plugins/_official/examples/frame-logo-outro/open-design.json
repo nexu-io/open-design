@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-frame-logo-outro",
+  "title": "Logo Outro Frame",
+  "title_i18n": {
+    "en": "Logo Outro Frame",
+    "zh-CN": "品牌 Logo 收尾帧",
+    "zh-TW": "Logo 片尾框架",
+    "ja": "ロゴエンディングフレーム",
+    "ko": "로고 아웃트로 프레임",
+    "de": "Logo-Outro-Frame",
+    "fr": "Frame de sortie logo",
+    "ru": "Финальный кадр с логотипом",
+    "es": "Marco de cierre con logo",
+    "pt-BR": "Frame de encerramento com logo",
+    "it": "Frame di chiusura logo",
+    "vi": "Khung kết logo",
+    "pl": "Ramka końcowa z logo",
+    "id": "Frame penutup logo",
+    "nl": "Logo-outro-frame",
+    "ar": "إطار ختامي للشعار",
+    "tr": "Logo bitiş karesi",
+    "uk": "Фінальний кадр з логотипом"
+  },
+  "version": "0.1.0",
+  "description": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+  "description_i18n": {
+    "en": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+    "zh-CN": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕",
+    "zh-TW": "分段 logo 組裝、輝光光暈和標語顯示，適用於影片片尾或品牌結束畫面。",
+    "ja": "セグメント化されたロゴアセンブリ、グローブルーム、タグライン表示機能。動画のアウトロやブランドクロージング画面に最適。",
+    "ko": "세그먼트 로고 조립, 글로우 블룸, 태그라인 공개 기능. 비디오 아웃트로 또는 브랜드 클로징 프레임에 적합합니다.",
+    "de": "Segmentierte Logo-Zusammenstellung, Glow-Bloom und Tagline-Enthüllung für Video-Outros oder Marken-Abschlussframes.",
+    "fr": "Assemblage de logo segmenté, effet de lueur et révélation de slogan pour outros vidéo ou écrans de fermeture de marque.",
+    "ru": "Сегментированная сборка логотипа, эффект свечения и раскрытие слогана для финала видео или завершающих кадров бренда.",
+    "es": "Ensamblaje segmentado de logo, efecto de brillo y revelación de eslogan para outros de video o pantallas de cierre de marca.",
+    "pt-BR": "Montagem segmentada de logo, efeito glow bloom e revelação de slogan para outros de vídeo ou telas de fechamento de marca.",
+    "it": "Assemblaggio segmentato del logo, effetto glow bloom e rivelazione del tagline per outro video o schermate di chiusura del brand.",
+    "vi": "Lắp ráp logo phân đoạn, hiệu ứng phát sáng và hiển thị khẩu hiệu cho outro video hoặc khung đóng thương hiệu.",
+    "pl": "Segmentowany montaż logo, efekt świecenia i ujawnienie hasła dla outro wideo lub końcowych kadrów marki.",
+    "id": "Perakitan logo tersegmentasi, efek glow bloom, dan pengungkapan tagline untuk outro video atau frame penutup brand.",
+    "nl": "Gesegmenteerde logo-assemblage, glow bloom-effect en tagline-onthulling voor video-outro's of merkafsluitingsframes.",
+    "ar": "تجميع شعار مجزأ، تأثير توهج مضيء، وكشف الشعار للمقاطع الختامية أو إطارات إغلاق العلامة التجارية.",
+    "tr": "Segmentli logo montajı, parlama efekti ve slogan açılımı için video outro veya marka kapanış kareleri.",
+    "uk": "Сегментоване складання логотипу, ефект світіння та розкриття слогану для фіналу відео або завершальних кадрів бренду."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-logo-outro",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "logo",
+    "outro",
+    "branding",
+    "end-card",
+    "frame"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "featured": 0.16,
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Logo Outro Frame template to turn my content into a video outro or brand closing frame with segmented logo assembly, glow bloom, and tagline reveal. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「品牌 Logo 收尾帧」模板把我的内容做成一段「Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Logo Outro Frame",
+          "title_i18n": {
+            "en": "Logo Outro Frame",
+            "zh-CN": "品牌 Logo 收尾帧"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

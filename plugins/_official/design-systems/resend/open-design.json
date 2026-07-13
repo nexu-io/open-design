@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-resend",
+  "title": "Resend",
+  "title_i18n": {
+    "zh-CN": "Resend",
+    "zh-TW": "Resend",
+    "ja": "Resend",
+    "ko": "Resend",
+    "de": "Resend",
+    "fr": "Resend",
+    "ru": "Resend",
+    "es": "Resend",
+    "pt-BR": "Resend",
+    "it": "Resend",
+    "vi": "Resend",
+    "pl": "Resend",
+    "id": "Resend",
+    "nl": "Resend",
+    "ar": "Resend",
+    "tr": "Resend",
+    "uk": "Resend",
+    "en": "Resend"
+  },
+  "version": "0.1.0",
+  "description": "Email API. Minimal dark theme, monospace accents.",
+  "description_i18n": {
+    "zh-CN": "电子邮件 API。极简深色主题，等宽字体点缀。",
+    "zh-TW": "電子郵件 API。極簡深色主題，等寬字型點綴。",
+    "ja": "メール API。ミニマルなダークテーマ、等幅フォントのアクセント。",
+    "ko": "이메일 API. 미니멀 다크 테마, 모노스페이스 액센트.",
+    "de": "E-Mail-API. Minimales dunkles Theme, Monospace-Akzente.",
+    "fr": "API Email. Thème sombre minimaliste, accents monospace.",
+    "ru": "Email API. Минималистичная тёмная тема, моноширинные акценты.",
+    "es": "API de correo electrónico. Tema oscuro minimalista, acentos monoespaciados.",
+    "pt-BR": "API de e-mail. Tema escuro minimalista, acentos monoespaçados.",
+    "it": "API Email. Tema scuro minimale, accenti monospazio.",
+    "vi": "API Email. Giao diện tối tối giản, điểm nhấn monospace.",
+    "pl": "Email API. Minimalny ciemny motyw, akcenty monospace.",
+    "id": "API Email. Tema gelap minimal, aksen monospace.",
+    "nl": "E-mail API. Minimaal donker thema, monospace accenten.",
+    "ar": "واجهة برمجة تطبيقات البريد الإلكتروني. سمة داكنة بسيطة، لمسات monospace.",
+    "tr": "E-posta API. Minimal koyu tema, monospace vurgular.",
+    "uk": "Email API. Мінімалістична темна тема, моноширинні акценти.",
+    "en": "Email API. Minimal dark theme, monospace accents."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "productivity-saas"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Resend design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Resend design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "resend",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+/* theme: blueprint — 蓝图工程 */
+:root{
+  --bg:#0b3a6f;--bg-soft:#0a3260;--surface:rgba(255,255,255,.06);--surface-2:rgba(255,255,255,.1);
+  --border:rgba(190,220,255,.3);--border-strong:rgba(190,220,255,.55);
+  --text-1:#e8f3ff;--text-2:#b8d4f0;--text-3:#7da8cf;
+  --accent:#ffffff;--accent-2:#aee1ff;--accent-3:#ffd27a;
+  --good:#8ef0a6;--warn:#ffd27a;--bad:#ff8a96;
+  --grad:linear-gradient(135deg,#ffffff,#aee1ff);
+  --grad-soft:linear-gradient(135deg,#0a3260,#0b3a6f);
+  --radius:2px;--radius-sm:2px;--radius-lg:4px;
+  --shadow:none;--shadow-lg:0 16px 40px rgba(0,0,0,.3);
+  --font-sans:'JetBrains Mono','IBM Plex Mono',monospace;
+  --font-display:'JetBrains Mono',monospace;
+}
+body{background:
+  linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px) 0 0/40px 40px,
+  linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px) 0 0/40px 40px,
+  #0b3a6f}
+.card{border:1px dashed rgba(190,220,255,.45);background:rgba(255,255,255,.04)}

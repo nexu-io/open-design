@@ -1,0 +1,37 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-extract",
+  "title": "Design extract",
+  "version": "0.1.0",
+  "description": "Extract design tokens from source code / Figma / screenshots into the canonical token bag.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/design-extract",
+  "tags": [
+    "atom",
+    "first-party",
+    "code-migration",
+    "figma-migration",
+    "phase-7"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "scenario": "code-migration",
+    "mode": "extract",
+    "capabilities": [
+      "prompt:inject",
+      "fs:read"
+    ]
+  }
+}

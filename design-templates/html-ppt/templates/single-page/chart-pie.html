@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Chart · Pie</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Pie chart">
+  <p class="kicker">Chart · 环形图</p>
+  <h2 class="h2">时间都花在了哪里</h2>
+  <div class="grid g2 mt-l" style="align-items:center">
+    <div class="card" style="height:460px;padding:28px"><canvas id="c"></canvas></div>
+    <div class="card">
+      <h4>Takeaways</h4>
+      <p class="dim">超过一半的时间都在写内容，动效只占 5%。说明值得把动效做成可复用模板。</p>
+      <ul class="mt-m dim">
+        <li>✍️ 写内容 &nbsp; 55%</li><li>🧩 挑版式 &nbsp; 18%</li><li>🎨 调样式 &nbsp; 14%</li>
+        <li>📸 出图 &nbsp; 8%</li><li>✨ 动效 &nbsp; 5%</li>
+      </ul>
+    </div>
+  </div>
+  <script>
+    addEventListener('DOMContentLoaded',()=>{
+      const css=getComputedStyle(document.documentElement);
+      const colors=['--accent','--accent-2','--accent-3','--good','--warn'].map(k=>css.getPropertyValue(k).trim());
+      const text2=css.getPropertyValue('--text-2').trim();
+      new Chart(document.getElementById('c'),{type:'doughnut',
+        data:{labels:['写内容','挑版式','调样式','出图','动效'],
+          datasets:[{data:[55,18,14,8,5],backgroundColor:colors,borderWidth:0}]},
+        options:{cutout:'62%',plugins:{legend:{position:'right',labels:{color:text2}}}}});
+    });
+  </script>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

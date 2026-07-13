@@ -1,0 +1,84 @@
+# Open Design daemon — Helm chart values. Spec §15.5.
+#
+# Override the image / persistence / secret pattern per cloud:
+#   AWS:    persistence.backend=efs    secrets.backend=secrets-manager
+#   GCP:    persistence.backend=filestore + gcsfuse    secrets.backend=secret-manager
+#   Azure:  persistence.backend=files   secrets.backend=key-vault
+#   Aliyun: persistence.backend=nas     secrets.backend=kms
+#   Tencent: persistence.backend=cfs    secrets.backend=ssm
+#   Huawei: persistence.backend=sfs     secrets.backend=kms
+#   Self-hosted: persistence.backend=hostPath / nfs / longhorn
+#
+# These values are reference defaults; the chart's templates/ aren't
+# wired here yet (Phase 5 follow-up). The file pins the parameter
+# surface so a downstream PR can implement the templates without
+# revisiting the deployment shape.
+
+image:
+  repository: ghcr.io/open-design/od
+  tag: edge
+  pullPolicy: IfNotPresent
+
+# `replicaCount: 1` is the v1 default — pluggable storage + Postgres
+# adapter (spec §15.6) lift this in a follow-up.
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 7456
+
+persistence:
+  enabled: true
+  data:
+    size: 20Gi
+    storageClass: ""
+  config:
+    size: 1Gi
+    storageClass: ""
+
+env:
+  OD_BIND_HOST: 0.0.0.0
+  OD_PORT: "7456"
+  OD_DATA_DIR: /data/od
+  OD_MEDIA_CONFIG_DIR: /data/config
+  OD_SNAPSHOT_UNREFERENCED_TTL_DAYS: "30"
+  OD_SNAPSHOT_GC_INTERVAL_MS: "21600000"
+
+# Secrets are NOT inlined in values.yaml — operators inject them
+# through their cloud's secret manager. This block is the schema the
+# templates will consume.
+secrets:
+  apiToken: ""           # OD_API_TOKEN
+  anthropicApiKey: ""    # ANTHROPIC_API_KEY
+  tavilyApiKey: ""       # TAVILY_API_KEY
+
+resources:
+  limits:
+    cpu: 2
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+podSecurityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: false
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

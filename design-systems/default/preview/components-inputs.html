@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern inputs</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+      }
+      main {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+      .field {
+        display: grid;
+        gap: var(--space-2);
+        margin-bottom: var(--space-4);
+      }
+      label {
+        color: var(--fg);
+        font-size: var(--text-sm);
+        font-weight: 600;
+      }
+      input,
+      textarea {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        background: var(--surface);
+        color: var(--fg);
+        font: inherit;
+      }
+      input:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 84%);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="field"><label for="name">Project name</label><input id="name" value="Operations dashboard" /></div>
+      <div class="field"><label for="notes">Notes</label><textarea id="notes" rows="4">Keep the surface calm and scannable.</textarea></div>
+    </main>
+  </body>
+</html>

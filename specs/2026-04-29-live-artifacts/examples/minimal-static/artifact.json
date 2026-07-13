@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "live_static_minimal",
+  "projectId": "project_fixture",
+  "title": "Minimal Static Live Artifact",
+  "slug": "minimal-static-live-artifact",
+  "status": "active",
+  "pinned": false,
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "refreshStatus": "never",
+  "createdAt": "2026-04-29T12:00:00.000Z",
+  "updatedAt": "2026-04-29T12:00:00.000Z",
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json",
+    "dataJson": {
+      "title": "Minimal Static Live Artifact",
+      "summary": "A safe static fixture rendered from template.html and data.json."
+    }
+  }
+}

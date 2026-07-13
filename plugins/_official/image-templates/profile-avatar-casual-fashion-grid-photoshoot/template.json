@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-casual-fashion-grid-photoshoot",
+  "surface": "image",
+  "title": "Profile / Avatar - Casual Fashion Grid Photoshoot",
+  "summary": "A structured JSON prompt for a 4-photo collage of a casual fashion photoshoot with detailed subject and lighting parameters.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "3d-render"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "{ \n  \"scene_type\": \"smartphone fashion portrait series\",\n  \"composition\": {\n    \"layout\": \"4-photo grid collage\",\n    \"camera\": \"smartphone photography\",\n    \"framing\": [\n      \"full body standing\",\n      \"crouching pose\",\n      \"casual seated pose\",\n      \"upper body portrait\"\n    ],\n    \"angle\": \"eye-level, natural perspective\",\n    \"aspect_ratio\": \"1:1 collage\"\n  },\n  \"subject\": {\n    \"gender\": \"{argument name=\"gender\" default=\"female\"}\",\n    \"age\": \"{argument name=\"age\" default=\"early 20s\"}\",\n    \"aesthetic\": \"extremely beautiful, sensual, candid\",\n    \"appearance\": {\n      \"skin_tone\": \"smooth light complexion\",\n      \"face\": \"soft feminine features, natural symmetry, bright smile\",\n      \"expression\": \"playful, warm, confident, subtly sensual\",\n      \"eyes\": \"expressive, gentle gaze\",\n      \"hair\": {\n        \"color\": \"{argument name=\"hair color\" default=\"deep black\"}\",\n        \"style\": \"long, loose waves\",\n        \"texture\": \"soft, natural shine\"\n      },\n      \"makeup\": \"natural glam, dewy skin, soft blush, subtle lip tint\"\n    },\n    \"outfit\": {\n      \"top\": \"white fitted sleeveless crop top\",\n      \"bottom\": \"loose straight-leg blue jeans\",\n      \"shoes\": \"casual white sneakers\",\n      \"style\": \"minimal, effortless, modern casual\"\n    },\n    \"pose_style\": \"relaxed, candid, playful fashion poses\",\n    \"body_language\": \"confident yet soft, natural movements, gentle sensual elegance\"\n  },\n  \"environment\": {\n    \"location\": \"minimal studio backdrop\",\n    \"background\": \"clean light gray seamless wall\",\n    \"floor\": \"neutral studio floor\",\n    \"lighting\": {\n      \"type\": \"soft diffused studio lighting\",\n      \"tone\": \"neutral\",\n      \"shadows\": \"soft and natural\",\n      \"highlights\": \"subtle skin glow\"\n    }\n  },\n  \"style\": {\n    \"photography_type\": \"smartphone editorial fashion\",\n    \"visual_tone\": \"minimalist, airy, modern\",\n    \"mood\": \"candid, sensual elegance, fresh and confident\",\n    \"color_palette\": \"white, denim blue, soft gray\",\n    \"contrast\": \"low to medium\",\n    \"grain\": \"very light natural grain\"\n  },\n  \"rendering\": {\n    \"realism\": \"ultra-realistic\",\n    \"detail_level\": \"high skin and fabric texture detail\",\n    \"sharpness\": \"high\",\n    \"depth_of_field\": \"natural\",\n    \"post_processing\": \"minimal, clean, slightly soft finish\"\n  },\n  \"atmosphere\": \"modern, youthful, effortless beauty, subtle sensual charm\"\n}",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777367267771_teyn0r_HG74_nJaoAEM5oD.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "Keskin",
+    "url": "https://x.com/craftian_keskin/status/2048848908999135645"
+  }
+}

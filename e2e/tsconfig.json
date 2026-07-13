@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["lib/*.ts"]
+    },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["node", "vitest"]
+  },
+  "include": [
+    "playwright.config.ts",
+    "playwright.visual.config.ts",
+    "vitest.config.ts",
+    "lib/**/*.ts",
+    "resources/**/*.ts",
+    "scripts/**/*.ts",
+    "specs/**/*.ts",
+    "tests/**/*.ts",
+    "ui/**/*.ts"
+  ],
+  "exclude": ["node_modules", "reports", ".od-data"]
+}

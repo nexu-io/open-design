@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-birthday-celebration-sequence",
+  "title": "Cinematic Birthday Celebration Sequence",
+  "title_i18n": {
+    "zh-CN": "电影感生日庆祝序列",
+    "zh-TW": "電影感生日慶祝序列",
+    "ja": "映画的な誕生日お祝いシーケンス",
+    "ko": "영화 같은 생일 축하 시퀀스",
+    "de": "Filmische Geburtstagsfeier-Sequenz",
+    "fr": "Séquence d'anniversaire cinématographique",
+    "ru": "Кинематографическая последовательность празднования дня рождения",
+    "es": "Secuencia cinematográfica de celebración de cumpleaños",
+    "pt-BR": "Sequência cinematográfica de celebração de aniversário",
+    "it": "Sequenza cinematografica di celebrazione del compleanno",
+    "vi": "Chuỗi cảnh sinh nhật phong cách điện ảnh",
+    "pl": "Filmowa sekwencja urodzinowa",
+    "id": "Sekuens perayaan ulang tahun sinematik",
+    "nl": "Filmische verjaardagsviering-sequentie",
+    "ar": "تسلسل احتفال عيد ميلاد سينمائي",
+    "tr": "Sinematik doğum günü kutlama sekansı",
+    "uk": "Кінематографічна послідовність святкування дня народження",
+    "en": "Cinematic Birthday Celebration Sequence"
+  },
+  "version": "0.1.0",
+  "description": "A highly detailed multi-shot video prompt for a birthday sequence, focusing on character consistency and emotional storytelling.",
+  "description_i18n": {
+    "zh-CN": "用于生成生日视频序列的详细多镜头提示词，注重角色一致性和情感叙事。",
+    "zh-TW": "用於生成生日影片序列的詳細多鏡頭提示詞，著重角色一致性和情感敘事。",
+    "ja": "キャラクターの一貫性と感情的なストーリーテリングに重点を置いた、誕生日シーケンス用の詳細なマルチショット動画プロンプト。",
+    "ko": "캐릭터 일관성과 감정적 스토리텔링에 중점을 둔 생일 시퀀스용 상세 멀티샷 비디오 프롬프트.",
+    "de": "Ein detaillierter Multi-Shot-Video-Prompt für Geburtstagssequenzen mit Fokus auf Charakterkonsistenz und emotionales Storytelling.",
+    "fr": "Un prompt vidéo multi-plans détaillé pour une séquence d'anniversaire, axé sur la cohérence des personnages et la narration émotionnelle.",
+    "ru": "Детальный видео-промпт с несколькими планами для создания сцены дня рождения с акцентом на согласованность персонажей и эмоциональное повествование.",
+    "es": "Un prompt de video detallado con múltiples tomas para una secuencia de cumpleaños, enfocado en la consistencia de personajes y la narrativa emocional.",
+    "pt-BR": "Um prompt de vídeo detalhado com múltiplos planos para uma sequência de aniversário, com foco em consistência de personagens e narrativa emocional.",
+    "it": "Un prompt video dettagliato multi-inquadratura per una sequenza di compleanno, incentrato sulla coerenza dei personaggi e sulla narrazione emotiva.",
+    "vi": "Prompt video nhiều cảnh chi tiết cho chuỗi sinh nhật, tập trung vào tính nhất quán của nhân vật và kể chuyện cảm xúc.",
+    "pl": "Szczegółowy wielokadrzowy prompt wideo dla sekwencji urodzinowej, skupiający się na spójności postaci i emocjonalnym storytellingu.",
+    "id": "Prompt video multi-shot yang sangat detail untuk sekuens ulang tahun, berfokus pada konsistensi karakter dan penceritaan emosional.",
+    "nl": "Een gedetailleerde multi-shot videoprompt voor een verjaardagssequentie, gericht op karakterconsistentie en emotionele storytelling.",
+    "ar": "موجه فيديو متعدد اللقطات مفصل لتسلسل عيد ميلاد، مع التركيز على اتساق الشخصيات والسرد العاطفي.",
+    "tr": "Karakter tutarlılığı ve duygusal hikaye anlatımına odaklanan, doğum günü sekansı için ayrıntılı çok çekimli video promptu.",
+    "uk": "Детальний відео-промпт з кількома планами для створення сцени дня народження з акцентом на узгодженість персонажів та емоційне оповідання.",
+    "en": "A highly detailed multi-shot video prompt for a birthday sequence, focusing on character consistency and emotional storytelling."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Soulful Ai",
+    "url": "https://x.com/soulful__ai/status/2048908956178001993"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "fantasy",
+    "cinematic-romance"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/47f113f50f5bd3794cbd83d2bb99320b/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/47f113f50f5bd3794cbd83d2bb99320b/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "0s–4s\nClose-up of a young girl waking up in a softly lit bedroom, warm golden sunlight through curtains, she gently smiles while checking her phone filled with birthday wishes, natural makeup, SAME facial features as reference image, cinematic lighting, shallow depth of field, ultra-realistic, 4K\n\n4s–8s\nCut to a cozy, beautifully decorated room with balloons and fairy lights, her friends surprise her with a birthday cake, everyone cheering, she laughs happily, SAME face as reference image, joyful expressions, cinematic camera movement, vibrant colors, soft glow, high detail\n\n8s–12s\nHer boyfriend enters — a well-dressed young man with neatly styled dark hair, sharp jawline, warm expressive eyes, wearing a clean elegant outfit (white shirt with a fitted blazer), minimal accessories, charming and calm presence ,he presents a beautiful bouquet of fresh flowers, she looks surprised and emotional, soft eye contact, SAME facial features maintained, romantic cinematic tone, warm lighting, slight slow motion, realistic textures, elegant framing\n\n12s–16s\nFinal scene: she stands surrounded by friends, holding the bouquet and cake, boyfriend beside her smiling softly, candles glowing, she closes her eyes to make a wish, SAME face consistency, cinematic wide shot, dreamy atmosphere, soft bokeh lights, high-end film look",
+        "zh-CN": "使用这个插件完成以下任务：0s–4s\nClose-up of a young girl waking up in a softly lit bedroom, warm golden sunlight through curtains, she gently smiles while checking her phone filled with birthday wishes, natural makeup, SAME facial features as reference image, cinematic lighting, shallow depth of field, ultra-realistic, 4K\n\n4s–8s\nCut to a cozy, beautifully decorated room with balloons and fairy lights, her friends surprise her with a birthday cake, everyone cheering, she laughs happily, SAME face as reference image, joyful expressions, cinematic camera movement, vibrant colors, soft glow, high detail\n\n8s–12s\nHer boyfriend enters — a well-dressed young man with neatly styled dark hair, sharp jawline, warm expressive eyes, wearing a clean elegant outfit (white shirt with a fitted blazer), minimal accessories, charming and calm presence ,he presents a beautiful bouquet of fresh flowers, she looks surprised and emotional, soft eye contact, SAME facial features maintained, romantic cinematic tone, warm lighting, slight slow motion, realistic textures, elegant framing\n\n12s–16s\nFinal scene: she stands surrounded by friends, holding the bouquet and cake, boyfriend beside her smiling softly, candles glowing, she closes her eyes to make a wish, SAME face consistency, cinematic wide shot, dreamy atmosphere, soft bokeh lights, high-end film look"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

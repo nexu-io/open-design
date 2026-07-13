@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Bebas+Neue&family=Inter:wght@500;700;800;900&family=Permanent+Marker&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root { --blue:#1537ff; --cream:#f4f0e3; --ink:#0e0e0f; --orange:#ffb34a; --red-shadow:#f05a3a; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      html,body { width:1920px; height:1080px; overflow:hidden; background:var(--cream); font-family:Inter,sans-serif; color:var(--ink); }
+      #root { position:relative; width:1920px; height:1080px; overflow:hidden; }
+      .scene { position:absolute; inset:0; opacity:0; pointer-events:none; }
+      .scene.live { opacity:1; pointer-events:auto; }
+      .deck-ui { position:absolute; left:50%; bottom:20px; transform:translateX(-50%); z-index:80; font:700 14px/1 "Bebas Neue",sans-serif; letter-spacing:.14em; background:#0f1013; color:#f7f7f2; border-radius:999px; padding:8px 16px; display:flex; gap:10px; align-items:center; opacity:.9; }
+      .deck-ui .sep { opacity:.35; }
+      .film-grain { position:absolute; inset:0; pointer-events:none; z-index:90; opacity:.065; mix-blend-mode:multiply; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.93' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E"); }
+      .wipe { position:absolute; inset:0; z-index:70; opacity:0; pointer-events:none; display:grid; grid-template-columns:repeat(3,1fr); }
+      .wipe > i { display:block; transform:translateY(-100%); }
+      .wipe > i:nth-child(1) { background:var(--blue); }
+      .wipe > i:nth-child(2) { background:var(--ink); }
+      .wipe > i:nth-child(3) { background:var(--orange); }
+      .s1 { background:var(--blue); border:8px solid var(--cream); padding:20px 28px; display:flex; flex-direction:column; color:var(--cream); }
+      .s1-top { display:flex; justify-content:space-between; font:700 26px/1 "Bebas Neue",sans-serif; letter-spacing:.18em; text-transform:uppercase; }
+      .chip { border:3px solid rgba(244,240,227,.92); border-radius:999px; padding:3px 16px; }
+      .s1-mid { margin-top:70px; }
+      .hero { font-family:"Alfa Slab One",serif; font-size:188px; line-height:.88; letter-spacing:.03em; color:var(--orange); text-transform:uppercase; text-shadow:0 6px 0 var(--red-shadow),8px 12px 0 rgba(6,9,22,.45); }
+      .s1-bottom { margin-top:44px; text-align:center; }
+      .subtitle { font:700 76px/1 "Bebas Neue",sans-serif; letter-spacing:.1em; text-transform:uppercase; color:var(--cream); text-shadow:0 3px 0 #0f1a74; }
+      .meta { margin-top:12px; font:700 33px/1 "Bebas Neue",sans-serif; letter-spacing:.22em; text-transform:uppercase; }
+      .s2 { background:var(--cream); display:grid; grid-template-rows:280px 1fr; border-top:5px solid var(--ink); border-bottom:5px solid var(--ink); }
+      .s2-head { border-bottom:4px solid var(--ink); display:grid; grid-template-columns:1.1fr 1fr; }
+      .s2-title { padding:22px 34px; font-family:"Alfa Slab One",serif; font-size:112px; line-height:.9; text-transform:uppercase; letter-spacing:.02em; color:var(--blue); text-shadow:0 5px 0 #ea5f43; }
+      .s2-brief { border-left:4px solid var(--ink); margin:34px 28px; padding-left:28px; font:700 46px/1.2 "Bebas Neue",sans-serif; letter-spacing:.04em; }
+      .prio-grid { display:grid; grid-template-columns:repeat(3,1fr); }
+      .prio { border-right:4px solid var(--ink); padding:30px 28px; display:flex; flex-direction:column; justify-content:space-between; }
+      .prio:last-child { border-right:0; }
+      .prio.mid { background:var(--blue); color:var(--cream); }
+      .num { font-family:"Alfa Slab One",serif; font-size:118px; line-height:.85; color:var(--orange); text-shadow:0 4px 0 #ea5f43; }
+      .kind { margin-top:10px; font:700 34px/1 "Bebas Neue",sans-serif; letter-spacing:.24em; text-transform:uppercase; }
+      .title { margin-top:14px; font-family:"Alfa Slab One",serif; font-size:74px; line-height:.95; text-transform:uppercase; color:var(--blue); text-shadow:0 3px 0 #ea5f43; }
+      .mid .title { color:var(--orange); }
+      .copy { margin-top:18px; font:700 38px/1.22 "Bebas Neue",sans-serif; letter-spacing:.03em; max-width:92%; }
+      .s3 { background:var(--cream); padding:16px 28px 24px; display:grid; grid-template-rows:1fr auto; }
+      .road-title { font-family:"Alfa Slab One",serif; font-size:104px; line-height:.9; color:var(--blue); text-shadow:0 4px 0 #ea5f43; text-transform:uppercase; }
+      .road-sub { margin-top:6px; font:700 52px/1 "Permanent Marker",cursive; color:#ef5034; }
+      .line-wrap { margin-top:34px; border-top:8px solid #121217; position:relative; }
+      .nodes { display:grid; grid-template-columns:repeat(4,1fr); margin-top:-28px; }
+      .node { position:relative; }
+      .dot { width:52px; height:52px; border:6px solid #101014; border-radius:50%; background:var(--orange); }
+      .dot.blue { background:var(--blue); }
+      .event { margin-top:18px; font-family:"Alfa Slab One",serif; font-size:54px; line-height:.92; color:var(--blue); text-transform:uppercase; }
+      .month { margin-top:10px; font:700 36px/1 "Bebas Neue",sans-serif; letter-spacing:.16em; text-transform:uppercase; }
+      .desc { margin-top:14px; font:700 30px/1.18 "Bebas Neue",sans-serif; max-width:90%; }
+      .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; align-self:end; }
+      .kpi { border:5px solid #111; min-height:140px; padding:14px 24px; background:#f6f3e8; }
+      .kpi.hot { background:var(--blue); color:#f4f0e3; }
+      .k-label { font:700 26px/1 "Bebas Neue",sans-serif; letter-spacing:.2em; text-transform:uppercase; opacity:.8; }
+      .k-value { margin-top:12px; font-family:"Alfa Slab One",serif; font-size:78px; line-height:.9; color:var(--orange); text-shadow:0 3px 0 #ea5f43; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="8.8" data-width="1920" data-height="1080">
+      <div class="film-grain"></div>
+      <div class="deck-ui"><span id="pg">01 / 03</span><span class="sep">|</span><span>Reset</span></div>
+      <div class="wipe" id="wipe"><i></i><i></i><i></i></div>
+      <section class="scene s1 live" id="s1">
+        <div class="s1-top"><div class="chip">Q2 · 2026</div><div>Strategic Review · Internal</div><div class="chip">Vol. 01</div></div>
+        <div class="s1-mid"><h1 class="hero">Quarterly<br />Review</h1></div>
+        <div class="s1-bottom"><div class="subtitle">A Presentation Template</div><div class="meta">Prepared by the team · May 2026 · Version 01</div></div>
+      </section>
+      <section class="scene s2" id="s2">
+        <div class="s2-head"><div class="s2-title">Three<br />Priorities.</div><div class="s2-brief">The work falls into three buckets this quarter. Each has a clear owner, a clear deliverable, and a clear way to know we are done.</div></div>
+        <div class="prio-grid">
+          <article class="prio"><div><div class="num">01</div><div class="kind">- Focus -</div><div class="title">Ship The<br />Core Flow.</div><div class="copy">Cut three legacy paths and double down on the one that drives ninety percent of activations.</div></div></article>
+          <article class="prio mid"><div><div class="num">02</div><div class="kind">- Learn -</div><div class="title">Talk To<br />Ten Teams.</div><div class="copy">Standing weekly research with target customers. Findings briefed every Friday in a one-page memo.</div></div></article>
+          <article class="prio"><div><div class="num">03</div><div class="kind">- Ship -</div><div class="title">One Launch,<br />Not Five.</div><div class="copy">Combine the four small drops on the calendar into a single, well-fold release with shared positioning.</div></div></article>
+        </div>
+      </section>
+      <section class="scene s3" id="s3">
+        <div>
+          <div class="road-title">The Roadmap.</div>
+          <div class="road-sub">- a plan, on a clock -</div>
+          <div class="line-wrap"><div class="nodes">
+            <div class="node"><div class="dot"></div><div class="month">May</div><div class="event">Kickoff</div><div class="desc">Charter the workstreams, lock owners, and publish the shared scorecard.</div></div>
+            <div class="node"><div class="dot blue"></div><div class="month">June</div><div class="event">Beta Opens</div><div class="desc">Onboard the first ten design partners on the new core flow.</div></div>
+            <div class="node"><div class="dot"></div><div class="month">August</div><div class="event">Launch</div><div class="desc">Public release, market site refresh, and sales enablement complete.</div></div>
+            <div class="node"><div class="dot blue"></div><div class="month">October</div><div class="event">Scale</div><div class="desc">Roll the changes to the long tail and retire the legacy paths for good.</div></div>
+          </div></div>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="k-label">- Time-to-value -</div><div class="k-value" id="k1">30m</div></div>
+          <div class="kpi hot"><div class="k-label">- Activation Rate -</div><div class="k-value" id="k2">+24%</div></div>
+          <div class="kpi"><div class="k-label">- Revenue Lift -</div><div class="k-value" id="k3">$1.4M</div></div>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      function setLive(id){["s1","s2","s3"].forEach(function(v){document.getElementById(v).classList.remove("live");});document.getElementById(id).classList.add("live");}
+      function tweenText(el, from, to, formatter, duration){var x={v:from};return gsap.to(x,{v:to,duration:duration,ease:"power2.out",onUpdate:function(){el.textContent=formatter(x.v);}});}
+      var T12=2.78, T23=5.56, tl=gsap.timeline({paused:true});
+      tl.from(".s1-top .chip, .s1-top > div:nth-child(2)",{y:-20,opacity:0,stagger:0.08,duration:0.34,ease:"power3.out"},0.05);
+      tl.from(".hero",{y:80,opacity:0,scale:0.97,duration:0.6,ease:"expo.out"},0.16);
+      tl.from(".subtitle, .meta",{y:26,opacity:0,duration:0.35,stagger:0.08,ease:"power2.out"},0.42);
+      tl.set("#wipe",{opacity:1},T12-0.03);
+      tl.fromTo(".wipe i",{yPercent:-100},{yPercent:0,duration:0.22,stagger:0.05,ease:"power3.in",overwrite:"auto"},T12);
+      tl.add(function(){setLive("s2");document.getElementById("pg").textContent="02 / 03";},T12+0.2);
+      tl.to(".wipe i",{yPercent:100,duration:0.22,stagger:0.05,ease:"power3.out",overwrite:"auto"},T12+0.22);
+      tl.set("#wipe",{opacity:0},T12+0.5);
+      var b=T12+0.3;
+      tl.from(".s2-title",{x:-70,opacity:0,duration:0.42,ease:"power3.out"},b);
+      tl.from(".s2-brief",{x:50,opacity:0,duration:0.4,ease:"power3.out"},b+0.04);
+      tl.from(".prio",{y:80,opacity:0,duration:0.48,stagger:0.1,ease:"power4.out"},b+0.14);
+      tl.set("#wipe",{opacity:1},T23-0.03);
+      tl.fromTo(".wipe i",{yPercent:-100},{yPercent:0,duration:0.22,stagger:0.05,ease:"power3.in",overwrite:"auto"},T23);
+      tl.add(function(){setLive("s3");document.getElementById("pg").textContent="03 / 03";},T23+0.2);
+      tl.to(".wipe i",{yPercent:100,duration:0.22,stagger:0.05,ease:"power3.out",overwrite:"auto"},T23+0.22);
+      tl.set("#wipe",{opacity:0},T23+0.5);
+      var c=T23+0.26;
+      tl.from(".road-title, .road-sub",{y:24,opacity:0,duration:0.36,stagger:0.06,ease:"power2.out"},c);
+      tl.from(".line-wrap",{scaleX:0,transformOrigin:"left center",duration:0.34,ease:"power2.out"},c+0.1);
+      tl.from(".node",{y:38,opacity:0,duration:0.34,stagger:0.07,ease:"power2.out"},c+0.16);
+      tl.from(".kpi",{y:48,opacity:0,duration:0.35,stagger:0.06,ease:"power3.out"},c+0.38);
+      tl.add(tweenText(document.getElementById("k1"),12,30,function(v){return Math.round(v)+"m";},0.8),c+0.6);
+      tl.add(tweenText(document.getElementById("k2"),6,24,function(v){return "+"+Math.round(v)+"%";},0.8),c+0.64);
+      tl.add(tweenText(document.getElementById("k3"),0.3,1.4,function(v){return "$"+v.toFixed(1)+"M";},0.8),c+0.68);
+      window.__timelines.main = tl;
+      window.addEventListener("keydown",function(e){
+        if(e.key==="1"){tl.pause(0);setLive("s1");document.getElementById("pg").textContent="01 / 03";}
+        if(e.key==="2"){tl.pause(T12+0.52);setLive("s2");document.getElementById("pg").textContent="02 / 03";}
+        if(e.key==="3"){tl.pause(T23+0.52);setLive("s3");document.getElementById("pg").textContent="03 / 03";}
+        if(e.key.toLowerCase()==="r"){tl.restart();setLive("s1");document.getElementById("pg").textContent="01 / 03";}
+      });
+    </script>
+  </body>
+</html>

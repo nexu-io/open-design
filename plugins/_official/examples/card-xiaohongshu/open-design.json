@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-card-xiaohongshu",
+  "title": "Xiaohongshu Card",
+  "title_i18n": {
+    "en": "Xiaohongshu Card",
+    "zh-CN": "小红书图文卡片",
+    "zh-TW": "小紅書卡片",
+    "ja": "Xiaohongshuカード",
+    "ko": "Xiaohongshu 카드",
+    "de": "Xiaohongshu-Karte",
+    "fr": "Carte Xiaohongshu",
+    "ru": "Карточка Xiaohongshu",
+    "es": "Tarjeta Xiaohongshu",
+    "pt-BR": "Cartão Xiaohongshu",
+    "it": "Scheda Xiaohongshu",
+    "vi": "Thẻ Xiaohongshu",
+    "pl": "Karta Xiaohongshu",
+    "id": "Kartu Xiaohongshu",
+    "nl": "Xiaohongshu-kaart",
+    "ar": "بطاقة Xiaohongshu",
+    "tr": "Xiaohongshu Kartı",
+    "uk": "Картка Xiaohongshu"
+  },
+  "version": "0.1.0",
+  "description": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
+  "description_i18n": {
+    "en": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
+    "zh-CN": "小红书风格知识卡片, 多张联排可滑动浏览",
+    "zh-TW": "小紅書風格的知識卡片，以可滑動的多卡輪播形式呈現。",
+    "ja": "Xiaohongshuスタイルのナレッジカードをスワイプ可能なマルチカードカルーセルで表示。",
+    "ko": "Xiaohongshu 스타일의 지식 카드를 스와이프 가능한 멀티 카드 캐러셀로 표시합니다.",
+    "de": "Wissenskarten im Xiaohongshu-Stil, angeordnet als wischbares Mehrkarten-Karussell.",
+    "fr": "Cartes de connaissances au style Xiaohongshu, organisées en carrousel multi-cartes défilable.",
+    "ru": "Карточки знаний в стиле Xiaohongshu, организованные в виде прокручиваемой карусели.",
+    "es": "Tarjetas de conocimiento estilo Xiaohongshu, organizadas como un carrusel deslizable de múltiples tarjetas.",
+    "pt-BR": "Cartões de conhecimento no estilo Xiaohongshu, organizados como um carrossel deslizável de múltiplos cartões.",
+    "it": "Schede informative in stile Xiaohongshu, disposte in un carosello scorrevole multi-scheda.",
+    "vi": "Thẻ kiến thức theo phong cách Xiaohongshu, được sắp xếp dạng băng chuyền đa thẻ có thể vuốt.",
+    "pl": "Karty wiedzy w stylu Xiaohongshu, ułożone jako przewijana karuzela wielokartowa.",
+    "id": "Kartu pengetahuan bergaya Xiaohongshu, disusun sebagai korsel multi-kartu yang dapat digeser.",
+    "nl": "Kenniskaarten in Xiaohongshu-stijl, gerangschikt als veegbare carrousel met meerdere kaarten.",
+    "ar": "بطاقات معرفية بأسلوب Xiaohongshu، مرتبة كدوار متعدد البطاقات قابل للتمرير.",
+    "tr": "Xiaohongshu tarzı bilgi kartları, kaydırılabilir çok kartlı döner galeri olarak düzenlenmiştir.",
+    "uk": "Картки знань у стилі Xiaohongshu, організовані як багатокартова карусель з прокручуванням."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/card-xiaohongshu",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "xhs",
+    "untitled",
+    "carousel"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Xiaohongshu Card template to turn my content into a Xiaohongshu-style swipeable knowledge-card carousel. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Xiaohongshu Card",
+          "title_i18n": {
+            "en": "Xiaohongshu Card",
+            "zh-CN": "小红书图文卡片"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

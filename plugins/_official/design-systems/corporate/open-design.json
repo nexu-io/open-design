@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-corporate",
+  "title": "Corporate",
+  "title_i18n": {
+    "zh-CN": "企业风格",
+    "zh-TW": "企業風格",
+    "ja": "コーポレート",
+    "ko": "기업용",
+    "de": "Corporate",
+    "fr": "Corporate",
+    "ru": "Корпоративный",
+    "es": "Corporativo",
+    "pt-BR": "Corporativo",
+    "it": "Corporate",
+    "vi": "Doanh nghiệp",
+    "pl": "Korporacyjny",
+    "id": "Korporat",
+    "nl": "Corporate",
+    "ar": "مؤسسي",
+    "tr": "Kurumsal",
+    "uk": "Корпоративний",
+    "en": "Corporate"
+  },
+  "version": "0.1.0",
+  "description": "Professional, brand-aligned design with structured grids, minimalist layouts, and consistent enterprise patterns.",
+  "description_i18n": {
+    "zh-CN": "专业的品牌化设计，采用结构化网格、简约布局和一致的企业级设计模式。",
+    "zh-TW": "專業的品牌化設計，採用結構化網格、簡約版面和一致的企業級設計模式。",
+    "ja": "構造化グリッド、ミニマルレイアウト、一貫したエンタープライズパターンを用いたプロフェッショナルでブランド統一されたデザイン。",
+    "ko": "구조화된 그리드, 미니멀 레이아웃, 일관된 엔터프라이즈 패턴을 갖춘 전문적이고 브랜드 정렬된 디자인.",
+    "de": "Professionelles, markenkonformes Design mit strukturierten Rastern, minimalistischen Layouts und konsistenten Unternehmensmustern.",
+    "fr": "Design professionnel aligné sur la marque avec grilles structurées, mises en page minimalistes et modèles d'entreprise cohérents.",
+    "ru": "Профессиональный дизайн в соответствии с брендом: структурированные сетки, минималистичные макеты и единые корпоративные паттерны.",
+    "es": "Diseño profesional alineado con la marca, con cuadrículas estructuradas, diseños minimalistas y patrones empresariales consistentes.",
+    "pt-BR": "Design profissional alinhado à marca com grades estruturadas, layouts minimalistas e padrões corporativos consistentes.",
+    "it": "Design professionale e allineato al brand con griglie strutturate, layout minimalisti e pattern aziendali coerenti.",
+    "vi": "Thiết kế chuyên nghiệp phù hợp thương hiệu với lưới có cấu trúc, bố cục tối giản và các mẫu doanh nghiệp nhất quán.",
+    "pl": "Profesjonalny design zgodny z marką, ze strukturalnymi siatkami, minimalistycznymi układami i spójnymi wzorcami korporacyjnymi.",
+    "id": "Desain profesional yang selaras dengan merek, menggunakan grid terstruktur, tata letak minimalis, dan pola perusahaan yang konsisten.",
+    "nl": "Professioneel, merkgericht ontwerp met gestructureerde rasters, minimalistische lay-outs en consistente bedrijfspatronen.",
+    "ar": "تصميم احترافي متوافق مع العلامة التجارية مع شبكات منظمة وتخطيطات بسيطة وأنماط مؤسسية متسقة.",
+    "tr": "Yapılandırılmış ızgaralar, minimalist düzenler ve tutarlı kurumsal kalıplarla profesyonel, marka uyumlu tasarım.",
+    "uk": "Професійний дизайн у відповідності з брендом: структуровані сітки, мінімалістичні макети та послідовні корпоративні шаблони.",
+    "en": "Professional, brand-aligned design with structured grids, minimalist layouts, and consistent enterprise patterns."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "professional-corporate"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Corporate design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Corporate design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "corporate",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

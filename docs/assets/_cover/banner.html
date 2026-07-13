@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>Open Design — cover</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap' rel='stylesheet'>
+<style>
+  :root {
+    --bg: #0d0a06;
+    --bg-2: #14100a;
+    --ink: #f3ead8;
+    --muted: #9b8f78;
+    --rule: #4a3f2c;
+    --accent: #f0833f;
+    --accent-2: #e85a2c;
+    --paper: #f6efdd;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background:
+      radial-gradient(1200px 700px at 78% 22%, rgba(240,131,63,0.12), transparent 70%),
+      radial-gradient(900px 600px at 12% 80%, rgba(232,90,44,0.06), transparent 70%),
+      linear-gradient(180deg, #0e0b07 0%, #0a0805 100%);
+    padding: 56px 72px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+  header .l { text-align: left; }
+  header .r { text-align: right; }
+  header .center {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  header .center .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin: 0 8px 4px 0;
+    vertical-align: middle;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    column-gap: 64px;
+    padding-top: 56px;
+    align-items: stretch;
+  }
+
+  .left {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .eyebrow .pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: #f6e9d4;
+    background: rgba(240,131,63,0.16);
+    border: 1px solid rgba(240,131,63,0.45);
+    padding: 6px 12px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .eyebrow .pill.alt {
+    color: var(--muted);
+    background: transparent;
+    border-color: var(--rule);
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 116px;
+    line-height: 0.94;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0 0 36px 0;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  h1 .small {
+    font-size: 96px;
+  }
+
+  .lede {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 22px;
+    line-height: 1.5;
+    color: #d8cdb6;
+    max-width: 640px;
+    margin: 0 0 32px 0;
+  }
+  .lede b {
+    font-weight: 500;
+    color: #f3ead8;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+  }
+  .meta .cell {
+    border-right: 1px solid var(--rule);
+    padding-right: 18px;
+  }
+  .meta .cell:last-child { border-right: none; }
+  .meta .num {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .meta .num em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .meta .lbl {
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  /* right artifact collage */
+  .right {
+    position: relative;
+  }
+  .stage {
+    position: absolute;
+    inset: 0;
+  }
+  .card {
+    position: absolute;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #1a140d;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04) inset,
+      0 24px 60px rgba(0,0,0,0.55),
+      0 6px 18px rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .card .tag {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #ffd9b6;
+    background: rgba(20, 14, 8, 0.7);
+    padding: 6px 10px;
+    border-radius: 6px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,217,182,0.18);
+  }
+
+  /* arrange three artifacts as an editorial collage */
+  .card.a { /* gamified-app — back-left */
+    width: 540px;
+    height: 320px;
+    top: 70px;
+    right: 280px;
+    transform: rotate(-3.5deg);
+  }
+  .card.b { /* digital-eguide — front-right hero */
+    width: 620px;
+    height: 360px;
+    top: 220px;
+    right: 0;
+    transform: rotate(2.5deg);
+    z-index: 3;
+  }
+  .card.c { /* dating-web — bottom-left */
+    width: 520px;
+    height: 300px;
+    top: 460px;
+    right: 230px;
+    transform: rotate(-1.5deg);
+    z-index: 2;
+  }
+
+  /* decorative marks */
+  .mark-circle {
+    position: absolute;
+    top: 36px;
+    right: 24px;
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffb37a, var(--accent-2) 80%);
+    color: #2a1408;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.15;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: rotate(8deg);
+    box-shadow: 0 14px 30px rgba(232,90,44,0.45);
+    z-index: 5;
+  }
+  .mark-circle span { padding: 0 10px; }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+  }
+  footer .l { text-align: left; }
+  footer .r { text-align: right; }
+  footer .c {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .underline-accent {
+    position: relative;
+    display: inline-block;
+  }
+  .underline-accent::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 4px;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class='mono l'>Open Design · Manifesto · 2026 Edition</div>
+    <div class='center'><span class='dot'></span>open.design</div>
+    <div class='mono r'>Cover · 01 / 08 · OSS Alternative</div>
+  </header>
+
+  <main>
+    <section class='left'>
+      <div>
+        <div class='eyebrow'>
+          <span class='pill'>· APACHE 2.0</span>
+          <span class='pill alt'>Local-first · BYOK</span>
+        </div>
+        <h1>
+          Design with the<br/>
+          <em>agent</em> already<br/>
+          <span class='small'>on your <span class='underline-accent'>laptop</span>.</span>
+        </h1>
+        <p class='lede'>
+          Open Design is the open-source alternative to Claude Design.
+          Your existing coding agent — <b>Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen</b> —
+          becomes the design engine, driven by 19 composable Skills and 71 brand-grade Design Systems.
+        </p>
+      </div>
+
+      <div class='meta'>
+        <div class='cell'>
+          <div class='num'>71</div>
+          <div class='lbl'>Design<br/>Systems</div>
+        </div>
+        <div class='cell'>
+          <div class='num'>19</div>
+          <div class='lbl'>Composable<br/>Skills</div>
+        </div>
+        <div class='cell'>
+          <div class='num'>06</div>
+          <div class='lbl'>Coding<br/>Agents</div>
+        </div>
+        <div class='cell'>
+          <div class='num'><em>0</em></div>
+          <div class='lbl'>Lock-in /<br/>Vendor Cloud</div>
+        </div>
+      </div>
+    </section>
+
+    <section class='right'>
+      <div class='stage'>
+        <div class='card a'>
+          <span class='tag'>· Hi-Fi Prototype · iPhone</span>
+          <img src='../../screenshots/skills/gamified-app.png' alt=''>
+        </div>
+        <div class='card b'>
+          <span class='tag'>· Digital E-guide · 64pp</span>
+          <img src='../../screenshots/skills/digital-eguide.png' alt=''>
+        </div>
+        <div class='card c'>
+          <span class='tag'>· Dating App · Web</span>
+          <img src='../../screenshots/skills/dating-web.png' alt=''>
+        </div>
+        <div class='mark-circle'><span>OPEN<br/>SOURCE</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class='mono l'>BYOK at every layer · No cloud lock-in</div>
+    <div class='c'>· pnpm dev · vercel deploy · npm start ·</div>
+    <div class='mono r'>github.com/open-design</div>
+  </footer>
+</body>
+</html>

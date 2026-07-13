@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-lavender-fantasy-mage-portrait",
+  "title": "Profile / Avatar - Lavender Fantasy Mage Portrait",
+  "title_i18n": {
+    "zh-CN": "头像 / 个人资料 - 薰衣草幻想法师肖像",
+    "zh-TW": "頭像 / 個人檔案 - 薰衣草幻想法師肖像",
+    "ja": "プロフィール / アバター - ラベンダーファンタジー魔法使いポートレート",
+    "ko": "프로필 / 아바타 - 라벤더 판타지 마법사 초상화",
+    "de": "Profil / Avatar - Lavendel-Fantasy-Magier-Porträt",
+    "fr": "Profil / Avatar - Portrait de mage fantasy lavande",
+    "ru": "Профиль / Аватар - Портрет лавандовой волшебницы",
+    "es": "Perfil / Avatar - Retrato de maga de fantasía lavanda",
+    "pt-BR": "Perfil / Avatar - Retrato de maga fantasia lavanda",
+    "it": "Profilo / Avatar - Ritratto maga fantasy lavanda",
+    "vi": "Hồ sơ / Ảnh đại diện - Chân dung pháp sư fantasy hoa oải hương",
+    "pl": "Profil / Awatar - Portret magiczki fantasy lawendowej",
+    "id": "Profil / Avatar - Potret penyihir fantasi lavender",
+    "nl": "Profiel / Avatar - Lavendel fantasy magiër portret",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة ساحرة خيالية لافندر",
+    "tr": "Profil / Avatar - Lavanta fantazi büyücü portresi",
+    "uk": "Профіль / Аватар - Портрет лавандової чарівниці",
+    "en": "Profile / Avatar - Lavender Fantasy Mage Portrait"
+  },
+  "version": "0.1.0",
+  "description": "This prompt generates a polished anime-style fantasy portrait of an elegant mage princess with glossy blonde hair, purple flowers, and ornate crystal attire, ideal for character art or magical illustr",
+  "description_i18n": {
+    "zh-CN": "生成精美的动漫风格奇幻法师公主肖像，金色光泽长发、紫色花朵和华丽水晶服饰，适合角色设计或魔法插画。",
+    "zh-TW": "生成精緻的動漫風格奇幻法師公主肖像，金色光澤長髮、紫色花朵和華麗水晶服飾，適合角色設計或魔法插畫。",
+    "ja": "光沢のある金髪、紫の花、華麗なクリスタルの衣装を纏ったエレガントな魔法使いの姫のアニメ風ファンタジーポートレートを生成。キャラクターアートや魔法のイラストに最適。",
+    "ko": "윤기나는 금발 머리, 보라색 꽃, 화려한 크리스탈 의상을 입은 우아한 마법사 공주의 애니메이션 스타일 판타지 초상화를 생성합니다. 캐릭터 아트나 마법 일러스트에 적합합니다.",
+    "de": "Erstellt ein elegantes Anime-Fantasy-Porträt einer Magier-Prinzessin mit glänzendem blondem Haar, lila Blumen und kunstvoller Kristallkleidung, ideal für Charakterkunst oder magische Illustrationen.",
+    "fr": "Génère un portrait fantasy anime élégant d'une princesse mage aux cheveux blonds brillants, fleurs violettes et tenue en cristaux ornés, idéal pour l'art de personnage ou les illustrations magiques.",
+    "ru": "Создает изящный портрет принцессы-волшебницы в стиле аниме с блестящими светлыми волосами, фиолетовыми цветами и роскошным хрустальным нарядом, идеально для арта персонажей или магических иллюстраций.",
+    "es": "Genera un elegante retrato de fantasía estilo anime de una princesa maga con cabello rubio brillante, flores moradas y atuendo de cristal ornamentado, ideal para arte de personajes o ilustraciones mágicas.",
+    "pt-BR": "Gera um retrato de fantasia estilo anime de uma princesa maga elegante com cabelo loiro brilhante, flores roxas e traje de cristal ornamentado, ideal para arte de personagens ou ilustrações mágicas.",
+    "it": "Genera un ritratto fantasy in stile anime di un'elegante principessa maga con capelli biondi lucidi, fiori viola e abiti di cristallo ornati, ideale per character art o illustrazioni magiche.",
+    "vi": "Tạo chân dung fantasy phong cách anime của công chúa pháp sư thanh lịch với mái tóc vàng bóng mượt, hoa tím và trang phục pha lê trang trí tinh xảo, lý tưởng cho nghệ thuật nhân vật hoặc minh họa phép thuật.",
+    "pl": "Generuje elegancki portret fantasy w stylu anime przedstawiający księżniczkę-magiczkę o błyszczących blond włosach, fioletowych kwiatach i ozdobnym kryształowym stroju, idealny do grafiki postaci lub magicznych ilustracji.",
+    "id": "Menghasilkan potret fantasi bergaya anime dari putri penyihir yang elegan dengan rambut pirang mengkilap, bunga ungu, dan pakaian kristal yang indah, ideal untuk seni karakter atau ilustrasi magis.",
+    "nl": "Genereert een elegant anime-stijl fantasy portret van een magiër-prinses met glanzend blond haar, paarse bloemen en sierlijke kristallen kleding, ideaal voor character art of magische illustraties.",
+    "ar": "ينشئ صورة شخصية خيالية بأسلوب الأنمي لأميرة ساحرة أنيقة بشعر أشقر لامع، وزهور بنفسجية، وزي كريستالي مزخرف، مثالي لفن الشخصيات أو الرسوم التوضيحية السحرية.",
+    "tr": "Parlak sarı saçlı, mor çiçekli ve süslü kristal kıyafetli zarif bir büyücü prensesinin anime tarzı fantazi portresini oluşturur, karakter sanatı veya büyülü illüstrasyonlar için idealdir.",
+    "uk": "Створює витончений портрет принцеси-чарівниці в стилі аніме з блискучим світлим волоссям, фіолетовими квітами та розкішним кришталевим вбранням, ідеально для арту персонажів або магічних ілюстрацій.",
+    "en": "This prompt generates a polished anime-style fantasy portrait of an elegant mage princess with glossy blonde hair, purple flowers, and ornate crystal attire, ideal for character art or magical illustr"
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "美和",
+    "url": "https://x.com/tokikageyomikag/status/2049200427842064715#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453212320_egzd24_HHA47W2aIAEKWQz.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed anime fantasy portrait of a beautiful young woman mage in a luminous flower garden at a castle. She is shown from about the waist up in a vertical composition, holding an ornate staff topped with a large faceted purple crystal in her right hand. Her face is obscured, but the rest of her design is elegant and refined. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair, long and silky with a smooth glossy finish, soft flowing strands, delicate highlights, and no frizz or messy dryness; the hair is partially braided on one side and decorated with 3 large purple flowers and fine gold filigree hair ornaments. She wears a {argument name=\"dress color\" default=\"lavender and white\"} fantasy gown with off-shoulder ruffled sleeves, translucent fabric, layered chiffon, intricate gold trim, embroidered details, and 3 visible purple gemstones set into the outfit and jewelry at the collar, chest, and waist. Add a jeweled choker-like collar and elegant arm details with gold chains. The background is a dreamy palace courtyard with purple blossoms, flowering vines, stone arches, and distant castle spires, filled with glowing particles and drifting petals. Use strong warm backlighting mixed with soft pastel ambient light, sparkling highlights, rim light through the hair, ethereal bloom, and a romantic magical atmosphere. Color palette focused on lavender, violet, soft pink, pearl white, and gold. Ultra-detailed, polished anime illustration, delicate linework, glossy fabric reflections, cinematic depth of field, premium fantasy card art aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed anime fantasy portrait of a beautiful young woman mage in a luminous flower garden at a castle. She is shown from about the waist up in a vertical composition, holding an ornate staff topped with a large faceted purple crystal in her right hand. Her face is obscured, but the rest of her design is elegant and refined. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair, long and silky with a smooth glossy finish, soft flowing strands, delicate highlights, and no frizz or messy dryness; the hair is partially braided on one side and decorated with 3 large purple flowers and fine gold filigree hair ornaments. She wears a {argument name=\"dress color\" default=\"lavender and white\"} fantasy gown with off-shoulder ruffled sleeves, translucent fabric, layered chiffon, intricate gold trim, embroidered details, and 3 visible purple gemstones set into the outfit and jewelry at the collar, chest, and waist. Add a jeweled choker-like collar and elegant arm details with gold chains. The background is a dreamy palace courtyard with purple blossoms, flowering vines, stone arches, and distant castle spires, filled with glowing particles and drifting petals. Use strong warm backlighting mixed with soft pastel ambient light, sparkling highlights, rim light through the hair, ethereal bloom, and a romantic magical atmosphere. Color palette focused on lavender, violet, soft pink, pearl white, and gold. Ultra-detailed, polished anime illustration, delicate linework, glossy fabric reflections, cinematic depth of field, premium fantasy card art aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

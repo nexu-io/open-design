@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-revolut",
+  "title": "Revolut",
+  "title_i18n": {
+    "zh-CN": "Revolut",
+    "zh-TW": "Revolut",
+    "ja": "Revolut",
+    "ko": "Revolut",
+    "de": "Revolut",
+    "fr": "Revolut",
+    "ru": "Revolut",
+    "es": "Revolut",
+    "pt-BR": "Revolut",
+    "it": "Revolut",
+    "vi": "Revolut",
+    "pl": "Revolut",
+    "id": "Revolut",
+    "nl": "Revolut",
+    "ar": "Revolut",
+    "tr": "Revolut",
+    "uk": "Revolut",
+    "en": "Revolut"
+  },
+  "version": "0.1.0",
+  "description": "Digital banking. Sleek dark interface, gradient cards, fintech precision.",
+  "description_i18n": {
+    "zh-CN": "数字银行。简洁深色界面，渐变卡片，金融科技精准设计。",
+    "zh-TW": "數位銀行。簡潔深色介面，漸層卡片，金融科技精準設計。",
+    "ja": "デジタルバンキング。洗練されたダークインターフェース、グラデーションカード、フィンテック精度。",
+    "ko": "디지털 뱅킹. 세련된 다크 인터페이스, 그라데이션 카드, 핀테크 정밀성.",
+    "de": "Digitales Banking. Elegantes dunkles Interface, Gradient-Karten, Fintech-Präzision.",
+    "fr": "Banque numérique. Interface sombre élégante, cartes en dégradé, précision fintech.",
+    "ru": "Цифровой банкинг. Элегантный темный интерфейс, градиентные карты, финтех-точность.",
+    "es": "Banca digital. Interfaz oscura elegante, tarjetas con gradiente, precisión fintech.",
+    "pt-BR": "Banco digital. Interface escura elegante, cartões com gradiente, precisão fintech.",
+    "it": "Banking digitale. Interfaccia scura elegante, carte con gradiente, precisione fintech.",
+    "vi": "Ngân hàng số. Giao diện tối thanh lịch, thẻ gradient, độ chính xác fintech.",
+    "pl": "Bankowość cyfrowa. Elegancki ciemny interfejs, karty gradientowe, precyzja fintech.",
+    "id": "Perbankan digital. Antarmuka gelap elegan, kartu gradien, presisi fintech.",
+    "nl": "Digitaal bankieren. Strak donker interface, gradiënt kaarten, fintech precisie.",
+    "ar": "الخدمات المصرفية الرقمية. واجهة داكنة أنيقة، بطاقات متدرجة، دقة تكنولوجيا مالية.",
+    "tr": "Dijital bankacılık. Şık koyu arayüz, gradyan kartlar, fintech hassasiyeti.",
+    "uk": "Цифровий банкінг. Елегантний темний інтерфейс, градієнтні картки, фінтех-точність.",
+    "en": "Digital banking. Sleek dark interface, gradient cards, fintech precision."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "fintech-crypto"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Revolut design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Revolut design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "revolut",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

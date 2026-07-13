@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-route-navigation-guide",
+  "title": "Cinematic Route Navigation Guide",
+  "title_i18n": {
+    "zh-CN": "电影级路线导航指南",
+    "zh-TW": "電影級路線導航指南",
+    "ja": "シネマティックルートナビゲーションガイド",
+    "ko": "시네마틱 경로 내비게이션 가이드",
+    "de": "Cinematischer Routen-Navigationsleitfaden",
+    "fr": "Guide de navigation d'itinéraire cinématique",
+    "ru": "Кинематографический навигационный гид",
+    "es": "Guía de navegación de ruta cinematográfica",
+    "pt-BR": "Guia de navegação de rota cinematográfica",
+    "it": "Guida di navigazione percorso cinematografica",
+    "vi": "Hướng dẫn điều hướng lộ trình điện ảnh",
+    "pl": "Kinowy przewodnik nawigacji tras",
+    "id": "Panduan navigasi rute sinematik",
+    "nl": "Cinematische routenavigatiegids",
+    "ar": "دليل الملاحة السينمائي للمسارات",
+    "tr": "Sinematik rota navigasyon rehberi",
+    "uk": "Кінематографічний навігаційний гід маршрутів",
+    "en": "Cinematic Route Navigation Guide"
+  },
+  "version": "0.1.0",
+  "description": "A structured multi-scene prompt designed for Seedance to create a consistent walking navigation video featuring a recurring tour guide character and smooth transitions between real-world locations.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 设计的多场景结构化提示词，用于创建具有一致导游角色和真实地点间流畅过渡的步行导航视频。",
+    "zh-TW": "為 Seedance 設計的多場景結構化提示詞，用於創建具有一致導遊角色和真實地點間流暢過渡的步行導航影片。",
+    "ja": "Seedance 用の構造化マルチシーンプロンプト。一貫したツアーガイドキャラクターと実際のロケーション間のスムーズな遷移を特徴とする徒歩ナビゲーション動画を作成します。",
+    "ko": "Seedance를 위한 구조화된 멀티 씬 프롬프트로, 일관된 투어 가이드 캐릭터와 실제 장소 간의 부드러운 전환이 특징인 도보 내비게이션 영상을 제작합니다.",
+    "de": "Ein strukturierter Multi-Szenen-Prompt für Seedance zur Erstellung konsistenter Walking-Navigation-Videos mit wiederkehrendem Reiseführer-Charakter und sanften Übergängen zwischen realen Orten.",
+    "fr": "Un prompt multi-scènes structuré pour Seedance permettant de créer des vidéos de navigation à pied cohérentes avec un personnage guide récurrent et des transitions fluides entre lieux réels.",
+    "ru": "Структурированный мультисценарный промпт для Seedance для создания согласованного видео пешеходной навигации с повторяющимся персонажем-гидом и плавными переходами между реальными локациями.",
+    "es": "Un prompt multiscena estructurado para Seedance que crea videos de navegación a pie consistentes con un personaje guía recurrente y transiciones fluidas entre ubicaciones del mundo real.",
+    "pt-BR": "Um prompt multi-cena estruturado para Seedance que cria vídeos de navegação a pé consistentes com um personagem guia recorrente e transições suaves entre locais do mundo real.",
+    "it": "Un prompt multi-scena strutturato per Seedance per creare video di navigazione a piedi coerenti con un personaggio guida ricorrente e transizioni fluide tra luoghi reali.",
+    "vi": "Prompt đa cảnh có cấu trúc cho Seedance để tạo video điều hướng đi bộ nhất quán với nhân vật hướng dẫn viên cố định và chuyển cảnh mượt mà giữa các địa điểm thực tế.",
+    "pl": "Uporządkowany wieloscenowy prompt dla Seedance do tworzenia spójnych filmów nawigacji pieszej z powtarzającą się postacią przewodnika i płynnymi przejściami między rzeczywistymi lokalizacjami.",
+    "id": "Prompt multi-adegan terstruktur untuk Seedance yang membuat video navigasi berjalan konsisten dengan karakter pemandu berulang dan transisi mulus antar lokasi dunia nyata.",
+    "nl": "Een gestructureerde multi-scene prompt voor Seedance om consistente wandelnavigatievideo's te maken met een terugkerend gidspersonage en vloeiende overgangen tussen echte locaties.",
+    "ar": "موجه متعدد المشاهد منظم لـ Seedance لإنشاء فيديو ملاحة مشي متسق يتميز بشخصية مرشد متكررة وانتقالات سلسة بين المواقع الحقيقية.",
+    "tr": "Seedance için yapılandırılmış çok sahneli prompt ile tekrarlayan tur rehberi karakteri ve gerçek konumlar arasında akıcı geçişler içeren tutarlı yürüyüş navigasyon videosu oluşturur.",
+    "uk": "Структурований мультисценовий промпт для Seedance для створення послідовного відео пішохідної навігації з персонажем-гідом, що повторюється, та плавними переходами між реальними локаціями.",
+    "en": "A structured multi-scene prompt designed for Seedance to create a consistent walking navigation video featuring a recurring tour guide character and smooth transitions between real-world locations."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Michael Guo",
+    "url": "https://x.com/Michaelzsguo/status/2048966649982669053"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "fantasy",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/49a08d9ecf7257120711ce6d7b158073/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/49a08d9ecf7257120711ce6d7b158073/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a 5-second cinematic route-guide clip for a walking navigation video.\n\nContinuity:\nThis is scene {N} of 5 in a route from North Avenue MARTA Station to Coda Tech Square in Atlanta.\nThe guide is the same stylish female tour guide in every scene: black sunglasses, sleeveless cream belted dress, brown leather belt, tour lanyard, small shoulder bag, brown hair tied back, confident warm expression.\nShe appears on the sidewalk or plaza only, never in traffic lanes.\n\nScene role:\n{route_step}\n\nStarting frame:\nUse the supplied Street View image as the real-world location reference. Preserve the recognizable street layout, building massing, sidewalk direction, signage, and lighting.\n\nAction:\nThe guide is already in frame, slightly ahead of the viewer. She turns toward the camera, gestures toward the next walking direction, then begins to lead the viewer forward.\n\nCamera:\nSmooth handheld walking pace, slight forward push-in, no jumpy zooms, no orbit. Keep horizon stable. The final second should frame the direction of the next scene so the edit can cut naturally.\n\nEnd frame:\nEnd with the camera facing {next_direction_or_landmark}, with the guide near the edge of frame pointing forward.\n\nRestrictions:\nDo not invent a different city, indoor location, parking lot, or tourist group. Do not place the guide in the road. Do not block crosswalks, street signs, building entrances, or the Coda facade.",
+        "zh-CN": "使用这个插件完成以下任务：Create a 5-second cinematic route-guide clip for a walking navigation video.\n\nContinuity:\nThis is scene {N} of 5 in a route from North Avenue MARTA Station to Coda Tech Square in Atlanta.\nThe guide is the same stylish female tour guide in every scene: black sunglasses, sleeveless cream belted dress, brown leather belt, tour lanyard, small shoulder bag, brown hair tied back, confident warm expression.\nShe appears on the sidewalk or plaza only, never in traffic lanes.\n\nScene role:\n{route_step}\n\nStarting frame:\nUse the supplied Street View image as the real-world location reference. Preserve the recognizable street layout, building massing, sidewalk direction, signage, and lighting.\n\nAction:\nThe guide is already in frame, slightly ahead of the viewer. She turns toward the camera, gestures toward the next walking direction, then begins to lead the viewer forward.\n\nCamera:\nSmooth handheld walking pace, slight forward push-in, no jumpy zooms, no orbit. Keep horizon stable. The final second should frame the direction of the next scene so the edit can cut naturally.\n\nEnd frame:\nEnd with the camera facing {next_direction_or_landmark}, with the guide near the edge of frame pointing forward.\n\nRestrictions:\nDo not invent a different city, indoor location, parking lot, or tourist group. Do not place the guide in the road. Do not block crosswalks, street signs, building entrances, or the Coda facade."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

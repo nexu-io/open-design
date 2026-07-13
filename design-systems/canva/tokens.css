@@ -1,0 +1,147 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/canva/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Canva".
+ * Consumer-friendly design platform: white canvas, vivid purple→cyan
+ * gradient, generously rounded geometry, weight-driven hierarchy.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure white canvas (#ffffff) — Canva looks inviting, never tinted
+ *   - Canva Purple (#7d2ae8) as the single accent — gradient origin
+ *   - Four ink tiers (#0e1318 → #3c4043 → #5f6368 → #9aa0a6) — weight
+ *     contrast and ink-tier contrast carry hierarchy together
+ *   - 12px card / 8px button radii — soft, friendly, never sharp
+ *   - Cool soft shadows (rgba(0,0,0,0.06)) — never warm-tinted
+ *   - Compressed type scale (14px body, 18px H3, 64px hero) — cards
+ *     and templates must read at thumbnail scale
+ *   - Material-style easing (0.4,0,0.2,1) at 180ms — friendly micro-lift
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * White canvas with cool-gray subtle break. Canva never tints its
+   * neutral surfaces — the purple/cyan gradient is the only colored
+   * brand moment on an otherwise calm white page. */
+  --bg: #ffffff;             /* Canvas — the primary white background */
+  --surface: #f4f5f7;        /* Surface Subtle — section break, sidebar */
+  --surface-warm: var(--surface); /* alias — Canva has no warm tier; palette is cool-neutral */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Four-tier ink stack from DESIGN.md §2: Primary → Secondary →
+   * Muted → Faint. Each tier is materially distinct so weight + tier
+   * together carry hierarchy (the palette stays neutral). */
+  --fg: #0e1318;             /* Ink Primary — headings, max-emphasis text */
+  --fg-2: #3c4043;           /* Ink Secondary — body prose */
+  --muted: #5f6368;          /* Ink Muted — captions, descriptions */
+  --meta: #9aa0a6;           /* Ink Faint — placeholder, disabled label */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Cool-gray hairlines. Canva uses two visible border tiers
+   * (Default + Strong on hover); --border-soft has no distinct value
+   * in DESIGN.md, so it aliases to keep the schema satisfied without
+   * inventing a tier the brand does not specify. */
+  --border: #e1e3e6;         /* Border Default — standard card hairline */
+  --border-soft: var(--border); /* alias — DESIGN.md specifies no softer tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Canva Purple — the gradient origin. The full purple→cyan gradient
+   * lives in component CSS as a linear-gradient(135deg, ...) on hero
+   * CTAs and Pro/Magic moments; the token itself is the solid purple
+   * used as the always-resolvable single-value accent. */
+  --accent: #7d2ae8;         /* Canva Purple — gradient origin, solid CTA */
+  --accent-on: #ffffff;
+  --accent-hover: #6815d4;   /* DESIGN.md §4 — explicit hover value */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Brand-specific semantic palette from DESIGN.md §2. Error reuses
+   * Canva Pink (#ff5757) — the same hue is the tertiary brand accent
+   * (Magic Studio), so destructive feedback inherits brand warmth. */
+  --success: #00b894;        /* Success — saved, exported */
+  --warn: #ffb020;           /* Warning — storage limit, advisory */
+  --danger: #ff5757;         /* Error — also the Magic Studio pink */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Canva Sans for everything — geometric rounded sans, no serifs.
+   * JetBrains Mono only inside devtools / code blocks. */
+  --font-display: "Canva Sans", "YS Text", system-ui, -apple-system, sans-serif;
+  --font-body: "Canva Sans", "YS Text", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. Compressed by design: 64px hero, 36px
+   * H1, then steps of 24/18/16/14/12/11. Tag (11px) is the floor so
+   * uppercase category chips on template tiles stay legible. */
+  --text-xs: 11px;           /* Tag — uppercase category chip */
+  --text-sm: 12px;           /* Caption — metadata, hint text */
+  --text-base: 14px;         /* Body — standard UI prose */
+  --text-lg: 16px;           /* Body Large — lede, marketing body */
+  --text-xl: 18px;           /* H3 — sub-section, card title */
+  --text-2xl: 24px;          /* H2 — section heading */
+  --text-3xl: 36px;          /* H1 — page heading */
+  --text-4xl: 64px;          /* Hero — marketing display, "Design anything." */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.15;     /* H1 baseline — tight enough for 3-line card titles */
+  --tracking-display: -0.02em; /* ≈ -1.28px at 64px — hero only */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base unit. Scale 4/8/12/16/20/24/32/48 covers everything in
+   * DESIGN.md §5 except 64 and 96 which surface only as section-y. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — generous on desktop (96px = scale top) so the
+   * white canvas breathes between marketing bands; compresses on
+   * narrower viewports following the 4px grid. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Ultra-soft. Buttons / inputs at 8px, cards at 12px (the Canva
+   * template tile), larger panels at 16px. Pills (9999px) reserved
+   * for chips, tags, and the Pro/Magic badge. */
+  --radius-sm: 8px;          /* Buttons, inputs, secondary chrome */
+  --radius-md: 12px;         /* Cards, template tiles — the Canva default */
+  --radius-lg: 16px;         /* Featured panels, hero cards */
+  --radius-pill: 9999px;     /* Chips, tags, Pro/Magic badge */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Soft cool-toned shadows that grow on hover (DESIGN.md §4 card +
+   * button shadows). --elev-raised matches the resting button shadow
+   * — `0 2px 8px rgba(0,0,0,0.06)`. Components scale up to the hover
+   * variant `0 8px 24px rgba(0,0,0,0.08)` inline. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Purple-tinted 3px ring, taken verbatim from DESIGN.md §4 input
+   * focus spec — `0 0 0 3px rgba(125, 42, 232, 0.16)`. Soft enough to
+   * sit beside a 1px purple border without crowding it. */
+  --focus-ring: 0 0 0 3px rgba(125, 42, 232, 0.16);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Friendly micro-interactions: 180ms hover (Canva's signature card
+   * lift) and 280ms for menu / dialog open (DESIGN.md §6). Easing is
+   * Material-style cubic-bezier(0.4, 0, 0.2, 1) — eases out softly
+   * rather than the snappier (0.2, 0, 0, 1) used by enterprise brands. */
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1320px container with 32px gutter (DESIGN.md §5). Wider than
+   * enterprise (Cohere 1440 is editor-led; Canva 1320 fits a 4-col
+   * template grid at 300px per tile + gaps comfortably). */
+  --container-max: 1320px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

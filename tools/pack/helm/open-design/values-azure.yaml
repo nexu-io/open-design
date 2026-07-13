@@ -1,0 +1,31 @@
+# Spec §15.5 — Azure override.
+#
+# Persistence:
+#   - azurefile-csi for the shared /data/od.
+#   - managed-csi (Premium SSD v2) for /data/config.
+#
+# Secrets:
+#   - Wire to Azure Key Vault via the Secrets Store CSI driver
+#     (`secrets-store.csi.x-k8s.io`) or External Secrets Operator.
+#
+# Ingress:
+#   - AKS Application Gateway ingress (`webapprouting.kubernetes.azure.com`)
+#     or an nginx-ingress class — configurable below.
+
+persistence:
+  enabled: true
+  data:
+    storageClass: azurefile-csi
+    size: 50Gi
+  config:
+    storageClass: managed-csi
+    size: 1Gi
+
+ingress:
+  enabled: true
+  className: webapprouting.kubernetes.azure.com
+  hosts:
+    - host: od.example.com
+      paths:
+        - path: /
+          pathType: Prefix

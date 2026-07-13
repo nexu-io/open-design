@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-codenest-coding-platform",
+  "title": "CodeNest — Coding Platform Hero",
+  "title_i18n": {
+    "zh-CN": "CodeNest — 编程平台 Hero",
+    "en": "CodeNest — Coding Platform Hero"
+  },
+  "version": "0.1.0",
+  "description": "High-end dark cinematic hero for a coding-education platform: full-screen HLS background video, a liquid-glass card, green-accent uppercase typography, central glow, desktop grid lines, and a working mobile hamburger menu.",
+  "description_i18n": {
+    "zh-CN": "高端暗色电影感编程教育平台 Hero：全屏 HLS 背景视频、液态玻璃卡片、绿色强调的大写排版、中央光晕、桌面网格线，以及可用的移动端汉堡菜单。",
+    "en": "High-end dark cinematic hero for a coding-education platform: full-screen HLS background video, a liquid-glass card, green-accent uppercase typography, central glow, desktop grid lines, and a working mobile hamburger menu."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "hero",
+    "landing-page",
+    "glassmorphism",
+    "video-background"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a high-end, dark-themed hero section for a coding education platform called 'CodeNest' using React and Tailwind CSS. The design must be responsive and follow these precise specifications:\n\n- Background & Layout:\n\nBackground: Implement a full-screen background video using the HLS stream: https://stream.mux.com/tLkHO1qZoaaQOUeVWo8hEBeGQfySP02EPS02BmnNFyXys.m3u8. Use hls.js and set enableWorker: false to ensure stability in sandboxed environments.\n\nOverlays: Set the video to 60% opacity. Add a dark linear gradient from the left (#070b0a to transparent) and a bottom-up gradient for readability.\n\nGrid System: Add three thin vertical grid lines (white/10 opacity) at the 25%, 50%, and 75% marks across the screen (visible on desktop).\n\nCentral Glow: Place a large horizontal SVG ellipse glow in the center-top area with a cyan/dark green hue, using a 25px Gaussian blur filter.\n\n- The Liquid Glass Card:\n\nComponent: Create a 200x200px floating card positioned above the main headline, shifted exactly 50px upwards using translate-y-[-50px].\n\nCSS Styling (Liquid Glass):\n\nbackground: rgba(255, 255, 255, 0.01) with background-blend-mode: luminosity.\n\nbackdrop-filter: blur(4px).\n\nbox-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1).\n\nBorder Effect: A ::before pseudo-element with inset: 0, padding: 1.4px, and a 180-degree white linear gradient. Use -webkit-mask-composite: xor and mask-composite: exclude to create a sharp, high-end border frame.\n\nContent: '[ 2025 ]' tag (14px), 'Taught by Industry Professionals' headline (18px, using Instrument Serif italic for 'Industry'), and a small description (11px).\n\n- Hero Content & Typography:\n\nEyebrow: 'Career-Ready Curriculum' in Plus Jakarta Sans, bold, 11px, color #5ed29c.\n\nMain Headline: 'LAUNCH YOUR CODING CAREER.' in Inter Extra Bold, uppercase, tracking-tight. Scale from 40px (mobile) to 72px (desktop). The final period must be green (#5ed29c).\n\nDescription: 'Master in-demand coding skills...' in Inter, 14px, 70% white opacity, max-width 512px.\n\nPrimary CTA: 'Get Started' button with an ArrowRight icon. Rounded-full, background #5ed29c, text #070b0a, uppercase, bold.\n\n- Global Navigation:\n\nHeader: Sticky/Absolute header with a white minimalist logo.\n\nDesktop Menu: Links for 'PROJECTS', 'BLOG', 'ABOUT', 'RESUME' in Inter, 16px. Hover state: #5ed29c.\n\nMobile Menu: A functional hamburger menu that toggles a full-screen dark overlay.\n\n- Required Imports:\n\nFonts: Inter, Plus Jakarta Sans, and Instrument Serif (italic).\n\nIcons: lucide-react (ArrowRight, Menu, X).\n\nLibrary: hls.js for video streaming.",
+        "zh-CN": "为编程教育平台 'CodeNest' 构建高端暗色 Hero 区块（React + Tailwind）：全屏 HLS 背景视频（hls.js，enableWorker: false，60% 透明度）、左侧与底部暗色渐变、桌面端 25/50/75% 三条竖向网格线、中央青/深绿 25px 高斯模糊椭圆光晕、200×200 液态玻璃卡片（mask-composite 边框）、绿色强调大写排版与圆角 CTA、桌面导航与移动端汉堡全屏菜单。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "CodeNest — Coding Platform Hero"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Auth Service · Runbook</title>
+<style>
+  :root {
+    --bg: #0c0e14;
+    --paper: #14171f;
+    --paper-2: #1c2030;
+    --ink: #eaecf3;
+    --muted: #8b94ad;
+    --line: #262b3b;
+    --accent: #6ee7b7;
+    --accent-soft: rgba(110,231,183,0.1);
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.6; }
+  .page { max-width: 1100px; margin: 0 auto; padding: 32px 28px 64px; }
+
+  /* Header */
+  .head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+  .head-left { display: flex; flex-direction: column; gap: 6px; }
+  .crumb { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  h1 { font-family: var(--display); font-size: 36px; margin: 4px 0; font-weight: 700; letter-spacing: -0.02em; }
+  .head-meta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .head-meta span { color: var(--accent); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  }
+  .pill.tier { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(110,231,183,0.3); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  section { margin-top: 40px; }
+  h2 { font-family: var(--display); font-size: 22px; margin: 0 0 14px; letter-spacing: -0.005em; font-weight: 700; }
+  h2 .index { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-right: 12px; vertical-align: middle; }
+
+  /* Summary */
+  .summary { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .panel { padding: 22px 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+  .panel p { margin: 0 0 12px; }
+  .panel p:last-child { margin: 0; }
+  .deps h3 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 500; }
+  .deps ul { padding: 0; margin: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-family: var(--mono); font-size: 12.5px; }
+  .deps li { display: flex; justify-content: space-between; padding: 8px 12px; background: var(--paper-2); border-radius: 6px; }
+  .deps li .ok { color: var(--accent); }
+  .deps li .warn { color: var(--warn); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+  th { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: var(--paper-2); }
+  tr:last-child td { border-bottom: none; }
+  td.code, .panel code { font-family: var(--mono); }
+  .sev { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 4px; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .sev-1 { background: rgba(248,113,113,0.15); color: var(--danger); }
+  .sev-2 { background: rgba(251,191,36,0.15); color: var(--warn); }
+  .sev-3 { background: rgba(110,231,183,0.15); color: var(--accent); }
+
+  /* Procedure cards */
+  .procs { display: flex; flex-direction: column; gap: 14px; }
+  .proc { padding: 18px 22px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+  .proc-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .proc-head h3 { margin: 0; font-family: var(--display); font-size: 17px; }
+  .proc-head .when { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  pre { background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: #cdd6f4; margin: 8px 0 0; }
+  pre .cmt { color: var(--muted); }
+  pre .var { color: var(--warn); }
+  pre .ok { color: var(--accent); }
+
+  /* On-call */
+  .rota { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+
+  /* Checklist */
+  .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .step { padding: 18px 20px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; display: flex; gap: 16px; align-items: flex-start; }
+  .step-num { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--bg); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-family: var(--display); font-size: 16px; }
+  .step h4 { margin: 0 0 6px; font-family: var(--display); font-size: 15px; }
+  .step p { margin: 0; color: var(--muted); font-size: 13px; }
+  .step code { font-family: var(--mono); background: var(--paper-2); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+  @media (max-width: 880px) {
+    .summary, .checklist { grid-template-columns: 1fr; }
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="head">
+    <div class="head-left">
+      <div class="crumb">Northwind / Identity / Auth</div>
+      <h1>auth-service</h1>
+      <div class="head-meta">Owned by <span>@identity-platform</span> · v4.7.2 · Last reviewed 14 Oct 2025</div>
+    </div>
+    <span class="pill tier"><span class="dot"></span>Tier 0 · production-critical</span>
+  </header>
+
+  <section>
+    <h2><span class="index">01</span>Service summary</h2>
+    <div class="summary">
+      <div class="panel">
+        <p><strong>auth-service</strong> issues, validates, and revokes session tokens for every Northwind product surface — web, mobile, and the public API. It owns the password store, the TOTP/WebAuthn enrollments, and the audit-log writer for all auth events.</p>
+        <p>If <code>auth-service</code> is down, customers cannot log in or refresh sessions. Existing valid sessions continue to work for their TTL (15 minutes) but no new auth happens.</p>
+      </div>
+      <div class="panel deps">
+        <h3>Dependencies</h3>
+        <ul>
+          <li><span>Postgres · auth-db</span><span class="ok">healthy</span></li>
+          <li><span>Redis · session-cache</span><span class="ok">healthy</span></li>
+          <li><span>KMS · auth-keyring</span><span class="ok">healthy</span></li>
+          <li><span>SES · transactional</span><span class="warn">degraded</span></li>
+          <li><span>Pager · oncall.northwind</span><span class="ok">healthy</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="index">02</span>Alerts you might wake up to</h2>
+    <table>
+      <thead><tr><th>Alert</th><th>Severity</th><th>What it means</th><th>First response</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="code">auth.login_5xx_rate &gt; 1%</td>
+          <td><span class="sev sev-1">SEV-1</span></td>
+          <td>Login endpoint returning errors. Customers are locked out.</td>
+          <td>Check Postgres + Redis dashboards. Roll back last deploy if &lt; 30 min old.</td>
+        </tr>
+        <tr>
+          <td class="code">auth.token_refresh_lag_p95 &gt; 800ms</td>
+          <td><span class="sev sev-2">SEV-2</span></td>
+          <td>Refresh path is slow. Web app starts to feel sluggish.</td>
+          <td>Inspect Redis CPU + connection count. Scale read replicas if needed.</td>
+        </tr>
+        <tr>
+          <td class="code">auth.signup_failure &gt; 10/min</td>
+          <td><span class="sev sev-2">SEV-2</span></td>
+          <td>New signups are failing. Often SES bounces or SMTP auth.</td>
+          <td>Check SES bounce rate. Failover transactional queue to backup region.</td>
+        </tr>
+        <tr>
+          <td class="code">auth.kms_signing_errors &gt; 0</td>
+          <td><span class="sev sev-1">SEV-1</span></td>
+          <td>KMS can't sign session tokens. New logins fail; existing sessions OK.</td>
+          <td>Page the security team. Do not roll keys without a security engineer.</td>
+        </tr>
+        <tr>
+          <td class="code">auth.audit_writer_backlog &gt; 5k</td>
+          <td><span class="sev sev-3">SEV-3</span></td>
+          <td>Audit log writer is falling behind. Compliance impact.</td>
+          <td>Drain manually. Open a ticket; not a wake-up.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="index">03</span>Common procedures</h2>
+    <div class="procs">
+      <div class="proc">
+        <div class="proc-head"><h3>Deploy a new version</h3><span class="when">Use during business hours</span></div>
+        <p>Deploys are blue/green. The script waits for two consecutive healthchecks before promoting traffic.</p>
+<pre><span class="cmt"># Deploy auth-service v4.7.3 to production</span>
+$ nw deploy auth-service --tag <span class="var">v4.7.3</span> --env production
+
+<span class="cmt"># Wait for two consecutive healthchecks (~90 s), then promote.</span>
+$ nw deploy promote auth-service --env production
+<span class="ok">→ traffic shifted: 10% / 50% / 100%</span></pre>
+      </div>
+      <div class="proc">
+        <div class="proc-head"><h3>Roll back to last known good</h3><span class="when">Use when error rate &gt; 1% post-deploy</span></div>
+<pre><span class="cmt"># Rolls back to the previously promoted version, no rebuild.</span>
+$ nw deploy rollback auth-service --env production
+<span class="ok">→ rolled back to v4.7.2 in 38 s</span></pre>
+      </div>
+      <div class="proc">
+        <div class="proc-head"><h3>Rotate signing keys</h3><span class="when">Schedule with security; never solo</span></div>
+<pre><span class="cmt"># 1. Generate the new signing key in KMS</span>
+$ nw kms create-key --alias auth-signing-<span class="var">$(date +%Y%m%d)</span>
+
+<span class="cmt"># 2. Mark the new key as the primary; old key remains valid for 24h</span>
+$ nw kms set-primary auth-signing --key <span class="var">&lt;arn&gt;</span>
+
+<span class="cmt"># 3. After 24h, schedule deletion of the previous key</span>
+$ nw kms schedule-deletion auth-signing --key <span class="var">&lt;old-arn&gt;</span> --days 30</pre>
+      </div>
+      <div class="proc">
+        <div class="proc-head"><h3>Drain audit-log backlog</h3><span class="when">Use when audit_writer_backlog alert fires</span></div>
+<pre>$ nw exec auth-service -- bin/audit-drain --batch <span class="var">5000</span>
+<span class="ok">→ drained 4,812 entries in 12 s; backlog now 0</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="index">04</span>On-call rotation · this month</h2>
+    <table class="rota">
+      <thead><tr><th>Week</th><th>Primary</th><th>Secondary</th><th>Backup (escalation)</th></tr></thead>
+      <tbody>
+        <tr><td>Oct 27 – Nov 02</td><td>Devon Park</td><td>Priya Banerjee</td><td>Sasha Lin</td></tr>
+        <tr><td>Nov 03 – Nov 09</td><td>Caleb Renner</td><td>Devon Park</td><td>Sasha Lin</td></tr>
+        <tr><td>Nov 10 – Nov 16</td><td>Priya Banerjee</td><td>Caleb Renner</td><td>Mira Reddy</td></tr>
+        <tr><td>Nov 17 – Nov 23</td><td>Sasha Lin</td><td>Priya Banerjee</td><td>Mira Reddy</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="index">05</span>Incident response — first 30 minutes</h2>
+    <div class="checklist">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div><h4>Acknowledge the page within 5 min.</h4><p>Type <code>/ack</code> in <code>#incidents-auth</code>. The bot stops re-paging and tags the on-call.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div><h4>Open the incident channel.</h4><p>Run <code>/incident open auth-service "&lt;short title&gt;"</code>. Slack bot creates a dedicated channel and pages the secondary.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div><h4>Post a status snapshot.</h4><p>Customer-impact in one line, what you know, what you're checking next. Re-post every 10 minutes.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div><h4>Mitigate before you diagnose.</h4><p>If a recent deploy is suspect, roll back. If KMS is degraded, fail open is <em>never</em> the answer for auth — escalate to security.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div><h4>Hand off or stand down.</h4><p>If you can't resolve in 30 min, hand to the secondary. When healthy, close with <code>/incident close</code>; postmortem is owed within 5 business days.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Northwind Identity Platform · runbook v3.2</span>
+    <span>Source: ops-docs/auth-service.md</span>
+  </footer>
+</div>
+</body>
+</html>

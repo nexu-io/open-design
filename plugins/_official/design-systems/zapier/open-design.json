@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-zapier",
+  "title": "Zapier",
+  "title_i18n": {
+    "zh-CN": "Zapier",
+    "zh-TW": "Zapier",
+    "ja": "Zapier",
+    "ko": "Zapier",
+    "de": "Zapier",
+    "fr": "Zapier",
+    "ru": "Zapier",
+    "es": "Zapier",
+    "pt-BR": "Zapier",
+    "it": "Zapier",
+    "vi": "Zapier",
+    "pl": "Zapier",
+    "id": "Zapier",
+    "nl": "Zapier",
+    "ar": "Zapier",
+    "tr": "Zapier",
+    "uk": "Zapier",
+    "en": "Zapier"
+  },
+  "version": "0.1.0",
+  "description": "Automation platform. Warm orange, friendly illustration-driven.",
+  "description_i18n": {
+    "zh-CN": "自动化平台。温暖橙色，友好的插画驱动风格。",
+    "zh-TW": "自動化平台。溫暖橙色，友善的插畫驅動風格。",
+    "ja": "自動化プラットフォーム。温かみのあるオレンジ、親しみやすいイラスト中心。",
+    "ko": "자동화 플랫폼. 따뜻한 오렌지, 친근한 일러스트 중심.",
+    "de": "Automatisierungsplattform. Warmes Orange, freundliches illustrationsgetriebenes Design.",
+    "fr": "Plateforme d'automatisation. Orange chaleureux, design axé sur l'illustration conviviale.",
+    "ru": "Платформа автоматизации. Тёплый оранжевый, дружелюбный стиль с иллюстрациями.",
+    "es": "Plataforma de automatización. Naranja cálido, impulsado por ilustraciones amigables.",
+    "pt-BR": "Plataforma de automação. Laranja acolhedor, design amigável com ilustrações.",
+    "it": "Piattaforma di automazione. Arancione caldo, design amichevole basato su illustrazioni.",
+    "vi": "Nền tảng tự động hóa. Màu cam ấm áp, phong cách minh họa thân thiện.",
+    "pl": "Platforma automatyzacji. Ciepła pomarańcz, przyjazny styl oparty na ilustracjach.",
+    "id": "Platform otomasi. Oranye hangat, didorong ilustrasi yang ramah.",
+    "nl": "Automatiseringsplatform. Warm oranje, vriendelijk illustratiegedreven ontwerp.",
+    "ar": "منصة أتمتة. برتقالي دافئ، مدفوعة برسوم توضيحية ودية.",
+    "tr": "Otomasyon platformu. Sıcak turuncu, samimi illüstrasyon odaklı.",
+    "uk": "Платформа автоматизації. Теплий помаранчевий, дружній стиль з ілюстраціями.",
+    "en": "Automation platform. Warm orange, friendly illustration-driven."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "productivity-saas"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Zapier design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Zapier design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "zapier",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

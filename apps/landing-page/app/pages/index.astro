@@ -1,0 +1,663 @@
+---
+import Page from '../page';
+import '../globals.css';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import FaviconLinks from '../_components/favicon-links.astro';
+import GoogleAnalytics from '../_components/google-analytics.astro';
+import PostHogAnalytics from '../_components/posthog-analytics.astro';
+import ResourceHints from '../_components/resource-hints.astro';
+import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
+import PreciseLazyload from '../_components/precise-lazyload.astro';
+import { heroImage, heroImageSrcset } from '../image-assets';
+import {
+  LANDING_LOCALES,
+  alternateLinksForPath,
+  getHomeFaq,
+  getHomeSeo,
+  getLocaleDefinition,
+  localeFromPath,
+  localePath,
+  type LandingLocaleCode,
+} from '../i18n';
+import { getCatalogCounts } from '../_lib/catalog';
+import { getGithubRepoMeta } from '../_lib/github';
+import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
+
+const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const { title, description } = getHomeSeo(locale, counts);
+const canonical = new URL(localePath(locale), Astro.site).toString();
+const origin = Astro.site?.toString() ?? 'https://open-design.ai/';
+const logoUrl = new URL('/android-chrome-512x512.png', Astro.site).toString();
+const alternateLinks = alternateLinksForPath('/').map((entry) => ({
+  ...entry,
+  href: new URL(entry.hrefPath, Astro.site).toString(),
+}));
+const xDefaultHref = new URL('/', Astro.site).toString();
+
+const REPO_URL = 'https://github.com/nexu-io/open-design';
+const RELEASES_URL = `${REPO_URL}/releases`;
+const ISSUES_URL = `${REPO_URL}/issues`;
+const DOCS_URL = `${REPO_URL}#readme`;
+const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const OFFICIAL_URL = `${origin}official/`;
+
+// Pass bare hosts (not full URLs) so localized Q2 reads
+// "lives at open-design.ai" instead of the awkward
+// "lives at https://open-design.ai/" with a stray protocol/slash.
+const faq = getHomeFaq(locale, {
+  origin: 'open-design.ai',
+  repo: 'github.com/nexu-io/open-design',
+});
+
+const websiteSchema = {
+  '@type': 'WebSite',
+  '@id': `${origin}#website`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  url: origin,
+  inLanguage: localeDef.htmlLang,
+  availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
+  publisher: { '@id': `${origin}#organization` },
+};
+
+const organizationSchema = {
+  '@type': 'Organization',
+  '@id': `${origin}#organization`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD', 'nexu-io/open-design'],
+  url: origin,
+  logo: {
+    '@type': 'ImageObject',
+    url: logoUrl,
+    width: 512,
+    height: 512,
+  },
+  // Five canonical pillars — Google uses sameAs to merge entity claims
+  // across sources. Listing the official site, GitHub repo, release
+  // feed, README docs, and Discord here prevents capture sites from
+  // splitting the brand entity.
+  sameAs: [REPO_URL, RELEASES_URL, DOCS_URL, DISCORD_URL, OFFICIAL_URL],
+};
+
+const softwareSchema = {
+  '@type': 'SoftwareApplication',
+  '@id': `${origin}#software`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  description,
+  url: origin,
+  inLanguage: localeDef.htmlLang,
+  applicationCategory: 'DesignApplication',
+  operatingSystem: 'macOS, Windows, Linux',
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  softwareVersion: github.versionLabel,
+  downloadUrl: RELEASES_URL,
+  installUrl: `${origin}quickstart/`,
+  softwareHelp: { '@type': 'CreativeWork', url: DOCS_URL },
+  releaseNotes: RELEASES_URL,
+  codeRepository: REPO_URL,
+  discussionUrl: DISCORD_URL,
+  issueTracker: ISSUES_URL,
+  sameAs: [REPO_URL, RELEASES_URL, DOCS_URL, DISCORD_URL, OFFICIAL_URL, LICENSE_URL],
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+  publisher: { '@id': `${origin}#organization` },
+};
+
+const faqSchema = {
+  '@type': 'FAQPage',
+  '@id': `${canonical}#faq`,
+  inLanguage: localeDef.htmlLang,
+  mainEntity: faq.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+};
+
+const homepageGraph = {
+  '@context': 'https://schema.org',
+  '@graph': [websiteSchema, organizationSchema, softwareSchema, faqSchema],
+};
+const pageHtml = renderToStaticMarkup(
+  Page({ counts, github, faq, locale }) as ReturnType<typeof createElement>,
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#efe7d2" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {alternateLinks.map((entry) => (
+      <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />
+    ))}
+    <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
+
+    <FaviconLinks />
+    <ResourceHints />
+
+    <GoogleAnalytics />
+    <PostHogAnalytics />
+
+    {/*
+     * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
+     * a 103 Early Hints response automatically when Early Hints is enabled in
+     * the dashboard, so the browser starts the image fetch before the HTML
+     * body finishes streaming.
+     *
+     * Only emitted on `/` — the rest of the site uses lighter hero treatment.
+     */}
+    <link
+      rel="preload"
+      as="image"
+      href={heroImage}
+      imagesrcset={heroImageSrcset}
+      imagesizes="(max-width: 768px) 100vw, 60vw"
+      fetchpriority="high"
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={heroImage} />
+    <meta property="og:locale" content={localeDef.ogLocale} />
+    {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+      <meta property="og:locale:alternate" content={entry.ogLocale} />
+    ))}
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={heroImage} />
+
+    {/*
+     * Single @graph JSON-LD block — WebSite + Organization +
+     * SoftwareApplication + FAQPage. The FAQPage entries must mirror
+     * the visible FAQ rendered by `<HomeFaq />` further down the page.
+     */}
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
+  </head>
+  <body>
+    <Fragment set:html={pageHtml} />
+    <PreciseLazyload />
+    <LocaleSwitcherScript />
+    <script is:inline define:vars={{ RELEASE_METADATA_URL }}>
+      (() => {
+        const formatStars = (count) => {
+          if (!Number.isFinite(count) || count <= 0) return '0';
+          if (count < 1000) return String(count);
+          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+        };
+
+        const formatVersion = (metadata) => {
+          const fromVersion = (version) => {
+            if (typeof version !== 'string') return null;
+            const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+            return m ? `v${m[1]}` : null;
+          };
+          const fromTag = (tag) => {
+            if (typeof tag !== 'string') return null;
+            const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+            return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+          };
+          return (
+            fromVersion(metadata?.releaseVersion) ??
+            fromVersion(metadata?.stableVersion) ??
+            fromVersion(metadata?.baseVersion) ??
+            fromTag(metadata?.versionTag) ??
+            null
+          );
+        };
+
+        // Best-effort OS + arch detection so the download CTAs point straight
+        // at the matching installer from the stable R2 metadata instead of
+        // bouncing through the releases page. There is no Linux artifact, so
+        // Linux/unknown leaves the CTA's pre-rendered releases-page href
+        // untouched.
+        //
+        // arm64 vs x64 on macOS is NOT reliably exposed to the browser
+        // (Safari hides CPU arch). We sniff the WebGL renderer for an Intel/AMD
+        // GPU and otherwise DEFAULT TO arm64, since every Mac shipped since
+        // late 2020 is Apple Silicon. Intel-Mac holdouts can still grab the x64
+        // build from the releases page.
+        const detectPlatform = () => {
+          const ua = (navigator.userAgent || '').toLowerCase();
+          const uaPlatform = (
+            (navigator.userAgentData && navigator.userAgentData.platform) ||
+            navigator.platform ||
+            ''
+          ).toLowerCase();
+          const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
+          const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+          const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
+          if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
+          if (isMac) {
+            const isIntel = (() => {
+              try {
+                const gl = document.createElement('canvas').getContext('webgl');
+                const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+                const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+                return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+              } catch {
+                return false;
+              }
+            })();
+            const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
+            const key = isIntel ? 'macIntel' : 'mac';
+            return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
+          }
+          // Linux has no published artifact: report the OS for the label but
+          // never match an asset, so the CTA keeps its releases-page fallback.
+          if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
+          return null;
+        };
+
+        // Rewrite every [data-download-cta] anchor to the matching installer
+        // URL from the stable metadata, swap any [data-download-os] label to
+        // the detected OS, and append the arch suffix to [data-download-arch] slots
+        // (下载 -> 下载（Apple Silicon）). No-ops (keeping the releases-page
+        // fallback) when the platform is unknown or no matching asset exists.
+        const enhanceDownloadCtas = (metadata) => {
+          const ctas = document.querySelectorAll('[data-download-cta]');
+          if (ctas.length === 0) return;
+          const platform = detectPlatform();
+          if (!platform) return;
+          for (const slot of document.querySelectorAll('[data-download-os]')) {
+            slot.textContent = platform.os;
+          }
+          for (const slot of document.querySelectorAll('[data-download-arch]')) {
+            if (!platform.arch) continue;
+            slot.textContent = `（${platform.arch}）`;
+            slot.hidden = false;
+          }
+          const url = platform.artifact(metadata);
+          if (typeof url !== 'string' || url.length === 0) return;
+          for (const cta of ctas) {
+            // The header nav download button routes to the /download page on
+            // purpose (it carries data-download-page); it still gets the arch
+            // label above but keeps its page href. The hero CTA has no such
+            // marker and is rewritten to the direct installer as before.
+            if (cta.hasAttribute('data-download-page')) continue;
+            cta.href = url;
+            // A direct file download should not open a blank tab.
+            cta.removeAttribute('target');
+            cta.removeAttribute('rel');
+          }
+        };
+
+        const enhanceHeader = () => {
+          const chrome = document.querySelector('[data-chrome-headroom]');
+          if (chrome) {
+            // Wrap the scroll listener's read + classList write in
+            // requestAnimationFrame. Trackpads and high-rate wheels fire
+            // scroll faster than the display refresh, and every callback
+            // that hits classList triggers a layout recalc. rAF collapses
+            // each burst to one DOM mutation per frame — PSI was
+            // attributing ~700ms of "forced reflow" to the un-throttled
+            // version on the previous build.
+            let lastY = window.scrollY;
+            let ticking = false;
+            const showTopThreshold = 100;
+            const scrollDelta = 6;
+            window.addEventListener(
+              'scroll',
+              () => {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(() => {
+                  const y = window.scrollY;
+                  const delta = y - lastY;
+                  if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+                  else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+                  else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
+                  lastY = y;
+                  ticking = false;
+                });
+              },
+              { passive: true },
+            );
+          }
+
+          // Hamburger menu toggle. Active only at narrow viewports (CSS
+          // hides the toggle button at ≥1080px). Click toggles `.is-open`
+          // on the header; outside-click, Escape, and clicking any link
+          // inside the menu close it again. Keeps `aria-expanded` in sync.
+          // This mirrors the handler in `header-enhancer.astro` — the
+          // homepage runs its own inline enhancer instead of importing
+          // that component, so the toggle has to be wired up here too.
+          const navToggle = document.querySelector('[data-nav-toggle]');
+          const primaryNav = document.querySelector('[data-nav-primary]');
+          const navEl = navToggle ? navToggle.closest('header.nav') : null;
+          if (navToggle && primaryNav && navEl) {
+            const setNavOpen = (open) => {
+              navEl.classList.toggle('is-open', open);
+              navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            };
+            navToggle.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              setNavOpen(!navEl.classList.contains('is-open'));
+            });
+            primaryNav.querySelectorAll('a').forEach((link) => {
+              link.addEventListener('click', () => setNavOpen(false));
+            });
+            document.addEventListener('click', (ev) => {
+              if (!navEl.contains(ev.target)) setNavOpen(false);
+            });
+            document.addEventListener('keydown', (ev) => {
+              if (ev.key === 'Escape') setNavOpen(false);
+            });
+          }
+
+          const stars = document.querySelector('[data-github-stars]');
+          if (stars) {
+            fetch('https://api.github.com/repos/nexu-io/open-design', {
+              headers: { Accept: 'application/vnd.github+json' },
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (typeof data?.stargazers_count === 'number') {
+                  stars.textContent = formatStars(data.stargazers_count);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Stable release metadata powers every "v0.x.y" badge on the page
+          // (topbar pulse, hero CTA-foot, footer download) AND the per-OS
+          // direct download CTAs. Fetch it through the landing origin so
+          // deployed static pages stay fresh without depending on cross-origin
+          // R2 CORS headers.
+          const versionSlots = document.querySelectorAll('[data-github-version]');
+          const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
+          if (versionSlots.length === 0 && !hasDownloadCtas) return;
+          fetch(RELEASE_METADATA_URL, {
+            headers: { Accept: 'application/json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((metadata) => {
+              enhanceDownloadCtas(metadata);
+              const label = formatVersion(metadata);
+              if (!label) return;
+              for (const slot of versionSlots) slot.textContent = label;
+            })
+            .catch(() => {});
+        };
+
+        const enhanceWire = () => {
+          const track = document.querySelector('[data-wire-contributors-track]');
+          const count = document.querySelector('[data-wire-contributors-count]');
+          if (!track) return;
+
+          const roleOverrides = {
+            tw93: 'kami',
+            op7418: 'guizang',
+            alchaincyf: 'huashu',
+            OpenCoworkAI: 'codesign',
+            'nexu-io': 'studio',
+            lewislulu: 'html-ppt',
+          };
+          const roleFor = (login, contributions) =>
+            roleOverrides[login] ?? `${contributions} ${contributions === 1 ? 'commit' : 'commits'}`;
+          const isContributor = (value) =>
+            value &&
+            typeof value.login === 'string' &&
+            typeof value.html_url === 'string' &&
+            typeof value.type === 'string' &&
+            typeof value.contributions === 'number';
+          const renderContributor = (contributor, index) => {
+            const link = document.createElement('a');
+            link.className = 'wire-item is-link';
+            link.href = contributor.href;
+            link.target = '_blank';
+            link.rel = 'noreferrer noopener';
+            link.setAttribute('aria-label', `Open ${contributor.handle} on GitHub`);
+            link.dataset.liveWireItem = String(index);
+
+            const dot = document.createElement('span');
+            dot.className = 'wire-dot';
+            dot.textContent = '·';
+            const handle = document.createElement('span');
+            handle.className = 'wire-handle';
+            handle.textContent = `@${contributor.handle}`;
+            const role = document.createElement('span');
+            role.className = 'wire-role';
+            role.textContent = contributor.role;
+
+            link.append(dot, handle, role);
+            return link;
+          };
+
+          fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=12', {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((data) => {
+              if (!Array.isArray(data)) return;
+              const live = data
+                .filter(isContributor)
+                .filter((c) => c.type !== 'Bot' && !c.login.endsWith('[bot]'))
+                .slice(0, 12)
+                .map((c) => ({
+                  handle: c.login,
+                  role: roleFor(c.login, c.contributions),
+                  href: c.html_url,
+                }));
+              if (live.length === 0) return;
+              live.push({
+                handle: 'you',
+                role: 'be next',
+                href: 'https://github.com/nexu-io/open-design/graphs/contributors',
+              });
+              if (count) count.textContent = String(Math.max(0, live.length - 1));
+              track.replaceChildren(
+                ...[...live, ...live].map((contributor, index) => renderContributor(contributor, index)),
+              );
+            })
+            .catch(() => {});
+        };
+
+        const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
+        enhanceHeader();
+        enhanceWire();
+
+        // Fire a PostHog surface_view the first time a [data-od-id] section
+        // scrolls into view. Reuses the reveal observer below; a Set dedupes so
+        // each section reports once per page load. window.__odTrack is defined
+        // by posthog-analytics.astro and is a no-op when PostHog isn't loaded.
+        // Event shape matches 埋点文档2.0: surface_view + page_name/section_id/
+        // section_index, where section_index is the 1-based document order.
+        const seenSections = new Set();
+        let sectionOrder = 0;
+        const reportSection = (el) => {
+          const section = el.closest && el.closest('[data-od-id]');
+          if (!section) return;
+          const id = section.getAttribute('data-od-id');
+          if (!id || seenSections.has(id)) return;
+          seenSections.add(id);
+          sectionOrder += 1;
+          if (window.__odTrack)
+            window.__odTrack('surface_view', {
+              page_name: 'landing_home',
+              section_id: id,
+              section_index: sectionOrder,
+              locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase(),
+            });
+        };
+
+        if (elements.length === 0) return;
+
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduceMotion || !('IntersectionObserver' in window)) {
+          for (const el of elements) {
+            el.dataset.revealed = 'true';
+            reportSection(el);
+          }
+          return;
+        }
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              entry.target.dataset.revealed = 'true';
+              reportSection(entry.target);
+              observer.unobserve(entry.target);
+            }
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+        );
+
+        for (const el of elements) observer.observe(el);
+      })();
+    </script>
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = 'od-newsletter-dismissed';
+        const locale = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+        const track = (area, result) => {
+          if (window.__odTrack)
+            window.__odTrack('newsletter_signup', { page_name: 'landing_home', area, result, locale });
+        };
+
+        const dismissed = () => {
+          try {
+            return window.localStorage.getItem(STORAGE_KEY) === '1';
+          } catch {
+            return false;
+          }
+        };
+        const setDismissed = () => {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, '1');
+          } catch {
+            /* private mode — popup will just reappear next visit */
+          }
+        };
+
+        const wireForm = (form, area) => {
+          const input = form.querySelector('[data-newsletter-email]');
+          const msg = form.querySelector('[data-newsletter-msg]');
+          const submit = form.querySelector('.newsletter-submit');
+          const submitIdleText = submit ? (submit.textContent || '').trim() : '';
+          const successText = form.getAttribute('data-success') || '';
+          const errorText = form.getAttribute('data-error') || '';
+          form.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            const email = (input && input.value ? input.value : '').trim();
+            if (!email) return;
+            if (submit) {
+              submit.disabled = true;
+              submit.classList.add('is-loading');
+              submit.setAttribute('aria-busy', 'true');
+              submit.textContent = submitIdleText ? `${submitIdleText}...` : 'Loading...';
+            }
+            if (msg) msg.textContent = '';
+            fetch('/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, source: form.getAttribute('data-source') || 'landing' }),
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (!data || data.ok !== true) throw new Error('rejected');
+                form.classList.add('is-success');
+                if (submit) {
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
+                if (msg) msg.textContent = successText;
+                if (input) input.value = '';
+                setDismissed();
+                track(area, 'success');
+              })
+              .catch(() => {
+                if (msg) msg.textContent = errorText;
+                if (submit) {
+                  submit.disabled = false;
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
+                track(area, 'error');
+              });
+          });
+        };
+
+        document.querySelectorAll('[data-newsletter-form]').forEach((form) => {
+          const popup = form.closest('[data-newsletter-popup]');
+          wireForm(form, popup ? 'popup' : 'section');
+        });
+
+        const popup = document.querySelector('[data-newsletter-popup]');
+        if (popup && !dismissed()) {
+          const syncPopupRailMask = () => {
+            if (popup.hidden || !popup.classList.contains('is-visible')) return;
+            const rect = popup.getBoundingClientRect();
+            document.body.style.setProperty('--newsletter-popup-mask-top', `${Math.max(0, rect.top)}px`);
+            document.body.style.setProperty(
+              '--newsletter-popup-mask-bottom',
+              `${Math.min(window.innerHeight, rect.bottom)}px`,
+            );
+          };
+          const clearPopupRailMask = () => {
+            document.body.classList.remove('newsletter-popup-visible');
+            document.body.style.removeProperty('--newsletter-popup-mask-top');
+            document.body.style.removeProperty('--newsletter-popup-mask-bottom');
+          };
+          const close = () => {
+            popup.hidden = true;
+            clearPopupRailMask();
+            setDismissed();
+          };
+          popup.querySelectorAll('[data-newsletter-dismiss]').forEach((btn) =>
+            btn.addEventListener('click', close),
+          );
+          document.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape' && !popup.hidden) close();
+          });
+          const reveal = () => {
+            if (dismissed()) return;
+            popup.hidden = false;
+            popup.classList.add('is-visible');
+            document.body.classList.add('newsletter-popup-visible');
+            requestAnimationFrame(syncPopupRailMask);
+            track('popup', 'view');
+          };
+          window.addEventListener('resize', syncPopupRailMask, { passive: true });
+          // Show after the visitor has scrolled past the hero, or a delay
+          // fallback — whichever comes first. Avoids interrupting the LCP.
+          let shown = false;
+          const showOnce = () => {
+            if (shown) return;
+            shown = true;
+            reveal();
+          };
+          const onScroll = () => {
+            if (window.scrollY > window.innerHeight * 0.5) {
+              window.removeEventListener('scroll', onScroll);
+              showOnce();
+            }
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.setTimeout(showOnce, 10000);
+        }
+      })();
+    </script>
+  </body>
+</html>

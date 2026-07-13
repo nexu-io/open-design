@@ -1,0 +1,249 @@
+---
+import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
+---
+
+<script is:inline define:vars={{ RELEASE_METADATA_URL }}>
+  (() => {
+    const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+
+    const formatStars = (count) => {
+      if (!Number.isFinite(count) || count <= 0) return null;
+      if (count < 1000) return String(count);
+      return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    };
+
+    const formatVersion = (metadata) => {
+      const fromVersion = (version) => {
+        if (typeof version !== 'string') return null;
+        const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      const fromTag = (tag) => {
+        if (typeof tag !== 'string') return null;
+        const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+        return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+      };
+      return (
+        fromVersion(metadata?.releaseVersion) ??
+        fromVersion(metadata?.stableVersion) ??
+        fromVersion(metadata?.baseVersion) ??
+        fromTag(metadata?.versionTag) ??
+        null
+      );
+    };
+
+    // Best-effort OS + arch detection so the header download CTA points
+    // straight at the matching installer. Mirrors app/pages/index.astro — keep
+    // the two in sync. arm64 vs x64 on macOS isn't reliably exposed (Safari
+    // hides CPU arch), so we sniff the WebGL renderer and otherwise default to
+    // arm64. Linux has no artifact, so it keeps the releases-page fallback.
+    const detectPlatform = () => {
+      const ua = (navigator.userAgent || '').toLowerCase();
+      const uaPlatform = (
+        (navigator.userAgentData && navigator.userAgentData.platform) ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
+      const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+      const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
+      if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
+      if (isMac) {
+        const isIntel = (() => {
+          try {
+            const gl = document.createElement('canvas').getContext('webgl');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+          } catch {
+            return false;
+          }
+        })();
+        const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
+        const key = isIntel ? 'macIntel' : 'mac';
+        return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
+      }
+      if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
+      return null;
+    };
+
+    const enhanceDownloadCtas = (metadata) => {
+      const ctas = document.querySelectorAll('[data-download-cta]');
+      if (ctas.length === 0) return;
+      const platform = detectPlatform();
+      if (!platform) return;
+      for (const slot of document.querySelectorAll('[data-download-os]')) {
+        slot.textContent = platform.os;
+      }
+      for (const slot of document.querySelectorAll('[data-download-arch]')) {
+        if (!platform.arch) continue;
+        slot.textContent = `（${platform.arch}）`;
+        slot.hidden = false;
+      }
+      const url = platform.artifact(metadata);
+      if (typeof url !== 'string' || url.length === 0) return;
+      for (const cta of ctas) {
+        // CTAs that intentionally route to the /download page (the header nav
+        // button) opt out of direct-asset rewriting: they still get the arch
+        // label above, but keep their page href so JS-enabled visitors land on
+        // the full installer matrix instead of an immediate download.
+        if (cta.hasAttribute('data-download-page')) continue;
+        cta.href = url;
+        cta.removeAttribute('target');
+        cta.removeAttribute('rel');
+      }
+    };
+
+    const chrome = document.querySelector('[data-chrome-headroom]');
+    if (chrome) {
+      // Wrap the scroll listener in requestAnimationFrame so a burst of
+      // scroll events (trackpads fire >60Hz) collapses to one DOM
+      // mutation per frame. PSI attributed ~700ms of "forced reflow" to
+      // the un-throttled version.
+      let lastY = window.scrollY;
+      let ticking = false;
+      const showTopThreshold = 100;
+      const scrollDelta = 6;
+      window.addEventListener(
+        'scroll',
+        () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            const y = window.scrollY;
+            const delta = y - lastY;
+            if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+            else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+            else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
+            lastY = y;
+            ticking = false;
+          });
+        },
+        { passive: true },
+      );
+    }
+
+    // Hamburger menu toggle. Active only at narrow viewports (CSS hides
+    // the toggle button at ≥1100px). Click toggles `.is-open` on the
+    // header; outside-click, Escape, and clicking any link inside the
+    // menu close it again. Keeps `aria-expanded` in sync.
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const primaryNav = document.querySelector('[data-nav-primary]');
+    const navEl = toggle ? toggle.closest('header.nav') : null;
+    if (toggle && primaryNav && navEl) {
+      const setOpen = (open) => {
+        navEl.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOpen(!navEl.classList.contains('is-open'));
+      });
+      // Close when clicking any actual nav link (but not the Product
+      // parent trigger — its href='/' is a real page link, so we let it
+      // navigate which closes the menu naturally).
+      primaryNav.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('click', (ev) => {
+        if (!navEl.contains(ev.target)) setOpen(false);
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') setOpen(false);
+      });
+    }
+
+    const starSlots = document.querySelectorAll('[data-github-stars]');
+    if (starSlots.length > 0) {
+      fetch(REPO_API, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatStars(data?.stargazers_count);
+          if (!label) return;
+          for (const slot of starSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    }
+
+    const versionSlots = document.querySelectorAll('[data-github-version]');
+    const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
+    if (versionSlots.length > 0 || hasDownloadCtas) {
+      fetch(RELEASE_METADATA_URL, {
+        headers: { Accept: 'application/json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((metadata) => {
+          enhanceDownloadCtas(metadata);
+          const label = formatVersion(metadata);
+          if (label) {
+            for (const slot of versionSlots) slot.textContent = label;
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Helper used by every clipboard-write button (link copy, share
+    // text copy). Tries the Clipboard API; falls back to a `prompt()`
+    // window the user can manually copy from on browsers that block
+    // clipboard writes (older Safari, embedded webviews).
+    const writeClipboard = async (text, btn) => {
+      const flash = () => {
+        if (!btn) return;
+        btn.setAttribute('data-copied', 'true');
+        setTimeout(() => btn.removeAttribute('data-copied'), 1400);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          flash();
+          return;
+        }
+      } catch {
+        // fall through
+      }
+      window.prompt('Copy', text);
+    };
+
+    // Copy-link buttons on detail pages and inside the share dialog.
+    document.querySelectorAll('[data-copy-link]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        writeClipboard(btn.getAttribute('data-copy-link') || '', btn);
+      });
+    });
+
+    // Share dialog: trigger button opens the matching `<dialog
+    // data-share-dialog="...">` and the `Copy text` button inside
+    // copies the textarea contents. Modal closes via the form's
+    // method="dialog" submit (the × button) or Escape key.
+    document.querySelectorAll('[data-share-open]').forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        const key = trigger.getAttribute('data-share-open');
+        const dialog = document.querySelector(`[data-share-dialog="${key}"]`);
+        if (dialog && typeof dialog.showModal === 'function') {
+          dialog.showModal();
+        } else if (dialog) {
+          // Older browsers without <dialog> support — just toggle
+          // a class. CSS already shows `.detail-share-dialog` open
+          // by default; we set `open` attr to mimic.
+          dialog.setAttribute('open', '');
+        }
+      });
+    });
+    document.querySelectorAll('[data-share-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const dialog = btn.closest('dialog, [data-share-dialog]');
+        const ta = dialog ? dialog.querySelector('[data-share-text]') : null;
+        if (!ta) return;
+        const text = ta.value || ta.textContent || '';
+        writeClipboard(text, btn);
+        // Auto-select the textarea contents so the user can manually
+        // copy too if they prefer that affordance.
+        if (ta.select) {
+          try { ta.select(); } catch {}
+        }
+      });
+    });
+  })();
+</script>

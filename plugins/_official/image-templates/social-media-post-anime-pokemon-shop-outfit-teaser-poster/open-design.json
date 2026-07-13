@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-anime-pokemon-shop-outfit-teaser-poster",
+  "title": "Social Media Post - Anime Pokémon Shop Outfit Teaser Poster",
+  "title_i18n": {
+    "zh-CN": "社交媒体帖子 - 动漫 Pokémon 商店服装预告海报",
+    "zh-TW": "社群媒體貼文 - 動漫 Pokémon 商店服裝預告海報",
+    "ja": "ソーシャルメディア投稿 - アニメ Pokémon ショップ衣装ティザーポスター",
+    "ko": "소셜 미디어 게시물 - 애니메이션 Pokémon 샵 의상 티저 포스터",
+    "de": "Social-Media-Beitrag - Anime-Pokémon-Shop-Outfit-Teaser-Poster",
+    "fr": "Publication réseaux sociaux - Poster teaser tenue anime boutique Pokémon",
+    "ru": "Пост для соцсетей - Тизерный постер наряда в аниме-магазине Pokémon",
+    "es": "Publicación redes sociales - Póster teaser de outfit tienda anime Pokémon",
+    "pt-BR": "Post de mídia social - Pôster teaser de roupa de loja anime Pokémon",
+    "it": "Post social media - Poster teaser outfit negozio anime Pokémon",
+    "vi": "Bài đăng mạng xã hội - Poster teaser trang phục cửa hàng anime Pokémon",
+    "pl": "Post w mediach społecznościowych - Plakat teaser stroju sklepu anime Pokémon",
+    "id": "Postingan media sosial - Poster teaser outfit toko anime Pokémon",
+    "nl": "Social media post - Anime Pokémon winkel outfit teaser poster",
+    "ar": "منشور وسائل التواصل الاجتماعي - ملصق تشويقي لزي متجر أنمي Pokémon",
+    "tr": "Sosyal medya gönderisi - Anime Pokémon mağaza kıyafet tanıtım posteri",
+    "uk": "Пост у соцмережах - Тизерний постер вбрання в аніме-магазині Pokémon",
+    "en": "Social Media Post - Anime Pokémon Shop Outfit Teaser Poster"
+  },
+  "version": "0.1.0",
+  "description": "This prompt generates a soft pastel anime fashion announcement poster featuring a blurred-face girl in a blue dress inside a Pokémon store, ideal for outfit reveal teasers and character promo visuals.",
+  "description_i18n": {
+    "zh-CN": "生成柔和粉彩动漫风格的时尚宣传海报，展示 Pokémon 商店内身穿蓝色连衣裙的模糊面部女孩，适合服装揭晓预告和角色宣传视觉。",
+    "zh-TW": "生成柔和粉彩動漫風格的時尚宣傳海報，展示 Pokémon 商店內身穿藍色洋裝的模糊面部女孩，適合服裝揭曉預告和角色宣傳視覺。",
+    "ja": "Pokémon ストア内の青いドレスを着た顔をぼかした女の子をフィーチャーした、柔らかなパステル調のアニメファッション告知ポスターを生成。衣装お披露目ティザーやキャラクタープロモビジュアルに最適。",
+    "ko": "Pokémon 매장 안에서 파란 드레스를 입은 얼굴이 흐릿한 소녀를 특징으로 하는 부드러운 파스텔 애니메이션 패션 공지 포스터를 생성합니다. 의상 공개 티저 및 캐릭터 프로모션 비주얼에 이상적입니다.",
+    "de": "Erstellt ein pastellfarbenes Anime-Mode-Ankündigungsposter mit einem Mädchen in blauem Kleid und verschwommenem Gesicht in einem Pokémon-Laden, ideal für Outfit-Reveal-Teaser und Charakter-Promo-Visuals.",
+    "fr": "Génère une affiche d'annonce mode anime aux couleurs pastel douces présentant une fille au visage flouté en robe bleue dans un magasin Pokémon, idéale pour les teasers de révélation de tenue et les visuels promotionnels de personnages.",
+    "ru": "Создает постер анонса моды в стиле аниме в мягких пастельных тонах с девушкой в синем платье и размытым лицом в магазине Pokémon, идеально для тизеров презентации нарядов и промо-визуалов персонажей.",
+    "es": "Genera un póster de anuncio de moda anime en tonos pastel suaves con una chica de rostro difuminado en vestido azul dentro de una tienda Pokémon, ideal para teasers de revelación de outfits y visuales promocionales de personajes.",
+    "pt-BR": "Gera um pôster de anúncio de moda anime em tons pastel suaves apresentando uma garota de rosto desfocado em vestido azul dentro de uma loja Pokémon, ideal para teasers de revelação de roupas e visuais promocionais de personagens.",
+    "it": "Genera un poster di annuncio moda anime dai toni pastello delicati con una ragazza dal volto sfocato in abito blu all'interno di un negozio Pokémon, ideale per teaser di presentazione outfit e visual promozionali di personaggi.",
+    "vi": "Tạo poster thông báo thời trang anime màu pastel nhẹ nhàng với cô gái mặt mờ mặc váy xanh trong cửa hàng Pokémon, lý tưởng cho teaser tiết lộ trang phục và hình ảnh quảng bá nhân vật.",
+    "pl": "Generuje plakat zapowiedzi mody anime w delikatnych pastelowych kolorach z dziewczyną w niebieskiej sukience i rozmytą twarzą w sklepie Pokémon, idealny do teaserów prezentacji strojów i materiałów promocyjnych postaci.",
+    "id": "Menghasilkan poster pengumuman fashion anime berwarna pastel lembut yang menampilkan gadis berwajah kabur mengenakan gaun biru di dalam toko Pokémon, ideal untuk teaser pengungkapan outfit dan visual promosi karakter.",
+    "nl": "Genereert een zachte pastel anime mode-aankondigingsposter met een meisje met vervaagd gezicht in een blauwe jurk in een Pokémon-winkel, ideaal voor outfit reveal teasers en karakter promotiebeelden.",
+    "ar": "ينشئ ملصق إعلان أزياء أنمي بألوان الباستيل الناعمة يعرض فتاة بوجه ضبابي ترتدي فستاناً أزرق داخل متجر Pokémon، مثالي لتشويقات الكشف عن الأزياء ومرئيات الترويج للشخصيات.",
+    "tr": "Pokémon mağazasında mavi elbise giyen bulanık yüzlü bir kızı içeren yumuşak pastel anime moda duyuru posteri oluşturur, kıyafet tanıtım teaserları ve karakter tanıtım görselleri için ideal.",
+    "uk": "Генерує постер анонсу моди в стилі аніме в м'яких пастельних тонах з дівчиною у синій сукні та розмитим обличчям у магазині Pokémon, ідеально для тизерів презентації вбрання та промо-візуалів персонажів.",
+    "en": "This prompt generates a soft pastel anime fashion announcement poster featuring a blurred-face girl in a blue dress inside a Pokémon store, ideal for outfit reveal teasers and character promo visuals."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "ねずみ男(AIイラスト専用)",
+    "url": "https://x.com/ratman_aiillust/status/2049107740686204942#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "anime",
+    "fantasy",
+    "typography",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453222738_l3artn_HG_koUwaAAAk7hW.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A dreamy pastel anime fashion announcement poster set inside a bright Pokémon merchandise shop. The composition is vertical and split visually into two zones: a large translucent information panel on the left and a full-body character showcase on the right. The scene has a soft, elegant, airy atmosphere with diffused indoor lighting, creamy highlights, gentle reflections on the polished floor, and a refined shoujo illustration style. In the background, show a clearly recognizable Pokémon store interior with display shelves, the Pokémon logo sign, a large Poké Ball emblem on the wall, potted plants, plush toys, and figures; visible Pokémon merchandise includes exactly 3 prominent character plushies or mascots: Pikachu at the bottom right, plus 2 small shelf plushies resembling Piplup and another pastel blue-green character. The girl stands slightly right of center in a graceful fashion pose with one leg crossing in front of the other, one hand lightly raised near her chest, and the other relaxed outward. Her face is intentionally obscured by a soft rectangular blur block. She has long wavy {argument name=\"hair color\" default=\"platinum blonde\"} hair with loose curls and a delicate feminine look. She wears a refined pastel outfit: a frilled white high-neck blouse with layered ruffles, a light blue sleeveless pinafore-style dress with a fitted waist and a flowing mid-calf flared skirt, a small white crossbody purse with a flap, white ankle socks, and glossy black Mary Jane shoes. Add subtle pink earrings. The outfit should feel classy, fresh, and cute, with gentle fabric movement. On the left, place a frosted semi-transparent poster panel with elegant typography and decorative flourishes. Include exactly 5 text blocks or labeled areas on this panel: 1) a top banner with Japanese text \"次回衣装プロンプト公開\" above large cursive English text {argument name=\"headline text\" default=\"Next Outfit\"}; 2) a name block with Japanese text \"セラス・柳田・リリエンフェルト\" and smaller romanized text \"Ceras Yanagida Lilienfeld\"; 3) a teaser line reading \"次回の衣装も お楽しみに！\" with a small Poké Ball icon; 4) a bordered description box titled \"Next Coordinate\" followed by several lines of small Japanese body text; 5) a bottom ribbon reading {argument name=\"footer text\" default=\"Coming Soon...\"} and \"STAY TUNED!\" with a small Pikachu silhouette. Use pale blue, white, silver-gray, and blush pastel tones throughout. Add faint ornamental corner decorations and a polished promotional layout, like a boutique fashion teaser poster for a themed anime character outfit reveal.",
+        "zh-CN": "A dreamy pastel anime fashion announcement poster set inside a bright Pokémon merchandise shop. The composition is vertical and split visually into two zones: a large translucent information panel on the left and a full-body character showcase on the right. The scene has a soft, elegant, airy atmosphere with diffused indoor lighting, creamy highlights, gentle reflections on the polished floor, and a refined shoujo illustration style. In the background, show a clearly recognizable Pokémon store interior with display shelves, the Pokémon logo sign, a large Poké Ball emblem on the wall, potted plants, plush toys, and figures; visible Pokémon merchandise includes exactly 3 prominent character plushies or mascots: Pikachu at the bottom right, plus 2 small shelf plushies resembling Piplup and another pastel blue-green character. The girl stands slightly right of center in a graceful fashion pose with one leg crossing in front of the other, one hand lightly raised near her chest, and the other relaxed outward. Her face is intentionally obscured by a soft rectangular blur block. She has long wavy {argument name=\"hair color\" default=\"platinum blonde\"} hair with loose curls and a delicate feminine look. She wears a refined pastel outfit: a frilled white high-neck blouse with layered ruffles, a light blue sleeveless pinafore-style dress with a fitted waist and a flowing mid-calf flared skirt, a small white crossbody purse with a flap, white ankle socks, and glossy black Mary Jane shoes. Add subtle pink earrings. The outfit should feel classy, fresh, and cute, with gentle fabric movement. On the left, place a frosted semi-transparent poster panel with elegant typography and decorative flourishes. Include exactly 5 text blocks or labeled areas on this panel: 1) a top banner with Japanese text \"次回衣装プロンプト公開\" above large cursive English text {argument name=\"headline text\" default=\"Next Outfit\"}; 2) a name block with Japanese text \"セラス・柳田・リリエンフェルト\" and smaller romanized text \"Ceras Yanagida Lilienfeld\"; 3) a teaser line reading \"次回の衣装も お楽しみに！\" with a small Poké Ball icon; 4) a bordered description box titled \"Next Coordinate\" followed by several lines of small Japanese body text; 5) a bottom ribbon reading {argument name=\"footer text\" default=\"Coming Soon...\"} and \"STAY TUNED!\" with a small Pikachu silhouette. Use pale blue, white, silver-gray, and blush pastel tones throughout. Add faint ornamental corner decorations and a polished promotional layout, like a boutique fashion teaser poster for a themed anime character outfit reveal."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

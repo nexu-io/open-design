@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-claude",
+  "title": "Claude (Anthropic)",
+  "title_i18n": {
+    "zh-CN": "Claude (Anthropic)",
+    "zh-TW": "Claude (Anthropic)",
+    "ja": "Claude (Anthropic)",
+    "ko": "Claude (Anthropic)",
+    "de": "Claude (Anthropic)",
+    "fr": "Claude (Anthropic)",
+    "ru": "Claude (Anthropic)",
+    "es": "Claude (Anthropic)",
+    "pt-BR": "Claude (Anthropic)",
+    "it": "Claude (Anthropic)",
+    "vi": "Claude (Anthropic)",
+    "pl": "Claude (Anthropic)",
+    "id": "Claude (Anthropic)",
+    "nl": "Claude (Anthropic)",
+    "ar": "Claude (Anthropic)",
+    "tr": "Claude (Anthropic)",
+    "uk": "Claude (Anthropic)",
+    "en": "Claude (Anthropic)"
+  },
+  "version": "0.1.0",
+  "description": "Anthropic's AI assistant. Warm terracotta accent, clean editorial layout.",
+  "description_i18n": {
+    "zh-CN": "Anthropic 的 AI 助手。采用温暖的赤陶色调和简洁的编辑布局。",
+    "zh-TW": "Anthropic 的 AI 助理。採用溫暖的赤陶色調和簡潔的編輯版面。",
+    "ja": "AnthropicのAIアシスタント。温かみのあるテラコッタカラーとクリーンなエディトリアルレイアウト。",
+    "ko": "Anthropic의 AI 어시스턴트. 따뜻한 테라코타 컬러와 깔끔한 에디토리얼 레이아웃.",
+    "de": "Anthropics KI-Assistent. Warme Terrakotta-Akzente, klares Editorial-Layout.",
+    "fr": "L'assistant IA d'Anthropic. Accent terre cuite chaleureux, mise en page éditoriale épurée.",
+    "ru": "AI-ассистент от Anthropic. Тёплый терракотовый акцент, чистый редакционный макет.",
+    "es": "Asistente de IA de Anthropic. Acento terracota cálido, diseño editorial limpio.",
+    "pt-BR": "Assistente de IA da Anthropic. Acento terracota acolhedor, layout editorial limpo.",
+    "it": "Assistente AI di Anthropic. Accento terracotta caldo, layout editoriale pulito.",
+    "vi": "Trợ lý AI của Anthropic. Màu teracotta ấm áp, bố cục biên tập gọn gàng.",
+    "pl": "Asystent AI od Anthropic. Ciepły akcent terakoty, czysty układ redakcyjny.",
+    "id": "Asisten AI Anthropic. Aksen terakota hangat, tata letak editorial yang bersih.",
+    "nl": "AI-assistent van Anthropic. Warm terracotta accent, strak editorial layout.",
+    "ar": "مساعد الذكاء الاصطناعي من Anthropic. لهجة تراكوتا دافئة، تخطيط تحريري نظيف.",
+    "tr": "Anthropic'in yapay zeka asistanı. Sıcak terracotta vurgusu, temiz editoryal düzen.",
+    "uk": "AI-асистент від Anthropic. Теплий теракотовий акцент, чистий редакційний макет.",
+    "en": "Anthropic's AI assistant. Warm terracotta accent, clean editorial layout."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Claude (Anthropic) design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Claude (Anthropic) design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "claude",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

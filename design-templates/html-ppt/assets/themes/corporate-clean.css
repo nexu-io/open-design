@@ -1,0 +1,19 @@
+/* theme: corporate-clean — 企业商务 */
+:root{
+  --bg:#ffffff;--bg-soft:#f5f7fa;--surface:#ffffff;--surface-2:#f0f3f7;
+  --border:rgba(10,37,64,.12);--border-strong:rgba(10,37,64,.28);
+  --text-1:#0a2540;--text-2:#425466;--text-3:#8898aa;
+  --accent:#0a2540;--accent-2:#1d4ed8;--accent-3:#64748b;
+  --good:#0e9f6e;--warn:#d97706;--bad:#dc2626;
+  --grad:linear-gradient(135deg,#0a2540,#1d4ed8);
+  --grad-soft:linear-gradient(135deg,#f0f4fb,#e4ecf7);
+  --radius:6px;--radius-sm:4px;--radius-lg:10px;
+  --shadow:0 1px 3px rgba(10,37,64,.08),0 4px 12px rgba(10,37,64,.05);
+  --shadow-lg:0 4px 12px rgba(10,37,64,.1),0 16px 40px rgba(10,37,64,.08);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --font-display:'Inter','Noto Sans SC',sans-serif;
+}
+.card{border:1px solid var(--border)}
+.divider-accent{background:var(--accent);height:3px;width:56px}
+.kicker{color:var(--accent-2)}
+h1.title,h2.title,.h1,.h2{font-weight:700;color:var(--accent)}

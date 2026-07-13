@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-psg-transfer-announcement-poster",
+  "title": "Social Media Post - PSG Transfer Announcement Poster",
+  "title_i18n": {
+    "zh-CN": "社交媒体帖子 - PSG 转会公告海报",
+    "zh-TW": "社群媒體貼文 - PSG 轉會公告海報",
+    "ja": "ソーシャルメディア投稿 - PSG移籍発表ポスター",
+    "ko": "소셜 미디어 게시물 - PSG 이적 발표 포스터",
+    "de": "Social-Media-Beitrag - PSG-Transfer-Ankündigungsposter",
+    "fr": "Publication Réseaux Sociaux - Affiche d'Annonce de Transfert PSG",
+    "ru": "Пост для соцсетей - Постер объявления трансфера PSG",
+    "es": "Publicación en Redes Sociales - Póster de Anuncio de Fichaje PSG",
+    "pt-BR": "Post para Redes Sociais - Pôster de Anúncio de Transferência PSG",
+    "it": "Post Social Media - Poster Annuncio Trasferimento PSG",
+    "vi": "Bài Đăng Mạng Xã Hội - Poster Thông Báo Chuyển Nhượng PSG",
+    "pl": "Post w Mediach Społecznościowych - Plakat Ogłoszenia Transferu PSG",
+    "id": "Postingan Media Sosial - Poster Pengumuman Transfer PSG",
+    "nl": "Social Media Post - PSG Transfer Aankondigingsposter",
+    "ar": "منشور وسائل التواصل الاجتماعي - ملصق إعلان انتقال PSG",
+    "tr": "Sosyal Medya Gönderisi - PSG Transfer Duyuru Posteri",
+    "uk": "Публікація в соцмережах - Постер оголошення трансферу PSG",
+    "en": "Social Media Post - PSG Transfer Announcement Poster"
+  },
+  "version": "0.1.0",
+  "description": "A bold, professional football signing poster for announcing a player's move to Paris Saint-Germain on social media or sports promo graphics.",
+  "description_i18n": {
+    "zh-CN": "用于在社交媒体或体育宣传图形上宣布球员转会至巴黎圣日耳曼的醒目专业足球签约海报。",
+    "zh-TW": "用於在社群媒體或體育宣傳圖形上宣布球員轉會至巴黎聖日耳曼的醒目專業足球簽約海報。",
+    "ja": "ソーシャルメディアやスポーツプロモーションで選手のパリ・サンジェルマン移籍を発表するための、大胆でプロフェッショナルなサッカー契約ポスター。",
+    "ko": "소셜 미디어나 스포츠 프로모션 그래픽에서 선수의 파리 생제르맹 이적을 발표하기 위한 대담하고 전문적인 축구 영입 포스터입니다.",
+    "de": "Ein auffälliges, professionelles Fußball-Verpflichtungsposter zur Ankündigung eines Spielerwechsels zu Paris Saint-Germain in sozialen Medien oder Sport-Promotion-Grafiken.",
+    "fr": "Une affiche de signature de joueur audacieuse et professionnelle pour annoncer le transfert d'un joueur au Paris Saint-Germain sur les réseaux sociaux ou les visuels promotionnels sportifs.",
+    "ru": "Яркий профессиональный постер о подписании футболиста для объявления перехода игрока в Пари Сен-Жермен в социальных сетях или спортивной промографике.",
+    "es": "Un póster de fichaje de fútbol audaz y profesional para anunciar la llegada de un jugador al Paris Saint-Germain en redes sociales o gráficos promocionales deportivos.",
+    "pt-BR": "Um pôster de contratação de futebol profissional e impactante para anunciar a chegada de um jogador ao Paris Saint-Germain em redes sociais ou gráficos promocionais esportivos.",
+    "it": "Un poster audace e professionale per annunciare il trasferimento di un calciatore al Paris Saint-Germain sui social media o nelle grafiche promozionali sportive.",
+    "vi": "Poster chuyển nhượng bóng đá chuyên nghiệp và nổi bật để thông báo cầu thủ gia nhập Paris Saint-Germain trên mạng xã hội hoặc đồ họa quảng bá thể thao.",
+    "pl": "Odważny, profesjonalny plakat transferowy do ogłaszania transferu zawodnika do Paris Saint-Germain w mediach społecznościowych lub grafikach promocyjnych sportowych.",
+    "id": "Poster penandatanganan sepak bola yang berani dan profesional untuk mengumumkan perpindahan pemain ke Paris Saint-Germain di media sosial atau grafis promosi olahraga.",
+    "nl": "Een gedurfde, professionele voetbal-signingposter voor het aankondigen van een spelersoverstap naar Paris Saint-Germain op sociale media of sportpromotiegrafics.",
+    "ar": "ملصق توقيع كرة قدم جريء واحترافي للإعلان عن انتقال لاعب إلى باريس سان جيرمان على وسائل التواصل الاجتماعي أو الرسومات الترويجية الرياضية.",
+    "tr": "Sosyal medya veya spor tanıtım grafiklerinde bir oyuncunun Paris Saint-Germain'e transferini duyurmak için cesur ve profesyonel futbol imza posteri.",
+    "uk": "Яскравий професійний постер про підписання футболіста для оголошення переходу гравця до Парі Сен-Жермен у соціальних мережах або спортивній промографіці.",
+    "en": "A bold, professional football signing poster for announcing a player's move to Paris Saint-Germain on social media or sports promo graphics."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "UxUi Tega (Design & Ai)",
+    "url": "https://x.com/Tegadesigns/status/2049400556578382190#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "cinematic",
+    "typography"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453173788_tb78r0_HHDu7nUWQAAWH7O.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a dramatic football transfer announcement poster in a vertical social-media format, centered on a photorealistic adult male soccer player wearing a modern Paris Saint-Germain home jersey, arms crossed, chest-up framing, strong athletic build, face mostly obscured by a soft rectangular blur block for anonymity, short close-cropped hair visible around the edges. Use a deep navy blue PSG-themed color palette with bold red and white accents. The jersey should feature a central red vertical stripe bordered by white, a red swoosh-style sports logo on the left side from the viewer's perspective, the PSG crest on the opposite chest, and faint sponsor lettering across the torso. Place the player in front of a layered graphic background featuring an oversized faded PSG crest filling most of the upper-right background, a dark Eiffel Tower silhouette on the right side, painterly brush-stroke textures, subtle grunge, and a white vertical paint strip on the left with a rough red brush accent near the middle. Include the PSG club badge near the upper left. Add left-side stacked slogan text in bold uppercase sans serif reading: \"NEW CLUB. NEW CHAPTER. PARIS.\" with the last word in red. Add a huge distressed white block headline across the lower middle reading \"{argument name=\"player surname\" default=\"MBAPPE\"}\", with smaller spaced uppercase first name above it reading \"{argument name=\"player first name\" default=\"KYLIAN\"}\". Overlay a red handwritten script across the big surname saying \"{argument name=\"welcome text\" default=\"Welcome To Paris\"}\". At the bottom center, add small uppercase text \"PARIS SAINT-GERMAIN\" and beneath it the year \"{argument name=\"year\" default=\"2026\"}\" in red with thin divider lines on each side. In the lower left, include small stacked text \"ICI C'EST PARIS\" with \"PARIS\" in red. In the lower right, add a circular stamp-style badge reading \"PARIS IS MAGIQUE\". Use cinematic lighting, high contrast, premium sports-brand poster design, sharp fabric texture, moody shadows, gritty editorial finish, and polished transfer-window announcement aesthetics.",
+        "zh-CN": "使用这个插件完成以下任务：Create a dramatic football transfer announcement poster in a vertical social-media format, centered on a photorealistic adult male soccer player wearing a modern Paris Saint-Germain home jersey, arms crossed, chest-up framing, strong athletic build, face mostly obscured by a soft rectangular blur block for anonymity, short close-cropped hair visible around the edges. Use a deep navy blue PSG-themed color palette with bold red and white accents. The jersey should feature a central red vertical stripe bordered by white, a red swoosh-style sports logo on the left side from the viewer's perspective, the PSG crest on the opposite chest, and faint sponsor lettering across the torso. Place the player in front of a layered graphic background featuring an oversized faded PSG crest filling most of the upper-right background, a dark Eiffel Tower silhouette on the right side, painterly brush-stroke textures, subtle grunge, and a white vertical paint strip on the left with a rough red brush accent near the middle. Include the PSG club badge near the upper left. Add left-side stacked slogan text in bold uppercase sans serif reading: \"NEW CLUB. NEW CHAPTER. PARIS.\" with the last word in red. Add a huge distressed white block headline across the lower middle reading \"{argument name=\"player surname\" default=\"MBAPPE\"}\", with smaller spaced uppercase first name above it reading \"{argument name=\"player first name\" default=\"KYLIAN\"}\". Overlay a red handwritten script across the big surname saying \"{argument name=\"welcome text\" default=\"Welcome To Paris\"}\". At the bottom center, add small uppercase text \"PARIS SAINT-GERMAIN\" and beneath it the year \"{argument name=\"year\" default=\"2026\"}\" in red with thin divider lines on each side. In the lower left, include small stacked text \"ICI C'EST PARIS\" with \"PARIS\" in red. In the lower right, add a circular stamp-style badge reading \"PARIS IS MAGIQUE\". Use cinematic lighting, high contrast, premium sports-brand poster design, sharp fabric texture, moody shadows, gritty editorial finish, and polished transfer-window announcement aesthetics."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

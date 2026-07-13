@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-luxury",
+  "title": "Luxury",
+  "title_i18n": {
+    "zh-CN": "奢华",
+    "zh-TW": "奢華",
+    "ja": "ラグジュアリー",
+    "ko": "럭셔리",
+    "de": "Luxury",
+    "fr": "Luxury",
+    "ru": "Luxury",
+    "es": "Luxury",
+    "pt-BR": "Luxury",
+    "it": "Luxury",
+    "vi": "Luxury",
+    "pl": "Luxury",
+    "id": "Luxury",
+    "nl": "Luxury",
+    "ar": "Luxury",
+    "tr": "Luxury",
+    "uk": "Luxury",
+    "en": "Luxury"
+  },
+  "version": "0.1.0",
+  "description": "High-end dark aesthetic with bold headings, monochromatic palette, and premium feel for luxury brand experiences.",
+  "description_i18n": {
+    "zh-CN": "高端深色美学，配以粗体标题、单色调色板和高级质感，专为奢侈品牌体验打造。",
+    "zh-TW": "高端深色美學，配以粗體標題、單色調色盤和高級質感，專為奢侈品牌體驗打造。",
+    "ja": "高級ダークテイストに太字の見出し、モノクロパレット、プレミアム感を備えた、ラグジュアリーブランド向けデザイン。",
+    "ko": "굵은 헤딩과 단색 팔레트, 프리미엄 느낌의 고급스러운 다크 미학으로 럭셔리 브랜드 경험을 제공합니다.",
+    "de": "Hochwertige dunkle Ästhetik mit fetten Überschriften, monochromer Farbpalette und Premium-Feeling für luxuriöse Markenerlebnisse.",
+    "fr": "Esthétique sombre haut de gamme avec titres en gras, palette monochrome et ambiance premium pour des expériences de marques de luxe.",
+    "ru": "Премиальная тёмная эстетика с жирными заголовками, монохромной палитрой и роскошным стилем для люксовых брендов.",
+    "es": "Estética oscura de alta gama con encabezados en negrita, paleta monocromática y sensación premium para experiencias de marcas de lujo.",
+    "pt-BR": "Estética escura sofisticada com títulos em negrito, paleta monocromática e sensação premium para experiências de marcas de luxo.",
+    "it": "Estetica scura di alta gamma con titoli in grassetto, palette monocromatica e atmosfera premium per esperienze di brand di lusso.",
+    "vi": "Phong cách tối cao cấp với tiêu đề đậm, bảng màu đơn sắc và cảm giác sang trọng cho trải nghiệm thương hiệu xa xỉ.",
+    "pl": "Ekskluzywna ciemna estetyka z pogrubionymi nagłówkami, monochromatyczną paletą i premium wyglądem dla marek luksusowych.",
+    "id": "Estetika gelap kelas atas dengan judul tebal, palet monokromatik, dan nuansa premium untuk pengalaman merek mewah.",
+    "nl": "Hoogwaardige donkere esthetiek met vetgedrukte koppen, monochroom kleurenpalet en premium uitstraling voor luxe merkervaringen.",
+    "ar": "تصميم داكن راقي مع عناوين عريضة ولوحة ألوان أحادية وطابع فاخر لتجارب العلامات التجارية الفاخرة.",
+    "tr": "Kalın başlıklar, monokromatik palet ve premium his ile lüks marka deneyimleri için üst düzey koyu estetik.",
+    "uk": "Преміальна темна естетика з жирними заголовками, монохромною палітрою та розкішним стилем для люксових брендів.",
+    "en": "High-end dark aesthetic with bold headings, monochromatic palette, and premium feel for luxury brand experiences."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "professional-corporate"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Luxury design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Luxury design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "luxury",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

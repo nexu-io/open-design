@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-sentry",
+  "title": "Sentry",
+  "title_i18n": {
+    "zh-CN": "Sentry",
+    "zh-TW": "Sentry",
+    "ja": "Sentry",
+    "ko": "Sentry",
+    "de": "Sentry",
+    "fr": "Sentry",
+    "ru": "Sentry",
+    "es": "Sentry",
+    "pt-BR": "Sentry",
+    "it": "Sentry",
+    "vi": "Sentry",
+    "pl": "Sentry",
+    "id": "Sentry",
+    "nl": "Sentry",
+    "ar": "Sentry",
+    "tr": "Sentry",
+    "uk": "Sentry",
+    "en": "Sentry"
+  },
+  "version": "0.1.0",
+  "description": "Error monitoring. Dark dashboard, data-dense, pink-purple accent.",
+  "description_i18n": {
+    "zh-CN": "错误监控。深色仪表板，高密度数据展示，粉紫色强调。",
+    "zh-TW": "錯誤監控。深色儀表板，高密度資料展示，粉紫色強調。",
+    "ja": "エラー監視。ダークダッシュボード、高密度データ表示、ピンクパープルアクセント。",
+    "ko": "오류 모니터링. 다크 대시보드, 고밀도 데이터, 핑크-퍼플 강조색.",
+    "de": "Fehlerüberwachung. Dunkles Dashboard, datenintensiv, pink-lila Akzent.",
+    "fr": "Surveillance des erreurs. Tableau de bord sombre, données denses, accent rose-violet.",
+    "ru": "Мониторинг ошибок. Тёмная панель, плотные данные, розово-фиолетовый акцент.",
+    "es": "Monitoreo de errores. Panel oscuro, datos densos, acento rosa-morado.",
+    "pt-BR": "Monitoramento de erros. Painel escuro, dados densos, destaque rosa-roxo.",
+    "it": "Monitoraggio errori. Dashboard scura, dati densi, accento rosa-viola.",
+    "vi": "Giám sát lỗi. Bảng điều khiển tối, dữ liệu dày đặc, điểm nhấn hồng-tím.",
+    "pl": "Monitorowanie błędów. Ciemny panel, gęste dane, akcent różowo-fioletowy.",
+    "id": "Pemantauan error. Dashboard gelap, data padat, aksen pink-ungu.",
+    "nl": "Foutmonitoring. Donker dashboard, data-intensief, roze-paars accent.",
+    "ar": "مراقبة الأخطاء. لوحة تحكم داكنة، بيانات كثيفة، لون تمييز وردي-بنفسجي.",
+    "tr": "Hata izleme. Koyu gösterge paneli, yoğun veri, pembe-mor vurgu.",
+    "uk": "Моніторинг помилок. Темна панель, щільні дані, рожево-фіолетовий акцент.",
+    "en": "Error monitoring. Dark dashboard, data-dense, pink-purple accent."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Sentry design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Sentry design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "sentry",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

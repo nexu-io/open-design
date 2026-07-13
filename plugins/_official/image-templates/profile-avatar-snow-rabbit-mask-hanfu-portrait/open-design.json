@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-snow-rabbit-mask-hanfu-portrait",
+  "title": "Profile / Avatar - Snow Rabbit Mask Hanfu Portrait",
+  "title_i18n": {
+    "zh-CN": "头像/个人资料 - 雪兔面具Hanfu人像",
+    "zh-TW": "頭像/個人檔案 - 雪兔面具Hanfu人像",
+    "ja": "プロフィール/アバター - 雪ウサギマスクHanfu肖像画",
+    "ko": "프로필 / 아바타 - 설토끼 마스크 Hanfu 초상화",
+    "de": "Profil / Avatar - Schneehasen-Maske Hanfu-Porträt",
+    "fr": "Profil / Avatar - Portrait Hanfu Masque Lapin des Neiges",
+    "ru": "Профиль / Аватар - Портрет в маске снежного кролика Hanfu",
+    "es": "Perfil / Avatar - Retrato Hanfu Máscara de Conejo de Nieve",
+    "pt-BR": "Perfil / Avatar - Retrato Hanfu Máscara de Coelho da Neve",
+    "it": "Profilo / Avatar - Ritratto Hanfu Maschera Coniglio della Neve",
+    "vi": "Hồ sơ / Avatar - Chân dung Hanfu Mặt nạ Thỏ Tuyết",
+    "pl": "Profil / Awatar - Portret Hanfu Maska Śnieżnego Królika",
+    "id": "Profil / Avatar - Potret Hanfu Topeng Kelinci Salju",
+    "nl": "Profiel / Avatar - Hanfu-portret Sneeuwkonijnmasker",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة Hanfu قناع الأرنب الثلجي",
+    "tr": "Profil / Avatar - Kar Tavşanı Maskesi Hanfu Portresi",
+    "uk": "Профіль / Аватар - Портрет у масці сніжного кролика Hanfu",
+    "en": "Profile / Avatar - Snow Rabbit Mask Hanfu Portrait"
+  },
+  "version": "0.1.0",
+  "description": "This prompt generates a cinematic winter fantasy portrait of a masked woman in a rabbit-themed white Hanfu, ideal for elegant character art and atmospheric AI showcase imagery.",
+  "description_i18n": {
+    "zh-CN": "生成一位佩戴兔主题面具、身着白色Hanfu的女性冬日奇幻电影级人像，适用于优雅的角色艺术和氛围感AI展示图像。",
+    "zh-TW": "生成一位佩戴兔主題面具、身著白色Hanfu的女性冬日奇幻電影級人像，適用於優雅的角色藝術和氛圍感AI展示圖像。",
+    "ja": "ウサギをテーマにした白いHanfuを着た仮面の女性の、シネマティックな冬のファンタジーポートレートを生成。優雅なキャラクターアートや雰囲気のあるAI展示画像に最適です。",
+    "ko": "토끼 테마의 흰색 Hanfu를 입은 마스크 착용 여성의 영화 같은 겨울 판타지 초상화를 생성합니다. 우아한 캐릭터 아트와 분위기 있는 AI 전시 이미지에 이상적입니다.",
+    "de": "Erzeugt ein kinoreifes Winter-Fantasy-Porträt einer maskierten Frau in hasenthematischem weißem Hanfu, ideal für elegante Charakterkunst und atmosphärische KI-Präsentationsbilder.",
+    "fr": "Génère un portrait cinématique fantastique hivernal d'une femme masquée en Hanfu blanc sur le thème du lapin, idéal pour l'art de personnage élégant et les visuels d'exposition IA atmosphériques.",
+    "ru": "Создает кинематографический зимний фэнтезийный портрет женщины в маске и белом Hanfu в кроличьей тематике, идеально для элегантного персонажного арта и атмосферных AI-изображений.",
+    "es": "Genera un retrato cinematográfico de fantasía invernal de una mujer enmascarada en Hanfu blanco temático de conejo, ideal para arte de personaje elegante e imágenes de exhibición AI atmosféricas.",
+    "pt-BR": "Gera um retrato cinematográfico de fantasia de inverno de uma mulher mascarada em Hanfu branco temático de coelho, ideal para arte de personagem elegante e imagens de exibição AI atmosféricas.",
+    "it": "Genera un ritratto cinematografico fantasy invernale di una donna mascherata in Hanfu bianco a tema coniglio, ideale per character art elegante e immagini AI d'atmosfera.",
+    "vi": "Tạo chân dung điện ảnh giả tưởng mùa đông của một phụ nữ đeo mặt nạ trong bộ Hanfu trắng chủ đề thỏ, lý tưởng cho nghệ thuật nhân vật thanh lịch và hình ảnh trưng bày AI đầy không khí.",
+    "pl": "Generuje kinowy zimowy portret fantasy zamaskowanej kobiety w białym Hanfu o tematyce królika, idealny do eleganckiej sztuki postaci i atmosferycznych obrazów pokazowych AI.",
+    "id": "Menghasilkan potret fantasi musim dingin sinematik seorang wanita bertopeng dalam Hanfu putih bertema kelinci, ideal untuk seni karakter elegan dan gambar pameran AI atmosferik.",
+    "nl": "Genereert een filmisch winter fantasy portret van een gemaskerde vrouw in konijnthema wit Hanfu, ideaal voor elegante karakterkunst en sfeervolle AI-tentoonstellingsbeelden.",
+    "ar": "ينشئ صورة سينمائية خيالية شتوية لامرأة ملثمة ترتدي Hanfu أبيض بموضوع الأرنب، مثالي للفن الشخصي الأنيق وصور عرض AI الجوية.",
+    "tr": "Tavşan temalı beyaz Hanfu giyen maskeli bir kadının sinematik kış fantezi portresini oluşturur, zarif karakter sanatı ve atmosferik AI sergileme görselleri için idealdir.",
+    "uk": "Генерує кінематографічний зимовий фентезійний портрет жінки в масці та білому Hanfu у кролячій тематиці, ідеально для елегантного персонажного арту та атмосферних AI-зображень.",
+    "en": "This prompt generates a cinematic winter fantasy portrait of a masked woman in a rabbit-themed white Hanfu, ideal for elegant character art and atmospheric AI showcase imagery."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "nature"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453211026_n5y31f_HG_dAB7aoAAZg6K.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A serene winter fantasy portrait of a woman standing outdoors in softly falling snow, framed from about mid-thigh upward, wearing an elegant traditional Hanfu-inspired robe in white and black. Her face is fully covered by a smooth white rabbit mask with upright pink-lined ears, small black eye openings, and a minimal cute expression. She has very long straight silver-white hair flowing past her waist, with delicate white floral and branch-like hair ornaments on both sides. Her robe is bright white with subtle embroidered silver detailing on the chest and shoulders, very wide draping sleeves, black trim along the collar and sleeve edges, and a fitted black waist sash tied at the front with tasseled cords and a snowflake-like ornament. The garment features visible rabbit motifs: 4 illustrated white rabbits in total, with 2 large rabbits near the outer lower sleeves, 1 small hopping rabbit on the lower black skirt panel, and 1 seated rabbit on the front lower skirt panel. The atmosphere is quiet, ethereal, and cinematic, with a cold blue-gray palette, shallow depth of field, and soft natural winter light. In the background, place blurred snow-covered traditional East Asian buildings and distant steep mountains, creating a misty alpine temple setting. Add gentle snowfall across the entire image, ultra-detailed fabric texture, soft volumetric haze, and a refined dreamlike gpt-image-2 aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A serene winter fantasy portrait of a woman standing outdoors in softly falling snow, framed from about mid-thigh upward, wearing an elegant traditional Hanfu-inspired robe in white and black. Her face is fully covered by a smooth white rabbit mask with upright pink-lined ears, small black eye openings, and a minimal cute expression. She has very long straight silver-white hair flowing past her waist, with delicate white floral and branch-like hair ornaments on both sides. Her robe is bright white with subtle embroidered silver detailing on the chest and shoulders, very wide draping sleeves, black trim along the collar and sleeve edges, and a fitted black waist sash tied at the front with tasseled cords and a snowflake-like ornament. The garment features visible rabbit motifs: 4 illustrated white rabbits in total, with 2 large rabbits near the outer lower sleeves, 1 small hopping rabbit on the lower black skirt panel, and 1 seated rabbit on the front lower skirt panel. The atmosphere is quiet, ethereal, and cinematic, with a cold blue-gray palette, shallow depth of field, and soft natural winter light. In the background, place blurred snow-covered traditional East Asian buildings and distant steep mountains, creating a misty alpine temple setting. Add gentle snowfall across the entire image, ultra-detailed fabric texture, soft volumetric haze, and a refined dreamlike gpt-image-2 aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

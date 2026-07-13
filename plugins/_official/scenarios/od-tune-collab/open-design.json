@@ -1,0 +1,135 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-tune-collab",
+  "title": "Tune & collaborate (default scenario)",
+  "title_i18n": {
+    "en": "Tune & collaborate (default scenario)",
+    "zh-CN": "调优与协作（默认场景）",
+    "zh-TW": "調優與協作（預設場景）",
+    "ja": "チューン＆協作（デフォルトシナリオ）",
+    "ko": "튜닝 & 협업 (기본 시나리오)",
+    "de": "Tunen & zusammenarbeiten (Standard-Szenario)",
+    "fr": "Tuning & collaboration (scénario par défaut)",
+    "ru": "Тюнинг и совместная работа (сценарий по умолчанию)",
+    "es": "Ajustar y colaborar (escenario predeterminado)",
+    "pt-BR": "Ajustar e colaborar (cenário padrão)",
+    "it": "Tuning e collaborazione (scenario predefinito)",
+    "vi": "Tinh chỉnh & hợp tác (kịch bản mặc định)",
+    "pl": "Tuning i współpraca (scenariusz domyślny)",
+    "id": "Tuning & kolaborasi (skenario default)",
+    "nl": "Tunen & samenwerken (standaardscenario)",
+    "ar": "الضبط والتعاون (السيناريو الافتراضي)",
+    "tr": "Tuning ve iş birliği (varsayılan senaryo)",
+    "uk": "Тюнінг і співпраця (типовий сценарій)"
+  },
+  "version": "0.1.0",
+  "description": "Default reference pipeline for the tune-collab taskKind.",
+  "description_i18n": {
+    "en": "Default reference pipeline for the tune-collab taskKind.",
+    "zh-CN": "tune-collab taskKind 的默认参考流水线。",
+    "zh-TW": "tune-collab taskKind 的預設參考流水線。",
+    "ja": "tune-collab taskKind 用のデフォルトリファレンスパイプライン。",
+    "ko": "tune-collab taskKind을 위한 기본 레퍼런스 파이프라인.",
+    "de": "Standard-Referenzpipeline für den tune-collab taskKind.",
+    "fr": "Pipeline de référence par défaut pour le taskKind tune-collab.",
+    "ru": "Эталонный конвейер по умолчанию для taskKind tune-collab.",
+    "es": "Pipeline de referencia por defecto para el taskKind tune-collab.",
+    "pt-BR": "Pipeline de referência padrão para o taskKind tune-collab.",
+    "it": "Pipeline di riferimento predefinita per il taskKind tune-collab.",
+    "vi": "Pipeline tham chiếu mặc định cho taskKind tune-collab.",
+    "pl": "Domyślny pipeline referencyjny dla taskKind tune-collab.",
+    "id": "Pipeline referensi default untuk taskKind tune-collab.",
+    "nl": "Standaard-referentiepipeline voor de tune-collab taskKind.",
+    "ar": "خط المعالجة المرجعي الافتراضي لـ taskKind tune-collab.",
+    "tr": "tune-collab taskKind için varsayılan referans pipeline.",
+    "uk": "Типовий референс-конвеєр для taskKind tune-collab."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-tune-collab",
+  "tags": [
+    "scenario",
+    "first-party",
+    "tune-collab"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "scenario": "tune-collab",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "direction",
+          "atoms": [
+            "direction-picker"
+          ]
+        },
+        {
+          "id": "patch",
+          "atoms": [
+            "patch-edit"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        },
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream).",
+        "zh-CN": "使用这个插件完成以下任务：Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream)."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/hero-tune.html",
+          "title": "Hero copy tune cycle (before/after)"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "tuneInstruction",
+        "type": "string",
+        "required": true,
+        "label": "What to change",
+        "placeholder": "Sharpen the hero copy and name the audience."
+      },
+      {
+        "name": "direction",
+        "type": "string",
+        "required": false,
+        "label": "Preferred direction",
+        "placeholder": "shorter / sharper / more playful"
+      }
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/huggingface/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Hugging Face".
+ * ML community hub: sunshine yellow badge accent, monospace identity,
+ * crisp 1px borders, brutalist-adjacent low radius, dense power-user layout.
+ *
+ * Key brand decisions encoded here:
+ *   - HF Yellow (#ffd21e) as the lone saturated accent — badge/badge/header strip
+ *   - Ink on off-white: deep slate (#0d1117) text on #fafafa canvas
+ *   - IBM Plex Mono for headings and tags — "config file is the README" vibe
+ *   - Source Sans Pro for body prose — contrasting readable counterpart
+ *   - 4–6px radii — closer to brutalist than rounded
+ *   - Crisp 1px borders (#e5e7eb) — borders that announce themselves
+ *   - Dense tables and tight padding — built for power users
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Off-white canvas with white cards — the yellow accent on a
+   * neutral foundation maximizes its signal impact. */
+  --bg: #fafafa;             /* Canvas Subtle — the default off-white hub background */
+  --surface: #ffffff;        /* Canvas — card surfaces, white panels */
+  --surface-warm: #fff4cc;   /* HF Yellow Soft — callout backgrounds, warm tint */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Deep slate — dark, readable, technical. */
+  --fg: #0d1117;             /* Ink Primary — primary text, headings */
+  --fg-2: #374151;           /* Ink Secondary — body prose */
+  --muted: #6b7280;          /* Ink Muted — captions, file paths, model authors */
+  --meta: var(--muted);      /* alias — same muted for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Crisp, visible borders — they announce themselves rather than hiding. */
+  --border: #e5e7eb;         /* Border Default — standard 1px hairline */
+  --border-soft: #f3f4f6;    /* Border Subtle — inner divider, row separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * HF Yellow — the sunshine yellow that makes Hugging Face instantly
+   * recognizable. Used for "new" pill, model-card header strip, badges.
+   * Dark text on yellow (--accent-on: #0d1117) for contrast. */
+  --accent: #ffd21e;
+  --accent-on: #0d1117;      /* Dark text on yellow — sufficient contrast */
+  --accent-hover: #f59e0b;   /* HF Yellow Deep — hover/active */
+  --accent-active: color-mix(in oklab, var(--accent), black 20%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Task-category colors used for model badges. Success uses vision green.
+   * Warning uses HF Yellow Deep (same as hover — reinforces the brand). */
+  --success: #16a34a;        /* Vision Green — also "build succeeded" */
+  --warn: #f59e0b;           /* HF Yellow Deep — warning / rate limit */
+  --danger: #dc2626;         /* Error Red — failed build, broken model */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * IBM Plex Mono for headings and tags — they look like code strings.
+   * Source Sans Pro for body — readable, prose-optimized counterpart.
+   * Weight cap at 600 — 700 is too loud against yellow. */
+  --font-display: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-body: "Source Sans Pro", Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. Display 48px, H1 32px, H2 24px, H3 18px. */
+  --text-xs: 12px;           /* Tag / Badge — IBM Plex Mono */
+  --text-sm: 13px;           /* Caption — author byline, timestamp */
+  --text-base: 15px;         /* Body — standard prose, model card */
+  --text-lg: 18px;           /* Body Large / H3 — sub-section */
+  --text-xl: 24px;           /* H2 — section heading */
+  --text-2xl: 32px;          /* H1 — page heading, model name */
+  --text-3xl: 40px;          /* Display — for marketing contexts */
+  --text-4xl: 48px;          /* Display Hero — marketing hero */
+
+  --leading-body: 1.55;      /* Source Sans Pro body reading */
+  --leading-tight: 1.1;      /* IBM Plex Mono display */
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base unit. Dense table padding (8px 16px per cell).
+   * Section rhythm 64–96px — community hub needs breathing room. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * 4–6px — brutalist-adjacent. Borders announce themselves.
+   * Do not round cards to 12px+ — the crisp geometry is intentional. */
+  --radius-sm: 4px;          /* Tags, small chips — nearest to sharp */
+  --radius-md: 6px;          /* Cards, inputs, buttons — the primary radius */
+  --radius-lg: 8px;          /* Slightly larger containers */
+  --radius-pill: 9999px;     /* Model task badges, status pills */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Border-based containment — 1px borders are the primary depth cue.
+   * Table row hover uses background shift (#f3f4f6). */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 90%);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Dark ring matching the primary ink color. */
+  --focus-ring: 0 0 0 3px rgba(13, 17, 23, 0.1);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Quick hover (120ms) — community hub interactions should feel snappy.
+   * Tag pop at 1.05× scale is the only exception to flat-on-hover. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1280px container with 280px sidebar for model browser.
+   * 24px gutter — content-dense layout. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

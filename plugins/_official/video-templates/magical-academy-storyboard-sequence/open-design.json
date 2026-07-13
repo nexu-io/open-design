@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-magical-academy-storyboard-sequence",
+  "title": "Magical Academy Storyboard Sequence",
+  "title_i18n": {
+    "zh-CN": "魔法学院故事板序列",
+    "zh-TW": "魔法學院故事板序列",
+    "ja": "魔法学園ストーリーボードシーケンス",
+    "ko": "마법 아카데미 스토리보드 시퀀스",
+    "de": "Magische Akademie Storyboard-Sequenz",
+    "fr": "Séquence Storyboard Académie Magique",
+    "ru": "Раскадровка Магической Академии",
+    "es": "Secuencia de Storyboard de Academia Mágica",
+    "pt-BR": "Sequência de Storyboard da Academia Mágica",
+    "it": "Sequenza Storyboard Accademia Magica",
+    "vi": "Chuỗi Storyboard Học Viện Phép Thuật",
+    "pl": "Sekwencja Storyboardu Magicznej Akademii",
+    "id": "Urutan Storyboard Akademi Magis",
+    "nl": "Magische Academie Storyboard Sequentie",
+    "ar": "تسلسل لوحة القصة للأكاديمية السحرية",
+    "tr": "Sihirli Akademi Storyboard Sekansı",
+    "uk": "Послідовність Розкадровки Магічної Академії",
+    "en": "Magical Academy Storyboard Sequence"
+  },
+  "version": "0.1.0",
+  "description": "A detailed storyboard-style prompt for a cinematic sequence depicting a magical girl at an academy, covering arrival, discovery of power, and a magical duel.",
+  "description_i18n": {
+    "zh-CN": "用于生成魔法学院场景的详细故事板提示词，包含少女到达学院、觉醒魔法力量和魔法决斗的电影化叙事序列。",
+    "zh-TW": "用於生成魔法學院場景的詳細故事板提示詞，包含少女抵達學院、覺醒魔法力量和魔法決鬥的電影化敘事序列。",
+    "ja": "魔法少女が学園に到着し、魔法の力を発見し、魔法の決闘を繰り広げるシネマティックなシーケンスを描く詳細なストーリーボード用プロンプト。",
+    "ko": "마법 소녀가 아카데미에 도착하여 힘을 발견하고 마법 결투를 펼치는 영화적 시퀀스를 묘사하는 상세한 스토리보드 프롬프트.",
+    "de": "Ein detaillierter Storyboard-Prompt für eine filmische Sequenz über ein magisches Mädchen an einer Akademie, mit Ankunft, Entdeckung ihrer Kraft und einem magischen Duell.",
+    "fr": "Un prompt de storyboard détaillé pour une séquence cinématographique dépeignant une fille magique dans une académie, couvrant l'arrivée, la découverte du pouvoir et un duel magique.",
+    "ru": "Детальный промпт раскадровки для кинематографической сцены о волшебной девочке в академии, включающей прибытие, открытие силы и магическую дуэль.",
+    "es": "Un prompt detallado estilo storyboard para una secuencia cinematográfica que representa a una chica mágica en una academia, cubriendo su llegada, descubrimiento de poder y un duelo mágico.",
+    "pt-BR": "Um prompt detalhado estilo storyboard para uma sequência cinematográfica retratando uma garota mágica em uma academia, cobrindo chegada, descoberta de poder e um duelo mágico.",
+    "it": "Un prompt dettagliato in stile storyboard per una sequenza cinematografica che raffigura una ragazza magica in un'accademia, coprendo arrivo, scoperta del potere e un duello magico.",
+    "vi": "Prompt storyboard chi tiết cho chuỗi cảnh điện ảnh về một cô gái phép thuật tại học viện, bao gồm cảnh đến trường, khám phá sức mạnh và trận đấu phép thuật.",
+    "pl": "Szczegółowy prompt storyboardowy dla sekwencji filmowej przedstawiającej magiczną dziewczynę w akademii, obejmujący przybycie, odkrycie mocy i magiczny pojedynek.",
+    "id": "Prompt storyboard terperinci untuk urutan sinematik yang menggambarkan gadis magis di akademi, mencakup kedatangan, penemuan kekuatan, dan duel magis.",
+    "nl": "Een gedetailleerde storyboard-prompt voor een filmische sequentie over een magisch meisje op een academie, met aankomst, ontdekking van kracht en een magisch duel.",
+    "ar": "موجه مفصل بأسلوب لوحة القصة لتسلسل سينمائي يصور فتاة سحرية في أكاديمية، يغطي الوصول واكتشاف القوة ومبارزة سحرية.",
+    "tr": "Bir akademideki sihirli kızı tasvir eden, varış, güç keşfi ve sihirli düelloyu kapsayan sinematik bir sekans için detaylı storyboard promptu.",
+    "uk": "Детальний промпт розкадровки для кінематографічної послідовності про чарівну дівчину в академії, що охоплює прибуття, відкриття сили та магічну дуель.",
+    "en": "A detailed storyboard-style prompt for a cinematic sequence depicting a magical girl at an academy, covering arrival, discovery of power, and a magical duel."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Soulful Ai",
+    "url": "https://x.com/soulful__ai/status/2049186700199620777"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "advertising",
+    "cinematic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c81825485052d7aff4ee2af086c7f307/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c81825485052d7aff4ee2af086c7f307/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "0s – 4s (Arrival at the Academy)\nA massive gothic magical academy appears above floating cliffs, surrounded by storm clouds and glowing runes. The girl walks through the grand iron gates. Her expression is calm but curious. Floating spell books drift around the entrance. Cinematic slow push-in shot, mist and dramatic lighting.\n\n4s – 8s (The Forbidden Core Reveal)\nInside a grand hall, students channel elemental magic. The girl stands still as her “sealed magical core” reacts. Dark energy briefly flickers around her chest, but she doesn’t collapse like others would. The academy masters observe in shock. Close-up on her face with glowing rune reflections in her eyes.\n\n8s – 12s (Soul-Binding Lesson)\nIn a floating classroom, chains of light connect students’ souls to magical entities. The girl absorbs a forbidden spell instead of being harmed. The spell dissolves into her body safely. Books levitate violently around her. Slow-motion, cinematic orbit camera around her.\n\n12s – 16s (Forbidden Power Awakens)\nA sudden magical duel breaks out. She steps forward and releases a silent wave of forbidden magic. Reality bends slightly around her. Runes explode into glowing fragments in the air. The academy freezes in awe as her power stabilizes. Final shot: her standing alone under floating spell books, softly glowing.",
+        "zh-CN": "使用这个插件完成以下任务：0s – 4s (Arrival at the Academy)\nA massive gothic magical academy appears above floating cliffs, surrounded by storm clouds and glowing runes. The girl walks through the grand iron gates. Her expression is calm but curious. Floating spell books drift around the entrance. Cinematic slow push-in shot, mist and dramatic lighting.\n\n4s – 8s (The Forbidden Core Reveal)\nInside a grand hall, students channel elemental magic. The girl stands still as her “sealed magical core” reacts. Dark energy briefly flickers around her chest, but she doesn’t collapse like others would. The academy masters observe in shock. Close-up on her face with glowing rune reflections in her eyes.\n\n8s – 12s (Soul-Binding Lesson)\nIn a floating classroom, chains of light connect students’ souls to magical entities. The girl absorbs a forbidden spell instead of being harmed. The spell dissolves into her body safely. Books levitate violently around her. Slow-motion, cinematic orbit camera around her.\n\n12s – 16s (Forbidden Power Awakens)\nA sudden magical duel breaks out. She steps forward and releases a silent wave of forbidden magic. Reality bends slightly around her. Runes explode into glowing fragments in the air. The academy freezes in awe as her power stabilizes. Final shot: her standing alone under floating spell books, softly glowing."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-signed-marker-portrait-on-shikishi",
+  "title": "Profile / Avatar - Signed Marker Portrait on Shikishi",
+  "title_i18n": {
+    "zh-CN": "个人资料 / 头像 - 色纸签名马克笔肖像",
+    "zh-TW": "個人資料 / 頭像 - 色紙簽名麥克筆肖像",
+    "ja": "プロフィール / アバター - 色紙サイン入りマーカーポートレート",
+    "ko": "프로필 / 아바타 - 사인 마커 초상화 on Shikishi",
+    "de": "Profil / Avatar - Signiertes Marker-Porträt auf Shikishi",
+    "fr": "Profil / Avatar - Portrait signé au marqueur sur Shikishi",
+    "ru": "Профиль / Аватар - Подписанный маркерный портрет на Shikishi",
+    "es": "Perfil / Avatar - Retrato con firma en marcador sobre Shikishi",
+    "pt-BR": "Perfil / Avatar - Retrato assinado com marcador em Shikishi",
+    "it": "Profilo / Avatar - Ritratto firmato a pennarello su Shikishi",
+    "vi": "Hồ sơ / Avatar - Chân dung ký bút marker trên Shikishi",
+    "pl": "Profil / Avatar - Podpisany portret markerem na Shikishi",
+    "id": "Profil / Avatar - Potret Tanda Tangan Marker di Shikishi",
+    "nl": "Profiel / Avatar - Gesigneerd markerportret op Shikishi",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة شخصية موقعة بالقلم على Shikishi",
+    "tr": "Profil / Avatar - Shikishi üzerinde imzalı marker portre",
+    "uk": "Профіль / Аватар - Підписаний маркерний портрет на Shikishi",
+    "en": "Profile / Avatar - Signed Marker Portrait on Shikishi"
+  },
+  "version": "0.1.0",
+  "description": "This generates a lively signed marker-style portrait on a square shikishi board, useful for fan-art autographs, commemorative illustration posts, and personalized thank-you visuals.",
+  "description_i18n": {
+    "zh-CN": "在方形色纸板上生成生动的签名马克笔风格肖像，适用于粉丝艺术签名、纪念插画帖子和个性化感谢视觉内容。",
+    "zh-TW": "在方形色紙板上生成生動的簽名麥克筆風格肖像，適用於粉絲藝術簽名、紀念插畫貼文和個人化感謝視覺內容。",
+    "ja": "正方形のshikishiボードに生き生きとしたサイン入りマーカースタイルのポートレートを生成。ファンアートのサイン、記念イラスト投稿、パーソナライズされた感謝ビジュアルに最適です。",
+    "ko": "정사각형 shikishi 보드에 생동감 있는 사인 마커 스타일 초상화를 생성합니다. 팬아트 사인, 기념 일러스트 게시물, 개인화된 감사 비주얼에 유용합니다.",
+    "de": "Erzeugt ein lebendiges signiertes Marker-Porträt auf einer quadratischen Shikishi-Tafel, ideal für Fanart-Autogramme, Gedenk-Illustrationen und personalisierte Dankesbilder.",
+    "fr": "Génère un portrait signé au marqueur vivant sur une planche shikishi carrée, utile pour les autographes de fan-art, les publications d'illustrations commémoratives et les visuels de remerciement personnalisés.",
+    "ru": "Создаёт живой подписанный портрет в стиле маркера на квадратной доске shikishi, подходит для автографов фан-арта, памятных иллюстраций и персонализированных благодарственных изображений.",
+    "es": "Genera un retrato vibrante firmado en estilo marcador sobre un tablero shikishi cuadrado, útil para autógrafos de fan-art, ilustraciones conmemorativas y visuales de agradecimiento personalizados.",
+    "pt-BR": "Gera um retrato vibrante assinado em estilo marcador sobre uma placa shikishi quadrada, útil para autógrafos de fan-art, posts de ilustração comemorativa e visuais de agradecimento personalizados.",
+    "it": "Genera un vivace ritratto firmato in stile pennarello su una tavola shikishi quadrata, utile per autografi fan-art, post illustrativi commemorativi e visual di ringraziamento personalizzati.",
+    "vi": "Tạo chân dung ký tên phong cách marker sống động trên bảng shikishi vuông, hữu ích cho chữ ký fan-art, bài đăng minh họa kỷ niệm và hình ảnh cảm ơn cá nhân hóa.",
+    "pl": "Generuje żywy podpisany portret w stylu markerowym na kwadratowej tablicy shikishi, przydatny do autografów fan-art, pamiątkowych ilustracji i spersonalizowanych podziękowań wizualnych.",
+    "id": "Menghasilkan potret bergaya marker bertanda tangan yang hidup di papan shikishi persegi, berguna untuk tanda tangan fan-art, postingan ilustrasi peringatan, dan visual ucapan terima kasih yang dipersonalisasi.",
+    "nl": "Genereert een levendig gesigneerd portret in markerstijl op een vierkant shikishi-bord, handig voor fan-art handtekeningen, herdenkingsillustraties en gepersonaliseerde bedank-visuals.",
+    "ar": "ينشئ صورة شخصية حيوية موقعة بأسلوب القلم على لوح shikishi مربع، مفيدة لتوقيعات فن المعجبين ومنشورات الرسوم التوضيحية التذكارية والصور المرئية الشخصية للشكر.",
+    "tr": "Kare shikishi tahtası üzerinde canlı imzalı marker tarzı portre oluşturur, hayran sanatı imzaları, anı illüstrasyonları ve kişiselleştirilmiş teşekkür görselleri için kullanışlıdır.",
+    "uk": "Створює яскравий підписаний портрет у стилі маркера на квадратній дошці shikishi, корисний для автографів фан-арту, пам'ятних ілюстрацій і персоналізованих подячних зображень.",
+    "en": "This generates a lively signed marker-style portrait on a square shikishi board, useful for fan-art autographs, commemorative illustration posts, and personalized thank-you visuals."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "ダルトワ★TV",
+    "url": "https://x.com/MireilleDartois/status/2048894364479565869#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777367317129_2rohn0_HG8hIdab0AAwzdp.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A lively hand-drawn fashion portrait in a changed illustration style, made to look like a signed fan-art sketch drawn with markers on a square white shikishi board with a thin gold border. Show a stylish young woman from about the waist up, leaning slightly forward with one elbow resting up near her face in a casual, friendly pose. Her face area is covered by a simple rectangular censor block in a muted beige tone. She has shoulder-length medium brown hair with warm highlights, soft volume, side-swept bangs, and flipped-out ends. Render the art with expressive black ink outlines, visible marker strokes, watercolor-like blending, sketchy hatching, and an energetic, vivid handmade feel. She wears a fitted dark gray ribbed long-sleeve knit top with subtle puffed shoulders, layered delicate gold necklaces, a dangling pearl earring, a beige crossbody bag strap running diagonally across her chest, and a light beige skirt or dress visible at the waist. Leave plenty of clean white background around the figure. Add 2 small sparkle doodles on the left side. Add handwritten Japanese thank-you messages and signature-style black ink writing around the portrait: at upper right write {argument name=\"top message\" default=\"ありがとう！\"} with an underline and a small heart, beneath it place a large stylized autograph reading {argument name=\"signature name\" default=\"Yui\"} with a smiling face mark and a heart, at lower left write {argument name=\"side message\" default=\"いつも応援してくれてありがとう♡\"}, and at lower right write the date {argument name=\"date\" default=\"2024.5.20\"} with another heart. The overall image should feel warm, personal, lively, and like a celebratory signed illustration on a square autograph board.",
+        "zh-CN": "A lively hand-drawn fashion portrait in a changed illustration style, made to look like a signed fan-art sketch drawn with markers on a square white shikishi board with a thin gold border. Show a stylish young woman from about the waist up, leaning slightly forward with one elbow resting up near her face in a casual, friendly pose. Her face area is covered by a simple rectangular censor block in a muted beige tone. She has shoulder-length medium brown hair with warm highlights, soft volume, side-swept bangs, and flipped-out ends. Render the art with expressive black ink outlines, visible marker strokes, watercolor-like blending, sketchy hatching, and an energetic, vivid handmade feel. She wears a fitted dark gray ribbed long-sleeve knit top with subtle puffed shoulders, layered delicate gold necklaces, a dangling pearl earring, a beige crossbody bag strap running diagonally across her chest, and a light beige skirt or dress visible at the waist. Leave plenty of clean white background around the figure. Add 2 small sparkle doodles on the left side. Add handwritten Japanese thank-you messages and signature-style black ink writing around the portrait: at upper right write {argument name=\"top message\" default=\"ありがとう！\"} with an underline and a small heart, beneath it place a large stylized autograph reading {argument name=\"signature name\" default=\"Yui\"} with a smiling face mark and a heart, at lower left write {argument name=\"side message\" default=\"いつも応援してくれてありがとう♡\"}, and at lower right write the date {argument name=\"date\" default=\"2024.5.20\"} with another heart. The overall image should feel warm, personal, lively, and like a celebratory signed illustration on a square autograph board."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

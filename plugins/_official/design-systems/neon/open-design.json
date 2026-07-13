@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-neon",
+  "title": "Neon",
+  "title_i18n": {
+    "zh-CN": "霓虹",
+    "zh-TW": "霓虹",
+    "ja": "ネオン",
+    "ko": "네온",
+    "de": "Neon",
+    "fr": "Néon",
+    "ru": "Неон",
+    "es": "Neón",
+    "pt-BR": "Neon",
+    "it": "Neon",
+    "vi": "Neon",
+    "pl": "Neon",
+    "id": "Neon",
+    "nl": "Neon",
+    "ar": "نيون",
+    "tr": "Neon",
+    "uk": "Неон",
+    "en": "Neon"
+  },
+  "version": "0.1.0",
+  "description": "Electric neon glow effects with high-contrast color pairings for bold, attention-grabbing interfaces.",
+  "description_i18n": {
+    "zh-CN": "电子霓虹发光效果，配以高对比度色彩组合，打造醒目夺目的界面。",
+    "zh-TW": "電子霓虹發光效果，配以高對比度色彩組合，打造醒目奪目的介面。",
+    "ja": "高コントラストな配色による電光ネオングロー効果で、大胆で注目を集めるインターフェースを実現。",
+    "ko": "높은 대비의 색상 조합으로 구성된 전기 네온 글로우 효과로 대담하고 시선을 사로잡는 인터페이스를 연출합니다.",
+    "de": "Elektrische Neon-Leuchteffekte mit kontrastreichen Farbkombinationen für auffällige, aufmerksamkeitsstarke Interfaces.",
+    "fr": "Effets de lueur néon électrique avec des associations de couleurs à fort contraste pour des interfaces audacieuses et accrocheuses.",
+    "ru": "Эффекты электрического неонового свечения с высококонтрастными цветовыми сочетаниями для ярких, привлекающих внимание интерфейсов.",
+    "es": "Efectos de brillo neón eléctrico con combinaciones de colores de alto contraste para interfaces audaces y llamativas.",
+    "pt-BR": "Efeitos de brilho neon elétrico com combinações de cores de alto contraste para interfaces ousadas e chamativas.",
+    "it": "Effetti bagliore neon elettrico con abbinamenti cromatici ad alto contrasto per interfacce audaci e accattivanti.",
+    "vi": "Hiệu ứng phát sáng neon điện với cặp màu tương phản cao cho giao diện táo bạo, thu hút sự chú ý.",
+    "pl": "Elektryczne efekty neonowego blasku z wysokokontrastowymi zestawieniami kolorów dla odważnych, przyciągających wzrok interfejsów.",
+    "id": "Efek cahaya neon elektrik dengan pasangan warna kontras tinggi untuk antarmuka yang berani dan menarik perhatian.",
+    "nl": "Elektrische neon-gloed-effecten met hoog contrast kleurencombinaties voor gedurfde, opvallende interfaces.",
+    "ar": "تأثيرات توهج نيون كهربائية مع تزاوجات ألوان عالية التباين لواجهات جريئة وجاذبة للانتباه.",
+    "tr": "Cesur ve dikkat çekici arayüzler için yüksek kontrastlı renk eşleştirmeleri ile elektrikli neon parıltı efektleri.",
+    "uk": "Ефекти електричного неонового сяйва з висококонтрастними колірними поєднаннями для яскравих, привертаючих увагу інтерфейсів.",
+    "en": "Electric neon glow effects with high-contrast color pairings for bold, attention-grabbing interfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "morphism-effects"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Neon design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Neon design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "neon",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-neobrutalism",
+  "title": "Neobrutalism",
+  "title_i18n": {
+    "zh-CN": "新野兽派",
+    "zh-TW": "新野獸派",
+    "ja": "ネオブルータリズム",
+    "ko": "네오브루탈리즘",
+    "de": "Neobrutalism",
+    "fr": "Néobrutalisme",
+    "ru": "Необрутализм",
+    "es": "Neobrutalism",
+    "pt-BR": "Neobrutalism",
+    "it": "Neobrutalism",
+    "vi": "Neobrutalism",
+    "pl": "Neobrutalism",
+    "id": "Neobrutalism",
+    "nl": "Neobrutalism",
+    "ar": "Neobrutalism",
+    "tr": "Neobrutalism",
+    "uk": "Необруталізм",
+    "en": "Neobrutalism"
+  },
+  "version": "0.1.0",
+  "description": "Modern take on brutalism with bold borders, vivid accent colors, and raw, high-contrast layouts on warm surfaces.",
+  "description_i18n": {
+    "zh-CN": "现代野兽主义风格，采用粗边框、鲜艳强调色和高对比度布局，搭配温暖的背景表面。",
+    "zh-TW": "現代野獸主義風格，採用粗邊框、鮮豔強調色和高對比度佈局，搭配溫暖的背景表面。",
+    "ja": "モダンなブルータリズムスタイル。太い境界線、鮮やかなアクセントカラー、温かみのある背景に高コントラストなレイアウトを採用。",
+    "ko": "모던한 브루탈리즘 스타일. 굵은 테두리, 선명한 강조색, 따뜻한 배경의 고대비 레이아웃.",
+    "de": "Moderne Interpretation des Brutalismus mit kräftigen Rahmen, lebendigen Akzentfarben und rohen, kontrastreichen Layouts auf warmen Oberflächen.",
+    "fr": "Approche moderne du brutalisme avec bordures épaisses, couleurs d'accentuation vives et mises en page brutes à fort contraste sur surfaces chaleureuses.",
+    "ru": "Современная интерпретация брутализма с жирными границами, яркими акцентными цветами и контрастными макетами на теплых поверхностях.",
+    "es": "Enfoque moderno del brutalismo con bordes gruesos, colores de acento vibrantes y diseños crudos de alto contraste sobre superficies cálidas.",
+    "pt-BR": "Abordagem moderna do brutalismo com bordas marcantes, cores de destaque vibrantes e layouts crus de alto contraste em superfícies quentes.",
+    "it": "Interpretazione moderna del brutalismo con bordi marcati, colori vivaci e layout crudi ad alto contrasto su superfici calde.",
+    "vi": "Phong cách brutalisme hiện đại với đường viền đậm, màu nhấn sống động và bố cục tương phản cao trên nền ấm áp.",
+    "pl": "Nowoczesne ujęcie brutalizmu z grubymi obramowaniami, żywymi kolorami akcentującymi oraz surowymi, kontrastowymi układami na ciepłych powierzchniach.",
+    "id": "Pendekatan modern brutalisme dengan border tebal, warna aksen cerah, dan tata letak kontras tinggi pada permukaan hangat.",
+    "nl": "Moderne kijk op brutalisme met dikke randen, levendige accentkleuren en ruwe, hoog-contrast lay-outs op warme oppervlakken.",
+    "ar": "نهج عصري للوحشية مع حدود عريضة وألوان تمييز زاهية وتخطيطات عالية التباين على أسطح دافئة.",
+    "tr": "Kalın kenarlıklar, canlı vurgu renkleri ve sıcak yüzeylerde ham, yüksek kontrastlı düzenlerle modern brutalizm yaklaşımı.",
+    "uk": "Сучасне трактуванняbrutalізму з товстими межами, яскравими акцентними кольорами та контрастними макетами на теплих поверхнях.",
+    "en": "Modern take on brutalism with bold borders, vivid accent colors, and raw, high-contrast layouts on warm surfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "bold-expressive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Neobrutalism design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Neobrutalism design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "neobrutalism",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

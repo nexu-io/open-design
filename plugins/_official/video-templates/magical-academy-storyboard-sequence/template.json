@@ -1,0 +1,21 @@
+{
+  "id": "magical-academy-storyboard-sequence",
+  "surface": "video",
+  "title": "Magical Academy Storyboard Sequence",
+  "summary": "A detailed storyboard-style prompt for a cinematic sequence depicting a magical girl at an academy, covering arrival, discovery of power, and a magical duel.",
+  "category": "Advertising",
+  "tags": [
+    "cinematic"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "0s – 4s (Arrival at the Academy)\nA massive gothic magical academy appears above floating cliffs, surrounded by storm clouds and glowing runes. The girl walks through the grand iron gates. Her expression is calm but curious. Floating spell books drift around the entrance. Cinematic slow push-in shot, mist and dramatic lighting.\n\n4s – 8s (The Forbidden Core Reveal)\nInside a grand hall, students channel elemental magic. The girl stands still as her “sealed magical core” reacts. Dark energy briefly flickers around her chest, but she doesn’t collapse like others would. The academy masters observe in shock. Close-up on her face with glowing rune reflections in her eyes.\n\n8s – 12s (Soul-Binding Lesson)\nIn a floating classroom, chains of light connect students’ souls to magical entities. The girl absorbs a forbidden spell instead of being harmed. The spell dissolves into her body safely. Books levitate violently around her. Slow-motion, cinematic orbit camera around her.\n\n12s – 16s (Forbidden Power Awakens)\nA sudden magical duel breaks out. She steps forward and releases a silent wave of forbidden magic. Reality bends slightly around her. Runes explode into glowing fragments in the air. The academy freezes in awe as her power stabilizes. Final shot: her standing alone under floating spell books, softly glowing.",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c81825485052d7aff4ee2af086c7f307/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c81825485052d7aff4ee2af086c7f307/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Soulful Ai",
+    "url": "https://x.com/soulful__ai/status/2049186700199620777"
+  }
+}

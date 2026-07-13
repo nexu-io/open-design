@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-04-29T12:00:00.000Z",
+  "generatedBy": "agent",
+  "notes": "Static fixture with no refresh source.",
+  "sources": [
+    {
+      "label": "Fixture author input",
+      "type": "user_input"
+    }
+  ]
+}

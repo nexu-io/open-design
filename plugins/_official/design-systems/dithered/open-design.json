@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-dithered",
+  "title": "Dithered",
+  "title_i18n": {
+    "zh-CN": "抖动",
+    "zh-TW": "抖動",
+    "ja": "ディザリング",
+    "ko": "디더링",
+    "de": "Dithering",
+    "fr": "Tramage",
+    "ru": "Дизеринг",
+    "es": "Tramado",
+    "pt-BR": "Pontilhado",
+    "it": "Dithering",
+    "vi": "Dithering",
+    "pl": "Dithering",
+    "id": "Dithering",
+    "nl": "Dithering",
+    "ar": "التنقيط",
+    "tr": "Dithering",
+    "uk": "Дизерінг",
+    "en": "Dithered"
+  },
+  "version": "0.1.0",
+  "description": "Dot-pattern rendering technique that simulates shades with a limited palette for nostalgic, retro, high-contrast visuals.",
+  "description_i18n": {
+    "zh-CN": "使用点阵图案渲染技术，在有限色板下模拟明暗层次，呈现怀旧复古的高对比度视觉效果。",
+    "zh-TW": "使用點陣圖案渲染技術，在有限色板下模擬明暗層次，呈現懷舊復古的高對比視覺效果。",
+    "ja": "限られたパレットで階調を再現するドットパターンレンダリング技術。ノスタルジックでレトロな高コントラストビジュアルを生成します。",
+    "ko": "제한된 팔레트로 음영을 시뮬레이션하는 도트 패턴 렌더링 기법으로, 향수를 불러일으키는 레트로 고대비 비주얼을 구현합니다.",
+    "de": "Punktmuster-Rendering-Technik, die Schattierungen mit einer begrenzten Palette simuliert und nostalgische, retro-inspirierte High-Contrast-Visuals erzeugt.",
+    "fr": "Technique de rendu par motifs de points qui simule les nuances avec une palette limitée pour des visuels nostalgiques, rétro et à fort contraste.",
+    "ru": "Техника рендеринга точечным узором, имитирующая оттенки с ограниченной палитрой для создания ностальгических ретро-визуалов с высокой контрастностью.",
+    "es": "Técnica de renderizado con patrones de puntos que simula tonos con una paleta limitada para crear visuales nostálgicos, retro y de alto contraste.",
+    "pt-BR": "Técnica de renderização com padrão de pontos que simula tons com paleta limitada para visuais nostálgicos, retrô e de alto contraste.",
+    "it": "Tecnica di rendering a pattern puntinato che simula le sfumature con una tavolozza limitata per creare visual nostalgici, retrò e ad alto contrasto.",
+    "vi": "Kỹ thuật kết xuất họa tiết chấm mô phỏng độ bóng với bảng màu hạn chế, tạo hình ảnh hoài cổ, retro và tương phản cao.",
+    "pl": "Technika renderowania wzorem kropkowym symulująca odcienie z ograniczoną paletą dla nostalgicznych, retro wizualizacji o wysokim kontraście.",
+    "id": "Teknik rendering pola titik yang mensimulasikan bayangan dengan palet terbatas untuk visual nostalgia, retro, dan kontras tinggi.",
+    "nl": "Stippenpatroon-renderingtechniek die schaduwen simuleert met een beperkt palet voor nostalgische, retro en contrastrijke visuals.",
+    "ar": "تقنية عرض بنمط نقطي تحاكي التظليل بلوحة ألوان محدودة لإنشاء مرئيات حنينية وريترو عالية التباين.",
+    "tr": "Sınırlı bir paletle gölgeleri simüle eden nokta desenli görüntüleme tekniği ile nostaljik, retro, yüksek kontrastlı görseller oluşturur.",
+    "uk": "Техніка рендерингу крапковим візерунком, що імітує відтінки з обмеженою палітрою для створення ностальгічних ретро-візуалів з високою контрастністю.",
+    "en": "Dot-pattern rendering technique that simulates shades with a limited palette for nostalgic, retro, high-contrast visuals."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "retro-nostalgic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Dithered design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Dithered design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "dithered",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

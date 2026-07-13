@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-playstation",
+  "title": "PlayStation",
+  "title_i18n": {
+    "zh-CN": "PlayStation",
+    "zh-TW": "PlayStation",
+    "ja": "PlayStation",
+    "ko": "PlayStation",
+    "de": "PlayStation",
+    "fr": "PlayStation",
+    "ru": "PlayStation",
+    "es": "PlayStation",
+    "pt-BR": "PlayStation",
+    "it": "PlayStation",
+    "vi": "PlayStation",
+    "pl": "PlayStation",
+    "id": "PlayStation",
+    "nl": "PlayStation",
+    "ar": "PlayStation",
+    "tr": "PlayStation",
+    "uk": "PlayStation",
+    "en": "PlayStation"
+  },
+  "version": "0.1.0",
+  "description": "Gaming console retail. Three-surface channel layout, quiet-authority display type, cyan hover-scale.",
+  "description_i18n": {
+    "zh-CN": "游戏主机零售。三面通道布局，沉稳权威显示类型，青色悬停缩放。",
+    "zh-TW": "遊戲主機零售。三面通道佈局，沉穩權威顯示類型，青色懸停縮放。",
+    "ja": "ゲーム機の小売販売。3面チャンネルレイアウト、落ち着いた権威的表示タイプ、シアンホバースケール。",
+    "ko": "게임 콘솔 리테일. 3면 채널 레이아웃, 차분한 권위 디스플레이 유형, 청록색 호버 스케일.",
+    "de": "Gaming-Konsolen-Einzelhandel. Dreiseitiges Kanal-Layout, ruhig-autoritärer Display-Typ, Cyan-Hover-Skalierung.",
+    "fr": "Vente au détail de consoles de jeu. Mise en page à trois surfaces, affichage d'autorité sobre, mise à l'échelle au survol cyan.",
+    "ru": "Розничная продажа игровых консолей. Трехповерхностная компоновка каналов, сдержанно-авторитетный тип отображения, голубое масштабирование при наведении.",
+    "es": "Venta minorista de consolas de videojuegos. Diseño de canal de tres superficies, tipo de visualización de autoridad tranquila, escala de hover cian.",
+    "pt-BR": "Varejo de console de jogos. Layout de canal de três superfícies, tipo de exibição de autoridade tranquila, escala de hover ciano.",
+    "it": "Vendita al dettaglio di console da gioco. Layout a tre superfici, tipo di visualizzazione sobria e autorevole, scala hover ciano.",
+    "vi": "Bán lẻ máy chơi game. Bố cục kênh ba bề mặt, kiểu hiển thị quyền uy trầm tĩnh, phóng to hover màu cyan.",
+    "pl": "Sprzedaż detaliczna konsol do gier. Układ trójpowierzchniowy, typ wyświetlania o spokojnej autorytecie, skalowanie hover w kolorze cyjan.",
+    "id": "Ritel konsol gaming. Tata letak saluran tiga permukaan, tipe tampilan otoritas tenang, skala hover cyan.",
+    "nl": "Retailverkoop van gameconsoles. Drievlaks kanaalindeling, rustig-gezaghebbend displaytype, cyaan hover-schaal.",
+    "ar": "بيع بالتجزئة لأجهزة الألعاب. تخطيط قناة ثلاثي الأسطح، نوع عرض هادئ موثوق، تكبير تمرير سماوي.",
+    "tr": "Oyun konsolu perakendesi. Üç yüzeyli kanal düzeni, sakin-otoriter görüntüleme tipi, camgöbeği hover ölçekleme.",
+    "uk": "Роздрібний продаж ігрових консолей. Триповерхневе компонування каналів, стриманий авторитетний тип відображення, блакитне масштабування при наведенні.",
+    "en": "Gaming console retail. Three-surface channel layout, quiet-authority display type, cyan hover-scale."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the PlayStation design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the PlayStation design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "playstation",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

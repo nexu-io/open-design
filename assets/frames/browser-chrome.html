@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  Shared frame: macOS Safari-style browser window (traffic lights + URL bar).
+  Usage:  <iframe src="browser-chrome.html?screen=path/to/page.html&url=example.com"></iframe>
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser frame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    body {
+      display: grid;
+      place-items: center;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      color: #1a1916;
+    }
+
+    .window {
+      position: relative;
+      width: min(960px, 96vw);
+      aspect-ratio: 16 / 10;
+      background: #fafaf7;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.06) inset,
+        0 1px 0 rgba(255,255,255,0.95) inset,
+        0 28px 60px -12px rgba(0,0,0,0.18),
+        0 8px 20px -8px rgba(0,0,0,0.12);
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: linear-gradient(to bottom, #ececeb 0%, #dadad8 100%);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      height: 38px;
+    }
+
+    .lights {
+      display: inline-flex;
+      gap: 8px;
+    }
+    .light {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 0.5px rgba(0,0,0,0.15) inset;
+    }
+    .light.r { background: #ff5f57; }
+    .light.y { background: #febc2e; }
+    .light.g { background: #28c840; }
+
+    .url {
+      flex: 1;
+      max-width: 60%;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #6b6964;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .url .lock { color: #6b6964; margin-right: 6px; }
+
+    .tabs {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      color: #6b6964;
+    }
+    .tabs svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+    .inner {
+      width: 100%;
+      height: calc(100% - 38px);
+      border: 0;
+      background: #fafaf7;
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar">
+      <span class="lights">
+        <span class="light r"></span>
+        <span class="light y"></span>
+        <span class="light g"></span>
+      </span>
+      <span class="tabs">
+        <svg viewBox="0 0 14 14"><path d="M9 3 4 7l5 4"/></svg>
+        <svg viewBox="0 0 14 14"><path d="M5 3l5 4-5 4"/></svg>
+      </span>
+      <div class="url" id="url"><span class="lock">🔒</span><span id="url-text">example.com</span></div>
+      <span class="tabs">
+        <svg viewBox="0 0 14 14"><path d="M2 7h10M7 2v10"/></svg>
+      </span>
+    </div>
+
+    <iframe
+      class="inner"
+      id="screen"
+      title="Inner page"
+      sandbox="allow-scripts allow-same-origin"
+      loading="lazy"
+      src="about:blank"
+    ></iframe>
+  </div>
+
+  <script>
+    (function () {
+      var qs = new URLSearchParams(location.search);
+      var raw = qs.get('screen');
+      var url = qs.get('url');
+      var iframe = document.getElementById('screen');
+      if (raw) {
+        var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+        iframe.src = isAbsolute
+          ? raw
+          : new URL(raw, document.referrer || location.href).toString();
+      }
+      if (url) document.getElementById('url-text').textContent = url;
+    })();
+  </script>
+</body>
+</html>

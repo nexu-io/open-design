@@ -1,0 +1,23 @@
+{
+  "id": "profile-avatar-professional-identity-portrait-wallpaper",
+  "surface": "image",
+  "title": "Profile / Avatar - Professional Identity Portrait Wallpaper",
+  "summary": "Generates a high-resolution, premium wallpaper featuring a subject in professional attire with career-related activities and typography.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "typography"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "Create a portrait size wallpaper of pride in carrying out the profession as an ({argument name=\"name\" default=\"ALINA\"}), in the wallpaper contains a photo of the attached subject wearing a uniform or things related to the profession, make a pose, the subject's expression looks happy, don't have the same expression as the attached photo, give the wallpaper ornaments, decorations related to the profession, add several activities related to the profession arranged neatly, precisely, harmoniously, the typography says \"I am ({argument name=\"job title\" default=\"ALINA FASHION TEACHER\"}) \"above the subject's head, the font adjusts to the subject's job, each part of the wallpaper must be neat, the wallpaper visuals should not look monotonous, should not look stiff, must be original style wallpaper cinematic resolution 8K coloring, grading, wallpaper effects must look premium. Face and body exactly same as uploaded image.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453121103_le4xip_HG958SlbsAAESjg.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "𝗦𝗮𝗻𝗶𝗮",
+    "url": "https://x.com/saniaspeaks_/status/2048990448882942051"
+  }
+}

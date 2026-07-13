@@ -1,0 +1,202 @@
+---
+/*
+ * /alternatives/claude-design/ — primary commercial-intent page.
+ *
+ * This is the highest-leverage SEO surface per
+ * `growth/seo-opendesigner-analysis.md` §8. Captures "claude design
+ * alternative", "open source claude design", and
+ * "claude design vs open design" queries.
+ *
+ * Structure follows the spec: TL;DR, why-people-search, local-first +
+ * BYOK explanation, feature comparison table, who-should-use-which,
+ * migration / first run, and a visible FAQ that matches FAQPage JSON-LD.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+// Derive SITE from Astro.site so preview/staging JSON-LD matches the
+// layout's canonical link. Falls back to the production origin.
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.claudeAlternative;
+const common = copy.common;
+
+const title = page.title;
+const description = page.description;
+
+const features = page.features;
+
+const faq = page.faq.map(({ name, text }) => ({ q: name, a: text }));
+
+const jsonLd = [
+  {
+    // Two-level breadcrumb only. There is no real `/alternatives/`
+    // index page today, so we don't fabricate a middle node — both
+    // the JSON-LD and the visible nav point straight from the home
+    // surface to this leaf. Mirror this if/when `/alternatives/`
+    // becomes a real index page.
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}alternatives/claude-design/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: `${SITE}alternatives/claude-design/`,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">{page.label}</span>
+      <h1 class="display">{page.heading}</h1>
+      <p class="lead">{page.lead}</p>
+    </header>
+
+    <div class="tldr-card">
+      <h3>{page.tldrTitle}</h3>
+      <p>{page.tldrBody}</p>
+    </div>
+
+    <nav class="info-toc" aria-label={common.onThisPage}>
+      <span>{common.onThisPage}</span>
+      <a href="#why-search">{page.toc[0]}</a>
+      <a href="#local-byok">{page.toc[1]}</a>
+      <a href="#compare">{page.toc[2]}</a>
+      <a href="#who">{page.toc[3]}</a>
+      <a href="#migrate">{page.toc[4]}</a>
+      <a href="#faq">{page.toc[5]}</a>
+    </nav>
+
+    <section class="info-section" id="why-search">
+      <h2>{page.whyTitle}</h2>
+      <p>{page.whyLead}</p>
+      <ol>
+        {page.reasons.map((item) => (
+          <li><strong>{item.label}</strong> {item.body}</li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="info-section" id="local-byok">
+      <h2>{page.localByokTitle}</h2>
+      {page.localByokBody.map((paragraph) => (
+        <p>{paragraph}</p>
+      ))}
+    </section>
+
+    <section class="info-section" id="compare">
+      <h2>{page.featureTitle}</h2>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Open Design</th>
+              <th>Claude Design</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((f) => (
+              <tr>
+                <th scope="row">{f.name}</th>
+                <td class="yes"><span class="check">●</span>{f.od}</td>
+                <td>{f.cd}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="info-section" id="who">
+      <h2>{page.whoTitle}</h2>
+      <h3>{page.pickClaudeTitle}</h3>
+      <ul>
+        {page.pickClaude.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+      <h3>{page.pickOpenTitle}</h3>
+      <ul>
+        {page.pickOpen.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="migrate">
+      <h2>{page.migrateTitle}</h2>
+      <p>{page.migrateLead}</p>
+      <ol>
+        {page.migrateSteps.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ol>
+      <p>{page.migrateClosing}</p>
+    </section>
+
+    <section class="info-section" id="faq">
+      <h2>{page.faqTitle}</h2>
+      <ol class="faq-list">
+        {faq.map(({ q, a }, idx) => (
+          <li class="faq-item">
+            <details>
+              <summary>
+                <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                <span class="faq-q">{q}</span>
+                <span class="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p class="faq-a">{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        <a class="btn btn-ghost" href={href('/quickstart/')}>{common.quickstart}</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.apache}</span>
+        <span>{common.localFirst} · {common.byok}</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+</Layout>

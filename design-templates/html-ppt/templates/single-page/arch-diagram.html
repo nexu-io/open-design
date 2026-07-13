@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Architecture</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.arch{margin-top:20px;display:grid;grid-template-rows:auto auto auto;gap:22px}
+.arch .tier{display:grid;grid-template-columns:120px 1fr;align-items:stretch;gap:22px}
+.arch .tname{display:flex;align-items:center;justify-content:center;background:var(--surface-2);border-radius:var(--radius);padding:18px;font-weight:600;font-size:13px;color:var(--text-2);text-transform:uppercase;letter-spacing:.1em;text-align:center}
+.arch .cells{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.arch .cells.three{grid-template-columns:repeat(3,1fr)}
+.arch .cell{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;box-shadow:var(--shadow)}
+.arch .cell .ic{font-size:24px}
+.arch .cell h4{font-size:14px;margin:6px 0 2px}
+.arch .cell p{font-size:11px;color:var(--text-3);margin:0}
+.arch .tier.hl .cell{border-top:3px solid var(--accent)}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Architecture">
+  <p class="kicker">Architecture · 系统总览</p>
+  <h2 class="h2">一套三层栈</h2>
+  <div class="arch anim-stagger-list" data-anim-target>
+    <div class="tier"><div class="tname">UI Layer</div>
+      <div class="cells"><div class="cell"><div class="ic">🧱</div><h4>Layouts</h4><p>30 个单页</p></div>
+        <div class="cell"><div class="ic">🎨</div><h4>Themes</h4><p>24 tokens 主题</p></div>
+        <div class="cell"><div class="ic">✨</div><h4>Animations</h4><p>25 个命名动效</p></div>
+        <div class="cell"><div class="ic">⌨️</div><h4>Runtime</h4><p>键盘导航</p></div>
+      </div>
+    </div>
+    <div class="tier hl"><div class="tname">Core · tokens</div>
+      <div class="cells three"><div class="cell"><div class="ic">🎯</div><h4>base.css</h4><p>排版 + 网格</p></div>
+        <div class="cell"><div class="ic">🔤</div><h4>fonts.css</h4><p>中英字体</p></div>
+        <div class="cell"><div class="ic">🪞</div><h4>:root vars</h4><p>语义颜色</p></div>
+      </div>
+    </div>
+    <div class="tier"><div class="tname">Tooling</div>
+      <div class="cells three"><div class="cell"><div class="ic">🧪</div><h4>render.sh</h4><p>headless Chrome</p></div>
+        <div class="cell"><div class="ic">🆕</div><h4>new-deck.sh</h4><p>脚手架</p></div>
+        <div class="cell"><div class="ic">📦</div><h4>AgentSkill</h4><p>Claude 接入点</p></div>
+      </div>
+    </div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

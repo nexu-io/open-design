@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Soft Editorial — Slide Template</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root {
+    --paper:    #F2EEDF;     /* warm cream page */
+    --paper-2:  #ECE6D2;
+    --ink:      #2A241B;     /* warm near-black */
+    --ink-soft: #5C5345;
+    --pink:     #E1A4C2;     /* dusty pink */
+    --lemon:    #D6DD63;     /* chartreuse */
+    --blush:    #E8C9B6;     /* soft peach */
+    --sage:     #B7C7A8;     /* sage (extra) */
+    --lilac:    #C9BEDC;     /* lilac (extra) */
+  }
+  html, body { margin:0; padding:0; background:#1a1a1a; }
+  body { font-family: "Work Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+  deck-stage { background: #1a1a1a; }
+
+  section.slide {
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Header / footer chrome shared across slides */
+  .eyebrow {
+    position: absolute;
+    top: 60px; left: 80px;
+    font-family: "Work Sans", sans-serif;
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .footer {
+    position: absolute;
+    left: 80px; right: 80px; bottom: 50px;
+    display: flex;
+    justify-content: space-between;
+    font-family: "Cormorant Garamond", "Garamond", serif;
+    font-size: 26px;
+    font-style: italic;
+    color: var(--ink-soft);
+  }
+  .pagedot {
+    position: absolute;
+    right: 80px; top: 60px;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 26px;
+    color: var(--ink-soft);
+  }
+
+  /* Typography */
+  h1, h2, h3, p { margin: 0; }
+  .serif      { font-family: "Cormorant Garamond", "Garamond", serif; font-weight: 500; }
+  .serif-it   { font-family: "Cormorant Garamond", serif; font-style: italic; font-weight: 500; }
+  .display {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 188px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+  }
+  .title {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 124px;
+    line-height: 0.98;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    font-family: "Work Sans", sans-serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.1;
+  }
+  .body {
+    font-family: "Work Sans", sans-serif;
+    font-weight: 400;
+    font-size: 26px;
+    line-height: 1.5;
+  }
+
+  /* ============== 1. COVER ================================== */
+  .s-cover .stack {
+    position: absolute;
+    left: 80px; right: 80px; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 36px;
+  }
+  .s-cover .kicker {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 38px;
+    color: var(--ink-soft);
+  }
+  .s-cover h1 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 232px;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+  }
+  .s-cover h1 em { font-style: italic; font-weight: 400; }
+  .s-cover .lede {
+    font-size: 30px;
+    line-height: 1.4;
+    max-width: 60ch;
+    color: var(--ink-soft);
+  }
+  .s-cover .swatches {
+    position: absolute;
+    right: 80px; top: 80px;
+    display: flex; gap: 14px;
+  }
+  .s-cover .swatches i {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: block;
+  }
+
+  /* ============== 2. FOREWORD =============================== */
+  .s-foreword .col-l {
+    position: absolute;
+    left: 80px; top: 200px; width: 760px;
+  }
+  .s-foreword .col-l .opener {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 56px;
+    line-height: 1.1;
+    color: var(--ink);
+    margin-bottom: 36px;
+  }
+  .s-foreword .col-l .opener:first-letter {
+    font-size: 132px;
+    float: left;
+    line-height: 0.85;
+    padding: 8px 14px 0 0;
+    font-style: normal;
+    font-weight: 500;
+  }
+  .s-foreword .col-r {
+    position: absolute;
+    right: 80px; top: 200px; width: 760px;
+  }
+  .s-foreword .col-r p {
+    font-size: 24px;
+    line-height: 1.55;
+    margin-bottom: 22px;
+    color: var(--ink-soft);
+  }
+  .s-foreword .col-r p:first-child { color: var(--ink); }
+  .s-foreword .signoff {
+    margin-top: 24px;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 30px;
+    color: var(--ink);
+  }
+
+  /* ============== 3. THE METHOD ============================= */
+  .s-method .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 220px; bottom: 140px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+  }
+  .s-method .step {
+    background: rgba(255,255,255,0.55);
+    border-radius: 32px;
+    padding: 36px 32px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+  }
+  .s-method .step .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 92px;
+    line-height: 0.9;
+    color: var(--ink);
+  }
+  .s-method .step h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1.05;
+    margin-top: 16px;
+  }
+  .s-method .step p {
+    font-size: 24px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .s-method .step.pink  { background: var(--pink); }
+  .s-method .step.lemon { background: var(--lemon); }
+  .s-method .step.blush { background: var(--blush); }
+  .s-method .step.sage  { background: var(--sage); }
+
+  /* ============== 4. INSIGHTS (reference layout) ============ */
+  .s-insights .row {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 200px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .s-insights .card {
+    border-radius: 36px;
+    padding: 64px 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 36px;
+  }
+  .s-insights .card.pink  { background: var(--pink); }
+  .s-insights .card.lemon { background: var(--lemon); }
+  .s-insights .card.blush { background: var(--blush); }
+  .s-insights .card .head h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 72px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin-bottom: 12px;
+    white-space: nowrap;
+  }
+  .s-insights .card .head .sub {
+    font-family: "Work Sans", sans-serif;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.1;
+  }
+  .s-insights .card p {
+    font-size: 24px;
+    line-height: 1.45;
+    max-width: 26ch;
+  }
+
+  /* ============== 5. A CLOSER LOOK (full-bleed) ============= */
+  .s-closer { background: var(--pink); }
+  .s-closer .eyebrow,
+  .s-closer .pagedot,
+  .s-closer .footer { color: var(--ink); }
+  .s-closer .footer { color: rgba(42,36,27,.7); }
+  .s-closer .center {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 1100px;
+    text-align: center;
+  }
+  .s-closer .marker {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 38px;
+    color: var(--ink);
+    margin-bottom: 32px;
+  }
+  .s-closer h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 168px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+    margin-bottom: 36px;
+  }
+  .s-closer h2 em { font-style: italic; font-weight: 400; }
+  .s-closer p {
+    font-size: 28px;
+    line-height: 1.5;
+    max-width: 56ch;
+    margin: 0 auto;
+  }
+
+  /* ============== 6. BY THE NUMBERS ========================= */
+  .s-numbers .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 140px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr 1fr;
+    gap: 28px;
+  }
+  .s-numbers .stat {
+    border-radius: 36px;
+    padding: 42px 44px;
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+  }
+  .s-numbers .stat .v {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 200px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+  }
+  .s-numbers .stat .v em { font-style: italic; font-weight: 400; }
+  .s-numbers .stat .lab {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 28ch;
+  }
+  .s-numbers .a { background: var(--lemon); grid-column: span 2; grid-row: span 2; }
+  .s-numbers .a .v { font-size: 320px; }
+  .s-numbers .b { background: var(--pink); }
+  .s-numbers .c { background: var(--blush); }
+
+  /* ============== 7. IN THEIR WORDS ========================= */
+  .s-quote .center {
+    position: absolute;
+    left: 80px; right: 80px; top: 50%;
+    transform: translateY(-50%);
+    text-align: center;
+  }
+  .s-quote .qmark {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 220px;
+    line-height: 0.7;
+    color: var(--blush);
+    margin-bottom: 12px;
+  }
+  .s-quote blockquote {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 88px;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin: 0 auto;
+    max-width: 28ch;
+    color: var(--ink);
+  }
+  .s-quote blockquote em { font-style: italic; font-weight: 400; }
+  .s-quote .attr {
+    margin-top: 48px;
+    font-family: "Work Sans", sans-serif;
+    font-weight: 500;
+    font-size: 24px;
+    color: var(--ink);
+  }
+  .s-quote .attr .role {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 24px;
+    color: var(--ink-soft);
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* ============== 8. WHAT WE'LL DO NEXT ===================== */
+  .s-next .grid {
+    position: absolute;
+    left: 80px; right: 80px; top: 200px; bottom: 140px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+  }
+  .s-next .panel {
+    border-radius: 36px;
+    padding: 48px 52px;
+    display: flex; flex-direction: column;
+    gap: 18px;
+  }
+  .s-next .panel.l {
+    background: rgba(255,255,255,0.55);
+    justify-content: center;
+  }
+  .s-next .panel.l h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 124px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+  }
+  .s-next .panel.l h2 em { font-style: italic; font-weight: 400; }
+  .s-next .panel.l p {
+    font-size: 24px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 36ch;
+    margin-top: 12px;
+  }
+  .s-next .panel.r {
+    background: transparent;
+    padding: 0;
+    gap: 20px;
+  }
+  .s-next .item {
+    border-radius: 28px;
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+  .s-next .item.pink  { background: var(--pink); }
+  .s-next .item.lemon { background: var(--lemon); }
+  .s-next .item.blush { background: var(--blush); }
+  .s-next .item .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 64px;
+    line-height: 1;
+  }
+  .s-next .item h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 38px;
+    line-height: 1.05;
+    margin-bottom: 4px;
+  }
+  .s-next .item p {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    opacity: 0.85;
+  }
+
+  /* ============== CONSULT (text-dense) ====================== */
+  .s-consult .eyebrow,
+  .s-consult .pagedot,
+  .s-consult .footer { color: var(--ink-soft); }
+  .s-consult .action {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    background: var(--lemon);
+    border-radius: 24px;
+    padding: 24px 36px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .s-consult .action .tag {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink);
+    flex-shrink: 0;
+    border-right: 1px solid rgba(42,36,27,.3);
+    padding-right: 24px;
+  }
+  .s-consult .action h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1.15;
+    letter-spacing: -0.005em;
+  }
+  .s-consult .body {
+    position: absolute;
+    left: 80px; right: 80px; top: 290px; bottom: 130px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 28px;
+  }
+  .s-consult .col {
+    background: rgba(255,255,255,0.55);
+    border-radius: 24px;
+    padding: 28px 30px;
+    display: flex; flex-direction: column;
+    gap: 16px;
+  }
+  .s-consult .col h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-style: italic;
+    font-size: 32px;
+    line-height: 1.05;
+    color: var(--ink);
+    border-bottom: 1px solid rgba(42,36,27,.18);
+    padding-bottom: 14px;
+  }
+  .s-consult .col .meta {
+    font-family: "Work Sans", sans-serif;
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .s-consult .col p {
+    font-size: 24px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+  .s-consult .col ul {
+    margin: 0; padding-left: 18px;
+    font-size: 24px; line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .s-consult .col ul li { margin-bottom: 8px; }
+  .s-consult .col ul li strong { color: var(--ink); font-weight: 500; }
+  .s-consult .source {
+    margin-top: auto;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink-soft);
+    padding-top: 12px;
+    border-top: 1px dashed rgba(42,36,27,.18);
+  }
+
+  /* ============== CHART =================================== */
+  .s-chart .left {
+    position: absolute;
+    left: 80px; top: 200px; bottom: 130px; width: 540px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .s-chart .left h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 96px;
+    line-height: 0.98;
+    letter-spacing: -0.01em;
+  }
+  .s-chart .left h2 em { font-style: italic; font-weight: 400; }
+  .s-chart .left p {
+    font-size: 24px; line-height: 1.5; color: var(--ink-soft);
+  }
+  .s-chart .left .legend {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-top: auto;
+  }
+  .s-chart .left .legend .li {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 24px; color: var(--ink);
+  }
+  .s-chart .left .legend .li i {
+    width: 28px; height: 12px; border-radius: 6px;
+  }
+  .s-chart .right {
+    position: absolute;
+    right: 80px; top: 200px; bottom: 200px; left: 680px;
+    background: rgba(255,255,255,0.55);
+    border-radius: 28px;
+    padding: 36px 40px 30px 80px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .s-chart .right .yhead {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+  .s-chart .right .plot {
+    flex: 1; min-height: 0; position: relative;
+    border-left: 1.5px solid rgba(42,36,27,.35);
+    border-bottom: 1.5px solid rgba(42,36,27,.35);
+    padding: 12px 12px 0 12px;
+  }
+  .s-chart .right .gline {
+    position: absolute; left: 0; right: 0;
+    border-top: 1px dashed rgba(42,36,27,.12);
+  }
+  .s-chart .right .yticks {
+    position: absolute; left: -56px; top: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-size: 24px; color: var(--ink-soft);
+    font-family: "Cormorant Garamond", serif; font-style: italic;
+  }
+  .s-chart .right svg { width: 100%; height: 100%; display: block; position: absolute; inset: 12px 12px 0 12px; overflow: visible; }
+  .s-chart .right .xticks {
+    display: flex; justify-content: space-between;
+    margin-top: 12px;
+    font-size: 24px; color: var(--ink-soft);
+    font-family: "Cormorant Garamond", serif; font-style: italic;
+  }
+
+  /* ============== PROCESS DIAGRAM ========================= */
+  .s-process .head {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .s-process .head h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 88px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .s-process .head h2 em { font-style: italic; font-weight: 400; }
+  .s-process .head .sub {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink-soft);
+    max-width: 32ch;
+    text-align: right;
+  }
+  .s-process .flow {
+    position: absolute;
+    left: 80px; right: 80px; top: 320px; bottom: 240px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
+    align-items: stretch;
+  }
+  .s-process .node {
+    border-radius: 28px;
+    padding: 26px 24px;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative;
+  }
+  .s-process .node .n {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 56px;
+    line-height: 0.9;
+  }
+  .s-process .node h3 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 32px;
+    line-height: 1.05;
+  }
+  .s-process .node p {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink-soft);
+  }
+  .s-process .node.n1 { background: var(--pink); }
+  .s-process .node.n2 { background: var(--blush); }
+  .s-process .node.n3 { background: var(--lemon); }
+  .s-process .node.n4 { background: var(--sage); }
+  .s-process .node.n5 { background: var(--lilac); }
+  .s-process .node .arrow {
+    position: absolute;
+    right: -20px; top: 50%; transform: translateY(-50%);
+    width: 32px; height: 32px;
+    z-index: 2;
+    color: var(--ink);
+  }
+  .s-process .node.n5 .arrow { display: none; }
+  .s-process .timeline {
+    position: absolute;
+    left: 80px; right: 80px; bottom: 140px; top: auto;
+    height: 60px;
+    background: rgba(255,255,255,0.55);
+    border-radius: 18px;
+    padding: 14px 28px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--ink);
+  }
+
+  /* ============== COMPARISON MATRIX ======================= */
+  .s-matrix .head {
+    position: absolute;
+    left: 80px; right: 80px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 40px;
+  }
+  .s-matrix .head h2 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 76px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    flex-shrink: 0;
+  }
+  .s-matrix .head h2 em { font-style: italic; font-weight: 400; }
+  .s-matrix .head .sub {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 26px;
+    color: var(--ink-soft);
+    max-width: 36ch;
+    text-align: right;
+    margin-top: 8px;
+  }
+  .s-matrix .table {
+    position: absolute;
+    left: 80px; right: 80px; top: 320px; bottom: 130px;
+    background: rgba(255,255,255,0.55);
+    border-radius: 28px;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    grid-auto-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .s-matrix .table .cell {
+    padding: 22px 24px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+    border-bottom: 1px dashed rgba(42,36,27,.18);
+    border-right: 1px dashed rgba(42,36,27,.18);
+  }
+  .s-matrix .table .cell:nth-child(4n) { border-right: 0; }
+  .s-matrix .table .cell.head-row {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--ink);
+    border-bottom: 1.5px solid rgba(42,36,27,.4);
+    align-items: center;
+  }
+  .s-matrix .table .cell.row-label {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 500;
+    font-size: 28px;
+    color: var(--ink);
+    align-items: center;
+  }
+  .s-matrix .table .cell.last { border-bottom: 0; }
+  .s-matrix .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .s-matrix .pill.yes  { background: var(--lemon); }
+  .s-matrix .pill.part { background: var(--blush); }
+  .s-matrix .pill.no   { background: var(--pink); }
+  .s-matrix .pill.note { background: rgba(255,255,255,0.6); border: 1px solid rgba(42,36,27,.18); color: var(--ink-soft); font-style: italic; font-family: "Cormorant Garamond", serif; font-weight: 400; }
+
+  /* ============== 9. DESIGN SYSTEM ========================== */
+  .s-system .wrap {
+    position: absolute;
+    left: 80px; right: 80px; top: 140px; bottom: 100px;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: auto 1fr 1fr;
+    gap: 24px;
+  }
+  .s-system .wrap > * { background: rgba(255,255,255,.55); border-radius: 24px; padding: 22px 26px; }
+  .s-system h4 {
+    font-family: "Cormorant Garamond", serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 26px;
+    margin-bottom: 12px;
+    color: var(--ink);
+  }
+  .s-system .small { font-size: 17px; line-height: 1.5; color: var(--ink-soft); }
+  .s-system .small li { margin-bottom: 6px; }
+  .s-system .small ul { margin: 0; padding-left: 18px; }
+
+  .s-system .pal { grid-column: 1 / span 5; grid-row: 1 / span 2; }
+  .s-system .pal .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .s-system .pal .sw { aspect-ratio: 1/1.2; border-radius: 16px; display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; font-family: "Work Sans", sans-serif; font-size: 11px; color: var(--ink); }
+  .s-system .pal .sw.s1 { background: var(--paper); border: 1px solid rgba(0,0,0,0.06); }
+  .s-system .pal .sw.s2 { background: var(--pink); }
+  .s-system .pal .sw.s3 { background: var(--lemon); }
+  .s-system .pal .sw.s4 { background: var(--blush); }
+  .s-system .pal .sw.s5 { background: var(--sage); }
+
+  .s-system .type { grid-column: 6 / span 7; grid-row: 1 / span 2; }
+  .s-system .type .row {
+    display: flex; align-items: baseline; gap: 18px;
+    padding: 6px 0; border-bottom: 1px dashed rgba(42,36,27,.15);
+  }
+  .s-system .type .row:last-child { border-bottom: 0; }
+  .s-system .type .lbl {
+    font-family: "Work Sans", sans-serif;
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-soft); margin-left: auto; white-space: nowrap;
+  }
+
+  .s-system .rules { grid-column: 1 / span 7; grid-row: 3; }
+  .s-system .dont  { grid-column: 8 / span 5; grid-row: 3; }
+  .s-system .corners {
+    display: flex; gap: 12px; margin-top: 8px;
+  }
+  .s-system .corners .box {
+    width: 42px; height: 42px;
+    background: var(--pink);
+  }
+  .s-system .corners .box.r1 { border-radius: 14px; background: var(--lemon); }
+  .s-system .corners .box.r2 { border-radius: 22px; background: var(--blush); }
+  .s-system .corners .box.r3 { border-radius: 50%; background: var(--sage); }
+</style>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+  <!-- 1. COVER -->
+  <section class="slide s-cover" data-label="01 Cover">
+    <div class="eyebrow">Field Notes</div>
+    <div class="swatches" aria-hidden="true">
+      <i style="background:var(--pink)"></i>
+      <i style="background:var(--lemon)"></i>
+      <i style="background:var(--blush)"></i>
+    </div>
+    <div class="stack">
+      <div class="kicker">A research debrief, vol. iii</div>
+      <h1>What we learned <em>this&nbsp;quarter.</em></h1>
+      <div class="lede">A short, honest look at what our customers told us between January and March — what's working, what's quietly broken, and what we want to try next.</div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 2. FOREWORD -->
+  <section class="slide s-foreword" data-label="02 Foreword">
+    <div class="eyebrow">Foreword</div>
+    <div class="pagedot">ii</div>
+    <div class="col-l">
+      <p class="opener">We spent eight weeks listening, and what we heard surprised us in the kindest way.</p>
+    </div>
+    <div class="col-r">
+      <p>The team ran twenty-eight long-form interviews, shadowed nine teams during their busiest week of the year, and sat with the support inbox for ten unbroken days.</p>
+      <p>The themes that emerged were not the ones we set out to find. The brief asked about onboarding; the answers we got were about trust. So we followed the thread.</p>
+      <p>This deck is the short version. Each insight is a door — open the ones that matter to your team this quarter, and let the others wait.</p>
+      <div class="signoff">— The research desk</div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 3. THE METHOD -->
+  <section class="slide s-method" data-label="03 The Method">
+    <div class="eyebrow">The Method</div>
+    <div class="pagedot">iii</div>
+    <div class="grid">
+      <div class="step pink">
+        <div class="n">i.</div>
+        <div>
+          <h3>Listen</h3>
+          <p>Twenty-eight long-form conversations with customers across four segments and three regions.</p>
+        </div>
+      </div>
+      <div class="step lemon">
+        <div class="n">ii.</div>
+        <div>
+          <h3>Watch</h3>
+          <p>Nine on-site shadowing sessions during peak workflows. We took notes, not video.</p>
+        </div>
+      </div>
+      <div class="step blush">
+        <div class="n">iii.</div>
+        <div>
+          <h3>Read</h3>
+          <p>Ten days inside the support inbox, tagging every message by intent and emotional tone.</p>
+        </div>
+      </div>
+      <div class="step sage">
+        <div class="n">iv.</div>
+        <div>
+          <h3>Distill</h3>
+          <p>Three rounds of thematic clustering with the design and policy teams, ending in eight themes.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 4. INSIGHTS (reference) -->
+  <section class="slide s-insights" data-label="04 Insights">
+    <div class="eyebrow">Insights</div>
+    <div class="pagedot">iv</div>
+    <div class="row">
+      <div class="card pink">
+        <div class="head">
+          <h3 class="serif">Insight #1</h3>
+          <div class="sub">Trust is the onboarding</div>
+        </div>
+        <p>Customers don't churn on day one because the product is hard. They churn because the first three emails feel like a stranger.</p>
+      </div>
+      <div class="card lemon">
+        <div class="head">
+          <h3 class="serif">Insight #2</h3>
+          <div class="sub">Power users dread upgrades</div>
+        </div>
+        <p>The people we asked to love new features the most quietly resent them. They want fewer surprises, not bigger ones.</p>
+      </div>
+      <div class="card blush">
+        <div class="head">
+          <h3 class="serif">Insight #3</h3>
+          <div class="sub">Support is product</div>
+        </div>
+        <p>Half of "feature requests" in the inbox are existing features that customers couldn't find. We have a discovery problem dressed as a roadmap problem.</p>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 5. A CLOSER LOOK (full bleed) -->
+  <section class="slide s-closer" data-label="05 A Closer Look">
+    <div class="eyebrow">A closer look · 1 of 3</div>
+    <div class="pagedot">v</div>
+    <div class="center">
+      <div class="marker">on insight #1</div>
+      <h2>Trust is the <em>onboarding.</em></h2>
+      <p>The product can be perfect on day one, but if the welcome email reads like a contract, half of new accounts will never log in twice. The fix is small and writerly, not technical.</p>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 6. BY THE NUMBERS -->
+  <section class="slide s-numbers" data-label="06 By the Numbers">
+    <div class="eyebrow">By the numbers</div>
+    <div class="pagedot">vi</div>
+    <div class="grid">
+      <div class="stat a">
+        <div class="lab serif-it" style="font-size:30px">of new accounts open the third email,<br/>up from 41% last quarter.</div>
+        <div class="v">68<em>%</em></div>
+      </div>
+      <div class="stat b">
+        <div class="v">28</div>
+        <div class="lab">long-form customer interviews, across four segments.</div>
+      </div>
+      <div class="stat c">
+        <div class="v">9</div>
+        <div class="lab">teams we shadowed for their busiest week of the year.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 7. IN THEIR WORDS -->
+  <section class="slide s-quote" data-label="07 In Their Words">
+    <div class="eyebrow">In their words</div>
+    <div class="pagedot">vii</div>
+    <div class="center">
+      <div class="qmark">"</div>
+      <blockquote>I did not need a <em>better</em> product. I needed it to behave like it remembered me.</blockquote>
+      <div class="attr">
+        Renée, three-year customer
+        <span class="role">Studio of seven, Lisbon</span>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 8. WHAT WE'LL DO NEXT -->
+  <section class="slide s-next" data-label="08 What's Next">
+    <div class="eyebrow">What we'll do next</div>
+    <div class="pagedot">viii</div>
+    <div class="grid">
+      <div class="panel l">
+        <h2>Three small <em>moves,</em><br/>before the next debrief.</h2>
+        <p>Each one is small enough to ship inside a sprint, and structured so we can tell, six weeks from now, whether it moved the dial.</p>
+      </div>
+      <div class="panel r">
+        <div class="item pink">
+          <div class="n">i.</div>
+          <div>
+            <h3>Rewrite the first three emails</h3>
+            <p>From templated to written. Owner: lifecycle. By: May 17.</p>
+          </div>
+        </div>
+        <div class="item lemon">
+          <div class="n">ii.</div>
+          <div>
+            <h3>Quiet upgrades by default</h3>
+            <p>Opt-in for power users; soft rollout for everyone else. Owner: product. By: June 1.</p>
+          </div>
+        </div>
+        <div class="item blush">
+          <div class="n">iii.</div>
+          <div>
+            <h3>Make the inbox a search bar</h3>
+            <p>Surface in-product help when a request matches a feature. Owner: support × product. By: June 14.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 9. CONSULT -->
+  <section class="slide s-consult" data-label="09 Findings · Detail">
+    <div class="eyebrow">Findings · Detail</div>
+    <div class="pagedot">ix</div>
+    <div class="action">
+      <div class="tag">Action title</div>
+      <h2>The trust gap is built in the first 72 hours, not the first 7 days — and the cost compounds for the rest of the lifecycle.</h2>
+    </div>
+    <div class="body">
+      <div class="col">
+        <h3>What we found</h3>
+        <p><strong style="color:var(--ink); font-weight:500">Three behavioral signals</strong> in the first 72 hours predict 18-month retention better than any feature-usage metric we tracked.</p>
+        <ul>
+          <li><strong>Email open #2</strong> — opening the second lifecycle email lifts D90 retention by 19 points.</li>
+          <li><strong>Personal salutation</strong> — accounts that received a written, non-templated welcome retained 2.4× the cohort.</li>
+          <li><strong>Reply received</strong> — a single human reply within 24 hours of signup is the single largest lever we measured.</li>
+        </ul>
+        <div class="source">Source: 14,200 cohorted accounts, Jan–Mar 2026.</div>
+      </div>
+      <div class="col">
+        <h3>Why it matters</h3>
+        <div class="meta">$4.1M in projected retained ARR, on the current cohort alone.</div>
+        <p>The first three days are the only window where customers are both paying attention and willing to write back. Every interaction during this window does the work of roughly four interactions in week three.</p>
+        <p>The cost of getting this wrong is not refunds — it is the long, quiet churn of an account that never returns to the inbox.</p>
+        <div class="source">Modelled on FY24 cohort behaviour.</div>
+      </div>
+      <div class="col">
+        <h3>What to do</h3>
+        <ul>
+          <li><strong>Rewrite emails 1–3</strong> in human voice; ship behind a 50/50 holdout. Owner: lifecycle. By: May 17.</li>
+          <li><strong>Route every signup</strong> to a named human for one personal reply within 24h, capped at the top 200 accounts/day. Owner: success. By: May 24.</li>
+          <li><strong>Instrument the 72-hour window</strong> as a first-class metric in the weekly review. Owner: analytics. By: June 1.</li>
+        </ul>
+        <div class="source">Pilot scope: top-decile signups by ICP score.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 10. CHART -->
+  <section class="slide s-chart" data-label="10 Retention Curve">
+    <div class="eyebrow">Retention, by cohort</div>
+    <div class="pagedot">x</div>
+    <div class="left">
+      <h2>The curve <em>bends</em><br/>around day three.</h2>
+      <p>Cohorts that received a written welcome and a human reply within 24 hours retain at roughly 2× the rate of the templated cohort, and the gap holds steady for the first ninety days.</p>
+      <div class="legend">
+        <div class="li"><i style="background:var(--pink)"></i> Templated welcome (control)</div>
+        <div class="li"><i style="background:var(--lemon)"></i> Written welcome</div>
+        <div class="li"><i style="background:var(--ink); height:14px"></i> Written + human reply</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">% of cohort active, by day</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#E1A4C2" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,28 32,46 48,60 64,72 80,80 100,86" />
+          <polyline fill="none" stroke="#D6DD63" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,16 32,26 48,36 64,44 80,50 100,54" />
+          <polyline fill="none" stroke="#2A241B" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+            points="0,4 16,10 32,16 48,22 64,28 80,32 100,36" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>D0</span><span>D7</span><span>D14</span><span>D30</span><span>D45</span><span>D60</span><span>D90</span>
+      </div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 11. PROCESS -->
+  <section class="slide s-process" data-label="11 Process">
+    <div class="eyebrow">How we'll work</div>
+    <div class="pagedot">xi</div>
+    <div class="head">
+      <h2>From <em>insight</em><br/>to shipped change.</h2>
+      <div class="sub">A five-step path each pilot follows, end to end, before it is allowed to graduate to the default experience.</div>
+    </div>
+    <div class="flow">
+      <div class="node n1">
+        <div class="n">i.</div>
+        <h3>Frame</h3>
+        <p>Translate the insight into a single behavioural hypothesis we can falsify.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n2">
+        <div class="n">ii.</div>
+        <h3>Design</h3>
+        <p>Sketch the smallest end-to-end change that lets the hypothesis be tested in one sprint.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n3">
+        <div class="n">iii.</div>
+        <h3>Pilot</h3>
+        <p>Ship to a 50/50 holdout in a single segment. Hold the line for two full cycles.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n4">
+        <div class="n">iv.</div>
+        <h3>Read</h3>
+        <p>Review the cohort against pre-registered metrics. Decide kill, scale, or extend.</p>
+        <svg class="arrow" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n5">
+        <div class="n">v.</div>
+        <h3>Default</h3>
+        <p>Graduate the change to the default surface. Retire the legacy path inside the same release.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Week 1</span><span>Weeks 2–3</span><span>Weeks 3–6</span><span>Week 7</span><span>Week 8</span>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 12. COMPARISON MATRIX -->
+  <section class="slide s-matrix" data-label="12 Comparison">
+    <div class="eyebrow">The three pilots, side by side</div>
+    <div class="pagedot">xii</div>
+    <div class="head">
+      <h2>Where each <em>pilot</em><br/>earns its keep.</h2>
+      <div class="sub">Scored against the four levers that matter most this cycle. We will only carry forward bets that win on at least two.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Rewrite welcome</div>
+      <div class="cell head-row">Quiet upgrades</div>
+      <div class="cell head-row">Inbox-as-search</div>
+
+      <div class="cell row-label">Time-to-impact</div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+      <div class="cell"><span class="pill part">6–8 weeks</span></div>
+      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+
+      <div class="cell row-label">Build cost</div>
+      <div class="cell"><span class="pill yes">Low</span></div>
+      <div class="cell"><span class="pill part">Medium</span></div>
+      <div class="cell"><span class="pill yes">Low</span></div>
+
+      <div class="cell row-label">Retention lift (model)</div>
+      <div class="cell"><span class="pill yes">+19 pts D90</span></div>
+      <div class="cell"><span class="pill part">+7 pts D90</span></div>
+      <div class="cell"><span class="pill part">+5 pts D90</span></div>
+
+      <div class="cell row-label last">Risk to power users</div>
+      <div class="cell last"><span class="pill yes">None</span></div>
+      <div class="cell last"><span class="pill no">Material</span></div>
+      <div class="cell last"><span class="pill note">Soft, reversible</span></div>
+    </div>
+    <div class="footer">
+      <span>April 29, 2026</span>
+      <span>Field Notes · Vol. III</span>
+    </div>
+  </section>
+
+  <!-- 13. DESIGN SYSTEM -->
+</deck-stage>
+
+</body>
+</html>

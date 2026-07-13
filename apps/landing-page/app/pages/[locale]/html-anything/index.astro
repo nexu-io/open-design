@@ -1,0 +1,12 @@
+---
+import HtmlAnythingPage from '../../html-anything/index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
+}
+---
+
+<HtmlAnythingPage />

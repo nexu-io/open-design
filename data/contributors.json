@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-06-03T10:40:24.829Z",
+  "totalContributors": 1,
+  "contributors": {
+    "zoeforfun": {
+      "username": "zoeforfun",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/254622774?v=4",
+      "points": 30,
+      "tier": "signal",
+      "prsMerged": 1,
+      "reviews": 0,
+      "discussionsAnswered": 0,
+      "issuesAccepted": 0,
+      "streakWeeks": 0,
+      "lastActiveAt": "2026-06-03T10:40:24.829Z",
+      "founding": false,
+      "tierHistory": [
+        {
+          "tier": "spark",
+          "reachedAt": "2026-06-03T10:40:24.829Z"
+        },
+        {
+          "tier": "signal",
+          "reachedAt": "2026-06-03T10:40:24.829Z"
+        }
+      ]
+    }
+  }
+}

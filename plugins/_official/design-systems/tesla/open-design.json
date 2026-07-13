@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-tesla",
+  "title": "Tesla",
+  "title_i18n": {
+    "zh-CN": "Tesla",
+    "zh-TW": "Tesla",
+    "ja": "Tesla",
+    "ko": "Tesla",
+    "de": "Tesla",
+    "fr": "Tesla",
+    "ru": "Tesla",
+    "es": "Tesla",
+    "pt-BR": "Tesla",
+    "it": "Tesla",
+    "vi": "Tesla",
+    "pl": "Tesla",
+    "id": "Tesla",
+    "nl": "Tesla",
+    "ar": "Tesla",
+    "tr": "Tesla",
+    "uk": "Tesla",
+    "en": "Tesla"
+  },
+  "version": "0.1.0",
+  "description": "Electric automotive. Radical subtraction, full-viewport photography, near-zero UI.",
+  "description_i18n": {
+    "zh-CN": "电动汽车。极简设计，全视窗摄影，近零 UI。",
+    "zh-TW": "電動汽車。極簡設計，全視窗攝影，近零 UI。",
+    "ja": "電気自動車。徹底的な削ぎ落とし、フルビューポート写真、ほぼゼロのUI。",
+    "ko": "전기 자동차. 극단적 절제, 전체 뷰포트 사진, 제로에 가까운 UI.",
+    "de": "Elektrofahrzeuge. Radikale Reduktion, Vollbild-Fotografie, nahezu null UI.",
+    "fr": "Automobile électrique. Soustraction radicale, photographie plein écran, UI quasi nulle.",
+    "ru": "Электромобили. Радикальный минимализм, полноэкранная фотография, почти нулевой UI.",
+    "es": "Automoción eléctrica. Sustracción radical, fotografía a pantalla completa, UI casi nulo.",
+    "pt-BR": "Automotivo elétrico. Subtração radical, fotografia em tela cheia, UI quase zero.",
+    "it": "Automotive elettrico. Sottrazione radicale, fotografia a schermo intero, UI quasi zero.",
+    "vi": "Ô tô điện. Tối giản triệt để, ảnh toàn màn hình, UI gần như bằng không.",
+    "pl": "Motoryzacja elektryczna. Radykalna redukcja, fotografia pełnoekranowa, prawie zerowy UI.",
+    "id": "Otomotif listrik. Pengurangan radikal, fotografi layar penuh, UI hampir nol.",
+    "nl": "Elektrische automobielen. Radicale reductie, volledig-viewport fotografie, bijna geen UI.",
+    "ar": "سيارات كهربائية. تجريد جذري، تصوير كامل الشاشة، UI شبه معدوم.",
+    "tr": "Elektrikli otomotiv. Radikal indirgeme, tam ekran fotoğraf, neredeyse sıfır UI.",
+    "uk": "Електромобілі. Радикальний мінімалізм, повноекранна фотографія, майже нульовий UI.",
+    "en": "Electric automotive. Radical subtraction, full-viewport photography, near-zero UI."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "automotive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Tesla design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Tesla design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "tesla",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>Open Design — Star us on GitHub</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap' rel='stylesheet'>
+<style>
+  :root {
+    --bg: #0d0a06;
+    --bg-2: #14100a;
+    --ink: #f3ead8;
+    --muted: #9b8f78;
+    --rule: #4a3f2c;
+    --accent: #f0833f;
+    --accent-2: #e85a2c;
+    --gold: #ffc83d;
+    --gold-2: #ffb000;
+    --paper: #f6efdd;
+
+    --gh-bg: #0d1117;
+    --gh-fg: #e6edf3;
+    --gh-muted: #8b949e;
+    --gh-border: #30363d;
+    --gh-border-2: #21262d;
+    --gh-btn: #21262d;
+    --gh-btn-hover: #30363d;
+    --gh-pill: #1f2328;
+    --gh-link: #4493f8;
+    --gh-tag-bg: #15295a;
+    --gh-tag-fg: #79c0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background:
+      radial-gradient(1200px 760px at 80% 18%, rgba(255,200,61,0.10), transparent 70%),
+      radial-gradient(900px 600px at 12% 80%, rgba(240,131,63,0.06), transparent 70%),
+      linear-gradient(180deg, #0e0b07 0%, #0a0805 100%);
+    padding: 56px 72px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+  header .l { text-align: left; }
+  header .r { text-align: right; }
+  header .center {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  header .center .star {
+    color: var(--gold);
+    margin-right: 6px;
+    font-size: 20px;
+    vertical-align: 1px;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    column-gap: 64px;
+    padding-top: 56px;
+    align-items: stretch;
+  }
+
+  /* --------- LEFT: editorial copy --------- */
+  .left {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: #f6e9d4;
+    background: rgba(240,131,63,0.16);
+    border: 1px solid rgba(240,131,63,0.45);
+    padding: 6px 12px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .pill.alt {
+    color: var(--muted);
+    background: transparent;
+    border-color: var(--rule);
+  }
+  .pill.gold {
+    color: #2a1a05;
+    background: linear-gradient(180deg, var(--gold), var(--gold-2));
+    border: 1px solid rgba(255,200,61,0.85);
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 100px;
+    line-height: 0.94;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0 0 32px 0;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  h1 .star-glyph {
+    color: var(--gold);
+    font-style: normal;
+    font-weight: 500;
+    display: inline-block;
+    transform: translateY(8px);
+    text-shadow:
+      0 0 24px rgba(255,200,61,0.55),
+      0 0 60px rgba(255,176,0,0.35);
+  }
+  h1 .underline-accent {
+    position: relative;
+    display: inline-block;
+  }
+  h1 .underline-accent::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 4px;
+    opacity: 0.85;
+  }
+
+  .lede {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 22px;
+    line-height: 1.5;
+    color: #d8cdb6;
+    max-width: 640px;
+    margin: 0 0 28px 0;
+  }
+  .lede b { font-weight: 500; color: #f3ead8; }
+
+  .url-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 22px;
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 36px;
+    box-shadow: 0 14px 30px rgba(0,0,0,0.35);
+  }
+  .url-card .arrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .url-card .url {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  .url-card .url b {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .url-card .copybtn {
+    margin-left: 8px;
+    border: 1px solid var(--rule);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+  }
+  .meta .cell {
+    border-right: 1px solid var(--rule);
+    padding-right: 18px;
+  }
+  .meta .cell:last-child { border-right: none; }
+  .meta .num {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .meta .num em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .meta .num .gold {
+    color: var(--gold);
+    text-shadow: 0 0 18px rgba(255,200,61,0.45);
+  }
+  .meta .lbl {
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  /* --------- RIGHT: GitHub mock --------- */
+  .right {
+    position: relative;
+  }
+  .stage {
+    position: absolute;
+    inset: 0;
+  }
+
+  .window {
+    position: absolute;
+    top: 130px;
+    left: 0;
+    right: 0;
+    background: var(--gh-bg);
+    color: var(--gh-fg);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--gh-border);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04) inset,
+      0 24px 60px rgba(0,0,0,0.55),
+      0 6px 18px rgba(0,0,0,0.45);
+    transform: rotate(-1deg);
+  }
+  .winbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gh-border);
+    background: linear-gradient(180deg, #15191e, #0f1216);
+  }
+  .winbar .dots { display: flex; gap: 6px; margin-right: 8px; }
+  .winbar .dot { width: 12px; height: 12px; border-radius: 50%; background: #3a3a3a; }
+  .winbar .dot.r { background: #ff5f57; }
+  .winbar .dot.y { background: #febc2e; }
+  .winbar .dot.g { background: #28c840; }
+  .winbar .urlbar {
+    flex: 1;
+    background: #161b22;
+    border: 1px solid var(--gh-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--gh-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .winbar .urlbar .lock { color: #6e7681; font-size: 10px; }
+  .winbar .urlbar b { color: var(--gh-fg); font-weight: 500; }
+
+  .ghnav {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 10px 22px;
+    border-bottom: 1px solid var(--gh-border);
+    background: var(--gh-bg);
+    font-size: 13px;
+    color: var(--gh-fg);
+  }
+  .ghnav .logo { width: 22px; height: 22px; }
+  .ghnav .crumbs { color: var(--gh-fg); font-weight: 500; }
+  .ghnav .crumbs .slash { color: var(--gh-muted); margin: 0 6px; font-weight: 300; }
+  .ghnav .crumbs .repo { color: var(--gh-link); }
+  .ghnav .private {
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--gh-muted);
+    border: 1px solid var(--gh-border);
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+
+  .ghhead {
+    padding: 22px 26px 6px;
+  }
+  .ghhead .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+  .ghhead .row > .repotitle { min-width: 0; flex-shrink: 1; }
+  .repotitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .repotitle .icon { color: var(--gh-muted); }
+  .repotitle .org { color: var(--gh-link); }
+  .repotitle .name { color: var(--gh-link); font-weight: 600; }
+  .repotitle .sep { color: var(--gh-muted); font-weight: 300; }
+  .repotitle .badge {
+    margin-left: 10px;
+    border: 1px solid var(--gh-border);
+    color: var(--gh-muted);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .ghbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--gh-btn);
+    border: 1px solid var(--gh-border);
+    color: var(--gh-fg);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+  .ghbtn .icon { color: var(--gh-muted); width: 14px; height: 14px; }
+  .ghbtn .count {
+    margin-left: 4px;
+    padding: 1px 6px;
+    background: var(--gh-pill);
+    border-radius: 999px;
+    color: var(--gh-fg);
+    font-weight: 500;
+    font-size: 11px;
+  }
+  .ghbtn .caret {
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--gh-muted);
+    margin-left: 6px;
+  }
+
+  .star-wrap {
+    position: relative;
+    padding: 6px;
+    margin: -6px;
+    border: 2px dashed var(--accent-2);
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 4px rgba(232,90,44,0.10),
+      0 0 36px rgba(255,200,61,0.18);
+    background: rgba(232,90,44,0.04);
+  }
+  .ghbtn.star {
+    background: linear-gradient(180deg, #1c1f25, #14171c);
+    border-color: var(--gh-border);
+  }
+  .ghbtn.star .icon { color: var(--gold); }
+  .ghbtn.star .label { color: var(--gh-fg); font-weight: 600; }
+
+  /* CTA arrow & note pointing at the star */
+  .point {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .point .note {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 28px;
+    color: var(--accent);
+    line-height: 1.15;
+    text-shadow: 0 6px 18px rgba(0,0,0,0.55);
+  }
+  .point .note .gold { color: var(--gold); }
+  .point .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+  .point.tap {
+    top: -20px;
+    right: 60px;
+    text-align: right;
+  }
+  .arrow-svg {
+    position: absolute;
+    overflow: visible;
+    z-index: 9;
+    pointer-events: none;
+  }
+
+  /* floating sparkle */
+  .sparkle {
+    position: absolute;
+    color: var(--gold);
+    text-shadow: 0 0 16px rgba(255,200,61,0.6);
+    font-size: 22px;
+  }
+
+  .stamp {
+    position: absolute;
+    bottom: 30px;
+    right: 0;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffe27a, var(--gold-2) 80%);
+    color: #2a1a05;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.15;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: rotate(8deg);
+    box-shadow: 0 14px 30px rgba(255,176,0,0.45);
+    z-index: 5;
+  }
+  .stamp .big { font-size: 28px; line-height: 1; display: block; margin-bottom: 2px; }
+
+  /* secondary stat strip below window */
+  .ghbody {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 0;
+    padding: 18px 26px 22px;
+    border-top: 1px solid var(--gh-border);
+    background: var(--gh-bg);
+  }
+  .ghbody .desc {
+    color: var(--gh-fg);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .ghbody .desc .em { color: var(--gh-link); }
+  .ghbody .topics {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .topic {
+    font-size: 11px;
+    color: var(--gh-tag-fg);
+    background: var(--gh-tag-bg);
+    padding: 2px 10px;
+    border-radius: 999px;
+  }
+  .ghbody .stats {
+    font-size: 12px;
+    color: var(--gh-muted);
+    text-align: right;
+  }
+  .ghbody .stats .row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .ghbody .stats .row .icon { color: var(--gh-muted); }
+  .ghbody .stats .row b { color: var(--gh-fg); font-weight: 500; }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+  }
+  footer .l { text-align: left; }
+  footer .r { text-align: right; }
+  footer .c {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class='mono l'>Open Design · Community · 2026 Edition</div>
+    <div class='center'><span class='star'>★</span>open.design</div>
+    <div class='mono r'>Cover · 03 / 08 · Star Us</div>
+  </header>
+
+  <main>
+    <section class='left'>
+      <div>
+        <div class='eyebrow'>
+          <span class='pill gold'>★ STAR US</span>
+          <span class='pill alt'>Open Source · Apache 2.0</span>
+        </div>
+        <h1>
+          If this saved<br/>
+          you <em>thirty</em><br/>
+          minutes,<br/>
+          give it a <span class='star-glyph'>★</span>.
+        </h1>
+        <p class='lede'>
+          Open Design is built and maintained in the open. <b>Stars don't pay rent —</b>
+          but they tell the next designer, agent, and contributor that this experiment
+          is worth their attention. One click, three seconds, real signal.
+        </p>
+
+        <div class='url-card'>
+          <span class='arrow'>· DROP BY →</span>
+          <span class='url'>github.com/<b>nexu-io/open-design</b></span>
+          <span class='copybtn'>· COPY</span>
+        </div>
+      </div>
+
+      <div class='meta'>
+        <div class='cell'>
+          <div class='num'>71</div>
+          <div class='lbl'>Design<br/>Systems</div>
+        </div>
+        <div class='cell'>
+          <div class='num'>19</div>
+          <div class='lbl'>Composable<br/>Skills</div>
+        </div>
+        <div class='cell'>
+          <div class='num'>06</div>
+          <div class='lbl'>Coding<br/>Agents</div>
+        </div>
+        <div class='cell'>
+          <div class='num'><span class='gold'>★</span></div>
+          <div class='lbl'>One click =<br/>one signal</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: stylized GitHub repo header -->
+    <section class='right'>
+      <div class='stage'>
+
+        <!-- Pointing note above the star -->
+        <div class='point tap'>
+          <div class='note'>Tap the <span class='gold'>★</span> Star<br/>top-right.</div>
+          <div class='sub'>· three seconds · one click ·</div>
+        </div>
+
+        <!-- arc arrow from the note down to the Star button -->
+        <svg class='arrow-svg' style='top:30px; right:30px; width:200px; height:200px;' viewBox='0 0 200 200' fill='none'>
+          <path d='M 30 60 C 60 90, 120 120, 168 168' stroke='#f0833f' stroke-width='2.5' stroke-linecap='round' fill='none' stroke-dasharray='2 8'/>
+          <path d='M 152 156 L 168 170 L 162 150' stroke='#f0833f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/>
+        </svg>
+
+        <!-- sparkles -->
+        <span class='sparkle' style='top:200px; right:30px; font-size:18px;'>✦</span>
+        <span class='sparkle' style='top:260px; right:120px; font-size:14px; opacity:.7;'>✦</span>
+        <span class='sparkle' style='top:150px; right:240px; font-size:12px; opacity:.55;'>✦</span>
+
+        <div class='window'>
+          <div class='winbar'>
+            <div class='dots'>
+              <span class='dot r'></span><span class='dot y'></span><span class='dot g'></span>
+            </div>
+            <div class='urlbar'>
+              <span class='lock'>🔒</span>
+              <span>github.com/<b>nexu-io/open-design</b></span>
+            </div>
+          </div>
+
+          <div class='ghnav'>
+            <svg class='logo' viewBox='0 0 16 16' fill='currentColor'>
+              <path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/>
+            </svg>
+            <div class='crumbs'>
+              <span class='org'>nexu-io</span>
+              <span class='slash'>/</span>
+              <span class='repo'>open-design</span>
+            </div>
+            <span class='private'>Public</span>
+          </div>
+
+          <div class='ghhead'>
+            <div class='row'>
+              <div class='repotitle'>
+                <svg class='icon' width='18' height='18' viewBox='0 0 16 16' fill='currentColor'>
+                  <path fill-rule='evenodd' d='M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.692 1.72.75.75 0 0 1-1.034 1.084A2.5 2.5 0 0 1 2 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 0 1 1-1h8zM5 12.25v3.25a.25.25 0 0 0 .4.2l1.45-1.087a.25.25 0 0 1 .3 0L8.6 15.7a.25.25 0 0 0 .4-.2v-3.25a.25.25 0 0 0-.25-.25h-3.5a.25.25 0 0 0-.25.25z'/>
+                </svg>
+                <span class='org'>nexu-io</span>
+                <span class='sep'>/</span>
+                <span class='name'>open-design</span>
+                <span class='badge'>Public</span>
+              </div>
+
+              <div class='actions'>
+                <span class='ghbtn'>
+                  <svg class='icon' viewBox='0 0 16 16' fill='currentColor'><path d='M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.756l8.61-8.61Z'/></svg>
+                  <span>Edit Pins</span>
+                  <span class='caret'></span>
+                </span>
+                <span class='ghbtn'>
+                  <svg class='icon' viewBox='0 0 16 16' fill='currentColor'><path d='M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 0 1 0 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.83.88 9.576.43 8.898a1.62 1.62 0 0 1 0-1.798c.45-.678 1.367-1.932 2.637-3.023C4.33 2.992 6.019 2 8 2ZM1.679 7.932a.12.12 0 0 0 0 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 0 0 0-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.825.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717ZM8 10a2 2 0 1 1-.001-3.999A2 2 0 0 1 8 10Z'/></svg>
+                  <span>Watch</span>
+                  <span class='count'>0</span>
+                  <span class='caret'></span>
+                </span>
+                <span class='ghbtn'>
+                  <svg class='icon' viewBox='0 0 16 16' fill='currentColor'><path d='M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z'/></svg>
+                  <span>Fork</span>
+                  <span class='count'>0</span>
+                  <span class='caret'></span>
+                </span>
+                <span class='star-wrap'>
+                  <span class='ghbtn star'>
+                    <svg class='icon' viewBox='0 0 16 16' fill='currentColor'><path d='M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z'/></svg>
+                    <span class='label'>Star</span>
+                    <span class='count'>1</span>
+                    <span class='caret'></span>
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class='ghbody'>
+            <div>
+              <div class='desc'>
+                <span class='em'>★</span> Local-first open replica of Anthropic's <b>Claude Design</b>.
+                ⚡ 19 Skills · ✶ 71 brand-grade Design Systems · ⛁ sandboxed preview ·
+                ⇩ HTML / PDF / PPTX export. Runs on Claude Code · Codex · Cursor · Gemini CLI · OpenCode · Qwen.
+              </div>
+              <div class='topics'>
+                <span class='topic'>react</span>
+                <span class='topic'>design</span>
+                <span class='topic'>design-systems</span>
+                <span class='topic'>typescript</span>
+                <span class='topic'>skills</span>
+                <span class='topic'>cursor</span>
+                <span class='topic'>local-first</span>
+                <span class='topic'>byok</span>
+                <span class='topic'>claude</span>
+                <span class='topic'>ai-agents</span>
+              </div>
+            </div>
+            <div class='stats'>
+              <div class='row'>
+                <span>Apache 2.0</span>
+                <svg class='icon' width='14' height='14' viewBox='0 0 16 16' fill='currentColor'><path d='M8.75.75V2h.985c.304 0 .603.08.867.231l1.29.736c.038.022.08.033.124.033h2.234a.75.75 0 0 1 0 1.5h-.427l2.111 4.692a.75.75 0 0 1-.154.838l-.53-.53.529.531-.001.002-.002.002-.006.006-.006.005-.01.01-.045.04c-.21.176-.441.327-.686.45C14.556 10.78 13.88 11 13 11a4.498 4.498 0 0 1-2.023-.454 3.544 3.544 0 0 1-.686-.45l-.045-.04-.016-.015-.006-.006-.004-.004v-.001a.75.75 0 0 1-.154-.838L12.178 4.5h-.162c-.305 0-.604-.079-.868-.231l-1.29-.736a.245.245 0 0 0-.124-.033H8.75V13h2.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.5V3.5h-.984a.245.245 0 0 0-.124.033l-1.289.737c-.265.15-.564.23-.869.23h-.162l2.112 4.692a.75.75 0 0 1-.154.838l-.53-.53.529.531-.001.002-.002.002-.006.006-.016.015-.045.04c-.21.176-.441.327-.686.45C4.556 10.78 3.88 11 3 11a4.498 4.498 0 0 1-2.023-.454 3.544 3.544 0 0 1-.686-.45l-.045-.04-.016-.015-.006-.006-.004-.004v-.001a.75.75 0 0 1-.154-.838L2.178 4.5H1.75a.75.75 0 0 1 0-1.5h2.234a.249.249 0 0 0 .125-.033l1.288-.737c.265-.15.564-.23.869-.23h.984V.75a.75.75 0 0 1 1.5 0Z'/></svg>
+              </div>
+              <div class='row'><b>3</b> Commits</div>
+              <div class='row'><b>2</b> Branches</div>
+              <div class='row'><b>0</b> Tags</div>
+              <div class='row'><b>0</b> Issues</div>
+              <div class='row' style='color:var(--gold);'>★ <b style='color:var(--gold);'>1</b> Star · be the next</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='stamp'>
+          <span><span class='big'>★</span>STAR<br/>US!</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class='mono l'>Local-first · BYOK · Apache 2.0</div>
+    <div class='c'>· git clone · pnpm install · pnpm dev ·</div>
+    <div class='mono r'>github.com/nexu-io/open-design</div>
+  </footer>
+</body>
+</html>

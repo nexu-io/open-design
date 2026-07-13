@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-vintage-sign-painter-sketch",
+  "title": "Social Media Post - Vintage Sign-Painter Sketch",
+  "title_i18n": {
+    "zh-CN": "社交媒体帖子 - 复古招牌画师素描",
+    "zh-TW": "社群媒體貼文 - 復古招牌畫師素描",
+    "ja": "ソーシャルメディア投稿 - ヴィンテージ看板ペインタースケッチ",
+    "ko": "소셜 미디어 게시물 - 빈티지 간판 페인터 스케치",
+    "de": "Social-Media-Beitrag - Vintage Schildermaler-Skizze",
+    "fr": "Publication sur les réseaux sociaux - Esquisse vintage de peintre d'enseignes",
+    "ru": "Пост в соцсетях - Винтажный эскиз художника вывесок",
+    "es": "Publicación en redes sociales - Boceto vintage de pintor de letreros",
+    "pt-BR": "Postagem em mídias sociais - Esboço vintage de pintor de placas",
+    "it": "Post sui social media - Bozzetto vintage da pittore di insegne",
+    "vi": "Bài đăng mạng xã hội - Phác thảo thợ vẽ biển hiệu cổ điển",
+    "pl": "Post w mediach społecznościowych - Szkic vintage malarza szyldów",
+    "id": "Postingan Media Sosial - Sketsa Pelukis Papan Nama Vintage",
+    "nl": "Sociale media-post - Vintage bordenschilder schets",
+    "ar": "منشور وسائل التواصل الاجتماعي - رسم رسام لافتات عتيق",
+    "tr": "Sosyal medya gönderisi - Vintage tabela ressamı eskizi",
+    "uk": "Пост у соцмережах - Вінтажний ескіз художника вивісок",
+    "en": "Social Media Post - Vintage Sign-Painter Sketch"
+  },
+  "version": "0.1.0",
+  "description": "Generates a hand-drawn marker sketch on paper with realistic details like graphite lines and ink bleed, perfect for vintage lettering styles.",
+  "description_i18n": {
+    "zh-CN": "生成纸上手绘马克笔素描，包含石墨线条和墨水渗透等真实细节，适合复古字体风格。",
+    "zh-TW": "生成紙上手繪麥克筆素描，包含石墨線條和墨水暈染等真實細節，適合復古字體風格。",
+    "ja": "グラファイト線やインクのにじみなどのリアルなディテールを含む、紙の上の手描きマーカースケッチを生成。ヴィンテージレタリングスタイルに最適です。",
+    "ko": "흑연 선과 잉크 번짐 같은 사실적인 디테일이 있는 종이 위 손그림 마커 스케치를 생성하며, 빈티지 레터링 스타일에 완벽합니다.",
+    "de": "Erzeugt eine handgezeichnete Marker-Skizze auf Papier mit realistischen Details wie Graphitlinien und Tintenverlauf, perfekt für Vintage-Schriftstile.",
+    "fr": "Génère une esquisse au marqueur dessinée à la main sur papier avec des détails réalistes comme des lignes graphite et des bavures d'encre, parfaite pour les styles de lettrage vintage.",
+    "ru": "Создает нарисованный от руки маркером эскиз на бумаге с реалистичными деталями, такими как графитовые линии и растекание чернил, идеально подходит для винтажных стилей леттеринга.",
+    "es": "Genera un boceto dibujado a mano con marcador sobre papel con detalles realistas como líneas de grafito y sangrado de tinta, perfecto para estilos de lettering vintage.",
+    "pt-BR": "Gera um esboço desenhado à mão com marcador no papel com detalhes realistas como linhas de grafite e sangramento de tinta, perfeito para estilos de lettering vintage.",
+    "it": "Genera uno schizzo disegnato a mano con pennarello su carta con dettagli realistici come linee di grafite e sbavature d'inchiostro, perfetto per stili di lettering vintage.",
+    "vi": "Tạo bản phác thảo vẽ tay bằng bút lông trên giấy với chi tiết chân thực như nét chì than và mực thấm, hoàn hảo cho phong cách chữ cổ điển.",
+    "pl": "Generuje ręcznie rysowany szkic markerem na papierze z realistycznymi detalami, takimi jak linie grafitowe i rozmazanie tuszu, idealny do vintage'owych stylów liternictwa.",
+    "id": "Menghasilkan sketsa spidol gambar tangan di kertas dengan detail realistis seperti garis grafit dan tinta yang merembes, sempurna untuk gaya lettering vintage.",
+    "nl": "Genereert een handgetekende markerschets op papier met realistische details zoals grafietlijnen en inktuitloop, perfect voor vintage letteringstijlen.",
+    "ar": "ينشئ رسمًا تخطيطيًا بالقلم الفلوماستر المرسوم يدويًا على الورق بتفاصيل واقعية مثل خطوط الجرافيت ونزف الحبر، مثالي لأنماط الخط العتيقة.",
+    "tr": "Grafit çizgileri ve mürekkep sızması gibi gerçekçi detaylarla kağıt üzerinde elle çizilmiş marker eskiz oluşturur, vintage harfleme stilleri için mükemmeldir.",
+    "uk": "Створює намальований від руки маркером ескіз на папері з реалістичними деталями, такими як графітові лінії та розтікання чорнила, ідеально підходить для вінтажних стилів летерингу.",
+    "en": "Generates a hand-drawn marker sketch on paper with realistic details like graphite lines and ink bleed, perfect for vintage lettering styles."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Ashish Sheth",
+    "url": "https://x.com/commanderdgr8/status/2049347770725912874"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453138935_3hpxkg_HHC-7jObsAAWmsk.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A hand-lettered sketch of the phrase “{argument name=\"phrase\" default=\"Good Morning\"} ” on warm-white marker paper, drawn with a black brush marker. Soft graphite construction lines visible underneath the inked strokes. Slight ink bleed-through from the previous page showing as faint ghosting. Letterforms are vintage sign-painter caps. Confident single-pass strokes, not retraced. Paper edges visible at the margins. Studio scan, slightly warm white balance, 600 DPI texture, no digital cleanup. No vector outlines, no AI airbrushed shading, no perfect symmetry.",
+        "zh-CN": "使用这个插件完成以下任务：A hand-lettered sketch of the phrase “{argument name=\"phrase\" default=\"Good Morning\"} ” on warm-white marker paper, drawn with a black brush marker. Soft graphite construction lines visible underneath the inked strokes. Slight ink bleed-through from the previous page showing as faint ghosting. Letterforms are vintage sign-painter caps. Confident single-pass strokes, not retraced. Paper edges visible at the margins. Studio scan, slightly warm white balance, 600 DPI texture, no digital cleanup. No vector outlines, no AI airbrushed shading, no perfect symmetry."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

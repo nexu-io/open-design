@@ -1,0 +1,23 @@
+{
+  "id": "profile-avatar-ethereal-blue-haired-fantasy-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Ethereal Blue-Haired Fantasy Portrait",
+  "summary": "This prompt generates a soft, luminous anime-style fantasy character portrait, ideal for creating elegant vertical key art or character illustrations with flowing hair and a dreamy spring atmosphere.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "anime",
+    "fantasy",
+    "3d-render"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A highly detailed anime fantasy portrait of {argument name=\"character name\" default=\"an elegant blue-haired fantasy woman\"}, shown from the back in a three-quarter pose, turning her head over her shoulder to look at the viewer with calm violet eyes and a soft, slightly distant expression. She has very long, flowing {argument name=\"hair color\" default=\"icy pastel blue\"} hair with layered wispy bangs, loose windblown strands, one small ahoge on top, and 1 dark curved horn with subtle crimson striping emerging from the left side of her head. Her outfit is a refined, backless fantasy gown with 4 visible main pieces: a dark fitted bodice, a white open-backed outer layer with ornate gold trim and pale embroidered patterns, 2 long detached sleeves that fade into translucent blue-violet pointed cuffs, and red-blue ribbon ornaments tied at the neck and waist. Add delicate jewel-like tassel details at the upper back and trailing ribbon ends drifting in the air. The scene is backlit by soft spring sunlight in a pale stone pavilion or arched balcony, with 1 large arch opening behind her and clusters of {argument name=\"flower type\" default=\"pink cherry blossoms\"} glowing in the top right background. Include a few drifting petals, luminous haze, subtle sparkles, and a dreamy pastel atmosphere. Composition is vertical, upper-thigh portrait, character centered slightly right, hair sweeping broadly across the left side of the frame. Render in a polished ethereal anime illustration style with soft bloom, translucent fabrics, glossy eyes, delicate linework, cool lavender and blue tones, gentle rim light, painterly background blur, and an emphasis on smooth elegant surfaces, clean fabric flow, and minimal wrinkling.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777367299255_7e01qg_HG7uRRbbIAABIeT.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "𝑳𝒊𝒊𝒈𝒋𝒎",
+    "url": "https://x.com/lchngjin91/status/2048836910676926484#reversed-0"
+  }
+}

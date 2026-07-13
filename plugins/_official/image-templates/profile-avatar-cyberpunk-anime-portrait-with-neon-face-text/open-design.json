@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-cyberpunk-anime-portrait-with-neon-face-text",
+  "title": "Profile / Avatar - Cyberpunk Anime Portrait with Neon Face Text",
+  "title_i18n": {
+    "zh-CN": "头像 / 用户资料 - 赛博朋克动漫肖像与霓虹字体",
+    "zh-TW": "頭像 / 用戶資料 - 賽博龐克動漫肖像與霓虹字體",
+    "ja": "プロフィール / アバター - サイバーパンクアニメポートレート（ネオン文字）",
+    "ko": "프로필 / 아바타 - 사이버펑크 애니메이션 초상화 (네온 텍스트)",
+    "de": "Profil / Avatar - Cyberpunk-Anime-Porträt mit Neon-Text",
+    "fr": "Profil / Avatar - Portrait Anime Cyberpunk avec Texte Néon",
+    "ru": "Профиль / Аватар - Киберпанк аниме-портрет с неоновым текстом",
+    "es": "Perfil / Avatar - Retrato Anime Cyberpunk con Texto Neón",
+    "pt-BR": "Perfil / Avatar - Retrato Anime Cyberpunk com Texto Neon",
+    "it": "Profilo / Avatar - Ritratto Anime Cyberpunk con Testo al Neon",
+    "vi": "Hồ sơ / Ảnh đại diện - Chân dung Anime Cyberpunk với Chữ Neon",
+    "pl": "Profil / Awatar - Portret Anime Cyberpunk z Neonowym Tekstem",
+    "id": "Profil / Avatar - Potret Anime Cyberpunk dengan Teks Neon",
+    "nl": "Profiel / Avatar - Cyberpunk Anime Portret met Neon Tekst",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة أنمي سايبربانك بنص نيون",
+    "tr": "Profil / Avatar - Neon Yazılı Cyberpunk Anime Portresi",
+    "uk": "Профіль / Аватар - Кіберпанк аніме-портрет з неоновим текстом",
+    "en": "Profile / Avatar - Cyberpunk Anime Portrait with Neon Face Text"
+  },
+  "version": "0.1.0",
+  "description": "A stylish neon-soaked anime portrait for posters, social media art, or futuristic branding visuals.",
+  "description_i18n": {
+    "zh-CN": "时尚霓虹风格的动漫肖像，适用于海报、社交媒体艺术或未来感品牌视觉设计。",
+    "zh-TW": "時尚霓虹風格的動漫肖像，適用於海報、社交媒體藝術或未來感品牌視覺設計。",
+    "ja": "ポスター、ソーシャルメディアアート、未来的なブランディングビジュアルに最適なネオン調のスタイリッシュなアニメポートレート。",
+    "ko": "포스터, 소셜 미디어 아트, 미래지향적 브랜딩 비주얼을 위한 세련된 네온 스타일 애니메이션 초상화입니다.",
+    "de": "Ein stylisches Anime-Porträt im Neon-Look für Poster, Social-Media-Kunst oder futuristische Branding-Visuals.",
+    "fr": "Un portrait anime stylé aux néons éclatants pour affiches, art sur réseaux sociaux ou visuels de marque futuristes.",
+    "ru": "Стильный неоновый аниме-портрет для постеров, соцсетей или футуристичных брендинговых визуалов.",
+    "es": "Un elegante retrato anime con estética neón para pósters, arte en redes sociales o visuales de marca futuristas.",
+    "pt-BR": "Um retrato anime estiloso com visual neon para pôsteres, arte para redes sociais ou visuais de marca futuristas.",
+    "it": "Un elegante ritratto anime con effetto neon per poster, arte sui social media o visual di branding futuristici.",
+    "vi": "Chân dung anime phong cách neon sành điệu cho poster, nghệ thuật mạng xã hội hoặc hình ảnh thương hiệu tương lai.",
+    "pl": "Stylowy portret anime w neonowej estetyce do plakatów, grafik na media społecznościowe lub futurystycznych wizualizacji brandingowych.",
+    "id": "Potret anime bergaya neon yang keren untuk poster, seni media sosial, atau visual branding futuristik.",
+    "nl": "Een stijlvol neon anime-portret voor posters, social media kunst of futuristische branding visuals.",
+    "ar": "صورة شخصية أنمي أنيقة بإضاءة نيون للملصقات، فن وسائل التواصل الاجتماعي، أو التصاميم المستقبلية للعلامات التجارية.",
+    "tr": "Posterler, sosyal medya sanatı veya fütüristik marka görselleri için şık neon ışıklı anime portresi.",
+    "uk": "Стильний неоновий аніме-портрет для постерів, соціальних мереж або футуристичних брендингових візуалів.",
+    "en": "A stylish neon-soaked anime portrait for posters, social media art, or futuristic branding visuals."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Anifun AI",
+    "url": "https://x.com/Anifun_AI/status/2049393871642345834#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "cinematic",
+    "cyberpunk"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A dramatic cyberpunk anime close-up portrait of a white-haired young man in side profile facing right, with spiky silver hair, pale skin, and a black blindfold covering his eyes. He wears a high-collar dark coat and stands in a neon-lit futuristic city at night. Bright electric-blue glowing text is projected across the side of his face, reading exactly {argument name=\"face text\" default=\"GPT IMAGE 2\"} in three stacked lines. The mood is cool, mysterious, and high-energy, with deep black shadows, saturated blue and violet lighting, reflective highlights on the skin and hair, and a cinematic anime look reminiscent of modern supernatural action series. The background is a blurred urban street with dense vertical neon signs and holographic billboards; include 1 large vertical sign on the right with Japanese characters, plus at least 6 additional smaller glowing signs scattered in the distance. Use strong rim lighting, soft bloom, shallow depth of field, high contrast, ultra-detailed digital illustration, and a sleek sci-fi atmosphere.",
+        "zh-CN": "使用这个插件完成以下任务：A dramatic cyberpunk anime close-up portrait of a white-haired young man in side profile facing right, with spiky silver hair, pale skin, and a black blindfold covering his eyes. He wears a high-collar dark coat and stands in a neon-lit futuristic city at night. Bright electric-blue glowing text is projected across the side of his face, reading exactly {argument name=\"face text\" default=\"GPT IMAGE 2\"} in three stacked lines. The mood is cool, mysterious, and high-energy, with deep black shadows, saturated blue and violet lighting, reflective highlights on the skin and hair, and a cinematic anime look reminiscent of modern supernatural action series. The background is a blurred urban street with dense vertical neon signs and holographic billboards; include 1 large vertical sign on the right with Japanese characters, plus at least 6 additional smaller glowing signs scattered in the distance. Use strong rim lighting, soft bloom, shallow depth of field, high contrast, ultra-detailed digital illustration, and a sleek sci-fi atmosphere."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

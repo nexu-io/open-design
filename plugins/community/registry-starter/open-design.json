@@ -1,0 +1,37 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "community-registry-starter",
+  "title": "Community Registry Starter",
+  "version": "0.1.0",
+  "description": "A minimal community plugin that exercises the default registry source and install provenance path.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design Community",
+    "url": "https://open-design.ai/marketplace/community"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/registry-starter",
+  "plugin": {
+    "repo": "https://github.com/nexu-io/open-design/tree/main/plugins/community/registry-starter"
+  },
+  "tags": [
+    "community",
+    "registry",
+    "starter"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "useCase": {
+      "query": {
+        "en": "Create a compact status card that explains how a community Open Design plugin flows from Available to Installed.",
+        "zh-CN": "创建一个紧凑状态卡片，说明社区 Open Design 插件如何从 Available 安装到 Installed。"
+      }
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
+

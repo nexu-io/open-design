@@ -1,0 +1,19 @@
+/* theme: midcentury — 世纪中期现代 */
+:root{
+  --bg:#f3ead8;--bg-soft:#ebdfc4;--surface:#f9f2e0;--surface-2:#e8dcbe;
+  --border:rgba(60,40,20,.18);--border-strong:rgba(60,40,20,.4);
+  --text-1:#201810;--text-2:#5a4830;--text-3:#9a8868;
+  --accent:#d4902a;--accent-2:#2a7a7f;--accent-3:#c7502a;
+  --good:#5a7a3a;--warn:#d4902a;--bad:#c7502a;
+  --grad:linear-gradient(135deg,#d4902a,#c7502a 55%,#2a7a7f);
+  --grad-soft:linear-gradient(135deg,#f4e0b6,#eac7a8);
+  --radius:2px;--radius-sm:0px;--radius-lg:4px;
+  --shadow:4px 4px 0 rgba(40,25,10,.12);
+  --shadow-lg:6px 6px 0 rgba(40,25,10,.2),0 10px 24px rgba(40,25,10,.14);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --font-display:'Playfair Display','Noto Serif SC',serif;
+}
+.card{border:1.5px solid var(--border-strong)}
+.divider-accent{background:var(--accent-3);height:4px;width:80px}
+.kicker{color:var(--accent-2)}
+h1.title,.h1{color:var(--accent-3)}

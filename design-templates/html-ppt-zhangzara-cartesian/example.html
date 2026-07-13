@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartesian Presentation Template</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #ede8e0;
+            --bg-secondary: #e2dbd1;
+            --text-primary: #1a1a1a;
+            --text-secondary: #5a5a5a;
+            --accent: #8a8178;
+            --line: #b8b0a4;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+            display: flex;
+            flex-direction: column;
+            padding: 4vh 4vw;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Geometric decorations */
+        .geo-lines {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 45vw;
+            height: 45vh;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .geo-circle {
+            position: absolute;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            opacity: 0.5;
+        }
+
+        .geo-arc {
+            position: absolute;
+            border: 1px dashed var(--line);
+            border-radius: 50%;
+            opacity: 0.3;
+        }
+
+        /* Navigation */
+        .nav-dots {
+            position: fixed;
+            right: 2vw;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--line);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-dot.active {
+            background: var(--text-primary);
+            transform: scale(1.3);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 3vh;
+            right: 3vw;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            color: var(--accent);
+            letter-spacing: 2px;
+            z-index: 100;
+        }
+
+        .nav-arrows {
+            position: fixed;
+            bottom: 3vh;
+            left: 3vw;
+            display: flex;
+            gap: 16px;
+            z-index: 100;
+        }
+
+        .nav-arrow {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--line);
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .nav-arrow:hover {
+            background: var(--text-primary);
+            color: var(--bg-primary);
+        }
+
+        /* Typography */
+        h1, h2, h3 {
+            font-family: 'Playfair Display', serif;
+            font-weight: 400;
+            line-height: 1.1;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+        }
+
+        h2 {
+            font-size: clamp(1.8rem, 3.5vw, 3rem);
+        }
+
+        h3 {
+            font-size: clamp(1.2rem, 2vw, 1.6rem);
+        }
+
+        p, li {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .label {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Slide 1: Title */
+        .slide-title {
+            justify-content: center;
+        }
+
+        .slide-title .content {
+            position: relative;
+            z-index: 1;
+            max-width: 65vw;
+        }
+
+        .slide-title .label {
+            margin-bottom: 3vh;
+        }
+
+        .slide-title h1 {
+            font-size: clamp(3rem, 6vw, 5.5rem);
+            margin-bottom: 2vh;
+        }
+
+        .slide-title .subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(1rem, 1.5vw, 1.3rem);
+            color: var(--text-secondary);
+            max-width: 40vw;
+        }
+
+        /* All geo-decoration instances are decorative overlays, not flex
+           items — they must be absolutely positioned in their slide. The
+           slide-statement instance uses inline left/top/width/height to
+           override the defaults below. */
+        .geo-decoration {
+            position: absolute;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .slide-title .geo-decoration {
+            right: 5vw;
+            bottom: 10vh;
+            width: 30vw;
+            height: 30vw;
+            opacity: 0.4;
+        }
+
+        .slide-title .geo-decoration::before {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            width: 80%;
+            height: 80%;
+            border: 1px dashed var(--line);
+            border-radius: 50%;
+        }
+
+        /* Slide 2: Agenda */
+        .slide-agenda .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-agenda .left-col h2 {
+            margin-bottom: 3vh;
+        }
+
+        .slide-agenda .left-col p {
+            max-width: 30vw;
+        }
+
+        .slide-agenda .agenda-list {
+            list-style: none;
+        }
+
+        .slide-agenda .agenda-list li {
+            padding: 2vh 0;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: baseline;
+            gap: 2vw;
+        }
+
+        .slide-agenda .agenda-number {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            color: var(--accent);
+            min-width: 3vw;
+        }
+
+        /* Slide 3: Statement */
+        .slide-statement {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .slide-statement .content {
+            max-width: 60vw;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+
+        .slide-statement .quote-mark {
+            font-family: 'Playfair Display', serif;
+            font-size: 5rem;
+            line-height: 1;
+            color: var(--line);
+            opacity: 0.5;
+            display: block;
+            margin-bottom: 2vh;
+        }
+
+        .slide-statement h2 {
+            font-style: italic;
+            margin-bottom: 3vh;
+        }
+
+        .slide-statement .attribution {
+            font-size: 0.85rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Slide 4: Bar Chart */
+        .slide-barchart .content {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 5vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-barchart .left-col h2 {
+            margin-bottom: 2vh;
+        }
+
+        .slide-barchart .chart-container {
+            position: relative;
+            height: 55vh;
+            width: 100%;
+        }
+
+        /* Slide 5: Two Column */
+        .slide-twocol .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-twocol .image-placeholder {
+            width: 100%;
+            height: 60vh;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--line);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-twocol .image-placeholder::before {
+            content: '';
+            position: absolute;
+            width: 150%;
+            height: 1px;
+            background: var(--line);
+            transform: rotate(-30deg);
+        }
+
+        .slide-twocol .image-placeholder::after {
+            content: '';
+            position: absolute;
+            width: 150%;
+            height: 1px;
+            background: var(--line);
+            transform: rotate(30deg);
+        }
+
+        .slide-twocol .image-label {
+            position: relative;
+            z-index: 1;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+        }
+
+        .slide-twocol .right-col h2 {
+            margin-bottom: 2vh;
+        }
+
+        .slide-twocol .right-col p {
+            margin-bottom: 2vh;
+        }
+
+        .slide-twocol .stats {
+            display: flex;
+            gap: 3vw;
+            margin-top: 4vh;
+            padding-top: 3vh;
+            border-top: 1px solid var(--line);
+        }
+
+        .slide-twocol .stat-item h4 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            margin-bottom: 0.5vh;
+        }
+
+        .slide-twocol .stat-item span {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Slide 6: Three Cards */
+        .slide-cards {
+            justify-content: center;
+        }
+
+        .slide-cards .content {
+            position: relative;
+            z-index: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide-cards .header {
+            text-align: center;
+            margin-bottom: 6vh;
+        }
+
+        .slide-cards .header h2 {
+            margin-bottom: 1vh;
+        }
+
+        .slide-cards .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3vw;
+        }
+
+        .slide-cards .card {
+            border: 1px solid var(--line);
+            padding: 4vh 2vw;
+            background: rgba(255,255,255,0.3);
+        }
+
+        .slide-cards .card-icon {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 3vh;
+            font-size: 1rem;
+            color: var(--accent);
+        }
+
+        .slide-cards .card h3 {
+            margin-bottom: 2vh;
+            font-size: 1.3rem;
+        }
+
+        .slide-cards .card p {
+            font-size: 0.9rem;
+        }
+
+        /* Slide 7: Line Chart */
+        .slide-linechart .content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-linechart .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 4vh;
+        }
+
+        .slide-linechart .chart-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        .slide-linechart .chart-wrapper canvas {
+            max-height: 100%;
+        }
+
+        /* Slide 8: Timeline */
+        .slide-timeline .content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-timeline .header {
+            margin-bottom: 6vh;
+        }
+
+        .slide-timeline .timeline {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            padding-top: 3vh;
+        }
+
+        .slide-timeline .timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--line);
+        }
+
+        .slide-timeline .timeline-item {
+            flex: 1;
+            padding-right: 3vw;
+            position: relative;
+        }
+
+        /* Phase markers removed — the labels alone provide enough structure
+           and the small circles were colliding with the start of each label. */
+        .slide-timeline .timeline-item::before {
+            content: none;
+        }
+
+        .slide-timeline .timeline-item h4 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem;
+            margin-bottom: 1vh;
+            margin-top: 2vh;
+        }
+
+        .slide-timeline .timeline-item .year {
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 1vh;
+        }
+
+        .slide-timeline .timeline-item p {
+            font-size: 0.85rem;
+        }
+
+        /* Slide 9: Team */
+        .slide-team .content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-team .header {
+            text-align: center;
+            margin-bottom: 6vh;
+        }
+
+        .slide-team .team-grid {
+            display: flex;
+            justify-content: center;
+            gap: 4vw;
+        }
+
+        .slide-team .team-member {
+            text-align: center;
+        }
+
+        .slide-team .member-photo {
+            width: 12vw;
+            height: 12vw;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            margin: 0 auto 2vh;
+            border: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--accent);
+        }
+
+        .slide-team .team-member h4 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem;
+            margin-bottom: 0.5vh;
+        }
+
+        .slide-team .team-member span {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Slide 10: Closing */
+        .slide-closing {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .slide-closing .content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-closing h1 {
+            margin-bottom: 3vh;
+        }
+
+        .slide-closing p {
+            margin-bottom: 4vh;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: 0.9rem;
+        }
+
+        .slide-closing .geo-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50vw;
+            height: 50vw;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            opacity: 0.3;
+            z-index: 0;
+        }
+
+        .slide-closing .geo-ring::before {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            width: 70%;
+            height: 70%;
+            border: 1px dashed var(--line);
+            border-radius: 50%;
+        }
+
+        /* Vertical line decoration */
+        .vertical-line {
+            position: absolute;
+            left: 8vw;
+            top: 0;
+            width: 1px;
+            height: 100%;
+            background: var(--line);
+            opacity: 0.3;
+            z-index: 0;
+        }
+
+        /* Horizontal accent */
+        .horizontal-accent {
+            position: absolute;
+            bottom: 15vh;
+            left: 0;
+            width: 20vw;
+            height: 1px;
+            background: var(--text-primary);
+            z-index: 0;
+        }
+
+        @media (max-aspect-ratio: 4/3) {
+            .slide-agenda .content,
+            .slide-barchart .content,
+            .slide-twocol .content {
+                grid-template-columns: 1fr;
+                gap: 3vh;
+            }
+
+            .slide-cards .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .slide-timeline .timeline {
+                flex-direction: column;
+                gap: 3vh;
+            }
+
+            .slide-timeline .timeline::before {
+                display: none;
+            }
+
+            .slide-team .team-grid {
+                flex-direction: column;
+                gap: 3vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide slide-title active">
+            <div class="geo-decoration"></div>
+            <div class="content">
+                <div class="label">Presentation Template</div>
+                <h1>Cartesian</h1>
+                <p class="subtitle">A minimalist framework for strategic narratives. Clean geometry meets editorial refinement.</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: Agenda -->
+        <div class="slide slide-agenda">
+            <div class="content">
+                <div class="left-col">
+                    <div class="label">Overview</div>
+                    <h2>Session Agenda</h2>
+                    <p>An outline of key discussion points structured to guide our strategic conversation forward.</p>
+                </div>
+                <div class="right-col">
+                    <ul class="agenda-list">
+                        <li><span class="agenda-number">01</span> Market Position Analysis</li>
+                        <li><span class="agenda-number">02</span> Core Value Proposition</li>
+                        <li><span class="agenda-number">03</span> Growth Trajectory</li>
+                        <li><span class="agenda-number">04</span> Implementation Roadmap</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Statement -->
+        <div class="slide slide-statement">
+            <div class="content">
+                <span class="quote-mark">"</span>
+                <h2>Precision in approach defines the boundary between noise and signal.</h2>
+                <div class="attribution">Guiding Principle</div>
+            </div>
+            <div class="geo-decoration" style="left: -10vw; top: 10vh; width: 40vw; height: 40vw; opacity: 0.2;"></div>
+        </div>
+
+        <!-- Slide 4: Bar Chart -->
+        <div class="slide slide-barchart">
+            <div class="content">
+                <div class="left-col">
+                    <div class="label">Performance Data</div>
+                    <h2>Quarterly Metrics</h2>
+                    <p>Comparative analysis across key business indicators demonstrating sustained momentum and operational efficiency.</p>
+                </div>
+                <div class="right-col">
+                    <div class="chart-container">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Two Column -->
+        <div class="slide slide-twocol">
+            <div class="content">
+                <div class="left-col">
+                    <div class="image-placeholder">
+                        <span class="image-label">Visual Reference</span>
+                    </div>
+                </div>
+                <div class="right-col">
+                    <div class="label">Case Study</div>
+                    <h2>Structural Overview</h2>
+                    <p>A comprehensive examination of foundational elements that define our operational framework and strategic positioning within the market landscape.</p>
+                    <p>Through iterative refinement and measured adaptation, the methodology ensures alignment with evolving objectives and stakeholder expectations.</p>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <h4>47%</h4>
+                            <span>Efficiency Gain</span>
+                        </div>
+                        <div class="stat-item">
+                            <h4>12x</h4>
+                            <span>Scale Factor</span>
+                        </div>
+                        <div class="stat-item">
+                            <h4>3.2M</h4>
+                            <span>Revenue Impact</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Three Cards -->
+        <div class="slide slide-cards">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Capabilities</div>
+                    <h2>Core Competencies</h2>
+                </div>
+                <div class="cards-grid">
+                    <div class="card">
+                        <div class="card-icon">I</div>
+                        <h3>Analytical Depth</h3>
+                        <p>Rigorous data-driven methodologies that transform raw information into actionable strategic intelligence.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">II</div>
+                        <h3>Operational Scale</h3>
+                        <p>Streamlined processes designed to expand seamlessly while maintaining quality and consistency.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">III</div>
+                        <h3>Adaptive Design</h3>
+                        <p>Flexible frameworks that evolve with changing conditions and emerging opportunities.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Line Chart -->
+        <div class="slide slide-linechart">
+            <div class="content">
+                <div class="header">
+                    <div>
+                        <div class="label">Trend Analysis</div>
+                        <h2>Growth Projection</h2>
+                    </div>
+                    <p style="max-width: 25vw; text-align: right;">Multi-year trajectory illustrating compound growth patterns and market penetration metrics.</p>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Timeline -->
+        <div class="slide slide-timeline">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Roadmap</div>
+                    <h2>Implementation Phases</h2>
+                </div>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="year">Phase One</div>
+                        <h4>Discovery</h4>
+                        <p>Initial assessment and comprehensive audit of existing systems and processes.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Phase Two</div>
+                        <h4>Strategy</h4>
+                        <p>Development of tailored frameworks aligned with organizational objectives.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Phase Three</div>
+                        <h4>Execution</h4>
+                        <p>Phased rollout with continuous monitoring and iterative optimization.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Phase Four</div>
+                        <h4>Scale</h4>
+                        <p>Expansion of proven methodologies across all operational units.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Team -->
+        <div class="slide slide-team">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Leadership</div>
+                    <h2>Key Contributors</h2>
+                </div>
+                <div class="team-grid">
+                    <div class="team-member">
+                        <div class="member-photo">A</div>
+                        <h4>Alex Morgan</h4>
+                        <span>Strategy Director</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">J</div>
+                        <h4>Jordan Lee</h4>
+                        <span>Operations Lead</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">S</div>
+                        <h4>Sam Taylor</h4>
+                        <span>Research Head</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">R</div>
+                        <h4>Reese Park</h4>
+                        <span>Design Principal</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Closing -->
+        <div class="slide slide-closing">
+            <div class="geo-ring"></div>
+            <div class="content">
+                <div class="label">Conclusion</div>
+                <h1>Thank You</h1>
+                <p>Questions & Discussion</p>
+                <div style="margin-top: 4vh; font-size: 0.85rem; color: var(--accent);">
+                    contact@example.com
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-dots">
+        <div class="nav-dot active" data-slide="0"></div>
+        <div class="nav-dot" data-slide="1"></div>
+        <div class="nav-dot" data-slide="2"></div>
+        <div class="nav-dot" data-slide="3"></div>
+        <div class="nav-dot" data-slide="4"></div>
+        <div class="nav-dot" data-slide="5"></div>
+        <div class="nav-dot" data-slide="6"></div>
+        <div class="nav-dot" data-slide="7"></div>
+        <div class="nav-dot" data-slide="8"></div>
+        <div class="nav-dot" data-slide="9"></div>
+    </div>
+
+    <div class="nav-arrows">
+        <button class="nav-arrow" id="prevBtn">&#8592;</button>
+        <button class="nav-arrow" id="nextBtn">&#8594;</button>
+    </div>
+
+    <div class="slide-counter">
+        <span id="currentSlide">01</span> / <span id="totalSlides">10</span>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.nav-dot');
+        let currentSlide = 0;
+        const totalSlides = slides.length;
+
+        document.getElementById('totalSlides').textContent = String(totalSlides).padStart(2, '0');
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.toggle('active', i === index);
+            });
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+            document.getElementById('currentSlide').textContent = String(index + 1).padStart(2, '0');
+            currentSlide = index;
+        }
+
+        function nextSlide() {
+            const next = (currentSlide + 1) % totalSlides;
+            showSlide(next);
+        }
+
+        function prevSlide() {
+            const prev = (currentSlide - 1 + totalSlides) % totalSlides;
+            showSlide(prev);
+        }
+
+        document.getElementById('nextBtn').addEventListener('click', nextSlide);
+        document.getElementById('prevBtn').addEventListener('click', prevSlide);
+
+        dots.forEach(dot => {
+            dot.addEventListener('click', () => {
+                showSlide(parseInt(dot.dataset.slide));
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Bar Chart
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+                datasets: [{
+                    label: 'Revenue',
+                    data: [2.4, 3.1, 3.8, 4.5],
+                    backgroundColor: '#1a1a1a',
+                    borderColor: '#1a1a1a',
+                    borderWidth: 1
+                }, {
+                    label: 'Target',
+                    data: [2.5, 3.0, 3.5, 4.2],
+                    backgroundColor: 'transparent',
+                    borderColor: '#b8b0a4',
+                    borderWidth: 2,
+                    borderDash: [5, 5]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: 'Inter', size: 11 },
+                            color: '#5a5a5a',
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#e2dbd1',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { family: 'Inter', size: 11 },
+                            color: '#8a8178',
+                            padding: 10
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { family: 'Inter', size: 12 },
+                            color: '#1a1a1a',
+                            padding: 10
+                        }
+                    }
+                }
+            }
+        });
+
+        // Line Chart
+        const lineCtx = document.getElementById('lineChart').getContext('2d');
+        new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: ['2020', '2021', '2022', '2023', '2024', '2025'],
+                datasets: [{
+                    label: 'Market Share',
+                    data: [12, 18, 25, 34, 42, 51],
+                    borderColor: '#1a1a1a',
+                    backgroundColor: 'rgba(26, 26, 26, 0.05)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#1a1a1a',
+                    pointBorderColor: '#ede8e0',
+                    pointBorderWidth: 2,
+                    pointRadius: 5
+                }, {
+                    label: 'Industry Average',
+                    data: [10, 14, 19, 24, 30, 36],
+                    borderColor: '#b8b0a4',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.4,
+                    pointBackgroundColor: '#b8b0a4',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: 'Inter', size: 11 },
+                            color: '#5a5a5a',
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#e2dbd1',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { family: 'Inter', size: 11 },
+                            color: '#8a8178',
+                            padding: 10,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { family: 'Inter', size: 12 },
+                            color: '#1a1a1a',
+                            padding: 10
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

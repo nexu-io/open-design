@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Twitter 分享卡 · 金句</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Noto+Serif+SC:wght@500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#0a0a0a; font-family:'Inter Tight','Noto Sans SC',sans-serif; min-height:100vh; display:grid; place-items:center; padding:24px; }
+  .card { width:1600px; max-width:96vw; aspect-ratio:16/9; border-radius:24px; overflow:hidden; position:relative;
+    background:#15140f; color:#fafaf7; padding:80px; display:flex; flex-direction:column; justify-content:space-between;
+    box-shadow:0 40px 100px -20px rgba(0,0,0,0.7);
+  }
+  .grid-pattern { position:absolute; inset:0; opacity:0.06; background-image:linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg,#fff 1px, transparent 1px); background-size:48px 48px; }
+  .glow { position:absolute; width:680px; height:680px; border-radius:50%; filter:blur(140px); opacity:0.55; }
+  .g1 { background:#c96442; top:-180px; left:-180px; }
+  .g2 { background:#e9b94a; bottom:-260px; right:-200px; }
+  .header { display:flex; align-items:center; justify-content:space-between; position:relative; z-index:2; }
+  .tag { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:999px; background:rgba(233,185,74,0.14); color:#e9b94a; font-size:13px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; border:1px solid rgba(233,185,74,0.25); }
+  .quote { font-family:'Noto Serif SC',serif; font-size:96px; line-height:1.18; font-weight:700; letter-spacing:-0.02em; max-width:24ch; position:relative; z-index:2; margin-top:auto; margin-bottom:auto; }
+  .quote .em { font-style:italic; color:#e9b94a; }
+  .quote::before { content:"" "" "; font-family:Georgia,serif; font-size:140px; color:#e9b94a; position:absolute; top:-60px; left:-60px; opacity:0.3; line-height:1; }
+  .footer { display:flex; align-items:center; justify-content:space-between; position:relative; z-index:2; }
+  .author { display:flex; align-items:center; gap:16px; }
+  .avatar { width:56px; height:56px; border-radius:999px; background:linear-gradient(135deg,#c96442,#e9b94a); display:grid; place-items:center; font-family:Georgia,serif; font-style:italic; font-size:28px; font-weight:700; color:#fff; }
+  .brand { display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace; font-size:13px; opacity:0.55; }
+  .brand .glyph { width:24px; height:24px; border-radius:6px; border:1px solid rgba(255,255,255,0.4); display:grid; place-items:center; font-family:Georgia,serif; font-style:italic; font-size:13px; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="grid-pattern"></div>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+
+  <div class="header">
+    <div class="tag">✦ Quote</div>
+    <div class="brand"><div class="glyph">H</div>html-anything</div>
+  </div>
+
+  <div class="quote">
+    Markdown 是给<span class="em">作者</span>爽的,<br/>
+    HTML 是给<span class="em">读者</span>爽的。
+  </div>
+
+  <div class="footer">
+    <div class="author">
+      <div class="avatar">T</div>
+      <div>
+        <div style="font-size:18px; font-weight:600">Tom Pan</div>
+        <div style="font-size:14px; opacity:0.55">@tompan · 一个把所有内部文档换成 HTML 的工程师</div>
+      </div>
+    </div>
+    <div style="font-size:13px; opacity:0.45; font-family:'JetBrains Mono',monospace">2026.05</div>
+  </div>
+</div>
+</body>
+</html>

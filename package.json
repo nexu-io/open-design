@@ -1,0 +1,65 @@
+{
+  "name": "open-design",
+  "version": "0.10.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "type": "module",
+  "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
+  "license": "Apache-2.0",
+  "bin": {
+    "od": "./apps/daemon/bin/od.mjs"
+  },
+  "scripts": {
+    "postinstall": "node ./scripts/postinstall.mjs",
+    "tools-dev": "pnpm exec tools-dev",
+    "tools-pack": "pnpm exec tools-pack",
+    "tools-serve": "pnpm exec tools-serve",
+    "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/product-neutrality.test.ts scripts/approve-fork-pr-workflows.test.ts scripts/postinstall.test.ts",
+    "i18n:check": "tsx ./scripts/i18n-check.ts",
+    "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
+    "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
+    "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
+    "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
+    "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
+    "backfill:failed-runs": "node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts",
+    "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@open-design/components": "workspace:*",
+    "@open-design/daemon": "workspace:*",
+    "@open-design/tools-dev": "workspace:*",
+    "@open-design/tools-pack": "workspace:*",
+    "@open-design/tools-serve": "workspace:*",
+    "@types/node": "20.19.39",
+    "tsx": "4.22.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": "~24",
+    "pnpm": ">=10.33.2 <11"
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion": "5.0.6",
+      "devalue": "5.8.1",
+      "fast-uri": "3.1.2",
+      "hono": "4.12.19",
+      "ip-address": "10.2.0",
+      "postcss": "8.5.15",
+      "protobufjs": "8.4.0",
+      "qs": "6.15.2",
+      "tmp": "0.2.7",
+      "yaml": "2.9.0"
+    },
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "core-js",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ]
+  }
+}

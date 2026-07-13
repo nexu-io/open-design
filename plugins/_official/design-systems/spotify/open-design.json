@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-spotify",
+  "title": "Spotify",
+  "title_i18n": {
+    "zh-CN": "Spotify",
+    "zh-TW": "Spotify",
+    "ja": "Spotify",
+    "ko": "Spotify",
+    "de": "Spotify",
+    "fr": "Spotify",
+    "ru": "Spotify",
+    "es": "Spotify",
+    "pt-BR": "Spotify",
+    "it": "Spotify",
+    "vi": "Spotify",
+    "pl": "Spotify",
+    "id": "Spotify",
+    "nl": "Spotify",
+    "ar": "Spotify",
+    "tr": "Spotify",
+    "uk": "Spotify",
+    "en": "Spotify"
+  },
+  "version": "0.1.0",
+  "description": "Music streaming. Vibrant green on dark, bold type, album-art-driven.",
+  "description_i18n": {
+    "zh-CN": "音乐流媒体。深色背景搭配鲜艳绿色，粗体字体，以专辑封面为主导。",
+    "zh-TW": "音樂串流。深色背景搭配鮮豔綠色，粗體字型，以專輯封面為主導。",
+    "ja": "音楽ストリーミング。ダークベースに鮮やかなグリーン、太字タイプ、アルバムアート主導。",
+    "ko": "음악 스트리밍. 어두운 배경에 선명한 그린, 볼드 타이포, 앨범 아트 중심.",
+    "de": "Musik-Streaming. Lebendiges Grün auf Dunkel, fette Schrift, albumcover-getrieben.",
+    "fr": "Streaming musical. Vert vif sur fond sombre, typographie grasse, axé sur les pochettes d'albums.",
+    "ru": "Музыкальный стриминг. Яркий зелёный на тёмном, жирный шрифт, с акцентом на обложки альбомов.",
+    "es": "Streaming de música. Verde vibrante sobre oscuro, tipografía en negrita, centrado en carátulas de álbumes.",
+    "pt-BR": "Streaming de música. Verde vibrante em fundo escuro, tipografia em negrito, focado em capas de álbuns.",
+    "it": "Streaming musicale. Verde vivace su scuro, caratteri in grassetto, incentrato sulle copertine degli album.",
+    "vi": "Phát nhạc trực tuyến. Xanh lá sống động trên nền tối, chữ đậm, tập trung vào ảnh bìa album.",
+    "pl": "Streaming muzyczny. Jaskrawozielony na ciemnym tle, pogrubiona czcionka, skupiony na okładkach albumów.",
+    "id": "Streaming musik. Hijau cerah pada latar gelap, tipe tebal, berfokus pada sampul album.",
+    "nl": "Muziekstreaming. Levendig groen op donker, vette letters, albumhoesgedreven.",
+    "ar": "بث الموسيقى. أخضر نابض على خلفية داكنة، خط عريض، يركز على أغلفة الألبومات.",
+    "tr": "Müzik akışı. Koyu zemin üzerinde canlı yeşil, kalın yazı tipi, albüm kapağı odaklı.",
+    "uk": "Музичний стримінг. Яскравий зелений на темному, жирний шрифт, з акцентом на обкладинки альбомів.",
+    "en": "Music streaming. Vibrant green on dark, bold type, album-art-driven."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Spotify design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Spotify design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "spotify",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

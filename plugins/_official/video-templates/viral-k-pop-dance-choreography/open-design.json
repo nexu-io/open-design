@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-viral-k-pop-dance-choreography",
+  "title": "Viral K-pop Dance Choreography",
+  "title_i18n": {
+    "zh-CN": "病毒式K-pop舞蹈编舞",
+    "zh-TW": "病毒式K-pop舞蹈編舞",
+    "ja": "バイラルK-popダンス振り付け",
+    "ko": "바이럴 K-pop 댄스 안무",
+    "de": "Virale K-Pop-Tanzchoreografie",
+    "fr": "Chorégraphie de danse K-pop virale",
+    "ru": "Вирусная хореография K-pop танца",
+    "es": "Coreografía de baile K-pop viral",
+    "pt-BR": "Coreografia de dança K-pop viral",
+    "it": "Coreografia di danza K-pop virale",
+    "vi": "Biên đạo múa K-pop lan truyền",
+    "pl": "Wirusowa choreografia tańca K-pop",
+    "id": "Koreografi tari K-pop viral",
+    "nl": "Virale K-pop danschoreografie",
+    "ar": "رقصات K-pop الفيروسية",
+    "tr": "Viral K-pop dans koreografisi",
+    "uk": "Вірусна хореографія K-pop танцю",
+    "en": "Viral K-pop Dance Choreography"
+  },
+  "version": "0.1.0",
+  "description": "A detailed prompt for Seedance 2.0 to animate a character performing a dance based on a 16-panel storyboard reference.",
+  "description_i18n": {
+    "zh-CN": "为Seedance 2.0提供详细提示词，根据16格分镜参考动画角色表演舞蹈。",
+    "zh-TW": "為Seedance 2.0提供詳細提示詞，根據16格分鏡參考動畫角色表演舞蹈。",
+    "ja": "16パネルのストーリーボード参考に基づいてキャラクターにダンスをアニメーションさせるSeedance 2.0用の詳細なプロンプト。",
+    "ko": "16패널 스토리보드 참고를 기반으로 캐릭터가 춤을 추도록 애니메이션하는 Seedance 2.0용 상세 프롬프트입니다.",
+    "de": "Ein detaillierter Prompt für Seedance 2.0, um eine Figur basierend auf einer 16-Panel-Storyboard-Referenz tanzen zu lassen.",
+    "fr": "Un prompt détaillé pour Seedance 2.0 afin d'animer un personnage effectuant une danse basée sur une référence de storyboard à 16 panneaux.",
+    "ru": "Подробный промпт для Seedance 2.0 для анимации персонажа, исполняющего танец на основе раскадровки из 16 панелей.",
+    "es": "Un prompt detallado para Seedance 2.0 que anima a un personaje realizando un baile basado en un storyboard de referencia de 16 paneles.",
+    "pt-BR": "Um prompt detalhado para o Seedance 2.0 animar um personagem executando uma dança baseada em um storyboard de referência de 16 painéis.",
+    "it": "Un prompt dettagliato per Seedance 2.0 per animare un personaggio che esegue una danza basata su uno storyboard di riferimento a 16 pannelli.",
+    "vi": "Prompt chi tiết cho Seedance 2.0 để tạo hoạt ảnh nhân vật thực hiện vũ đạo dựa trên bảng phân cảnh 16 khung hình tham khảo.",
+    "pl": "Szczegółowy prompt dla Seedance 2.0 do animowania postaci wykonującej taniec na podstawie 16-panelowego storyboardu referencyjnego.",
+    "id": "Prompt terperinci untuk Seedance 2.0 untuk menganimasikan karakter yang menampilkan tarian berdasarkan referensi storyboard 16 panel.",
+    "nl": "Een gedetailleerde prompt voor Seedance 2.0 om een personage een dans te laten uitvoeren op basis van een 16-panelen storyboard referentie.",
+    "ar": "موجه تفصيلي لـ Seedance 2.0 لتحريك شخصية تؤدي رقصة بناءً على مرجع لوحة قصة من 16 لوحة.",
+    "tr": "16 panelli bir storyboard referansına dayalı olarak dans eden bir karakteri canlandırmak için Seedance 2.0'a yönelik detaylı bir prompt.",
+    "uk": "Детальний промпт для Seedance 2.0 для анімації персонажа, який виконує танець на основі раскадрування з 16 панелей.",
+    "en": "A detailed prompt for Seedance 2.0 to animate a character performing a dance based on a 16-panel storyboard reference."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "MetaBynny",
+    "url": "https://x.com/MetaBynny/status/2049008203854184461"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "social-meme",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://pbs.twimg.com/media/HG-JpHkbUAA2B08.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "viral kpop dance. Monochrome grayscale illustration, 3D-rendered character, clean instructional reference sheet, white background, comic-style cell grid layout, technical diagram aesthetic. [LAYOUT] 4×4 grid layout with a total of 16 panels. Each panel is separated by thin black border lines. Cells are numbered from 1 to 16, with consistent panel sizes. [CHARACTER] image1 (the same character appears consistently in all panels) [PANEL STRUCTURE – per cell] Top-left: bold number badge + English title text Center: full-body character pose illustration Bottom-left: English description text (3–4 lines) Overlay: directional arrows indicating movement [ARROWS / MOTION INDICATORS] Curved arrows, straight arrows, and circular rotation indicators placed around the character to show motion flow and direction. [RENDERING STYLE] Highly detailed 3D sculpted style, soft studio lighting, subtle shadows, no color, grayscale shading, clean linework, game concept art quality. [NEGATIVE] No background scenery, no color tones, no additional characters, no complex background. Use the attached image as reference. Use the attached image as reference. Create a dance video that follows the exact sequence and movements from steps 1–16 shown in the attached image. The music should be a trending tiktok song. There should be no dialogue, text, or narration. she is wearing a casual tank top with sweatpants and sneakers.",
+        "zh-CN": "使用这个插件完成以下任务：viral kpop dance. Monochrome grayscale illustration, 3D-rendered character, clean instructional reference sheet, white background, comic-style cell grid layout, technical diagram aesthetic. [LAYOUT] 4×4 grid layout with a total of 16 panels. Each panel is separated by thin black border lines. Cells are numbered from 1 to 16, with consistent panel sizes. [CHARACTER] image1 (the same character appears consistently in all panels) [PANEL STRUCTURE – per cell] Top-left: bold number badge + English title text Center: full-body character pose illustration Bottom-left: English description text (3–4 lines) Overlay: directional arrows indicating movement [ARROWS / MOTION INDICATORS] Curved arrows, straight arrows, and circular rotation indicators placed around the character to show motion flow and direction. [RENDERING STYLE] Highly detailed 3D sculpted style, soft studio lighting, subtle shadows, no color, grayscale shading, clean linework, game concept art quality. [NEGATIVE] No background scenery, no color tones, no additional characters, no complex background. Use the attached image as reference. Use the attached image as reference. Create a dance video that follows the exact sequence and movements from steps 1–16 shown in the attached image. The music should be a trending tiktok song. There should be no dialogue, text, or narration. she is wearing a casual tank top with sweatpants and sneakers."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

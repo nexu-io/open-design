@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notion — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/notion. Every visible
+        value comes from tokens.css. Notion's signature moves: warm neutral
+        surfaces, NotionInter with aggressive negative letter-spacing at
+        display sizes, whisper-thin borders (rgba(0,0,0,0.1)), multi-layer
+        shadows with sub-0.05 opacity, Notion Blue CTAs."
+    />
+
+    <style>
+      :root {
+        --bg:           #ffffff;
+        --surface:      #f6f5f4;
+        --surface-warm: var(--surface);
+
+        --fg:   rgba(0, 0, 0, 0.95);
+        --fg-2: #31302e;
+        --muted: #615d59;
+        --meta:  #a39e98;
+
+        --border:      rgba(0, 0, 0, 0.1);
+        --border-soft: rgba(0, 0, 0, 0.06);
+
+        --accent:        #0075de;
+        --accent-on:     #ffffff;
+        --accent-hover:  #005bab;
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #1aae39;
+        --warn:    #dd5b00;
+        --danger:  #dc2626;
+
+        --font-display: "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+        --font-body:    "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+        --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 16px;
+        --text-lg:   20px;
+        --text-xl:   26px;
+        --text-2xl:  40px;
+        --text-3xl:  48px;
+        --text-4xl:  64px;
+
+        --leading-body:     1.5;
+        --leading-tight:    1.00;
+        --tracking-display: -0.033em;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet:  48px;
+        --section-y-phone:   32px;
+
+        --radius-sm:   4px;
+        --radius-md:   8px;
+        --radius-lg:   12px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised:
+          rgba(0, 0, 0, 0.04) 0px 4px 18px,
+          rgba(0, 0, 0, 0.027) 0px 2px 7.85px,
+          rgba(0, 0, 0, 0.02) 0px 0.8px 2.93px,
+          rgba(0, 0, 0, 0.01) 0px 0.175px 1.04px;
+
+        --focus-ring: 0 0 0 3px rgba(9, 127, 232, 0.3);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   12px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-feature-settings: "lnum", "locl";
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 700;
+        margin: 0;
+        line-height: var(--leading-tight);
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        letter-spacing: var(--tracking-display);
+        /* 64px display: -2.125px = -0.033em; OpenType lnum+locl. */
+        font-feature-settings: "lnum", "locl";
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        /* 48px section heading: line-height 1.00, tracking -1.5px (-0.031em). */
+        letter-spacing: -0.031em;
+        font-feature-settings: "lnum";
+      }
+      h3 {
+        font-size: var(--text-xl);
+        /* 26px sub-heading: line-height 1.23, tracking -0.625px (-0.024em).
+           Overrides the shared 1.00 (--leading-tight) set above. */
+        line-height: 1.23;
+        letter-spacing: -0.024em;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        line-height: 1.40;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .eyebrow {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-display);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        line-height: 1.33;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard),
+          transform var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn:active { transform: scale(0.95); }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+        border-color: transparent;
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-secondary {
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg);
+        border-color: transparent;
+      }
+      .btn-secondary:hover { background: rgba(0, 0, 0, 0.08); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg);
+        text-decoration: underline;
+        padding: 8px 4px;
+      }
+
+      /* ─── Pill badges ───────────────────────────────────────────── */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 4px 8px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        letter-spacing: 0.125px;
+        line-height: 1.33;
+      }
+      .pill-blue { background: #f2f9ff; color: #097fe8; }
+      .pill-green { background: #e8faf0; color: #1aae39; }
+
+      /* ─── Cards ─────────────────────────────────────────────────── */
+      .card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+        transition: box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .card:hover { box-shadow: var(--elev-raised); }
+      .card-warm { background: var(--surface); }
+
+      /* ─── Inputs ────────────────────────────────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg);
+      }
+      .field input {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid #dddddd;
+        border-radius: var(--radius-sm);
+        padding: 6px 8px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Layout helpers ────────────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — h1 (NotionInter 64px / -0.033em), .lead, .eyebrow,
+           .btn-primary (Notion Blue), .btn-secondary, .pill-blue.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · notion</p>
+            <h1>The connected workspace where better work happens.</h1>
+            <p class="lead" style="max-width: 48ch">
+              Notion combines notes, docs, wikis, and project management in one
+              warm, approachable tool. Every value below comes from tokens.css —
+              no raw hex, no off-token type.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Get Notion free
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+
+          <aside style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="card card-warm" style="display:flex;flex-direction:column;gap:var(--space-3)">
+              <div class="row-between">
+                <span class="body-sm" style="font-weight:500">Trusted by teams at</span>
+                <span class="pill pill-blue">New</span>
+              </div>
+              <p class="body-sm body-muted">Figma, Notion, Vercel, Linear, and 4M+ teams worldwide.</p>
+              <span class="pill pill-green">
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="4"/></svg>
+                All systems operational
+              </span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURES — h2 (48px / tight), h3 (26px / 1.23),
+           .card (whisper border + multi-layer shadow hover),
+           .pill-blue, warm section background.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="features" style="background:var(--surface);margin-inline:calc(var(--container-gutter-desktop)*-1);padding-inline:var(--container-gutter-desktop)">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width:26ch">Every component uses only var(--*) tokens.</h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start:var(--space-6)">
+          <article class="card">
+            <h3>Warm neutrals</h3>
+            <p class="body-muted body-sm" style="margin-top:var(--space-3)">
+              --bg white, --surface #f6f5f4 (warm white). Grays carry
+              yellow-brown undertones — never blue-gray. The warmth is
+              imperceptible individually, defining at scale.
+            </p>
+            <a href="./tokens.css" class="body-sm" style="display:block;margin-top:var(--space-4);color:var(--accent)">Inspect tokens →</a>
+          </article>
+
+          <article class="card">
+            <h3>Compression at scale</h3>
+            <p class="body-muted body-sm" style="margin-top:var(--space-3)">
+              -2.125px at 64px, -1.5px at 48px, -0.625px at 26px,
+              relaxing to normal at 16px. Density at headlines,
+              readability at body.
+            </p>
+            <a href="./DESIGN.md" class="body-sm" style="display:block;margin-top:var(--space-4);color:var(--accent)">Read the spec →</a>
+          </article>
+
+          <article class="card">
+            <h3>Whisper depth</h3>
+            <p class="body-muted body-sm" style="margin-top:var(--space-3)">
+              1px solid rgba(0,0,0,0.1) borders. Shadows use 4 layers
+              at max opacity 0.04 — depth felt rather than seen.
+              Hover reveals the --elev-raised stack.
+            </p>
+            <a href="./tokens.css" class="body-sm" style="display:block;margin-top:var(--space-4);color:var(--accent)">Inspect borders →</a>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM — .field (4px radius inputs), blue focus ring,
+           .btn-primary, .btn-ghost, metric card with large number.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="form">
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--space-12);align-items:start">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs inherit the same token system.</h2>
+            <p class="body-muted" style="max-width:44ch">
+              Focus ring: 2px solid #097fe8 + shadow reinforcement.
+              Border at rest: 1px solid #dddddd — standard Notion input.
+              Hover and active use scale(0.95) via CSS transform.
+            </p>
+
+            <div class="card card-warm" style="max-width:320px">
+              <p class="eyebrow">Teams using Notion</p>
+              <p style="font-size:var(--text-2xl);font-weight:700;letter-spacing:-0.02em;line-height:1.5;margin-top:var(--space-2)">4,000,000+</p>
+              <p class="body-sm body-muted">across engineering, design, and ops.</p>
+            </div>
+          </div>
+
+          <form style="display:flex;flex-direction:column;gap:var(--space-4);max-width:400px"
+                onsubmit="event.preventDefault()">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input id="email" type="email" placeholder="you@company.com" autocomplete="email" />
+            </div>
+            <div class="field">
+              <label for="name">Full name</label>
+              <input id="name" type="text" placeholder="Ada Lovelace" autocomplete="name" />
+            </div>
+            <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2)">
+              <button type="submit" class="btn btn-primary">Get started free</button>
+              <button type="button" class="btn btn-ghost">Skip for now</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+  Shared frame: iPad Pro 11" (834 × 1194 logical, displayed at 70% scale).
+  Usage:  <iframe src="ipad-pro.html?screen=path/to/screen.html"></iframe>
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>iPad Pro frame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    body {
+      display: grid;
+      place-items: center;
+      font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    }
+
+    .device {
+      position: relative;
+      width: 584px;
+      height: 836px;
+      border-radius: 36px;
+      padding: 14px;
+      background:
+        linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.04) inset,
+        0 0 0 2px #000 inset,
+        0 28px 60px -12px rgba(0,0,0,0.45),
+        0 8px 20px -8px rgba(0,0,0,0.35);
+    }
+    /* power + volume on right edge */
+    .device::after {
+      content: '';
+      position: absolute;
+      right: -3px; top: 80px;
+      width: 4px; height: 56px;
+      background: #0a0a0c; border-radius: 2px;
+    }
+
+    /* front camera, top-center landscape position (we render portrait here) */
+    .camera {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 6px;
+      height: 6px;
+      background: #0a0a0c;
+      border-radius: 50%;
+      z-index: 5;
+    }
+
+    .screen {
+      position: relative;
+      width: 100%; height: 100%;
+      background: #fafaf7;
+      border-radius: 22px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .inner {
+      flex: 1 1 auto;
+      width: 100%;
+      border: 0;
+      background: #fafaf7;
+    }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <span class="camera" aria-hidden></span>
+    <div class="screen">
+      <iframe
+        class="inner"
+        id="screen"
+        title="Inner screen"
+        sandbox="allow-scripts allow-same-origin"
+        loading="lazy"
+        src="about:blank"
+      ></iframe>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var qs = new URLSearchParams(location.search);
+      var raw = qs.get('screen');
+      var iframe = document.getElementById('screen');
+      if (!raw) return;
+      var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+      iframe.src = isAbsolute
+        ? raw
+        : new URL(raw, document.referrer || location.href).toString();
+    })();
+  </script>
+</body>
+</html>

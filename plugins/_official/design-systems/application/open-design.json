@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-application",
+  "title": "Application",
+  "title_i18n": {
+    "zh-CN": "应用程序",
+    "zh-TW": "應用程式",
+    "ja": "アプリケーション",
+    "ko": "애플리케이션",
+    "de": "Anwendung",
+    "fr": "Application",
+    "ru": "Приложение",
+    "es": "Aplicación",
+    "pt-BR": "Aplicativo",
+    "it": "Applicazione",
+    "vi": "Ứng dụng",
+    "pl": "Aplikacja",
+    "id": "Aplikasi",
+    "nl": "Applicatie",
+    "ar": "التطبيق",
+    "tr": "Uygulama",
+    "uk": "Застосунок",
+    "en": "Application"
+  },
+  "version": "0.1.0",
+  "description": "App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows.",
+  "description_i18n": {
+    "zh-CN": "紫色主题的应用仪表板，包含顶栏导航、卡片式布局和开发者优先的工作流程。",
+    "zh-TW": "紫色主題的應用程式儀表板，包含頂部導航列、卡片式佈局和開發者優先的工作流程。",
+    "ja": "紫をテーマにしたアプリダッシュボード。トップバーナビゲーション、カードベースのレイアウト、開発者ファーストのワークフローを搭載。",
+    "ko": "보라색 테마의 앱 대시보드로, 상단 바 내비게이션, 카드 기반 레이아웃 및 개발자 우선 워크플로를 제공합니다.",
+    "de": "App-Dashboard mit violettem Design, Top-Bar-Navigation, kartenbasierten Layouts und entwicklerorientierten Workflows.",
+    "fr": "Tableau de bord d'application au design violet, avec navigation en barre supérieure, mises en page à base de cartes et workflows axés développeur.",
+    "ru": "Панель управления приложения в фиолетовой тематике с навигацией в верхней панели, карточными макетами и процессами, ориентированными на разработчиков.",
+    "es": "Panel de aplicación con estética morada, navegación superior, diseños basados en tarjetas y flujos de trabajo orientados a desarrolladores.",
+    "pt-BR": "Painel de aplicativo com estética roxa, navegação superior, layouts baseados em cards e fluxos de trabalho voltados para desenvolvedores.",
+    "it": "Dashboard dell'app con estetica viola, navigazione a barra superiore, layout basati su card e flussi di lavoro orientati agli sviluppatori.",
+    "vi": "Bảng điều khiển ứng dụng với giao diện màu tím, thanh điều hướng trên cùng, bố cục dạng thẻ và quy trình làm việc ưu tiên nhà phát triển.",
+    "pl": "Panel aplikacji z fioletową estetyką, nawigacją górną, układami opartymi na kartach i przepływami pracy zorientowanymi na programistów.",
+    "id": "Dashboard aplikasi dengan estetika bertema ungu, navigasi bilah atas, tata letak berbasis kartu, dan alur kerja yang mengutamakan developer.",
+    "nl": "App-dashboard met paarse esthetiek, navigatie in de bovenste balk, kaartgebaseerde lay-outs en ontwikkelaargerichte workflows.",
+    "ar": "لوحة تحكم التطبيق بتصميم أرجواني، مع شريط تنقل علوي، وتخطيطات قائمة على البطاقات، وسير عمل موجه للمطورين.",
+    "tr": "Mor temalı estetik, üst çubuk navigasyonu, kart tabanlı düzenler ve geliştirici odaklı iş akışlarına sahip uygulama panosu.",
+    "uk": "Панель керування застосунком з фіолетовою естетикою, навігацією у верхній панелі, макетами на основі карток та робочими процесами, орієнтованими на розробників.",
+    "en": "App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "professional-corporate"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Application design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Application design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "application",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

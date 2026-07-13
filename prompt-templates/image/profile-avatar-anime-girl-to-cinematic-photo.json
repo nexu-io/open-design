@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-anime-girl-to-cinematic-photo",
+  "surface": "image",
+  "title": "Profile / Avatar - Anime Girl to Cinematic Photo",
+  "summary": "This prompt turns a character reference illustration into a realistic, warm-toned vintage interior portrait while preserving the original outfit, pose, and cat.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "anime",
+    "cinematic",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "Using the provided reference image, recreate the same girl and black cat in the same seated pose, but transform the flat anime drawing into a realistic cinematic photo. Keep the orange-and-black gothic dress, white frills, lightning armband, headpiece, black cat lying across her knees, white socks, and black Mary Jane shoes consistent with the reference. Place her in a moody vintage interior with a worn wooden floor, aged plaster walls, and 1 tall softly glowing window with sheer curtains on the left casting warm late-afternoon light. Use a nostalgic sepia-orange color grade, subtle film grain, soft shadows, and shallow depth of field for a photoreal editorial look.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453169843_ceq758_HG-nC89aQAApDXC.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "maku",
+    "url": "https://x.com/maku67879787/status/2049040029612486845#reversed-0"
+  }
+}

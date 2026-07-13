@@ -1,0 +1,516 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildBoardCommentAttachments,
+  buildVisualAnnotationAttachment,
+  commentSnapshotOverlayEqual,
+  commentVisibleOnDeckSlide,
+  commentsToAttachments,
+  historyWithCommentAttachmentContext,
+  liveCommentTargetMapsEqual,
+  liveSnapshotForComment,
+  mergeAttachedComments,
+  mergePreviewCommentAttachments,
+  messageContentWithCommentAttachments,
+  overlayBoundsFromSnapshot,
+  queuedSlideNavTarget,
+  removeAttachedComment,
+  targetFromSnapshot,
+} from '../src/comments';
+import type { PreviewCommentSnapshot } from '../src/comments';
+import type { ChatCommentAttachment, ChatMessage, PreviewComment } from '../src/types';
+
+function commentAttachment(
+  overrides: Partial<ChatCommentAttachment> = {},
+): ChatCommentAttachment {
+  return {
+    id: 'att-1',
+    order: 1,
+    filePath: 'deck.html',
+    elementId: 'el-1',
+    selector: '[data-od-id="el-1"]',
+    label: 'span.capsule.accent',
+    comment: 'make it white',
+    currentText: 'DTC launches',
+    pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+    htmlHint: '<span></span>',
+    ...overrides,
+  };
+}
+
+describe('preview comment attachment helpers', () => {
+  it('builds compact target context from an iframe snapshot', () => {
+    const target = targetFromSnapshot({
+      filePath: 'index.html',
+      elementId: 'hero-title',
+      selector: '[data-od-id="hero-title"]',
+      label: 'h1.hero-title',
+      text: `  ${'Title '.repeat(80)}  `,
+      htmlHint: `<h1 class="hero-title" data-od-id="hero-title">${'x'.repeat(240)}</h1>`,
+      position: { x: 10.4, y: 20.5, width: 300.2, height: 88.8 },
+      style: {
+        color: 'rgb(26, 25, 22)',
+        fontSize: '13.5px',
+        fontFamily: 'Inter, sans-serif',
+      },
+    });
+
+    expect(target.text.length).toBeLessThanOrEqual(160);
+    expect(target.htmlHint.length).toBeLessThanOrEqual(180);
+    expect(target.position).toEqual({ x: 10, y: 21, width: 300, height: 89 });
+    expect(target.style).toMatchObject({
+      color: 'rgb(26, 25, 22)',
+      fontSize: '13.5px',
+      fontFamily: 'Inter, sans-serif',
+    });
+  });
+
+  it('creates ordered compact send payloads from attached comments', () => {
+    const attachments = commentsToAttachments([
+      comment({ id: 'c1', elementId: 'hero-title', note: 'Shorten this title' }),
+      comment({ id: 'c2', elementId: 'chart', note: 'Make it feel real' }),
+    ]);
+
+    expect(attachments).toMatchObject([
+      { id: 'c1', order: 1, elementId: 'hero-title', comment: 'Shorten this title' },
+      { id: 'c2', order: 2, elementId: 'chart', comment: 'Make it feel real' },
+    ]);
+  });
+
+  it('keeps saved comment images in send payloads even when the note is empty', () => {
+    const [attachment] = commentsToAttachments([
+      comment({
+        id: 'c1',
+        note: '',
+        attachments: [{ path: 'uploads/reference.png', name: 'reference.png' }],
+      }),
+    ]);
+
+    expect(attachment).toMatchObject({
+      id: 'c1',
+      comment: 'Use the attached image as the comment reference.',
+      imageAttachments: [{ path: 'uploads/reference.png', name: 'reference.png' }],
+    });
+    expect(messageContentWithCommentAttachments('', attachment ? [attachment] : []))
+      .toContain('image.1: uploads/reference.png | reference.png');
+  });
+
+  it('keeps the task query out of context when a comment is promoted to message text', () => {
+    const [attachment] = commentsToAttachments([
+      comment({ id: 'c1', elementId: 'hero-title', note: 'Make the title factual' }),
+    ]);
+    const contextOnly = attachment
+      ? [{ ...attachment, comment: '', commentContext: 'query' as const }]
+      : [];
+
+    const content = messageContentWithCommentAttachments('Make the title factual', contextOnly);
+
+    expect(content).toContain('Make the title factual');
+    expect(content).toContain('selector: [data-od-id="hero-title"]');
+    expect(content).not.toContain('comment: Make the title factual');
+  });
+
+  it('merges saved preview comment image attachments without duplicates', () => {
+    expect(
+      mergePreviewCommentAttachments(
+        [
+          { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+          { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+        ],
+        [
+          { path: 'uploads/ref-b.png', name: 'duplicate.png' },
+          { path: 'uploads/ref-c.png', name: '' },
+        ],
+      ),
+    ).toEqual([
+      { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+      { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+      { path: 'uploads/ref-c.png', name: 'ref-c.png' },
+    ]);
+  });
+
+  it('builds grouped board payloads for pod selections', () => {
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'pod-1',
+        selector: '[data-od-id="hero"], [data-od-id="chart"]',
+        label: 'Hero and chart',
+        text: 'Hero title Chart value',
+        position: { x: 10, y: 20, width: 300, height: 200 },
+        htmlHint: '<section data-od-id="hero">',
+        selectionKind: 'pod',
+        memberCount: 2,
+        podMembers: [
+          {
+            elementId: 'hero',
+            selector: '[data-od-id="hero"]',
+            label: 'section.hero',
+            text: 'Hero title',
+            position: { x: 10, y: 20, width: 200, height: 100 },
+            htmlHint: '<section data-od-id="hero">',
+          },
+          {
+            elementId: 'chart',
+            selector: '[data-od-id="chart"]',
+            label: 'section.chart',
+            text: 'Chart value',
+            position: { x: 120, y: 80, width: 190, height: 120 },
+            htmlHint: '<section data-od-id="chart">',
+          },
+        ],
+      },
+      notes: ['Tighten the hierarchy', 'Make the chart feel premium'],
+    });
+
+    expect(attachments).toHaveLength(2);
+    expect(attachments[0]).toMatchObject({
+      selectionKind: 'pod',
+      memberCount: 2,
+      source: 'board-batch',
+      comment: 'Tighten the hierarchy',
+    });
+    expect(messageContentWithCommentAttachments('', attachments)).toContain('memberCount: 2');
+  });
+
+  it('builds an image-only board payload when no text note was entered', () => {
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'hero-title',
+        selector: '[data-od-id="hero-title"]',
+        label: 'Hero title',
+        text: 'Open Design',
+        position: { x: 10, y: 20, width: 300, height: 80 },
+        htmlHint: '<h1 data-od-id="hero-title">',
+        selectionKind: 'element',
+      },
+      notes: [],
+      includeImageOnly: true,
+      imageAttachmentCount: 2,
+    });
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]).toMatchObject({
+      elementId: 'hero-title',
+      comment: 'Use the 2 attached images as the comment reference.',
+      source: 'board-batch',
+    });
+  });
+
+  it('builds visual annotation payloads without requiring a selector', () => {
+    const attachment = buildVisualAnnotationAttachment({
+      order: 1,
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      note: '',
+      bounds: { x: 12, y: 24, width: 140, height: 80 },
+      target: {
+        filePath: 'index.html',
+        position: { x: 12, y: 24, width: 140, height: 80 },
+      },
+    });
+
+    expect(attachment).toMatchObject({
+      selectionKind: 'visual',
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      selector: '',
+      comment: expect.stringContaining('red strokes'),
+      intent: expect.stringContaining('red strokes'),
+    });
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('targetKind: visual');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('screenshot: uploads/drawing.png');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('markKind: stroke');
+    expect(messageContentWithCommentAttachments('', [attachment])).not.toContain('selector: ');
+  });
+
+  it('keeps large queued board-note batches ordered in one send payload', () => {
+    const notes = Array.from({ length: 8 }, (_, index) => `Note ${index + 1}`);
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'pod-2',
+        selector: '[data-od-id="card"]',
+        label: 'Card pod',
+        text: 'Heading Body CTA',
+        position: { x: 20, y: 30, width: 240, height: 160 },
+        htmlHint: '<section data-od-id="card">',
+        selectionKind: 'pod',
+        memberCount: 3,
+        podMembers: [
+          {
+            elementId: 'card-heading',
+            selector: '[data-od-id="card-heading"]',
+            label: 'h2.card-heading',
+            text: 'Heading',
+            position: { x: 24, y: 34, width: 100, height: 32 },
+            htmlHint: '<h2 data-od-id="card-heading">',
+          },
+          {
+            elementId: 'card-body',
+            selector: '[data-od-id="card-body"]',
+            label: 'p.card-body',
+            text: 'Body',
+            position: { x: 24, y: 72, width: 180, height: 48 },
+            htmlHint: '<p data-od-id="card-body">',
+          },
+          {
+            elementId: 'card-cta',
+            selector: '[data-od-id="card-cta"]',
+            label: 'button.card-cta',
+            text: 'CTA',
+            position: { x: 24, y: 128, width: 96, height: 32 },
+            htmlHint: '<button data-od-id="card-cta">',
+          },
+        ],
+      },
+      notes,
+    });
+
+    expect(attachments).toHaveLength(8);
+    expect(attachments.map((attachment) => attachment.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(attachments.map((attachment) => attachment.comment)).toEqual(notes);
+    expect(messageContentWithCommentAttachments('', attachments)).toContain('8. pod-2');
+  });
+
+  it('updates and removes attached comments by saved comment id', () => {
+    const first = comment({ id: 'c1', elementId: 'hero-title', note: 'Original' });
+    const updated = comment({ id: 'c1', elementId: 'hero-title', note: 'Updated' });
+    const chart = comment({ id: 'c2', elementId: 'chart', note: 'Fix chart' });
+
+    const merged = mergeAttachedComments([first, chart], updated);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]?.note).toBe('Updated');
+
+    const remaining = removeAttachedComment(merged, 'c1');
+    expect(commentsToAttachments(remaining)).toEqual([
+      expect.objectContaining({ id: 'c2', elementId: 'chart' }),
+    ]);
+  });
+
+  it('converts iframe snapshot bounds into scaled overlay bounds', () => {
+    expect(overlayBoundsFromSnapshot({
+      filePath: 'index.html',
+      elementId: 'hero-title',
+      selector: '[data-od-id="hero-title"]',
+      label: 'h1.hero-title',
+      text: '',
+      htmlHint: '',
+      position: { x: 10, y: 20, width: 120, height: 40 },
+    }, 1.25)).toEqual({
+      left: 12.5,
+      top: 25,
+      width: 150,
+      height: 50,
+    });
+  });
+
+  it('only resolves saved markers from live snapshots for the same file', () => {
+    const saved = comment({ filePath: 'index.html', elementId: 'hero-title' });
+    const snapshots = new Map([
+      ['hero-title', {
+        filePath: 'index.html',
+        elementId: 'hero-title',
+        selector: '[data-od-id="hero-title"]',
+        label: 'h1.hero-title',
+        text: '',
+        htmlHint: '',
+        position: { x: 1, y: 2, width: 3, height: 4 },
+      }],
+    ]);
+
+    expect(liveSnapshotForComment(saved, snapshots)?.elementId).toBe('hero-title');
+    expect(liveSnapshotForComment(comment({ filePath: 'other.html' }), snapshots)).toBeNull();
+  });
+
+  it('rehydrates saved free-pin markers from persisted comment position after iframe reload', () => {
+    const saved = comment({
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      text: '',
+      htmlHint: '',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+
+    expect(liveSnapshotForComment(saved, new Map())).toMatchObject({
+      filePath: 'index.html',
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+  });
+
+  it('ignores collapsed live snapshots so deck slide changes do not jump markers to 0,0', () => {
+    const saved = comment({ filePath: 'index.html', elementId: 'hero-title' });
+    const snapshots = new Map([
+      ['hero-title', {
+        filePath: 'index.html',
+        elementId: 'hero-title',
+        selector: '[data-od-id="hero-title"]',
+        label: 'h1.hero-title',
+        text: '',
+        htmlHint: '',
+        position: { x: 0, y: 0, width: 0, height: 0 },
+      }],
+    ]);
+
+    expect(liveSnapshotForComment(saved, snapshots)).toBeNull();
+  });
+
+  it('shows deck comments only on their saved slide index', () => {
+    expect(commentVisibleOnDeckSlide({ slideIndex: 2 }, 2)).toBe(true);
+    expect(commentVisibleOnDeckSlide({ slideIndex: 2 }, 1)).toBe(false);
+    expect(commentVisibleOnDeckSlide({}, 1)).toBe(true);
+  });
+
+  it('keeps overlay equality separate from stored target metadata updates', () => {
+    const base: PreviewCommentSnapshot = {
+      filePath: 'index.html',
+      elementId: 'hero-title',
+      selector: '[data-od-id="hero-title"]',
+      label: 'h1.hero-title',
+      text: 'Hello',
+      htmlHint: '',
+      position: { x: 12, y: 24, width: 120, height: 32 },
+    };
+    const current = new Map([['hero-title', base]]);
+    const next = new Map([['hero-title', { ...base, text: 'Hello world' }]]);
+    expect(commentSnapshotOverlayEqual(base, next.get('hero-title')!)).toBe(true);
+    expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
+    next.set('hero-title', { ...base, position: { x: 13, y: 24, width: 120, height: 32 } });
+    expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
+  });
+
+  it('serializes selected comments into API-mode prompt context without visible input', () => {
+    const attachments = commentsToAttachments([
+      comment({
+        id: 'c1',
+        elementId: 'hero-title',
+        note: 'Only shorten this title',
+        style: {
+          color: 'rgb(26, 25, 22)',
+          backgroundColor: 'rgba(255, 255, 255, 0)',
+          fontSize: '13.5px',
+          fontWeight: '500',
+          fontFamily: 'Inter, sans-serif',
+        },
+      }),
+    ]);
+
+    const content = messageContentWithCommentAttachments('', attachments);
+
+    expect(content).toContain('(No extra typed instruction.)');
+    expect(content).toContain('<attached-preview-comments>');
+    expect(content).toContain('selector: [data-od-id="hero-title"]');
+    expect(content).toContain('computedStyle: color: rgb(26, 25, 22)');
+    expect(content).toContain('fontSize: 13.5px');
+    expect(content).toContain('comment: Only shorten this title');
+    // The hard-scope sentence IS the behavior change. Assert its key phrases
+    // so a future edit that softens or drops the directive lights the suite
+    // red instead of silently re-opening the over-broad edit bug.
+    expect(content).toContain('Hard scope: change ONLY');
+    expect(content).toContain('Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules');
+    expect(content).toContain('ask the user before proceeding');
+  });
+
+  it('adds hidden comment context only to the current user message sent to API providers', () => {
+    const attachments = commentsToAttachments([
+      comment({ id: 'c1', elementId: 'hero-title', note: 'Make it bolder' }),
+    ]);
+    const history: ChatMessage[] = [
+      {
+        id: 'old',
+        role: 'user',
+        content: 'Previous request',
+        createdAt: 0,
+        commentAttachments: attachments,
+      },
+      {
+        id: 'u1',
+        role: 'user',
+        content: '',
+        createdAt: 1,
+        commentAttachments: attachments,
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: 'Ready',
+        createdAt: 2,
+        commentAttachments: attachments,
+      },
+    ];
+
+    const next = historyWithCommentAttachmentContext(history, 'u1');
+
+    expect(next[0]?.content).toBe('Previous request');
+    expect(next[1]?.content).toContain('<attached-preview-comments>');
+    expect(next[1]?.content).toContain('comment: Make it bolder');
+    expect(next[2]?.content).toBe('Ready');
+    expect(history[1]?.content).toBe('');
+  });
+});
+
+function comment(patch: Partial<PreviewComment>): PreviewComment {
+  return {
+    id: 'c1',
+    projectId: 'project-1',
+    conversationId: 'conversation-1',
+    filePath: 'index.html',
+    elementId: 'hero-title',
+    selector: '[data-od-id="hero-title"]',
+    label: 'h1.hero-title',
+    text: 'Current title',
+    position: { x: 1, y: 2, width: 3, height: 4 },
+    htmlHint: '<h1 data-od-id="hero-title">',
+    note: 'Comment',
+    status: 'open',
+    createdAt: 1,
+    updatedAt: 1,
+    ...patch,
+  };
+}
+
+describe('queuedSlideNavTarget', () => {
+  it('returns the slide a queued send should flip the deck to', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ filePath: 'deck.html', slideIndex: 1 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 1 });
+  });
+
+  it('uses the first attachment that names a deck file and a slide', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ id: 'a', filePath: 'deck.html', slideIndex: undefined }),
+      commentAttachment({ id: 'b', filePath: 'deck.html', slideIndex: 3 }),
+      commentAttachment({ id: 'c', filePath: 'deck.html', slideIndex: 5 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 3 });
+  });
+
+  it('floors fractional slide indices and accepts slide zero', () => {
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 0 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 0 });
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 2.9 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 2 });
+  });
+
+  it('returns null when nothing is slide-scoped', () => {
+    expect(queuedSlideNavTarget(undefined)).toBeNull();
+    expect(queuedSlideNavTarget(null)).toBeNull();
+    expect(queuedSlideNavTarget([])).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: undefined })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ filePath: '', slideIndex: 2 })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: -1 })]),
+    ).toBeNull();
+  });
+});

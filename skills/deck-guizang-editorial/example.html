@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>贵赞编辑墨水 · 章节封页</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400&family=Inter:wght@400;500;600&family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { font-family: 'Inter','Noto Sans SC',system-ui,sans-serif; background:#0a0a0b; margin:0; }
+  .deck { display:grid; gap:24px; padding:24px; }
+  .slide { width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto; position:relative; overflow:hidden; }
+  .paper { background:#f1efea; color:#0a0a0b; }
+  .ink { background:#0a0a0b; color:#f1efea; }
+  .display { font-family:'Playfair Display','Noto Serif SC',serif; }
+  .body-serif { font-family:'Playfair Display','Noto Serif SC',serif; font-style:italic; }
+  .kicker { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; font-weight:500; }
+  .hairline { border:0; border-top:1px solid currentColor; opacity:0.3; }
+  .folio { font-feature-settings:'tnum'; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- L02 Act Divider · ink reverse -->
+  <section class="slide ink">
+    <div class="absolute inset-0 p-12 flex flex-col justify-between">
+      <header class="flex items-baseline justify-between kicker opacity-70">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span>Act II</span>
+        <span class="folio">04 / 12</span>
+      </header>
+      <div>
+        <div class="kicker opacity-80">第二章</div>
+        <h1 class="display mt-4 leading-[0.95]" style="font-size:clamp(64px,9vw,160px); font-weight:500;">
+          为什么<br/>
+          <span class="body-serif">写作者</span>该写 HTML<br/>
+          而不是 Markdown。
+        </h1>
+      </div>
+      <footer class="flex items-baseline justify-between kicker opacity-60">
+        <span>BY Open Design · 2026 SPRING</span>
+        <span class="body-serif normal-case tracking-normal">A magazine for editorial agents.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- L03 Big Numbers Grid · paper -->
+  <section class="slide paper">
+    <div class="absolute inset-0 p-12 flex flex-col justify-between">
+      <header class="flex items-baseline justify-between kicker" style="color:#3a382f">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span>Numbers</span>
+        <span class="folio">05 / 12</span>
+      </header>
+      <div>
+        <div class="kicker" style="color:#6b665b">By the numbers</div>
+        <h2 class="display mt-2 leading-[1.0]" style="font-size:clamp(36px,5vw,72px); font-weight:500;">
+          四个数字, <span class="body-serif">一条线</span> —— HTML 已经赢了。
+        </h2>
+      </div>
+      <div class="grid grid-cols-4 gap-8 mt-4">
+        <article class="border-t pt-4" style="border-color:#0a0a0b">
+          <div class="kicker" style="color:#6b665b">现有模板</div>
+          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">75</div>
+          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f"><span class="body-serif">+16</span> in this release; cover slides, docs, frames.</p>
+        </article>
+        <article class="border-t pt-4" style="border-color:#0a0a0b">
+          <div class="kicker" style="color:#6b665b">本地 Agent</div>
+          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">17</div>
+          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">Claude · Codex · Cursor · Gemini · Copilot, all <span class="body-serif">stdin</span>.</p>
+        </article>
+        <article class="border-t pt-4" style="border-color:#0a0a0b">
+          <div class="kicker" style="color:#6b665b">平均生成</div>
+          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">80<span class="body-serif text-[40px]">s</span></div>
+          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">一份杂志风 PPT, <span class="body-serif">31KB</span> 自包含 HTML.</p>
+        </article>
+        <article class="border-t pt-4" style="border-color:#0a0a0b">
+          <div class="kicker" style="color:#6b665b">API Keys</div>
+          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">0</div>
+          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">复用你 <span class="body-serif">已经登录</span>的 CLI session.</p>
+        </article>
+      </div>
+      <footer class="flex items-baseline justify-between kicker opacity-70" style="color:#3a382f">
+        <span>Source: HTML-Anything internal · 2026-05</span>
+        <span class="body-serif normal-case tracking-normal">Set in Playfair &amp; Inter.</span>
+      </footer>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

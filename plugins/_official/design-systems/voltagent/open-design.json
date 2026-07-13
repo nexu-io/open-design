@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-voltagent",
+  "title": "VoltAgent",
+  "title_i18n": {
+    "zh-CN": "VoltAgent",
+    "zh-TW": "VoltAgent",
+    "ja": "VoltAgent",
+    "ko": "VoltAgent",
+    "de": "VoltAgent",
+    "fr": "VoltAgent",
+    "ru": "VoltAgent",
+    "es": "VoltAgent",
+    "pt-BR": "VoltAgent",
+    "it": "VoltAgent",
+    "vi": "VoltAgent",
+    "pl": "VoltAgent",
+    "id": "VoltAgent",
+    "nl": "VoltAgent",
+    "ar": "VoltAgent",
+    "tr": "VoltAgent",
+    "uk": "VoltAgent",
+    "en": "VoltAgent"
+  },
+  "version": "0.1.0",
+  "description": "AI agent framework. Void-black canvas, emerald accent, terminal-native.",
+  "description_i18n": {
+    "zh-CN": "AI 智能体框架。深黑画布，翠绿点缀，终端原生风格。",
+    "zh-TW": "AI 代理框架。深黑畫布，翠綠點綴，終端原生風格。",
+    "ja": "AIエージェントフレームワーク。漆黒のキャンバス、エメラルドアクセント、ターミナルネイティブ。",
+    "ko": "AI 에이전트 프레임워크. 순검은 캔버스, 에메랄드 액센트, 터미널 네이티브.",
+    "de": "KI-Agenten-Framework. Tiefschwarze Leinwand, smaragdgrüner Akzent, Terminal-nativ.",
+    "fr": "Framework d'agent IA. Toile noir profond, accent émeraude, natif terminal.",
+    "ru": "Фреймворк AI-агентов. Чёрный холст, изумрудный акцент, терминальный стиль.",
+    "es": "Framework de agentes IA. Lienzo negro profundo, acento esmeralda, estilo terminal nativo.",
+    "pt-BR": "Framework de agentes IA. Tela preta profunda, destaque esmeralda, estilo terminal nativo.",
+    "it": "Framework per agenti IA. Tela nera profonda, accento smeraldo, stile terminale nativo.",
+    "vi": "Framework tác nhân AI. Canvas đen tuyền, điểm nhấn ngọc lục bảo, phong cách terminal gốc.",
+    "pl": "Framework agentów AI. Głęboko czarne płótno, szmaragdowy akcent, natywny styl terminala.",
+    "id": "Framework agen AI. Kanvas hitam pekat, aksen zamrud, gaya terminal asli.",
+    "nl": "AI-agent framework. Diepzwart canvas, smaragdgroen accent, terminal-native.",
+    "ar": "إطار عمل وكيل AI. لوحة سوداء داكنة، لمسة زمردية، نمط طرفية أصلي.",
+    "tr": "AI ajan çerçevesi. Derin siyah tuval, zümrüt vurgu, terminal-yerel.",
+    "uk": "Фреймворк AI-агентів. Глибоко-чорне полотно, смaragдовий акцент, термінальний стиль.",
+    "en": "AI agent framework. Void-black canvas, emerald accent, terminal-native."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the VoltAgent design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the VoltAgent design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "voltagent",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

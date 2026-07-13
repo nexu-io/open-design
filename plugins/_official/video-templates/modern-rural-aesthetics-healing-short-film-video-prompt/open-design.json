@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-modern-rural-aesthetics-healing-short-film-video-prompt",
+  "title": "Modern Rural Aesthetics Healing Short Film Video Prompt",
+  "title_i18n": {
+    "zh-CN": "现代田园美学治愈短片视频提示词",
+    "zh-TW": "現代田園美學療癒短片影片提示詞",
+    "ja": "モダン田園美学ヒーリングショートフィルム動画プロンプト",
+    "ko": "모던 전원 미학 힐링 단편 영화 비디오 프롬프트",
+    "de": "Modernes Landästhetik-Heilungsfilm-Video-Prompt",
+    "fr": "Prompt vidéo court-métrage guérisseur esthétique rurale moderne",
+    "ru": "Подсказка для видео исцеляющего короткометражного фильма в стиле современной сельской эстетики",
+    "es": "Prompt de vídeo de cortometraje curativo de estética rural moderna",
+    "pt-BR": "Prompt de vídeo curta-metragem curativo de estética rural moderna",
+    "it": "Prompt video cortometraggio curativo estetica rurale moderna",
+    "vi": "Prompt video phim ngắn chữa lành phong cách thẩm mỹ nông thôn hiện đại",
+    "pl": "Prompt wideo leczniczego filmu krótkometrażowego w estetyce współczesnej wsi",
+    "id": "Prompt video film pendek penyembuhan estetika pedesaan modern",
+    "nl": "Prompt voor helende korte film video in moderne landelijke esthetiek",
+    "ar": "موجه فيديو فيلم قصير علاجي بجماليات ريفية حديثة",
+    "tr": "Modern kırsal estetik iyileştirici kısa film video promptu",
+    "uk": "Промпт відео зцілюючого короткометражного фільму в сучасній сільській естетиці",
+    "en": "Modern Rural Aesthetics Healing Short Film Video Prompt"
+  },
+  "version": "0.1.0",
+  "description": "A detailed, three-shot prompt for Seedance 2.0 to generate a healing, cinematic short film in the Modern Rural Aesthetics style. It specifies the style (Cinematic Commercial, 4K/8K, Extreme Macro, nat",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 生成现代田园美学风格治愈短片的详细三镜头提示词，包含电影商业风格、4K/8K、极致微距等技术规格。",
+    "zh-TW": "為 Seedance 2.0 生成現代田園美學風格療癒短片的詳細三鏡頭提示詞，包含電影商業風格、4K/8K、極致微距等技術規格。",
+    "ja": "Seedance 2.0でモダン田園美学スタイルのヒーリング的なショートフィルムを生成する詳細な3ショットプロンプト。シネマティックコマーシャル、4K/8K、極端マクロなどを指定。",
+    "ko": "Seedance 2.0에서 모던 전원 미학 스타일의 힐링 단편 영화를 생성하는 상세한 3샷 프롬프트. 시네마틱 커머셜, 4K/8K, 익스트림 매크로 등을 지정합니다.",
+    "de": "Ein detailliertes Drei-Aufnahmen-Prompt für Seedance 2.0 zur Generierung eines heilenden Kurzfilms im Stil moderner Landästhetik mit Cinematic Commercial, 4K/8K und Extreme Macro.",
+    "fr": "Un prompt détaillé en trois plans pour Seedance 2.0 afin de générer un court-métrage cinématique et apaisant dans le style esthétique rurale moderne, avec Cinematic Commercial, 4K/8K et Extreme Macro.",
+    "ru": "Детальная подсказка из трех кадров для Seedance 2.0 для создания исцеляющего кинематографического короткометражного фильма в стиле современной сельской эстетики с Cinematic Commercial, 4K/8K и Extreme Macro.",
+    "es": "Un prompt detallado de tres tomas para Seedance 2.0 para generar un cortometraje cinematográfico curativo en estilo de estética rural moderna, con Cinematic Commercial, 4K/8K y Extreme Macro.",
+    "pt-BR": "Um prompt detalhado de três tomadas para Seedance 2.0 gerar um curta-metragem cinematográfico curativo no estilo de estética rural moderna, com Cinematic Commercial, 4K/8K e Extreme Macro.",
+    "it": "Un prompt dettagliato a tre inquadrature per Seedance 2.0 per generare un cortometraggio cinematografico curativo in stile estetica rurale moderna, con Cinematic Commercial, 4K/8K ed Extreme Macro.",
+    "vi": "Prompt chi tiết ba cảnh quay cho Seedance 2.0 để tạo phim ngắn điện ảnh chữa lành theo phong cách thẩm mỹ nông thôn hiện đại, với Cinematic Commercial, 4K/8K và Extreme Macro.",
+    "pl": "Szczegółowy prompt trzech ujęć dla Seedance 2.0 do generowania leczniczego, kinowego filmu krótkometrażowego w stylu współczesnej estetyki wiejskiej, z Cinematic Commercial, 4K/8K i Extreme Macro.",
+    "id": "Prompt tiga shot terperinci untuk Seedance 2.0 menghasilkan film pendek sinematik yang menyembuhkan dalam gaya estetika pedesaan modern, dengan Cinematic Commercial, 4K/8K, dan Extreme Macro.",
+    "nl": "Een gedetailleerde drie-shot prompt voor Seedance 2.0 om een helende, cinematografische korte film te genereren in moderne landelijke esthetiekstijl, met Cinematic Commercial, 4K/8K en Extreme Macro.",
+    "ar": "موجه مفصل من ثلاث لقطات لـ Seedance 2.0 لإنشاء فيلم قصير سينمائي علاجي بأسلوب الجماليات الريفية الحديثة، مع Cinematic Commercial و4K/8K وExtreme Macro.",
+    "tr": "Seedance 2.0 ile modern kırsal estetik tarzında iyileştirici, sinematik bir kısa film oluşturmak için üç çekimlik detaylı prompt, Cinematic Commercial, 4K/8K ve Extreme Macro içerir.",
+    "uk": "Детальний промпт із трьох кадрів для Seedance 2.0 для створення зцілюючого кінематографічного короткометражного фільму в стилі сучасної сільської естетики з Cinematic Commercial, 4K/8K та Extreme Macro.",
+    "en": "A detailed, three-shot prompt for Seedance 2.0 to generate a healing, cinematic short film in the Modern Rural Aesthetics style. It specifies the style (Cinematic Commercial, 4K/8K, Extreme Macro, nat"
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "John",
+    "url": "https://x.com/johnAGI168/status/2021818021354848258"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "action",
+    "food"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ce508b28e505ffce07247e2ab036d6f1/thumbnails/thumbnail.jpg",
+      "video": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/288.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "[Style]\nModern Rural Aesthetics, Cinematic Commercial quality, shot with Sony A7S3/cinema camera, 4K/8K ultra-clear, Extreme Macro, natural transparent lighting, healing ASMR, no historical costume drama feel.\n\n[Scene]\nA well-maintained modern farmhouse open kitchen, background is a lush vegetable garden, bright sunshine.\n\n[Character]\nModern Rural Creator, black long hair casually tied up with a wooden hairpin, wearing a dark blue comfortable linen outfit, clear makeup, focused and peaceful eyes.\n\n[Shot Details]\n[00:00-00:05] Shot 1: Morning Harvest (The Freshness)\nVisuals: High-definition close-up. Morning sunlight hits the plants with side backlighting.\nAction: The Creator's bare hands (long, clean fingers) pick a bright red tomato with glistening dew drops from the vine.\nDetails: Extremely sharp focus, clearly showing the fuzz on the tomato surface and the trajectory of sliding water droplets. Background is blurred high-quality green.\n\n[00:05-00:10] Shot 2: Extreme Craftsmanship (The Craft)\nVisuals: Indoor stove area, full of life but spotless.\nAction: The Creator is cutting vegetables, movements are skilled and precise (non-performance nature).\nDetails: Macro lens captures the moment the knife blade slices through the ingredients, juice splattering. Then switches to the orange flame flickering in the earthen stove, light and shadow are warm and real.\n\n[00:10-00:15] Shot 3: Tranquil Time (The Moment)\nVisuals: Full shot/Medium shot.\nAction: A delicate home-cooked dish is placed on the wooden long table in the yard. The Creator sits down quietly, gently tidies a stray hair, and picks up a bite of food.\nAtmosphere: Steam slowly rises against the backlight, the scene is so quiet you can almost hear the wind, showcasing the ultimate sense of relaxation modern people yearn for.",
+        "zh-CN": "使用这个插件完成以下任务：[Style]\nModern Rural Aesthetics, Cinematic Commercial quality, shot with Sony A7S3/cinema camera, 4K/8K ultra-clear, Extreme Macro, natural transparent lighting, healing ASMR, no historical costume drama feel.\n\n[Scene]\nA well-maintained modern farmhouse open kitchen, background is a lush vegetable garden, bright sunshine.\n\n[Character]\nModern Rural Creator, black long hair casually tied up with a wooden hairpin, wearing a dark blue comfortable linen outfit, clear makeup, focused and peaceful eyes.\n\n[Shot Details]\n[00:00-00:05] Shot 1: Morning Harvest (The Freshness)\nVisuals: High-definition close-up. Morning sunlight hits the plants with side backlighting.\nAction: The Creator's bare hands (long, clean fingers) pick a bright red tomato with glistening dew drops from the vine.\nDetails: Extremely sharp focus, clearly showing the fuzz on the tomato surface and the trajectory of sliding water droplets. Background is blurred high-quality green.\n\n[00:05-00:10] Shot 2: Extreme Craftsmanship (The Craft)\nVisuals: Indoor stove area, full of life but spotless.\nAction: The Creator is cutting vegetables, movements are skilled and precise (non-performance nature).\nDetails: Macro lens captures the moment the knife blade slices through the ingredients, juice splattering. Then switches to the orange flame flickering in the earthen stove, light and shadow are warm and real.\n\n[00:10-00:15] Shot 3: Tranquil Time (The Moment)\nVisuals: Full shot/Medium shot.\nAction: A delicate home-cooked dish is placed on the wooden long table in the yard. The Creator sits down quietly, gently tidies a stray hair, and picks up a bite of food.\nAtmosphere: Steam slowly rises against the backlight, the scene is so quiet you can almost hear the wind, showcasing the ultimate sense of relaxation modern people yearn for."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-lingo",
+  "title": "Lingo",
+  "title_i18n": {
+    "zh-CN": "Lingo",
+    "zh-TW": "Lingo",
+    "ja": "Lingo",
+    "ko": "Lingo",
+    "de": "Lingo",
+    "fr": "Lingo",
+    "ru": "Lingo",
+    "es": "Lingo",
+    "pt-BR": "Lingo",
+    "it": "Lingo",
+    "vi": "Lingo",
+    "pl": "Lingo",
+    "id": "Lingo",
+    "nl": "Lingo",
+    "ar": "Lingo",
+    "tr": "Lingo",
+    "uk": "Lingo",
+    "en": "Lingo"
+  },
+  "version": "0.1.0",
+  "description": "Playful, minimal design with bright colors, rounded shapes, tactile 3D borders, and friendly illustrations for approachable interfaces.",
+  "description_i18n": {
+    "zh-CN": "俏皮简约的设计风格，采用明亮色彩、圆润形状、触感立体边框和友好插图，打造平易近人的界面。",
+    "zh-TW": "俏皮簡約的設計風格，採用明亮色彩、圓潤形狀、觸感立體邊框和友善插圖，打造平易近人的介面。",
+    "ja": "明るい色彩、丸みを帯びた形状、触感的な3Dボーダー、フレンドリーなイラストを使用した、親しみやすいインターフェースのための遊び心のあるミニマルデザイン。",
+    "ko": "밝은 색상, 둥근 형태, 입체적인 3D 테두리, 친근한 일러스트를 활용한 경쾌하고 미니멀한 디자인으로 친근한 인터페이스를 구현합니다.",
+    "de": "Verspieltes, minimalistisches Design mit leuchtenden Farben, abgerundeten Formen, haptischen 3D-Rahmen und freundlichen Illustrationen für zugängliche Benutzeroberflächen.",
+    "fr": "Design ludique et minimaliste avec des couleurs vives, des formes arrondies, des bordures 3D tactiles et des illustrations conviviales pour des interfaces accessibles.",
+    "ru": "Игривый минималистичный дизайн с яркими цветами, округлыми формами, тактильными 3D-границами и дружелюбными иллюстрациями для доступных интерфейсов.",
+    "es": "Diseño minimalista y divertido con colores brillantes, formas redondeadas, bordes 3D táctiles e ilustraciones amigables para interfaces accesibles.",
+    "pt-BR": "Design minimalista e divertido com cores vibrantes, formas arredondadas, bordas 3D táteis e ilustrações amigáveis para interfaces acessíveis.",
+    "it": "Design minimalista e giocoso con colori vivaci, forme arrotondate, bordi 3D tattili e illustrazioni amichevoli per interfacce accessibili.",
+    "vi": "Thiết kế tối giản vui tươi với màu sắc tươi sáng, hình dạng tròn trịa, viền 3D xúc giác và hình minh họa thân thiện cho giao diện dễ tiếp cận.",
+    "pl": "Zabawny, minimalistyczny design z jasnymi kolorami, zaokrąglonymi kształtami, dotykalnymi obramowaniami 3D i przyjaznymi ilustracjami dla przystępnych interfejsów.",
+    "id": "Desain minimal yang menyenangkan dengan warna cerah, bentuk bulat, border 3D taktil, dan ilustrasi ramah untuk antarmuka yang mudah didekati.",
+    "nl": "Speels, minimalistisch ontwerp met felle kleuren, afgeronde vormen, tactiele 3D-randen en vriendelijke illustraties voor toegankelijke interfaces.",
+    "ar": "تصميم مرح وبسيط مع ألوان زاهية وأشكال مستديرة وحدود ثلاثية الأبعاد ملموسة ورسوم توضيحية ودية لواجهات سهلة الوصول.",
+    "tr": "Parlak renkler, yuvarlak şekiller, dokunsal 3D kenarlıklar ve dostça illüstrasyonlarla ulaşılabilir arayüzler için oyunsu, minimalist tasarım.",
+    "uk": "Грайливий мінімалістичний дизайн із яскравими кольорами, округлими формами, тактильними 3D-межами та дружніми ілюстраціями для доступних інтерфейсів.",
+    "en": "Playful, minimal design with bright colors, rounded shapes, tactile 3D borders, and friendly illustrations for approachable interfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "creative-artistic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Lingo design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Lingo design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "lingo",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

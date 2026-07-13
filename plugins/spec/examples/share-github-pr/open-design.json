@@ -1,0 +1,54 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "share-github-pr",
+  "title": "Share as GitHub PR",
+  "version": "0.1.0",
+  "description": "Package an accepted artifact or plugin folder as a GitHub pull request.",
+  "license": "MIT",
+  "tags": ["share", "github-pr", "pull-request", "spec-plugin"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "tune-collab",
+    "mode": "share",
+    "scenario": "github-pr",
+    "useCase": {
+      "query": "Prepare a GitHub PR for {{targetRepo}} from the accepted artifact or plugin folder."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["file-read", "todo-write", "handoff", "connector"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "inspect", "atoms": ["file-read", "todo-write"] },
+        { "id": "confirm", "atoms": ["connector"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "connectors": {
+      "required": [
+        { "id": "github", "tools": ["create-pull-request"] }
+      ]
+    },
+    "genui": {
+      "surfaces": [
+        {
+          "id": "confirm-pr",
+          "kind": "confirmation",
+          "persist": "run",
+          "trigger": { "stageId": "confirm", "atom": "connector" },
+          "prompt": "Open a GitHub PR with the prepared branch and summary?"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "targetRepo", "type": "string", "required": true, "label": "Target repository", "placeholder": "nexu-io/open-design" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "connector", "connector:github", "network"]
+  }
+}
+

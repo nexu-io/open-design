@@ -1,0 +1,14 @@
+/* theme: dracula — dracula 深色 */
+:root{
+  --bg:#282a36;--bg-soft:#21222c;--surface:#343746;--surface-2:#44475a;
+  --border:rgba(248,248,242,.12);--border-strong:rgba(248,248,242,.24);
+  --text-1:#f8f8f2;--text-2:#bdbde0;--text-3:#6272a4;
+  --accent:#bd93f9;--accent-2:#ff79c6;--accent-3:#8be9fd;
+  --good:#50fa7b;--warn:#f1fa8c;--bad:#ff5555;
+  --grad:linear-gradient(135deg,#bd93f9,#ff79c6 55%,#8be9fd);
+  --grad-soft:linear-gradient(135deg,#343746,#44475a);
+  --radius:12px;--radius-sm:8px;--radius-lg:18px;
+  --shadow:0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg:0 22px 60px rgba(0,0,0,.55);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

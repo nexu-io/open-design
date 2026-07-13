@@ -1,0 +1,22 @@
+---
+import {
+  DEFAULT_LOCALE,
+  getCommonCopy,
+  isLandingLocale,
+} from '../i18n';
+
+const { locale: rawLocale = DEFAULT_LOCALE } = Astro.props;
+const locale = isLandingLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+const copy = getCommonCopy(locale).topbar;
+---
+
+<div class='topbar' data-od-id='topbar'>
+  <div class='container topbar-inner'>
+    <span class='mid'>
+      <span>
+        {copy.filedUnder} <b class='coral'>{copy.category}</b>
+      </span>
+      <span>{copy.madeOnEarth}</span>
+    </span>
+  </div>
+</div>

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-artistic",
+  "title": "Artistic",
+  "title_i18n": {
+    "zh-CN": "艺术风格",
+    "zh-TW": "藝術風格",
+    "ja": "アーティスティック",
+    "ko": "아티스틱",
+    "de": "Artistic",
+    "fr": "Artistic",
+    "ru": "Artistic",
+    "es": "Artistic",
+    "pt-BR": "Artistic",
+    "it": "Artistic",
+    "vi": "Artistic",
+    "pl": "Artistic",
+    "id": "Artistic",
+    "nl": "Artistic",
+    "ar": "Artistic",
+    "tr": "Artistic",
+    "uk": "Artistic",
+    "en": "Artistic"
+  },
+  "version": "0.1.0",
+  "description": "High-contrast, expressive style with creative typography and bold color choices for visually striking interfaces.",
+  "description_i18n": {
+    "zh-CN": "高对比度、富有表现力的设计风格，采用创意排版和大胆的色彩选择，打造视觉冲击力强的界面。",
+    "zh-TW": "高對比度、富有表現力的設計風格，採用創意排版和大膽的色彩選擇，打造視覺衝擊力強的介面。",
+    "ja": "高コントラストで表現豊かなスタイル。クリエイティブなタイポグラフィと大胆な色使いで、視覚的にインパクトのあるインターフェースを実現します。",
+    "ko": "창의적인 타이포그래피와 대담한 색상 선택으로 시각적으로 인상적인 인터페이스를 구현하는 고대비 표현적 스타일입니다.",
+    "de": "Kontrastreicher, ausdrucksstarker Stil mit kreativer Typografie und mutigen Farbwahlen für visuell beeindruckende Interfaces.",
+    "fr": "Style expressif à fort contraste avec une typographie créative et des choix de couleurs audacieux pour des interfaces visuellement saisissantes.",
+    "ru": "Высококонтрастный выразительный стиль с креативной типографикой и смелыми цветовыми решениями для визуально впечатляющих интерфейсов.",
+    "es": "Estilo expresivo de alto contraste con tipografía creativa y elecciones de color audaces para interfaces visualmente impactantes.",
+    "pt-BR": "Estilo expressivo de alto contraste com tipografia criativa e escolhas de cores ousadas para interfaces visualmente marcantes.",
+    "it": "Stile espressivo ad alto contrasto con tipografia creativa e scelte cromatiche audaci per interfacce visivamente d'impatto.",
+    "vi": "Phong cách biểu cảm với độ tương phản cao, typography sáng tạo và lựa chọn màu sắc táo bạo cho giao diện ấn tượng về mặt thị giác.",
+    "pl": "Ekspresyjny styl o wysokim kontraście z kreatywną typografią i odważnymi wyborami kolorystycznymi dla wizualnie efektownych interfejsów.",
+    "id": "Gaya ekspresif dengan kontras tinggi, tipografi kreatif, dan pilihan warna berani untuk tampilan antarmuka yang mencolok secara visual.",
+    "nl": "Expressieve stijl met hoog contrast, creatieve typografie en gedurfde kleurkeuzes voor visueel opvallende interfaces.",
+    "ar": "أسلوب تعبيري عالي التباين مع طباعة إبداعية وخيارات ألوان جريئة لواجهات مذهلة بصرياً.",
+    "tr": "Yaratıcı tipografi ve cesur renk seçimleriyle görsel olarak çarpıcı arayüzler için yüksek kontrastlı, etkileyici stil.",
+    "uk": "Висококонтрастний виразний стиль із креативною типографікою та сміливими кольоровими рішеннями для візуально вражаючих інтерфейсів.",
+    "en": "High-contrast, expressive style with creative typography and bold color choices for visually striking interfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "creative-artistic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Artistic design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Artistic design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "artistic",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

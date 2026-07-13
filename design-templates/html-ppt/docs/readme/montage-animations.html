@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="aurora">
+<head>
+<meta charset="utf-8">
+<title>47 animations showcase</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" href="../../assets/themes/aurora.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden}
+  body{background:#0a0a14;font-family:"PingFang SC","Noto Sans SC","Inter",-apple-system,sans-serif;color:#fff;padding:48px 56px 44px;display:flex;flex-direction:column;gap:28px}
+  .hdr{display:flex;align-items:flex-end;justify-content:space-between}
+  .hdr h2{font:900 48px/1 "Inter",sans-serif;letter-spacing:-.02em;color:#fff}
+  .hdr h2 b{display:inline-block;font-size:58px;padding-right:14px;background:linear-gradient(90deg,#ff4d8d,#f59e0b,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hdr .sub{font:600 16px/1 "JetBrains Mono","SF Mono",monospace;color:#aab0c0;letter-spacing:.1em;text-transform:uppercase}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:18px;min-height:0}
+  .cell{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 56px rgba(0,0,0,.45);background:#050510;min-height:0}
+  .cell .fx-host{position:absolute;inset:0}
+  .cell .label{position:absolute;left:14px;bottom:12px;z-index:5;font:700 11px/1 "JetBrains Mono","SF Mono",monospace;letter-spacing:.1em;padding:6px 12px;border-radius:999px;background:rgba(10,10,20,.72);color:#fff;text-transform:uppercase;border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(6px)}
+  .cell .kind{position:absolute;left:14px;top:12px;z-index:5;font:700 10px/1 "JetBrains Mono","SF Mono",monospace;letter-spacing:.14em;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.1);color:#fff;text-transform:uppercase;border:1px solid rgba(255,255,255,.16)}
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <h2><b>47</b>Animations — 27 CSS · 20 Canvas FX</h2>
+    <div class="sub">html-ppt · data-anim="…" / data-fx="…" · pick 8 canvas FX</div>
+  </div>
+  <div class="grid">
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="knowledge-graph" style="--accent:#7c5cff;--accent-2:#22d3ee;--text-1:#fff"></div><span class="label">knowledge-graph</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="neural-net" style="--accent:#22d3ee;--accent-2:#ff4d8d"></div><span class="label">neural-net</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="galaxy-swirl" style="--accent:#7c5cff;--accent-2:#ff4d8d"></div><span class="label">galaxy-swirl</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="constellation" style="--accent:#9fb4ff"></div><span class="label">constellation</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="matrix-rain"></div><span class="label">matrix-rain</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="starfield" style="--accent:#fff;--accent-2:#9fb4ff"></div><span class="label">starfield</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="firework" style="--accent:#ff4d8d;--accent-2:#22d3ee"></div><span class="label">firework</span></div>
+    <div class="cell"><span class="kind">data-fx</span><div class="fx-host" data-fx="particle-burst" style="--accent:#ff4d8d;--accent-2:#7c5cff"></div><span class="label">particle-burst</span></div>
+  </div>
+<script src="../../assets/animations/fx/_util.js"></script>
+<script src="../../assets/animations/fx/knowledge-graph.js"></script>
+<script src="../../assets/animations/fx/neural-net.js"></script>
+<script src="../../assets/animations/fx/galaxy-swirl.js"></script>
+<script src="../../assets/animations/fx/constellation.js"></script>
+<script src="../../assets/animations/fx/matrix-rain.js"></script>
+<script src="../../assets/animations/fx/starfield.js"></script>
+<script src="../../assets/animations/fx/firework.js"></script>
+<script src="../../assets/animations/fx/particle-burst.js"></script>
+<script>
+(function(){
+  document.querySelectorAll('[data-fx]').forEach(el => {
+    const name = el.getAttribute('data-fx');
+    const fn = window.HPX && window.HPX[name];
+    if (typeof fn === 'function') {
+      try { fn(el, {}); } catch(e) { console.warn('[fx]', name, e); }
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/shadcn/tokens.css
+ *
+ * Structured token bindings for "shadcn" — the open-source copy-paste
+ * React component library whose "brand" is the calm, neutral baseline
+ * that thousands of teams extend. shadcn is intentionally NOT a loud
+ * identity: zinc/slate neutrals, near-black primary, 8px default
+ * radius, restrained spacing, Inter/Geist body text, and accessibility
+ * non-negotiables (visible focus, AA contrast, semantic state colors).
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating an artifact for shadcn should paste
+ * the `:root` block verbatim into the first `<style>` of the artifact,
+ * then reference everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match shadcn's voice rather than the cross-brand default):
+ *
+ *   1. `--accent` is `#000000` (DESIGN.md §2 Primary), NOT a chromatic
+ *      hue. shadcn's primary action button is pure black on white —
+ *      that IS the accent moment. Because pure black cannot darken
+ *      further visibly, `--accent-hover` and `--accent-active` mix
+ *      TOWARD WHITE (not toward black like the schema default). This
+ *      mirrors the shadcn convention of `bg-primary hover:bg-primary/90`
+ *      where the hover lifts the fill instead of pressing it deeper.
+ *
+ *   2. `--fg` is `#111827` (DESIGN.md §2 Text — Tailwind slate-900),
+ *      NOT `#000000`. Pure-black body copy against pure-white surface
+ *      reads as harsh; the slight cool slate undertone is part of the
+ *      shadcn neutral system. Keeping `--fg` distinct from `--accent`
+ *      preserves the "body text" vs "decisive CTA" semantic split.
+ *
+ *   3. `--fg-2`, `--meta`, `--surface-warm`, `--border-soft` collapse
+ *      to their schema siblings via `var()`. shadcn is a monochrome
+ *      baseline with one foreground tier, one canvas tier, one border
+ *      weight — brands extending shadcn (e.g. a Warm theme) rebind
+ *      these slots independently. The names still exist so shared
+ *      components targeting the full ramp resolve.
+ *
+ *   4. `--focus-ring` is the signature shadcn pattern: a 2px halo of
+ *      `var(--bg)` (the offset) wrapped by a 2px ring of `var(--accent)`
+ *      (the focus indicator). This is the `ring-2 ring-offset-2`
+ *      Tailwind utility every shadcn primitive inherits, expressed as
+ *      a layered box-shadow so it works on dark surfaces, glass
+ *      surfaces, and inside scrollers without the offset clipping.
+ *
+ *   5. `--radius-md` is `8px` — the canonical shadcn default
+ *      (`--radius: 0.5rem` in the components.json starter). `--radius-sm`
+ *      drops to `6px` so inputs and buttons feel one shade tighter
+ *      than cards, matching the `calc(var(--radius) - 2px)` formula
+ *      shadcn primitives use internally. The whole scale (6/8/12/9999)
+ *      is restrained — shadcn rejects oversized pill cards.
+ *
+ *   6. Type scale tops out at `48px` (`--text-4xl`). DESIGN.md §3
+ *      caps the documented scale at 32px; we extend to 40/48 for
+ *      marketing hero treatments while keeping `--tracking-display`
+ *      at a gentle `-0.02em` (not the aggressive `-0.05em` of brand-
+ *      voice systems like Vercel). shadcn whispers; it does not shout.
+ *
+ *   7. `--elev-raised` is a two-layer hairline shadow (1px + 3px
+ *      ambient), mirroring Tailwind's `shadow-sm` — shadcn cards lift
+ *      with a whisper, not a blur. No inner glow, no atmospheric
+ *      wash; the brand voice is functional surface, not theatre.
+ *
+ *   8. Section rhythm is generous (`96 / 64 / 48`) and `--container-max`
+ *      is `1280px` (`max-w-7xl`), the canonical shadcn marketing-page
+ *      width. Gutter narrows to `16px` on phone but never edge-bleeds
+ *      body copy — readability is non-negotiable.
+ *
+ *   9. `--font-mono` is "Fira Code" (DESIGN.md §3), kept distinct
+ *      from the body Geist so code blocks and `kbd` carry a visible
+ *      "this is technical content" signal. The system-mono fallback
+ *      stack guarantees code remains legible if Fira Code is missing.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the schema. Geist and Fira Code are
+ * referenced through OS-fallback stacks so artifacts render
+ * acceptably even when the faces are not loaded; any host that wants
+ * the real faces links them externally.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — schema slot) ─────────────────────────────
+   * Pure white canvas, pure white cards. shadcn intentionally rejects
+   * background-color variation between sections — depth comes from the
+   * border and the elevation hairline, not from tinting surfaces
+   * warmer or cooler. `--surface-warm` aliases to surface because the
+   * brand has no third tier; extending themes (e.g. a "Stone" preset)
+   * rebind independently. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-warm: var(--surface);     /* alias — shadcn has no warm tier */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * shadcn differentiates two text levels in its base preset: primary
+   * (slate-900) and muted (slate-500). `--fg-2` aliases to `--fg` and
+   * `--meta` aliases to `--muted` so shared components targeting the
+   * richer ramp still resolve. `--fg` is `#111827` (slate-900) NOT
+   * `#000000` — the slight cool undertone is part of the neutral
+   * system. Pure black is reserved for `--accent` (the decisive CTA). */
+  --fg: #111827;                       /* slate-900 — body text (DESIGN.md §2 Text) */
+  --fg-2: var(--fg);                   /* alias — shadcn has no secondary fg tier */
+  --muted: #64748b;                    /* slate-500 — captions, subtext, descriptions */
+  --meta: var(--muted);                /* alias — shadcn has no metadata tier */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Single hairline weight. shadcn uses real `border: 1px solid` (not
+   * shadow-as-border like Vercel) — the explicit edge is part of the
+   * copy-paste primitive's "you can see exactly what's drawn" voice.
+   * `--border-soft` aliases for brands that need a row-separator vs
+   * card-edge distinction; shadcn does not. */
+  --border: #e5e7eb;                   /* slate-200 — card edge, input edge, dividers */
+  --border-soft: var(--border);        /* alias — shadcn has no soft tier */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Pure black per DESIGN.md §2 ("Primary: #000000 — Favor Primary
+   * for CTA emphasis"). shadcn's primary button is `bg-primary` =
+   * near-black on white; that IS the accent moment. The hover and
+   * active states mix toward WHITE (not toward black) because pure
+   * black cannot darken further — this mirrors the shadcn idiom
+   * `bg-primary hover:bg-primary/90` where the fill lightens slightly
+   * on pointer-over to signal interactivity. */
+  --accent: #000000;                   /* DESIGN.md §2 Primary — CTA fill */
+  --accent-on: #ffffff;                /* white label on black */
+  --accent-hover: color-mix(in oklab, var(--accent), white 10%);   /* ~#1a1a1a — lift, don't press */
+  --accent-active: color-mix(in oklab, var(--accent), white 18%);  /* ~#2e2e2e — clear pressed delta */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Reserved for state, not decoration. Values come directly from
+   * DESIGN.md §2 — Tailwind green-600 / amber-600 / red-600. Keep
+   * total semantic-color pixels under 5% of any surface; shadcn
+   * primitives use them for badges and validation only, never as
+   * filler chrome. */
+  --success: #16a34a;
+  --warn: #d97706;                     /* DESIGN.md §2 Warning — amber-600, not the schema yellow */
+  --danger: #dc2626;
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Geist Sans for display and body per DESIGN.md §3 — modern, neutral,
+   * humanist sans that ships open-source. Geist scales cleanly from
+   * 12px UI to 48px hero without re-weighting. Fira Code for monospace
+   * (DESIGN.md §3 mono) lends code blocks the legible ligature-friendly
+   * face shadcn examples gravitate toward. OS-mono fallback covers
+   * environments without Fira Code installed. */
+  --font-display: "Geist", "Geist Sans", -apple-system, system-ui, "Segoe UI", Arial, sans-serif;
+  --font-body: "Geist", "Geist Sans", -apple-system, system-ui, "Segoe UI", Arial, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — DESIGN.md §3 lists 12/14/16/20/24/32; we extend
+   * 40/48 for marketing hero treatments. The scale stays restrained
+   * (no 64+ display) because shadcn's voice is "build your own", not
+   * "look at this hero". Hierarchy comes from weight + spacing, not
+   * px excess. */
+  --text-xs: 12px;                     /* caption, meta, badge */
+  --text-sm: 14px;                     /* button, input, secondary body */
+  --text-base: 16px;                   /* body baseline */
+  --text-lg: 20px;                     /* lede, featured paragraph */
+  --text-xl: 24px;                     /* card title, H3 */
+  --text-2xl: 32px;                    /* section title, H2 */
+  --text-3xl: 40px;                    /* H1 */
+  --text-4xl: 48px;                    /* display hero (marketing only) */
+
+  /* Body leading at 1.5 (shadcn docs default), tight leading at 1.2
+   * for headings. Display tracking is a gentle `-0.02em` — shadcn
+   * whispers; the aggressive `-0.05em` compression of brand-voice
+   * systems would override the calm baseline that makes shadcn
+   * recognizable. */
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 4px-grid base scale. DESIGN.md §4 documents 4/8/12/16/24/32; the
+   * schema requires 8 tiers so we add 20 and 48 for breathing room
+   * between cards and inside marketing forms. Tailwind/shadcn users
+   * map these to `space-1` → `space-12` mentally without translation. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — generous but never gallery-empty. 96px desktop
+   * matches shadcn marketing pages (py-24 in Tailwind units), 64px
+   * tablet preserves the documented hierarchy, 48px phone collapses
+   * without losing the breathing room that distinguishes shadcn
+   * sections from dense dashboard layouts. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * The canonical shadcn default is `--radius: 0.5rem` (8px) and the
+   * smaller variants compute as `calc(var(--radius) - Npx)`. We bind:
+   *   sm 6px → buttons, inputs (the `calc(--radius - 2px)` tier)
+   *   md 8px → cards, modals (the documented baseline)
+   *   lg 12px → featured containers (the `calc(--radius + 4px)` tier)
+   *   pill 9999px → badges, avatars, capsule chips */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * Tailwind-`shadow-sm` philosophy: two whisper-soft layers, no
+   * atmospheric blur. shadcn rejects the multi-layer card stack
+   * because the brand voice is "you can read exactly what's drawn",
+   * not "look how lifted this is". `--elev-ring` carries hairline
+   * edges where a real border would shift layout; `--elev-raised`
+   * adds the 1px+3px ambient pair for dropdowns, popovers, and
+   * floating panels. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 1px 2px 0 color-mix(in oklab, var(--fg), transparent 92%),
+    0 1px 3px 0 color-mix(in oklab, var(--fg), transparent 88%);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * The shadcn signature: 2px halo of canvas color (the "offset")
+   * wrapped by a 2px ring of accent. This is the `ring-2 ring-offset-2
+   * ring-ring` Tailwind utility every shadcn primitive inherits,
+   * expressed as a layered box-shadow so the offset reads cleanly on
+   * any surface (light, dark, glass) without the outline-offset
+   * caveats. DESIGN.md §6 explicitly requires "strong focus-visible
+   * states" — this is the rule, not a suggestion. */
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Two durations + one easing curve, per DESIGN.md §7 "short,
+   * purposeful transitions (150–250ms) with stable easing". shadcn
+   * primitives are quick and unobtrusive — never a long-form
+   * choreographed entrance. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1280px max content width (`max-w-7xl`) — the canonical shadcn
+   * marketing-page width that keeps line lengths comfortable on
+   * wide displays without edge-bleeding into 1440px+ territory.
+   * Gutters narrow to 16px on phone but never collapse to 0; shadcn
+   * preserves the visible inset that frames the column. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 16px;
+}

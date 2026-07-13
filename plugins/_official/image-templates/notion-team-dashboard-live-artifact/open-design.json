@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-notion-team-dashboard-live-artifact",
+  "title": "Notion-style Team Dashboard (Live Artifact)",
+  "title_i18n": {
+    "zh-CN": "Notion 风格团队仪表板（实时制品）",
+    "zh-TW": "Notion 風格團隊儀表板（即時製品）",
+    "ja": "Notion スタイルチームダッシュボード（ライブアーティファクト）",
+    "ko": "Notion 스타일 팀 대시보드 (라이브 아티팩트)",
+    "de": "Notion-Stil Team-Dashboard (Live-Artefakt)",
+    "fr": "Tableau de bord d'équipe style Notion (Artefact en direct)",
+    "ru": "Командная панель в стиле Notion (Live Artifact)",
+    "es": "Panel de equipo estilo Notion (Artefacto en vivo)",
+    "pt-BR": "Painel de equipe estilo Notion (Artefato ao vivo)",
+    "it": "Dashboard team in stile Notion (Artefatto live)",
+    "vi": "Bảng điều khiển nhóm phong cách Notion (Artefact trực tiếp)",
+    "pl": "Panel zespołowy w stylu Notion (Artefakt na żywo)",
+    "id": "Dasbor Tim Gaya Notion (Artefak Langsung)",
+    "nl": "Notion-stijl teamdashboard (Live Artifact)",
+    "ar": "لوحة معلومات الفريق بأسلوب Notion (عنصر مباشر)",
+    "tr": "Notion tarzı Ekip Gösterge Paneli (Canlı Artifact)",
+    "uk": "Командна панель у стилі Notion (Live Artifact)",
+    "en": "Notion-style Team Dashboard (Live Artifact)"
+  },
+  "version": "0.1.0",
+  "description": "Single-screen Notion-native team dashboard mockup — KPI grid, 7-day sparkline, activity feed, and linked-database task table. Visual companion to the live-artifact skill; pair with it for refreshable / connector-backed runs, or use standalone as a still mockup.",
+  "description_i18n": {
+    "zh-CN": "单屏 Notion 原生团队仪表板模型——包含 KPI 网格、7 天趋势图、活动信息流和关联数据库任务表。可搭配实时制品功能实现数据刷新和连接器支持，也可作为静态模型独立使用。",
+    "zh-TW": "單螢幕 Notion 原生團隊儀表板模型——包含 KPI 網格、7 天趨勢圖、活動資訊流和關聯資料庫任務表。可搭配即時製品功能實現資料重新整理和連接器支援，也可作為靜態模型獨立使用。",
+    "ja": "単一画面の Notion ネイティブチームダッシュボードモックアップ — KPI グリッド、7日間スパークライン、アクティビティフィード、リンクデータベースタスクテーブルを搭載。データ更新やコネクタ連携に対応し、静的モックアップとしても使用可能。",
+    "ko": "단일 화면 Notion 네이티브 팀 대시보드 목업 — KPI 그리드, 7일 스파크라인, 활동 피드, 연결된 데이터베이스 작업 테이블 포함. 라이브 아티팩트 기능과 함께 데이터 새로고침 및 커넥터 지원 가능하며, 정적 목업으로도 독립 사용 가능.",
+    "de": "Einseitiges Notion-natives Team-Dashboard-Mockup — mit KPI-Raster, 7-Tage-Sparkline, Aktivitätsfeed und verknüpfter Datenbank-Aufgabentabelle. Kombinierbar mit Live-Artefakt-Funktion für aktualisierbare Connector-Läufe oder eigenständig als statisches Mockup nutzbar.",
+    "fr": "Maquette de tableau de bord d'équipe Notion sur un seul écran — grille de KPI, graphique sparkline 7 jours, fil d'activité et table de tâches de base de données liée. Compatible avec la fonctionnalité d'artefact en direct pour actualisation et connecteurs, ou utilisable seul comme maquette statique.",
+    "ru": "Одноэкранный макет командной панели в стиле Notion — сетка KPI, 7-дневный спарклайн, лента активности и таблица задач из связанной базы данных. Работает с функцией live-artifact для обновления данных и подключения коннекторов или как статический макет.",
+    "es": "Maqueta de panel de equipo nativo de Notion en una sola pantalla — cuadrícula de KPI, gráfico sparkline de 7 días, feed de actividad y tabla de tareas de base de datos vinculada. Compatible con la función de artefacto en vivo para actualización y conectores, o uso independiente como maqueta estática.",
+    "pt-BR": "Mockup de painel de equipe nativo do Notion em tela única — grade de KPI, sparkline de 7 dias, feed de atividades e tabela de tarefas de banco de dados vinculado. Compatível com recurso de artefato ao vivo para atualização e conectores, ou uso independente como mockup estático.",
+    "it": "Mockup di dashboard team nativa Notion su schermo singolo — griglia KPI, sparkline a 7 giorni, feed attività e tabella task con database collegato. Compatibile con funzionalità artefatto live per aggiornamenti e connettori, o utilizzabile in autonomia come mockup statico.",
+    "vi": "Mô hình bảng điều khiển nhóm Notion trên một màn hình — lưới KPI, biểu đồ sparkline 7 ngày, nguồn cấp hoạt động và bảng nhiệm vụ cơ sở dữ liệu liên kết. Tương thích với tính năng artefact trực tiếp để làm mới dữ liệu và kết nối, hoặc dùng độc lập như mô hình tĩnh.",
+    "pl": "Jednoekranowy mockup panelu zespołowego Notion — siatka KPI, wykres sparkline 7-dniowy, kanał aktywności i tabela zadań z połączoną bazą danych. Kompatybilny z funkcją artefaktu na żywo do odświeżania danych i konektorów lub samodzielny jako statyczny mockup.",
+    "id": "Mockup dasbor tim Notion native satu layar — grid KPI, sparkline 7 hari, feed aktivitas, dan tabel tugas database tertaut. Kompatibel dengan fitur artefak langsung untuk pembaruan data dan konektor, atau digunakan mandiri sebagai mockup statis.",
+    "nl": "Eenscherms Notion-native teamdashboard mockup — KPI-raster, 7-daagse sparkline, activiteitenfeed en gekoppelde database-takentabel. Compatibel met live-artifact functie voor vernieuwbare data en connectors, of zelfstandig te gebruiken als statische mockup.",
+    "ar": "نموذج لوحة معلومات فريق Notion بشاشة واحدة — شبكة KPI، مخطط خطي لـ 7 أيام، موجز الأنشطة، وجدول مهام قاعدة بيانات مرتبط. متوافق مع ميزة العنصر المباشر لتحديث البيانات والموصلات، أو استخدام مستقل كنموذج ثابت.",
+    "tr": "Tek ekran Notion yerel ekip gösterge paneli mockup'ı — KPI ızgarası, 7 günlük sparkline, etkinlik akışı ve bağlantılı veritabanı görev tablosu. Canlı artifact özelliği ile veri yenileme ve bağlayıcı desteği veya bağımsız statik mockup olarak kullanılabilir.",
+    "uk": "Одноекранний макет командної панелі Notion — сітка KPI, 7-денний спарклайн, стрічка активності та таблиця завдань із прив'язаною базою даних. Сумісний з функцією live-artifact для оновлення даних і підключення конекторів або самостійне використання як статичний макет.",
+    "en": "Single-screen Notion-native team dashboard mockup — KPI grid, 7-day sparkline, activity feed, and linked-database task table. Visual companion to the live-artifact skill; pair with it for refreshable / connector-backed runs, or use standalone as a still mockup."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "joeylee12629-star",
+    "url": "https://github.com/joeylee12629-star/open-design"
+  },
+  "homepage": "https://github.com/joeylee12629-star/open-design",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "live-artifact",
+    "app-showcase",
+    "chart"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/prompt-templates/image/notion-team-dashboard-live-artifact.preview.png"
+    },
+    "useCase": {
+      "query": {
+        "en": "{\n  \"type\": \"team productivity dashboard screenshot (prompt-only design preview, no live connector data)\",\n  \"ui_aesthetic\": \"Notion native — off-white background #FFFFFF with #F7F6F3 sidebar, 14px SF Pro / Inter body, charcoal ink #37352F, hairline grid #ECECEA, accent blue #2EAADC used sparingly. No gradients, no card shadows, no rounded inner cards, no glassmorphism, no purple→pink hero, no emoji icon strip across the top.\",\n  \"top_banner\": {\n    \"color\": \"soft amber #FDECC8 with #E6CF94 hairline\",\n    \"text\": \"Sample data — design preview. This page is a prompt-only Notion-style dashboard mockup; every number, name, and timestamp below is seeded, not pulled from a real Notion workspace or Composio connector. For real refreshable / connector-backed artifacts, see the live-artifact skill.\"\n  },\n  \"topbar\": {\n    \"breadcrumb\": \"{argument name=\\\"workspace name\\\" default=\\\"Acme Studio\\\"} / Workspace / {argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"}\",\n    \"preview_pill\": \"pill on the right reading 'Sample · design preview' with a small neutral-grey dot — do NOT render a 'Live · synced', 'Online', or any live/sync pill\"\n  },\n  \"page_header\": {\n    \"page_emoji\": \"📊 (a single semantically relevant Notion-style emoji, not 🚀 / ✨ / 🔥)\",\n    \"title\": \"{argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"} rendered at 40px weight 700, letter-spacing -0.01em\",\n    \"meta_row\": \"Last edited by {argument name=\\\"editor name\\\" default=\\\"Sarah Chen\\\"} · Seeded sample data — for real refreshable / connector-backed runs use the live-artifact skill. Do NOT render a 'Last refreshed just now' label, an 'Auto' toggle, or a 'Refresh from Notion' button anywhere in this row.\"\n  },\n  \"callout\": \"💡 This is a prompt-only design preview. The numbers, names, and timestamps below are seeded sample data — they are not pulled from a real Notion workspace and not refreshed via the Composio connector. For real refreshable / connector-backed Live Artifacts, use the live-artifact skill.\",\n  \"kpi_grid\": {\n    \"count\": \"{argument name=\\\"kpi count\\\" default=\\\"4\\\"}\",\n    \"items\": [\n      {\n        \"label\": \"Total tasks\",\n        \"value\": \"143\",\n        \"delta\": \"↑ 6 vs last week (green)\"\n      },\n      {\n        \"label\": \"Done this week\",\n        \"value\": \"24\",\n        \"delta\": \"↑ 4 vs last week (green)\"\n      },\n      {\n        \"label\": \"Active members\",\n        \"value\": \"11 / 14\",\n        \"delta\": \"· Stable (grey)\"\n      },\n      {\n        \"label\": \"Docs awaiting review\",\n        \"value\": \"7\",\n        \"delta\": \"↓ 2 vs last week (red)\"\n      }\n    ],\n    \"style\": \"1px hairline grid; no shadows; tabular-nums weight 600 numbers; small grey delta line under each KPI; uppercase 12px label-grey labels. All values are seeded sample data.\"\n  },\n  \"sparkline_card\": {\n    \"title\": \"Tasks created · last 7 days (sample)\",\n    \"total\": \"100 total (sample)\",\n    \"shape\": \"hand-rolled SVG, 7 days Wed→Tue, 2px stroke accent blue, 10% alpha fill below the curve, very light dotted baseline grid\"\n  },\n  \"activity_feed_card\": {\n    \"title\": \"Recent activity (sample)\",\n    \"subtitle\": \"Notion-style seeded activity for design preview — not from a real Notion workspace\",\n    \"rows\": \"5 rows shaped '<18px round colored avatar with 2-letter initials> <name> <action> <target> · <time ago>' (e.g. 'SC Sarah Chen edited Q4 Roadmap · 2m ago'). All names and times are seeded sample values.\"\n  },\n  \"linked_database\": {\n    \"title\": \"📋 Tasks · Active sprint (sample)\",\n    \"subtitle\": \"Linked-database-style table · seeded sample rows · no live connector binding\",\n    \"columns\": [\n      \"Name\",\n      \"Status\",\n      \"Assignee\",\n      \"Due\",\n      \"Priority\"\n    ],\n    \"row_styles\": \"Notion five-color status pills — Done #DBEDDB/#2B593F · In progress #FDECC8/#976D23 · Blocked #FFE2DD/#B13B2C · In review #D3E5EF/#1F5B78 · To do #E9E5E3/#5A534F. Person chips: 18px round colored avatars with 2-letter initials. Charcoal text. Do NOT render an 'Updated ↻' refresh badge or any other refresh affordance on any row.\"\n  },\n  \"footer\": \"Source: Notion-style sample data · seeded design preview, not bound to any Notion workspace or Composio connector · for real refreshable runs see the live-artifact skill\",\n  \"honesty_rule\": \"Render the top amber banner unobstructed. Every number, name, timestamp, status, and label in the generated screenshot must be presented as seeded sample data. NEVER render any 'Live · synced' pill, 'Last refreshed' label, 'Auto' toggle, 'Refresh from Notion' button, 'pulled from your workspace' / 'via the Composio connector' callout, or any other UI affordance that suggests the data is connected to a real Notion workspace or Composio connector. For real refreshable / connector-backed runs the user should follow the live-artifact skill instead.\",\n  \"layout\": \"Optional 240px Notion sidebar on the left when the canvas is wide enough; main content occupies the remaining width with 32px outer padding.\"\n}",
+        "zh-CN": "使用这个插件完成以下任务：{\n  \"type\": \"team productivity dashboard screenshot (prompt-only design preview, no live connector data)\",\n  \"ui_aesthetic\": \"Notion native — off-white background #FFFFFF with #F7F6F3 sidebar, 14px SF Pro / Inter body, charcoal ink #37352F, hairline grid #ECECEA, accent blue #2EAADC used sparingly. No gradients, no card shadows, no rounded inner cards, no glassmorphism, no purple→pink hero, no emoji icon strip across the top.\",\n  \"top_banner\": {\n    \"color\": \"soft amber #FDECC8 with #E6CF94 hairline\",\n    \"text\": \"Sample data — design preview. This page is a prompt-only Notion-style dashboard mockup; every number, name, and timestamp below is seeded, not pulled from a real Notion workspace or Composio connector. For real refreshable / connector-backed artifacts, see the live-artifact skill.\"\n  },\n  \"topbar\": {\n    \"breadcrumb\": \"{argument name=\\\"workspace name\\\" default=\\\"Acme Studio\\\"} / Workspace / {argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"}\",\n    \"preview_pill\": \"pill on the right reading 'Sample · design preview' with a small neutral-grey dot — do NOT render a 'Live · synced', 'Online', or any live/sync pill\"\n  },\n  \"page_header\": {\n    \"page_emoji\": \"📊 (a single semantically relevant Notion-style emoji, not 🚀 / ✨ / 🔥)\",\n    \"title\": \"{argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"} rendered at 40px weight 700, letter-spacing -0.01em\",\n    \"meta_row\": \"Last edited by {argument name=\\\"editor name\\\" default=\\\"Sarah Chen\\\"} · Seeded sample data — for real refreshable / connector-backed runs use the live-artifact skill. Do NOT render a 'Last refreshed just now' label, an 'Auto' toggle, or a 'Refresh from Notion' button anywhere in this row.\"\n  },\n  \"callout\": \"💡 This is a prompt-only design preview. The numbers, names, and timestamps below are seeded sample data — they are not pulled from a real Notion workspace and not refreshed via the Composio connector. For real refreshable / connector-backed Live Artifacts, use the live-artifact skill.\",\n  \"kpi_grid\": {\n    \"count\": \"{argument name=\\\"kpi count\\\" default=\\\"4\\\"}\",\n    \"items\": [\n      {\n        \"label\": \"Total tasks\",\n        \"value\": \"143\",\n        \"delta\": \"↑ 6 vs last week (green)\"\n      },\n      {\n        \"label\": \"Done this week\",\n        \"value\": \"24\",\n        \"delta\": \"↑ 4 vs last week (green)\"\n      },\n      {\n        \"label\": \"Active members\",\n        \"value\": \"11 / 14\",\n        \"delta\": \"· Stable (grey)\"\n      },\n      {\n        \"label\": \"Docs awaiting review\",\n        \"value\": \"7\",\n        \"delta\": \"↓ 2 vs last week (red)\"\n      }\n    ],\n    \"style\": \"1px hairline grid; no shadows; tabular-nums weight 600 numbers; small grey delta line under each KPI; uppercase 12px label-grey labels. All values are seeded sample data.\"\n  },\n  \"sparkline_card\": {\n    \"title\": \"Tasks created · last 7 days (sample)\",\n    \"total\": \"100 total (sample)\",\n    \"shape\": \"hand-rolled SVG, 7 days Wed→Tue, 2px stroke accent blue, 10% alpha fill below the curve, very light dotted baseline grid\"\n  },\n  \"activity_feed_card\": {\n    \"title\": \"Recent activity (sample)\",\n    \"subtitle\": \"Notion-style seeded activity for design preview — not from a real Notion workspace\",\n    \"rows\": \"5 rows shaped '<18px round colored avatar with 2-letter initials> <name> <action> <target> · <time ago>' (e.g. 'SC Sarah Chen edited Q4 Roadmap · 2m ago'). All names and times are seeded sample values.\"\n  },\n  \"linked_database\": {\n    \"title\": \"📋 Tasks · Active sprint (sample)\",\n    \"subtitle\": \"Linked-database-style table · seeded sample rows · no live connector binding\",\n    \"columns\": [\n      \"Name\",\n      \"Status\",\n      \"Assignee\",\n      \"Due\",\n      \"Priority\"\n    ],\n    \"row_styles\": \"Notion five-color status pills — Done #DBEDDB/#2B593F · In progress #FDECC8/#976D23 · Blocked #FFE2DD/#B13B2C · In review #D3E5EF/#1F5B78 · To do #E9E5E3/#5A534F. Person chips: 18px round colored avatars with 2-letter initials. Charcoal text. Do NOT render an 'Updated ↻' refresh badge or any other refresh affordance on any row.\"\n  },\n  \"footer\": \"Source: Notion-style sample data · seeded design preview, not bound to any Notion workspace or Composio connector · for real refreshable runs see the live-artifact skill\",\n  \"honesty_rule\": \"Render the top amber banner unobstructed. Every number, name, timestamp, status, and label in the generated screenshot must be presented as seeded sample data. NEVER render any 'Live · synced' pill, 'Last refreshed' label, 'Auto' toggle, 'Refresh from Notion' button, 'pulled from your workspace' / 'via the Composio connector' callout, or any other UI affordance that suggests the data is connected to a real Notion workspace or Composio connector. For real refreshable / connector-backed runs the user should follow the live-artifact skill instead.\",\n  \"layout\": \"Optional 240px Notion sidebar on the left when the canvas is wide enough; main content occupies the remaining width with 32px outer padding.\"\n}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "4:3"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-hyper-realistic-selfie-texture-prompts",
+  "title": "Profile / Avatar - Hyper-Realistic Selfie Texture Prompts",
+  "title_i18n": {
+    "zh-CN": "个人资料 / 头像 - 超写实自拍纹理提示词",
+    "zh-TW": "個人資料 / 頭像 - 超寫實自拍紋理提示詞",
+    "ja": "プロフィール / アバター - 超リアル自撮りテクスチャプロンプト",
+    "ko": "프로필 / 아바타 - 초사실적 셀카 텍스처 프롬프트",
+    "de": "Profil / Avatar - Hyperrealistische Selfie-Textur-Prompts",
+    "fr": "Profil / Avatar - Prompts de Texture Selfie Hyperréaliste",
+    "ru": "Профиль / Аватар - Гиперреалистичные промпты для селфи-текстур",
+    "es": "Perfil / Avatar - Prompts de Textura Selfie Hiperrealista",
+    "pt-BR": "Perfil / Avatar - Prompts de Textura Selfie Hiper-Realista",
+    "it": "Profilo / Avatar - Prompt per Texture Selfie Iperrealisti",
+    "vi": "Hồ sơ / Avatar - Prompt kết cấu selfie siêu chân thực",
+    "pl": "Profil / Awatar - Prompty do hiperrealistycznych tekstur selfie",
+    "id": "Profil / Avatar - Prompt Tekstur Selfie Hiper-Realistis",
+    "nl": "Profiel / Avatar - Hyperrealistische Selfie Textuur Prompts",
+    "ar": "الملف الشخصي / الصورة الرمزية - مطالبات نسيج سيلفي فائق الواقعية",
+    "tr": "Profil / Avatar - Hiper-Gerçekçi Selfie Doku Promptları",
+    "uk": "Профіль / Аватар - Гіперреалістичні промпти для селфі-текстур",
+    "en": "Profile / Avatar - Hyper-Realistic Selfie Texture Prompts"
+  },
+  "version": "0.1.0",
+  "description": "Detailed prompt snippets for generating realistic skin textures and authentic phone selfie framing, focusing on visible pores and natural lighting.",
+  "description_i18n": {
+    "zh-CN": "用于生成逼真皮肤纹理和自然手机自拍构图的详细提示词片段，聚焦可见毛孔和自然光照效果。",
+    "zh-TW": "用於生成逼真皮膚紋理和自然手機自拍構圖的詳細提示詞片段，聚焦可見毛孔和自然光照效果。",
+    "ja": "リアルな肌の質感と自然なスマホ自撮り構図を生成するための詳細なプロンプトスニペット。毛穴の表現と自然な照明に焦点を当てています。",
+    "ko": "사실적인 피부 질감과 자연스러운 폰 셀카 구도를 생성하는 상세한 프롬프트 스니펫. 보이는 모공과 자연광에 중점을 둡니다.",
+    "de": "Detaillierte Prompt-Snippets zur Generierung realistischer Hauttexturen und authentischer Handy-Selfie-Kompositionen mit Fokus auf sichtbare Poren und natürliche Beleuchtung.",
+    "fr": "Extraits de prompts détaillés pour générer des textures de peau réalistes et des cadrages selfie authentiques, axés sur les pores visibles et l'éclairage naturel.",
+    "ru": "Подробные фрагменты промптов для генерации реалистичных текстур кожи и естественного кадрирования селфи на телефон с акцентом на видимые поры и естественное освещение.",
+    "es": "Fragmentos detallados de prompts para generar texturas de piel realistas y encuadres auténticos de selfies con móvil, enfocados en poros visibles e iluminación natural.",
+    "pt-BR": "Trechos detalhados de prompts para gerar texturas de pele realistas e enquadramentos autênticos de selfies com celular, focando em poros visíveis e iluminação natural.",
+    "it": "Frammenti di prompt dettagliati per generare texture cutanee realistiche e inquadrature autentiche di selfie con smartphone, con focus su pori visibili e illuminazione naturale.",
+    "vi": "Các đoạn prompt chi tiết để tạo kết cấu da chân thực và khung hình selfie tự nhiên trên điện thoại, tập trung vào lỗ chân lông rõ ràng và ánh sáng tự nhiên.",
+    "pl": "Szczegółowe fragmenty promptów do generowania realistycznych tekstur skóry i autentycznych kadrów selfie z telefonu, skupiające się na widocznych porach i naturalnym oświetleniu.",
+    "id": "Cuplikan prompt terperinci untuk menghasilkan tekstur kulit realistis dan framing selfie ponsel yang autentik, berfokus pada pori-pori yang terlihat dan pencahayaan alami.",
+    "nl": "Gedetailleerde prompt-fragmenten voor het genereren van realistische huidtexturen en authentieke telefoon-selfie-frames, gericht op zichtbare poriën en natuurlijke belichting.",
+    "ar": "مقتطفات مطالبات مفصلة لإنشاء نسيج بشرة واقعي وإطارات سيلفي هاتف أصلية، مع التركيز على المسام الظاهرة والإضاءة الطبيعية.",
+    "tr": "Gerçekçi cilt dokuları ve otantik telefon selfie çerçevelemesi oluşturmak için detaylı prompt parçacıkları, görünür gözenekler ve doğal aydınlatmaya odaklanır.",
+    "uk": "Детальні фрагменти промптів для генерації реалістичних текстур шкіри та автентичного кадрування селфі на телефоні з фокусом на видимі пори та природне освітлення.",
+    "en": "Detailed prompt snippets for generating realistic skin textures and authentic phone selfie framing, focusing on visible pores and natural lighting."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Adrian Solarz",
+    "url": "https://x.com/adriansolarzz/status/2048950419204751574"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453164857_ghcikd_HG9U5wnbYAE3-76.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "realistic skin texture, visible pores around nose and cheeks, natural slight unevenness, no filter quality, handheld phone camera feel, slight angle, casual framing, filmed in a real environment, soft window light from the left, natural indoor lighting, no harsh highlights",
+        "zh-CN": "使用这个插件完成以下任务：realistic skin texture, visible pores around nose and cheeks, natural slight unevenness, no filter quality, handheld phone camera feel, slight angle, casual framing, filmed in a real environment, soft window light from the left, natural indoor lighting, no harsh highlights"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

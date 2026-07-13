@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-friendly",
+  "title": "Friendly",
+  "title_i18n": {
+    "zh-CN": "友好",
+    "zh-TW": "友善",
+    "ja": "フレンドリー",
+    "ko": "친근함",
+    "de": "Freundlich",
+    "fr": "Convivial",
+    "ru": "Дружелюбный",
+    "es": "Amigable",
+    "pt-BR": "Amigável",
+    "it": "Amichevole",
+    "vi": "Thân thiện",
+    "pl": "Przyjazny",
+    "id": "Ramah",
+    "nl": "Vriendelijk",
+    "ar": "ودود",
+    "tr": "Dostça",
+    "uk": "Дружній",
+    "en": "Friendly"
+  },
+  "version": "0.1.0",
+  "description": "Approachable, intuitive design with rounded elements, ample whitespace, and soft pastel color palettes.",
+  "description_i18n": {
+    "zh-CN": "亲和直观的设计，采用圆角元素、充足留白和柔和的粉彩配色。",
+    "zh-TW": "親切直覺的設計，採用圓角元素、充足留白和柔和的粉彩配色。",
+    "ja": "親しみやすく直感的なデザイン。丸みを帯びた要素、十分な余白、柔らかなパステルカラーを使用。",
+    "ko": "둥근 요소, 충분한 여백, 부드러운 파스텔 컬러 팔레트로 구성된 친근하고 직관적인 디자인.",
+    "de": "Zugängliches, intuitives Design mit abgerundeten Elementen, großzügigem Weißraum und sanften Pastellfarben.",
+    "fr": "Design accessible et intuitif avec des éléments arrondis, des espaces généreux et des palettes de couleurs pastel douces.",
+    "ru": "Доступный и интуитивный дизайн со скругленными элементами, обилием свободного пространства и мягкими пастельными цветами.",
+    "es": "Diseño accesible e intuitivo con elementos redondeados, amplio espacio en blanco y paletas de colores pastel suaves.",
+    "pt-BR": "Design acessível e intuitivo com elementos arredondados, amplo espaço em branco e paletas de cores pastel suaves.",
+    "it": "Design accessibile e intuitivo con elementi arrotondati, ampio spazio bianco e palette di colori pastello tenui.",
+    "vi": "Thiết kế gần gũi, trực quan với các phần tử bo tròn, khoảng trắng rộng rãi và bảng màu pastel nhẹ nhàng.",
+    "pl": "Przystępny, intuicyjny projekt z zaokrąglonymi elementami, dużą ilością białej przestrzeni i delikatnymi pastelowymi kolorami.",
+    "id": "Desain yang mudah didekati dan intuitif dengan elemen membulat, ruang putih yang luas, dan palet warna pastel lembut.",
+    "nl": "Toegankelijk, intuïtief ontwerp met afgeronde elementen, ruime witruimte en zachte pastelkleuren.",
+    "ar": "تصميم سهل الاستخدام وبديهي مع عناصر مستديرة ومساحات بيضاء واسعة ولوحات ألوان باستيل ناعمة.",
+    "tr": "Yuvarlatılmış öğeler, bol boşluk ve yumuşak pastel renk paletleriyle ulaşılabilir, sezgisel tasarım.",
+    "uk": "Доступний та інтуїтивний дизайн із закругленими елементами, достатнім білим простором і м'якими пастельними кольорами.",
+    "en": "Approachable, intuitive design with rounded elements, ample whitespace, and soft pastel color palettes."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "creative-artistic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Friendly design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Friendly design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "friendly",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

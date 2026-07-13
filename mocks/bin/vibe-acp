@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Alias wrapper for vibe-acp — the primary bin name OD resolves for the
+# vibe RuntimeAgentDef (bin: 'vibe-acp').
+# Delegates to the same mock as mocks/bin/vibe.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as vibe "$@"

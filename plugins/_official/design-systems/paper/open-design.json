@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-paper",
+  "title": "Paper",
+  "title_i18n": {
+    "zh-CN": "纸张",
+    "zh-TW": "紙張",
+    "ja": "ペーパー",
+    "ko": "페이퍼",
+    "de": "Papier",
+    "fr": "Papier",
+    "ru": "Бумага",
+    "es": "Papel",
+    "pt-BR": "Papel",
+    "it": "Carta",
+    "vi": "Giấy",
+    "pl": "Papier",
+    "id": "Kertas",
+    "nl": "Papier",
+    "ar": "ورق",
+    "tr": "Kağıt",
+    "uk": "Папір",
+    "en": "Paper"
+  },
+  "version": "0.1.0",
+  "description": "Paper-textured, print-inspired design with minimal colors, clean serif/sans typography, and tactile surface qualities.",
+  "description_i18n": {
+    "zh-CN": "纸质纹理、印刷风格设计，配以极简色彩、简洁的衬线/无衬线字体以及触感表面质感。",
+    "zh-TW": "紙質紋理、印刷風格設計，配以極簡色彩、簡潔的襯線/無襯線字體以及觸感表面質感。",
+    "ja": "紙のテクスチャと印刷風のデザイン。ミニマルなカラー、クリーンなセリフ/サンセリフタイポグラフィ、触感のある表面質感を特徴とします。",
+    "ko": "종이 질감의 인쇄 스타일 디자인. 미니멀한 색상, 깔끔한 세리프/산세리프 타이포그래피, 촉각적 표면 질감을 특징으로 합니다.",
+    "de": "Design mit Papierstruktur und Druckcharakter, minimalen Farben, klarer Serifen-/Sans-Typografie und taktilen Oberflächenqualitäten.",
+    "fr": "Design à texture papier inspiré de l'impression, avec des couleurs minimalistes, une typographie serif/sans-serif épurée et des qualités de surface tactiles.",
+    "ru": "Дизайн с бумажной текстурой в печатном стиле, минимальной цветовой палитрой, чистой типографикой с засечками и без, а также тактильными качествами поверхности.",
+    "es": "Diseño con textura de papel inspirado en impresión, con colores minimalistas, tipografía serif/sans limpia y cualidades táctiles de superficie.",
+    "pt-BR": "Design com textura de papel inspirado em impressão, com cores minimalistas, tipografia serif/sans limpa e qualidades táteis de superfície.",
+    "it": "Design con texture cartacea ispirato alla stampa, con colori minimali, tipografia serif/sans pulita e qualità tattili della superficie.",
+    "vi": "Thiết kế kết cấu giấy lấy cảm hứng từ in ấn với màu sắc tối giản, kiểu chữ serif/sans-serif gọn gàng và chất lượng bề mặt xúc giác.",
+    "pl": "Projekt o teksturze papieru inspirowany drukiem, z minimalnymi kolorami, czystą typografią szeryfową/bezszeryfową i dotykową jakością powierzchni.",
+    "id": "Desain bertekstur kertas bergaya cetak dengan warna minimal, tipografi serif/sans yang bersih, dan kualitas permukaan yang taktil.",
+    "nl": "Papieren textuurontwerp geïnspireerd op print, met minimale kleuren, strakke serif/sans-typografie en tactiele oppervlaktekwaliteiten.",
+    "ar": "تصميم بملمس ورقي مستوحى من الطباعة مع ألوان بسيطة، طباعة serif/sans نظيفة، وخصائص سطح ملموسة.",
+    "tr": "Minimal renkler, temiz serif/sans tipografi ve dokunsal yüzey nitelikleriyle kağıt dokulu, baskı esinli tasarım.",
+    "uk": "Дизайн з паперовою текстурою в друкованому стилі, з мінімальною кольоровою палітрою, чистою типографікою з засічками та без, а також тактильними якостями поверхні.",
+    "en": "Paper-textured, print-inspired design with minimal colors, clean serif/sans typography, and tactile surface qualities."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "retro-nostalgic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Paper design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Paper design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "paper",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

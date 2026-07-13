@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-nightclub-flyer-atmospheric-animation",
+  "title": "Nightclub Flyer Atmospheric Animation",
+  "title_i18n": {
+    "zh-CN": "夜店传单氛围动画",
+    "zh-TW": "夜店傳單氛圍動畫",
+    "ja": "ナイトクラブフライヤー雰囲気アニメーション",
+    "ko": "나이트클럽 전단지 분위기 애니메이션",
+    "de": "Nachtclub-Flyer Atmosphärische Animation",
+    "fr": "Animation Atmosphérique de Flyer de Boîte de Nuit",
+    "ru": "Атмосферная анимация флаера ночного клуба",
+    "es": "Animación Atmosférica de Volante de Club Nocturno",
+    "pt-BR": "Animação Atmosférica de Panfleto de Balada",
+    "it": "Animazione Atmosferica Flyer da Discoteca",
+    "vi": "Hiệu Ứng Động Tờ Rơi Hộp Đêm",
+    "pl": "Animacja Atmosferyczna Ulotki Klubowej",
+    "id": "Animasi Atmosfer Selebaran Klub Malam",
+    "nl": "Nachtclub Flyer Atmosferische Animatie",
+    "ar": "رسوم متحركة جوية لمنشور نادي ليلي",
+    "tr": "Gece Kulübü Broşürü Atmosferik Animasyon",
+    "uk": "Атмосферна анімація флаєра нічного клубу",
+    "en": "Nightclub Flyer Atmospheric Animation"
+  },
+  "version": "0.1.0",
+  "description": "A subtle animation prompt for Seedance 2.0 to bring background and lighting elements to life while keeping the subject locked",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 提供的细微动画提示词，使背景和光照元素生动起来，同时保持主体静止",
+    "zh-TW": "為 Seedance 2.0 提供的細微動畫提示詞，使背景和光照元素生動起來，同時保持主體靜止",
+    "ja": "Seedance 2.0 用の繊細なアニメーションプロンプト。被写体を固定したまま背景と照明要素に動きを加えます",
+    "ko": "Seedance 2.0용 섬세한 애니메이션 프롬프트로, 피사체는 고정하면서 배경과 조명 요소에 생동감을 부여합니다",
+    "de": "Ein subtiler Animationsprompt für Seedance 2.0, um Hintergrund- und Lichtelemente zum Leben zu erwecken, während das Motiv fixiert bleibt",
+    "fr": "Un prompt d'animation subtil pour Seedance 2.0 qui anime les éléments d'arrière-plan et d'éclairage tout en gardant le sujet fixe",
+    "ru": "Деликатный промпт анимации для Seedance 2.0, оживляющий фон и световые элементы при неподвижном объекте",
+    "es": "Un prompt de animación sutil para Seedance 2.0 que da vida a los elementos de fondo e iluminación mientras mantiene el sujeto fijo",
+    "pt-BR": "Um prompt de animação sutil para Seedance 2.0 que traz vida aos elementos de fundo e iluminação mantendo o assunto fixo",
+    "it": "Un prompt di animazione sottile per Seedance 2.0 che anima gli elementi di sfondo e illuminazione mantenendo il soggetto fisso",
+    "vi": "Prompt hoạt ảnh tinh tế cho Seedance 2.0 làm sống động các yếu tố nền và ánh sáng trong khi giữ chủ thể cố định",
+    "pl": "Subtelny prompt animacji dla Seedance 2.0, który ożywia elementy tła i oświetlenia, utrzymując obiekt w bezruchu",
+    "id": "Prompt animasi halus untuk Seedance 2.0 yang menghidupkan elemen latar belakang dan pencahayaan sambil menjaga subjek tetap diam",
+    "nl": "Een subtiele animatieprompt voor Seedance 2.0 om achtergrond- en lichteffecten tot leven te brengen terwijl het onderwerp vast blijft",
+    "ar": "موجه رسوم متحركة دقيق لـ Seedance 2.0 لإحياء عناصر الخلفية والإضاءة مع الحفاظ على الموضوع ثابتًا",
+    "tr": "Seedance 2.0 için arka plan ve aydınlatma öğelerini canlandırırken özneyi sabit tutan ince bir animasyon prompt'u",
+    "uk": "Тонкий промпт анімації для Seedance 2.0, що оживляє фон та світлові елементи, зберігаючи об'єкт нерухомим",
+    "en": "A subtle animation prompt for Seedance 2.0 to bring background and lighting elements to life while keeping the subject locked"
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Nash Deen",
+    "url": "https://x.com/DeenNash_Fu/status/2048912067361452121"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "cinematic",
+    "typography"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ac4aa8dd242046f292eab0e1333692ef/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ac4aa8dd242046f292eab0e1333692ef/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Hyper-detailed nightclub event flyer, a Black woman with sleek long braids and bold red lipstick photographed in a confident chin-up power pose looking directly at camera, wearing a fitted black blazer with gold chain, dramatic red rim light from behind creating glowing edge, harder key light from front-left. Subject cut out over deep oxblood-red textured background with heavy film grain and subtle smoke haze. Behind her the massive display word \"FRIDAY\" in tall condensed slab serif, cream-white with grungy distressed edges, partially occluded by her shoulders and hair. Secondary script tagline \"the night belongs to you\" in elegant gold cursive. Bottom info block: \"NOV 14 · 10PM · DOORS AT 9 · UPTOWN CLT\". Scattered accents: small gold sparkle stars, one circled date stamp, thin gold scribble line. Palette strictly oxblood red, cream-white, gold, deep black. Warm cinematic grade. 4:5 vertical, 2048x2560, club poster quality. Negative: smooth AI skin, generic stock, watermarks. Animate only the background and atmospheric elements — subject, typography, and outfit remain completely locked. Slow rolling smoke haze drifts horizontally across the lower third of the frame behind her, low-opacity, dreamy. Red rim light behind her subtly pulses brighter then dimmer once over 5 seconds, like a slow heartbeat. Tiny gold sparkle particles float upward slowly from bottom edge. Film grain flickers naturally. Cream \"FRIDAY\" letters behind her have an almost imperceptible texture shimmer. Camera fully locked off, no pan, no zoom. 24fps, 5 seconds, cinematic nightclub mood. Negative: subject moving, face changing, lips moving, hands deforming, text warping.",
+        "zh-CN": "使用这个插件完成以下任务：Hyper-detailed nightclub event flyer, a Black woman with sleek long braids and bold red lipstick photographed in a confident chin-up power pose looking directly at camera, wearing a fitted black blazer with gold chain, dramatic red rim light from behind creating glowing edge, harder key light from front-left. Subject cut out over deep oxblood-red textured background with heavy film grain and subtle smoke haze. Behind her the massive display word \"FRIDAY\" in tall condensed slab serif, cream-white with grungy distressed edges, partially occluded by her shoulders and hair. Secondary script tagline \"the night belongs to you\" in elegant gold cursive. Bottom info block: \"NOV 14 · 10PM · DOORS AT 9 · UPTOWN CLT\". Scattered accents: small gold sparkle stars, one circled date stamp, thin gold scribble line. Palette strictly oxblood red, cream-white, gold, deep black. Warm cinematic grade. 4:5 vertical, 2048x2560, club poster quality. Negative: smooth AI skin, generic stock, watermarks. Animate only the background and atmospheric elements — subject, typography, and outfit remain completely locked. Slow rolling smoke haze drifts horizontally across the lower third of the frame behind her, low-opacity, dreamy. Red rim light behind her subtly pulses brighter then dimmer once over 5 seconds, like a slow heartbeat. Tiny gold sparkle particles float upward slowly from bottom edge. Film grain flickers naturally. Cream \"FRIDAY\" letters behind her have an almost imperceptible texture shimmer. Camera fully locked off, no pan, no zoom. 24fps, 5 seconds, cinematic nightclub mood. Negative: subject moving, face changing, lips moving, hands deforming, text warping."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

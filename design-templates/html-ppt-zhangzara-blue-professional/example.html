@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presentation Template</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #fdfae7;
+      --primary: #1e2bfa;
+      --text: #111111;
+      --text-muted: #6b6b6b;
+      --text-light: #9a9a9a;
+      --accent-light: rgba(30, 43, 250, 0.08);
+      --accent-medium: rgba(30, 43, 250, 0.15);
+      --border: rgba(30, 43, 250, 0.2);
+      --card-bg: rgba(30, 43, 250, 0.04);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* Slide container */
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      /* Asymmetric padding: extra bottom space to clear the fixed
+         slide-counter (left) and nav-controls (right). Without this,
+         cards/grids that fill slide-content overlap the nav chrome. */
+      padding: 3.5vw 4vw 8.5vh 4vw;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(40px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      overflow: hidden;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateX(0);
+      z-index: 10;
+    }
+
+    .slide.prev {
+      transform: translateX(-40px);
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 5vw, 4.2rem);
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      margin-bottom: 1.5rem;
+    }
+
+    h3 {
+      font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    h4 {
+      font-size: clamp(0.85rem, 1.2vw, 1rem);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+    }
+
+    p, li {
+      font-size: clamp(0.85rem, 1.1vw, 1.05rem);
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* Slide header bar */
+    .slide-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2.5vh;
+      flex-shrink: 0;
+    }
+
+    .slide-header h4 {
+      margin: 0;
+    }
+
+    .slide-header .tag {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--primary);
+      background: var(--accent-light);
+      padding: 0.35rem 0.9rem;
+      border-radius: 100px;
+    }
+
+    /* Slide content area */
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* Navigation */
+    .nav-controls {
+      position: fixed;
+      bottom: 2.5vh;
+      right: 3vw;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      z-index: 100;
+    }
+
+    .nav-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--bg);
+      color: var(--primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
+    }
+
+    .nav-btn:hover {
+      background: var(--primary);
+      color: var(--bg);
+      border-color: var(--primary);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .slide-counter {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      position: fixed;
+      bottom: 2.5vh;
+      left: 3vw;
+      z-index: 100;
+    }
+
+    .progress-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: var(--primary);
+      transition: width 0.4s ease;
+      z-index: 100;
+    }
+
+    /* Decorative elements */
+    .accent-line {
+      width: 60px;
+      height: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+      margin-bottom: 1.5rem;
+    }
+
+    .accent-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ============================================================
+       LAYOUT 1: Cover / Title Slide
+       ============================================================ */
+    .layout-cover {
+      justify-content: center;
+      align-items: flex-start;
+      padding-left: 8vw;
+    }
+
+    .layout-cover h1 {
+      max-width: 55vw;
+      margin-bottom: 1.5rem;
+      line-height: 1.05;
+    }
+
+    .layout-cover .subtitle {
+      font-size: clamp(1rem, 1.5vw, 1.25rem);
+      color: var(--text-muted);
+      max-width: 40vw;
+      margin-bottom: 3rem;
+      font-weight: 400;
+    }
+
+    .layout-cover .meta {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      color: var(--text-light);
+      letter-spacing: 0.05em;
+    }
+
+    .layout-cover .cover-decoration {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 35vw;
+      height: 100vh;
+      background: var(--accent-light);
+      clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
+    }
+
+    .layout-cover .cover-dots {
+      position: absolute;
+      bottom: 12vh;
+      right: 8vw;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      opacity: 0.25;
+    }
+
+    .layout-cover .cover-dots .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+    }
+
+    /* ============================================================
+       LAYOUT 2: Agenda / Table of Contents
+       ============================================================ */
+    .layout-agenda .agenda-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 1rem 3rem;
+      margin-top: 1rem;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .agenda-item {
+      display: flex;
+      gap: 1.2rem;
+      align-items: center;
+      padding: 1rem 1.2rem;
+      border-radius: 12px;
+      transition: background 0.2s ease;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .agenda-item:hover {
+      background: var(--card-bg);
+    }
+
+    .agenda-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+      min-width: 36px;
+    }
+
+    .agenda-item h3 {
+      margin-bottom: 0.3rem;
+      font-size: clamp(1rem, 1.4vw, 1.2rem);
+    }
+
+    .agenda-item p {
+      font-size: clamp(0.8rem, 1vw, 0.95rem);
+      line-height: 1.5;
+    }
+
+    /* ============================================================
+       LAYOUT 3: Key Metrics (3 large callouts)
+       Cards size to their content; the row centers vertically
+       inside the remaining slide-content area.
+       ============================================================ */
+    .layout-metrics .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-metrics .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 0.5rem;
+      align-items: stretch;
+    }
+
+    .metric-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      padding: 1.5rem 1.6rem;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--card-bg);
+    }
+
+    .metric-card .metric-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(2.2rem, 3.4vw, 3rem);
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .metric-card .metric-label {
+      font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .metric-card .metric-desc {
+      font-size: clamp(0.78rem, 0.95vw, 0.9rem);
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .metric-card .metric-supports {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin: 0.2rem 0 0;
+      padding: 0.7rem 0 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .metric-card .metric-supports li {
+      font-size: clamp(0.75rem, 0.9vw, 0.85rem);
+      color: var(--text-muted);
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.45;
+    }
+
+    .metric-card .metric-supports li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: var(--text-light);
+    }
+
+    .metric-card .metric-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-top: 0.3rem;
+    }
+
+    .metric-change.positive { color: #059669; }
+    .metric-change.negative { color: #dc2626; }
+
+    /* ============================================================
+       LAYOUT 4: Data Dashboard (6 stat grid)
+       Cells have natural height with stat at top + name + small
+       context line. Grid is auto-sized; the row stays in the upper
+       portion of slide-content with the bottom-padding reserved
+       for nav chrome.
+       ============================================================ */
+    .layout-dashboard .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-dashboard .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.2rem;
+      margin-top: 0.5rem;
+    }
+
+    .stat-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1.4rem 1.5rem;
+      border-radius: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .stat-cell .stat-top {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .stat-cell .stat-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .stat-cell .stat-unit {
+      font-size: 0.8rem;
+      color: var(--text-light);
+      font-weight: 500;
+    }
+
+    .stat-cell .stat-name {
+      font-size: clamp(0.85rem, 1vw, 0.95rem);
+      color: var(--text);
+      line-height: 1.35;
+      font-weight: 500;
+    }
+
+    .stat-cell .stat-context {
+      font-size: 0.75rem;
+      color: var(--text-light);
+      line-height: 1.4;
+      padding-top: 0.4rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ============================================================
+       LAYOUT 5: Two Column Split
+       Left = numbered insight list, Right = pull-quote + supporting
+       stats. Both columns size to their content with natural rhythm
+       (gap-based spacing, no forced height-distribution).
+       ============================================================ */
+    .layout-split .slide-content {
+      justify-content: flex-start;
+    }
+
+    .layout-split .split-body {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 3.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .split-left, .split-right {
+      display: flex;
+      flex-direction: column;
+      gap: 1.4rem;
+    }
+
+    .split-right {
+      padding-left: 2.5rem;
+      border-left: 2px solid var(--border);
+    }
+
+    .insight-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+      margin: 0;
+      counter-reset: insight;
+    }
+
+    .insight-list li {
+      position: relative;
+      padding-left: 2.6rem;
+      font-size: clamp(0.88rem, 1.05vw, 1rem);
+      color: var(--text);
+      line-height: 1.55;
+      counter-increment: insight;
+    }
+
+    .insight-list li::before {
+      content: counter(insight, decimal-leading-zero);
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--primary);
+      letter-spacing: 0.05em;
+      line-height: 1.7;
+    }
+
+    .split-highlight {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.15rem, 1.55vw, 1.5rem);
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.4;
+      padding: 1.3rem 1.5rem;
+      background: var(--accent-light);
+      border-radius: 12px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .split-highlight cite {
+      display: block;
+      margin-top: 0.7rem;
+      font-style: normal;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .mini-stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      padding-top: 0.4rem;
+    }
+
+    .mini-stat {
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .mini-stat .mini-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .mini-stat .mini-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+      line-height: 1.35;
+    }
+
+    /* ============================================================
+       LAYOUT 6: Horizontal Bar Ranking
+       ============================================================ */
+    .layout-bars .bars-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.8rem;
+      margin-top: 0.5rem;
+    }
+
+    .bar-item {
+      display: grid;
+      grid-template-columns: minmax(180px, 30%) 1fr auto;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 0;
+    }
+
+    .bar-label {
+      font-size: clamp(0.8rem, 1.1vw, 1rem);
+      color: var(--text);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    .bar-track {
+      height: 28px;
+      background: var(--accent-light);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 6px;
+      transition: width 0.8s ease;
+    }
+
+    .bar-pct {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--primary);
+      min-width: 45px;
+      text-align: right;
+    }
+
+    .bar-note {
+      font-size: 0.75rem;
+      color: var(--text-light);
+      margin-top: 0.2rem;
+    }
+
+    /* ============================================================
+       LAYOUT 7: Quote / Highlight
+       ============================================================ */
+    .layout-quote {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .layout-quote .quote-mark {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 8rem;
+      font-weight: 700;
+      color: var(--primary);
+      opacity: 0.15;
+      line-height: 0.5;
+      margin-bottom: 1rem;
+    }
+
+    .layout-quote blockquote {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--text);
+      max-width: 65vw;
+      margin-bottom: 2rem;
+    }
+
+    .layout-quote .quote-source {
+      font-size: clamp(0.85rem, 1.1vw, 1rem);
+      color: var(--text-muted);
+    }
+
+    .layout-quote .quote-source strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .layout-quote .quote-decoration {
+      position: absolute;
+      top: 10vh;
+      left: 5vw;
+      width: 80px;
+      height: 80px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .layout-quote .quote-decoration-2 {
+      position: absolute;
+      bottom: 12vh;
+      right: 6vw;
+      width: 60px;
+      height: 60px;
+      background: var(--accent-light);
+      border-radius: 50%;
+    }
+
+    /* ============================================================
+       LAYOUT 8: Timeline / Process Flow
+       ============================================================ */
+    .layout-timeline .timeline-track {
+      display: flex;
+      gap: 1.5rem;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    .timeline-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .timeline-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 28px;
+      right: -0.75rem;
+      width: 1.5rem;
+      height: 2px;
+      background: var(--border);
+    }
+
+    .step-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .timeline-step:nth-child(2) .step-circle { opacity: 0.85; }
+    .timeline-step:nth-child(3) .step-circle { opacity: 0.7; }
+    .timeline-step:nth-child(4) .step-circle { opacity: 0.55; }
+
+    .step-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(0.95rem, 1.4vw, 1.15rem);
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.4rem;
+    }
+
+    .step-desc {
+      font-size: clamp(0.75rem, 1vw, 0.9rem);
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 220px;
+    }
+
+    /* ============================================================
+       LAYOUT 9: Detailed Analysis (bullets with sub-items)
+       ============================================================ */
+    .layout-detail .detail-body {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2rem 3rem;
+      flex: 1;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+
+    .detail-col {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .detail-block {
+      padding: 1rem 1.2rem;
+      border-radius: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+    }
+
+    .detail-block h3 {
+      font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+      margin-bottom: 0.6rem;
+      color: var(--text);
+    }
+
+    .detail-block ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .detail-block ul li {
+      position: relative;
+      padding-left: 1.1rem;
+      padding-bottom: 0.4rem;
+      font-size: clamp(0.78rem, 1vw, 0.9rem);
+      line-height: 1.5;
+    }
+
+    .detail-block ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+
+    .detail-block ul li:last-child {
+      padding-bottom: 0;
+    }
+
+    /* ============================================================
+       LAYOUT 10: Closing / CTA
+       ============================================================ */
+    .layout-closing {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .layout-closing h1 {
+      margin-bottom: 1rem;
+    }
+
+    .layout-closing .closing-sub {
+      font-size: clamp(1rem, 1.5vw, 1.3rem);
+      color: var(--text-muted);
+      max-width: 45vw;
+      margin-bottom: 2.5rem;
+    }
+
+    .layout-closing .cta-btn {
+      display: inline-block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--bg);
+      background: var(--primary);
+      padding: 0.9rem 2.2rem;
+      border-radius: 100px;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .layout-closing .cta-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(30, 43, 250, 0.25);
+    }
+
+    .layout-closing .closing-contact {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: var(--text-light);
+    }
+
+    .layout-closing .closing-decoration {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px;
+      height: 500px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .layout-closing .closing-decoration-2 {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 360px;
+      height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    /* Keyboard hint */
+    .keyboard-hint {
+      position: fixed;
+      bottom: 2.5vh;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      color: var(--text-light);
+      z-index: 100;
+      opacity: 0.6;
+    }
+
+    /* Responsive adjustments for very small heights */
+    @media (max-height: 700px) {
+      .slide { padding: 2.5vh 3vw; }
+      .layout-agenda .agenda-grid { gap: 0.8rem 2rem; }
+      .agenda-item { padding: 0.8rem; }
+      .metric-card { padding: 1rem; }
+      .layout-bars .bars-container { gap: 0.5rem; }
+      .bar-item { padding: 0.4rem 0; }
+      .detail-block { padding: 0.8rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="deck">
+
+    <!-- SLIDE 1: Cover -->
+    <div class="slide layout-cover active">
+      <div class="cover-decoration"></div>
+      <div class="cover-dots">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="accent-line"></div>
+      <h1>Market Outlook &amp;<br>Strategic Priorities</h1>
+      <p class="subtitle">An analytical overview of emerging trends, shifting investor sentiment, and the key decisions shaping the next growth cycle.</p>
+      <p class="meta">Q2 2026 &nbsp;&middot;&nbsp; Confidential</p>
+    </div>
+
+    <!-- SLIDE 2: Agenda -->
+    <div class="slide layout-agenda">
+      <div class="slide-header">
+        <h4>Table of Contents</h4>
+        <span class="tag">Overview</span>
+      </div>
+      <div class="slide-content">
+        <div class="accent-line"></div>
+        <div class="agenda-grid">
+          <div class="agenda-item">
+            <span class="agenda-num">01</span>
+            <div>
+              <h3>Executive Summary</h3>
+              <p>High-level findings and key takeaways from the latest quarterly assessment.</p>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <span class="agenda-num">02</span>
+            <div>
+              <h3>Macroeconomic Sentiment</h3>
+              <p>Investor perspectives on growth, inflation, and risk factors in the current environment.</p>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <span class="agenda-num">03</span>
+            <div>
+              <h3>Capital Allocation Trends</h3>
+              <p>How portfolios are shifting in response to policy changes and volatility signals.</p>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <span class="agenda-num">04</span>
+            <div>
+              <h3>Strategic Recommendations</h3>
+              <p>Actionable priorities for leadership teams navigating an uncertain landscape.</p>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <span class="agenda-num">05</span>
+            <div>
+              <h3>Risk &amp; Opportunity Matrix</h3>
+              <p>Evaluating the trade-offs between defensive positioning and offensive growth bets.</p>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <span class="agenda-num">06</span>
+            <div>
+              <h3>Conclusion &amp; Next Steps</h3>
+              <p>Summary of implications and recommended follow-up actions for stakeholders.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: Key Metrics -->
+    <div class="slide layout-metrics">
+      <div class="slide-header">
+        <h4>Executive Summary</h4>
+        <span class="tag">Key Findings</span>
+      </div>
+      <div class="slide-content">
+        <h2>Sentiment has shifted measurably from the prior quarter</h2>
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="metric-value">73%</div>
+            <div class="metric-label">Bullish on three-year outlook</div>
+            <div class="metric-desc">An all-time series high, reflecting renewed confidence in medium-term fundamentals despite near-term uncertainty.</div>
+            <ul class="metric-supports">
+              <li>Highest reading since the survey began in 2018</li>
+              <li>Cross-sector consensus, led by tech and industrials</li>
+              <li>Driven by clarity on rate trajectory and AI capex</li>
+            </ul>
+            <div class="metric-change positive">
+              <span>&uarr;</span> +11 pts vs. prior quarter
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">55%</div>
+            <div class="metric-label">Expect recession before year-end</div>
+            <div class="metric-desc">Down significantly from the prior reading, indicating easing fears of a severe or prolonged contraction.</div>
+            <ul class="metric-supports">
+              <li>Soft-landing scenario now the modal expectation</li>
+              <li>Median timeline pushed from Q2 to Q4</li>
+              <li>Severity expectations also moderated meaningfully</li>
+            </ul>
+            <div class="metric-change positive">
+              <span>&darr;</span> -36 pts vs. prior quarter
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">4.5%</div>
+            <div class="metric-label">Median inflation expectation</div>
+            <div class="metric-desc">Investors expect price pressures to remain elevated through the end of the current calendar year.</div>
+            <ul class="metric-supports">
+              <li>Wage and services inflation remain the stickiest</li>
+              <li>Energy disinflation slower than originally modeled</li>
+              <li>Long-run anchor steady at 3% for the next decade</li>
+            </ul>
+            <div class="metric-change negative">
+              <span>&uarr;</span> +0.3 pts vs. prior quarter
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: Dashboard -->
+    <div class="slide layout-dashboard">
+      <div class="slide-header">
+        <h4>Macroeconomic Sentiment</h4>
+        <span class="tag">Data Overview</span>
+      </div>
+      <div class="slide-content">
+        <h2>Current perspectives on the economy and markets</h2>
+        <div class="stats-grid">
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">22%</span>
+              <span class="stat-unit">of respondents</span>
+            </div>
+            <div class="stat-name">Bullish for the current calendar year</div>
+            <div class="stat-context">Steady from prior quarter, anchored by tariff and policy uncertainty.</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">51%</span>
+              <span class="stat-unit">of respondents</span>
+            </div>
+            <div class="stat-name">Bullish for the next calendar year</div>
+            <div class="stat-context">Up from 38% last quarter as the rate path firms up.</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">60%</span>
+              <span class="stat-unit">of respondents</span>
+            </div>
+            <div class="stat-name">More bullish on the economy than three months ago</div>
+            <div class="stat-context">A 22-point improvement, the largest sentiment swing in two years.</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">53%</span>
+              <span class="stat-unit">of respondents</span>
+            </div>
+            <div class="stat-name">More bullish on equities than three months ago</div>
+            <div class="stat-context">Tech and financials led the upgrade; energy and utilities lag.</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">3.6%</span>
+              <span class="stat-unit">median</span>
+            </div>
+            <div class="stat-name">Expected inflation rate for the next two years</div>
+            <div class="stat-context">Down 0.4 pts; long-run expectations remain anchored at 3.0%.</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-top">
+              <span class="stat-num">2.7%</span>
+              <span class="stat-unit">median</span>
+            </div>
+            <div class="stat-name">Expected real GDP growth for the next two years</div>
+            <div class="stat-context">A modest upgrade reflecting easing recession fears.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: Two Column -->
+    <div class="slide layout-split">
+      <div class="slide-header">
+        <h4>Investor Priorities</h4>
+        <span class="tag">Analysis</span>
+      </div>
+      <div class="slide-content">
+        <h2>What investors want companies to focus on right now</h2>
+        <div class="split-body">
+          <div class="split-left">
+            <ul class="insight-list">
+              <li>Growth and protecting the top line remain the leading priority, cited by a clear majority as essential in the current cycle.</li>
+              <li>Cash flow resilience has risen sharply in importance as liquidity conditions tightened across credit markets through Q3.</li>
+              <li>Supply chain stability ranks consistently high, reflecting the lasting operational scars of recent global disruptions.</li>
+              <li>Margin preservation and cost discipline have moved from defensive levers to first-line strategy in investor conversations.</li>
+              <li>AI capex remains the most-discussed structural theme, but with rising attention to monetization timelines.</li>
+            </ul>
+          </div>
+          <div class="split-right">
+            <div class="split-highlight">
+              "The shift from growth-at-all-costs to profitable, sustainable expansion is the defining theme of this cycle."
+              <cite>Senior PM, multi-strategy fund</cite>
+            </div>
+            <div class="mini-stat-row">
+              <div class="mini-stat">
+                <div class="mini-val">63%</div>
+                <div class="mini-label">Prioritize top-line growth</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-val">55%</div>
+                <div class="mini-label">Prioritize cash flow resilience</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-val">33%</div>
+                <div class="mini-label">Prioritize supply chain stability</div>
+              </div>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.55; margin: 0;">
+              Notably absent from the top of the list: ESG-led capital allocation, which has dropped 24 points year-over-year as investors recalibrate toward returns-first mandates.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: Bar Chart -->
+    <div class="slide layout-bars">
+      <div class="slide-header">
+        <h4>Risk Factors</h4>
+        <span class="tag">Ranking</span>
+      </div>
+      <div class="slide-content">
+        <h2>Most important macroeconomic concerns among investors</h2>
+        <div class="bars-container">
+          <div class="bar-item">
+            <div class="bar-label">Consumer price inflation</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 79%"></div>
+            </div>
+            <div class="bar-pct">79%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Interest rates &amp; central bank policy</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 69%"></div>
+            </div>
+            <div class="bar-pct">69%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Geopolitical risks</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 39%"></div>
+            </div>
+            <div class="bar-pct">39%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Liquidity tightening in capital markets</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 37%"></div>
+            </div>
+            <div class="bar-pct">37%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Asset price volatility</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 25%"></div>
+            </div>
+            <div class="bar-pct">25%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Public-sector debt &amp; spending</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 22%"></div>
+            </div>
+            <div class="bar-pct">22%</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Climate &amp; ESG-related risks</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 18%"></div>
+            </div>
+            <div class="bar-pct">18%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: Quote -->
+    <div class="slide layout-quote">
+      <div class="quote-decoration"></div>
+      <div class="quote-decoration-2"></div>
+      <div class="quote-mark">&ldquo;</div>
+      <blockquote>
+        In this environment, the companies that will win are those that can balance operational discipline with strategic flexibility.
+      </blockquote>
+      <p class="quote-source"><strong>Senior Partner, Strategy Practice</strong> &mdash; Global Investment Forum 2026</p>
+    </div>
+
+    <!-- SLIDE 8: Timeline -->
+    <div class="slide layout-timeline">
+      <div class="slide-header">
+        <h4>Strategic Roadmap</h4>
+        <span class="tag">Process</span>
+      </div>
+      <div class="slide-content">
+        <h2>Recommended approach to navigating the current cycle</h2>
+        <div class="timeline-track">
+          <div class="timeline-step">
+            <div class="step-circle">1</div>
+            <div class="step-title">Assess Resilience</div>
+            <div class="step-desc">Evaluate balance sheet strength and operational buffers under stress scenarios.</div>
+          </div>
+          <div class="timeline-step">
+            <div class="step-circle">2</div>
+            <div class="step-title">Protect Core Revenue</div>
+            <div class="step-desc">Defend market position and pricing power in segments with durable demand.</div>
+          </div>
+          <div class="timeline-step">
+            <div class="step-circle">3</div>
+            <div class="step-title">Optimize Costs</div>
+            <div class="step-desc">Streamline overhead while preserving capacity for high-return investments.</div>
+          </div>
+          <div class="timeline-step">
+            <div class="step-circle">4</div>
+            <div class="step-title">Selective Growth</div>
+            <div class="step-desc">Deploy capital toward opportunities with clear path to profitability.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: Detail -->
+    <div class="slide layout-detail">
+      <div class="slide-header">
+        <h4>Deep Dive</h4>
+        <span class="tag">Detailed Analysis</span>
+      </div>
+      <div class="slide-content">
+        <h2>Changes in investment practices and valuation frameworks</h2>
+        <div class="detail-body">
+          <div class="detail-col">
+            <div class="detail-block">
+              <h3>Assuming higher cost of capital</h3>
+              <ul>
+                <li>Using elevated discount rates to reflect tighter monetary conditions</li>
+                <li>Shifting hurdle rates for internal capital allocation decisions</li>
+                <li>Emphasizing shorter payback periods for new projects</li>
+              </ul>
+            </div>
+            <div class="detail-block">
+              <h3>More conservative valuation approach</h3>
+              <ul>
+                <li>Greater weight assigned to downside and bear-case scenarios</li>
+                <li>Reduced reliance on long-dated terminal value assumptions</li>
+                <li>Increased sensitivity analysis around key drivers</li>
+              </ul>
+            </div>
+            <div class="detail-block">
+              <h3>Value over growth momentum</h3>
+              <ul>
+                <li>Pivoting toward earnings-supported valuations</li>
+                <li>Favoring demonstrable unit economics over scale narratives</li>
+                <li>Reassessing premium multiples for unprofitable segments</li>
+              </ul>
+            </div>
+          </div>
+          <div class="detail-col">
+            <div class="detail-block">
+              <h3>Cash flow &amp; balance sheet focus</h3>
+              <ul>
+                <li>Prioritizing free cash flow generation as a key screening metric</li>
+                <li>Analyzing working capital needs under inflationary input costs</li>
+                <li>Reviewing leverage ratios and refinancing schedules</li>
+              </ul>
+            </div>
+            <div class="detail-block">
+              <h3>Bottom-up stock selection</h3>
+              <ul>
+                <li>Reducing macro-driven top-down factor exposures</li>
+                <li>Intensifying fundamental research at the security level</li>
+                <li>Building conviction through differentiated data sources</li>
+              </ul>
+            </div>
+            <div class="detail-block">
+              <h3>Shorter-term orientation</h3>
+              <ul>
+                <li>Narrowing forecasting windows for revenue and margin</li>
+                <li>More frequent reassessment of position sizing</li>
+                <li>Active hedging around event-driven volatility</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: Closing -->
+    <div class="slide layout-closing">
+      <div class="closing-decoration"></div>
+      <div class="closing-decoration-2"></div>
+      <div class="accent-line" style="margin: 0 auto 1.5rem;"></div>
+      <h1>Thank You</h1>
+      <p class="closing-sub">For questions or a deeper discussion of these findings, please reach out to the research team.</p>
+      <a href="#" class="cta-btn">Download Full Report</a>
+      <p class="closing-contact">research@company.com &nbsp;&middot;&nbsp; www.company.com</p>
+    </div>
+
+  </div>
+
+  <!-- Navigation -->
+  <div class="slide-counter"><span id="current">1</span> / <span id="total">10</span></div>
+  <div class="keyboard-hint">Use arrow keys to navigate</div>
+  <div class="progress-bar" id="progress"></div>
+  <div class="nav-controls">
+    <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)" aria-label="Previous slide">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <button class="nav-btn" id="nextBtn" onclick="changeSlide(1)" aria-label="Next slide">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+  </div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const currentEl = document.getElementById('current');
+    const totalEl = document.getElementById('total');
+    const progressEl = document.getElementById('progress');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    let current = 0;
+    const total = slides.length;
+    totalEl.textContent = total;
+
+    function updateSlide() {
+      slides.forEach((slide, i) => {
+        slide.classList.remove('active', 'prev');
+        if (i === current) {
+          slide.classList.add('active');
+        } else if (i < current) {
+          slide.classList.add('prev');
+        }
+      });
+      currentEl.textContent = current + 1;
+      progressEl.style.width = ((current + 1) / total * 100) + '%';
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === total - 1;
+    }
+
+    function changeSlide(dir) {
+      const next = current + dir;
+      if (next >= 0 && next < total) {
+        current = next;
+        updateSlide();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        changeSlide(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        changeSlide(-1);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        current = 0;
+        updateSlide();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        current = total - 1;
+        updateSlide();
+      }
+    });
+
+    // Touch support
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      const diff = touchStartX - touchEndX;
+      if (Math.abs(diff) > 50) {
+        changeSlide(diff > 0 ? 1 : -1);
+      }
+    }, { passive: true });
+
+    updateSlide();
+  </script>
+
+</body>
+</html>

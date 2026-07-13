@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-html-in-canvas-text-cursor",
+  "surface": "video",
+  "title": "HyperFrames HTML-in-Canvas: Cinematic Text Cursor Reveal",
+  "summary": "An 8-second dramatic text reveal with cursor glow, chromatic shadow rays, and directional lighting on a black stage. Real DOM typography under live shader post-processing. Built on the vfx-text-cursor catalog block.",
+  "category": "VFX / HTML-in-Canvas",
+  "tags": ["hyperframes", "html-in-canvas", "text", "cinematic", "shader"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build an 8-second HyperFrames composition (1920×1080, 30fps) titled \"cinematic-text-cursor\". Pull the catalog block first: `npx hyperframes add vfx-text-cursor`.\n\nVisual identity: pure black stage #000000, off-white type #f7f7f5, single chromatic shadow tint #ff4d3a (warm) bleeding into #4d8dff (cool) for spectral edges. Display face: \"PP Neue Montreal\" 220px Medium for the hero word, fallback \"NB International Pro\". Tracking -0.02em on the hero. No body type — the whole composition is one line.\n\nThe full composition is one HTML-in-Canvas reveal of a single short line the user supplies (default: \"think bigger\"). Source DOM is a `<canvas layoutsubtree width=\"1920\" height=\"1080\">` with one centered `<h1>` element. The shader does the cinema.\n\nTimeline (paused: true, window.__timelines.main, data-duration=8):\n\n0.0–0.8s DARK — fully black, only a single faint cursor scan-line at 50% canvas height moving left to right at 800px/s, intensity 0.3.\n\n0.8–2.4s REVEAL — cursor reaches the headline x-position. The hero word reveals letter by letter via clip-path (linear left-to-right wipe over 1.4s, ease power3.out). Each letter, the moment it appears, lights up the chromatic shadow rays radiating outward 18° spread, length 320px, intensity peaks at 0.85, decays over 0.5s. Directional key light from camera-upper-left sweeps the type with a soft glow.\n\n2.4–5.0s HOLD — type stays lit, cursor parks just to the right of the final letter and pulses (opacity 0.9 ↔ 0.5, period 0.8s, ease sine.inOut, finite repeat — calculate `Math.ceil(2.6 / 0.8) - 1` repeats). Chromatic shadow stabilises at 0.18 intensity. A subtle film-grain overlay (use `grain-overlay` component at 6%) holds across the scene.\n\n5.0–8.0s OUTRO — cursor accelerates rightward off-canvas (x position +1200 over 1.0s ease expo.in). Chromatic rays intensify briefly to 1.0, then everything dims to black via the root container's opacity over 1.6s. The hero word stays in CSS position — only the root container fades. Final 0.4s pure black hold.\n\nFeature detection: if `drawElementImage` is unavailable, render the source DOM directly as a normal CSS-only kinetic-type composition with class-based reveal — the text itself is the fallback. Never show a black canvas with no text.\n\nNon-negotiables: one font, one expressive line, deterministic motion. Min hero size 200px. No `repeat: -1` (the cursor pulse uses a finite count). No animation conflict — the cursor glow shader and the GSAP letter reveal animate different properties on different elements. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 8 --at 0.5,1.6,2.2,4.0,5.5,7.0` before render. Output: `cinematic-text-cursor.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-text-cursor.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-text-cursor.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/blocks/vfx-text-cursor"
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-soul-switching-mirror-magic-sequence",
+  "title": "Soul-Switching Mirror Magic Sequence",
+  "title_i18n": {
+    "zh-CN": "灵魂互换镜像魔法序列",
+    "zh-TW": "靈魂互換鏡像魔法序列",
+    "ja": "魂入れ替えミラー魔法シーケンス",
+    "ko": "영혼 교환 거울 마법 시퀀스",
+    "de": "Seelentausch-Spiegel-Magie-Sequenz",
+    "fr": "Séquence magique d'échange d'âmes au miroir",
+    "ru": "Магическая последовательность обмена душами у зеркала",
+    "es": "Secuencia mágica de intercambio de almas en el espejo",
+    "pt-BR": "Sequência mágica de troca de almas no espelho",
+    "it": "Sequenza magica di scambio di anime allo specchio",
+    "vi": "Chuỗi ma thuật hoán đổi linh hồn qua gương",
+    "pl": "Magiczna sekwencja zamiany dusz w lustrze",
+    "id": "Urutan sihir pertukaran jiwa di cermin",
+    "nl": "Magische zielenruil-spiegel-sequentie",
+    "ar": "تسلسل سحر تبادل الأرواح عند المرآة",
+    "tr": "Ruh değiştirme ayna büyüsü dizisi",
+    "uk": "Магічна послідовність обміну душами біля дзеркала",
+    "en": "Soul-Switching Mirror Magic Sequence"
+  },
+  "version": "0.1.0",
+  "description": "A narrative video prompt describing a magical soul-switching event at a mirror, with specific camera instructions and emotional cues for each segment.",
+  "description_i18n": {
+    "zh-CN": "描述镜前魔法灵魂互换事件的叙事视频提示，包含各片段的镜头指导和情感提示。",
+    "zh-TW": "描述鏡前魔法靈魂互換事件的敘事影片提示，包含各片段的鏡頭指導和情感提示。",
+    "ja": "鏡の前で魂が入れ替わる魔法イベントを描写するナラティブ動画プロンプト。各セグメントのカメラ指示と感情の手がかりを含みます。",
+    "ko": "거울 앞에서 벌어지는 마법 영혼 교환 이벤트를 묘사하는 내러티브 비디오 프롬프트. 각 세그먼트의 카메라 지시와 감정 단서를 포함합니다.",
+    "de": "Ein narratives Video-Prompt, das ein magisches Seelentausch-Ereignis vor einem Spiegel beschreibt, mit spezifischen Kamera-Anweisungen und emotionalen Hinweisen für jedes Segment.",
+    "fr": "Un prompt vidéo narratif décrivant un événement magique d'échange d'âmes devant un miroir, avec des instructions de caméra et des indications émotionnelles pour chaque segment.",
+    "ru": "Нарративный видео-промпт, описывающий магическое событие обмена душами у зеркала, с конкретными инструкциями по камере и эмоциональными подсказками для каждого сегмента.",
+    "es": "Un prompt de video narrativo que describe un evento mágico de intercambio de almas frente a un espejo, con instrucciones de cámara y señales emocionales para cada segmento.",
+    "pt-BR": "Um prompt de vídeo narrativo descrevendo um evento mágico de troca de almas em frente a um espelho, com instruções de câmera e dicas emocionais para cada segmento.",
+    "it": "Un prompt video narrativo che descrive un evento magico di scambio di anime davanti a uno specchio, con istruzioni specifiche per la telecamera e segnali emotivi per ogni segmento.",
+    "vi": "Prompt video tường thuật mô tả sự kiện ma thuật hoán đổi linh hồn trước gương, với hướng dẫn camera và gợi ý cảm xúc cho từng phân đoạn.",
+    "pl": "Narracyjny prompt wideo opisujący magiczne wydarzenie zamiany dusz przy lustrze, ze szczegółowymi instrukcjami dla kamery i wskazówkami emocjonalnymi dla każdego segmentu.",
+    "id": "Prompt video naratif yang menggambarkan peristiwa magis pertukaran jiwa di depan cermin, dengan instruksi kamera dan petunjuk emosi untuk setiap segmen.",
+    "nl": "Een narratieve videoprompt die een magische zielenruil bij een spiegel beschrijft, met specifieke camera-instructies en emotionele aanwijzingen voor elk segment.",
+    "ar": "موجه فيديو سردي يصف حدث سحري لتبادل الأرواح أمام مرآة، مع تعليمات كاميرا محددة وإشارات عاطفية لكل مقطع.",
+    "tr": "Aynada gerçekleşen büyülü bir ruh değiştirme olayını anlatan, her segment için özel kamera talimatları ve duygusal ipuçları içeren anlatısal video prompt'u.",
+    "uk": "Наративний відео-промпт, що описує магічну подію обміну душами біля дзеркала, зі специфічними інструкціями для камери та емоційними підказками для кожного сегмента.",
+    "en": "A narrative video prompt describing a magical soul-switching event at a mirror, with specific camera instructions and emotional cues for each segment."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Soulful Ai",
+    "url": "https://x.com/soulful__ai/status/2049094162134532477"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "vfx-fantasy",
+    "cinematic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e614b54b8f60956db3cd9cb765db1d09/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e614b54b8f60956db3cd9cb765db1d09/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "0s – 4s (Opening Mystery)\nA hidden magical kingdom under heavy rain at night. The girl stands beside a glowing water mirror in an ancient palace courtyard. Blue magical fog surrounds her. The water reflects faint glowing runes. She slowly reaches toward the reflection.\nCamera: Slow push-in close-up, cinematic depth of field\nMood: Mysterious, calm tension, soft rain sounds\n\n4s – 8s (Soul Switch Event)\nHer fingers touch the water reflection suddenly the surface shatters into glowing blue energy. A magical pulse spreads. Her eyes flash with light as her soul violently switches with the crown prince.\nCamera: Fast magical shockwave transition, close-up eye zoom\nVFX: Soul transfer glow, water turning into floating light particles\nMood: Intense, dramatic awakening\n\n8s – 12s (Living as the Prince)\nNow inside the crown prince’s body (her consciousness), she stands in a royal throne room. Nobles bow before her, unaware of the switch. She struggles to act like him while hiding panic. Subtle expressions of confusion and fear.\nCamera: Slow tracking shot through palace hall\nLighting: Cold golden royal lighting with shadows\nMood: Suspense, identity tension, hidden fear\n\n12s – 16s (Hidden Truth + Cliffhanger)\nBack in the courtyard mirror, the prince (in her body) looks back at her real form from the reflection. The magical water starts cracking again, suggesting unstable soul connection. Blue energy rises violently.",
+        "zh-CN": "使用这个插件完成以下任务：0s – 4s (Opening Mystery)\nA hidden magical kingdom under heavy rain at night. The girl stands beside a glowing water mirror in an ancient palace courtyard. Blue magical fog surrounds her. The water reflects faint glowing runes. She slowly reaches toward the reflection.\nCamera: Slow push-in close-up, cinematic depth of field\nMood: Mysterious, calm tension, soft rain sounds\n\n4s – 8s (Soul Switch Event)\nHer fingers touch the water reflection suddenly the surface shatters into glowing blue energy. A magical pulse spreads. Her eyes flash with light as her soul violently switches with the crown prince.\nCamera: Fast magical shockwave transition, close-up eye zoom\nVFX: Soul transfer glow, water turning into floating light particles\nMood: Intense, dramatic awakening\n\n8s – 12s (Living as the Prince)\nNow inside the crown prince’s body (her consciousness), she stands in a royal throne room. Nobles bow before her, unaware of the switch. She struggles to act like him while hiding panic. Subtle expressions of confusion and fear.\nCamera: Slow tracking shot through palace hall\nLighting: Cold golden royal lighting with shadows\nMood: Suspense, identity tension, hidden fear\n\n12s – 16s (Hidden Truth + Cliffhanger)\nBack in the courtyard mirror, the prince (in her body) looks back at her real form from the reflection. The magical water starts cracking again, suggesting unstable soul connection. Blue energy rises violently."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

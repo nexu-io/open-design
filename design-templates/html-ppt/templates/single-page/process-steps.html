@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Process Steps</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:24px}
+.step{position:relative;padding:24px 26px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
+.step .num{position:absolute;top:-24px;left:22px;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;box-shadow:var(--shadow)}
+.step h4{margin:18px 0 8px;font-size:17px}
+.step p{font-size:13px;color:var(--text-2);line-height:1.6}
+.step .tag{display:inline-block;margin-top:10px;font-size:11px;padding:3px 10px;border-radius:999px;background:var(--surface-2);color:var(--text-3)}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Process">
+  <p class="kicker">How-to · 四步做一个 deck</p>
+  <h2 class="h2">从零到一，只需要十分钟</h2>
+  <div class="steps anim-stagger-list" data-anim-target>
+    <div class="step"><div class="num">1</div><h4>起稿</h4><p>运行 <code>new-deck.sh</code> 创建脚手架，默认 6 页。</p><span class="tag">~30s</span></div>
+    <div class="step"><div class="num">2</div><h4>选版式</h4><p>从 <code>templates/single-page/</code> 里复制你需要的页型。</p><span class="tag">~2min</span></div>
+    <div class="step"><div class="num">3</div><h4>写内容</h4><p>替换 demo 数据，保留结构。</p><span class="tag">~6min</span></div>
+    <div class="step"><div class="num">4</div><h4>换主题</h4><p>按 <b>T</b> 循环看 24 个主题，挑一个定稿。</p><span class="tag">~1min</span></div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

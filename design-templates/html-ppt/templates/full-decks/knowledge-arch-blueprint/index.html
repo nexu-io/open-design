@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Arch Blueprint</title>
+<link rel="stylesheet" href="../../../assets/fonts.css">
+<link rel="stylesheet" href="../../../assets/base.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-knowledge-arch-blueprint">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="kb-grid-bg"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:44px">
+      <div>
+        <div class="kb-kicker">Karpathy Stack · 架构图 v2</div>
+        <h1 class="kb-h1">LLM <span class="rust">知识库</span> 的<br>工程化蓝图</h1>
+        <p class="kb-sub">从「乱贴笔记」到「可审计、可纠错、可复用」的第二大脑 —— 这是我读完 Karpathy 的分享后画的一张系统图。</p>
+      </div>
+      <div class="kb-insight"><span class="kk">KEY INSIGHT</span>Karpathy 原版缺一块：<br>反馈闭环让错误能回流纠正。</div>
+    </div>
+    <div class="kb-section-label">Pipeline · End-to-end</div>
+    <div class="kb-pipeline">
+      <div class="kb-step"><div class="kb-step-num">STEP 01</div><div class="kb-step-title">采集</div><div class="kb-step-body">浏览器剪藏、PDF、Podcast 转写、聊天记录</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 02</div><div class="kb-step-title">去噪</div><div class="kb-step-body">清洗导航栏、广告、重复段落、低信噪素材</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">STEP 03 · CORE</div><div class="kb-step-title">Wiki 化</div><div class="kb-step-body">结构化成双链笔记，实体、关系、属性全在一起</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 04</div><div class="kb-step-title">使用</div><div class="kb-step-body">Agent 随时检索、回答、再写入</div></div>
+    </div>
+    <div class="kb-footer"><span>Blueprint · v2 · 2026.04</span><span>01 / 08</span></div>
+  </section>
+
+  <!-- 2. SECTION DIVIDER -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div style="margin:auto 0">
+      <div class="kb-kicker">Chapter One</div>
+      <h1 class="kb-h1" style="font-size:120px">为什么 <span class="rust">笔记</span><br>不够用了</h1>
+      <p class="kb-sub" style="font-size:24px;margin-top:20px">当你的知识量超过记忆容量，<br>你需要的不是更多文件，而是一张<b>可导航的图</b>。</p>
+    </div>
+    <div class="kb-footer"><span>Section · Chapter 1</span><span>02 / 08</span></div>
+  </section>
+
+  <!-- 3. CONTENT 2-col -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div class="kb-kicker">Problem · Solution</div>
+    <h1 class="kb-h1" style="font-size:48px">原版 vs <span class="rust">升级版</span></h1>
+    <div class="kb-grid-2">
+      <div class="kb-card">
+        <div class="kb-kicker" style="color:#888">原版 Karpathy</div>
+        <h4>一次性写入</h4>
+        <p>采集 → 转写 → 存档，错了就错了。没有回路，没有修正机制，笔记越多越混乱。</p>
+      </div>
+      <div class="kb-card" style="background:var(--kb-rust-soft);border-color:var(--kb-rust)">
+        <div class="kb-kicker">升级 v2</div>
+        <h4>反馈闭环</h4>
+        <p>AI 使用知识库时记录每次 miss / 幻觉 / 过期事实，自动回灌到源文件，让笔记会自我修正。</p>
+      </div>
+    </div>
+    <div class="kb-legend">
+      <div class="d"><span class="b"></span>普通节点</div>
+      <div class="d"><span class="b rust"></span>核心节点 · 反馈回路入口</div>
+      <div class="d">—— 数据流 &nbsp;&nbsp; ┈┈ 反馈回路</div>
+    </div>
+    <div class="kb-footer"><span>Content · Compare</span><span>03 / 08</span></div>
+  </section>
+
+  <!-- 4. CODE -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div class="kb-kicker">Implementation · Skill Manifest</div>
+    <h1 class="kb-h1" style="font-size:48px">反馈回路 <span class="rust">怎么实现</span></h1>
+    <p class="kb-sub">一个 100 行的 Agent Skill，把「AI 用得顺不顺」回写成 vault 的一条条修订记录。</p>
+    <pre class="kb-codebox"><span class="cm"># skills/wiki-feedback/SKILL.md</span>
+<span class="kw">name</span>: wiki-feedback
+<span class="kw">trigger</span>: <span class="st">"after every retrieval"</span>
+
+<span class="kw">on_hit</span>:     record(<span class="st">query, path, used=true</span>)
+<span class="kw">on_miss</span>:    record(<span class="st">query, reason=</span><span class="hl">"not-in-vault"</span>)
+<span class="kw">on_wrong</span>:   record(<span class="st">query, correction, path</span>)
+
+<span class="kw">nightly</span>:
+  - <span class="st">aggregate misses → suggest new notes</span>
+  - <span class="st">aggregate wrongs → diff-patch old notes</span>
+  - <span class="st">commit to git, open PR for human review</span></pre>
+    <div class="kb-footer"><span>Content · Code</span><span>04 / 08</span></div>
+  </section>
+
+  <!-- 5. DIAGRAM - SVG feedback loop -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div class="kb-kicker">System Diagram</div>
+    <h1 class="kb-h1" style="font-size:44px">反馈回路全貌</h1>
+    <svg viewBox="0 0 1200 520" style="width:100%;max-width:1200px;margin-top:20px" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1a1a1a"/>
+        </marker>
+        <marker id="arrow-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#B5392A"/>
+        </marker>
+      </defs>
+      <g font-family="Inter, sans-serif" font-size="16" font-weight="700">
+        <!-- boxes -->
+        <rect x="40" y="180" width="200" height="120" rx="10" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+        <text x="140" y="220" text-anchor="middle">Sources</text>
+        <text x="140" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#666">web · pdf · chat</text>
+
+        <rect x="300" y="180" width="200" height="120" rx="10" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+        <text x="400" y="220" text-anchor="middle">Clean + Split</text>
+        <text x="400" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#666">defuddle / chunker</text>
+
+        <rect x="560" y="160" width="220" height="160" rx="10" fill="#B5392A" stroke="#B5392A" stroke-width="2"/>
+        <text x="670" y="210" text-anchor="middle" fill="#fff" font-size="20">Vault (Wiki)</text>
+        <text x="670" y="240" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">markdown · links</text>
+        <text x="670" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">bases · canvas</text>
+
+        <rect x="840" y="180" width="200" height="120" rx="10" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+        <text x="940" y="220" text-anchor="middle">Agent Use</text>
+        <text x="940" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#666">retrieve / answer</text>
+
+        <!-- forward arrows -->
+        <line x1="245" y1="240" x2="295" y2="240" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="505" y1="240" x2="555" y2="240" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="785" y1="240" x2="835" y2="240" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow)"/>
+
+        <!-- feedback dashed -->
+        <path d="M 940 180 Q 940 80, 670 80 Q 400 80, 400 180" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
+        <rect x="580" y="58" width="180" height="30" rx="6" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
+        <text x="670" y="78" text-anchor="middle" fill="#B5392A" font-size="12">FEEDBACK · wrong / miss</text>
+
+        <!-- bottom feedback to sources -->
+        <path d="M 940 300 Q 940 420, 670 420 Q 140 420, 140 300" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
+        <rect x="560" y="400" width="220" height="30" rx="6" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
+        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">NIGHTLY · suggest new sources</text>
+      </g>
+    </svg>
+    <div class="kb-footer"><span>Diagram · Feedback Loop</span><span>05 / 08</span></div>
+  </section>
+
+  <!-- 6. STATS -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div class="kb-kicker">After 6 Months</div>
+    <h1 class="kb-h1" style="font-size:44px">升级版 <span class="rust">跑了半年</span> 的数据</h1>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:24px;margin-top:28px;align-items:center">
+      <div style="text-align:center"><div class="kb-big-num">13</div><p style="font-size:14px;color:#666;margin-top:6px;letter-spacing:.1em;text-transform:uppercase">关键优化项 · 全部落地</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">-62%</h4><p>幻觉率（相比无反馈回路版本）</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">+4.1×</h4><p>单次检索命中率</p></div>
+    </div>
+    <div class="kb-grid-2" style="margin-top:18px">
+      <div class="kb-card"><h4>自动修订 227 条</h4><p>其中 189 条被人工批准合并，38 条被拒绝（数据已归档）。</p></div>
+      <div class="kb-card"><h4>新增笔记 412 篇</h4><p>从 miss 日志聚类而来，每篇都有来源追溯。</p></div>
+    </div>
+    <div class="kb-footer"><span>Content · Stats</span><span>06 / 08</span></div>
+  </section>
+
+  <!-- 7. CTA -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div class="kb-kicker">Next Step</div>
+    <h1 class="kb-h1" style="font-size:60px">开始你的 <span class="rust">Wiki v2</span></h1>
+    <p class="kb-sub">不用重写所有笔记。先接一条回路，让 AI 的每次使用都在「改好」你的 vault。</p>
+    <div class="kb-pipeline">
+      <div class="kb-step"><div class="kb-step-num">TONIGHT</div><div class="kb-step-title">装 Skill</div><div class="kb-step-body">pnpm i -g @lewis/wiki-feedback</div></div>
+      <div class="kb-step"><div class="kb-step-num">DAY 2</div><div class="kb-step-title">跑 7 天</div><div class="kb-step-body">观察 miss log 自动累积</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">DAY 8 · CORE</div><div class="kb-step-title">第一次审 PR</div><div class="kb-step-body">花 15 分钟 review 自动生成的修订</div></div>
+      <div class="kb-step"><div class="kb-step-num">MONTH 1</div><div class="kb-step-title">开始信它</div><div class="kb-step-body">你的 vault 会变成活的</div></div>
+    </div>
+    <div class="kb-footer"><span>CTA</span><span>07 / 08</span></div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide">
+    <div class="kb-grid-bg"></div>
+    <div style="margin:auto 0;text-align:center">
+      <div class="kb-kicker">END · blueprint v2</div>
+      <h1 class="kb-h1" style="font-size:140px;margin-top:24px">谢谢 <span class="rust">·</span> thanks</h1>
+      <p class="kb-sub" style="margin:0 auto;font-size:22px">图纸、Skill、笔记模板都在 <b>github.com/lewis/karpathy-wiki-v2</b></p>
+    </div>
+    <div class="kb-footer"><span>End of deck</span><span>08 / 08</span></div>
+  </section>
+
+</div>
+<script src="../../../assets/runtime.js"></script>
+</body>
+</html>

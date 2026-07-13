@@ -1,0 +1,19 @@
+{
+  "id": "hunched-character-animation",
+  "surface": "video",
+  "title": "Hunched Character Animation",
+  "summary": "Instruction for Seedance 2 to create an in-place walking animation for a specific character reference.",
+  "category": "General",
+  "tags": [],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "create a walking animation for this hunched over character. the character stays in place",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d3d5dcaf102414a8cceca23d60b5c0d0/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d3d5dcaf102414a8cceca23d60b5c0d0/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Olivio Sarikas",
+    "url": "https://x.com/OlivioSarikas/status/2049093747011670042"
+  }
+}

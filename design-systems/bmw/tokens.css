@@ -1,0 +1,179 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/bmw/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by BMW".
+ * German automotive precision: white-and-dark cinematic rhythm,
+ * BMW Blue as singular interactive accent, zero border-radius,
+ * BMWTypeNextLatin Light at 60px uppercase as the signature gesture.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure White (#ffffff) canvas + cinematic dark hero sections
+ *   - BMW Blue (#1c69d4) — singular accent, used only for interactive elements
+ *   - BMW Focus Blue (#0653b6) — the documented darker tone, bound to
+ *     --accent-hover and reused inside --focus-ring
+ *   - Zero border-radius EVERYWHERE — including --radius-pill (DESIGN.md §5)
+ *   - BMWTypeNextLatin Light (300) for uppercase display — whispered authority
+ *   - Weight extremes only (300, 400, 700, 900) — never 500–600
+ *   - Tight line-heights throughout (body 1.15, display 1.30)
+ *   - No shadows — depth comes from dark/light section contrast
+ *
+ * Contract sources:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback values:   design-systems/_schema/defaults.css
+ *   - Brand source of truth: design-systems/bmw/DESIGN.md
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Pure white is the BMW canvas. Content sections are flat white; the
+   * dramatic depth in BMW pages comes from alternating with full-bleed
+   * dark photography bands, NOT from an internal surface ladder. We
+   * bind --surface to a near-white (#f5f5f5) for cards/inputs that need
+   * the faintest separation from page background without competing
+   * with the showroom rhythm. --surface-warm aliases — BMW has no
+   * warm tier; the identity is cool industrial. */
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --surface-warm: var(--surface);
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Near Black (#262626) is slightly warmer than pure #000 — gives the
+   * body reading texture BMW favors on white. Meta Gray (#757575) is
+   * BMW's own documented `--site-context-metainfo-color`. Silver
+   * (#bbbbbb) marks the most restrained tier (footer links, dividers).
+   * --fg-2 aliases to --fg — BMW jumps from primary to meta with no
+   * intermediate secondary-heading tier (the leap is part of the
+   * stark voice). */
+  --fg: #262626;
+  --fg-2: var(--fg);
+  --muted: #757575;
+  --meta: #bbbbbb;
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Subtle gray hairlines on light surfaces. BMW pages have minimal
+   * borders — depth and definition are carried by photography and
+   * dark/light contrast, not edge-work. --border-soft aliases — no
+   * inner-row separator distinction is needed. */
+  --border: #e0e0e0;
+  --border-soft: var(--border);
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * BMW Blue (#1c69d4) — the system's only persistent chromatic move
+   * (DESIGN.md §2: `--site-context-highlight-color`). Used exclusively
+   * for interactive elements (CTAs, links, focus signals). Never as a
+   * background fill or decorative element.
+   *
+   * --accent-hover binds to BMW Focus Blue (#0653b6) — the documented
+   * `--site-context-focus-color` — so primary buttons darken to the
+   * brand-canonical "pressed" tone on hover rather than mixing toward
+   * black. --accent-active darkens further with the schema formula. */
+  --accent: #1c69d4;
+  --accent-on: #ffffff;
+  --accent-hover: #0653b6;
+  --accent-active: color-mix(in oklab, var(--accent), black 18%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * BMW DESIGN.md documents no brand-specific semantic palette — the
+   * page relies on automotive photography and BMW Blue for signal.
+   * Schema defaults preserved; should occupy <5% of any surface. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * BMWTypeNextLatin Light (weight 300) for display, BMWTypeNextLatin
+   * for body. Fallback chain from DESIGN.md §3 — includes Japanese
+   * fonts (Hiragino, Meiryo) reflecting BMW's global market presence.
+   * Single typeface family at extreme weights (300 vs 900) is the
+   * signature typographic tension. */
+  --font-display: "BMWTypeNextLatin Light", Helvetica, Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --font-body: BMWTypeNextLatin, Helvetica, Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 60px display is the defining BMW
+   * gesture (uppercase, weight 300). 18px navigation tier sits
+   * between body baseline (16) and section heading (32) — it's the
+   * weight 900 nav-emphasis size that creates the 300↔900 contrast. */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --text-4xl: 60px;
+
+  /* Leading inverts the usual web convention here: body is tighter
+   * (1.15) than display (1.30). DESIGN.md §3 — "Tight everything,
+   * German engineering"; no line in the system breathes loose. */
+  --leading-body: 1.15;
+  --leading-tight: 1.30;
+  --tracking-display: 0;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit. DESIGN.md §5 documents the full BMW scale (1, 5, 8,
+   * 10, 12, 15, 16, 20, 24, 30, 32, 40, 45, 56, 60); mapped to the
+   * schema's 4-8-12-16-20-24-32-48 tier where each tier aligns. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Showroom pacing — generous vertical envelope so each content band
+   * feels spotlit between dark hero sections. Sized above the schema
+   * default of 80px to honor BMW's premium breathing room. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * ZERO border-radius — non-negotiable BMW identity. DESIGN.md §5:
+   * "BMW uses sharp corners exclusively — every element is a precise
+   * rectangle. This is the most angular design system analyzed."
+   * --radius-pill is also bound to 0 to honor the rule literally;
+   * components needing circular dots use `border-radius: 50%` inline
+   * at the call site rather than borrow the (square) pill token. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-pill: 0;
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * No shadows. DESIGN.md §6 — "BMW uses virtually no shadows. Depth
+   * is created entirely through the contrast between dark photographic
+   * sections and white content sections." --elev-raised collapses to
+   * `none`; --elev-ring stays available for input outlines and dense
+   * configurator surfaces where hairline containment is still useful. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: none;
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Sharp 2px solid ring at BMW Focus Blue (--accent-hover = #0653b6).
+   * No transparency, no glow — engineered precision instead of the
+   * schema's soft accent-tinted halo. */
+  --focus-ring: 0 0 0 2px var(--accent-hover);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Brisk, deliberate transitions. BMW's motion expresses precision,
+   * not personality; schema defaults match the voice unchanged. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1440px content max — fits BMW's wide-format layouts and the
+   * "Large Desktop 1280–1440" breakpoint from DESIGN.md §8. Full-bleed
+   * automotive photography extends beyond this; the container
+   * constrains text columns only. Gutters step generously
+   * (32 → 24 → 16) to keep the showroom margin even at mobile. */
+  --container-max: 1440px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

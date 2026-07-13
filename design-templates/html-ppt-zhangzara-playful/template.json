@@ -1,0 +1,43 @@
+{
+  "slug": "zhangzara-playful",
+  "name": "Playful",
+  "tagline": "Sun-warm peach background with Syne display: a friendly indie launch deck.",
+  "mood": [
+    "warm",
+    "approachable",
+    "indie",
+    "friendly"
+  ],
+  "occasion": [
+    "creator portfolio",
+    "indie product launch",
+    "lifestyle brand",
+    "small-business pitch",
+    "newsletter / community"
+  ],
+  "tone": [
+    "upbeat",
+    "informal",
+    "welcoming"
+  ],
+  "formality": "low",
+  "density": "medium",
+  "palette": {
+    "bg": "#F0C8A0",
+    "bg_alt": "#E8B88E",
+    "text": "#1A1A1A",
+    "light": "#F7DEC6",
+    "description": "warm peach / sand backgrounds with ink-black structure and lighter cream cards; single warm temperature throughout"
+  },
+  "typography": {
+    "display": "Syne",
+    "body": "Space Grotesk",
+    "style": "geometric variable display with personality + clean grotesk body"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks. Also welcoming for any deck — including tech or research — that wants to feel friendly and human rather than corporate.",
+  "avoid_for": "Contexts where institutional credibility matters more than warmth — the peach palette is intentionally informal.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/playful"
+}

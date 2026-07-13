@@ -1,0 +1,61 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-prototype-dashboard",
+  "title": "Example Ops Dashboard",
+  "version": "0.1.0",
+  "description": "Spec example plugin for creating a dense operations dashboard prototype with KPIs, charts, and an action table.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design Spec Examples",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/spec/examples/create-prototype-dashboard",
+  "tags": ["create", "prototype", "dashboard", "operations"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create an operations dashboard for a launch command room with KPIs, incident status, owners, and next actions.",
+        "zh-CN": "使用插件创建一个发布指挥室运营仪表盘，包含 KPI、事件状态、负责人和下一步动作。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Example Ops Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "craft": ["state-coverage", "accessibility-baseline", "laws-of-ux"],
+      "assets": ["./example.html"],
+      "atoms": ["todo-write", "critique-theater", "handoff"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write", "live-artifact"] },
+        { "id": "critique", "atoms": ["critique-theater"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "inputs": [
+      { "name": "team", "type": "string", "required": true, "label": "Team" },
+      { "name": "time_window", "type": "string", "default": "last 7 days", "label": "Time window" }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

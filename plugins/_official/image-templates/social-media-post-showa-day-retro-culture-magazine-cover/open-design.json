@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-showa-day-retro-culture-magazine-cover",
+  "title": "Social Media Post - Showa Day Retro Culture Magazine Cover",
+  "title_i18n": {
+    "zh-CN": "社交媒体帖子 - 昭和之日复古文化杂志封面",
+    "zh-TW": "社群媒體貼文 - 昭和之日復古文化雜誌封面",
+    "ja": "ソーシャルメディア投稿 - 昭和の日レトロカルチャー雑誌カバー",
+    "ko": "소셜 미디어 게시물 - Showa의 날 레트로 문화 잡지 커버",
+    "de": "Social-Media-Beitrag - Showa-Tag Retro-Kultur-Magazin-Cover",
+    "fr": "Publication sur les réseaux sociaux - Couverture de magazine culture rétro du jour Showa",
+    "ru": "Публикация в соцсетях - Обложка ретро-журнала культуры дня Showa",
+    "es": "Publicación en redes sociales - Portada de revista de cultura retro del día Showa",
+    "pt-BR": "Postagem em mídia social - Capa de revista de cultura retrô do dia Showa",
+    "it": "Post sui social media - Copertina di rivista cultura retrò del giorno Showa",
+    "vi": "Bài đăng mạng xã hội - Bìa tạp chí văn hóa retro ngày Showa",
+    "pl": "Post w mediach społecznościowych - Okładka magazynu kultury retro dnia Showa",
+    "id": "Postingan media sosial - Sampul majalah budaya retro hari Showa",
+    "nl": "Social media-bericht - Retrocultuurmagazine cover Showa-dag",
+    "ar": "منشور وسائل التواصل الاجتماعي - غلاف مجلة الثقافة الرجعية ليوم Showa",
+    "tr": "Sosyal medya gönderisi - Showa günü retro kültür dergi kapağı",
+    "uk": "Публікація в соцмережах - Обкладинка ретро-журналу культури дня Showa",
+    "en": "Social Media Post - Showa Day Retro Culture Magazine Cover"
+  },
+  "version": "0.1.0",
+  "description": "A warm editorial-style Japanese holiday feature page combining anime character art, nostalgic Showa-era street imagery, and magazine-style informational layout for seasonal cultural promotions.",
+  "description_i18n": {
+    "zh-CN": "温馨编辑风格的日本节日特色页面，结合动漫角色艺术、怀旧的Showa时代街景图像和杂志风格的信息布局，适用于季节性文化推广。",
+    "zh-TW": "溫馨編輯風格的日本節日特色頁面，結合動漫角色藝術、懷舊的Showa時代街景影像和雜誌風格的資訊版面，適用於季節性文化推廣。",
+    "ja": "アニメキャラクターアート、ノスタルジックなShowa時代のストリートイメージ、雑誌スタイルの情報レイアウトを組み合わせた、温かみのある編集スタイルの日本の祝日特集ページで、季節の文化プロモーションに最適です。",
+    "ko": "애니메이션 캐릭터 아트, 향수를 불러일으키는 Showa 시대 거리 이미지, 매거진 스타일의 정보 레이아웃을 결합한 따뜻한 편집 스타일의 일본 명절 특집 페이지로 계절별 문화 프로모션에 적합합니다.",
+    "de": "Eine warme Editorial-Style-Seite für japanische Feiertage mit Anime-Charakterkunst, nostalgischen Showa-Ära-Straßenbildern und magazinartigem Informationslayout für saisonale Kulturwerbung.",
+    "fr": "Page éditoriale chaleureuse pour les fêtes japonaises combinant l'art de personnages d'anime, des images de rues nostalgiques de l'ère Showa et une mise en page informative de style magazine pour les promotions culturelles saisonnières.",
+    "ru": "Теплая редакционная страница японского праздника, сочетающая арт аниме-персонажей, ностальгические уличные изображения эпохи Showa и информационную компоновку в стиле журнала для сезонных культурных промо.",
+    "es": "Página editorial cálida de festividad japonesa que combina arte de personajes de anime, imágenes nostálgicas de calles de la era Showa y diseño informativo estilo revista para promociones culturales de temporada.",
+    "pt-BR": "Página editorial acolhedora de feriado japonês combinando arte de personagens de anime, imagens nostálgicas de ruas da era Showa e layout informativo estilo revista para promoções culturais sazonais.",
+    "it": "Pagina editoriale calorosa per le festività giapponesi che combina arte di personaggi anime, immagini nostalgiche delle strade dell'era Showa e layout informativo in stile rivista per promozioni culturali stagionali.",
+    "vi": "Trang chuyên mục phong cách ấm áp về ngày lễ Nhật Bản kết hợp nghệ thuật nhân vật anime, hình ảnh phố xá hoài niệm thời đại Showa và bố cục thông tin kiểu tạp chí cho các chiến dịch văn hóa theo mùa.",
+    "pl": "Ciepła redakcyjna strona japońskiego święta łącząca sztukę postaci anime, nostalgiczne obrazy ulic ery Showa i układ informacyjny w stylu magazynowym do sezonowych promocji kulturalnych.",
+    "id": "Halaman editorial hangat tentang hari libur Jepang yang menggabungkan seni karakter anime, gambar jalanan era Showa yang nostalgia, dan tata letak informasi bergaya majalah untuk promosi budaya musiman.",
+    "nl": "Een warme redactionele Japanse feestdagpagina die anime-karakterkunst, nostalgische Showa-tijdperkstraatbeelden en informatieve lay-out in tijdschriftstijl combineert voor seizoensgebonden culturele promoties.",
+    "ar": "صفحة تحريرية دافئة للعطلة اليابانية تجمع بين فن شخصيات الأنمي وصور الشوارع الحنينية لحقبة Showa وتخطيط معلوماتي بأسلوب المجلات للعروض الترويجية الثقافية الموسمية.",
+    "tr": "Anime karakter sanatı, nostaljik Showa dönemi sokak görüntüleri ve dergi tarzı bilgilendirici düzeni birleştiren sıcak editoryal tarzda Japon tatil özellik sayfası, mevsimsel kültürel promosyonlar için uygundur.",
+    "uk": "Тепла редакційна сторінка японського свята, що поєднує арт аніме-персонажів, ностальгічні вуличні зображення епохи Showa та інформаційне компонування в стилі журналу для сезонних культурних промо.",
+    "en": "A warm editorial-style Japanese holiday feature page combining anime character art, nostalgic Showa-era street imagery, and magazine-style informational layout for seasonal cultural promotions."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Kazuch2ND@AI ART",
+    "url": "https://x.com/Kazuch75240438/status/2049292582606496252#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "anime",
+    "typography",
+    "food"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453174956_qapj6l_HGy7GDlbYAAR6Np.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "{\"type\":\"retro Japanese lifestyle magazine cover poster\",\"theme\":\"Showa Day feature celebrating nostalgic Japanese retro culture\",\"style\":\"clean editorial layout mixed with warm anime illustration, soft natural sunlight, nostalgic yet fresh atmosphere, cream paper background, olive green accents, elegant serif and Japanese Mincho typography\",\"aspect_ratio\":\"3:4 vertical\",\"headline\":{\"top_tags\":\"LIFESTYLE / FEATURE / RETRO CULTURE\",\"date_text\":\"{argument name=\\\"event date\\\" default=\\\"4.29\\\"} EVENT\",\"main_title\":\"昭和の日特集\",\"subtitle_ribbon\":\"懐かしさの中に、新しい発見を。\"},\"badge\":{\"position\":\"top right\",\"shape\":\"circular date stamp with botanical decoration\",\"text\":[\"4/29\",\"TUE.\",\"祝日\"]},\"main_text\":{\"intro_lines\":[\"今日は『昭和の日』です。\",\"昭和という時代を振り返り、\",\"これからの未来について考える日として\",\"制定されました。\",\"レトロな文化や暮らしには、\",\"今見ても魅力的なものが\",\"たくさんあります。\"]},\"layout\":{\"sections\":[{\"title\":\"main illustration\",\"position\":\"upper right\",\"count\":1,\"labels\":[\"full-body character in retro shopping street\"]},{\"title\":\"POINT\",\"position\":\"left lower column\",\"count\":3,\"labels\":[\"POINT 01 昭和の日とは?\",\"POINT 02 レトロ文化を楽しむ\",\"POINT 03 今の暮らしに活かす\"]},{\"title\":\"photo-style chibi panels\",\"position\":\"bottom right strip\",\"count\":3,\"labels\":[\"純喫茶でひと休み。\",\"レコードやおもちゃも素敵。\",\"思い出をノートに残して。\"]},{\"title\":\"footer summary\",\"position\":\"bottom center\",\"count\":1,\"labels\":[\"まとめ\"]}],\"decorations\":{\"botanical_sprigs_count\":6,\"bottom_icons_count\":3,\"bottom_icons\":[\"vinyl record\",\"retro camera\",\"coffee cup\"]}},\"character\":{\"gender_presentation\":\"cute anime girl\",\"age_appearance\":\"young teen to young adult chibi proportions\",\"hair\":{\"color\":\"{argument name=\\\"hair color\\\" default=\\\"medium brown\\\"}\",\"style\":\"messy high ponytail with loose fluffy strands and a red hair tie\"},\"eyes\":\"large amber-brown anime eyes\",\"outfit\":{\"count\":5,\"pieces\":[\"white oversized T-shirt with a red box logo reading {argument name=\\\"shirt logo text\\\" default=\\\"SUPPER\\\"}\",\"olive green cargo pants\",\"black low-top sneakers with white toe caps and laces\",\"cream canvas shoulder tote bag\",\"simple necklace\"]}},\"main_scene\":{\"setting\":\"sunny narrow retro Japanese alley with wooden storefronts and vintage signs\",\"background_elements\":{\"count\":9,\"items\":[\"vertical red sign ナショナル電球\",\"blue salt shop sign 塩 まるしお\",\"vertical sign 森永ミルク\",\"vertical sign 文具のサクラ堂\",\"red cylindrical post box\",\"wooden shop facades\",\"overhead utility wires\",\"green tree leaves casting dappled light\",\"stacked vintage radio and tin box in lower right\"]},\"pose\":\"walking confidently toward the viewer with one hand near the pocket and tote bag hanging from the shoulder\"},\"point_cards\":[{\"icon\":\"retro television\",\"title\":\"POINT 01\",\"body\":\"昭和という激動の時代を振り返る国民の祝日です。\"},{\"icon\":\"coffee cup\",\"title\":\"POINT 02\",\"body\":\"純喫茶や昭和レトロ雑貨巡りも人気です。\"},{\"icon\":\"camera\",\"title\":\"POINT 03\",\"body\":\"物を大切にする価値観を見直すきっかけになります。\"}],\"bottom_panels\":[{\"index\":1,\"scene\":\"character seated in a retro cafe with a green cream soda and coffee on a wooden table, warm interior, slight front view\",\"caption\":\"純喫茶でひと休み。\"},{\"index\":2,\"scene\":\"side view of the character browsing records or retro toys in a nostalgic shop filled with colorful posters and shelves\",\"caption\":\"レコードやおもちゃも素敵。\"},{\"index\":3,\"scene\":\"character sitting on a bench writing in a notebook, small camera in hand, cozy storefront backdrop\",\"caption\":\"思い出をノートに残して。\"}],\"summary_box\":{\"title\":\"まとめ\",\"text\":[\"懐かしさを楽しみながら、未来について考える。\",\"そんな一日にしてみるのも素敵です。\",\"昭和の魅力にふれる時間が、きっと、今をより豊かにしてくれるはずです。\"]},\"footer\":{\"left_text\":\"季節の行事をきっかけに、心豊かな毎日を。\",\"right_text\":\"NEXT ISSUE : 5.5 こどもの日特集\"},\"color_palette\":{\"count\":6,\"colors\":[\"warm cream\",\"olive green\",\"sepia brown\",\"sunlit gold\",\"brick red\",\"soft sky blue\"]}}",
+        "zh-CN": "{\"type\":\"retro Japanese lifestyle magazine cover poster\",\"theme\":\"Showa Day feature celebrating nostalgic Japanese retro culture\",\"style\":\"clean editorial layout mixed with warm anime illustration, soft natural sunlight, nostalgic yet fresh atmosphere, cream paper background, olive green accents, elegant serif and Japanese Mincho typography\",\"aspect_ratio\":\"3:4 vertical\",\"headline\":{\"top_tags\":\"LIFESTYLE / FEATURE / RETRO CULTURE\",\"date_text\":\"{argument name=\\\"event date\\\" default=\\\"4.29\\\"} EVENT\",\"main_title\":\"昭和の日特集\",\"subtitle_ribbon\":\"懐かしさの中に、新しい発見を。\"},\"badge\":{\"position\":\"top right\",\"shape\":\"circular date stamp with botanical decoration\",\"text\":[\"4/29\",\"TUE.\",\"祝日\"]},\"main_text\":{\"intro_lines\":[\"今日は『昭和の日』です。\",\"昭和という時代を振り返り、\",\"これからの未来について考える日として\",\"制定されました。\",\"レトロな文化や暮らしには、\",\"今見ても魅力的なものが\",\"たくさんあります。\"]},\"layout\":{\"sections\":[{\"title\":\"main illustration\",\"position\":\"upper right\",\"count\":1,\"labels\":[\"full-body character in retro shopping street\"]},{\"title\":\"POINT\",\"position\":\"left lower column\",\"count\":3,\"labels\":[\"POINT 01 昭和の日とは?\",\"POINT 02 レトロ文化を楽しむ\",\"POINT 03 今の暮らしに活かす\"]},{\"title\":\"photo-style chibi panels\",\"position\":\"bottom right strip\",\"count\":3,\"labels\":[\"純喫茶でひと休み。\",\"レコードやおもちゃも素敵。\",\"思い出をノートに残して。\"]},{\"title\":\"footer summary\",\"position\":\"bottom center\",\"count\":1,\"labels\":[\"まとめ\"]}],\"decorations\":{\"botanical_sprigs_count\":6,\"bottom_icons_count\":3,\"bottom_icons\":[\"vinyl record\",\"retro camera\",\"coffee cup\"]}},\"character\":{\"gender_presentation\":\"cute anime girl\",\"age_appearance\":\"young teen to young adult chibi proportions\",\"hair\":{\"color\":\"{argument name=\\\"hair color\\\" default=\\\"medium brown\\\"}\",\"style\":\"messy high ponytail with loose fluffy strands and a red hair tie\"},\"eyes\":\"large amber-brown anime eyes\",\"outfit\":{\"count\":5,\"pieces\":[\"white oversized T-shirt with a red box logo reading {argument name=\\\"shirt logo text\\\" default=\\\"SUPPER\\\"}\",\"olive green cargo pants\",\"black low-top sneakers with white toe caps and laces\",\"cream canvas shoulder tote bag\",\"simple necklace\"]}},\"main_scene\":{\"setting\":\"sunny narrow retro Japanese alley with wooden storefronts and vintage signs\",\"background_elements\":{\"count\":9,\"items\":[\"vertical red sign ナショナル電球\",\"blue salt shop sign 塩 まるしお\",\"vertical sign 森永ミルク\",\"vertical sign 文具のサクラ堂\",\"red cylindrical post box\",\"wooden shop facades\",\"overhead utility wires\",\"green tree leaves casting dappled light\",\"stacked vintage radio and tin box in lower right\"]},\"pose\":\"walking confidently toward the viewer with one hand near the pocket and tote bag hanging from the shoulder\"},\"point_cards\":[{\"icon\":\"retro television\",\"title\":\"POINT 01\",\"body\":\"昭和という激動の時代を振り返る国民の祝日です。\"},{\"icon\":\"coffee cup\",\"title\":\"POINT 02\",\"body\":\"純喫茶や昭和レトロ雑貨巡りも人気です。\"},{\"icon\":\"camera\",\"title\":\"POINT 03\",\"body\":\"物を大切にする価値観を見直すきっかけになります。\"}],\"bottom_panels\":[{\"index\":1,\"scene\":\"character seated in a retro cafe with a green cream soda and coffee on a wooden table, warm interior, slight front view\",\"caption\":\"純喫茶でひと休み。\"},{\"index\":2,\"scene\":\"side view of the character browsing records or retro toys in a nostalgic shop filled with colorful posters and shelves\",\"caption\":\"レコードやおもちゃも素敵。\"},{\"index\":3,\"scene\":\"character sitting on a bench writing in a notebook, small camera in hand, cozy storefront backdrop\",\"caption\":\"思い出をノートに残して。\"}],\"summary_box\":{\"title\":\"まとめ\",\"text\":[\"懐かしさを楽しみながら、未来について考える。\",\"そんな一日にしてみるのも素敵です。\",\"昭和の魅力にふれる時間が、きっと、今をより豊かにしてくれるはずです。\"]},\"footer\":{\"left_text\":\"季節の行事をきっかけに、心豊かな毎日を。\",\"right_text\":\"NEXT ISSUE : 5.5 こどもの日特集\"},\"color_palette\":{\"count\":6,\"colors\":[\"warm cream\",\"olive green\",\"sepia brown\",\"sunlit gold\",\"brick red\",\"soft sky blue\"]}}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

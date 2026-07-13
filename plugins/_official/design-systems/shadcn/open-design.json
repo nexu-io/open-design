@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-shadcn",
+  "title": "Shadcn",
+  "title_i18n": {
+    "zh-CN": "Shadcn",
+    "zh-TW": "Shadcn",
+    "ja": "Shadcn",
+    "ko": "Shadcn",
+    "de": "Shadcn",
+    "fr": "Shadcn",
+    "ru": "Shadcn",
+    "es": "Shadcn",
+    "pt-BR": "Shadcn",
+    "it": "Shadcn",
+    "vi": "Shadcn",
+    "pl": "Shadcn",
+    "id": "Shadcn",
+    "nl": "Shadcn",
+    "ar": "Shadcn",
+    "tr": "Shadcn",
+    "uk": "Shadcn",
+    "en": "Shadcn"
+  },
+  "version": "0.1.0",
+  "description": "Shadcn/ui-inspired design with minimal, clean components, monochrome palette, and utility-first patterns.",
+  "description_i18n": {
+    "zh-CN": "受 Shadcn/ui 启发的设计，具有简洁的组件、单色调色板和实用优先的模式。",
+    "zh-TW": "受 Shadcn/ui 啟發的設計，具有簡潔的元件、單色調色盤和實用優先的模式。",
+    "ja": "Shadcn/ui にインスパイアされたデザイン。ミニマルでクリーンなコンポーネント、モノクロームパレット、ユーティリティファーストパターンを採用。",
+    "ko": "Shadcn/ui에서 영감을 받은 디자인으로 미니멀하고 깔끔한 컴포넌트, 모노크롬 팔레트 및 유틸리티 우선 패턴을 제공합니다.",
+    "de": "Von Shadcn/ui inspiriertes Design mit minimalen, sauberen Komponenten, monochromer Farbpalette und Utility-First-Mustern.",
+    "fr": "Design inspiré de Shadcn/ui avec des composants minimalistes et épurés, une palette monochrome et des modèles axés sur l'utilitaire.",
+    "ru": "Дизайн, вдохновленный Shadcn/ui, с минималистичными, чистыми компонентами, монохромной палитрой и utility-first паттернами.",
+    "es": "Diseño inspirado en Shadcn/ui con componentes minimalistas y limpios, paleta monocromática y patrones de utilidad primero.",
+    "pt-BR": "Design inspirado no Shadcn/ui com componentes minimalistas e limpos, paleta monocromática e padrões utility-first.",
+    "it": "Design ispirato a Shadcn/ui con componenti minimal e puliti, palette monocromatica e pattern utility-first.",
+    "vi": "Thiết kế lấy cảm hứng từ Shadcn/ui với các thành phần tối giản, gọn gàng, bảng màu đơn sắc và mẫu thiết kế utility-first.",
+    "pl": "Design inspirowany Shadcn/ui z minimalistycznymi, czystymi komponentami, monochromatyczną paletą i wzorcami utility-first.",
+    "id": "Desain terinspirasi Shadcn/ui dengan komponen minimal dan bersih, palet monokrom, dan pola utility-first.",
+    "nl": "Door Shadcn/ui geïnspireerd ontwerp met minimalistische, strakke componenten, monochroom kleurenpalet en utility-first patronen.",
+    "ar": "تصميم مستوحى من Shadcn/ui مع مكونات بسيطة ونظيفة ولوحة ألوان أحادية اللون وأنماط utility-first.",
+    "tr": "Shadcn/ui'dan ilham alan minimal ve temiz bileşenler, monokrom palet ve utility-first desenler içeren tasarım.",
+    "uk": "Дизайн, натхненний Shadcn/ui, з мінімалістичними, чистими компонентами, монохромною палітрою та utility-first патернами.",
+    "en": "Shadcn/ui-inspired design with minimal, clean components, monochrome palette, and utility-first patterns."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "modern-minimal"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Shadcn design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Shadcn design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "shadcn",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

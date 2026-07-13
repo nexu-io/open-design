@@ -1,0 +1,70 @@
+{
+  "name": "@open-design/daemon",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "bin": {
+    "od": "./bin/od.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./package.json": "./package.json",
+    "./sidecar": {
+      "types": "./dist/sidecar/index.d.ts",
+      "default": "./dist/sidecar/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "daemon": "pnpm run build && node dist/cli.js --no-open",
+    "dev": "pnpm run build && node dist/cli.js --no-open",
+    "start": "pnpm run build && node dist/cli.js",
+    "test": "vitest run -c vitest.config.ts",
+    "typecheck": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/registry-protocol build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@open-design/agui-adapter": "workspace:*",
+    "@open-design/contracts": "workspace:*",
+    "@open-design/diagnostics": "workspace:*",
+    "@open-design/platform": "workspace:*",
+    "@open-design/plugin-runtime": "workspace:*",
+    "@open-design/registry-protocol": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "better-sqlite3": "12.10.0",
+    "blake3-wasm": "2.1.5",
+    "cheerio": "1.2.0",
+    "chokidar": "5.0.0",
+    "express": "5.2.1",
+    "jszip": "3.10.1",
+    "multer": "2.1.1",
+    "node-pty": "1.1.0",
+    "posthog-node": "5.34.6",
+    "prom-client": "15.1.3",
+    "tar": "7.5.15",
+    "undici": "7.25.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/express": "5.0.6",
+    "@types/multer": "2.1.0",
+    "@types/node": "20.19.39",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-taste-brutalist",
+  "title": "Html Ppt Taste Brutalist",
+  "title_i18n": {
+    "zh-CN": "Html Ppt Taste Brutalist",
+    "zh-TW": "Html Ppt Taste Brutalist",
+    "ja": "Html Ppt Taste Brutalist",
+    "ko": "Html Ppt Taste Brutalist",
+    "de": "Html Ppt Taste Brutalist",
+    "fr": "Html Ppt Taste Brutalist",
+    "ru": "Html Ppt Taste Brutalist",
+    "es": "Html Ppt Taste Brutalist",
+    "pt-BR": "Html Ppt Taste Brutalist",
+    "it": "Html Ppt Taste Brutalist",
+    "vi": "Html Ppt Taste Brutalist",
+    "pl": "Html Ppt Taste Brutalist",
+    "id": "Html Ppt Taste Brutalist",
+    "nl": "Html Ppt Taste Brutalist",
+    "ar": "Html Ppt Taste Brutalist",
+    "tr": "Html Ppt Taste Brutalist",
+    "uk": "Html Ppt Taste Brutalist",
+    "en": "Html Ppt Taste Brutalist"
+  },
+  "version": "0.1.0",
+  "description": "16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode).",
+  "description_i18n": {
+    "zh-CN": "16:9 HTML 幻灯片，战术遥测 / CRT 终端风格。失活 CRT 炭黑背景、白色荧光等宽字体、警示红强调色、扫描线叠加、ASCII 语法，密度优先于装饰。提取自 Leonxlnx/taste-skill `brutalist-skill`（战术遥测模式）。",
+    "zh-TW": "16:9 HTML 簡報，戰術遙測 / CRT 終端機風格。失活 CRT 炭黑背景、白色螢光等寬字型、警示紅強調色、掃描線疊加、ASCII 語法，密度優先於裝飾。提取自 Leonxlnx/taste-skill `brutalist-skill`（戰術遙測模式）。",
+    "ja": "16:9 HTML デッキ、タクティカルテレメトリー / CRT ターミナルスタイル。非アクティブ CRT チャコールスライド、白色リン光モノスペース、ハザードレッドアクセント、スキャンラインオーバーレイ、ASCII 構文、装飾より密度を優先。Leonxlnx/taste-skill `brutalist-skill`（タクティカルテレメトリーモード）から抽出。",
+    "ko": "16:9 HTML 덱, 전술 원격측정 / CRT 터미널 스타일. 비활성 CRT 차콜 슬라이드, 백색 인광 모노스페이스, 위험 빨강 강조, 스캔라인 오버레이, ASCII 구문, 장식보다 밀도 우선. Leonxlnx/taste-skill `brutalist-skill`(전술 원격측정 모드)에서 추출.",
+    "de": "16:9 HTML-Deck im Tactical-Telemetry / CRT-Terminal-Stil. Deaktivierte CRT-Anthrazit-Folien, weiß-phosphoreszierende Monospace, Gefahren-Rot-Akzent, Scanline-Overlay, ASCII-Syntax, Dichte statt Dekoration. Destilliert aus Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry-Modus).",
+    "fr": "Présentation HTML 16:9 dans le style tactical-telemetry / terminal CRT. Diapositives charbon CRT désactivé, monospace phosphore blanc, accent rouge danger, superposition scanline, syntaxe ASCII, densité avant décoration. Extrait de Leonxlnx/taste-skill `brutalist-skill` (mode Tactical Telemetry).",
+    "ru": "HTML-презентация 16:9 в стиле tactical-telemetry / CRT-терминал. Угольно-чёрные слайды отключённого CRT, белый фосфорный моноширинный шрифт, акцент тревожно-красный, наложение сканлайнов, ASCII-синтаксис, плотность важнее декора. Извлечено из Leonxlnx/taste-skill `brutalist-skill` (режим Tactical Telemetry).",
+    "es": "Presentación HTML 16:9 al estilo tactical-telemetry / terminal CRT. Diapositivas carbón de CRT desactivado, monoespacio fósforo blanco, acento rojo peligro, superposición de líneas de escaneo, sintaxis ASCII, densidad sobre decoración. Destilado de Leonxlnx/taste-skill `brutalist-skill` (modo Tactical Telemetry).",
+    "pt-BR": "Apresentação HTML 16:9 no estilo tactical-telemetry / terminal CRT. Slides carvão de CRT desativado, monoespaçado fósforo branco, destaque vermelho perigo, sobreposição scanline, sintaxe ASCII, densidade sobre decoração. Destilado de Leonxlnx/taste-skill `brutalist-skill` (modo Tactical Telemetry).",
+    "it": "Presentazione HTML 16:9 in stile tactical-telemetry / terminale CRT. Slide carbonio CRT disattivato, monospazio fosforo bianco, accento rosso pericolo, overlay scanline, sintassi ASCII, densità prima della decorazione. Distillato da Leonxlnx/taste-skill `brutalist-skill` (modalità Tactical Telemetry).",
+    "vi": "Bộ trình chiếu HTML 16:9 theo phong cách tactical-telemetry / terminal CRT. Slide than CRT vô hiệu, chữ monospace phốt pho trắng, điểm nhấn đỏ nguy hiểm, lớp phủ scanline, cú pháp ASCII, mật độ hơn trang trí. Chắt lọc từ Leonxlnx/taste-skill `brutalist-skill` (chế độ Tactical Telemetry).",
+    "pl": "Prezentacja HTML 16:9 w stylu tactical-telemetry / terminal CRT. Slajdy węglowe dezaktywowanego CRT, biały fosforowy monospace, akcent niebezpieczna czerwień, nakładka scanline, składnia ASCII, gęstość ponad dekorację. Zdestylowane z Leonxlnx/taste-skill `brutalist-skill` (tryb Tactical Telemetry).",
+    "id": "Deck HTML 16:9 bergaya tactical-telemetry / terminal CRT. Slide charcoal CRT nonaktif, monospace fosfor putih, aksen merah bahaya, overlay scanline, sintaks ASCII, kepadatan di atas dekorasi. Disuling dari Leonxlnx/taste-skill `brutalist-skill` (mode Tactical Telemetry).",
+    "nl": "16:9 HTML-deck in tactical-telemetry / CRT-terminal stijl. Gedeactiveerde CRT-houtskool slides, wit-fosfor monospace, gevaar-rood accent, scanline overlay, ASCII-syntaxis, dichtheid boven decoratie. Gedistilleerd uit Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry-modus).",
+    "ar": "عرض تقديمي HTML بنسبة 16:9 بأسلوب tactical-telemetry / طرفية CRT. شرائح فحمية CRT معطلة، خط أحادي المسافة فسفور أبيض، لون تمييز أحمر خطر، طبقة خطوط مسح، صيغة ASCII، الكثافة فوق الزخرفة. مُستخلص من Leonxlnx/taste-skill `brutalist-skill` (وضع Tactical Telemetry).",
+    "tr": "16:9 HTML sunum, tactical-telemetry / CRT terminal tarzında. Devre dışı CRT kömür slaytlar, beyaz fosforlu monospace, tehlike kırmızısı vurgu, tarama çizgisi kaplaması, ASCII sözdizimi, dekorasyondan çok yoğunluk. Leonxlnx/taste-skill `brutalist-skill`'den (Tactical Telemetry modu) damıtılmıştır.",
+    "uk": "HTML-презентація 16:9 у стилі tactical-telemetry / CRT-термінал. Вугільно-чорні слайди вимкненого CRT, білий фосфорний моноширинний шрифт, акцент небезпечно-червоний, накладання скан-ліній, ASCII-синтаксис, щільність важливіша за декор. Витягнуто з Leonxlnx/taste-skill `brutalist-skill` (режим Tactical Telemetry).",
+    "en": "16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode)."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-taste-brutalist",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode).",
+        "zh-CN": "使用这个插件完成以下任务：16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode)."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Taste Brutalist"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

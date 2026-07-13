@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>od-new-generation · SaaS landing page</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fbfaf7;
+      --fg: #131316;
+      --muted: #5f5f6a;
+      --line: #ececef;
+      --accent: #1a1a1a;
+      --accent-fg: #fafafa;
+      --soft: #f3f1ec;
+      --pill: #e9eaff;
+      --pill-fg: #2c2cb1;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0f10;
+        --fg: #f4f4f5;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --accent: #fafafa;
+        --accent-fg: #0a0a0c;
+        --soft: #18181b;
+        --pill: #1d1b40;
+        --pill-fg: #c5c2ff;
+      }
+    }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); }
+    body {
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+    .nav { display: flex; align-items: center; justify-content: space-between; padding-bottom: 28px; }
+    .brand { font-weight: 600; letter-spacing: -0.01em; }
+    .nav-links { display: flex; gap: 22px; color: var(--muted); font-size: 13.5px; }
+    .pill {
+      display: inline-block; padding: 4px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+      background: var(--pill); color: var(--pill-fg);
+    }
+    .hero { text-align: center; padding: 32px 0 12px; }
+    h1 {
+      font-size: 44px; line-height: 1.08; letter-spacing: -0.025em;
+      margin: 18px auto 14px; max-width: 14ch;
+    }
+    .lede { color: var(--muted); max-width: 52ch; margin: 0 auto 22px; font-size: 16px; }
+    .cta {
+      display: inline-flex; gap: 10px; align-items: center;
+      background: var(--accent); color: var(--accent-fg);
+      padding: 11px 18px; border-radius: 10px;
+      font-weight: 500; font-size: 14px;
+    }
+    .cta.alt { background: transparent; color: var(--fg); border: 1px solid var(--line); margin-left: 8px; }
+
+    .preview {
+      margin-top: 36px; padding: 18px;
+      border: 1px solid var(--line); border-radius: 16px;
+      background: var(--soft);
+    }
+    .preview-bar { display: flex; gap: 6px; padding-bottom: 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #d2d2d6; }
+    .preview-body { background: var(--bg); border-radius: 10px; padding: 20px; min-height: 180px; }
+    .skeleton { display: grid; gap: 10px; }
+    .sk { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--soft), var(--line), var(--soft)); }
+    .sk.w20 { width: 20%; } .sk.w40 { width: 40%; } .sk.w60 { width: 60%; } .sk.w80 { width: 80%; }
+    .sk.tall { height: 64px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+    .features { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feature { padding: 18px; border: 1px solid var(--line); border-radius: 12px; }
+    .feature h3 { font-size: 15px; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .feature p { color: var(--muted); margin: 0; font-size: 13.5px; }
+
+    footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">▲ Lamina</div>
+    <div class="nav-links">
+      <span>Product</span><span>Customers</span><span>Pricing</span><span>Sign in</span>
+    </div>
+  </div>
+
+  <section class="hero">
+    <span class="pill">New · Series A launch</span>
+    <h1>Faster pipelines for product teams.</h1>
+    <p class="lede">
+      Lamina turns your scattered tooling into one coherent surface — so the
+      next thing your team ships is the thing your customers actually asked for.
+    </p>
+    <a class="cta" href="#">Start free</a>
+    <a class="cta alt" href="#">Book a demo</a>
+  </section>
+
+  <section class="preview" aria-hidden="true">
+    <div class="preview-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <div class="preview-body">
+      <div class="skeleton">
+        <div class="sk w40"></div>
+        <div class="grid3">
+          <div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div>
+        </div>
+        <div class="sk w80"></div>
+        <div class="sk w60"></div>
+        <div class="sk w20"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature"><h3>Discovery first</h3><p>The agent asks clarifying questions before it commits to a plan, so the artifact is the artifact you wanted.</p></div>
+    <div class="feature"><h3>Critique theatre</h3><p>Every generation runs through a live self-critique loop until the score converges or it hits the iteration ceiling.</p></div>
+    <div class="feature"><h3>Live artifacts</h3><p>You see the artifact stream into place — no opaque "thinking…" bar, no stale screenshots.</p></div>
+  </section>
+
+  <footer>
+    Example artifact rendered for the <code>od-new-generation</code> scenario.
+    Real runs persist the produced HTML/MDX/PNG/etc. under
+    <code>.od/artifacts/</code>.
+  </footer>
+</body>
+</html>

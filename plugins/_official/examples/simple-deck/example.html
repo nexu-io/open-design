@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filebase · Investor deck — Q2 2026</title>
+  <style>
+    :root {
+      --bg: #fafaf9; --fg: #1c1b1a; --muted: #6b6964; --accent: #c96442; --surface: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      display: flex;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+    body::-webkit-scrollbar { display: none; }
+    .slide {
+      flex: 0 0 100vw;
+      height: 100vh;
+      scroll-snap-align: start;
+      padding: 80px 96px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+    .slide.title { background: var(--fg); color: var(--bg); }
+    .eyebrow { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 28px; }
+    .slide h1 { font-size: clamp(48px, 7vw, 96px); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 20px; max-width: 16ch; }
+    .slide h2 { font-size: clamp(32px, 4vw, 48px); letter-spacing: -0.015em; margin: 0 0 20px; max-width: 20ch; }
+    .slide .body { font-size: 22px; color: var(--muted); max-width: 56ch; }
+    .slide.title .body { color: rgba(250,250,249,0.7); }
+    .slide.big-stat .number { font-size: clamp(120px, 22vw, 280px); line-height: 0.9; letter-spacing: -0.04em; color: var(--accent); margin-bottom: 16px; font-weight: 600; }
+    .slide.big-stat .caption { font-size: 24px; color: var(--muted); max-width: 24ch; }
+    .quote-mark { font-family: Georgia, serif; font-size: 200px; line-height: 0.7; color: var(--accent); opacity: 0.18; margin-bottom: -40px; }
+    .quote-text { font-family: Georgia, serif; font-size: 36px; line-height: 1.3; max-width: 26ch; margin: 0 0 28px; }
+    .quote-author { font-size: 14px; color: var(--muted); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 40px; }
+    .grid-3 .pt { border-top: 2px solid var(--accent); padding-top: 16px; }
+    .grid-3 .pt .h { font-size: 18px; font-weight: 500; margin: 0 0 8px; }
+    .grid-3 .pt .p { color: var(--muted); margin: 0; font-size: 16px; }
+    .counter { position: fixed; bottom: 24px; right: 32px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); background: var(--surface); padding: 4px 10px; border-radius: 999px; border: 1px solid #e6e4e0; }
+    .hint { position: fixed; bottom: 24px; left: 32px; font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <section class="slide title" data-od-id="slide-1">
+    <div class="eyebrow" style="color:#c96442;">Filebase · Series B · Q2 2026</div>
+    <h1>The bandwidth bill is the bug.</h1>
+    <p class="body">A sync engine that ships only what changed. Backed by 3,184 paying teams.</p>
+  </section>
+  <section class="slide" data-od-id="slide-2">
+    <div class="eyebrow">Problem</div>
+    <h2>Every other tool re-uploads the whole file.</h2>
+    <p class="body">Edit one frame in a 4 GB Final Cut project; today's tools sync all 4 GB. The video, post-production, and design industries are eating multi-thousand-dollar bandwidth bills they shouldn't be.</p>
+  </section>
+  <section class="slide big-stat" data-od-id="slide-3">
+    <div class="number">38×</div>
+    <div class="caption">less data moved over the wire vs. naive sync, on real customer workloads.</div>
+  </section>
+  <section class="slide" data-od-id="slide-4">
+    <div class="eyebrow">Why now</div>
+    <h2>Three shifts make this market real.</h2>
+    <div class="grid-3">
+      <div class="pt"><h3 class="h">Remote post-production</h3><p class="p">Editors don't sit in one room any more. Cloud sync went from convenient to load-bearing.</p></div>
+      <div class="pt"><h3 class="h">AI workflows</h3><p class="p">Diffusion checkpoints are 7 GB. Engineers iterate on them daily. Existing tools choke.</p></div>
+      <div class="pt"><h3 class="h">Bandwidth pricing</h3><p class="p">Egress costs 4× what it did in 2022. Storage is cheap; movement is expensive.</p></div>
+    </div>
+  </section>
+  <section class="slide" data-od-id="slide-5">
+    <div class="quote-mark">"</div>
+    <p class="quote-text">Filebase pays for itself in the first month. We were going to hire a dedicated DevOps person to babysit our sync — instead we just switched.</p>
+    <p class="quote-author">— Mira Hassan, CTO at Northwind Studios</p>
+  </section>
+  <section class="slide title" data-od-id="slide-6">
+    <div class="eyebrow" style="color:#c96442;">Ask</div>
+    <h1>$22M to ship the next sync engine.</h1>
+    <p class="body">18-month runway, hire 14, expand to enterprise on-prem.</p>
+  </section>
+
+  <div class="counter" id="counter">1 / 6</div>
+  <div class="hint">← / → to navigate</div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const counter = document.getElementById('counter');
+    let active = 0;
+
+    // Detect the real scroller — when body has `display: flex` + `overflow-x: auto`
+    // the scroller can be body OR documentElement depending on the host (in
+    // particular, the OD srcdoc iframe). Pick whichever actually overflows.
+    function scroller() {
+      if (document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function go(i) {
+      const next = Math.max(0, Math.min(slides.length - 1, i));
+      active = next;
+      counter.textContent = (next + 1) + ' / ' + slides.length;
+      scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    }
+    function syncFromScroll() {
+      const i = Math.round(scroller().scrollLeft / window.innerWidth);
+      if (i !== active && i >= 0 && i < slides.length) {
+        active = i;
+        counter.textContent = (i + 1) + ' / ' + slides.length;
+      }
+    }
+    function onKey(e) {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); go(0); }
+      else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+    }
+    // Listen on both window and document in capture phase so the handler
+    // fires regardless of which element holds focus inside the iframe.
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('keydown', onKey, true);
+    // And listen for scroll on both surfaces — same reason.
+    document.addEventListener('scroll', syncFromScroll, { passive: true, capture: true });
+    window.addEventListener('scroll', syncFromScroll, { passive: true });
+
+    // Auto-focus body so arrow keys work without a click.
+    document.body.setAttribute('tabindex', '-1');
+    document.body.style.outline = 'none';
+    function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+    document.addEventListener('mousedown', focusDeck);
+    window.addEventListener('load', focusDeck);
+    focusDeck();
+  </script>
+</body>
+</html>

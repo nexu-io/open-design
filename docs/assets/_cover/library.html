@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>71 Design Systems — cover</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap' rel='stylesheet'>
+<style>
+  :root {
+    --surface: #d9c3bd;
+    --surface-2: #e6d2cc;
+    --paper: #f5ecd9;
+    --paper-edge: #e8dcc4;
+    --ink: #1c1814;
+    --ink-soft: #4d4339;
+    --muted: #8a7e70;
+    --rule: #c8b9a1;
+    --accent: #c44a3a;
+    --accent-2: #d4593f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 1920px;
+    height: 1080px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background:
+      radial-gradient(1100px 700px at 28% 12%, var(--surface-2), transparent 70%),
+      radial-gradient(900px 600px at 88% 90%, #cab1aa, transparent 70%),
+      var(--surface);
+    padding: 60px 80px;
+    display: flex;
+    gap: 56px;
+    align-items: stretch;
+  }
+
+  .page {
+    background: var(--paper);
+    flex: 1;
+    border-radius: 4px;
+    padding: 56px 60px;
+    box-shadow:
+      0 0 0 1px var(--paper-edge),
+      0 30px 60px rgba(60, 30, 24, 0.18),
+      0 8px 22px rgba(60, 30, 24, 0.12);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(28,24,20,0.04), transparent 8%, transparent 92%, rgba(28,24,20,0.05));
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .pageHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 8px;
+    vertical-align: middle;
+    transform: translateY(-1px);
+  }
+
+  /* ---------- LEFT (cover) page ---------- */
+  .cover h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 96px;
+    line-height: 0.94;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 64px 0 32px 0;
+  }
+  .cover h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .cover .tagline {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    max-width: 480px;
+    margin: 0 0 36px 0;
+  }
+  .byline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 14px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 36px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin-bottom: 44px;
+  }
+  .stats .cell { padding-right: 16px; }
+  .stats .cell + .cell { border-left: 1px solid var(--rule); padding-left: 24px; }
+  .stats .num {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 64px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+  .stats .num em { font-style: italic; color: var(--accent); }
+  .stats .lbl {
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  .toc-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 32px;
+    margin: 8px 0 18px 0;
+    color: var(--ink);
+  }
+  .toc-title em { font-style: italic; color: var(--accent); }
+
+  .toc {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .toc-row {
+    display: flex;
+    align-items: baseline;
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .toc-row .name { flex: 0 0 auto; }
+  .toc-row .dots {
+    flex: 1;
+    border-bottom: 1px dotted #b6a487;
+    margin: 0 10px;
+    transform: translateY(-4px);
+  }
+  .toc-row .pg {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+
+  .cover .footer {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--rule);
+    padding-top: 14px;
+  }
+
+  /* ---------- RIGHT (index) page ---------- */
+  .index .h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 32px 0 12px 0;
+  }
+  .index .h2 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .index .sub {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 540px;
+    margin: 0 0 28px 0;
+  }
+  .drop {
+    float: left;
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 76px;
+    line-height: 0.85;
+    color: var(--accent);
+    margin: 8px 12px -4px 0;
+  }
+  .drop + p {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin: 0 0 18px 0;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 36px;
+    row-gap: 6px;
+    margin: 18px 0 12px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 0;
+  }
+  .item {
+    display: grid;
+    grid-template-columns: 26px 1fr auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 0;
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .item .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  .item .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+    transform: translateY(2px);
+    margin-right: 6px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.08) inset;
+  }
+  .item .name { font-weight: 500; }
+  .item .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .item.featured .name { color: var(--accent); font-style: italic; }
+
+  .spotlight {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 18px;
+    align-items: center;
+    background: #f0e3c8;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-top: 18px;
+  }
+  .spotlight .swatches {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .spotlight .sw {
+    height: 28px;
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06) inset;
+  }
+  .spotlight .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .spotlight h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-style: italic;
+    font-size: 22px;
+    margin: 0 0 6px 0;
+    color: var(--ink);
+  }
+  .spotlight h3 em { color: var(--accent); }
+  .spotlight p {
+    font-family: 'Fraunces', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  .index .footer {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--rule);
+    padding-top: 14px;
+  }
+
+  .stamp {
+    position: absolute;
+    top: 56px;
+    right: 56px;
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff5e9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transform: rotate(8deg);
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-style: italic;
+    font-size: 13px;
+    line-height: 1.15;
+    box-shadow: 0 12px 28px rgba(196,74,58,0.35);
+    z-index: 2;
+  }
+</style>
+</head>
+<body>
+
+  <!-- LEFT PAGE: cover -->
+  <article class='page cover'>
+    <div class='pageHead'>
+      <div class='mono'><span class='dot'></span>Style &amp; Format Guide for Designers</div>
+      <div class='mono'>2026 Edition</div>
+    </div>
+
+    <h1>The <em>71</em><br/>Systems<br/>Library.</h1>
+    <p class='tagline'>
+      Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma —
+      seventy-one brand-grade systems, one open library, zero lock-in.
+    </p>
+    <div class='byline'>By Open Design · Maintained on GitHub · 19 / 04 / 2026</div>
+
+    <div class='stats'>
+      <div class='cell'>
+        <div class='num'>71</div>
+        <div class='lbl'>Design<br/>Systems</div>
+      </div>
+      <div class='cell'>
+        <div class='num'>19</div>
+        <div class='lbl'>Composable<br/>Skills</div>
+      </div>
+      <div class='cell'>
+        <div class='num'><em>1</em></div>
+        <div class='lbl'>Library, zero<br/>vendor cloud</div>
+      </div>
+    </div>
+
+    <h2 class='toc-title'>What's <em>inside</em>.</h2>
+    <div class='toc'>
+      <div class='toc-row'><span class='name'>Tokens, palettes, motion</span><span class='dots'></span><span class='pg'>04</span></div>
+      <div class='toc-row'><span class='name'>Pick a direction</span><span class='dots'></span><span class='pg'>12</span></div>
+      <div class='toc-row'><span class='name'>Tone &amp; typography</span><span class='dots'></span><span class='pg'>18</span></div>
+      <div class='toc-row'><span class='name'>71 systems index</span><span class='dots'></span><span class='pg'>24</span></div>
+      <div class='toc-row'><span class='name'>Bring-your-own-key</span><span class='dots'></span><span class='pg'>40</span></div>
+      <div class='toc-row'><span class='name'>The anti-AI-slop checklist</span><span class='dots'></span><span class='pg'>52</span></div>
+    </div>
+
+    <div class='footer'>
+      <div class='mono'>Tokens, palettes &amp; type</div>
+      <div class='mono'>01 / 64</div>
+    </div>
+  </article>
+
+  <!-- RIGHT PAGE: index -->
+  <article class='page index'>
+    <div class='pageHead'>
+      <div class='mono'><span class='dot'></span>Chapter 02 · Index</div>
+      <div class='mono'>71 entries · A → Z</div>
+    </div>
+
+    <h2 class='h2'>All systems —<br/><em>one library.</em></h2>
+    <p class='sub'>
+      Every system ships a deterministic OKLch palette, a font stack, and a tone profile.
+      Pick one tile and the agent inherits the whole brand.
+    </p>
+
+    <p>
+      <span class='drop'>S</span>
+      eventy-one product systems, two hand-authored starters, five visual directions. Imported and curated
+      from awesome-design-md, hand-tuned for Open Design's discovery loop. Drop one in,
+      every artifact downstream changes accordingly — no model freestyle.
+    </p>
+
+    <div class='columns'>
+      <div class='item featured'>
+        <span class='n'>03</span>
+        <span><span class='swatch' style='background:#5e6ad2'></span><span class='name'>Linear</span></span>
+        <span class='tag'>· graphite · violet</span>
+      </div>
+      <div class='item'>
+        <span class='n'>07</span>
+        <span><span class='swatch' style='background:#635bff'></span><span class='name'>Stripe</span></span>
+        <span class='tag'>· payments · indigo</span>
+      </div>
+      <div class='item'>
+        <span class='n'>09</span>
+        <span><span class='swatch' style='background:#000000'></span><span class='name'>Vercel</span></span>
+        <span class='tag'>· void · grayscale</span>
+      </div>
+      <div class='item'>
+        <span class='n'>14</span>
+        <span><span class='swatch' style='background:#ff385c'></span><span class='name'>Airbnb</span></span>
+        <span class='tag'>· rausch · rounded</span>
+      </div>
+      <div class='item'>
+        <span class='n'>18</span>
+        <span><span class='swatch' style='background:#cc0000'></span><span class='name'>Tesla</span></span>
+        <span class='tag'>· red · industrial</span>
+      </div>
+      <div class='item'>
+        <span class='n'>22</span>
+        <span><span class='swatch' style='background:#000000'></span><span class='name'>Notion</span></span>
+        <span class='tag'>· paper · serif</span>
+      </div>
+      <div class='item'>
+        <span class='n'>27</span>
+        <span><span class='swatch' style='background:#cc785c'></span><span class='name'>Anthropic</span></span>
+        <span class='tag'>· clay · serif</span>
+      </div>
+      <div class='item'>
+        <span class='n'>31</span>
+        <span><span class='swatch' style='background:#a8a8a8'></span><span class='name'>Apple</span></span>
+        <span class='tag'>· chrome · sf pro</span>
+      </div>
+      <div class='item'>
+        <span class='n'>34</span>
+        <span><span class='swatch' style='background:#1a1a1a'></span><span class='name'>Cursor</span></span>
+        <span class='tag'>· terminal · mono</span>
+      </div>
+      <div class='item'>
+        <span class='n'>41</span>
+        <span><span class='swatch' style='background:#3ecf8e'></span><span class='name'>Supabase</span></span>
+        <span class='tag'>· emerald · rounded</span>
+      </div>
+      <div class='item'>
+        <span class='n'>48</span>
+        <span><span class='swatch' style='background:#0acf83'></span><span class='name'>Figma</span></span>
+        <span class='tag'>· spectrum · canvas</span>
+      </div>
+      <div class='item'>
+        <span class='n'>57</span>
+        <span><span class='swatch' style='background:#000000'></span><span class='name'>OpenAI</span></span>
+        <span class='tag'>· void · sober</span>
+      </div>
+    </div>
+
+    <div class='spotlight'>
+      <div class='swatches'>
+        <span class='sw' style='background:#1c1816'></span>
+        <span class='sw' style='background:#5e6ad2'></span>
+        <span class='sw' style='background:#9b9bd6'></span>
+        <span class='sw' style='background:#f3ead8'></span>
+      </div>
+      <div>
+        <div class='label'>Spotlight · Linear · 03 / 71</div>
+        <h3>Graphite + electric <em>violet.</em></h3>
+        <p>IBM Plex Sans · Inter Display · 4-step OKLch palette · 16/24 grid · square radius. The agent inherits the full token tree the moment you tap the tile.</p>
+      </div>
+    </div>
+
+    <div class='footer'>
+      <div class='mono'>Chapter 02 · Index</div>
+      <div class='mono'>24 / 64</div>
+    </div>
+
+    <div class='stamp'><span>71<br/>SYSTEMS</span></div>
+  </article>
+
+</body>
+</html>

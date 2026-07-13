@@ -1,0 +1,75 @@
+{
+  "name": "@open-design/contracts",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./api/connectionTest": {
+      "types": "./dist/api/connectionTest.d.ts",
+      "default": "./dist/api/connectionTest.mjs"
+    },
+    "./api/orbit": {
+      "types": "./dist/api/orbit.d.ts",
+      "default": "./dist/api/orbit.mjs"
+    },
+    "./api/finalize": {
+      "types": "./dist/api/finalize.d.ts",
+      "default": "./dist/api/finalize.mjs"
+    },
+    "./api/handoff": {
+      "types": "./dist/api/handoff.d.ts",
+      "default": "./dist/api/handoff.mjs"
+    },
+    "./api/providerModels": {
+      "types": "./dist/api/providerModels.d.ts",
+      "default": "./dist/api/providerModels.mjs"
+    },
+    "./api/research": {
+      "types": "./dist/api/research.d.ts",
+      "default": "./dist/api/research.mjs"
+    },
+    "./design-systems/components-manifest": {
+      "types": "./dist/design-systems/components-manifest.d.ts",
+      "default": "./dist/design-systems/components-manifest.mjs"
+    },
+    "./design-systems/derived-token-outputs": {
+      "types": "./dist/design-systems/derived-token-outputs.d.ts",
+      "default": "./dist/design-systems/derived-token-outputs.mjs"
+    },
+    "./design-systems/token-schema": {
+      "types": "./dist/design-systems/token-schema.d.ts",
+      "default": "./dist/design-systems/token-schema.mjs"
+    },
+    "./critique": {
+      "types": "./dist/critique.d.ts",
+      "default": "./dist/critique.mjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.ts",
+      "default": "./dist/analytics/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
+  }
+}

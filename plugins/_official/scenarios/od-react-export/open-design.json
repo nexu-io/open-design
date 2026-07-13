@@ -1,0 +1,119 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-react-export",
+  "title": "Export to React",
+  "title_i18n": {
+    "en": "Export to React",
+    "zh-CN": "导出到 React",
+    "zh-TW": "匯出到 React",
+    "ja": "React へエクスポート",
+    "ko": "React로 내보내기",
+    "de": "Nach React exportieren",
+    "fr": "Exporter vers React",
+    "ru": "Экспорт в React",
+    "es": "Exportar a React",
+    "pt-BR": "Exportar para React",
+    "it": "Esporta in React",
+    "vi": "Xuất sang React",
+    "pl": "Eksport do React",
+    "id": "Ekspor ke React",
+    "nl": "Naar React exporteren",
+    "ar": "تصدير إلى React",
+    "tr": "React'e dışa aktar",
+    "uk": "Експорт у React"
+  },
+  "version": "0.1.0",
+  "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a React component handoff.",
+  "description_i18n": {
+    "en": "Starter downstream export plugin for turning an accepted Open Design artifact into a React component handoff.",
+    "zh-CN": "入门级下游导出插件：把已 accept 的 Open Design 产物转成 React 组件交付。",
+    "zh-TW": "入門級下游匯出外掛：把已 accept 的 Open Design 產物轉成 React 元件交付。",
+    "ja": "受理済みの Open Design アーティファクトを React コンポーネントのハンドオフへ変換する、入門用ダウンストリームエクスポートプラグイン。",
+    "ko": "수락된 Open Design 산출물을 React 컴포넌트 핸드오프로 변환하는 입문용 다운스트림 익스포트 플러그인.",
+    "de": "Einsteiger-Downstream-Export: macht aus einem akzeptierten Open-Design-Artefakt eine React-Komponenten-Übergabe.",
+    "fr": "Plugin d'export downstream de démarrage pour transformer un artefact Open Design accepté en handoff de composant React.",
+    "ru": "Стартовый downstream-экспорт-плагин: превращает принятый артефакт Open Design в передачу React-компонента.",
+    "es": "Plugin de exportación downstream inicial para convertir un artefacto aceptado de Open Design en un handoff de componente React.",
+    "pt-BR": "Plugin de exportação downstream inicial para transformar um artefato aceito do Open Design em handoff de componente React.",
+    "it": "Plugin di export downstream iniziale per trasformare un artefatto Open Design accettato in un handoff di componente React.",
+    "vi": "Plugin xuất downstream khởi đầu, chuyển artifact Open Design đã accept thành bàn giao component React.",
+    "pl": "Startowa wtyczka eksportu downstream: zamienia zaakceptowany artefakt Open Design w handoff komponentu React.",
+    "id": "Plugin ekspor downstream pemula untuk mengubah artifact Open Design yang diterima menjadi handoff komponen React.",
+    "nl": "Starter-downstream-exportplug-in: zet een geaccepteerd Open Design-artefact om naar een React-component-overdracht.",
+    "ar": "إضافة تصدير لاحق تمهيدية تحوّل عنصر Open Design المقبول إلى تسليم مكوّن React.",
+    "tr": "Kabul edilmiş bir Open Design çıktısını React bileşeni devrine dönüştüren başlangıç downstream dışa aktarma eklentisi.",
+    "uk": "Стартовий downstream-плагін експорту: перетворює прийнятий артефакт Open Design на передачу React-компонента."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-react-export",
+  "tags": [
+    "scenario",
+    "first-party",
+    "export",
+    "downstream",
+    "handoff",
+    "react",
+    "reactjs"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "scenario": "downstream-export",
+    "mode": "export",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Export the accepted Open Design artifact to a React 18 + TypeScript component. Preserve the visual system, extract reusable props only where they clarify intent, and finish with integration notes.",
+        "zh-CN": "将已确认的 Open Design 产物导出为 React 18 + TypeScript 组件。保持视觉系统一致，只在有助于表达意图时抽出可复用 props，并在最后给出集成说明。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "label": "Component name",
+        "placeholder": "LandingHero"
+      },
+      {
+        "name": "styling",
+        "type": "select",
+        "required": false,
+        "label": "Styling",
+        "options": [
+          "Tailwind CSS",
+          "CSS module",
+          "plain CSS"
+        ],
+        "default": "Tailwind CSS"
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "slug": "zhangzara-peoples-platform",
+  "name": "People's Platform (Block & Bold)",
+  "tagline": "Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush.",
+  "mood": [
+    "activist",
+    "loud",
+    "graphic",
+    "honest"
+  ],
+  "occasion": [
+    "cultural commentary",
+    "manifesto",
+    "community / civic deck",
+    "design talk",
+    "campaign pitch",
+    "founder vision"
+  ],
+  "tone": [
+    "punchy",
+    "direct",
+    "expressive",
+    "warm-bold"
+  ],
+  "formality": "medium-low",
+  "density": "medium-high",
+  "palette": {
+    "blue": "#2C2CDC",
+    "orange": "#F2A03A",
+    "red": "#E83A2A",
+    "cream": "#F4E9D6",
+    "ink": "#0E0E14",
+    "description": "saturated political-poster palette: cobalt blue, signal orange, warning red, on warm cream with deep ink"
+  },
+  "typography": {
+    "display": "Alfa Slab One",
+    "secondary": "Archivo Narrow",
+    "script": "Caveat Brush",
+    "mono": "DM Mono",
+    "style": "heavy slab display + narrow grotesk + brush script + mono; protest-poster typographic stack"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches. Excellent for founder-vision moments, mission statements, or any deck — including across industries — that wants protest-poster energy instead of corporate polish.",
+  "avoid_for": "Contexts where institutional restraint is the actual goal — the saturated political-poster palette commits hard to expressive energy.",
+  "slide_count": 10,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/peoples-platform"
+}

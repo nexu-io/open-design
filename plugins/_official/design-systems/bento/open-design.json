@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-bento",
+  "title": "Bento",
+  "title_i18n": {
+    "zh-CN": "Bento",
+    "zh-TW": "Bento",
+    "ja": "Bento",
+    "ko": "Bento",
+    "de": "Bento",
+    "fr": "Bento",
+    "ru": "Bento",
+    "es": "Bento",
+    "pt-BR": "Bento",
+    "it": "Bento",
+    "vi": "Bento",
+    "pl": "Bento",
+    "id": "Bento",
+    "nl": "Bento",
+    "ar": "Bento",
+    "tr": "Bento",
+    "uk": "Bento",
+    "en": "Bento"
+  },
+  "version": "0.1.0",
+  "description": "Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces.",
+  "description_i18n": {
+    "zh-CN": "模块化网格布局，包含卡片式区块、清晰的层级结构、柔和的间距和微妙的视觉对比，打造有序、易扫描的界面。",
+    "zh-TW": "模組化網格佈局，包含卡片式區塊、清晰的層級結構、柔和的間距和微妙的視覺對比，打造有序、易掃描的介面。",
+    "ja": "カード型ブロック、明確な階層構造、柔らかな余白、繊細な視覚的コントラストを備えたモジュラーグリッドレイアウトで、整理された読み取りやすいインターフェースを実現します。",
+    "ko": "카드형 블록, 명확한 계층 구조, 부드러운 간격, 은은한 시각적 대비를 갖춘 모듈형 그리드 레이아웃으로 정돈되고 스캔하기 쉬운 인터페이스를 구현합니다.",
+    "de": "Modulares Grid-Layout mit kartenartigen Blöcken, klarer Hierarchie, sanften Abständen und subtilem visuellem Kontrast für übersichtliche, scanbare Interfaces.",
+    "fr": "Disposition en grille modulaire avec blocs en forme de cartes, hiérarchie claire, espacement doux et contraste visuel subtil pour des interfaces organisées et faciles à parcourir.",
+    "ru": "Модульная сетка с блоками-карточками, четкой иерархией, мягкими отступами и тонким визуальным контрастом для упорядоченных, легко сканируемых интерфейсов.",
+    "es": "Diseño de cuadrícula modular con bloques tipo tarjeta, jerarquía clara, espaciado suave y contraste visual sutil para interfaces organizadas y fáciles de escanear.",
+    "pt-BR": "Layout em grade modular com blocos tipo cartão, hierarquia clara, espaçamento suave e contraste visual sutil para interfaces organizadas e fáceis de escanear.",
+    "it": "Layout a griglia modulare con blocchi simili a carte, gerarchia chiara, spaziatura morbida e contrasto visivo delicato per interfacce organizzate e facilmente scansionabili.",
+    "vi": "Bố cục lưới mô-đun với các khối dạng thẻ, phân cấp rõ ràng, khoảng cách mềm mại và độ tương phản trực quan tinh tế cho giao diện có tổ chức, dễ quét.",
+    "pl": "Modułowy układ siatki z blokami przypominającymi karty, wyraźną hierarchią, miękkim odstępem i subtelnym kontrastem wizualnym dla zorganizowanych, łatwych do skanowania interfejsów.",
+    "id": "Tata letak grid modular dengan blok mirip kartu, hierarki yang jelas, spasi lembut, dan kontras visual halus untuk antarmuka yang terorganisir dan mudah dipindai.",
+    "nl": "Modulaire rasterlay-out met kaartachtige blokken, duidelijke hiërarchie, zachte afstanden en subtiel visueel contrast voor georganiseerde, scanbare interfaces.",
+    "ar": "تخطيط شبكي معياري مع كتل تشبه البطاقات، وتسلسل هرمي واضح، ومسافات ناعمة، وتباين بصري دقيق لواجهات منظمة وسهلة المسح.",
+    "tr": "Kart benzeri bloklar, net hiyerarşi, yumuşak aralıklar ve ince görsel kontrast ile düzenli, taranabilir arayüzler için modüler ızgara düzeni.",
+    "uk": "Модульна сітка з блоками-картками, чіткою ієрархією, м'якими відступами та витонченим візуальним контрастом для організованих, легко скануємих інтерфейсів.",
+    "en": "Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "layout-structure"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Bento design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Bento design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "bento",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

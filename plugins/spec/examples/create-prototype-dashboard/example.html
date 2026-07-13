@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Example Ops Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #15181d;
+      --muted: #667085;
+      --line: #d8dee8;
+      --paper: #f7f4ee;
+      --panel: #ffffff;
+      --teal: #0b7a75;
+      --blue: #3267d6;
+      --red: #ba3a33;
+      --gold: #b47a13;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+    }
+    aside {
+      padding: 28px 22px;
+      border-right: 1px solid var(--line);
+      background: #fffaf1;
+    }
+    .brand {
+      font-size: 21px;
+      font-weight: 760;
+      letter-spacing: 0;
+      margin-bottom: 30px;
+    }
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+    .nav span {
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .nav span:first-child {
+      background: #10201f;
+      color: #fff;
+    }
+    main {
+      padding: 30px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      max-width: 720px;
+      line-height: 1.5;
+    }
+    .status-pill {
+      border: 1px solid #a8d8d2;
+      background: #e8faf6;
+      color: #075e57;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 760;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(27, 34, 45, 0.05);
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 760;
+    }
+    .value {
+      font-size: 30px;
+      font-weight: 820;
+      margin-top: 8px;
+    }
+    .delta {
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 720;
+      margin-top: 6px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, .8fr);
+      gap: 14px;
+    }
+    .chart {
+      height: 292px;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      align-items: end;
+      padding-top: 28px;
+    }
+    .bar {
+      min-height: 42px;
+      border-radius: 7px 7px 3px 3px;
+      background: linear-gradient(180deg, var(--blue), #77a3ff);
+      position: relative;
+    }
+    .bar::after {
+      content: attr(data-day);
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+    .table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .table td {
+      padding: 13px 8px;
+      border-bottom: 1px solid #edf0f4;
+      vertical-align: top;
+    }
+    .tag {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 760;
+      background: #eef4ff;
+      color: #244aa5;
+    }
+    .tag.warn { background: #fff5dc; color: var(--gold); }
+    .tag.hot { background: #ffe9e7; color: var(--red); }
+    .feed {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .feed div {
+      border-left: 3px solid var(--teal);
+      padding-left: 12px;
+      color: #313946;
+      line-height: 1.45;
+    }
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .kpis, .grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">LaunchOps</div>
+      <nav class="nav" aria-label="Sections">
+        <span>Command room</span>
+        <span>Incidents</span>
+        <span>Owners</span>
+        <span>Readiness</span>
+      </nav>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <h1>Launch command dashboard</h1>
+          <p class="subtitle">Seven-day view for release readiness, incident pressure, customer signals, and owner follow-through.</p>
+        </div>
+        <div class="status-pill">On track: 84%</div>
+      </header>
+      <section class="kpis" aria-label="Key metrics">
+        <div class="card"><div class="label">Open risks</div><div class="value">12</div><div class="delta">4 need exec review</div></div>
+        <div class="card"><div class="label">Resolved today</div><div class="value">28</div><div class="delta">+18% vs avg</div></div>
+        <div class="card"><div class="label">SLA health</div><div class="value">96%</div><div class="delta">2 hot accounts</div></div>
+        <div class="card"><div class="label">Owners active</div><div class="value">37</div><div class="delta">All functions staffed</div></div>
+      </section>
+      <section class="grid">
+        <div class="card">
+          <div class="label">Resolved work by day</div>
+          <div class="chart" aria-label="Bar chart of resolved work">
+            <div class="bar" style="height: 45%" data-day="Mon"></div>
+            <div class="bar" style="height: 58%" data-day="Tue"></div>
+            <div class="bar" style="height: 52%" data-day="Wed"></div>
+            <div class="bar" style="height: 76%" data-day="Thu"></div>
+            <div class="bar" style="height: 68%" data-day="Fri"></div>
+            <div class="bar" style="height: 34%" data-day="Sat"></div>
+            <div class="bar" style="height: 63%" data-day="Sun"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="label">Live activity</div>
+          <div class="feed">
+            <div>Payments rollback drill passed in staging. Finance owner signed off.</div>
+            <div>Enterprise beta cohort moved to amber while support updates saved replies.</div>
+            <div>Docs review queue cleared; final API examples are ready for publication.</div>
+          </div>
+        </div>
+      </section>
+      <section class="card" style="margin-top:14px">
+        <div class="label">Priority actions</div>
+        <table class="table">
+          <thead><tr><th>Workstream</th><th>Status</th><th>Owner</th><th>Next step</th></tr></thead>
+          <tbody>
+            <tr><td>Billing migration</td><td><span class="tag hot">Hot</span></td><td>Mina</td><td>Confirm webhook replay plan</td></tr>
+            <tr><td>Launch docs</td><td><span class="tag">Ready</span></td><td>Arun</td><td>Publish quickstart after QA pass</td></tr>
+            <tr><td>Success outreach</td><td><span class="tag warn">Watch</span></td><td>Jules</td><td>Send saved replies to priority accounts</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

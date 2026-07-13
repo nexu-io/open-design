@@ -1,0 +1,127 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-social-x-post-card",
+  "title": "X / Twitter Post Card",
+  "title_i18n": {
+    "en": "X / Twitter Post Card",
+    "zh-CN": "X (Twitter) 帖子卡",
+    "zh-TW": "X / Twitter 貼文卡片",
+    "ja": "X / Twitter 投稿カード",
+    "ko": "X / Twitter 게시물 카드",
+    "de": "X / Twitter Beitragskarte",
+    "fr": "Carte de publication X / Twitter",
+    "ru": "Карточка поста X / Twitter",
+    "es": "Tarjeta de publicación X / Twitter",
+    "pt-BR": "Card de postagem X / Twitter",
+    "it": "Card post X / Twitter",
+    "vi": "Thẻ bài đăng X / Twitter",
+    "pl": "Karta posta X / Twitter",
+    "id": "Kartu Postingan X / Twitter",
+    "nl": "X / Twitter berichtkaart",
+    "ar": "بطاقة منشور X / Twitter",
+    "tr": "X / Twitter Gönderi Kartı",
+    "uk": "Картка публікації X / Twitter"
+  },
+  "version": "0.1.0",
+  "description": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
+  "description_i18n": {
+    "en": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
+    "zh-CN": "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享",
+    "zh-TW": "逼真的 X 貼文卡片，包含互動指標（按讚、轉發、觀看次數），適用於影片疊加層或可分享的圖片卡片。",
+    "ja": "いいね、リポスト、閲覧数などのエンゲージメント指標を含むリアルなX投稿カード。動画オーバーレイやシェア可能な画像カードに最適。",
+    "ko": "좋아요, 리포스트, 조회수 등의 참여 지표를 포함한 사실적인 X 게시물 카드. 비디오 오버레이나 공유 가능한 이미지 카드에 적합합니다.",
+    "de": "Realistische X-Beitragskarte mit Engagement-Metriken (Likes, Reposts, Aufrufe), geeignet für Video-Overlays oder teilbare Bildkarten.",
+    "fr": "Carte de publication X réaliste avec métriques d'engagement (likes, reposts, vues), adaptée aux superpositions vidéo ou cartes d'image partageables.",
+    "ru": "Реалистичная карточка поста X с метриками вовлечения (лайки, репосты, просмотры), подходит для видеооверлеев или публикуемых изображений.",
+    "es": "Tarjeta realista de publicación X con métricas de interacción (me gusta, reposts, vistas), ideal para superposiciones de video o tarjetas de imagen compartibles.",
+    "pt-BR": "Card realista de postagem X com métricas de engajamento (curtidas, reposts, visualizações), ideal para sobreposições de vídeo ou cards de imagem compartilháveis.",
+    "it": "Card post X realistico con metriche di engagement (like, repost, visualizzazioni), adatto per overlay video o card immagine condivisibili.",
+    "vi": "Thẻ bài đăng X chân thực với các chỉ số tương tác (lượt thích, chia sẻ lại, lượt xem), phù hợp cho lớp phủ video hoặc thẻ hình ảnh có thể chia sẻ.",
+    "pl": "Realistyczna karta posta X z metrykami zaangażowania (polubienia, reposty, wyświetlenia), idealna do nakładek wideo lub kart obrazów do udostępniania.",
+    "id": "Kartu postingan X realistis dengan metrik engagement (suka, repost, tayangan), cocok untuk overlay video atau kartu gambar yang dapat dibagikan.",
+    "nl": "Realistische X-berichtkaart met betrokkenheidsstatistieken (likes, reposts, weergaven), geschikt voor video-overlays of deelbare afbeeldingskaarten.",
+    "ar": "بطاقة منشور X واقعية مع مقاييس التفاعل (الإعجابات، إعادة النشر، المشاهدات)، مناسبة لتراكبات الفيديو أو بطاقات الصور القابلة للمشاركة.",
+    "tr": "Etkileşim metrikleriyle (beğeniler, yeniden paylaşımlar, görüntülenmeler) gerçekçi X gönderi kartı, video kaplamaları veya paylaşılabilir resim kartları için uygundur.",
+    "uk": "Реалістична картка публікації X з метриками залучення (вподобання, репости, перегляди), підходить для відеооверлеїв або картки зображень для поширення."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-x-post-card",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "twitter",
+    "x",
+    "social",
+    "card",
+    "overlay"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the X / Twitter Post Card template to turn my content into a realistic X post card with engagement metrics for a video overlay or shareable image card. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "X / Twitter Post Card",
+          "title_i18n": {
+            "en": "X / Twitter Post Card",
+            "zh-CN": "X (Twitter) 帖子卡"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

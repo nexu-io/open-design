@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-colorful",
+  "title": "Colorful",
+  "title_i18n": {
+    "zh-CN": "缤纷多彩",
+    "zh-TW": "繽紛多彩",
+    "ja": "カラフル",
+    "ko": "컬러풀",
+    "de": "Colorful",
+    "fr": "Colorful",
+    "ru": "Colorful",
+    "es": "Colorful",
+    "pt-BR": "Colorful",
+    "it": "Colorful",
+    "vi": "Colorful",
+    "pl": "Colorful",
+    "id": "Colorful",
+    "nl": "Colorful",
+    "ar": "Colorful",
+    "tr": "Colorful",
+    "uk": "Colorful",
+    "en": "Colorful"
+  },
+  "version": "0.1.0",
+  "description": "Vibrant, high-contrast palettes and gradients for engaging, memorable, and modern user experiences.",
+  "description_i18n": {
+    "zh-CN": "充满活力的高对比度调色板和渐变，打造引人入胜、令人难忘的现代用户体验。",
+    "zh-TW": "充滿活力的高對比度調色盤和漸層，打造引人入勝、令人難忘的現代使用者體驗。",
+    "ja": "魅力的で印象的な現代的なユーザー体験を実現する、鮮やかな高コントラストパレットとグラデーション。",
+    "ko": "매력적이고 기억에 남는 현대적인 사용자 경험을 위한 생동감 넘치는 고대비 팔레트와 그라데이션.",
+    "de": "Lebendige, kontrastreiche Farbpaletten und Verläufe für ansprechende, einprägsame und moderne Benutzererlebnisse.",
+    "fr": "Palettes et dégradés vibrants et à contraste élevé pour des expériences utilisateur engageantes, mémorables et modernes.",
+    "ru": "Яркие высококонтрастные палитры и градиенты для создания запоминающегося и современного пользовательского опыта.",
+    "es": "Paletas y degradados vibrantes de alto contraste para experiencias de usuario atractivas, memorables y modernas.",
+    "pt-BR": "Paletas e gradientes vibrantes de alto contraste para experiências de usuário envolventes, memoráveis e modernas.",
+    "it": "Palette e gradienti vivaci ad alto contrasto per esperienze utente coinvolgenti, memorabili e moderne.",
+    "vi": "Bảng màu và gradient sống động, tương phản cao cho trải nghiệm người dùng hấp dẫn, đáng nhớ và hiện đại.",
+    "pl": "Żywe palety i gradienty o wysokim kontraście dla angażujących, zapadających w pamięć i nowoczesnych doświadczeń użytkownika.",
+    "id": "Palet dan gradien yang vibrant dan berkontras tinggi untuk pengalaman pengguna yang menarik, berkesan, dan modern.",
+    "nl": "Levendige, contrastrijke kleurenpaletten en verloopkleuren voor boeiende, memorabele en moderne gebruikerservaringen.",
+    "ar": "لوحات ألوان وتدرجات نابضة بالحياة وعالية التباين لتجارب مستخدم جذابة لا تُنسى وعصرية.",
+    "tr": "Etkileyici, akılda kalıcı ve modern kullanıcı deneyimleri için canlı, yüksek kontrastlı paletler ve gradyanlar.",
+    "uk": "Яскраві висококонтрастні палітри та градієнти для привабливого, запам'ятовуючого та сучасного користувацького досвіду.",
+    "en": "Vibrant, high-contrast palettes and gradients for engaging, memorable, and modern user experiences."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "bold-expressive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Colorful design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Colorful design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "colorful",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

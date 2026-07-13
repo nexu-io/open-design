@@ -1,0 +1,210 @@
+# Open Design · Vaunt contributor recognition config
+#
+# Maps the Open Design 5-tier system (Spark / Signal / Node / Beacon / Nova)
+# to Vaunt's achievement + point-action model so Vaunt can:
+#   1. Backfill historical PR / review / issue / discussion / comment data
+#   2. Compute cumulative points per contributor against our scoring rules
+#   3. Auto-grant the matching tier achievement when thresholds are crossed
+#
+# Source of truth for scoring rules: open-design-bot/src/scoring.ts
+# Source of truth for tier thresholds: open-design-bot/src/tier.ts
+#
+# After this config is merged, Vaunt will rescan the repo on a periodic basis
+# and award achievements retroactively to qualifying contributors. Backfill is
+# silent — Vaunt does NOT post comments to old PRs / issues. Public visibility
+# only happens when we generate CONTRIBUTORS.md from the resulting data.
+
+version: 0.0.1
+
+# ───────────────────────────────────────────────────────────────────────
+# Point actions — translate every Open Design contribution event into
+# the point value defined in scoring.ts. Vaunt then aggregates these via
+# sum() to drive tier achievements.
+#
+# Actor/action pairings follow Vaunt's documented matrix
+# (https://docs.vaunt.dev/organizations/achievements/index.html#actor):
+#   - author:      pull_request, review, commit, issue, discussion, star
+#   - reviewers:   pull_request only
+#   - resolved_by: issue
+#   - assignees:   pull_request, issue
+# ───────────────────────────────────────────────────────────────────────
+actions:
+  # First merged PR — base 12 + first-time bonus 18 = 30 (lands the user
+  # straight into Signal tier as designed in spec §2.6)
+  - action:
+      type: point
+      name: pr_first_merge
+      triggers:
+        - trigger:
+            actor: author
+            action: pull_request
+            condition: merged = true & count(merged = true) = 1
+            value: 30
+
+  # Subsequent merged PRs
+  - action:
+      type: point
+      name: pr_subsequent_merge
+      triggers:
+        - trigger:
+            actor: author
+            action: pull_request
+            condition: merged = true & count(merged = true) > 1
+            value: 12
+
+  # PR review (collapsed: spec separates "substantial" 4pt vs "approved" 2pt
+  # but Vaunt's review action has no substance signal — using midpoint 3).
+  # NOTE: actor MUST be `author` for action `review`; `reviewers` is only
+  # valid with action `pull_request` per Vaunt docs.
+  - action:
+      type: point
+      name: pr_review
+      triggers:
+        - trigger:
+            actor: author
+            action: review
+            value: 3
+
+  # Issue opened (default value; spam / invalid can be subtracted later via
+  # label-based negative actions in v1.5)
+  - action:
+      type: point
+      name: issue_opened
+      triggers:
+        - trigger:
+            actor: author
+            action: issue
+            value: 5
+
+  # Helpful comment on issue
+  - action:
+      type: point
+      name: issue_comment
+      triggers:
+        - trigger:
+            actor: author
+            action: issue_comment
+            value: 1
+
+  # Helpful comment on PR
+  - action:
+      type: point
+      name: pr_comment
+      triggers:
+        - trigger:
+            actor: author
+            action: pull_request_comment
+            value: 1
+
+  # Discussion started
+  - action:
+      type: point
+      name: discussion_started
+      triggers:
+        - trigger:
+            actor: author
+            action: discussion
+            value: 2
+
+  # Note: scoring.ts also has commit_authored: 1 — intentionally NOT modelled
+  # in Vaunt to avoid double-counting (every PR already contains commits and
+  # already grants pr_first_merge / pr_subsequent_merge). Keep commits at 0.
+
+  # Note: scoring.ts also has pr_reverted_penalty: -10 — deferred to v1.5;
+  # requires us to define a "reverted" PR label convention first.
+
+  # Note: scoring.ts has discussion_answered_accepted: 6 — Vaunt's discussion
+  # action exposes only the `closed` field, not an "answer accepted" signal,
+  # so we cannot precisely model this rule. The rule is also moot today
+  # because the repo has Discussions disabled. When Discussions are turned on
+  # AND Vaunt exposes an answered field, add it here. Until then, this 6-pt
+  # rule lives only in src/scoring.ts and is awarded by our own bot.
+
+  # Note: scoring.ts has star_given: 0 — Vaunt's star action would award the
+  # achievement on first star but contribute 0 points, which matches the spec
+  # ("Spark = anyone who showed up"). Modelled below as part of the Spark
+  # achievement triggers, not as a point action.
+
+# ───────────────────────────────────────────────────────────────────────
+# Tier achievements — five lifetime badges keyed off the cumulative point
+# total. Each one links to a 500x500 PNG hosted in this same repo.
+# ───────────────────────────────────────────────────────────────────────
+achievements:
+
+  - achievement:
+      name: Spark
+      icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/spark.png
+      description: Lit the first spark — your first contribution to Open Design.
+      triggers:
+        # Any single contribution event qualifies for Spark.
+        # Intentionally redundant triggers cover every entry path so brand-new
+        # contributors light up immediately on whichever surface they touch first.
+        - trigger:
+            actor: author
+            action: star
+            condition: starred = true
+        - trigger:
+            actor: author
+            action: pull_request
+            condition: count() >= 1
+        - trigger:
+            actor: author
+            action: issue
+            condition: count() >= 1
+        - trigger:
+            actor: author
+            action: discussion
+            condition: count() >= 1
+        - trigger:
+            actor: author
+            action: issue_comment
+            condition: count() >= 1
+        - trigger:
+            actor: author
+            action: pull_request_comment
+            condition: count() >= 1
+        # Reviewing a PR also counts; actor must be `author` for action `review`.
+        - trigger:
+            actor: author
+            action: review
+            condition: count() >= 1
+
+  - achievement:
+      name: Signal
+      icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/signal.png
+      description: Sending steady signals — you crossed 30 points of contribution.
+      triggers:
+        - trigger:
+            actor: author
+            action: point
+            condition: sum(pr_first_merge, pr_subsequent_merge, pr_review, issue_opened, issue_comment, pr_comment, discussion_started) >= 30
+
+  - achievement:
+      name: Node
+      icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/node.png
+      description: Holding the network together — you crossed 150 points.
+      triggers:
+        - trigger:
+            actor: author
+            action: point
+            condition: sum(pr_first_merge, pr_subsequent_merge, pr_review, issue_opened, issue_comment, pr_comment, discussion_started) >= 150
+
+  - achievement:
+      name: Beacon
+      icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/beacon.png
+      description: Guiding the way for others — you crossed 700 points.
+      triggers:
+        - trigger:
+            actor: author
+            action: point
+            condition: sum(pr_first_merge, pr_subsequent_merge, pr_review, issue_opened, issue_comment, pr_comment, discussion_started) >= 700
+
+  - achievement:
+      name: Nova
+      icon: https://raw.githubusercontent.com/nexu-io/open-design/main/.vaunt/icons/nova.png
+      description: Bright as a Nova — you crossed 2,500 points and joined the top 1%.
+      triggers:
+        - trigger:
+            actor: author
+            action: point
+            condition: sum(pr_first_merge, pr_subsequent_merge, pr_review, issue_opened, issue_comment, pr_comment, discussion_started) >= 2500

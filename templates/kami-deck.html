@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>kami · deck template</title>
+  <style>
+    /* ===========================================================
+       Deck framework — DO NOT EDIT the rules in this <style> block.
+       This is a verbatim copy of templates/deck-framework.html.
+       Edit only the kami token block + per-deck styles below, and
+       the <section class="slide"> bodies.
+       =========================================================== */
+    :root {
+      /* kami theme tokens — warm parchment canvas, ink-blue accent.
+         See design-systems/kami/DESIGN.md for the full spec. */
+      --bg:        #f5f4ed;   /* parchment — page background */
+      --ivory:     #faf9f5;   /* card surface */
+      --warm-sand: #e8e6dc;   /* button default */
+      --fg:        #141413;   /* near black — primary text */
+      --dark-warm: #3d3d3a;   /* secondary text, table headers */
+      --olive:     #504e49;   /* subtext, captions */
+      --stone:     #6b6a64;   /* tertiary, metadata, eyebrows */
+      --muted:     #6b6a64;   /* alias for --stone */
+      --brand:     #1B365D;   /* ink blue — single accent, ≤5% surface */
+      --brand-light: #2D5A8A;
+      --border:      #e8e6dc;
+      --border-soft: #e5e3d8;
+      --tag-bg:    #E4ECF5;   /* solid hex — never rgba (print double-paints) */
+      --shell:     #2a2a26;   /* warm dark behind the stage, not slate */
+      --accent:    var(--brand); /* compatibility with deck-framework slot name */
+      --deck-scale: 1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--shell);
+      color: var(--fg);
+      font: 18px/1.5 Charter, Georgia, "TsangerJinKai02", "Source Han Serif SC",
+            "Noto Serif CJK SC", "Songti SC", Palatino, serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-stage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1920px;
+      height: 1080px;
+      background: var(--bg);
+      transform: translate(-50%, -50%) scale(var(--deck-scale, 1));
+      transform-origin: center;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .slide.active { display: flex; }
+
+    /* Chrome — counter + prev/next live outside the scaled stage. */
+    .deck-counter {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(20, 20, 19, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(250, 249, 245, 0.08);
+      color: #faf9f5;
+      font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.18em;
+      z-index: 1000;
+    }
+    .deck-counter button {
+      width: 36px; height: 36px;
+      background: transparent;
+      color: #faf9f5;
+      border: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s;
+    }
+    .deck-counter button:hover { background: rgba(250, 249, 245, 0.12); }
+    .deck-counter button[disabled] { opacity: 0.3; cursor: default; }
+    .deck-counter .deck-count {
+      padding: 0 14px;
+      letter-spacing: 0.22em;
+    }
+    .deck-counter .deck-count .total { color: rgba(250, 249, 245, 0.5); }
+    .deck-hint {
+      position: fixed;
+      bottom: 26px;
+      right: 28px;
+      color: rgba(250, 249, 245, 0.4);
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    /* Print / PDF stitching — every slide stacks top-to-bottom, one per page. */
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body {
+        width: 1920px !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #f5f4ed !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .deck-stage {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+        width: 1920px !important;
+        height: auto !important;
+        overflow: visible !important;
+      }
+      .slide {
+        display: flex !important;
+        position: relative !important;
+        inset: auto !important;
+        width: 1920px !important;
+        height: 1080px !important;
+        page-break-after: always;
+        break-after: page;
+      }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+  <style>
+    /* ===========================================================
+       Per-deck styles — kami print rhythm at slide scale.
+       Macro tokens (font/padding) ≈ print pt × 1.6.
+       Micro tokens (border/tracking) ≈ print pt × 0.6.
+       Tracking is roughly half of print values: 8px tracking that
+       reads as confident in a printed deck disintegrates at 1920×1080.
+       =========================================================== */
+    :root {
+      --slide-pad: 96px;
+      --serif: Charter, Georgia, "TsangerJinKai02", "Source Han Serif SC",
+               "Noto Serif CJK SC", "Songti SC", Palatino, serif;
+      --sans:  var(--serif);
+      --mono:  "JetBrains Mono", "SF Mono", Consolas, Monaco,
+               "TsangerJinKai02", "Source Han Serif SC", monospace;
+    }
+    .slide {
+      padding: var(--slide-pad);
+      font-family: var(--serif);
+      color: var(--fg);
+      background: var(--bg);
+    }
+
+    /* Cover slide — full ink-blue ground, ivory text */
+    .slide.cover {
+      background: var(--brand);
+      color: var(--ivory);
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .cover .eyebrow {
+      font: 500 18px/1 var(--sans);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(250, 249, 245, 0.7);
+      margin-bottom: 36px;
+    }
+    .cover h1 {
+      font: 500 132px/1.05 var(--serif);
+      letter-spacing: -1.5px;
+      color: var(--ivory);
+      max-width: 1400px;
+    }
+    .cover .rule {
+      width: 96px; height: 1px;
+      background: rgba(250, 249, 245, 0.6);
+      margin: 48px 0 32px;
+    }
+    .cover .meta {
+      font: 500 22px/1.4 var(--serif);
+      color: rgba(250, 249, 245, 0.75);
+      letter-spacing: 0.2px;
+    }
+
+    /* Generic content slide chrome */
+    .slide-head {
+      display: flex;
+      align-items: baseline;
+      gap: 28px;
+      margin-bottom: 56px;
+    }
+    .section-num {
+      font: 500 22px/1 var(--serif);
+      color: var(--brand);
+      letter-spacing: 0.6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .section-title {
+      font: 500 56px/1.15 var(--serif);
+      color: var(--fg);
+      letter-spacing: 0.2px;
+    }
+    .section-lede {
+      max-width: 1100px;
+      font: 500 28px/1.45 var(--serif);
+      color: var(--olive);
+      margin-bottom: 56px;
+    }
+
+    /* Eyebrow + footer */
+    .eyebrow-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font: 500 16px/1 var(--sans);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--stone);
+      margin-bottom: 48px;
+    }
+    .slide-foot {
+      margin-top: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 32px;
+      border-top: 1px solid var(--border-soft);
+      font: 500 16px/1 var(--sans);
+      color: var(--stone);
+      letter-spacing: 0.6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .slide-foot .mark { color: var(--brand); }
+
+    /* Agenda list — numbered, ink-blue digits */
+    .agenda {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 80px;
+      row-gap: 0;
+      border-top: 1px solid var(--border-soft);
+    }
+    .agenda li {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 24px;
+      align-items: baseline;
+      padding: 32px 0;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .agenda .n {
+      font: 500 32px/1 var(--serif);
+      color: var(--brand);
+      font-variant-numeric: tabular-nums;
+    }
+    .agenda .t { font: 500 32px/1.25 var(--serif); color: var(--fg); }
+    .agenda .d { font: 500 18px/1.4 var(--serif); color: var(--olive); margin-top: 6px; }
+
+    /* Metric row — three lifted cards on parchment */
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .metric-card {
+      background: var(--ivory);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 56px 48px;
+    }
+    .metric-card .v {
+      font: 500 96px/1 var(--serif);
+      color: var(--brand);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+    .metric-card .l {
+      font: 500 22px/1.45 var(--serif);
+      color: var(--olive);
+      margin-top: 24px;
+    }
+
+    /* Body grid — column of dash-bullets next to a quote */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 96px;
+      align-items: start;
+    }
+    .dash-list {
+      list-style: none;
+      font: 500 26px/1.55 var(--serif);
+      color: var(--dark-warm);
+    }
+    .dash-list li {
+      position: relative;
+      padding: 18px 0 18px 32px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .dash-list li:first-child { border-top: 1px solid var(--border-soft); }
+    .dash-list li::before {
+      content: "\2013";
+      position: absolute;
+      left: 0; top: 18px;
+      color: var(--brand);
+    }
+    .dash-list b { color: var(--fg); font-weight: 500; }
+
+    .pull-quote {
+      border-left: 3px solid var(--brand);
+      padding: 8px 0 8px 32px;
+      font: 500 30px/1.5 var(--serif);
+      color: var(--olive);
+    }
+    .pull-quote .who {
+      display: block;
+      margin-top: 24px;
+      font: 500 18px/1 var(--sans);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+
+    /* Tag chips */
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 40px;
+    }
+    .tag {
+      font: 500 16px/1 var(--sans);
+      padding: 8px 14px;
+      border-radius: 4px;
+      color: var(--brand);
+      background: var(--tag-bg);
+      letter-spacing: 0.4px;
+    }
+    /* Single sanctioned gradient — see DESIGN.md §2 "Gradient System".
+       Use at most once per page on a "featured" or "new" tag. */
+    .tag.brush {
+      background: linear-gradient(to right, #D6E1EE, #E4ECF5 70%, #EEF2F7);
+    }
+
+    /* Closing slide — restrained, single ink-blue rule */
+    .slide.closing {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .closing h2 {
+      font: 500 88px/1.1 var(--serif);
+      color: var(--fg);
+      letter-spacing: -0.4px;
+      max-width: 1400px;
+    }
+    .closing .sub {
+      margin-top: 32px;
+      font: 500 26px/1.5 var(--serif);
+      color: var(--olive);
+      max-width: 1200px;
+    }
+    .closing .rule {
+      margin: 56px auto 32px;
+      width: 96px; height: 1px;
+      background: var(--brand);
+    }
+    .closing .meta {
+      font: 500 18px/1 var(--sans);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+  </style>
+</head>
+<body>
+  <div class="deck-stage" id="deck-stage">
+
+    <!-- SLOT: slides. The first slide MUST have class="slide active";
+         the rest just "slide". The framework auto-counts them. -->
+
+    <!-- 01 · Cover -->
+    <section class="slide cover active" data-screen-label="01 Cover">
+      <div class="eyebrow">紙 · Kami · Edition One</div>
+      <h1>Good content<br/>deserves good paper.</h1>
+      <div class="rule"></div>
+      <div class="meta">A kami-flavored deck template · 2026</div>
+    </section>
+
+    <!-- 02 · Agenda -->
+    <section class="slide" data-screen-label="02 Agenda">
+      <div class="eyebrow-row"><span>Edition One</span><span>Agenda</span></div>
+      <div class="slide-head">
+        <span class="section-num">01</span>
+        <h2 class="section-title">What we're covering</h2>
+      </div>
+      <ol class="agenda">
+        <li><span class="n">01</span><div><div class="t">The ten invariants</div><div class="d">Why kami stays restrained on every page.</div></div></li>
+        <li><span class="n">02</span><div><div class="t">Color, type, rhythm</div><div class="d">Parchment canvas, ink-blue accent, single serif weight.</div></div></li>
+        <li><span class="n">03</span><div><div class="t">Components in print</div><div class="d">Cards, tags, quotes, metric rows.</div></div></li>
+        <li><span class="n">04</span><div><div class="t">Slides as paper</div><div class="d">Print rhythm scaled cleanly to 1920×1080.</div></div></li>
+      </ol>
+      <div class="slide-foot"><span class="mark">紙 · kami</span><span>02 / 05</span></div>
+    </section>
+
+    <!-- 03 · Metric row -->
+    <section class="slide" data-screen-label="03 Metrics">
+      <div class="eyebrow-row"><span>Edition One</span><span>By the numbers</span></div>
+      <div class="slide-head">
+        <span class="section-num">02</span>
+        <h2 class="section-title">Restraint, in three numbers</h2>
+      </div>
+      <p class="section-lede">A small palette and a single weight do most of the work. The rest is whitespace, tabular numbers, and a willingness to subtract.</p>
+      <div class="metric-row">
+        <div class="metric-card"><div class="v">1</div><div class="l">accent color, ever — ink-blue covers no more than 5% of any surface.</div></div>
+        <div class="metric-card"><div class="v">2</div><div class="l">serif weights in use: 400 for body, 500 for hierarchy. Bold and italic are off-limits.</div></div>
+        <div class="metric-card"><div class="v">4</div><div class="l">levels of warm gray, top to bottom — every neutral has a yellow-brown undertone.</div></div>
+      </div>
+      <div class="slide-foot"><span class="mark">紙 · kami</span><span>03 / 05</span></div>
+    </section>
+
+    <!-- 04 · Two-column body + pull quote -->
+    <section class="slide" data-screen-label="04 Principles">
+      <div class="eyebrow-row"><span>Edition One</span><span>Principles</span></div>
+      <div class="slide-head">
+        <span class="section-num">03</span>
+        <h2 class="section-title">What kami refuses to do</h2>
+      </div>
+      <div class="two-col">
+        <ul class="dash-list">
+          <li><b>No pure white.</b> The page is parchment (#f5f4ed) — paper, not a UI panel.</li>
+          <li><b>No second accent.</b> Ink-blue (#1B365D) carries every emphasis on the page.</li>
+          <li><b>No cool grays.</b> Every neutral is warm: R ≈ G &gt; B in the channel ramp.</li>
+          <li><b>No bold, no italic.</b> Hierarchy comes from size and color, not weight or slant.</li>
+          <li><b>No drop shadows.</b> Depth comes from 1px rings and a single whisper shadow.</li>
+        </ul>
+        <blockquote class="pull-quote">
+          Hierarchy carried by serif at one weight, on warm cream paper, with a single ink-blue accent — that is the entire instrument.
+          <span class="who">紙 — design.md, §1</span>
+        </blockquote>
+      </div>
+      <div class="tag-row">
+        <span class="tag brush">Edition 02 · New</span>
+        <span class="tag">Parchment</span>
+        <span class="tag">Ink Blue</span>
+        <span class="tag">Serif 500</span>
+        <span class="tag">Tabular nums</span>
+        <span class="tag">Whisper shadow</span>
+      </div>
+      <div class="slide-foot"><span class="mark">紙 · kami</span><span>04 / 05</span></div>
+    </section>
+
+    <!-- 05 · Closing -->
+    <section class="slide closing" data-screen-label="05 Close">
+      <h2>Use this template as a starting paper.</h2>
+      <p class="sub">Edit the kami token block at the top of the file, then duplicate any slide as a starting structure. Every demo slide above is composable.</p>
+      <div class="rule"></div>
+      <div class="meta">design-systems / kami</div>
+    </section>
+
+  </div>
+
+  <!-- Framework chrome — DO NOT EDIT below this line. -->
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space</div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var prev = document.getElementById('deck-prev');
+      var next = document.getElementById('deck-next');
+      var cur = document.getElementById('deck-cur');
+      var total = document.getElementById('deck-total');
+      var STORE = 'deck:idx:' + (location.pathname || '/');
+      var idx = 0;
+
+      function fit() {
+        var sw = window.innerWidth;
+        var sh = window.innerHeight;
+        if (sw <= 0 || sh <= 0) return;
+        var pad = 24;
+        var s = Math.min((sw - pad) / 1920, (sh - pad) / 1080);
+        if (!isFinite(s) || s <= 0) s = 1;
+        root.style.setProperty('--deck-scale', String(s));
+      }
+
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function paint() {
+        slides.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+        if (cur) cur.textContent = pad2(idx + 1);
+        if (total) total.textContent = pad2(slides.length);
+        if (prev) prev.toggleAttribute('disabled', idx <= 0);
+        if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+      }
+      function go(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        paint();
+        try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
+      }
+      function onKey(e) {
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+      }
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      if (prev) prev.addEventListener('click', function () { go(idx - 1); });
+      if (next) next.addEventListener('click', function () { go(idx + 1); });
+
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+
+      try {
+        var saved = parseInt(localStorage.getItem(STORE) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) idx = saved;
+      } catch (_) {}
+
+      window.addEventListener('resize', fit);
+      if (typeof ResizeObserver === 'function') {
+        try { new ResizeObserver(fit).observe(document.documentElement); } catch (_) {}
+      }
+      fit();
+      paint();
+      focusDeck();
+    })();
+  </script>
+</body>
+</html>

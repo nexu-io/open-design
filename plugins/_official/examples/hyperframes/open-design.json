@@ -1,0 +1,183 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hyperframes",
+  "title": "Hyperframes",
+  "title_i18n": {
+    "zh-CN": "Hyperframes",
+    "zh-TW": "Hyperframes",
+    "ja": "Hyperframes",
+    "ko": "Hyperframes",
+    "de": "Hyperframes",
+    "fr": "Hyperframes",
+    "ru": "Hyperframes",
+    "es": "Hyperframes",
+    "pt-BR": "Hyperframes",
+    "it": "Hyperframes",
+    "vi": "Hyperframes",
+    "pl": "Hyperframes",
+    "id": "Hyperframes",
+    "nl": "Hyperframes",
+    "ar": "Hyperframes",
+    "tr": "Hyperframes",
+    "uk": "Hyperframes",
+    "en": "Hyperframes"
+  },
+  "version": "0.1.1",
+  "description": "Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video content, add captions or subtitles synced to audio, generate text-to-speech narration, create audio-reactive animation (beat sync, glow, pulse driven by music), add animated text highlighting (marker sweeps, hand-drawn circles, burst lines, scribble, sketchout), or add transitions between scenes (crossfades, wipes, reveals, shader transitions). Covers composition authoring, timing, media, and the full video production workflow. For CLI commands (init, lint, preview, render, transcribe, tts) see the hyperframes-cli skill.",
+  "description_i18n": {
+    "zh-CN": "使用 HyperFrames HTML 创建视频合成、动画、标题卡、叠加层、字幕、配音、音频响应式视觉效果和场景转场。支持构建 HTML 视频内容、添加音频同步字幕、生成语音合成旁白、创建音乐驱动的动画效果（节拍同步、发光、脉冲）、添加动画文本高亮（标记扫描、手绘圆圈、爆发线、涂鸦、素描）以及场景转场效果（淡入淡出、擦除、显示、着色器转场）。",
+    "zh-TW": "使用 HyperFrames HTML 建立影片合成、動畫、標題卡、疊加層、字幕、配音、音訊反應視覺效果和場景轉場。支援建構 HTML 影片內容、新增音訊同步字幕、產生文字轉語音旁白、建立音樂驅動的動畫效果（節拍同步、發光、脈衝）、新增動畫文字醒目提示（標記掃描、手繪圓圈、爆發線、塗鴉、素描）以及場景轉場效果（淡入淡出、擦除、顯示、著色器轉場）。",
+    "ja": "HyperFrames HTML で動画コンポジション、アニメーション、タイトルカード、オーバーレイ、字幕、ナレーション、オーディオリアクティブビジュアル、シーントランジションを作成。HTML ベースの動画コンテンツ制作、音声同期字幕追加、テキスト読み上げナレーション生成、音楽連動アニメーション（ビート同期、グロー、パルス）、アニメーションテキスト強調（マーカースイープ、手描き円、バーストライン、スクリブル、スケッチアウト）、シーントランジション（クロスフェード、ワイプ、リビール、シェーダートランジション）に対応。",
+    "ko": "HyperFrames HTML로 비디오 합성, 애니메이션, 타이틀 카드, 오버레이, 자막, 보이스오버, 오디오 반응형 비주얼, 장면 전환을 제작합니다. HTML 기반 비디오 콘텐츠 제작, 오디오 동기화 자막 추가, 텍스트 음성 변환 내레이션 생성, 음악 반응형 애니메이션(비트 동기화, 글로우, 펄스), 애니메이션 텍스트 강조(마커 스윕, 손그림 원, 버스트 라인, 낙서, 스케치아웃), 장면 전환 효과(크로스페이드, 와이프, 리빌, 셰이더 전환)를 지원합니다.",
+    "de": "Erstellen Sie Videokompositionen, Animationen, Titelkarten, Overlays, Untertitel, Voice-Overs, audioreaktive Visuals und Szenenübergänge in HyperFrames HTML. Unterstützt HTML-basierte Videoinhalte, audio-synchronisierte Untertitel, Text-to-Speech-Narration, musikgesteuerte Animationen (Beat-Sync, Glow, Pulse), animierte Texthervorhebungen (Marker-Sweeps, handgezeichnete Kreise, Burst-Linien, Kritzeleien, Sketch-Effekte) und Szenenübergänge (Crossfades, Wipes, Reveals, Shader-Übergänge).",
+    "fr": "Créez des compositions vidéo, animations, cartons titre, superpositions, sous-titres, voix off, visuels audio-réactifs et transitions de scène en HyperFrames HTML. Prend en charge le contenu vidéo HTML, les sous-titres synchronisés à l'audio, la narration text-to-speech, les animations audio-réactives (sync battement, glow, pulse), les surlignages de texte animés (balayages marqueur, cercles dessinés, lignes éclatées, gribouillages, sketch) et les transitions de scène (fondus enchaînés, wipes, reveals, transitions shader).",
+    "ru": "Создавайте видеокомпозиции, анимацию, титульные карты, оверлеи, субтитры, озвучку, аудиореактивные визуалы и переходы между сценами в HyperFrames HTML. Поддерживает создание HTML-видео, добавление синхронизированных субтитров, генерацию синтеза речи, аудиореактивную анимацию (синхронизация с битом, свечение, пульсация), анимированное выделение текста (маркеры, рисованные круги, линии взрыва, каракули, наброски) и переходы между сценами (затухания, вайпы, раскрытия, шейдерные переходы).",
+    "es": "Crea composiciones de video, animaciones, tarjetas de título, superposiciones, subtítulos, locuciones, visuales reactivos al audio y transiciones de escena en HyperFrames HTML. Admite contenido de video HTML, subtítulos sincronizados con audio, narración de texto a voz, animaciones reactivas al audio (sincronización de ritmo, brillo, pulso), resaltado de texto animado (barridos de marcador, círculos dibujados, líneas de explosión, garabatos, bocetos) y transiciones de escena (fundidos cruzados, barridos, revelaciones, transiciones shader).",
+    "pt-BR": "Crie composições de vídeo, animações, cartões de título, sobreposições, legendas, narrações, visuais reativos ao áudio e transições de cena em HyperFrames HTML. Suporta conteúdo de vídeo HTML, legendas sincronizadas com áudio, narração texto-para-fala, animações reativas ao áudio (sincronia de batida, brilho, pulso), realce de texto animado (varreduras de marcador, círculos desenhados, linhas de explosão, rabiscos, esboços) e transições de cena (crossfades, wipes, revelações, transições shader).",
+    "it": "Crea composizioni video, animazioni, titoli, overlay, sottotitoli, voice-over, visual audio-reattivi e transizioni di scena in HyperFrames HTML. Supporta contenuti video HTML, sottotitoli sincronizzati con l'audio, narrazione text-to-speech, animazioni audio-reattive (sincronizzazione beat, glow, pulse), evidenziazione testo animata (marker sweep, cerchi disegnati, linee esplosive, scarabocchi, sketch) e transizioni di scena (dissolvenze, wipe, reveal, transizioni shader).",
+    "vi": "Tạo bố cục video, hoạt ảnh, thẻ tiêu đề, lớp phủ, phụ đề, lồng tiếng, hiệu ứng thị giác phản ứng âm thanh và chuyển cảnh trong HyperFrames HTML. Hỗ trợ nội dung video HTML, phụ đề đồng bộ âm thanh, tạo giọng đọc text-to-speech, hoạt ảnh phản ứng âm nhạc (đồng bộ nhịp, phát sáng, xung), làm nổi bật văn bản hoạt ảnh (quét marker, vòng tròn vẽ tay, đường nổ, nét vẽ nguệch ngoạc, phác thảo) và chuyển cảnh (fade chéo, wipe, reveal, chuyển cảnh shader).",
+    "pl": "Twórz kompozycje wideo, animacje, plansze tytułowe, nakładki, napisy, narracje, wizualizacje reagujące na dźwięk i przejścia między scenami w HyperFrames HTML. Obsługuje treści wideo HTML, napisy zsynchronizowane z dźwiękiem, narrację text-to-speech, animacje reagujące na muzykę (synchronizacja z rytmem, poświata, pulsacja), animowane podświetlanie tekstu (zakreślenia markerem, ręcznie rysowane kółka, linie wybuchu, bazgroły, szkice) oraz przejścia między scenami (przenikanie, wycieranie, ujawnianie, przejścia shaderowe).",
+    "id": "Buat komposisi video, animasi, kartu judul, overlay, caption, voice-over, visual reaktif audio, dan transisi adegan di HyperFrames HTML. Mendukung konten video HTML, caption tersinkronisasi audio, narasi text-to-speech, animasi reaktif musik (sinkronisasi beat, cahaya, pulse), penyorotan teks animasi (sapuan marker, lingkaran gambar tangan, garis ledakan, coretan, sketsa) dan transisi adegan (crossfade, wipe, reveal, transisi shader).",
+    "nl": "Maak videocomposities, animaties, titelkaarten, overlays, ondertiteling, voice-overs, audio-reactieve visuals en scèneovergangen in HyperFrames HTML. Ondersteunt HTML-videocontent, met audio gesynchroniseerde ondertiteling, text-to-speech narration, audio-reactieve animaties (beat sync, glow, pulse), geanimeerde tekstmarkering (marker sweeps, handgetekende cirkels, burst-lijnen, krabbels, schetsen) en scèneovergangen (crossfades, wipes, reveals, shader-overgangen).",
+    "ar": "أنشئ مقاطع فيديو مركبة ورسوم متحركة وبطاقات عناوين وطبقات وترجمات وتعليقات صوتية ومرئيات تفاعلية صوتية وانتقالات مشهدية في HyperFrames HTML. يدعم محتوى فيديو HTML والترجمات المتزامنة مع الصوت وإنشاء السرد الصوتي النصي والرسوم المتحركة التفاعلية الموسيقية (مزامنة الإيقاع، توهج، نبض) وتمييز النص المتحرك (مسح العلامات، دوائر مرسومة، خطوط انفجار، خربشات، رسومات تخطيطية) وانتقالات المشاهد (تلاشي متقاطع، مسح، كشف، انتقالات shader).",
+    "tr": "HyperFrames HTML ile video kompozisyonları, animasyonlar, başlık kartları, katmanlar, altyazılar, seslendirmeler, ses-reaktif görseller ve sahne geçişleri oluşturun. HTML tabanlı video içeriği, sesle senkronize altyazılar, metin-konuşma anlatımı, müzikle reaktif animasyonlar (beat senkronizasyonu, parıltı, nabız), animasyonlu metin vurgulama (marker süpürmesi, el çizimi daireler, patlama çizgileri, karalamalar, taslaklar) ve sahne geçişleri (crossfade, wipe, reveal, shader geçişleri) destekler.",
+    "uk": "Створюйте відеокомпозиції, анімацію, титульні картки, накладення, субтитри, озвучення, аудіореактивні візуали та переходи між сценами в HyperFrames HTML. Підтримує HTML-відео, синхронізовані з аудіо субтитри, синтез мовлення, аудіореактивну анімацію (синхронізація з бітом, світіння, пульсація), анімоване виділення тексту (маркери, малювання кіл, лінії вибуху, каракулі, ескізи) та переходи між сценами (затемнення, вайпи, розкриття, шейдерні переходи).",
+    "en": "Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video content, add captions or subtitles synced to audio, generate text-to-speech narration, create audio-reactive animation (beat sync, glow, pulse driven by music), add animated text highlighting (marker sweeps, hand-drawn circles, burst lines, scribble, sketchout), or add transitions between scenes (crossfades, wipes, reveals, shader transitions). Covers composition authoring, timing, media, and the full video production workflow. For CLI commands (init, lint, preview, render, transcribe, tts) see the hyperframes-cli skill."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/hyperframes",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "video-composition",
+    "interactive-video",
+    "captions",
+    "tts-video",
+    "kinetic-typography",
+    "html-in-canvas",
+    "drawelementimage",
+    "html-shader",
+    "vfx-iphone-device",
+    "vfx-liquid-glass",
+    "vfx-portal"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "useCase": {
+      "query": {
+        "en": "Create a premium product-studio {{duration}}-second {{format}} HyperFrames composition for {{subject}}: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing. Aspect: {{aspect}}. Visual style: {{style}}. Audio/captions: {{audioPlan}}. Use the HyperFrames HTML workflow, deterministic timelines, and the referenced motion guides.",
+        "zh-CN": "用高端产品工作室的完成度，为 {{subject}} 创建一个 {{duration}} 秒的 {{format}} HyperFrames 作品：动态排版利落、转场优雅、运动语言克制，整体有工作室级别的节奏和完成度。画幅：{{aspect}}。视觉风格：{{style}}。音频/字幕：{{audioPlan}}。使用 HyperFrames HTML 工作流、确定性时间线和引用的运动指南。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "format",
+        "label": "Format",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product reveal",
+          "captioned short",
+          "logo outro",
+          "audio-reactive visual",
+          "scene transition sequence"
+        ],
+        "default": "product reveal"
+      },
+      {
+        "name": "subject",
+        "label": "Subject",
+        "type": "string",
+        "required": true,
+        "placeholder": "a premium AI note-taking app",
+        "default": "a premium product concept"
+      },
+      {
+        "name": "duration",
+        "label": "Duration",
+        "type": "number",
+        "required": true,
+        "default": 5
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "required": true,
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "style",
+        "label": "Style",
+        "type": "string",
+        "placeholder": "minimal premium, soft side light, restrained motion",
+        "default": "premium product-studio motion"
+      },
+      {
+        "name": "audioPlan",
+        "label": "Audio/captions",
+        "type": "string",
+        "placeholder": "muted, TTS narration, captions from transcript",
+        "default": "no audio or captions unless requested"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./references/audio-reactive.md",
+        "./references/captions.md",
+        "./references/css-patterns.md",
+        "./references/dynamic-techniques.md",
+        "./references/html-in-canvas.md",
+        "./references/motion-principles.md",
+        "./references/transcript-guide.md",
+        "./references/transitions.md",
+        "./references/tts.md",
+        "./references/typography.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

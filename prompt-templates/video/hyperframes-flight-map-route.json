@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-flight-map-route",
+  "surface": "video",
+  "title": "HyperFrames: Apple-Style Flight Map (Origin → Destination)",
+  "summary": "An 8-second 16:9 cinematic flight-route map — realistic terrain zoom, animated plane gliding from origin to destination along a curved path, labelled cities, kinetic distance counter. Built directly on the HyperFrames `nyc-paris-flight` catalog block, repurposable for any city pair.",
+  "category": "Travel",
+  "tags": ["hyperframes", "map", "travel", "route", "cinematic"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build an 8-second HyperFrames cinematic flight-map (1920×1080, 30fps) showing a plane traveling between two named cities. Pull `npx hyperframes add nyc-paris-flight` and override the two endpoint coordinates plus city labels with the user's chosen pair (default: New York → Paris, ~5,837 km).\n\nVisual identity: dark map canvas #0a0e1a (Apple Maps dark style), warm route accent #ffb76b, off-white labels #f5f1ea, secondary slate #7da4ff for distance / coordinate text. Display: \"Inter\" 64px for city names; mono \"JetBrains Mono\" 18px for coordinates; tabular-nums forced on the distance counter.\n\nAnimation (8s total):\n• 0–1.2s — globe / map zooms in from a wide world view to a regional view spanning both cities, ease expo.inOut, with a slight rotation correction. Use the catalog block's built-in zoom hook.\n• 1.0–1.8s — origin city label fades in at the origin marker, x-axis offset 0, opacity 0→1 + scale 0.92→1 ease power3.out 0.6s. The marker (a 14px ring + 4px dot in #ffb76b) pulses scale 1→1.18→1 over 1.0s ease sine.inOut.\n• 1.8–6.0s — the route arc draws progressively from origin to destination using stroke-dashoffset on an SVG path, 4.0s ease power2.inOut. The plane icon (small 36px svg) rides the path with motionPath, rotating to match the bearing. A small cluster of \"distance traveled\" text in tabular-nums counts up below the plane: 0 → 5,837 km.\n• 5.5–6.5s — destination city label fades in at the destination marker on landing, same pattern as origin.\n• 6.5–8.0s — final hold. The full route + both labels remain on screen. A small footer line \"flight time · 7h 42m\" fades in at 7.0s. No exit animations.\n\nNon-negotiables: tabular-nums on the distance readout; min 16px on coordinate labels; deterministic only (no Math.random for plane jitter — use a seeded mulberry32 if you need any noise); entrance-only; all timelines paused:true; root data-duration=8.\n\nQuality: run `npx hyperframes inspect --at 1.5,3,5.5,7.5` to confirm both labels fit inside the canvas, then dispatch render. Output: `flight-route-{origin}-{destination}.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/nyc-paris-flight"
+  }
+}

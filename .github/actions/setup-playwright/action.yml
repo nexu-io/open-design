@@ -1,0 +1,34 @@
+name: Setup Playwright
+description: Restore Playwright browser cache and install browsers
+
+inputs:
+  package-json-path:
+    description: Path to package.json containing @playwright/test or playwright devDependency
+    required: true
+  install-command:
+    description: Command used to install browsers
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Playwright version
+      id: playwright-version
+      shell: bash
+      run: |
+        version=$(node -p "const pkg = require('./${{ inputs.package-json-path }}'); const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }; (deps['@playwright/test'] || deps.playwright || '').replace(/[^0-9.]/g,'')")
+        if [ -z "$version" ]; then
+          echo "Could not resolve Playwright version from ${{ inputs.package-json-path }}" >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browser binaries
+      uses: actions/cache@v5.0.5
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+    - name: Install Playwright browsers
+      shell: bash
+      run: ${{ inputs.install-command }}

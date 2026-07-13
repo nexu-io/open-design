@@ -1,0 +1,63 @@
+/* design-systems/cafe/tokens.css
+ * Structured token bindings for Cafe.
+ * cafe hospitality system with warm cream, espresso text, and inviting menu surfaces.
+ */
+
+:root {
+  --bg: #fbf6ee;
+  --surface: #fffdf8;
+  --surface-warm: #f1e3cf;
+  --fg: #201914;
+  --fg-2: #4c4037;
+  --muted: #7a6d63;
+  --meta: #9b5b32;
+  --border: #ded2c3;
+  --border-soft: #eee4d7;
+  --accent: #9b5b32;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #4f8a4f;
+  --warn: #c9822f;
+  --danger: #b33a3a;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 42px;
+  --text-3xl: 64px;
+  --text-4xl: 88px;
+  --leading-body: 1.62;
+  --leading-tight: 1;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 20px 52px rgba(32, 25, 20, 0.12);
+  --focus-ring: 0 0 0 4px rgba(155, 91, 50, 0.24);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

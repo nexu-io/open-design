@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a question
+    url: https://github.com/nexu-io/open-design/discussions/categories/q-a
+    about: How do I use X? Why does Y behave like that? — Q&A on Discussions gets faster answers and stays searchable for others.
+  - name: 💡 Discuss an idea
+    url: https://github.com/nexu-io/open-design/discussions/categories/ideas
+    about: Have a half-formed idea you want to chew on before opening a formal feature request? Start a thread in Ideas.
+  - name: 🙌 Show what you've made
+    url: https://github.com/nexu-io/open-design/discussions/categories/show-and-tell
+    about: Built something cool with Open Design? Share it in Show and tell.
+  - name: 🗣 General discussion
+    url: https://github.com/nexu-io/open-design/discussions/categories/general
+    about: Anything else — chat, suggestions, community talk.

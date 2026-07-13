@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-supabase",
+  "title": "Supabase",
+  "title_i18n": {
+    "zh-CN": "Supabase",
+    "zh-TW": "Supabase",
+    "ja": "Supabase",
+    "ko": "Supabase",
+    "de": "Supabase",
+    "fr": "Supabase",
+    "ru": "Supabase",
+    "es": "Supabase",
+    "pt-BR": "Supabase",
+    "it": "Supabase",
+    "vi": "Supabase",
+    "pl": "Supabase",
+    "id": "Supabase",
+    "nl": "Supabase",
+    "ar": "Supabase",
+    "tr": "Supabase",
+    "uk": "Supabase",
+    "en": "Supabase"
+  },
+  "version": "0.1.0",
+  "description": "Open-source Firebase alternative. Dark emerald theme, code-first.",
+  "description_i18n": {
+    "zh-CN": "开源的 Firebase 替代方案。深翠绿主题，代码优先。",
+    "zh-TW": "開源的 Firebase 替代方案。深翠綠主題，程式碼優先。",
+    "ja": "オープンソースのFirebase代替。ダークエメラルドテーマ、コードファースト。",
+    "ko": "오픈소스 Firebase 대안. 다크 에메랄드 테마, 코드 우선.",
+    "de": "Open-Source Firebase-Alternative. Dunkles Smaragd-Theme, Code-First.",
+    "fr": "Alternative open source à Firebase. Thème émeraude sombre, orienté code.",
+    "ru": "Open-source альтернатива Firebase. Темная изумрудная тема, code-first.",
+    "es": "Alternativa open-source a Firebase. Tema verde esmeralda oscuro, orientado al código.",
+    "pt-BR": "Alternativa open-source ao Firebase. Tema verde esmeralda escuro, focado em código.",
+    "it": "Alternativa open-source a Firebase. Tema verde smeraldo scuro, orientato al codice.",
+    "vi": "Giải pháp thay thế Firebase mã nguồn mở. Chủ đề ngọc lục bảo tối, ưu tiên code.",
+    "pl": "Open-source'owa alternatywa dla Firebase. Ciemny szmaragdowy motyw, podejście code-first.",
+    "id": "Alternatif Firebase open-source. Tema hijau zamrud gelap, mengutamakan kode.",
+    "nl": "Open-source Firebase-alternatief. Donker smaragdgroen thema, code-first.",
+    "ar": "بديل مفتوح المصدر لـ Firebase. ثيم أخضر زمردي داكن، يركز على الكود.",
+    "tr": "Açık kaynaklı Firebase alternatifi. Koyu zümrüt teması, kod odaklı.",
+    "uk": "Open-source альтернатива Firebase. Темна смарагдова тема, орієнтація на код.",
+    "en": "Open-source Firebase alternative. Dark emerald theme, code-first."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Supabase design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Supabase design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "supabase",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

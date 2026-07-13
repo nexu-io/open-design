@@ -1,0 +1,47 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-image-campaign",
+  "title": "Image Campaign",
+  "version": "0.1.0",
+  "description": "Generate image campaign assets and prompts from a structured creative brief.",
+  "license": "MIT",
+  "tags": ["create", "image", "campaign", "marketing"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "marketing",
+    "useCase": {
+      "query": "Create {{count}} image campaign concepts for {{product}} aimed at {{audience}} in {{aspectRatio}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["discovery-question-form", "direction-picker", "media-image", "file-write", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "direction", "atoms": ["direction-picker"] },
+        { "id": "generate", "atoms": ["media-image", "file-write"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "product", "type": "string", "required": true, "label": "Product" },
+      { "name": "audience", "type": "string", "required": true, "label": "Audience" },
+      { "name": "aspectRatio", "type": "select", "required": false, "label": "Aspect ratio", "options": ["1:1", "16:9", "9:16", "4:3"], "default": "1:1" },
+      { "name": "count", "type": "number", "required": false, "label": "Concept count", "default": 3 }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
+

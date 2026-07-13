@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-perspective",
+  "title": "Perspective",
+  "title_i18n": {
+    "zh-CN": "透视",
+    "zh-TW": "透視",
+    "ja": "パースペクティブ",
+    "ko": "원근감",
+    "de": "Perspektive",
+    "fr": "Perspective",
+    "ru": "Перспектива",
+    "es": "Perspectiva",
+    "pt-BR": "Perspectiva",
+    "it": "Prospettiva",
+    "vi": "Phối cảnh",
+    "pl": "Perspektywa",
+    "id": "Perspektif",
+    "nl": "Perspectief",
+    "ar": "المنظور",
+    "tr": "Perspektif",
+    "uk": "Перспектива",
+    "en": "Perspective"
+  },
+  "version": "0.1.0",
+  "description": "Spatial depth design with isometric views, vanishing points, and layered elements that guide attention through 3D-like realism.",
+  "description_i18n": {
+    "zh-CN": "采用等距视图、消失点和分层元素的空间深度设计，通过 3D 般的真实感引导视觉注意力。",
+    "zh-TW": "採用等距視圖、消失點和分層元素的空間深度設計，透過 3D 般的真實感引導視覺注意力。",
+    "ja": "アイソメトリックビュー、消失点、レイヤー要素を用いた空間的な奥行きデザインで、3Dのようなリアリズムを通じて視線を誘導します。",
+    "ko": "등각 투영 뷰, 소실점, 레이어 요소를 활용한 공간 깊이 디자인으로 3D 같은 사실감을 통해 시선을 유도합니다.",
+    "de": "Räumliches Tiefendesign mit isometrischen Ansichten, Fluchtpunkten und geschichteten Elementen, die durch 3D-ähnlichen Realismus Aufmerksamkeit lenken.",
+    "fr": "Design de profondeur spatiale avec vues isométriques, points de fuite et éléments en couches qui guident l'attention par un réalisme 3D.",
+    "ru": "Дизайн с пространственной глубиной, использующий изометрические виды, точки схода и слоистые элементы для направления внимания через 3D-реализм.",
+    "es": "Diseño de profundidad espacial con vistas isométricas, puntos de fuga y elementos en capas que guían la atención mediante un realismo tridimensional.",
+    "pt-BR": "Design de profundidade espacial com vistas isométricas, pontos de fuga e elementos em camadas que guiam a atenção através de realismo 3D.",
+    "it": "Design di profondità spaziale con viste isometriche, punti di fuga ed elementi stratificati che guidano l'attenzione attraverso un realismo tridimensionale.",
+    "vi": "Thiết kế độ sâu không gian với góc nhìn đẳng giác, điểm tụ và các thành phần phân lớp để hướng sự chú ý qua tính chân thực 3D.",
+    "pl": "Projektowanie głębi przestrzennej z widokami izometrycznymi, punktami zbiegu i warstwowymi elementami kierującymi uwagę przez realizm 3D.",
+    "id": "Desain kedalaman spasial dengan tampilan isometrik, titik lenyap, dan elemen berlapis yang memandu perhatian melalui realisme 3D.",
+    "nl": "Ruimtelijk diepteontwerp met isometrische weergaven, verdwijnpunten en gelaagde elementen die aandacht leiden door 3D-achtig realisme.",
+    "ar": "تصميم عمق مكاني مع عروض متساوية القياس ونقاط تلاشي وعناصر متعددة الطبقات توجه الانتباه من خلال واقعية ثلاثية الأبعاد.",
+    "tr": "İzometrik görünümler, kaçış noktaları ve katmanlı öğelerle 3D benzeri gerçekçilik yoluyla dikkati yönlendiren mekansal derinlik tasarımı.",
+    "uk": "Дизайн просторової глибини з ізометричними виглядами, точками сходження та шаруватими елементами, що направляють увагу через 3D-реалізм.",
+    "en": "Spatial depth design with isometric views, vanishing points, and layered elements that guide attention through 3D-like realism."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "layout-structure"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Perspective design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Perspective design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "perspective",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

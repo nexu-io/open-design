@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-mission-control",
+  "title": "Mission Control Design System",
+  "title_i18n": {
+    "zh-CN": "Mission Control 设计系统",
+    "zh-TW": "Mission Control 設計系統",
+    "ja": "Mission Control デザインシステム",
+    "ko": "Mission Control 디자인 시스템",
+    "de": "Mission Control Design System",
+    "fr": "Mission Control Design System",
+    "ru": "Mission Control Design System",
+    "es": "Mission Control Design System",
+    "pt-BR": "Mission Control Design System",
+    "it": "Mission Control Design System",
+    "vi": "Mission Control Design System",
+    "pl": "Mission Control Design System",
+    "id": "Mission Control Design System",
+    "nl": "Mission Control Design System",
+    "ar": "Mission Control Design System",
+    "tr": "Mission Control Design System",
+    "uk": "Mission Control Design System",
+    "en": "Mission Control Design System"
+  },
+  "version": "0.1.0",
+  "description": "Space/aerospace mission monitoring. Dark command center, amber telemetry, monospace precision. Functional clarity above all else.",
+  "description_i18n": {
+    "zh-CN": "太空/航空任务监控。深色指挥中心，琥珀色遥测数据，等宽字体精度。功能清晰至上。",
+    "zh-TW": "太空/航太任務監控。深色指揮中心，琥珀色遙測數據，等寬字型精度。功能清晰至上。",
+    "ja": "宇宙/航空ミッション監視。ダークコマンドセンター、アンバーテレメトリ、等幅フォントの精度。機能性と明瞭性を最優先。",
+    "ko": "우주/항공 임무 모니터링. 다크 커맨드 센터, 앰버 원격 측정, 모노스페이스 정밀도. 기능적 명확성 우선.",
+    "de": "Raumfahrt-Missionsüberwachung. Dunkles Kommandozentrum, bernsteinfarbene Telemetrie, Monospace-Präzision. Funktionale Klarheit steht an erster Stelle.",
+    "fr": "Surveillance de missions spatiales/aérospatiales. Centre de commande sombre, télémétrie ambrée, précision monospace. Clarté fonctionnelle avant tout.",
+    "ru": "Мониторинг космических/аэрокосмических миссий. Тёмный командный центр, янтарная телеметрия, моноширинная точность. Функциональная ясность превыше всего.",
+    "es": "Monitoreo de misiones espaciales/aeroespaciales. Centro de comando oscuro, telemetría ámbar, precisión monoespaciada. Claridad funcional ante todo.",
+    "pt-BR": "Monitoramento de missões espaciais/aeroespaciais. Centro de comando escuro, telemetria âmbar, precisão monoespaçada. Clareza funcional acima de tudo.",
+    "it": "Monitoraggio missioni spaziali/aerospaziali. Centro di comando scuro, telemetria ambra, precisione monospace. Chiarezza funzionale sopra ogni cosa.",
+    "vi": "Giám sát nhiệm vụ không gian/hàng không vũ trụ. Trung tâm chỉ huy tối, dữ liệu đo từ xa màu hổ phách, độ chính xác monospace. Rõ ràng chức năng trên hết.",
+    "pl": "Monitorowanie misji kosmicznych/lotniczych. Ciemne centrum dowodzenia, bursztynowa telemetria, precyzja czcionki monospace. Funkcjonalna przejrzystość przede wszystkim.",
+    "id": "Pemantauan misi luar angkasa/aerospace. Pusat komando gelap, telemetri amber, presisi monospace. Kejelasan fungsional di atas segalanya.",
+    "nl": "Ruimtevaart-/luchtvaartvolgmissies. Donker commandocentrum, amberkleurige telemetrie, monospace-precisie. Functionele helderheid boven alles.",
+    "ar": "مراقبة مهام الفضاء/الطيران. مركز قيادة داكن، قياس عن بُعد كهرماني، دقة monospace. الوضوح الوظيفي فوق كل شيء.",
+    "tr": "Uzay/havacılık misyon izleme. Karanlık komuta merkezi, kehribar telemetri, monospace hassasiyet. Her şeyden önce işlevsel netlik.",
+    "uk": "Моніторинг космічних/аерокосмічних місій. Темний командний центр, бурштинова телеметрія, моноширинна точність. Функціональна чіткість понад усе.",
+    "en": "Space/aerospace mission monitoring. Dark command center, amber telemetry, monospace precision. Functional clarity above all else."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "developer-tools"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Mission Control Design System design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Mission Control Design System design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "mission-control",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

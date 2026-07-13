@@ -1,0 +1,36 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "token-map",
+  "title": "Token map",
+  "version": "0.1.0",
+  "description": "Map an extracted source-token bag onto the active OD design system, producing a deterministic crosswalk.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/token-map",
+  "tags": [
+    "atom",
+    "first-party",
+    "figma-migration",
+    "code-migration",
+    "phase-6"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "scenario": "figma-migration",
+    "mode": "token-map",
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-luxury-supercar-cinematic-narrative",
+  "title": "Luxury Supercar Cinematic Narrative",
+  "title_i18n": {
+    "zh-CN": "豪华超跑电影叙事",
+    "zh-TW": "豪華超跑電影敘事",
+    "ja": "ラグジュアリースーパーカー シネマティックナラティブ",
+    "ko": "럭셔리 슈퍼카 시네마틱 내러티브",
+    "de": "Luxus-Supersportwagen Cinematic Narrative",
+    "fr": "Récit Cinématographique de Supercar de Luxe",
+    "ru": "Кинематографический нарратив роскошного суперкара",
+    "es": "Narrativa Cinematográfica de Superdeportivo de Lujo",
+    "pt-BR": "Narrativa Cinematográfica de Supercarro de Luxo",
+    "it": "Narrativa Cinematografica di Supercar di Lusso",
+    "vi": "Tường Thuật Điện Ảnh Siêu Xe Sang Trọng",
+    "pl": "Kinowa Narracja Luksusowego Supersamochodu",
+    "id": "Narasi Sinematik Supercar Mewah",
+    "nl": "Luxe Supercar Cinematisch Verhaal",
+    "ar": "سرد سينمائي لسيارة خارقة فاخرة",
+    "tr": "Lüks Süper Araba Sinematik Anlatısı",
+    "uk": "Кінематографічна розповідь про розкішний суперкар",
+    "en": "Luxury Supercar Cinematic Narrative"
+  },
+  "version": "0.1.0",
+  "description": "A highly detailed multi-shot cinematic prompt for Seedance 2.0 involving a stylish man, Dobermans, and a vintage supercar in a misty mountain setting.",
+  "description_i18n": {
+    "zh-CN": "适用于 Seedance 2.0 的多镜头电影提示词，包含时尚男士、杜宾犬和复古超跑，场景设定在雾气弥漫的山区。",
+    "zh-TW": "適用於 Seedance 2.0 的多鏡頭電影提示詞，包含時尚男士、杜賓犬和復古超跑，場景設定在霧氣瀰漫的山區。",
+    "ja": "Seedance 2.0 向けの詳細なマルチショット映画プロンプト。スタイリッシュな男性、ドーベルマン、ヴィンテージスーパーカーを霧の山岳地帯で描写します。",
+    "ko": "Seedance 2.0용 멀티샷 영화 프롬프트로, 스타일리시한 남성, 도베르만, 빈티지 슈퍼카가 안개 낀 산악 배경에서 펼쳐집니다.",
+    "de": "Ein detaillierter Multi-Shot-Filmprompt für Seedance 2.0 mit stilvollem Mann, Dobermännern und Vintage-Supersportwagen in nebligen Bergen.",
+    "fr": "Un prompt cinématographique multi-plans détaillé pour Seedance 2.0 avec un homme élégant, des Dobermans et une supercar vintage dans un décor montagneux brumeux.",
+    "ru": "Детальный многокадровый кинематографический промпт для Seedance 2.0 со стильным мужчиной, доберманами и винтажным суперкаром в туманных горах.",
+    "es": "Un prompt cinematográfico multipanorámica detallado para Seedance 2.0 con un hombre elegante, dóbermans y un superdeportivo vintage en un entorno montañoso neblinoso.",
+    "pt-BR": "Um prompt cinematográfico multipanorama detalhado para Seedance 2.0 com um homem estiloso, Dobermans e um supercarro vintage em cenário montanhoso enevoado.",
+    "it": "Un prompt cinematografico multi-shot dettagliato per Seedance 2.0 con un uomo elegante, Dobermann e una supercar vintage in un'ambientazione montana nebbiosa.",
+    "vi": "Prompt điện ảnh đa cảnh chi tiết cho Seedance 2.0 với người đàn ông phong cách, chó Doberman và siêu xe cổ điển trong khung cảnh núi non sương mù.",
+    "pl": "Szczegółowy wielokadrowy prompt filmowy dla Seedance 2.0 z stylowym mężczyzną, dobermanami i zabytkowym supersamochodem w mglistej górskiej scenerii.",
+    "id": "Prompt sinematik multi-shot terperinci untuk Seedance 2.0 dengan pria bergaya, Doberman, dan supercar vintage dalam latar pegunungan berkabut.",
+    "nl": "Een gedetailleerde multi-shot filmische prompt voor Seedance 2.0 met een stijlvolle man, Dobermanns en een vintage supercar in een mistige bergomgeving.",
+    "ar": "موجه سينمائي متعدد اللقطات ومفصل لـ Seedance 2.0 يتضمن رجلاً أنيقاً وكلاب دوبرمان وسيارة خارقة عتيقة في بيئة جبلية ضبابية.",
+    "tr": "Seedance 2.0 için şık bir adam, Doberman'lar ve sisli dağlık ortamda vintage süper araba içeren detaylı çok çekimli sinematik prompt.",
+    "uk": "Детальний багатокадровий кінематографічний промпт для Seedance 2.0 зі стильним чоловіком, доберманами та вінтажним суперкаром у туманних горах.",
+    "en": "A highly detailed multi-shot cinematic prompt for Seedance 2.0 involving a stylish man, Dobermans, and a vintage supercar in a misty mountain setting."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Ivanna | AI Art & Prompts",
+    "url": "https://x.com/ivanka_humeniuk/status/2048962364083691774"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "action",
+    "nature"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Global Intent: Quiet Luxury with an aggressive edge. A stylish man with Dobermans and a classic dark blue vintage supercar journeys through misty mountains to an epic coast. Deep, saturated color palette: dark blue, matte black, foggy gray. The pacing is driven by a slow, heavy trap beat with deep 808 bass, featuring rhythmic cinematic cuts.\n\nSEQUENCE LIST:\n\nSHOT 1 (0-1.5s) Medium Shot\n\n• camera_motion: push in\n\n• core_action: Front of a modern matte black house. A stylish man in effortlessly expensive dark clothing stands motionless, holding three perfect Dobermans on thick leather leashes. Behind them sits a classic dark blue vintage supercar. confident movement, grounded interaction, authentic human behavior patterns. Audio: Quiet engine idling, trap beat intro.\n\n(CUT TO)\n\nSHOT 2 (1.5-2.5s) Extreme Close-Up\n\n• camera_motion: static shot\n\n• core_action: Macro of the man's face. He slowly lowers his sunglasses, staring directly into the lens with absolute confidence, revealing diamond grillz catching the light. confident movement, slow and deliberate movement. Audio: First heavy 808 bass hit.\n\n(CUT TO)\n\nSHOT 3 (2.5-4s) Close-Up\n\n• camera_motion: static shot\n\n• core_action: The head of one Doberman. The dog aggressively barks and bares its teeth in slight slow motion, saliva flying. energetic movement, realistic physics. Audio: Muffled, bass-heavy dog bark syncing seamlessly with the beat.\n\n(CUT TO)\n\nSHOT 4 (4-5s) Medium Shot\n\n• camera_motion: static shot\n\n• core_action: Next to the supercar. The man pulls open the heavy car door. A Doberman elegantly and quickly leaps onto the vibrant red leather passenger seat. fluid movement, authentic momentum conservation. Audio: Heavy car door CLICK-CLUNK.\n\n(CUT TO)\n\nSHOT 5 (5-6.5s) Macro Shot\n\n• camera_motion: push in\n\n• core_action: The supercar's hood. The pop-up headlights sharply snap open, instantly illuminating the frame with a piercing, bright yellow beam. mechanical precision, rigid body movement. Audio: Mechanical WHIRR and explosive engine roar on startup.\n\n(CUT TO)\n\nSHOT 6 (6.5-8s) Wide Shot\n\n• camera_motion: tracking shot\n\n• core_action: Winding mountain road engulfed in dense fog. The dark blue supercar aggressively drifts through a sharp hairpin turn, leaving a thick trail of tire smoke. realistic physics governing all actions, volumetric smoke flow, authentic momentum conservation. Audio: Tire SCREECH perfectly pitched to the track's high frequencies.\n\n(CUT TO)\n\nSHOT 7 (8-9.5s) Medium Shot\n\n• camera_motion: static shot\n\n• core_action: Interior of the supercar. The man calmly steers with one hand. The Doberman sits in the passenger seat, its head sticking out the window, ears violently flapping in the rushing wind. wind interaction dynamics, natural movement. Audio: Heavy wind noise, muffled interior engine roar.\n\n(CUT TO)\n\nSHOT 8 (9.5-11.5s) Wide Shot\n\n• camera_motion: tracking shot",
+        "zh-CN": "使用这个插件完成以下任务：Global Intent: Quiet Luxury with an aggressive edge. A stylish man with Dobermans and a classic dark blue vintage supercar journeys through misty mountains to an epic coast. Deep, saturated color palette: dark blue, matte black, foggy gray. The pacing is driven by a slow, heavy trap beat with deep 808 bass, featuring rhythmic cinematic cuts.\n\nSEQUENCE LIST:\n\nSHOT 1 (0-1.5s) Medium Shot\n\n• camera_motion: push in\n\n• core_action: Front of a modern matte black house. A stylish man in effortlessly expensive dark clothing stands motionless, holding three perfect Dobermans on thick leather leashes. Behind them sits a classic dark blue vintage supercar. confident movement, grounded interaction, authentic human behavior patterns. Audio: Quiet engine idling, trap beat intro.\n\n(CUT TO)\n\nSHOT 2 (1.5-2.5s) Extreme Close-Up\n\n• camera_motion: static shot\n\n• core_action: Macro of the man's face. He slowly lowers his sunglasses, staring directly into the lens with absolute confidence, revealing diamond grillz catching the light. confident movement, slow and deliberate movement. Audio: First heavy 808 bass hit.\n\n(CUT TO)\n\nSHOT 3 (2.5-4s) Close-Up\n\n• camera_motion: static shot\n\n• core_action: The head of one Doberman. The dog aggressively barks and bares its teeth in slight slow motion, saliva flying. energetic movement, realistic physics. Audio: Muffled, bass-heavy dog bark syncing seamlessly with the beat.\n\n(CUT TO)\n\nSHOT 4 (4-5s) Medium Shot\n\n• camera_motion: static shot\n\n• core_action: Next to the supercar. The man pulls open the heavy car door. A Doberman elegantly and quickly leaps onto the vibrant red leather passenger seat. fluid movement, authentic momentum conservation. Audio: Heavy car door CLICK-CLUNK.\n\n(CUT TO)\n\nSHOT 5 (5-6.5s) Macro Shot\n\n• camera_motion: push in\n\n• core_action: The supercar's hood. The pop-up headlights sharply snap open, instantly illuminating the frame with a piercing, bright yellow beam. mechanical precision, rigid body movement. Audio: Mechanical WHIRR and explosive engine roar on startup.\n\n(CUT TO)\n\nSHOT 6 (6.5-8s) Wide Shot\n\n• camera_motion: tracking shot\n\n• core_action: Winding mountain road engulfed in dense fog. The dark blue supercar aggressively drifts through a sharp hairpin turn, leaving a thick trail of tire smoke. realistic physics governing all actions, volumetric smoke flow, authentic momentum conservation. Audio: Tire SCREECH perfectly pitched to the track's high frequencies.\n\n(CUT TO)\n\nSHOT 7 (8-9.5s) Medium Shot\n\n• camera_motion: static shot\n\n• core_action: Interior of the supercar. The man calmly steers with one hand. The Doberman sits in the passenger seat, its head sticking out the window, ears violently flapping in the rushing wind. wind interaction dynamics, natural movement. Audio: Heavy wind noise, muffled interior engine roar.\n\n(CUT TO)\n\nSHOT 8 (9.5-11.5s) Wide Shot\n\n• camera_motion: tracking shot"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

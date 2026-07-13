@@ -1,0 +1,119 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-web-prototype-taste-soft",
+  "title": "Web Prototype Taste Soft",
+  "title_i18n": {
+    "zh-CN": "Web Prototype Taste Soft",
+    "zh-TW": "Web Prototype Taste Soft",
+    "ja": "Web Prototype Taste Soft",
+    "ko": "Web Prototype Taste Soft",
+    "de": "Web Prototype Taste Soft",
+    "fr": "Web Prototype Taste Soft",
+    "ru": "Web Prototype Taste Soft",
+    "es": "Web Prototype Taste Soft",
+    "pt-BR": "Web Prototype Taste Soft",
+    "it": "Web Prototype Taste Soft",
+    "vi": "Web Prototype Taste Soft",
+    "pl": "Web Prototype Taste Soft",
+    "id": "Web Prototype Taste Soft",
+    "nl": "Web Prototype Taste Soft",
+    "ar": "Web Prototype Taste Soft",
+    "tr": "Web Prototype Taste Soft",
+    "uk": "Web Prototype Taste Soft",
+    "en": "Web Prototype Taste Soft"
+  },
+  "version": "0.1.0",
+  "description": "Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`.",
+  "description_i18n": {
+    "zh-CN": "Apple 级柔和风格网页原型。银灰/奶油色画布，双边框卡片，嵌套按钮 CTA，大圆角，弹性动效和环境网格。基于 Leonxlnx/taste-skill 的 soft-skill 及第 4-8 节。",
+    "zh-TW": "Apple 等級柔和風格網頁原型。銀灰/奶油色畫布，雙邊框卡片，嵌套按鈕 CTA，大圓角，彈性動效和環境網格。基於 Leonxlnx/taste-skill 的 soft-skill 及第 4-8 節。",
+    "ja": "Apple レベルのソフトなウェブプロトタイプ。シルバー/クリームキャンバス、ダブルベゼルカード、ネストボタン CTA、大きなスコーナー、スプリングモーション、アンビエントメッシュ。Leonxlnx/taste-skill の soft-skill およびセクション 4-8 に基づく。",
+    "ko": "Apple 급 소프트 웹 프로토타입. 실버/크림 캔버스, 이중 베젤 카드, 중첩 버튼 CTA, 넉넉한 스쿼클 반경, 스프링 모션, 앰비언트 메시. Leonxlnx/taste-skill의 soft-skill 및 섹션 4-8 기반.",
+    "de": "Web-Prototyp in Apple-Qualität mit softem Design. Silber/Creme-Canvas, doppelte Rahmen-Karten, verschachtelte Button-CTAs, großzügige Squircle-Radien, Spring-Motion und Ambient-Mesh. Basierend auf Leonxlnx/taste-skill soft-skill und Abschnitten 4–8.",
+    "fr": "Prototype web doux de niveau Apple. Canevas argent/crème, cartes à double cadre, CTA en boutons imbriqués, grands rayons squircle, animation fluide et maillage ambiant. Basé sur soft-skill de Leonxlnx/taste-skill et sections 4–8.",
+    "ru": "Мягкий веб-прототип уровня Apple. Серебристо-кремовый холст, карточки с двойной рамкой, вложенные кнопки CTA, щедрые squircle-радиусы, пружинная анимация, эмбиент-сетка. На основе soft-skill из Leonxlnx/taste-skill и разделов 4–8.",
+    "es": "Prototipo web suave nivel Apple. Lienzo plateado/crema, tarjetas con doble marco, CTAs con botones anidados, radios squircle generosos, animación elástica y malla ambiental. Basado en soft-skill de Leonxlnx/taste-skill y secciones 4–8.",
+    "pt-BR": "Protótipo web suave nível Apple. Canvas prata/creme, cards com moldura dupla, CTAs com botões aninhados, raios squircle generosos, animação elástica e malha ambiente. Baseado em soft-skill do Leonxlnx/taste-skill e seções 4–8.",
+    "it": "Prototipo web soft di livello Apple. Canvas argento/crema, card con doppio bordo, CTA con pulsanti annidati, ampi raggi squircle, animazione fluida e mesh ambientale. Basato su soft-skill di Leonxlnx/taste-skill e sezioni 4–8.",
+    "vi": "Nguyên mẫu web phong cách mềm mại chuẩn Apple. Canvas bạc/kem, thẻ viền kép, CTA nút lồng nhau, bán kính squircle rộng, chuyển động đàn hồi và lưới môi trường. Dựa trên soft-skill của Leonxlnx/taste-skill và phần 4–8.",
+    "pl": "Miękki prototyp webowy na poziomie Apple. Srebrno-kremowe płótno, karty z podwójną ramką, zagnieżdżone przyciski CTA, duże promienie squircle, sprężysta animacja i ambient mesh. Oparty na soft-skill z Leonxlnx/taste-skill i sekcjach 4–8.",
+    "id": "Prototipe web soft level Apple. Kanvas perak/krem, kartu bingkai ganda, CTA tombol bersarang, radius squircle besar, animasi spring, dan ambient mesh. Berdasarkan soft-skill dari Leonxlnx/taste-skill dan bagian 4–8.",
+    "nl": "Zacht webprototype van Apple-niveau. Zilver/crème canvas, dubbele rand kaarten, geneste knop-CTAs, ruime squircle-stralen, verende beweging en ambient mesh. Gebaseerd op soft-skill van Leonxlnx/taste-skill en secties 4–8.",
+    "ar": "نموذج ويب ناعم بمستوى Apple. لوحة فضية/كريمية، بطاقات بإطار مزدوج، أزرار CTA متداخلة، نصف قطر squircle سخي، حركة مرنة وشبكة محيطة. مبني على soft-skill من Leonxlnx/taste-skill والأقسام 4–8.",
+    "tr": "Apple seviyesinde yumuşak web prototipi. Gümüş/krem tuval, çift çerçeveli kartlar, iç içe düğme CTA'lar, cömert squircle yarıçapları, yaylı hareket ve ortam mesh. Leonxlnx/taste-skill soft-skill ve 4–8 bölümlerine dayalı.",
+    "uk": "М'який веб-прототип рівня Apple. Сріблясто-кремове полотно, картки з подвійною рамкою, вкладені кнопки CTA, щедрі squircle-радіуси, пружна анімація та ambient-сітка. На основі soft-skill з Leonxlnx/taste-skill та розділів 4–8.",
+    "en": "Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/web-prototype-taste-soft",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`.",
+        "zh-CN": "使用这个插件完成以下任务：Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Web Prototype Taste Soft"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

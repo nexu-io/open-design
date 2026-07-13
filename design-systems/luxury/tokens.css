@@ -1,0 +1,63 @@
+/* design-systems/luxury/tokens.css
+ * Structured token bindings for Luxury.
+ * luxury commerce with black lacquer, champagne gold, and spacious premium rhythm.
+ */
+
+:root {
+  --bg: #080706;
+  --surface: #151310;
+  --surface-warm: #241e14;
+  --fg: #fff8ea;
+  --fg-2: #d8cdb7;
+  --muted: #9f927c;
+  --meta: #c6a15b;
+  --border: #3a3020;
+  --border-soft: #282217;
+  --accent: #c6a15b;
+  --accent-on: #080706;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #5fa36a;
+  --warn: #d8a94f;
+  --danger: #d85a52;
+  --font-display: "Didot", "Bodoni 72", Georgia, serif;
+  --font-body: "Avenir Next", Inter, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 28px;
+  --text-2xl: 44px;
+  --text-3xl: 68px;
+  --text-4xl: 96px;
+  --leading-body: 1.6;
+  --leading-tight: 0.98;
+  --tracking-display: -0.015em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 120px;
+  --section-y-tablet: 84px;
+  --section-y-phone: 60px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 30px 90px rgba(0, 0, 0, 0.52);
+  --focus-ring: 0 0 0 4px rgba(198, 161, 91, 0.30);
+  --motion-fast: 180ms;
+  --motion-base: 300ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --container-max: 1160px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

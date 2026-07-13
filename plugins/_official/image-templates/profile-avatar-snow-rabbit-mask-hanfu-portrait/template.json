@@ -1,0 +1,23 @@
+{
+  "id": "profile-avatar-snow-rabbit-mask-hanfu-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Snow Rabbit Mask Hanfu Portrait",
+  "summary": "This prompt generates a cinematic winter fantasy portrait of a masked woman in a rabbit-themed white Hanfu, ideal for elegant character art and atmospheric AI showcase imagery.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "fantasy",
+    "nature"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A serene winter fantasy portrait of a woman standing outdoors in softly falling snow, framed from about mid-thigh upward, wearing an elegant traditional Hanfu-inspired robe in white and black. Her face is fully covered by a smooth white rabbit mask with upright pink-lined ears, small black eye openings, and a minimal cute expression. She has very long straight silver-white hair flowing past her waist, with delicate white floral and branch-like hair ornaments on both sides. Her robe is bright white with subtle embroidered silver detailing on the chest and shoulders, very wide draping sleeves, black trim along the collar and sleeve edges, and a fitted black waist sash tied at the front with tasseled cords and a snowflake-like ornament. The garment features visible rabbit motifs: 4 illustrated white rabbits in total, with 2 large rabbits near the outer lower sleeves, 1 small hopping rabbit on the lower black skirt panel, and 1 seated rabbit on the front lower skirt panel. The atmosphere is quiet, ethereal, and cinematic, with a cold blue-gray palette, shallow depth of field, and soft natural winter light. In the background, place blurred snow-covered traditional East Asian buildings and distant steep mountains, creating a misty alpine temple setting. Add gentle snowfall across the entire image, ultra-detailed fabric texture, soft volumetric haze, and a refined dreamlike gpt-image-2 aesthetic.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453211026_n5y31f_HG_dAB7aoAAZg6K.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-1"
+  }
+}

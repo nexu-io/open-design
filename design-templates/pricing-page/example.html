@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pricing — Filebase</title>
+  <style>
+    :root {
+      --bg: #fafaf9; --fg: #1c1b1a; --muted: #6b6964; --border: #e6e4e0;
+      --accent: #c96442; --surface: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, system-ui, sans-serif; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 64px 32px 96px; }
+    header { text-align: center; margin-bottom: 64px; }
+    header h1 { font-size: clamp(40px, 5vw, 60px); letter-spacing: -0.02em; margin: 0 0 14px; }
+    header p { font-size: 18px; color: var(--muted); margin: 0 auto; max-width: 50ch; }
+    .toggle { display: inline-flex; margin-top: 28px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); overflow: hidden; }
+    .toggle button { font: inherit; cursor: pointer; padding: 8px 18px; border: none; background: transparent; color: var(--muted); }
+    .toggle button.active { background: var(--fg); color: white; }
+    .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 64px; }
+    @media (max-width: 800px) { .tiers { grid-template-columns: 1fr; } }
+    .tier { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 36px 32px; }
+    .tier.featured { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(201,100,66,0.08); }
+    .tier h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+    .tier .desc { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+    .tier .price { font-size: 48px; letter-spacing: -0.025em; line-height: 1; margin-bottom: 6px; }
+    .tier .price small { font-size: 14px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
+    .tier ul { list-style: none; padding: 0; margin: 24px 0 28px; font-size: 14px; }
+    .tier ul li { padding: 8px 0; color: var(--fg); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+    .tier ul li::before { content: '✓'; color: var(--accent); flex-shrink: 0; }
+    .tier ul li:first-child { border-top: none; }
+    button.cta { font: inherit; cursor: pointer; padding: 12px 18px; border-radius: 8px; width: 100%; font-weight: 500; }
+    .cta-primary { background: var(--accent); color: white; border: 1px solid var(--accent); }
+    .cta-secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+    .featured-pill { display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 999px; background: var(--accent); color: white; margin-bottom: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .compare { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .compare h3 { padding: 24px 28px; margin: 0; font-size: 16px; border-bottom: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px 18px; text-align: left; border-top: 1px solid var(--border); }
+    th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; background: var(--bg); }
+    td.has { color: var(--accent); font-weight: 500; }
+    td.no { color: var(--muted); }
+    .faq { margin-top: 56px; }
+    .faq h3 { font-size: 22px; letter-spacing: -0.01em; margin-bottom: 24px; }
+    details { padding: 16px 0; border-top: 1px solid var(--border); }
+    details summary { font-weight: 500; cursor: pointer; }
+    details p { margin: 10px 0 0; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header data-od-id="header">
+      <h1>One flat rate. No throttling.</h1>
+      <p>Start free. Pick a paid tier the day you outgrow it. Switch yearly billing for two months off.</p>
+      <div class="toggle">
+        <button class="active">Monthly</button>
+        <button>Yearly · save 17%</button>
+      </div>
+    </header>
+
+    <section class="tiers" data-od-id="tiers">
+      <div class="tier">
+        <h2>Solo</h2>
+        <p class="desc">For individuals.</p>
+        <div class="price">$8 <small>/ month</small></div>
+        <ul>
+          <li>1 TB storage</li>
+          <li>Block-level sync</li>
+          <li>2 devices</li>
+          <li>Email support</li>
+        </ul>
+        <button class="cta cta-secondary">Choose Solo</button>
+      </div>
+      <div class="tier featured">
+        <span class="featured-pill">Recommended</span>
+        <h2>Team</h2>
+        <p class="desc">For teams up to 50 people.</p>
+        <div class="price">$14 <small>/ seat / month</small></div>
+        <ul>
+          <li>5 TB pooled storage</li>
+          <li>Shared folders & granular roles</li>
+          <li>Unlimited devices</li>
+          <li>Audit log + usage analytics</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="cta cta-primary">Choose Team</button>
+      </div>
+      <div class="tier">
+        <h2>Enterprise</h2>
+        <p class="desc">SSO, on-prem keys, 99.99% SLA.</p>
+        <div class="price">Custom</div>
+        <ul>
+          <li>Unlimited storage</li>
+          <li>SAML / SCIM provisioning</li>
+          <li>On-prem encryption keys</li>
+          <li>Dedicated CSM</li>
+        </ul>
+        <button class="cta cta-secondary">Talk to sales</button>
+      </div>
+    </section>
+
+    <section class="compare" data-od-id="compare">
+      <h3>Plan comparison</h3>
+      <table>
+        <thead><tr><th>Feature</th><th>Solo</th><th>Team</th><th>Enterprise</th></tr></thead>
+        <tbody>
+          <tr><td>Block-level sync</td><td class="has">✓</td><td class="has">✓</td><td class="has">✓</td></tr>
+          <tr><td>End-to-end encryption</td><td class="has">✓</td><td class="has">✓</td><td class="has">✓</td></tr>
+          <tr><td>Shared folders</td><td class="no">—</td><td class="has">✓</td><td class="has">✓</td></tr>
+          <tr><td>SAML / SCIM</td><td class="no">—</td><td class="no">—</td><td class="has">✓</td></tr>
+          <tr><td>Audit log</td><td class="no">—</td><td class="has">✓</td><td class="has">✓</td></tr>
+          <tr><td>SLA</td><td class="no">—</td><td>99.9%</td><td>99.99%</td></tr>
+          <tr><td>Support</td><td>Email</td><td>Priority</td><td>Dedicated CSM</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="faq" data-od-id="faq">
+      <h3>Common questions</h3>
+      <details><summary>Can I change tiers mid-month?</summary><p>Yes. Switching upward charges a prorated difference; downgrades take effect at the next billing cycle.</p></details>
+      <details><summary>Is there a free tier?</summary><p>14-day free trial on every paid tier. No credit card required.</p></details>
+      <details><summary>How does seat-based billing work for Team?</summary><p>You pay per active seat per month. Inactive seats automatically free up after 30 days; we'll prorate the credit.</p></details>
+    </section>
+  </div>
+</body>
+</html>

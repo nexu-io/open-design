@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-clickhouse",
+  "title": "ClickHouse",
+  "title_i18n": {
+    "zh-CN": "ClickHouse",
+    "zh-TW": "ClickHouse",
+    "ja": "ClickHouse",
+    "ko": "ClickHouse",
+    "de": "ClickHouse",
+    "fr": "ClickHouse",
+    "ru": "ClickHouse",
+    "es": "ClickHouse",
+    "pt-BR": "ClickHouse",
+    "it": "ClickHouse",
+    "vi": "ClickHouse",
+    "pl": "ClickHouse",
+    "id": "ClickHouse",
+    "nl": "ClickHouse",
+    "ar": "ClickHouse",
+    "tr": "ClickHouse",
+    "uk": "ClickHouse",
+    "en": "ClickHouse"
+  },
+  "version": "0.1.0",
+  "description": "Fast analytics database. Yellow-accented, technical documentation style.",
+  "description_i18n": {
+    "zh-CN": "快速分析数据库。黄色强调，技术文档风格。",
+    "zh-TW": "快速分析資料庫。黃色強調，技術文件風格。",
+    "ja": "高速分析データベース。黄色のアクセント、技術文書スタイル。",
+    "ko": "빠른 분석 데이터베이스. 노란색 강조, 기술 문서 스타일.",
+    "de": "Schnelle Analytics-Datenbank. Gelbe Akzente, technischer Dokumentationsstil.",
+    "fr": "Base de données analytique rapide. Accents jaunes, style documentation technique.",
+    "ru": "Быстрая аналитическая база данных. Желтые акценты, стиль технической документации.",
+    "es": "Base de datos de análisis rápida. Acentos amarillos, estilo de documentación técnica.",
+    "pt-BR": "Banco de dados de análise rápido. Acentos amarelos, estilo de documentação técnica.",
+    "it": "Database di analisi veloce. Accenti gialli, stile documentazione tecnica.",
+    "vi": "Cơ sở dữ liệu phân tích nhanh. Nhấn màu vàng, phong cách tài liệu kỹ thuật.",
+    "pl": "Szybka baza danych analitycznych. Żółte akcenty, styl dokumentacji technicznej.",
+    "id": "Database analitik cepat. Aksen kuning, gaya dokumentasi teknis.",
+    "nl": "Snelle analytics-database. Gele accenten, technische documentatiestijl.",
+    "ar": "قاعدة بيانات تحليلية سريعة. لمسات صفراء، أسلوب توثيق تقني.",
+    "tr": "Hızlı analitik veritabanı. Sarı vurgulu, teknik dokümantasyon stili.",
+    "uk": "Швидка аналітична база даних. Жовті акценти, стиль технічної документації.",
+    "en": "Fast analytics database. Yellow-accented, technical documentation style."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the ClickHouse design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the ClickHouse design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "clickhouse",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

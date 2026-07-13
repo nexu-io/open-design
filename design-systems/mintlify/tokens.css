@@ -1,0 +1,256 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/mintlify/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Mintlify".
+ * Documentation-as-product clarity: white-on-white canvas, near-black
+ * text, signature mint-green accent used sparingly, ultra-subtle 5%-
+ * opacity borders carrying the entire separation system, and a full-
+ * pill (9999px) radius reserved for buttons / inputs / badges as the
+ * brand's signature shape.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating an artifact for Mintlify should
+ * paste the `:root` block verbatim into the first `<style>` of the
+ * artifact, then reference everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Mintlify's voice rather than the cross-brand default):
+ *
+ *   1. `--accent` is Mintlify's mint-green `#18E299`, NOT used as the
+ *      primary CTA fill. DESIGN.md §4 documents the primary button as
+ *      near-black on white (`#0d0d0d`) with the accent reserved for
+ *      links, hover states, focus rings, and the occasional
+ *      "promotional" green pill. Treating black as `--fg` and green
+ *      as `--accent` keeps the accent slot honest with the lint's
+ *      "≤2 visible accent uses per screen" rule, since the heavy CTA
+ *      block already lives in `--fg`.
+ *
+ *   2. `--accent-hover` is bound to `#0fa76e` (Brand Green Deep),
+ *      NOT a `color-mix(black 8%)` shade. DESIGN.md §2 documents
+ *      `#0fa76e` as the explicit hover/dark-on-light variant of the
+ *      brand green ("Darker green for text on light-green badges,
+ *      hover states on brand elements"). Using the brand-documented
+ *      colour preserves voice instead of inventing a math-derived
+ *      sibling that does not match Mintlify's own product surfaces.
+ *
+ *   3. `--accent-on` is `#0d0d0d` (Near Black), NOT white. The
+ *      brand-accent button (DESIGN.md §4 "Brand Accent Button") sets
+ *      `Text: #0d0d0d` over `Background: #18E299` because mint green
+ *      is high-luminance — white labels on `#18E299` fall below
+ *      WCAG contrast. This is the only brand in the system that
+ *      paints dark text on the accent fill.
+ *
+ *   4. `--border` is `rgba(0, 0, 0, 0.05)` — the documented "5%
+ *      black opacity" hairline DESIGN.md §1 names as the primary
+ *      separation mechanism. Mintlify forbids gray section
+ *      backgrounds and instead uses these whisper-thin borders to
+ *      slice white-on-white sections apart. Binding `--border` to
+ *      the alpha (not a solid hex) lets `--elev-ring` reproduce the
+ *      barely-there hairline by default.
+ *
+ *   5. The radius scale climbs HARD: 8 → 16 → 24 → pill. DESIGN.md
+ *      §5 names four tiers — 8px (nav buttons / small containers),
+ *      16px (standard cards), 24px (featured cards), 9999px (the
+ *      signature pill on every button, input, and badge). The full
+ *      pill is the shape that visually identifies a Mintlify
+ *      component at a glance, so we reserve `--radius-pill` for
+ *      buttons / inputs / badges and let medium / large carry the
+ *      card progression.
+ *
+ *   6. `--elev-raised` is the documented Mintlify card whisper —
+ *      `0 2px 4px rgba(0, 0, 0, 0.03)` — NOT the schema's slightly
+ *      heavier `transparent 92%` blur. DESIGN.md §6 makes the
+ *      restraint explicit ("When shadows appear, they're
+ *      atmospheric whispers… 0.03 opacity, 2px blur, 4px spread").
+ *      The brand's depth system is border-driven, not shadow-driven;
+ *      this token barely registers visually and is intentional.
+ *
+ *   7. `--focus-ring` is a sharp 2px ring at `var(--accent)`, NOT
+ *      the schema's 3px alpha glow. DESIGN.md §4 specifies focused
+ *      inputs use `1px solid var(--color-brand)` plus a matching
+ *      outline; the 2px box-shadow form keeps keyboard focus
+ *      legible against the white canvas without diffusing into a
+ *      halo that would dilute the engineered, paper-like feel.
+ *
+ *   8. The type scale tops out at 64px (`--text-4xl`) with
+ *      `--tracking-display: -0.02em` (≈ -1.28px at 64px, the exact
+ *      DESIGN.md §3 hero spec). Mintlify's display reads compressed
+ *      and deliberate, like a documentation header — not a
+ *      billboard. `--leading-tight` sits at 1.15 to match the
+ *      documented hero line-height; smaller headings relax toward
+ *      1.30 inline per component.
+ *
+ *   9. Section rhythm is documentation-grade generous: 96px desktop,
+ *      64px tablet, 48px phone (`--section-y-*`). DESIGN.md §5
+ *      describes "documentation-grade breathing room" with 48–96px
+ *      vertical padding between "chapter-break" sections. We sit at
+ *      the top of the documented range on desktop because Mintlify
+ *      sells reading comfort and the marketing page must demonstrate
+ *      it.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the schema. The Inter / Geist Mono
+ * faces do not need a CDN reference here — the font stacks list
+ * fallback face names + system fallbacks so artifacts render
+ * acceptably even when Inter is not loaded, and any host that wants
+ * the real Inter face links it externally.
+ * ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Pure white canvas, white cards, NO color section variation.
+   * DESIGN.md §1: "Clean white canvas — no gray backgrounds, no
+   * color sections, depth through borders and whitespace alone."
+   * `--surface-warm` resolves to a near-white `#fafafa` because
+   * DESIGN.md §4 names "Logo/Trust Card" containers with `#fafafa`
+   * as a surface tint distinct from the pure-white card surface;
+   * components targeting `var(--surface-warm)` therefore reach the
+   * documented Gray 50 instead of collapsing onto plain white. */
+  --bg: #ffffff;                        /* Pure White — page background */
+  --surface: #ffffff;                   /* White cards on white background */
+  --surface-warm: #fafafa;              /* Gray 50 — trust-card / muted surface tint */
+
+  /* ─── Foreground (4 levels) ───────────────────────────────────────
+   * `#0d0d0d` instead of `#000000` — the micro-softness DESIGN.md §2
+   * calls out as "improves reading comfort". Four independent text
+   * tiers because Mintlify genuinely uses four (heading, body
+   * description, caption, placeholder/disabled), so binding `--fg-2`
+   * and `--meta` independently lets cross-brand components targeting
+   * the richer tiers resolve to Mintlify's actual gray ramp. */
+  --fg: #0d0d0d;                        /* Gray 900 — primary text, headings */
+  --fg-2: #333333;                      /* Gray 700 — body description */
+  --muted: #666666;                     /* Gray 500 — captions, tertiary text */
+  --meta: #888888;                      /* Gray 400 — placeholder, disabled, code annotations */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * 5% opacity hairline is THE signature — DESIGN.md §1 names it as
+   * the primary separation mechanism. `--border-soft` aliases to
+   * `--border` because Mintlify's documented system has only one
+   * "subtle" tier; the slightly stronger `rgba(0,0,0,0.08)` from
+   * DESIGN.md §2 is reserved for INTERACTIVE element edges and is
+   * inlined per-component (button outline, input border) rather than
+   * promoted to a separator-level token. */
+  --border: rgba(0, 0, 0, 0.05);        /* signature 5% hairline — section / card edge */
+  --border-soft: var(--border);         /* alias — Mintlify has one subtle tier */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Mint green — used SPARINGLY (DESIGN.md §1: "≤2 visible uses per
+   * screen" enforced by the lint). CTAs, link hover, focus rings,
+   * and the occasional brand-accent pill. Primary CTAs are NOT this
+   * green — they are `--fg`. */
+  --accent: #18E299;                    /* Brand Green — the signature mint */
+  --accent-on: #0d0d0d;                 /* dark text on mint — bright accent fails WCAG against white */
+  --accent-hover: #0fa76e;              /* Brand Green Deep — DESIGN.md §2 documented hover */
+  --accent-active: color-mix(in oklab, var(--accent-hover), black 12%);
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Warn / Danger sourced from DESIGN.md §2's twoslash colour set
+   * (the technical-doc context where these states most often appear
+   * for Mintlify). `--success` keeps the cross-brand schema default
+   * because using the brand mint (`--accent`) would overload it for
+   * status work and break the "≤2 accent uses per screen" lint. */
+  --success: #16a34a;
+  --warn: #c37d0d;                      /* Warm Amber — DESIGN.md `--twoslash-warn-bg` */
+  --danger: #d45656;                    /* Error Red  — DESIGN.md `--twoslash-error-bg` */
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Inter for everything human-readable; Geist Mono ONLY for code,
+   * tabular metrics, kbd, and uppercase technical labels (DESIGN.md
+   * §3: "The boundary is strict — no mixing"). The `Inter Fallback`
+   * / `Geist Mono Fallback` face names mirror the upstream Mintlify
+   * stylesheet so platforms that ship metric-compatible fallback
+   * fonts under those names can substitute without layout shift. */
+  --font-display: "Inter", "Inter Fallback", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: "Inter", "Inter Fallback", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. Display tops out at 64px; mono code
+   * starts at 12px. The 18px tier (--text-lg) is the documented
+   * "Body Large" for hero descriptions and section introductions. */
+  --text-xs: 12px;                      /* Mono Code, micro labels */
+  --text-sm: 14px;                      /* Caption, link, small body */
+  --text-base: 16px;                    /* Body, button label */
+  --text-lg: 18px;                      /* Body Large — hero descriptions */
+  --text-xl: 20px;                      /* Card Title */
+  --text-2xl: 24px;                     /* Sub-heading */
+  --text-3xl: 40px;                     /* Section Heading */
+  --text-4xl: 64px;                     /* Display Hero */
+
+  /* `--leading-body` 1.5 — the documented 16px / 24px reading rhythm.
+   * `--leading-tight` 1.15 matches the 64px display line-height.
+   * `--tracking-display` -0.02em ≈ -1.28px at 64px (exact DESIGN.md
+   * §3 hero spec) and scales proportionally with size. */
+  --leading-body: 1.5;
+  --leading-tight: 1.15;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 8px base grid (DESIGN.md §5). The 2/4/5/6/7/10 sub-tier
+   * micro-padding values (button `4.5px 12px`, etc.) are inlined
+   * per-component because they are too fine to belong in the
+   * shared schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: 48–96px chapter-break padding.
+   * Desktop sits at the top of the documented range because the
+   * marketing page itself must demonstrate documentation-grade
+   * breathing room. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 four-tier radius scale. The pill (9999px) is the
+   * SIGNATURE shape — every button, every input, every badge.
+   * Cards step from 16 (standard) to 24 (featured). 8 is reserved
+   * for nav-button-style functional rectangles. */
+  --radius-sm: 8px;                     /* nav buttons, transparent buttons */
+  --radius-md: 16px;                    /* standard cards */
+  --radius-lg: 24px;                    /* featured cards, hero containers */
+  --radius-pill: 9999px;                /* SIGNATURE — buttons, inputs, badges */
+
+  /* ─── Elevation ──────────────────────────────────────────────────
+   * Shadow as atmospheric whisper. DESIGN.md §6: "Mintlify barely
+   * uses shadows. The depth system is almost entirely border-
+   * driven." `--elev-raised` is the documented card whisper at
+   * 0.03 alpha — barely registering visually, intentional. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 4px rgba(0, 0, 0, 0.03);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * Sharp 2px box-shadow at the brand mint. DESIGN.md §4 specifies
+   * focused inputs use `1px solid var(--color-brand)` plus a
+   * matching outline; the 2px shadow form keeps keyboard focus
+   * unmistakable on the white canvas without the soft halo that
+   * would dilute the engineered feel. */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Standard durations + standard ease — Mintlify's voice is in
+   * type, colour restraint, and whitespace, not in animation. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1200px max content width per DESIGN.md §5. Horizontal gutters
+   * climb from 24px on phone/tablet to 32px on desktop — the
+   * documented "24px (mobile) to 32px (desktop)" container padding. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 24px;
+}

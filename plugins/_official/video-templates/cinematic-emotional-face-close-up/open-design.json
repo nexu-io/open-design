@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-emotional-face-close-up",
+  "title": "Cinematic Emotional Face Close-up",
+  "title_i18n": {
+    "zh-CN": "电影级情绪面部特写",
+    "zh-TW": "電影級情緒面部特寫",
+    "ja": "映画的な感情表現の顔のクローズアップ",
+    "ko": "영화적 감정 얼굴 클로즈업",
+    "de": "Filmische emotionale Gesichts-Nahaufnahme",
+    "fr": "Gros plan émotionnel cinématographique du visage",
+    "ru": "Кинематографический эмоциональный крупный план лица",
+    "es": "Primer plano facial emocional cinematográfico",
+    "pt-BR": "Close-up facial emocional cinematográfico",
+    "it": "Primo piano emotivo cinematografico del viso",
+    "vi": "Cận cảnh khuôn mặt cảm xúc điện ảnh",
+    "pl": "Kinowe zbliżenie na emocjonalną twarz",
+    "id": "Close-up wajah emosional sinematik",
+    "nl": "Cinematische emotionele close-up van gezicht",
+    "ar": "لقطة مقربة عاطفية سينمائية للوجه",
+    "tr": "Sinematik duygusal yüz yakın çekimi",
+    "uk": "Кінематографічний емоційний крупний план обличчя",
+    "en": "Cinematic Emotional Face Close-up"
+  },
+  "version": "0.1.0",
+  "description": "A highly detailed technical prompt for Seedance 2.0 focusing on realistic skin textures and a series of complex emotional facial transitions.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 提供高度细致的技术提示，专注于逼真的皮肤纹理和复杂的面部情绪转换系列。",
+    "zh-TW": "為 Seedance 2.0 提供高度細緻的技術提示，專注於逼真的皮膚紋理和複雜的面部情緒轉換系列。",
+    "ja": "Seedance 2.0向けの高精細な技術プロンプトで、リアルな肌質感と複雑な表情の変化シリーズに焦点を当てています。",
+    "ko": "Seedance 2.0을 위한 고도로 상세한 기술 프롬프트로, 사실적인 피부 질감과 복잡한 얼굴 감정 전환 시리즈에 중점을 둡니다.",
+    "de": "Ein hochdetaillierter technischer Prompt für Seedance 2.0, der sich auf realistische Hauttexturen und eine Reihe komplexer emotionaler Gesichtsübergänge konzentriert.",
+    "fr": "Un prompt technique très détaillé pour Seedance 2.0 axé sur des textures de peau réalistes et une série de transitions faciales émotionnelles complexes.",
+    "ru": "Высокодетализированный технический промпт для Seedance 2.0, фокусирующийся на реалистичных текстурах кожи и серии сложных эмоциональных переходов на лице.",
+    "es": "Un prompt técnico altamente detallado para Seedance 2.0 centrado en texturas de piel realistas y una serie de transiciones faciales emocionales complejas.",
+    "pt-BR": "Um prompt técnico altamente detalhado para Seedance 2.0 focado em texturas de pele realistas e uma série de transições faciais emocionais complexas.",
+    "it": "Un prompt tecnico altamente dettagliato per Seedance 2.0 focalizzato su texture della pelle realistiche e una serie di transizioni facciali emotive complesse.",
+    "vi": "Một prompt kỹ thuật chi tiết cao cho Seedance 2.0 tập trung vào kết cấu da chân thực và chuỗi chuyển đổi cảm xúc trên khuôn mặt phức tạp.",
+    "pl": "Wysoce szczegółowy prompt techniczny dla Seedance 2.0 skupiający się na realistycznych teksturach skóry i serii złożonych przejść emocjonalnych na twarzy.",
+    "id": "Prompt teknis yang sangat detail untuk Seedance 2.0 yang berfokus pada tekstur kulit realistis dan serangkaian transisi emosi wajah yang kompleks.",
+    "nl": "Een zeer gedetailleerde technische prompt voor Seedance 2.0 gericht op realistische huidtexturen en een reeks complexe emotionele gezichtstransities.",
+    "ar": "موجه تقني مفصل للغاية لـ Seedance 2.0 يركز على نسيج البشرة الواقعي وسلسلة من تحولات تعابير الوجه العاطفية المعقدة.",
+    "tr": "Seedance 2.0 için gerçekçi cilt dokuları ve karmaşık duygusal yüz geçişleri serisine odaklanan son derece detaylı teknik prompt.",
+    "uk": "Високодеталізований технічний промпт для Seedance 2.0, зосереджений на реалістичних текстурах шкіри та серії складних емоційних переходів на обличчі.",
+    "en": "A highly detailed technical prompt for Seedance 2.0 focusing on realistic skin textures and a series of complex emotional facial transitions."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Ai Doctor",
+    "url": "https://x.com/DoctorAmna11/status/2049119918755283014"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "portrait",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "A realistic human face with highly detailed skin texture, pores, and micro-musculature. Scene: Tight portrait close-up against a dark, void-like background. Style: Cinematic realism, 35mm film aesthetic, shallow depth of field with soft bokeh, moody and introspective. Lighting: Dynamic emotional lighting that shifts in color temperature and direction to match the internal state. Audio: Ambient atmospheric drone, soft rhythmic breathing, subtle emotional orchestral swells. Avoid: Identity drift, jitter, distorted limbs, unnatural morphing artifacts. [0-3s] Camera: Slow, imperceptible push-in. Action: The face breaks into a genuine, soft smile; eyes crinkle at the corners and the cheeks lift. Lighting: Warm golden-hour glow, soft and frontal. Vfx: Subtle lens flare. [3-6s] Camera: Static extreme close-up. Action: The smile dissolves into a heavy, downward curve; eyes well up with glistening tears that catch the light, and the lower lip trembles. Lighting: Transition to a cool, melancholy blue wash from above. [6-9s] Camera: Controlled lateral pan. Action: The brow furrows deeply into a sharp V-shape; the jaw clenches visibly, and nostrils flare with rhythmic, heavy breathing. Lighting: Harsh, high-contrast red and orange side-lighting creating deep shadows. [9-12s] Camera: Subtle handheld micro-shake for tension. Action: The eyes snap wide, pupils dilating; the face pales as the muscles go taut, and the mouth hangs slightly open in a shallow gasp. Lighting: Dim, desaturated, flickering low-key light. [12-15s] Camera: Gentle pull-out to a medium close-up. Action: All tension drains from the face; the eyes slowly close, and the features settle into a mask of perfect, serene stillness. Lighting: Soft, diffused white light enveloping the subject like a halo.",
+        "zh-CN": "使用这个插件完成以下任务：A realistic human face with highly detailed skin texture, pores, and micro-musculature. Scene: Tight portrait close-up against a dark, void-like background. Style: Cinematic realism, 35mm film aesthetic, shallow depth of field with soft bokeh, moody and introspective. Lighting: Dynamic emotional lighting that shifts in color temperature and direction to match the internal state. Audio: Ambient atmospheric drone, soft rhythmic breathing, subtle emotional orchestral swells. Avoid: Identity drift, jitter, distorted limbs, unnatural morphing artifacts. [0-3s] Camera: Slow, imperceptible push-in. Action: The face breaks into a genuine, soft smile; eyes crinkle at the corners and the cheeks lift. Lighting: Warm golden-hour glow, soft and frontal. Vfx: Subtle lens flare. [3-6s] Camera: Static extreme close-up. Action: The smile dissolves into a heavy, downward curve; eyes well up with glistening tears that catch the light, and the lower lip trembles. Lighting: Transition to a cool, melancholy blue wash from above. [6-9s] Camera: Controlled lateral pan. Action: The brow furrows deeply into a sharp V-shape; the jaw clenches visibly, and nostrils flare with rhythmic, heavy breathing. Lighting: Harsh, high-contrast red and orange side-lighting creating deep shadows. [9-12s] Camera: Subtle handheld micro-shake for tension. Action: The eyes snap wide, pupils dilating; the face pales as the muscles go taut, and the mouth hangs slightly open in a shallow gasp. Lighting: Dim, desaturated, flickering low-key light. [12-15s] Camera: Gentle pull-out to a medium close-up. Action: All tension drains from the face; the eyes slowly close, and the features settle into a mask of perfect, serene stillness. Lighting: Soft, diffused white light enveloping the subject like a halo."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

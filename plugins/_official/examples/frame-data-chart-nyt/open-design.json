@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-frame-data-chart-nyt",
+  "title": "NYT-Style Data Chart Frame",
+  "title_i18n": {
+    "en": "NYT-Style Data Chart Frame",
+    "zh-CN": "NYT 风数据图表帧",
+    "zh-TW": "NYT 風格資料圖表框架",
+    "ja": "NYT スタイルデータチャートフレーム",
+    "ko": "NYT 스타일 데이터 차트 프레임",
+    "de": "NYT-Stil Datendiagramm-Rahmen",
+    "fr": "Cadre de graphique de données style NYT",
+    "ru": "Фрейм диаграмм в стиле NYT",
+    "es": "Marco de gráficos de datos estilo NYT",
+    "pt-BR": "Moldura de gráfico de dados estilo NYT",
+    "it": "Cornice grafico dati stile NYT",
+    "vi": "Khung biểu đồ dữ liệu phong cách NYT",
+    "pl": "Ramka wykresu danych w stylu NYT",
+    "id": "Bingkai Grafik Data Gaya NYT",
+    "nl": "NYT-stijl datadiagram frame",
+    "ar": "إطار مخطط بيانات بأسلوب NYT",
+    "tr": "NYT Tarzı Veri Grafiği Çerçevesi",
+    "uk": "Фрейм діаграм даних у стилі NYT"
+  },
+  "version": "0.1.0",
+  "description": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+  "description_i18n": {
+    "en": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+    "zh-CN": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)",
+    "zh-TW": "NYT 新聞編輯室排版、交錯顯示動畫和編輯級圖表（折線圖、長條圖或區間帶）。",
+    "ja": "NYT 編集室タイポグラフィ、段階的表示アニメーション、編集グレードのチャート（折れ線、棒、または範囲バンド）。",
+    "ko": "NYT 뉴스룸 타이포그래피, 순차 표시 애니메이션 및 편집급 차트(선형, 막대 또는 범위 밴드).",
+    "de": "NYT-Newsroom-Typografie, gestaffelte Enthüllungsanimation und Diagramme in redaktioneller Qualität (Linien-, Balken- oder Bereichsband).",
+    "fr": "Typographie de la rédaction NYT, animation de révélation échelonnée et graphiques de qualité éditoriale (ligne, barre ou bande de plage).",
+    "ru": "Типографика редакции NYT, поэтапная анимация появления и диаграммы редакционного качества (линейные, столбчатые или диапазонные).",
+    "es": "Tipografía de la redacción de NYT, animación de revelación escalonada y gráficos de grado editorial (línea, barra o banda de rango).",
+    "pt-BR": "Tipografia da redação do NYT, animação de revelação escalonada e gráficos de nível editorial (linha, barra ou faixa de intervalo).",
+    "it": "Tipografia della redazione NYT, animazione di rivelazione scaglionata e grafici di livello editoriale (linea, barra o banda di intervallo).",
+    "vi": "Kiểu chữ phòng biên tập NYT, hoạt ảnh hiển thị từng bước và biểu đồ cấp biên tập (đường, cột hoặc dải phạm vi).",
+    "pl": "Typografia redakcji NYT, stopniowa animacja ujawniania i wykresy w jakości redakcyjnej (liniowe, słupkowe lub pasmowe).",
+    "id": "Tipografi ruang berita NYT, animasi tampil bertahap, dan grafik tingkat editorial (garis, batang, atau pita rentang).",
+    "nl": "NYT-nieuwsredactie typografie, gefaseerde onthullingsanimatie en diagrammen van redactionele kwaliteit (lijn, staaf of bereiksband).",
+    "ar": "طباعة غرفة أخبار NYT، رسوم متحركة للكشف المتدرج، ومخططات بجودة تحريرية (خطي، عمودي، أو نطاق).",
+    "tr": "NYT haber odası tipografisi, kademeli açılma animasyonu ve editoryal düzeyde grafikler (çizgi, çubuk veya aralık bandı).",
+    "uk": "Типографіка редакції NYT, поетапна анімація появи та діаграми редакційної якості (лінійні, стовпчикові або діапазонні)."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-data-chart-nyt",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "data",
+    "chart",
+    "nyt",
+    "editorial",
+    "frame"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the NYT-Style Data Chart Frame template to turn my content into a frame with NYT-newsroom typography, staggered reveal animation, and editorial-grade charts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「NYT 风数据图表帧」模板把我的内容做成一段「NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "NYT-Style Data Chart Frame",
+          "title_i18n": {
+            "en": "NYT-Style Data Chart Frame",
+            "zh-CN": "NYT 风数据图表帧"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

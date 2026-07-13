@@ -1,0 +1,57 @@
+name: 💡 Feature request
+description: Suggest a new feature or improvement for Open Design.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing your idea!
+
+        Before you submit:
+        - Check whether the same idea is already discussed in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+label%3Aenhancement) or [Discussions → Ideas](https://github.com/nexu-io/open-design/discussions/categories/ideas).
+        - If you're still exploring an idea and want a conversation first, prefer [Discussions → Ideas](https://github.com/nexu-io/open-design/discussions/new?category=ideas).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the pain or limitation, not the solution. Why does today's behavior fall short?
+      placeholder: When I try to do X, the current flow forces me to ... which makes it hard to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: What's your proposed behavior, UI, or capability?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Other ways you've thought about solving this, and why they fall short.
+      placeholder: I also considered ... but it doesn't work because ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links to related issues, prior art in other tools, anything that helps.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you be willing to contribute a PR?
+      options:
+        - "Yes, I can take this on"
+        - "Yes, with guidance from a maintainer"
+        - "No, just suggesting"
+    validations:
+      required: true

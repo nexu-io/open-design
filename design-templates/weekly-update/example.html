@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Growth · Weekly update · W42</title>
+<style>
+  :root {
+    --bg: #0e0d12;
+    --paper: #19171f;
+    --paper-2: #221f2a;
+    --ink: #f4f0e6;
+    --muted: #a09aaf;
+    --line: #2c2935;
+    --accent: #ffcc4d;
+    --accent-2: #b388ff;
+    --display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--display); }
+  body { overflow: hidden; }
+  .deck {
+    display: flex;
+    width: 100vw; height: 100vh;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+  }
+  .deck::-webkit-scrollbar { display: none; }
+  .slide {
+    flex: 0 0 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 56px 80px;
+    scroll-snap-align: start;
+    position: relative;
+  }
+  .slide-inner { width: 100%; max-width: 1100px; }
+  .crumb {
+    position: absolute; top: 24px; left: 32px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .pageno {
+    position: absolute; bottom: 24px; right: 32px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .nav {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; z-index: 5;
+  }
+  .nav .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.2);
+    cursor: pointer;
+  }
+  .nav .dot.active { background: var(--accent); }
+
+  /* Cover */
+  .cover { display: flex; flex-direction: column; gap: 28px; }
+  .cover .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); align-self: flex-start; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .cover .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .cover h1 { font-size: clamp(56px, 8vw, 110px); margin: 0; line-height: 0.96; letter-spacing: -0.03em; font-weight: 800; }
+  .cover h1 em { font-style: normal; color: var(--accent); }
+  .cover .meta { display: flex; gap: 36px; color: var(--muted); font-family: var(--mono); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Headline */
+  .headline { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+  .headline-num { font-size: clamp(120px, 18vw, 220px); line-height: 0.9; letter-spacing: -0.04em; font-weight: 800; color: var(--accent); }
+  .headline-num small { display: block; font-size: 18px; color: var(--muted); font-weight: 400; letter-spacing: 0; margin-top: 12px; font-family: var(--mono); text-transform: uppercase; }
+  .headline-text h2 { font-size: 44px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 18px; font-weight: 700; }
+  .headline-text p { color: var(--muted); font-size: 18px; max-width: 36ch; line-height: 1.5; }
+
+  /* Section title */
+  .section-title { font-size: clamp(32px, 4vw, 56px); margin: 0 0 36px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 700; }
+  .section-title em { font-style: normal; color: var(--accent); }
+
+  /* Lists of items */
+  .item-list { display: flex; flex-direction: column; gap: 14px; }
+  .item { display: grid; grid-template-columns: auto 1fr auto; gap: 22px; align-items: center; padding: 22px 26px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+  .item-num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .item-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .item-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .av-row { display: flex; }
+  .av { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--paper); margin-left: -8px; font-size: 11px; font-weight: 700; color: var(--bg); display: inline-flex; align-items: center; justify-content: center; background: var(--accent); }
+  .av:first-child { margin-left: 0; }
+  .av-2 { background: var(--accent-2); color: white; }
+  .av-3 { background: #ff6f91; color: white; }
+
+  /* Blocked */
+  .blocked-block { padding: 36px 40px; background: linear-gradient(135deg, rgba(255,111,145,0.18), rgba(255,204,77,0.08)); border: 1px solid rgba(255,111,145,0.4); border-radius: 18px; }
+  .blocked-block h3 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .blocked-block p { color: var(--muted); margin: 0 0 18px; font-size: 16px; }
+  .blocked-ask { display: inline-flex; padding: 10px 22px; background: var(--accent); color: var(--bg); border-radius: 999px; font-weight: 600; font-size: 14px; }
+
+  /* Charts */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .chart { padding: 28px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+  .chart h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+  .chart .sub { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .chart svg { width: 100%; height: 220px; display: block; margin-top: 16px; }
+  .big-num { font-size: 72px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-top: 16px; }
+  .delta { font-family: var(--mono); font-size: 13px; color: var(--accent); margin-top: 8px; }
+  .delta.warn { color: #ff6f91; }
+
+  /* Asks */
+  .asks { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ask { padding: 28px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .ask .who { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+  .ask h3 { font-size: 22px; line-height: 1.25; margin: 0; letter-spacing: -0.01em; }
+  .ask p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+
+  /* Closer */
+  .closer { display: flex; flex-direction: column; gap: 28px; align-items: flex-start; }
+  .closer h2 { font-size: clamp(44px, 6vw, 84px); margin: 0; line-height: 1.05; letter-spacing: -0.025em; font-weight: 800; }
+  .closer h2 em { font-style: normal; color: var(--accent); }
+  .closer p { color: var(--muted); font-size: 18px; max-width: 56ch; }
+  .closer .signature { display: flex; align-items: center; gap: 14px; padding-top: 24px; border-top: 1px solid var(--line); width: 100%; }
+  .closer .signature .av { width: 44px; height: 44px; font-size: 16px; }
+  .closer .signature strong { display: block; font-size: 16px; }
+  .closer .signature span { color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 760px) {
+    .slide { padding: 48px 28px; }
+    .headline { grid-template-columns: 1fr; }
+    .chart-grid, .asks { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide">
+    <span class="crumb">Growth squad · weekly</span>
+    <div class="slide-inner cover">
+      <div class="badge"><span class="dot"></span>Week 42 · 14 → 18 Oct</div>
+      <h1>Hello, week <em>forty&#8209;two</em>.</h1>
+      <div class="meta">
+        <span>Author · Devon Park</span>
+        <span>Audience · Squad + leadership</span>
+        <span>5 min read</span>
+      </div>
+    </div>
+    <span class="pageno">01 / 08</span>
+  </section>
+
+  <!-- 2. Headline number -->
+  <section class="slide">
+    <span class="crumb">Headline</span>
+    <div class="slide-inner headline">
+      <div class="headline-num">+22%<small>Net new MRR vs Q3 weekly avg</small></div>
+      <div class="headline-text">
+        <h2>The week the funnel started feeling fast again.</h2>
+        <p>Onboarding completion is up 9 pp, signup→activation cut to 47 minutes from 1h12, and we shipped the first piece of the 2FA workstream.</p>
+      </div>
+    </div>
+    <span class="pageno">02 / 08</span>
+  </section>
+
+  <!-- 3. Shipped -->
+  <section class="slide">
+    <span class="crumb">What shipped</span>
+    <div class="slide-inner">
+      <h2 class="section-title">Shipped, <em>top to bottom</em>.</h2>
+      <div class="item-list">
+        <div class="item"><span class="item-num">01</span><span class="item-title">TOTP enrollment in member settings</span><span class="item-meta">NW-201 · Devon</span></div>
+        <div class="item"><span class="item-num">02</span><span class="item-title">Onboarding empty-state illustrations</span><span class="item-meta">NW-241 · Mira</span></div>
+        <div class="item"><span class="item-num">03</span><span class="item-title">Audit-log entries for auth events</span><span class="item-meta">NW-198 · Priya</span></div>
+        <div class="item"><span class="item-num">04</span><span class="item-title">Workspace-switcher scroll-reset fix</span><span class="item-meta">NW-233 · Caleb</span></div>
+      </div>
+    </div>
+    <span class="pageno">03 / 08</span>
+  </section>
+
+  <!-- 4. In flight -->
+  <section class="slide">
+    <span class="crumb">In flight</span>
+    <div class="slide-inner">
+      <h2 class="section-title">In flight, <em>landing soon</em>.</h2>
+      <div class="item-list">
+        <div class="item"><span class="item-num">01</span><span class="item-title">Recovery codes — generate, download, regenerate</span><div class="av-row"><span class="av">PB</span></div></div>
+        <div class="item"><span class="item-num">02</span><span class="item-title">2FA challenge step — visual + microcopy</span><div class="av-row"><span class="av av-2">MR</span><span class="av">SL</span></div></div>
+        <div class="item"><span class="item-num">03</span><span class="item-title">Settings nav restructure (left rail)</span><div class="av-row"><span class="av av-2">MR</span></div></div>
+        <div class="item"><span class="item-num">04</span><span class="item-title">Audit-writer backlog dashboard</span><div class="av-row"><span class="av av-3">CA</span></div></div>
+      </div>
+    </div>
+    <span class="pageno">04 / 08</span>
+  </section>
+
+  <!-- 5. Blocked -->
+  <section class="slide">
+    <span class="crumb">Blocked</span>
+    <div class="slide-inner">
+      <h2 class="section-title">One thing's <em>stuck</em>.</h2>
+      <div class="blocked-block">
+        <h3>Brand copy review for the 2FA challenge step.</h3>
+        <p>Sasha needs Brand to review the new microcopy by Wednesday EOD or M2 (Nov 18) slips. The doc is tagged in <code style="font-family: var(--mono);">#brand-reviews</code>; we just need eyes.</p>
+        <span class="blocked-ask">Ask: Brand — please review by Wed</span>
+      </div>
+    </div>
+    <span class="pageno">05 / 08</span>
+  </section>
+
+  <!-- 6. Metrics -->
+  <section class="slide">
+    <span class="crumb">Metrics</span>
+    <div class="slide-inner">
+      <h2 class="section-title">Metrics that <em>moved</em>.</h2>
+      <div class="chart-grid">
+        <div class="chart">
+          <h4>Activation rate · 4-week trailing</h4>
+          <div class="sub">Higher is better</div>
+          <svg viewBox="0 0 600 220" preserveAspectRatio="none">
+            <defs><linearGradient id="lg1" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ffcc4d" stop-opacity="0.4"/><stop offset="100%" stop-color="#ffcc4d" stop-opacity="0"/></linearGradient></defs>
+            <polygon fill="url(#lg1)" points="20,210 20,160 110,150 200,140 290,124 380,108 470,80 560,52 580,52 580,210" />
+            <polyline fill="none" stroke="#ffcc4d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"
+              points="20,160 110,150 200,140 290,124 380,108 470,80 560,52" />
+            <circle cx="560" cy="52" r="5" fill="#ffcc4d"/>
+          </svg>
+          <div class="big-num">38%</div>
+          <div class="delta">▲ +9 pp this week</div>
+        </div>
+        <div class="chart">
+          <h4>Time-to-activation · median</h4>
+          <div class="sub">Lower is better</div>
+          <svg viewBox="0 0 600 220" preserveAspectRatio="none">
+            <defs><linearGradient id="lg2" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#b388ff" stop-opacity="0.4"/><stop offset="100%" stop-color="#b388ff" stop-opacity="0"/></linearGradient></defs>
+            <polygon fill="url(#lg2)" points="20,210 20,60 110,72 200,90 290,108 380,124 470,148 560,164 580,164 580,210" />
+            <polyline fill="none" stroke="#b388ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"
+              points="20,60 110,72 200,90 290,108 380,124 470,148 560,164" />
+            <circle cx="560" cy="164" r="5" fill="#b388ff"/>
+          </svg>
+          <div class="big-num" style="color: #b388ff;">47 min</div>
+          <div class="delta">▼ −25 min this week</div>
+        </div>
+      </div>
+    </div>
+    <span class="pageno">06 / 08</span>
+  </section>
+
+  <!-- 7. Asks -->
+  <section class="slide">
+    <span class="crumb">Asks</span>
+    <div class="slide-inner">
+      <h2 class="section-title">Asks for <em>next week</em>.</h2>
+      <div class="asks">
+        <div class="ask">
+          <div class="who"><span class="av av-2">SL</span>Brand</div>
+          <h3>Review the 2FA challenge microcopy by Wednesday EOD.</h3>
+          <p>Doc is tagged in <code style="font-family: var(--mono);">#brand-reviews</code>. Without it, M2 ships late and the Pioneer deal slips.</p>
+        </div>
+        <div class="ask">
+          <div class="who"><span class="av av-3">PB</span>Security</div>
+          <h3>Pair on the KMS rotation rehearsal Thursday 14:00.</h3>
+          <p>30 minutes. We want to dry-run the procedure before we touch prod next quarter.</p>
+        </div>
+        <div class="ask">
+          <div class="who"><span class="av">DP</span>Sales</div>
+          <h3>Loop us in to the Pioneer security review call.</h3>
+          <p>We can answer the 2FA questions live; will save a round-trip.</p>
+        </div>
+        <div class="ask">
+          <div class="who"><span class="av av-2">MR</span>Research</div>
+          <h3>Five recruits for the Enterprise admin study by next Friday.</h3>
+          <p>Existing customers preferred. We have an Airtable form ready.</p>
+        </div>
+      </div>
+    </div>
+    <span class="pageno">07 / 08</span>
+  </section>
+
+  <!-- 8. Closing -->
+  <section class="slide">
+    <span class="crumb">Thanks</span>
+    <div class="slide-inner closer">
+      <h2>That's the <em>week</em>.</h2>
+      <p>Thanks for the focus. The 2FA push is paying off and the funnel work landed harder than I expected. Special thanks to Mira for the empty-state work — small change, big lift on activation.</p>
+      <div class="signature">
+        <span class="av">DP</span>
+        <div><strong>Devon Park</strong><span>Growth squad lead · ping me in #growth-squad</span></div>
+      </div>
+    </div>
+    <span class="pageno">08 / 08</span>
+  </section>
+</div>
+
+<div class="nav" id="nav"></div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = deck.querySelectorAll('.slide');
+  const nav = document.getElementById('nav');
+  slides.forEach((_, i) => {
+    const d = document.createElement('span');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => deck.scrollTo({ left: window.innerWidth * i, behavior: 'smooth' }));
+    nav.appendChild(d);
+  });
+  function activeIndex() {
+    return Math.round(deck.scrollLeft / window.innerWidth);
+  }
+  deck.addEventListener('scroll', () => {
+    const idx = activeIndex();
+    nav.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+  }, { passive: true });
+  document.addEventListener('keydown', (e) => {
+    const idx = activeIndex();
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      const next = Math.min(slides.length - 1, idx + 1);
+      deck.scrollTo({ left: window.innerWidth * next, behavior: 'smooth' });
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      const prev = Math.max(0, idx - 1);
+      deck.scrollTo({ left: window.innerWidth * prev, behavior: 'smooth' });
+    }
+  });
+</script>
+</body>
+</html>

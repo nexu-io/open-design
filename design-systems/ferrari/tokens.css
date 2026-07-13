@@ -1,0 +1,64 @@
+/* design-systems/ferrari/tokens.css
+ *
+ * Structured token bindings for Ferrari.
+ * Italian performance luxury with racing red, carbon black, and premium editorial spacing.
+ */
+
+:root {
+  --bg: #0b0b0b;
+  --surface: #171717;
+  --surface-warm: #23130f;
+  --fg: #fffaf0;
+  --fg-2: #e8dcc8;
+  --muted: #a89f91;
+  --meta: #ffd200;
+  --border: #342a24;
+  --border-soft: #241f1b;
+  --accent: #dc0000;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #0f9d58;
+  --warn: #ffd200;
+  --danger: #ff3b30;
+  --font-display: "Ferrari Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Ferrari Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 26px;
+  --text-2xl: 40px;
+  --text-3xl: 62px;
+  --text-4xl: 88px;
+  --leading-body: 1.5;
+  --leading-tight: 0.98;
+  --tracking-display: -0.03em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 26px 80px rgba(0, 0, 0, 0.48);
+  --focus-ring: 0 0 0 4px rgba(220, 0, 0, 0.30);
+  --motion-fast: 130ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --container-max: 1240px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 18px;
+}

@@ -1,0 +1,138 @@
+{
+  "repository": {
+    "name": "open-design",
+    "fullName": "nexu-io/open-design",
+    "url": "https://github.com/nexu-io/open-design",
+    "description": "Local-first, open-source alternative to Anthropic's Claude Design. 19 Skills · 71 brand-grade Design Systems · Generate web/desktop/mobile prototypes · slides · images · videos",
+    "language": "TypeScript",
+    "license": "Apache-2.0",
+    "created": "Apr 28, 2026",
+    "lastUpdated": "May 6, 2026",
+    "size": "112 MB"
+  },
+  "metrics": {
+    "stars": {
+      "total": "29,070",
+      "growth": "2,847"
+    },
+    "forks": {
+      "total": "3,167",
+      "growth": "218"
+    },
+    "contributors": {
+      "total": "87",
+      "active": "12"
+    },
+    "issues": {
+      "open": "230",
+      "total": "450"
+    },
+    "pullRequests": {
+      "open": "5",
+      "total": "653"
+    }
+  },
+  "charts": {
+    "starGrowth": [
+      { "label": "W1", "height": 45 },
+      { "label": "W2", "height": 62 },
+      { "label": "W3", "height": 78 },
+      { "label": "W4", "height": 100 }
+    ],
+    "forkTrend": [
+      { "height": 35 },
+      { "height": 42 },
+      { "height": 48 },
+      { "height": 55 },
+      { "height": 61 },
+      { "height": 68 },
+      { "height": 74 },
+      { "height": 82 },
+      { "height": 88 },
+      { "height": 95 },
+      { "height": 100 }
+    ]
+  },
+  "contributors": [
+    {
+      "login": "pftom",
+      "avatar": "https://avatars.githubusercontent.com/u/26423749?v=4",
+      "contributions": 26
+    },
+    {
+      "login": "lefarcen",
+      "avatar": "https://avatars.githubusercontent.com/u/20859779?v=4",
+      "contributions": 18
+    },
+    {
+      "login": "Sid-Qin",
+      "avatar": "https://avatars.githubusercontent.com/u/201593046?v=4",
+      "contributions": 17
+    },
+    {
+      "login": "nettee",
+      "avatar": "https://avatars.githubusercontent.com/u/3953668?v=4",
+      "contributions": 10
+    },
+    {
+      "login": "alchemistklk",
+      "avatar": "https://avatars.githubusercontent.com/u/56862773?v=4",
+      "contributions": 9
+    }
+  ],
+  "recentActivity": [
+    {
+      "typeText": "PR",
+      "typeClass": "pr",
+      "title": "Add Alipay merchant onboarding skill",
+      "label": "feature",
+      "labelClass": "feature-pill",
+      "author": "leilei926524-tech",
+      "authorAvatar": "https://avatars.githubusercontent.com/u/238133142?v=4",
+      "updated": "2 hours ago"
+    },
+    {
+      "typeText": "ISSUE",
+      "typeClass": "issue",
+      "title": "Add clear success feedback after saving API keys in Settings",
+      "label": "bug",
+      "labelClass": "danger-pill",
+      "author": "shangxinyu1",
+      "authorAvatar": "https://avatars.githubusercontent.com/u/237175303?v=4",
+      "updated": "2 hours ago"
+    },
+    {
+      "typeText": "ISSUE",
+      "typeClass": "issue",
+      "title": "hermes json-rpc id 2: Invalid params",
+      "label": "bug",
+      "labelClass": "danger-pill",
+      "author": "zlpawn",
+      "authorAvatar": "https://avatars.githubusercontent.com/u/42241934?v=4",
+      "updated": "3 hours ago"
+    },
+    {
+      "typeText": "PR",
+      "typeClass": "pr",
+      "title": "fix: 修复0.4.0版本聊天窗口宽度溢出问题",
+      "label": "bug-fix",
+      "labelClass": "active-pill",
+      "author": "1119302165",
+      "authorAvatar": "https://avatars.githubusercontent.com/u/12208097?v=4",
+      "updated": "4 hours ago"
+    },
+    {
+      "typeText": "ISSUE",
+      "typeClass": "issue",
+      "title": "Fix Open Design not reading the latest model list from Codex CLI",
+      "label": "bug",
+      "labelClass": "danger-pill",
+      "author": "shangxinyu1",
+      "authorAvatar": "https://avatars.githubusercontent.com/u/237175303?v=4",
+      "updated": "5 hours ago"
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "May 6, 2026"
+  }
+}

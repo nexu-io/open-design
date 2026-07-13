@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-flat",
+  "title": "Flat",
+  "title_i18n": {
+    "zh-CN": "扁平",
+    "zh-TW": "扁平",
+    "ja": "フラット",
+    "ko": "플랫",
+    "de": "Flat",
+    "fr": "Flat",
+    "ru": "Flat",
+    "es": "Plano",
+    "pt-BR": "Flat",
+    "it": "Flat",
+    "vi": "Phẳng",
+    "pl": "Płaski",
+    "id": "Datar",
+    "nl": "Flat",
+    "ar": "مسطح",
+    "tr": "Düz",
+    "uk": "Плоский",
+    "en": "Flat"
+  },
+  "version": "0.1.0",
+  "description": "Two-dimensional minimalist style with vibrant colors, clean typography, and no 3D effects for fast, user-friendly interfaces.",
+  "description_i18n": {
+    "zh-CN": "二维极简风格，采用鲜艳色彩、简洁字体，无3D效果，打造快速且用户友好的界面。",
+    "zh-TW": "二維極簡風格，採用鮮豔色彩、簡潔字體，無3D效果，打造快速且使用者友善的介面。",
+    "ja": "鮮やかな色彩、クリーンなタイポグラフィ、3D効果なしの二次元ミニマリストスタイルで、高速でユーザーフレンドリーなインターフェースを実現。",
+    "ko": "선명한 색상, 깔끔한 타이포그래피, 3D 효과 없는 2차원 미니멀리스트 스타일로 빠르고 사용자 친화적인 인터페이스를 제공합니다.",
+    "de": "Zweidimensionaler minimalistischer Stil mit lebendigen Farben, klarer Typografie und ohne 3D-Effekte für schnelle, benutzerfreundliche Oberflächen.",
+    "fr": "Style minimaliste bidimensionnel avec des couleurs vives, une typographie épurée et sans effets 3D pour des interfaces rapides et conviviales.",
+    "ru": "Двумерный минималистичный стиль с яркими цветами, чистой типографикой и без 3D-эффектов для быстрых и удобных интерфейсов.",
+    "es": "Estilo minimalista bidimensional con colores vibrantes, tipografía limpia y sin efectos 3D para interfaces rápidas y fáciles de usar.",
+    "pt-BR": "Estilo minimalista bidimensional com cores vibrantes, tipografia limpa e sem efeitos 3D para interfaces rápidas e amigáveis.",
+    "it": "Stile minimalista bidimensionale con colori vivaci, tipografia pulita e senza effetti 3D per interfacce veloci e user-friendly.",
+    "vi": "Phong cách tối giản hai chiều với màu sắc sống động, kiểu chữ rõ ràng và không có hiệu ứng 3D cho giao diện nhanh, thân thiện với người dùng.",
+    "pl": "Dwuwymiarowy minimalistyczny styl z żywymi kolorami, czystą typografią i bez efektów 3D dla szybkich, przyjaznych interfejsów.",
+    "id": "Gaya minimalis dua dimensi dengan warna-warna cerah, tipografi bersih, dan tanpa efek 3D untuk antarmuka yang cepat dan ramah pengguna.",
+    "nl": "Tweedimensionale minimalistische stijl met levendige kleuren, strakke typografie en zonder 3D-effecten voor snelle, gebruiksvriendelijke interfaces.",
+    "ar": "نمط بسيط ثنائي الأبعاد مع ألوان نابضة بالحياة، طباعة نظيفة، وبدون تأثيرات ثلاثية الأبعاد لواجهات سريعة وسهلة الاستخدام.",
+    "tr": "Canlı renkler, temiz tipografi ve 3D efekt içermeyen iki boyutlu minimalist stil ile hızlı, kullanıcı dostu arayüzler.",
+    "uk": "Двовимірний мінімалістичний стиль з яскравими кольорами, чистою типографікою та без 3D-ефектів для швидких та зручних інтерфейсів.",
+    "en": "Two-dimensional minimalist style with vibrant colors, clean typography, and no 3D effects for fast, user-friendly interfaces."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "modern-minimal"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Flat design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Flat design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "flat",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,286 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/apple/tokens.css
+ *
+ * Structured token bindings for the Apple-inspired design system —
+ * a precision editorial language built around white-space discipline,
+ * SF Pro typography, and a single restrained blue accent. This file
+ * is the *machine-readable* form of the values described in
+ * `DESIGN.md`. Agents are expected to paste the `:root { … }` block
+ * verbatim into the first `<style>` of every artifact they generate
+ * against this design system, then reference everything via
+ * var(--name) from then on.
+ *
+ * Why this file exists:
+ *   DESIGN.md tells humans that Apple uses "Pale Apple Gray (#f5f5f7)
+ *   as the main light surface" and "Apple Action Blue (#0071e3) as the
+ *   primary accent", but agents have to translate those prose names
+ *   into the standard token names the lint enforces (`--surface`,
+ *   `--accent`). That translation step is where token misuse happens.
+ *   This file pre-translates the brand once, so agents copy structure
+ *   instead of inventing it.
+ *
+ * Brand-specific schema decisions (non-obvious bindings worth flagging
+ * for reviewers and downstream brand authors):
+ *   1. We bind --surface-warm to a real intermediate tier (#fbfbfd),
+ *      NOT an alias of --surface. Apple's surface ladder genuinely has
+ *      three light stops — pure white retail canvas, near-white
+ *      brightness-shifted bands, and pale Apple gray feature fields —
+ *      so collapsing surface-warm would erase a real brand feature.
+ *   2. We bind --fg-2, --meta, and --border-soft to independent values
+ *      rather than aliases. Apple's neutral text ramp is famously
+ *      four-stop (Near-Black Ink → Utility Dark Gray → Secondary
+ *      Neutral Gray → Mid Border Gray) and the schema's B-slots map
+ *      onto it cleanly.
+ *   3. --radius-pill is bound to 980px, not 9999px. Apple's signature
+ *      capsule CTA literally uses 980px in published CSS, and the
+ *      number is itself a brand-recognisable detail; we keep it.
+ *   4. --accent-hover lifts (#0077ed) instead of darkening. Apple's
+ *      live blue buttons brighten slightly on hover rather than mix
+ *      toward black; the schema's default formula would fight that.
+ *      --accent-active darkens to #0066cc — the documented Body Link
+ *      Blue — so the active state aligns with Apple's read-link tone.
+ *   5. --tracking-display is -0.015em. The DESIGN.md hierarchy lists
+ *      -1.2px on 80px hero (-0.015em); tighter than that breaks at
+ *      smaller display sizes, looser loses Apple's machined feel.
+ *   6. --section-y-desktop is 100px. Apple's billboard chapters lean
+ *      noticeably more generous than the schema default of 80px — the
+ *      breathing room is what lets product imagery do the talking.
+ *   7. --ease-standard is cubic-bezier(0.28, 0, 0.22, 1), an Apple-
+ *      flavoured smooth-out instead of the schema default. Apple
+ *      transitions decelerate hard then settle, never bounce.
+ *
+ * Contract sources:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *       (TOKEN_SCHEMA — every name below appears there or as an
+ *        explicit B-slot alias.)
+ *   - A2 fallback values: design-systems/_schema/defaults.css
+ *       (We override --motion-base, --ease-standard, --elev-raised,
+ *        --focus-ring, --radius-pill; the rest match defaults.)
+ *   - Lint enforcement: apps/daemon/src/lint-artifact.ts
+ *       (raw-hex >12 outside :root → P1; non-token accent → P0)
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the shared schema. New Apple-derived sub-brands
+ * cloning this template should overwrite values, not rename keys.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Apple's binary section rhythm alternates pure white retail/hero
+   * canvases with pale Apple gray feature fields. We bind --bg to
+   * the white canvas (the most common default Apple page background)
+   * and --surface to the pale gray that cards and feature bands lift
+   * onto. --surface-warm is bound to a real third tier (#fbfbfd) —
+   * the near-white brightness shift that appears between hero and
+   * pale-gray bands on apple.com. Collapsing it to var(--surface)
+   * would erase a real brand feature, so we keep it independent. */
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --surface-warm: #fbfbfd;
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Apple's text neutrals are explicitly named in DESIGN.md §2:
+   * Near-Black Ink (primary), Utility Dark Gray (secondary text /
+   * dark-neutral surfaces in store contexts), Secondary Neutral Gray
+   * (helper copy / tertiary metadata), Mid Border Gray (the strongest
+   * neutral, used for stronger field outlines and the most-restrained
+   * caption tier). We bind all four — Apple genuinely walks the full
+   * ramp, so collapsing --fg-2 or --meta to siblings would flatten
+   * the brand.
+   *
+   * Note that none of these are pure black (#000000). #000000 is
+   * reserved for hero canvases and dark chapters; for body type on
+   * white, #1d1d1f gives the slight warmth that reads as Apple. */
+  --fg: #1d1d1f;
+  --fg-2: #424245;
+  --muted: #6e6e73;
+  --meta: #86868b;
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Soft Border Gray (#d2d2d7) is Apple's default divider weight and
+   * card-edge color. --border-soft is bound to a lighter near-neutral
+   * (#e8e8ed) for inner row separators in dense retail tables and
+   * configurator option lists, where the d2d2d7 hairline would
+   * over-compete with the option labels. */
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Apple Action Blue — the system's only persistent chromatic move.
+   * DESIGN.md §7 ("Don't introduce broad secondary accent palettes
+   * that compete with Apple blue") makes this a one-color brand for
+   * action and link semantics; the schema's hard cap of ≤2 visible
+   * accent uses per screen aligns naturally. */
+  --accent: #0071e3;
+  --accent-on: #ffffff; /* white label on the blue fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * Apple's live primary buttons LIGHTEN on hover (the blue gains
+   * luminance) and darken on press. The schema's default black-mix
+   * formula would fight that motion, so we hand-pick both values:
+   *   - hover: #0077ed (≈ 4% brighter than --accent)
+   *   - active: #0066cc (the documented Body Link Blue from DESIGN.md
+   *             §2, which doubles cleanly as the press tone)
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. The binding strategy (formula / hand-picked /
+   * identity) is brand-decided. Default uses formulas; kami uses
+   * identity + hand-picked; Apple uses hand-picked in both
+   * directions. */
+  --accent-hover: #0077ed;
+  --accent-active: #0066cc;
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Apple's DESIGN.md §2 explicitly notes "no distinct semantic
+   * palette was consistently visible in the extracted surface set" —
+   * so we inherit the schema defaults verbatim. Apple artifacts
+   * almost never need success / warn / danger; when they do, the
+   * defaults are restrained enough not to fight the blue accent.
+   * Reserve under 5% of any surface area regardless. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Apple's documented split is two SF Pro families: SF Pro Display
+   * for hero / merchandising headings, SF Pro Text for navigation,
+   * controls, and dense commerce copy. We mirror the exact published
+   * fallback chain (SF Pro Icons → Helvetica Neue → Helvetica → Arial
+   * → sans-serif) so artifacts rendered on non-macOS clients land on
+   * the closest practical substitute.
+   *
+   * SF Mono leads the monospace stack — Apple's brand mono — with
+   * the schema fallbacks behind it for portability. */
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Apple's body baseline is 17px (NOT the 16px web norm) because
+   * SF Pro Text was metrically tuned at 17 for Retina; rebinding
+   * --text-base to anything else collapses the brand's reading
+   * texture. The display ceiling is the 80px Hero Display XL. */
+  --text-xs:   12px;   /* Micro UI — fine print, micro labels */
+  --text-sm:   14px;   /* Control Label — buttons, helper labels */
+  --text-base: 17px;   /* Body Primary — Apple's reading baseline */
+  --text-lg:   21px;   /* Link/Action Heading — large promo links */
+  --text-xl:   28px;   /* Card/Product Title — tile-level naming */
+  --text-2xl:  40px;   /* Product Heading — campaign section titles */
+  --text-3xl:  56px;   /* Hero Display L — homepage hero moments */
+  --text-4xl:  80px;   /* Hero Display XL — Environment / store hero */
+
+  /* Apple's leading envelope is unusually tight at the top of the
+   * scale (display sizes ride at 1.00–1.10) and unusually airy in
+   * the body (1.47, well above the web 1.4 default). Both numbers
+   * come straight from DESIGN.md §3. */
+  --leading-body:  1.47;   /* SF Pro Text body, 17px */
+  --leading-tight: 1.05;   /* Hero Display XL ceiling */
+
+  /* Display tracking compresses to -0.015em — the famous Apple
+   * machined-headline feel. DESIGN.md §3 lists -1.2px on 80px
+   * (≈ -0.015em); we bind a single em-value so the same rule applies
+   * across the display tiers. Body type runs at 0 / -0.374px and is
+   * left to component-level rules so as not to hurt readability. */
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Apple's underlying grid is 8px (DESIGN.md §5), with utility
+   * micro-steps (2/4/6/7/8/9/10) for precision alignment. The shared
+   * schema's 4-8-12-16-20-24-32-48 scale fits cleanly — we inherit
+   * the defaults. Component-internal values that don't match a token
+   * (Apple's 14px or 17px utility intervals) stay inline at the
+   * call site rather than spawning extra spacing tokens. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Apple's billboard chapters lean noticeably more generous than the
+   * schema default of 80px — broad top/bottom breathing room is what
+   * lets product imagery dominate the page. We bind 100/64/40, a
+   * slightly wider envelope than default's 80/48/32. */
+  --section-y-desktop: 100px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Apple uses purposeful radius tiers (DESIGN.md §5 §7 — "don't
+   * flatten all corners to a single radius"). The mapping:
+   *   --radius-sm   → 8px   compact controls and fields
+   *   --radius-md   → 12px  standard buttons, configurator chips
+   *   --radius-lg   → 18px  cards, module frames, commerce panels
+   *   --radius-pill → 980px Apple's signature capsule CTA — we keep
+   *                          the literal value rather than collapse
+   *                          to 9999px because the number itself is
+   *                          a brand-recognisable detail in Apple's
+   *                          published CSS.
+   *
+   * The 28-36px spotlight tier and the 56px capsule sub-tier are
+   * component-internal one-offs and stay inline — they do not earn
+   * their own tokens until a second use appears. */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-pill: 980px;
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Apple uses depth sparingly (DESIGN.md §6 — "depth is intentionally
+   * restrained"). Three sanctioned levels:
+   *   - flat   → none (the default; tonal contrast does the work)
+   *   - ring   → 0 0 0 1px var(--border) (border-led containment in
+   *              dense retail contexts)
+   *   - raised → 0 12px 32px rgba(0,0,0,0.08) (the soft Apple card
+   *              shadow; rgba 0.08 is the lower bound from DESIGN.md
+   *              §6's "0.08 → 0.22" range, which keeps cards from
+   *              feeling Material-flavoured)
+   *
+   * No fourth level — that would be the Material/neumorphism stack
+   * Apple consciously avoids. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Apple's keyboard-focus signal is a soft blue glow at the action
+   * accent (DESIGN.md §6 — "Blue focus signal (#0071e3) for keyboard
+   * and selection emphasis"). We use a 4px ring at ~35% accent
+   * opacity, slightly larger than the schema's 3px default so it
+   * reads as the deliberate Apple halo rather than a generic outline.
+   * Implemented as a box-shadow so it layers outside the element
+   * without affecting layout. */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 65%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Apple transitions decelerate hard and settle — never bounce,
+   * never spring past the target. We override the schema default
+   * easing with cubic-bezier(0.28, 0, 0.22, 1), the curve Apple
+   * uses on apple.com for hover and section reveals; --motion-base
+   * is bumped from 200ms → 220ms because Apple's micro-interactions
+   * carry slightly more cinematic weight than the web default.
+   * --motion-fast stays at 150ms for true micro-states (hover tints,
+   * focus, kbd press feedback). */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Apple's marketing core is a constrained readable column with
+   * generous outer margins (DESIGN.md §5). 1024px max keeps lines
+   * inside the SF Pro Text comfortable-measure ceiling (~80ch at
+   * 17px) while leaving the chapter band full-bleed. Gutters step
+   * 22 → 18 → 16 across desktop / tablet / phone — slightly tighter
+   * than default to honor Apple's "broad horizontal breathing room
+   * but column-disciplined content" balance. */
+  --container-max:            1024px;
+  --container-gutter-desktop: 22px;
+  --container-gutter-tablet:  18px;
+  --container-gutter-phone:   16px;
+}

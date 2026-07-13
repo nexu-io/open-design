@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retro Zine Business Presentation</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --bg: #C8B99A;
+      --bg-dark: #B8A98A;
+      --green: #008F4D;
+      --green-light: #00A85D;
+      --black: #1A1A1A;
+      --white: #F4EFE6;
+      --line: #1A1A1A;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--black);
+    }
+
+    /* ---------- GRAIN TEXTURE OVERLAY ---------- */
+    .grain-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.07;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+    }
+
+    /* ---------- NAVIGATION ---------- */
+    .nav-hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--black);
+      color: var(--bg);
+      padding: 8px 20px;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    body:hover .nav-hint {
+      opacity: 1;
+    }
+    .nav-hint span {
+      opacity: 0.6;
+    }
+    .slide-counter {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: var(--black);
+      background: var(--white);
+      padding: 6px 14px;
+      border: 2px solid var(--black);
+    }
+    .progress-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      background: var(--green);
+      z-index: 100;
+      transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ---------- SLIDES SYSTEM ---------- */
+    .slides-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0);
+    }
+
+    /* ---------- UTILITIES ---------- */
+    .font-bold {
+      font-family: 'Bebas Neue', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .font-hand {
+      font-family: 'Caveat', cursive;
+    }
+    .font-body {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .text-green { color: var(--green); }
+    .text-black { color: var(--black); }
+    .text-white { color: var(--white); }
+    .bg-green { background: var(--green); }
+    .bg-black { background: var(--black); }
+    .bg-white { background: var(--white); }
+
+    .line-top {
+      border-top: 3px solid var(--line);
+    }
+    .line-bottom {
+      border-bottom: 3px solid var(--line);
+    }
+    .line-left {
+      border-left: 3px solid var(--line);
+    }
+    .line-right {
+      border-right: 3px solid var(--line);
+    }
+    .line-box {
+      border: 3px solid var(--line);
+    }
+
+    /* Stamp rotation utility */
+    .stamp {
+      display: inline-block;
+      transform: rotate(-8deg);
+    }
+    .stamp-alt {
+      display: inline-block;
+      transform: rotate(6deg);
+    }
+
+    /* ---------- SLIDE 1: HERO TITLE ---------- */
+    .slide-hero {
+      background: var(--bg);
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .slide-hero .hero-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 12px;
+    }
+    .slide-hero .hero-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 10vw, 140px);
+      line-height: 0.88;
+      color: var(--green);
+      text-transform: uppercase;
+      letter-spacing: 4px;
+    }
+    .slide-hero .hero-illustration {
+      width: clamp(120px, 18vw, 240px);
+      height: auto;
+      margin: 16px 0;
+    }
+    .slide-hero .hero-sub {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(12px, 1.2vw, 16px);
+      font-weight: 500;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--black);
+      margin-top: 12px;
+    }
+    .slide-hero .hero-date {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(32px, 5vw, 72px);
+      color: var(--green);
+      margin-top: 8px;
+      line-height: 1;
+    }
+
+    /* ---------- SLIDE 2: SPLIT EDITORIAL ---------- */
+    .slide-split {
+      flex-direction: row;
+      padding: 0;
+    }
+    .slide-split .split-left {
+      flex: 1;
+      padding: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-right: 3px solid var(--black);
+    }
+    .slide-split .split-right {
+      flex: 1;
+      padding: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--bg-dark);
+    }
+    .slide-split .split-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--green);
+      margin-bottom: 20px;
+    }
+    .slide-split .split-heading {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(42px, 6vw, 90px);
+      line-height: 0.95;
+      color: var(--black);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .slide-split .split-body {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(14px, 1.3vw, 18px);
+      line-height: 1.6;
+      color: var(--black);
+      max-width: 480px;
+    }
+    .slide-split .split-stat {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(80px, 12vw, 160px);
+      color: var(--green);
+      line-height: 1;
+    }
+    .slide-split .split-stat-label {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(24px, 3vw, 36px);
+      color: var(--black);
+      margin-top: 8px;
+    }
+
+    /* ---------- SLIDE 3: STATEMENT ---------- */
+    .slide-statement {
+      text-align: center;
+      background: var(--green);
+      color: var(--white);
+    }
+    .slide-statement .statement-line-top,
+    .slide-statement .statement-line-bottom {
+      width: 60px;
+      height: 4px;
+      background: var(--white);
+      margin: 0 auto;
+    }
+    .slide-statement .statement-quote {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 6vw, 90px);
+      line-height: 1.1;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin: 40px auto;
+      max-width: 900px;
+    }
+    .slide-statement .statement-author {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(24px, 3vw, 36px);
+      margin-top: 20px;
+    }
+
+    /* ---------- SLIDE 4: INFO GRID ---------- */
+    .slide-grid {
+      padding: 60px;
+      justify-content: center;
+    }
+    .slide-grid .grid-header {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 7vw, 100px);
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 40px;
+      line-height: 0.9;
+    }
+    .slide-grid .grid-boxes {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0;
+      width: 100%;
+      max-width: 1000px;
+      border: 3px solid var(--black);
+    }
+    .slide-grid .grid-box {
+      padding: 32px;
+      border: 1.5px solid var(--black);
+    }
+    .slide-grid .grid-box-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .slide-grid .grid-box-value {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(22px, 2.5vw, 32px);
+      color: var(--black);
+      line-height: 1.3;
+    }
+    .slide-grid .grid-box-value strong {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(20px, 2vw, 28px);
+      color: var(--black);
+      letter-spacing: 1px;
+    }
+
+    /* ---------- SLIDE 5: FULL VISUAL ---------- */
+    .slide-visual {
+      padding: 0;
+      position: relative;
+    }
+    .slide-visual .visual-bg {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .slide-visual .visual-bg svg {
+      width: 70%;
+      height: auto;
+      max-height: 70%;
+      opacity: 0.25;
+    }
+    .slide-visual .visual-overlay {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      background: var(--green);
+      padding: 40px 60px;
+      border: 3px solid var(--black);
+      transform: rotate(-2deg);
+    }
+    .slide-visual .visual-overlay h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 8vw, 120px);
+      color: var(--white);
+      text-transform: uppercase;
+      line-height: 0.9;
+    }
+    .slide-visual .visual-overlay p {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(24px, 3vw, 36px);
+      color: var(--white);
+      margin-top: 12px;
+    }
+    .slide-visual .visual-caption {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--black);
+      z-index: 2;
+    }
+
+    /* ---------- SLIDE 6: EDITORIAL TWO-COLUMN ---------- */
+    .slide-editorial {
+      padding: 60px 80px;
+      justify-content: center;
+    }
+    .slide-editorial .ed-header {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 3px solid var(--black);
+      padding-bottom: 16px;
+      margin-bottom: 40px;
+    }
+    .slide-editorial .ed-header h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 5vw, 72px);
+      color: var(--green);
+      text-transform: uppercase;
+      line-height: 0.95;
+    }
+    .slide-editorial .ed-header .ed-issue {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--black);
+    }
+    .slide-editorial .ed-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      max-width: 1100px;
+      width: 100%;
+    }
+    .slide-editorial .ed-col {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      line-height: 1.7;
+      color: var(--black);
+    }
+    .slide-editorial .ed-col:first-child {
+      border-right: 2px solid var(--black);
+      padding-right: 60px;
+    }
+    .slide-editorial .ed-drop {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 6vw, 80px);
+      color: var(--green);
+      float: left;
+      line-height: 0.8;
+      margin-right: 12px;
+      margin-top: 6px;
+    }
+    .slide-editorial .ed-highlight {
+      background: var(--black);
+      color: var(--bg);
+      padding: 2px 8px;
+      font-weight: 600;
+    }
+
+    /* ---------- SLIDE 7: NUMBERED FEATURES ---------- */
+    .slide-numbers {
+      padding: 60px;
+      justify-content: center;
+    }
+    .slide-numbers .num-header {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(14px, 1.5vw, 18px);
+      letter-spacing: 4px;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .slide-numbers .num-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      max-width: 1000px;
+      width: 100%;
+    }
+    .slide-numbers .num-item {
+      padding: 24px 20px;
+      border: 1.5px solid var(--black);
+      text-align: center;
+    }
+    .slide-numbers .num-digit {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(44px, 6vw, 80px);
+      color: var(--green);
+      line-height: 1;
+    }
+    .slide-numbers .num-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 15px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--black);
+      margin-top: 10px;
+    }
+    .slide-numbers .num-desc {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(16px, 1.5vw, 20px);
+      color: var(--black);
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    /* ---------- SLIDE 8: COLLAGE ---------- */
+    .slide-collage {
+      padding: 0;
+      background: var(--bg);
+    }
+    .slide-collage .collage-header {
+      position: absolute;
+      top: 40px;
+      left: 60px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(14px, 1.5vw, 18px);
+      letter-spacing: 4px;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+    .slide-collage .collage-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .slide-collage .collage-piece {
+      position: absolute;
+      border: 3px solid var(--black);
+      background: var(--white);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .slide-collage .collage-piece h3 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(24px, 3vw, 42px);
+      text-transform: uppercase;
+      color: var(--black);
+      margin-bottom: 8px;
+    }
+    .slide-collage .collage-piece p {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(18px, 2vw, 26px);
+      color: var(--black);
+      line-height: 1.3;
+    }
+    .slide-collage .piece-1 {
+      top: 15%;
+      left: 8%;
+      width: 32%;
+      height: 28%;
+      transform: rotate(-3deg);
+      background: var(--green);
+      color: var(--white);
+    }
+    .slide-collage .piece-1 h3 { color: var(--white); }
+    .slide-collage .piece-1 p { color: var(--white); }
+    .slide-collage .piece-2 {
+      top: 12%;
+      right: 10%;
+      width: 28%;
+      height: 34%;
+      transform: rotate(4deg);
+      background: var(--white);
+    }
+    .slide-collage .piece-3 {
+      bottom: 18%;
+      left: 12%;
+      width: 26%;
+      height: 30%;
+      transform: rotate(2deg);
+      background: var(--bg-dark);
+    }
+    .slide-collage .piece-4 {
+      bottom: 15%;
+      right: 8%;
+      width: 34%;
+      height: 26%;
+      transform: rotate(-5deg);
+      background: var(--black);
+      color: var(--bg);
+    }
+    .slide-collage .piece-4 h3 { color: var(--green); }
+    .slide-collage .piece-4 p { color: var(--bg); }
+
+    /* Tape effects */
+    .tape {
+      position: absolute;
+      width: 80px;
+      height: 24px;
+      background: rgba(255,255,255,0.4);
+      border: 1px solid rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+
+    /* ---------- SLIDE 9: RSVP / CTA ---------- */
+    .slide-rsvp {
+      padding: 60px;
+      justify-content: center;
+      align-items: center;
+    }
+    .slide-rsvp .rsvp-card {
+      width: 100%;
+      max-width: 700px;
+      border: 3px solid var(--black);
+      background: var(--white);
+      padding: 48px;
+      position: relative;
+    }
+    .slide-rsvp .rsvp-card::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: -12px;
+      bottom: -12px;
+      background: var(--green);
+      z-index: -1;
+    }
+    .slide-rsvp .rsvp-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(42px, 6vw, 80px);
+      color: var(--green);
+      text-transform: uppercase;
+      line-height: 0.95;
+      margin-bottom: 8px;
+    }
+    .slide-rsvp .rsvp-subtitle {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(22px, 2.5vw, 30px);
+      color: var(--black);
+      margin-bottom: 32px;
+    }
+    .slide-rsvp .rsvp-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .slide-rsvp .rsvp-field {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      border-bottom: 2px solid var(--black);
+      padding-bottom: 8px;
+    }
+    .slide-rsvp .rsvp-field label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green);
+      white-space: nowrap;
+    }
+    .slide-rsvp .rsvp-field .hand-line {
+      flex: 1;
+      font-family: 'Caveat', cursive;
+      font-size: 22px;
+      color: var(--black);
+    }
+    .slide-rsvp .rsvp-stamp {
+      position: absolute;
+      bottom: -20px;
+      right: 30px;
+      background: var(--black);
+      color: var(--green);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      letter-spacing: 2px;
+      padding: 10px 24px;
+      transform: rotate(-8deg);
+      border: 2px solid var(--green);
+    }
+
+    /* ---------- SLIDE 10: CLOSING ---------- */
+    .slide-closing {
+      background: var(--black);
+      color: var(--bg);
+      text-align: center;
+    }
+    .slide-closing .closing-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 24px;
+    }
+    .slide-closing .closing-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(56px, 10vw, 160px);
+      line-height: 0.85;
+      text-transform: uppercase;
+      color: var(--bg);
+    }
+    .slide-closing .closing-divider {
+      width: 80px;
+      height: 4px;
+      background: var(--green);
+      margin: 32px auto;
+    }
+    .slide-closing .closing-hand {
+      font-family: 'Caveat', cursive;
+      font-size: clamp(24px, 3vw, 36px);
+      color: var(--green);
+      margin-top: 16px;
+    }
+    .slide-closing .closing-social {
+      margin-top: 40px;
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .slide-closing .closing-social a {
+      color: var(--bg);
+      text-decoration: none;
+      border-bottom: 2px solid var(--green);
+      padding-bottom: 4px;
+      transition: color 0.3s;
+    }
+    .slide-closing .closing-social a:hover {
+      color: var(--green);
+    }
+
+    /* ---------- HANDWRITTEN SVG ILLUSTRATION ---------- */
+    .hand-illustration {
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+    }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width: 768px) {
+      .slide { padding: 32px; }
+      .slide-split { flex-direction: column; }
+      .slide-split .split-left { border-right: none; border-bottom: 3px solid var(--black); }
+      .slide-grid .grid-boxes { grid-template-columns: 1fr; }
+      .slide-numbers .num-grid { grid-template-columns: 1fr; }
+      .slide-editorial .ed-columns { grid-template-columns: 1fr; gap: 24px; }
+      .slide-editorial .ed-col:first-child { border-right: none; padding-right: 0; border-bottom: 2px solid var(--black); padding-bottom: 24px; }
+      .slide-collage .collage-piece { position: relative; top: auto; left: auto; right: auto; bottom: auto; width: 90%; height: auto; margin: 10px auto; transform: none; }
+      .slide-collage .collage-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; overflow-y: auto; }
+      .slide-rsvp .rsvp-card { padding: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Grain texture overlay -->
+  <div class="grain-overlay"></div>
+
+  <!-- Progress & Navigation -->
+  <div class="progress-bar" id="progressBar"></div>
+  <div class="slide-counter" id="slideCounter">01 / 10</div>
+  <div class="nav-hint">
+    <span>&#8592; PREV</span> | <span>SPACE / CLICK</span> | <span>NEXT &#8594;</span>
+  </div>
+
+  <div class="slides-container" id="slidesContainer">
+
+    <!-- SLIDE 1: HERO TITLE -->
+    <div class="slide slide-hero active" data-index="0">
+      <div class="hero-label">Q3 Strategic Overview</div>
+      <div class="hero-title">NEXUS<br>VENTURES</div>
+      <svg class="hero-illustration" viewBox="0 0 300 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="110" cy="120" rx="60" ry="45" fill="#1A1A1A" stroke="#1A1A1A" stroke-width="3"/>
+        <circle cx="110" cy="120" r="18" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
+        <circle cx="110" cy="120" r="6" fill="#1A1A1A"/>
+        <path d="M60 85 Q75 60 110 55 Q150 50 175 75" stroke="#1A1A1A" stroke-width="3" fill="none"/>
+        <path d="M70 100 Q80 80 100 75" stroke="#C8B99A" stroke-width="2" fill="none" opacity="0.6"/>
+        <path d="M180 140 L180 60 Q180 40 200 40 L220 40 Q240 40 240 60 L240 140" stroke="#1A1A1A" stroke-width="3" fill="none"/>
+        <path d="M180 140 Q180 160 200 160 L220 160 Q240 160 240 140" stroke="#1A1A1A" stroke-width="3" fill="none"/>
+        <path d="M170 75 Q210 90 250 75" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.3"/>
+        <path d="M180 50 Q210 60 230 50" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.3"/>
+        <path d="M40 150 Q90 130 130 160 Q170 190 220 150" stroke="#1A1A1A" stroke-width="3" fill="none"/>
+        <path d="M50 165 Q100 145 140 175 Q180 205 230 165" stroke="#1A1A1A" stroke-width="3" fill="none"/>
+        <path d="M30 160 L50 155 L45 175 Z" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
+        <path d="M240 145 L260 140 L255 160 Z" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
+      </svg>
+      <div class="hero-sub">Growth &mdash; Innovation &mdash; Partnership</div>
+      <div class="hero-date">2026</div>
+    </div>
+
+    <!-- SLIDE 2: SPLIT EDITORIAL -->
+    <div class="slide slide-split" data-index="1">
+      <div class="split-left">
+        <div class="split-label">Our Mission</div>
+        <div class="split-heading">Building<br>Tomorrow</div>
+        <div class="split-body">
+          We partner with ambitious teams to turn complex challenges into scalable solutions. 
+          Through disciplined strategy and creative execution, we help organizations 
+          outpace change and deliver lasting value to their customers.
+        </div>
+      </div>
+      <div class="split-right">
+        <div class="split-stat">340%</div>
+        <div class="split-stat-label">year-over-year growth</div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: STATEMENT -->
+    <div class="slide slide-statement" data-index="2">
+      <div class="statement-line-top"></div>
+      <div class="statement-quote">
+        "The companies that thrive<br>are not the ones that predict<br>the future. They are the ones<br>that build it."
+      </div>
+      <div class="statement-line-bottom"></div>
+      <div class="statement-author">&mdash; Our founding principle since day one</div>
+    </div>
+
+    <!-- SLIDE 4: INFO GRID -->
+    <div class="slide slide-grid" data-index="3">
+      <div class="grid-header">At a Glance</div>
+      <div class="grid-boxes">
+        <div class="grid-box">
+          <div class="grid-box-label">Founded</div>
+          <div class="grid-box-value"><strong>2019</strong> &mdash; San Francisco, CA</div>
+        </div>
+        <div class="grid-box">
+          <div class="grid-box-label">Team</div>
+          <div class="grid-box-value"><strong>120</strong> people across 4 continents</div>
+        </div>
+        <div class="grid-box">
+          <div class="grid-box-label">Clients</div>
+          <div class="grid-box-value"><strong>48</strong> active partnerships</div>
+        </div>
+        <div class="grid-box">
+          <div class="grid-box-label">Revenue</div>
+          <div class="grid-box-value">$12.4M ARR &mdash; <strong>profitable</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: FULL VISUAL -->
+    <div class="slide slide-visual" data-index="4">
+      <div class="visual-bg">
+        <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="200" cy="200" r="160" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.15"/>
+          <circle cx="200" cy="200" r="120" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.15"/>
+          <circle cx="200" cy="200" r="80" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.15"/>
+          <circle cx="200" cy="200" r="40" stroke="#1A1A1A" stroke-width="2" fill="none" opacity="0.15"/>
+          <line x1="200" y1="40" x2="200" y2="360" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
+          <line x1="40" y1="200" x2="360" y2="200" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
+          <line x1="80" y1="80" x2="320" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
+          <line x1="320" y1="80" x2="80" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
+          <path d="M200 40 Q240 120 320 200 Q240 280 200 360 Q160 280 80 200 Q160 120 200 40" stroke="#008F4D" stroke-width="3" fill="none" opacity="0.2"/>
+        </svg>
+      </div>
+      <div class="visual-overlay stamp">
+        <h2>Q3<br>Target</h2>
+        <p>$18M ARR by December</p>
+      </div>
+      <div class="visual-caption">Fiscal year ending March 2027</div>
+    </div>
+
+    <!-- SLIDE 6: EDITORIAL -->
+    <div class="slide slide-editorial" data-index="5">
+      <div class="ed-header">
+        <h2>Product<br>Roadmap</h2>
+        <div class="ed-issue">FY 2026 / 2027</div>
+      </div>
+      <div class="ed-columns">
+        <div class="ed-col">
+          <span class="ed-drop">P</span>hase one is about foundation — refining our core platform, 
+          improving onboarding velocity, and expanding our API surface to serve 
+          <span class="ed-highlight">enterprise clients</span> with stricter compliance needs. 
+          We shipped 14 major releases this quarter alone.
+          <br><br>
+          The feedback loop with early adopters has sharpened our roadmap significantly. 
+          What started as a single feature request is now a dedicated vertical.
+        </div>
+        <div class="ed-col">
+          <strong style="font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--green);">PHASE TWO: SCALE</strong>
+          <br><br>
+          Next quarter we shift from build mode to distribution. The product is proven. 
+          Now we need partners, channels, and the operational muscle to support 
+          10x user growth without breaking the experience.
+          <br><br>
+          International expansion is next. Two new regions. Localized support. 
+          Same product ethos, adapted for new markets.
+          <br><br>
+          <em style="font-family: 'Caveat', cursive; font-size: 22px;">Speed without sacrifice is the goal.</em>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: NUMBERED FEATURES -->
+    <div class="slide slide-numbers" data-index="6">
+      <div class="num-header">Our Core Values</div>
+      <div class="num-grid">
+        <div class="num-item">
+          <div class="num-digit">01</div>
+          <div class="num-label">Clarity</div>
+          <div class="num-desc">Complex problems deserve simple explanations.</div>
+        </div>
+        <div class="num-item">
+          <div class="num-digit">02</div>
+          <div class="num-label">Velocity</div>
+          <div class="num-desc">Ship fast, learn faster, iterate always.</div>
+        </div>
+        <div class="num-item">
+          <div class="num-digit">03</div>
+          <div class="num-label">Trust</div>
+          <div class="num-desc">Every partnership is built on radical transparency.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: COLLAGE -->
+    <div class="slide slide-collage" data-index="7">
+      <div class="collage-header">Capabilities</div>
+      <div class="collage-container">
+        <div class="tape" style="top: 12%; left: 30%; transform: rotate(-25deg);"></div>
+        <div class="tape" style="top: 10%; right: 22%; transform: rotate(35deg);"></div>
+        <div class="tape" style="bottom: 20%; left: 24%; transform: rotate(15deg);"></div>
+        <div class="tape" style="bottom: 18%; right: 28%; transform: rotate(-40deg);"></div>
+
+        <div class="collage-piece piece-1">
+          <h3>Strategy</h3>
+          <p>Market analysis, competitive positioning, and roadmaps that bridge ambition with execution.</p>
+        </div>
+        <div class="collage-piece piece-2">
+          <h3>Design</h3>
+          <p>Product design, brand systems, and user experiences that make complexity feel effortless.</p>
+        </div>
+        <div class="collage-piece piece-3">
+          <h3>Engineering</h3>
+          <p>Scalable architecture, robust APIs, and infrastructure that grows with your demand.</p>
+        </div>
+        <div class="collage-piece piece-4">
+          <h3>Growth</h3>
+          <p>Go-to-market planning, partner programs, and revenue operations that accelerate traction.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: RSVP -->
+    <div class="slide slide-rsvp" data-index="8">
+      <div class="rsvp-card">
+        <div class="rsvp-title">Let's Talk</div>
+        <div class="rsvp-subtitle">Ready to explore what we can build together?</div>
+        <div class="rsvp-fields">
+          <div class="rsvp-field">
+            <label>Name</label>
+            <div class="hand-line">_________________________________</div>
+          </div>
+          <div class="rsvp-field">
+            <label>Company</label>
+            <div class="hand-line">_________________________________</div>
+          </div>
+          <div class="rsvp-field">
+            <label>Email</label>
+            <div class="hand-line">_________________________________</div>
+          </div>
+          <div class="rsvp-field">
+            <label>Project</label>
+            <div class="hand-line">_________________________________</div>
+          </div>
+        </div>
+        <div class="rsvp-stamp">CONTACT US</div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: CLOSING -->
+    <div class="slide slide-closing" data-index="9">
+      <div class="closing-label">Thank You</div>
+      <div class="closing-title">Let's Build<br>Together</div>
+      <div class="closing-divider"></div>
+      <div class="closing-hand">hello@nexusventures.co &mdash; San Francisco &mdash; Worldwide</div>
+      <div class="closing-social">
+        <a href="#">LinkedIn</a>
+        <a href="#">Contact</a>
+        <a href="#">Careers</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (function() {
+      const slides = document.querySelectorAll('.slide');
+      const progressBar = document.getElementById('progressBar');
+      const slideCounter = document.getElementById('slideCounter');
+      const totalSlides = slides.length;
+      let current = 0;
+
+      function updateSlide(index) {
+        slides.forEach((slide, i) => {
+          slide.classList.toggle('active', i === index);
+        });
+        const pct = ((index + 1) / totalSlides) * 100;
+        progressBar.style.width = pct + '%';
+        slideCounter.textContent = String(index + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+      }
+
+      function next() {
+        if (current < totalSlides - 1) {
+          current++;
+          updateSlide(current);
+        }
+      }
+
+      function prev() {
+        if (current > 0) {
+          current--;
+          updateSlide(current);
+        }
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter' || e.key === 'PageDown') {
+          e.preventDefault();
+          next();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+          e.preventDefault();
+          prev();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        const x = e.clientX;
+        const w = window.innerWidth;
+        if (x > w / 2) {
+          next();
+        } else {
+          prev();
+        }
+      });
+
+      // Touch support
+      let touchStartX = 0;
+      document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+      });
+      document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].screenX;
+        if (touchStartX - touchEndX > 50) {
+          next();
+        } else if (touchEndX - touchStartX > 50) {
+          prev();
+        }
+      });
+
+      updateSlide(0);
+    })();
+  </script>
+</body>
+</html>

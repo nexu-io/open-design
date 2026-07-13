@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-xiaohongshu",
+  "title": "Xiaohongshu",
+  "title_i18n": {
+    "zh-CN": "Xiaohongshu",
+    "zh-TW": "Xiaohongshu",
+    "ja": "Xiaohongshu",
+    "ko": "Xiaohongshu",
+    "de": "Xiaohongshu",
+    "fr": "Xiaohongshu",
+    "ru": "Xiaohongshu",
+    "es": "Xiaohongshu",
+    "pt-BR": "Xiaohongshu",
+    "it": "Xiaohongshu",
+    "vi": "Xiaohongshu",
+    "pl": "Xiaohongshu",
+    "id": "Xiaohongshu",
+    "nl": "Xiaohongshu",
+    "ar": "Xiaohongshu",
+    "tr": "Xiaohongshu",
+    "uk": "Xiaohongshu",
+    "en": "Xiaohongshu"
+  },
+  "version": "0.1.0",
+  "description": "Lifestyle UGC social platform. Singular brand red, generous radius, content-first.",
+  "description_i18n": {
+    "zh-CN": "生活方式UGC社交平台。独特的品牌红、大圆角、内容优先。",
+    "zh-TW": "生活風格UGC社群平台。獨特的品牌紅、大圓角、內容優先。",
+    "ja": "ライフスタイルUGCソーシャルプラットフォーム。独自のブランドレッド、大きな角丸、コンテンツファースト。",
+    "ko": "라이프스타일 UGC 소셜 플랫폼. 독특한 브랜드 레드, 큰 라운드, 콘텐츠 우선.",
+    "de": "Lifestyle-UGC-Social-Plattform. Charakteristisches Markenrot, großzügige Rundungen, inhaltsorientiert.",
+    "fr": "Plateforme sociale UGC lifestyle. Rouge signature, angles arrondis généreux, contenu prioritaire.",
+    "ru": "Социальная UGC-платформа для образа жизни. Фирменный красный, большие радиусы, контент на первом месте.",
+    "es": "Plataforma social UGC de estilo de vida. Rojo característico, radios generosos, contenido primero.",
+    "pt-BR": "Plataforma social UGC de estilo de vida. Vermelho característico, raios generosos, conteúdo em primeiro lugar.",
+    "it": "Piattaforma social UGC lifestyle. Rosso distintivo, ampi raggi, contenuto al primo posto.",
+    "vi": "Nền tảng mạng xã hội UGC lối sống. Màu đỏ thương hiệu, bo góc rộng, ưu tiên nội dung.",
+    "pl": "Platforma społecznościowa UGC lifestyle. Charakterystyczna czerwień, duże zaokrąglenia, treść na pierwszym miejscu.",
+    "id": "Platform sosial UGC gaya hidup. Merah khas merek, radius besar, konten utama.",
+    "nl": "Lifestyle UGC-sociaal platform. Kenmerkend merkreed, ruime radius, content eerst.",
+    "ar": "منصة اجتماعية UGC لأسلوب الحياة. اللون الأحمر المميز، زوايا دائرية كبيرة، المحتوى أولاً.",
+    "tr": "Yaşam tarzı UGC sosyal platformu. Kendine özgü marka kırmızısı, geniş yarıçap, içerik öncelikli.",
+    "uk": "Соціальна UGC-платформа lifestyle. Фірмовий червоний, великі радіуси, контент на першому місці.",
+    "en": "Lifestyle UGC social platform. Singular brand red, generous radius, content-first."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Xiaohongshu design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Xiaohongshu design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "xiaohongshu",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

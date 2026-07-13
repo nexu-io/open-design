@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-expressive",
+  "title": "Expressive",
+  "title_i18n": {
+    "zh-CN": "表现力",
+    "zh-TW": "表現力",
+    "ja": "エクスプレッシブ",
+    "ko": "표현적",
+    "de": "Expressiv",
+    "fr": "Expressif",
+    "ru": "Экспрессивный",
+    "es": "Expresivo",
+    "pt-BR": "Expressivo",
+    "it": "Espressivo",
+    "vi": "Biểu Cảm",
+    "pl": "Ekspresyjny",
+    "id": "Ekspresif",
+    "nl": "Expressief",
+    "ar": "تعبيري",
+    "tr": "İfade Dolu",
+    "uk": "Експресивний",
+    "en": "Expressive"
+  },
+  "version": "0.1.0",
+  "description": "Vibrant, personality-driven design with bold colors, playful graphics, and dynamic layouts that balance creativity with structure.",
+  "description_i18n": {
+    "zh-CN": "充满活力、彰显个性的设计，采用大胆的色彩、趣味性图形和动态布局，在创意与结构之间达到平衡。",
+    "zh-TW": "充滿活力、彰顯個性的設計，採用大膽的色彩、趣味性圖形和動態佈局，在創意與結構之間達到平衡。",
+    "ja": "大胆な色使い、遊び心のあるグラフィック、ダイナミックなレイアウトで個性を表現する、創造性と構造のバランスが取れた活気あるデザイン。",
+    "ko": "대담한 색상, 재미있는 그래픽, 역동적인 레이아웃으로 창의성과 구조의 균형을 이루는 활기차고 개성 넘치는 디자인.",
+    "de": "Lebendiges, persönlichkeitsgetriebenes Design mit kräftigen Farben, verspielten Grafiken und dynamischen Layouts, die Kreativität mit Struktur in Einklang bringen.",
+    "fr": "Design vibrant et axé sur la personnalité avec des couleurs audacieuses, des graphiques ludiques et des mises en page dynamiques qui équilibrent créativité et structure.",
+    "ru": "Яркий дизайн с выраженной индивидуальностью, смелыми цветами, игривой графикой и динамичными макетами, сочетающими креативность со структурой.",
+    "es": "Diseño vibrante y lleno de personalidad con colores audaces, gráficos divertidos y diseños dinámicos que equilibran creatividad con estructura.",
+    "pt-BR": "Design vibrante e cheio de personalidade com cores ousadas, gráficos divertidos e layouts dinâmicos que equilibram criatividade com estrutura.",
+    "it": "Design vivace e ricco di personalità con colori audaci, grafiche giocose e layout dinamici che bilanciano creatività e struttura.",
+    "vi": "Thiết kế sống động, thể hiện cá tính với màu sắc táo bạo, đồ họa vui tươi và bố cục năng động cân bằng giữa sáng tạo và cấu trúc.",
+    "pl": "Żywy, pełen osobowości projekt z odważnymi kolorami, zabawnymi grafikami i dynamicznymi układami, które równoważą kreatywność ze strukturą.",
+    "id": "Desain yang hidup dan penuh kepribadian dengan warna-warna berani, grafis yang playful, dan tata letak dinamis yang menyeimbangkan kreativitas dengan struktur.",
+    "nl": "Levendig, persoonlijkheidsgedreven ontwerp met gedurfde kleuren, speelse graphics en dynamische lay-outs die creativiteit en structuur in balans brengen.",
+    "ar": "تصميم نابض بالحياة يعكس الشخصية بألوان جريئة ورسومات مرحة وتخطيطات ديناميكية توازن بين الإبداع والبنية.",
+    "tr": "Cesur renkler, eğlenceli grafikler ve yaratıcılıkla yapıyı dengeleyen dinamik düzenlerle canlı, kişiliğe dayalı tasarım.",
+    "uk": "Яскравий дизайн з виразною індивідуальністю, сміливими кольорами, грайливою графікою та динамічними макетами, що поєднують креативність зі структурою.",
+    "en": "Vibrant, personality-driven design with bold colors, playful graphics, and dynamic layouts that balance creativity with structure."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "bold-expressive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Expressive design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Expressive design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "expressive",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

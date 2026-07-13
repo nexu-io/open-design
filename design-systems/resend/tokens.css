@@ -1,0 +1,353 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/resend/tokens.css
+ *
+ * Structured token bindings for "Resend" — the developer-first email
+ * API whose marketing surface treats a pure-black canvas like a
+ * gallery wall and lights every container with a single, icy blue-
+ * tinted hairline.
+ *
+ * Brand identity in three sentences:
+ *   1. Void-black (#000000) canvas with near-white (#f0f0f0) ink —
+ *      theatrical darkness; the page is the stage and content
+ *      performs on it without competing chrome.
+ *   2. Frost borders (rgba(214, 235, 253, 0.19)) replace gray borders
+ *      everywhere — every divider, button, card, and tab is a thin
+ *      icy line on the void; depth is by border luminance, not by
+ *      blur shadows that cannot cast against pure black.
+ *   3. ABC Favorit (geometric sans) for display headings with
+ *      aggressive negative tracking, Inter for body and UI, Commit
+ *      Mono for code — one accent at a time (here: Resend Orange
+ *      #ff801f) so the chromatic moment lands hard against the gray.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Resend's voice rather than the cross-brand default):
+ *
+ *   1. `--bg` and `--surface` both bind to `#000000`. DESIGN.md §7 is
+ *      explicit: "Don't lighten the background above #000000 — the
+ *      pure black void is non-negotiable." Cards on Resend do not
+ *      lift via fill; they read by their frost border alone. Setting
+ *      `--surface` to the same void as `--bg` honors that rule and
+ *      forces every card-like component to express elevation through
+ *      `--border` / `--elev-ring`, not through tinted backgrounds.
+ *      `--surface-warm` aliases to `--surface` because the brand has
+ *      no warm tier — there is no second background color anywhere.
+ *
+ *   2. `--border` is `rgba(214, 235, 253, 0.19)` — the literal
+ *      "frost border" alpha named in DESIGN.md §1 as "the signature"
+ *      of the entire system. Binding the slot to the alpha (not a
+ *      solid hex) lets `--elev-ring` (`0 0 0 1px var(--border)`)
+ *      reproduce the icy line by default, and lets every component
+ *      reach the same value via `border: 1px solid var(--border)`.
+ *      `--border-soft` drops to `rgba(217, 237, 254, 0.145)` for
+ *      inner row separators that should not compete with the
+ *      container's outer frost edge.
+ *
+ *   3. `--fg` is `#f0f0f0`, not `#ffffff`. DESIGN.md §2 names this
+ *      the "Near White" — a deliberately softened text tier that
+ *      lets pure white (`#ffffff`) stay reserved for the maximum-
+ *      emphasis moments DESIGN.md describes as "link highlights"
+ *      and the white-pill CTA. The four-level foreground ramp
+ *      (`#f0f0f0 → #a1a4a5 → #5c5c5c → #464a4d`) maps directly onto
+ *      DESIGN.md §2's documented neutral scale (Near White, Silver,
+ *      Mid Gray, Dark Gray) so `--fg-2` and `--meta` are
+ *      independently bound rather than aliased.
+ *
+ *   4. `--accent` is Resend Orange (`#ff801f`, "Orange 10" in
+ *      DESIGN.md §2). Resend's product surface uses a multi-color
+ *      accent system (orange/green/blue/yellow/red), but the shared
+ *      schema slot must pick one — and Orange 10 is the only entry
+ *      DESIGN.md prefixes with "primary orange accent". The blue
+ *      and green variants live as semantic / inline values in
+ *      components.html; promoting any of them to a second accent
+ *      slot would require a C-extension, which the brand contract
+ *      defers until ≥2 brands need the same name. `--accent-on` is
+ *      `#000000` because saturated orange against black reads best
+ *      with black labels (DESIGN.md §4 confirms the white-pill
+ *      pattern is for `#ffffff` solid backgrounds, not for the
+ *      orange accent fill).
+ *
+ *   5. `--accent-hover` brightens toward white (10%) and
+ *      `--accent-active` darkens toward black (12%) — the inverse
+ *      of the schema's default mid-luminance pattern. On Resend's
+ *      void canvas, a "pressed" state reads as a small recession
+ *      into the dark, while a "lifted" hover reads as a luminance
+ *      step up. This matches the Linear / dark-system convention
+ *      and avoids the schema default's all-darken pattern that
+ *      would make the orange disappear into the void on hover.
+ *
+ *   6. Semantic colors come straight from DESIGN.md §2's multi-
+ *      color accent scale — `--success: #11ff99` (Green 4),
+ *      `--warn: #ffc53d` (Yellow 9), `--danger: #ff2047` (Red 5).
+ *      These are the saturated source values; components that want
+ *      the documented "12–42% opacity" tints reach them via
+ *      `color-mix(in oklab, var(--success), transparent 80%)` in
+ *      situ, keeping the alpha-blend decision at the component
+ *      layer rather than in the token slot.
+ *
+ *   7. Type scale is documented in DESIGN.md §3: 96px display,
+ *      56px section, 24px feature title, 20px sub-heading, 18px
+ *      body-large, 16px body, 14px caption, 12px small. The schema
+ *      has 8 slots; `--text-2xl` is bound to `36px` as the
+ *      intermediate that bridges 24px (feature title) to 56px
+ *      (section heading) — DESIGN.md does not enumerate this stop,
+ *      but a 24 → 56 jump without a mid-tier would force every H2
+ *      to either undershoot or overshoot. `--leading-tight: 1.0`
+ *      matches the documented Display Hero rhythm; `--leading-body:
+ *      1.5` matches the documented Body / Body Large / Feature
+ *      Title leading.
+ *
+ *   8. `--tracking-display` is `-0.05em`, derived from DESIGN.md
+ *      §3 Section Heading (`-2.8px at 56px = -0.05em`). ABC Favorit
+ *      compresses harder than Domaine Display (`-0.01em` at 96px),
+ *      so binding the slot to the ABC Favorit characteristic value
+ *      gives every display-tier element the brand's "engineered
+ *      masthead" feel. The hero in components.html can opt back
+ *      into the gentler Domaine tracking inline if needed.
+ *
+ *   9. `--font-display` lists ABC Favorit first, with Inter as the
+ *      structural fallback. Inter is documented in DESIGN.md §3 as
+ *      the body / UI font, but it shares the geometric voice well
+ *      enough to carry display weight when ABC Favorit is not
+ *      loaded — far better than falling through to a generic system
+ *      sans. Domaine Display (the editorial serif hero font) is
+ *      deliberately not in the stack: it is a paid Klim Type
+ *      Foundry face whose absence would surface as a jarring serif
+ *      drop. Heroes that want Domaine layer it in via
+ *      `font-family: "Domaine Display", var(--font-display)` at the
+ *      component level.
+ *
+ *  10. Section rhythm is generous: 120px desktop, 80px tablet, 48px
+ *      phone. DESIGN.md §5 names "Cinematic black space" with "80–
+ *      120px+ vertical spacing between sections" as a defining
+ *      property — "the black background IS the whitespace". 120px
+ *      desktop sits at the top of that documented range.
+ *
+ *  11. `--radius-sm` is `4px` (DESIGN.md "Sharp": buttons-ghost,
+ *      inputs); `--radius-md` is `8px` (tabs / content blocks);
+ *      `--radius-lg` is `16px` (feature cards / images / main
+ *      buttons); `--radius-pill` is `9999px` (primary CTAs / tags
+ *      / badges). The 24px "Section" radius from DESIGN.md is
+ *      component-specific (large panels) and reached inline rather
+ *      than via the shared schema.
+ *
+ *  12. `--elev-raised` layers the documented `rgba(176, 199, 217,
+ *      0.145) 0 0 0 1px` ring shadow with the subtle drop from
+ *      DESIGN.md §6 Level 2. On pure black, opaque blur shadows
+ *      vanish — the ring carries the edge, and the soft drop adds
+ *      just enough atmospheric tint to read as "lifted" against
+ *      the void. Never strip the ring when overriding this token.
+ *
+ *  13. `--focus-ring` is a sharp 2px ring at `var(--accent)`, not
+ *      the schema's 3px alpha glow. DESIGN.md §6 Level 3 documents
+ *      a heavy 8px black focus ring that works in product context
+ *      (against non-black surroundings); on this brand fixture the
+ *      black canvas would swallow that ring, so we substitute the
+ *      orange accent at 2px — sharp, engineered, legible against
+ *      both the void and any card surface.
+ *
+ *  14. `--container-max` caps at `1200px` with generous 32px
+ *      desktop gutters — Resend's marketing pages center contained
+ *      content in vast dark space, treating the gutter as part of
+ *      the gallery margin rather than as edge-bleed.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the schema. ABC Favorit, Domaine
+ * Display, and Commit Mono are paid faces — the stacks list
+ * defensible OS fallbacks so artifacts render legibly even when
+ * the brand faces are not loaded.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — schema slot) ─────────────────────────────
+   * The void is the canvas. DESIGN.md §7: "Don't lighten the
+   * background above #000000 — the pure black void is non-
+   * negotiable." `--surface` matches `--bg` because cards on Resend
+   * read by their frost border alone, not by a tinted fill.
+   * `--surface-warm` aliases to surface — the brand has no second
+   * background color anywhere. */
+  --bg: #000000;
+  --surface: #000000;
+  --surface-warm: var(--surface);          /* alias — Resend has no warm tier */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Near White → Silver → Mid Gray → Dark Gray, the documented
+   * neutral scale from DESIGN.md §2. `#f0f0f0` instead of `#ffffff`
+   * matters — pure white is reserved for the white-pill CTA and link
+   * highlights; the softened near-white keeps body type calm against
+   * the void. All four tiers are independently bound (not aliased)
+   * because DESIGN.md names four distinct neutral roles: primary
+   * text, secondary / link-muted, hover / caption, tertiary /
+   * quaternary timestamp. */
+  --fg: #f0f0f0;                           /* Near White — primary text, button labels */
+  --fg-2: #a1a4a5;                         /* Silver — secondary text, muted links */
+  --muted: #5c5c5c;                        /* Mid Gray — captions, hover, subtle emphasis */
+  --meta: #464a4d;                         /* Dark Gray — tertiary text, timestamps */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Frost-as-border is THE signature: `rgba(214, 235, 253, 0.19)`
+   * at 1px replaces every gray border in the system. Binding
+   * `--border` to the alpha (not a solid hex) lets `--elev-ring`
+   * reproduce the icy line by default, and lets
+   * `border: 1px solid var(--border)` paint the same value when a
+   * real CSS border is structurally required (e.g. the bottom edge
+   * of the sticky nav per DESIGN.md §4). `--border-soft` drops to
+   * `0.145` alpha for inner row separators that must not compete
+   * with the container's outer frost edge. */
+  --border: rgba(214, 235, 253, 0.19);     /* signature frost border alpha */
+  --border-soft: rgba(217, 237, 254, 0.145); /* inner row separator — lighter frost */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Resend Orange (Orange 10 from DESIGN.md §2). Hard cap of ≤2
+   * visible uses per screen — DESIGN.md §7 forbids cross-mixing
+   * accent colors within a single component. The multi-color
+   * scale (green/blue/yellow/red) lives at the semantic / inline
+   * layer; only the orange slot rides on `--accent`.
+   *
+   * `--accent-on` is BLACK, not white — saturated #ff801f against
+   * black reads cleanest with black labels (the white-pill CTA in
+   * DESIGN.md §4 uses #ffffff fill with #000000 text, not the
+   * orange accent). Hover brightens 10% toward white, active
+   * darkens 12% toward black — the inverse of the schema's all-
+   * darken default, matching the dark-theme convention where
+   * "pressed" reads as recession into the void. */
+  --accent: #ff801f;                       /* Resend Orange — primary chromatic accent */
+  --accent-on: #000000;                    /* black label on saturated orange fill */
+  --accent-hover: color-mix(in oklab, var(--accent), white 10%);
+  --accent-active: color-mix(in oklab, var(--accent), black 12%);
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Saturated source values from DESIGN.md §2's multi-color accent
+   * scale. Components reach the documented 12–42% opacity tints
+   * via `color-mix(in oklab, var(--success), transparent 80%)` in
+   * situ, keeping the alpha-blend decision at the component layer. */
+  --success: #11ff99;                      /* Green 4 — emerald success indicator */
+  --warn: #ffc53d;                         /* Yellow 9 — warm gold warning */
+  --danger: #ff2047;                       /* Red 5 — error / destructive */
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Three-font editorial hierarchy from DESIGN.md §3. ABC Favorit
+   * carries display; Inter carries body and UI; Commit Mono
+   * carries code and technical labels. Domaine Display (the
+   * editorial serif hero face) is intentionally not in the
+   * `--font-display` stack — it is a paid Klim Type Foundry face
+   * whose absence would surface as a jarring serif drop. Heroes
+   * that want Domaine layer it in via `font-family: "Domaine
+   * Display", var(--font-display)` at the component level. */
+  --font-display: "ABC Favorit", "Inter", -apple-system, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", -apple-system, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Commit Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * 12 / 14 / 16 / 18 / 20 / 24 / 56 / 96 are all documented; the
+   * 36px `--text-2xl` is the synthesized intermediate that bridges
+   * 24px feature-title to 56px section-heading. Without it, every
+   * H2 would have to undershoot at 24 or overshoot at 56 and the
+   * type rhythm would jump. */
+  --text-xs: 12px;                         /* Small — tags, meta, fine print */
+  --text-sm: 14px;                         /* Caption, button, nav link */
+  --text-base: 16px;                       /* Body — standard reading */
+  --text-lg: 20px;                         /* Sub-heading — ABC Favorit */
+  --text-xl: 24px;                         /* Feature Title — Inter weight 500 */
+  --text-2xl: 36px;                        /* Synthesized H2 — bridges 24 → 56 */
+  --text-3xl: 56px;                        /* Section Heading — ABC Favorit */
+  --text-4xl: 96px;                        /* Display Hero — Domaine / ABC Favorit */
+
+  /* Leading + tracking.
+   * --leading-body 1.5: DESIGN.md body / feature-title / body-large.
+   * --leading-tight 1.0: DESIGN.md Display Hero (96px).
+   * --tracking-display -0.05em: ABC Favorit Section Heading
+   *   (-2.8px / 56px). Harder compression than Domaine's -0.01em;
+   *   binding the slot to the ABC Favorit value gives display tiers
+   *   the brand's "engineered masthead" feel. */
+  --leading-body: 1.5;
+  --leading-tight: 1.0;
+  --tracking-display: -0.05em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * Standard 4px-grid base scale. DESIGN.md §5 also documents 5px,
+   * 6px, 7px, 10px, 30px, 40px micro-tiers — those are too fine to
+   * belong in the shared schema and are inlined per-component when
+   * needed (button padding `5px 12px`, etc.). The 4/8/12/16/20/
+   * 24/32/48 tier covers the structural rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "Cinematic black space" with
+   * 80–120px+ vertical padding between sections. 120px desktop sits
+   * at the top of the documented range, dropping to 80px tablet
+   * (still generous) and 48px phone (the documented mobile floor). */
+  --section-y-desktop: 120px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 4 / 6 / 8 / 10 / 12 / 16 / 24 / 9999.
+   * We bind the four schema tiers to: 4 (sharp — ghost button,
+   * inputs), 8 (standard — tabs, content), 16 (large — feature
+   * cards, images, main buttons), 9999 (pill — primary CTAs, tags,
+   * badges). The 24px "Section" radius is component-specific (large
+   * panels) and reached inline. */
+  --radius-sm: 4px;                        /* Sharp — ghost button, input */
+  --radius-md: 8px;                        /* Standard — tab, content block */
+  --radius-lg: 16px;                       /* Large — feature card, image, main button */
+  --radius-pill: 9999px;                   /* Pill — primary CTA, tag, badge */
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * Resend barely uses shadows — DESIGN.md §6: "On a pure black
+   * background, traditional shadows are invisible — you can't cast
+   * a shadow into the void. Instead, Resend creates depth through
+   * its signature frost borders."
+   *
+   *   --elev-flat    no shadow (page background, text blocks)
+   *   --elev-ring    the signature frost hairline (most surfaces)
+   *   --elev-raised  ring + subtle drop for true "lifted" feel
+   *
+   * `--elev-raised` layers the documented `rgba(176, 199, 217, 0.145)
+   * 0 0 0 1px` ring with the §6 Level 2 subtle drop. Never strip
+   * the ring when overriding — it is the edge mechanism that lets
+   * a card read against the void at all. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 0 0 1px rgba(176, 199, 217, 0.145),
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    0 1px 2px -1px rgba(0, 0, 0, 0.4);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * Sharp 2px ring at `var(--accent)`, NOT the schema's 3px alpha
+   * glow. DESIGN.md §6 documents an 8px black ring that works in
+   * product context (against non-black surroundings); on this
+   * brand fixture the black canvas would swallow that ring, so we
+   * substitute the orange accent at 2px — sharp, engineered,
+   * legible against both the void and any card surface. */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Two durations + one easing curve. Resend's micro-states are
+   * quick and unobtrusive — pill buttons crossfade to white glass,
+   * frost borders intensify on focus, no choreographed entrances. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1200px max content width — DESIGN.md §5 "Centered content with
+   * generous max-width". Gutters stay wide on desktop (32px) so
+   * the gallery margin around the void canvas reads as intentional
+   * framing; mobile narrows to 16px to preserve readable measure. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

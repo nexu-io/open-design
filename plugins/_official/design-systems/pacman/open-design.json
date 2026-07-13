@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-pacman",
+  "title": "Pacman",
+  "title_i18n": {
+    "zh-CN": "Pacman",
+    "zh-TW": "Pacman",
+    "ja": "Pacman",
+    "ko": "Pacman",
+    "de": "Pacman",
+    "fr": "Pacman",
+    "ru": "Pacman",
+    "es": "Pacman",
+    "pt-BR": "Pacman",
+    "it": "Pacman",
+    "vi": "Pacman",
+    "pl": "Pacman",
+    "id": "Pacman",
+    "nl": "Pacman",
+    "ar": "Pacman",
+    "tr": "Pacman",
+    "uk": "Pacman",
+    "en": "Pacman"
+  },
+  "version": "0.1.0",
+  "description": "Retro arcade-inspired design with pixel fonts, dotted borders, playful high-contrast colors, and 8-bit game aesthetics.",
+  "description_i18n": {
+    "zh-CN": "复古街机风格设计，包含像素字体、点状边框、趣味高对比度色彩和 8 位游戏美学。",
+    "zh-TW": "復古街機風格設計，包含像素字體、點狀邊框、趣味高對比度色彩和 8 位元遊戲美學。",
+    "ja": "レトロアーケード風デザイン。ピクセルフォント、ドット枠線、遊び心のある高コントラストカラー、8ビットゲーム美学を採用。",
+    "ko": "레트로 아케이드 스타일 디자인으로 픽셀 폰트, 점선 테두리, 경쾌한 고대비 색상, 8비트 게임 미학을 제공합니다.",
+    "de": "Retro-Arcade-inspiriertes Design mit Pixel-Schriften, gepunkteten Rahmen, verspielten Kontrastfarben und 8-Bit-Spielästhetik.",
+    "fr": "Design inspiré des bornes d'arcade rétro avec polices pixelisées, bordures pointillées, couleurs contrastées ludiques et esthétique 8-bit.",
+    "ru": "Ретро-дизайн в стиле аркадных игр с пиксельными шрифтами, точечными рамками, яркими контрастными цветами и 8-битной эстетикой.",
+    "es": "Diseño inspirado en arcades retro con fuentes pixeladas, bordes punteados, colores de alto contraste y estética de juegos de 8 bits.",
+    "pt-BR": "Design inspirado em arcade retrô com fontes pixeladas, bordas pontilhadas, cores vibrantes de alto contraste e estética de jogos 8-bit.",
+    "it": "Design ispirato agli arcade retrò con font pixel, bordi punteggiati, colori ad alto contrasto e estetica da giochi 8-bit.",
+    "vi": "Thiết kế lấy cảm hứng từ trò chơi arcade cổ điển với phông chữ pixel, viền chấm, màu tương phản vui nhộn và phong cách game 8-bit.",
+    "pl": "Design inspirowany retro arcade z pikselowymi czcionkami, kropkowanymi ramkami, kontrastowymi kolorami i estetyką gier 8-bitowych.",
+    "id": "Desain bergaya arcade retro dengan font pixel, border bertitik, warna kontras tinggi yang playful, dan estetika game 8-bit.",
+    "nl": "Retro arcade-geïnspireerd ontwerp met pixellettertypes, gestippelde randen, speelse contrastkleuren en 8-bit game-esthetiek.",
+    "ar": "تصميم مستوحى من ألعاب الأركيد الكلاسيكية مع خطوط البكسل، حدود منقطة، ألوان متباينة مرحة، وجماليات ألعاب 8-bit.",
+    "tr": "Piksel fontlar, noktalı kenarlıklar, eğlenceli yüksek kontrast renkler ve 8-bit oyun estetiği ile retro atari salonu tarzı tasarım.",
+    "uk": "Ретро-дизайн у стилі аркадних ігор з піксельними шрифтами, точковими рамками, яскравими контрастними кольорами та 8-бітною естетикою.",
+    "en": "Retro arcade-inspired design with pixel fonts, dotted borders, playful high-contrast colors, and 8-bit game aesthetics."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "themed-unique"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Pacman design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Pacman design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "pacman",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
