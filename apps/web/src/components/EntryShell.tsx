@@ -217,13 +217,6 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-// Newsletter signup endpoint. Lives on the marketing site (Cloudflare Pages
-// Function backed by KV), so this is a cross-origin POST from the desktop
-// client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
-// it at a local `wrangler pages dev` instance during development.
-const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
-const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 
@@ -239,7 +232,6 @@ type OnboardingProfileState = {
   orgSize: string;
   useCase: string[];
   source: string;
-  email: string;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -393,7 +385,7 @@ interface Props {
   onCreateDesignSystem?: () => void;
   // NOTE: first-run onboarding intentionally no longer hosts guided
   // design-system creation. The previous step-3 design-system surface was
-  // replaced by the newsletter and brand-extraction steps, so EntryShell does
+  // replaced by the brand-extraction follow-up, so EntryShell does
   // not accept a `renderDesignSystemCreation` renderer. Guided creation stays
   // reachable from the standalone `design-system-create` route and the
   // Design Systems tab; do not re-thread an onboarding renderer here.
@@ -1379,7 +1371,6 @@ function OnboardingView({
   const [amrStatusResolved, setAmrStatusResolved] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
-  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [providerTestState, setProviderTestState] = useState<
@@ -1409,7 +1400,6 @@ function OnboardingView({
     orgSize: '',
     useCase: [] as string[],
     source: '',
-    email: '',
   });
   const [profileQuestionIndex, setProfileQuestionIndex] = useState(0);
   // Live mirror of `profile` so closures that fire faster than React
@@ -1672,8 +1662,7 @@ function OnboardingView({
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
     if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    if (stepIdx === 2) return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
-    return { area: 'design_system', stepIndex: '4', stepName: 'design_system' };
+    return { area: 'design_system', stepIndex: '3', stepName: 'design_system' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1767,7 +1756,6 @@ function OnboardingView({
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
-    t('settings.onboardingStepNewsletter'),
     t('settings.onboardingStepDesignSystem'),
   ];
   const isLastStep = step === steps.length - 1;
@@ -2085,7 +2073,6 @@ function OnboardingView({
   }
 
   function handleBackWithTracking(): void {
-    if (newsletterSubmitting) return;
     // The secondary button only renders for step > 0 — the Connect step has no
     // earlier step and no Skip affordance — so this is always a real Back.
     // (The former step-0 "Skip" path, which emitted the onboarding `skip` /
@@ -2095,7 +2082,6 @@ function OnboardingView({
     setStep((current) => current - 1);
   }
   async function handlePrimaryAction() {
-    if (newsletterSubmitting) return;
     // Connect gate: the button is `aria-disabled` (not natively disabled, so it
     // can still surface its tooltip on hover), so guard the click here — a
     // blocked Continue must not advance past the Connect step.
@@ -2150,10 +2136,9 @@ function OnboardingView({
   }
 
   // Shared finish work for the final step, independent of where the user lands
-  // next. Emits the About-you snapshot + completion analytics exactly once
-  // (both are idempotent per session), submits the newsletter if an email was
-  // entered, then clears the session. Reading `profileRef` captures the user's
-  // final picks even on a fast click before React commits the latest state.
+  // next. Emits the About-you snapshot + completion analytics exactly once and
+  // clears the session. Reading `profileRef` captures the user's final picks
+  // even on a fast click before React commits the latest state.
   // Callers pick the destination: home (`onFinish`) or the design-system
   // create flow (`onGoBuild`).
   // `completionType` distinguishes the final-step fork (C2, tracking spec §3.1):
@@ -2165,26 +2150,17 @@ function OnboardingView({
   ): Promise<void> {
     emitAboutYouSubmit();
     void persistOnboardingProfileToMemory();
-    const newsletterEmail = profileRef.current.email;
-    const shouldSubmitNewsletter =
-      NEWSLETTER_EMAIL_RE.test(newsletterEmail.trim().toLowerCase());
-    if (shouldSubmitNewsletter) {
-      setNewsletterSubmitting(true);
-      await submitNewsletterEmail(newsletterEmail);
-    }
     emitOnboardingClick('continue', 'continue');
     emitOnboardingComplete('completed', completionType);
     clearOnboardingSessionId();
   }
 
   async function handleFinishToHome(): Promise<void> {
-    if (newsletterSubmitting) return;
     await runOnboardingCompletion('completed_without_design_system');
     onFinish();
   }
 
   async function handleFinishToBuild(): Promise<void> {
-    if (newsletterSubmitting) return;
     await runOnboardingCompletion('completed_with_design_system');
     onGoBuild();
   }
@@ -2346,31 +2322,6 @@ function OnboardingView({
       use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
       discovery_source: snapshot.source || 'unknown',
     });
-  }
-
-  // Optional newsletter signup captured on the Newsletter step. The last-step
-  // button shows loading while this settles; failures are swallowed so
-  // onboarding completion never depends on the marketing site. A blank or
-  // malformed email is simply skipped. Only a boolean opt-in is tracked — the
-  // address itself is never sent to analytics.
-  async function submitNewsletterEmail(rawEmail: string): Promise<void> {
-    const email = rawEmail.trim().toLowerCase();
-    if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
-    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
-    try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'client' }),
-        signal: controller.signal,
-      });
-    } catch {
-      // Swallow — onboarding completion must not depend on the marketing site.
-    } finally {
-      window.clearTimeout(timeout);
-    }
   }
 
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
@@ -2553,10 +2504,7 @@ function OnboardingView({
     step,
   ]);
 
-  const onboardingNavigationLocked = newsletterSubmitting;
-  const primaryActionLabel = isLastStep && newsletterSubmitting
-    ? t('common.loading')
-    : step === 0 && amrLoginPending
+  const primaryActionLabel = step === 0 && amrLoginPending
     ? t('settings.amrSigningIn')
     : step === 0 && amrSelectedAndSignedOut
       ? t('settings.amrSignInToContinue')
@@ -2813,7 +2761,6 @@ function OnboardingView({
                 type="button"
                 className="onboarding-view__back-to-cloud"
                 onClick={handleProfileQuestionBack}
-                disabled={onboardingNavigationLocked}
               >
                 <Icon name="chevron-left" size={14} />
                 <span>{t('settings.onboardingBack')}</span>
@@ -2847,41 +2794,6 @@ function OnboardingView({
           ) : null}
 
           {step === 2 ? (
-            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingNewsletterTitle')}
-                body={t('settings.onboardingNewsletterBody')}
-              />
-              <label className="onboarding-view__email-field">
-                <span className="onboarding-view__email-label">
-                  {t('newsletter.label')}
-                </span>
-                <input
-                  className="onboarding-view__email-input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={t('newsletter.placeholder')}
-                  value={profile.email}
-                  onChange={(event) =>
-                    setProfile((current) => ({ ...current, email: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
-          ) : null}
-
-
-          {step === 3 ? (
             <div className="onboarding-view__panel onboarding-view__build">
               <span className="onboarding-view__build-badge">
                 <Icon name="sparkles" size={13} aria-hidden />
@@ -2949,7 +2861,6 @@ function OnboardingView({
                   type="button"
                   className="onboarding-view__ghost onboarding-view__build-back"
                   onClick={handleBackWithTracking}
-                  disabled={onboardingNavigationLocked}
                 >
                   {t('settings.onboardingBack')}
                 </button>
@@ -2959,7 +2870,6 @@ function OnboardingView({
                   onClick={() => {
                     void handleFinishToHome();
                   }}
-                  disabled={newsletterSubmitting}
                 >
                   {t('onboarding.buildHome')}
                 </button>
@@ -2969,8 +2879,6 @@ function OnboardingView({
                   onClick={() => {
                     void handleFinishToBuild();
                   }}
-                  disabled={newsletterSubmitting}
-                  aria-busy={newsletterSubmitting ? true : undefined}
                 >
                   <span>{t('onboarding.buildStart')}</span>
                 </button>
@@ -2978,7 +2886,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 1 || step === 3 ? null : (
+          {step === 1 || step === 2 ? null : (
             <div className="onboarding-view__actions">
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
@@ -3001,11 +2909,10 @@ function OnboardingView({
                   connectGateTooltip ? ' od-tooltip' : ''
                 }`}
                 onClick={handlePrimaryAction}
-                disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
+                disabled={amrLoginPending || amrLoginCancelPending}
                 aria-disabled={connectStepBlocked || undefined}
                 data-tooltip={connectGateTooltip ?? undefined}
                 data-tooltip-placement="top"
-                aria-busy={newsletterSubmitting ? true : undefined}
               >
                 <span>{primaryActionLabel}</span>
               </button>
