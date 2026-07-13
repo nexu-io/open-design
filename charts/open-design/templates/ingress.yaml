@@ -3,8 +3,8 @@
 {{- range .Values.ingress.hosts }}
   {{- range .paths }}
     {{- $configuredPath := .path | trimSuffix "/" -}}
-    {{- if and $webBasePath $configuredPath (ne $configuredPath $webBasePath) }}
-      {{- fail "ingress path must match config.webBasePath when a fixed Web base path is configured" }}
+    {{- if and $configuredPath (ne $configuredPath $webBasePath) }}
+      {{- fail "ingress path must match config.webBasePath" }}
     {{- end }}
   {{- end }}
 {{- end }}
