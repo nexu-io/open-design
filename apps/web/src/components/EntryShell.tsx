@@ -1339,6 +1339,11 @@ function OnboardingView({
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
+  const [onboardingConfigPersistState, setOnboardingConfigPersistState] = useState<
+    | { status: 'idle' }
+    | { status: 'saving'; token: number }
+    | { status: 'error'; token: number }
+  >({ status: 'idle' });
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [providerTestState, setProviderTestState] = useState<
     | { status: 'idle' }
@@ -1412,6 +1417,7 @@ function OnboardingView({
   const amrAgentRefreshAttemptedRef = useRef(false);
   const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
   const providerAutoTestKeyRef = useRef<string | null>(null);
+  const onboardingConfigPersistTokenRef = useRef(0);
   const providerModelAutoSelectRef = useRef({
     model: config.model,
     providerModelsInputKey: '',
@@ -1422,6 +1428,11 @@ function OnboardingView({
   const deploymentProviderAvailable =
     deploymentProviderConfig?.available === true &&
     deploymentProviderConfig.protocol === 'openai';
+  useEffect(() => {
+    if (runtime === 'deployment' || onboardingConfigPersistState.status === 'idle') return;
+    onboardingConfigPersistTokenRef.current += 1;
+    setOnboardingConfigPersistState({ status: 'idle' });
+  }, [onboardingConfigPersistState.status, runtime]);
   const providerCredentialSource = runtime === 'deployment' ? 'deployment' : 'user';
   const deploymentProviderModelsFingerprint =
     deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
@@ -1506,7 +1517,8 @@ function OnboardingView({
   const deploymentProviderReady =
     runtime === 'deployment' &&
     deploymentProviderAvailable &&
-    Boolean(config.model.trim());
+    Boolean(config.model.trim()) &&
+    onboardingConfigPersistState.status === 'idle';
   const connectStepRuntimeReady =
     (runtime === 'amr' && amrSignedIn) ||
     (runtime === 'local' && selectedAgent !== null) ||
@@ -1518,7 +1530,15 @@ function OnboardingView({
   // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
   // "Sign in to continue" CTA — still clickable, but the tooltip explains why
   // the next steps need a runtime first.
-  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | 'deployment_model_missing' | null =
+  const connectGateReason:
+    | 'no_runtime'
+    | 'amr_signed_out'
+    | 'local_agent_unavailable'
+    | 'byok_unverified'
+    | 'deployment_model_missing'
+    | 'deployment_config_saving'
+    | 'deployment_config_failed'
+    | null =
     step !== 0
       ? null
       : amrSelectedAndSignedOut
@@ -1529,7 +1549,11 @@ function OnboardingView({
             : runtime === 'byok'
               ? 'byok_unverified'
               : runtime === 'deployment'
-                ? 'deployment_model_missing'
+                ? onboardingConfigPersistState.status === 'saving'
+                  ? 'deployment_config_saving'
+                  : onboardingConfigPersistState.status === 'error'
+                    ? 'deployment_config_failed'
+                    : 'deployment_model_missing'
               : 'no_runtime'
           : null;
   const connectGateTooltip =
@@ -1541,9 +1565,13 @@ function OnboardingView({
           ? t('settings.onboardingGateTooltipByok')
           : connectGateReason === 'deployment_model_missing'
             ? t('newproj.modelMissingSub')
-            : connectGateReason === 'no_runtime'
-              ? t('settings.onboardingGateTooltipNoRuntime')
-              : null;
+            : connectGateReason === 'deployment_config_saving'
+              ? t('settings.autosaveSaving')
+              : connectGateReason === 'deployment_config_failed'
+                ? t('settings.autosaveError')
+                : connectGateReason === 'no_runtime'
+                  ? t('settings.onboardingGateTooltipNoRuntime')
+                  : null;
 
   useEffect(() => {
     return () => {
@@ -1958,7 +1986,20 @@ function OnboardingView({
   }
 
   function persistOnboardingConfig(nextConfig: AppConfig): void {
-    void Promise.resolve(onConfigPersist(nextConfig)).catch(() => undefined);
+    const token = onboardingConfigPersistTokenRef.current + 1;
+    onboardingConfigPersistTokenRef.current = token;
+    setOnboardingConfigPersistState({ status: 'saving', token });
+    void Promise.resolve(onConfigPersist(nextConfig))
+      .then(() => {
+        if (onboardingConfigPersistTokenRef.current === token) {
+          setOnboardingConfigPersistState({ status: 'idle' });
+        }
+      })
+      .catch(() => {
+        if (onboardingConfigPersistTokenRef.current === token) {
+          setOnboardingConfigPersistState({ status: 'error', token });
+        }
+      });
   }
 
   function preservedOpenAiUserDraft(): ApiProtocolConfig | undefined {
@@ -3195,6 +3236,11 @@ function OnboardingView({
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
                   {amrLoginError}
+                </span>
+              ) : null}
+              {step === 0 && runtime === 'deployment' && onboardingConfigPersistState.status === 'error' ? (
+                <span className="onboarding-view__action-status is-error" role="alert">
+                  {t('settings.autosaveError')}
                 </span>
               ) : null}
               {step === 0 && amrLoginPending ? (

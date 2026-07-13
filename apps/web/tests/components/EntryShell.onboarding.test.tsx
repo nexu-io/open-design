@@ -147,8 +147,9 @@ function renderOnboarding(
           {...props}
           config={config}
           onConfigPersist={(next) => {
-            props.onConfigPersist(next);
+            const result = props.onConfigPersist(next);
             setConfig(next as AppConfig);
+            return result;
           }}
         />
       </I18nProvider>
@@ -1635,6 +1636,60 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/provider/models'))).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
+  });
+
+  it('blocks deployment onboarding when config persistence fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const onConfigPersist = vi.fn()
+      .mockRejectedValueOnce(new Error('save failed'))
+      .mockResolvedValue(undefined);
+    renderOnboarding({
+      onConfigPersist: onConfigPersist as React.ComponentProps<typeof EntryShell>['onConfigPersist'],
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Workspace provider/i }));
+
+    await waitFor(() => {
+      expect(onConfigPersist).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('local daemon');
+    });
+    const continueButton = screen.getByRole('button', { name: /^Continue$/i });
+    expect(continueButton.getAttribute('aria-disabled')).toBe('true');
+
+    fireEvent.click(continueButton);
+    expect(screen.queryByRole('heading', { name: 'About you' })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-routed-retry' } });
+    await waitFor(() => {
+      expect(onConfigPersist).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(continueButton.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    fireEvent.click(continueButton);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
   });
 
   it('requires an explicit deployment model when the daemon config has no default model', async () => {
