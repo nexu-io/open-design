@@ -40,7 +40,9 @@ team. Each category is independently controllable in Settings.
 - The contents of your generated artifact files.
 - Your BYOK API keys, tokens, or other secrets — these are redacted before
   send and are never part of telemetry.
-- Anything at all while telemetry is turned off.
+- Anything at all while telemetry is turned off — with one exception, described
+  under [Stability and crash diagnostics](#stability-and-crash-diagnostics)
+  below.
 
 ## How telemetry is sent
 
@@ -52,14 +54,31 @@ product-analytics provider, using a public project key. The web app, the local
 daemon, and the packaged desktop app each send these directly to PostHog rather
 than through the relay described below.
 
-**Conversation and tool content**, when that category is enabled, is sent as
-redacted batches to a Cloudflare Worker relay operated by the Open Design team,
-which forwards them to [Langfuse](https://langfuse.com) for analysis. The relay
-holds the Langfuse write credentials server-side, so packaged clients only ever
-ship a public relay URL — no secret keys.
+**Conversation and tool content** is sent as redacted batches to a Cloudflare
+Worker relay operated by the Open Design team, which forwards them to
+[Langfuse](https://langfuse.com) for analysis. This path is used only when
+**both** *Anonymous metrics* **and** *Conversation and tool content* are enabled
+in **Settings → Privacy** — if metrics are turned off, no content is sent to
+Langfuse even when the content toggle is left on. The relay holds the Langfuse
+write credentials server-side, so packaged clients only ever ship a public relay
+URL — no secret keys.
 
 If either endpoint is unavailable the app retries quietly and keeps working;
 telemetry never blocks your workflow.
+
+## Stability and crash diagnostics
+
+One narrow category is deliberately **not** covered by the telemetry toggle.
+Exception reports, white screens, stuck or dropped runs, and startup failures are
+sent to PostHog **even when telemetry is turned off**, so that stability problems
+stay visible to the team — including crashes that happen before the app is
+healthy enough to report anything else.
+
+These reports carry the exception type and message, scrubbed stack frames and
+file paths, the path of the page you were on, your anonymous installation ID, the
+app version, and a session ID. They are not a copy of your conversations or your
+project files, and the redaction described above still applies — API keys, tokens,
+and other secrets are stripped before anything is sent.
 
 ## Your anonymous ID
 
