@@ -139,6 +139,24 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.extractions.map((r) => r.id).sort()).toEqual(['a', 'b']);
   });
 
+  it('re-fetches to restore the row when the delete request rejects', async () => {
+    const server = [record('a'), record('b')];
+    const port = makePort({
+      deleteExtraction: vi.fn(async () => { throw new Error('network offline'); }),
+      fetchExtractions: vi.fn(async () => server),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('b')));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    await act(async () => {
+      await result.current.onDeleteExtraction('a');
+    });
+
+    expect(port.fetchExtractions).toHaveBeenCalledOnce();
+    expect(result.current.extractions.map((r) => r.id).sort()).toEqual(['a', 'b']);
+  });
+
   it('clearExtractions empties the list and calls the port', async () => {
     const port = makePort({ clearExtractionHistory: vi.fn(async () => true) });
     const { result } = renderHook(() => useMemoryExtractions(port));
@@ -167,6 +185,23 @@ describe('useMemoryExtractions — delete + clear', () => {
 
     // The failed clear triggers a reload, restoring the server truth.
     expect(port.fetchExtractions).toHaveBeenCalled();
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('re-fetches when the clear request rejects', async () => {
+    const server = [record('a')];
+    const port = makePort({
+      clearExtractionHistory: vi.fn(async () => { throw new Error('network offline'); }),
+      fetchExtractions: vi.fn(async () => server),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    await act(async () => {
+      await result.current.clearExtractions();
+    });
+
+    expect(port.fetchExtractions).toHaveBeenCalledOnce();
     expect(result.current.extractions.map((r) => r.id)).toEqual(['a']);
   });
 

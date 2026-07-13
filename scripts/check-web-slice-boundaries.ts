@@ -36,6 +36,7 @@ import ts from "typescript";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const webSrcDir = path.join(repoRoot, "apps", "web", "src");
+const webAppDir = path.join(repoRoot, "apps", "web", "app");
 const featuresDir = path.join(webSrcDir, "features");
 const providersDir = path.join(webSrcDir, "providers");
 
@@ -318,9 +319,15 @@ async function checkSliceFiles(violations: Violation[]): Promise<void> {
 // walks featuresDir — reports success. The same collector resolves `@/*` aliases
 // too, so `@/src/features/<slice>/...` is not a boundary escape hatch.
 async function checkExternalSliceImports(violations: Violation[]): Promise<void> {
-  for (const fullPath of await collectSourceFiles(webSrcDir)) {
-    if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
-    violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), await readFile(fullPath, "utf8")));
+  // `app/` contains live Next.js entrypoints alongside the shared `src/`
+  // runtime. Both are consumers outside a slice and therefore must use its
+  // public barrel; scanning only src/ would leave app-route deep imports as an
+  // escape hatch.
+  for (const root of [webSrcDir, webAppDir]) {
+    for (const fullPath of await collectSourceFiles(root)) {
+      if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
+      violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), await readFile(fullPath, "utf8")));
+    }
   }
 }
 

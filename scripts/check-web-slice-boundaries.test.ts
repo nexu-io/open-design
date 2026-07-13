@@ -4,6 +4,7 @@ import test from "node:test";
 import { collectImportBoundaryViolations, resolveWebImport } from "./check-web-slice-boundaries.ts";
 
 const ORCHESTRATOR = "apps/web/src/components/MemorySection.tsx";
+const APP_ROUTE = "apps/web/app/[[...slug]]/page.tsx";
 const SIBLING_SLICE_FILE = "apps/web/src/features/mcp/components/Panel.tsx";
 
 test("resolveWebImport maps the @/* alias onto the apps/web root", () => {
@@ -30,6 +31,15 @@ test("outside-in: a relative deep import into a slice is rejected", () => {
 test("outside-in: an @/-aliased deep import into a slice is rejected too", () => {
   const violations = collectImportBoundaryViolations(
     ORCHESTRATOR,
+    "import { useMemoryConfig } from '@/src/features/memory/hooks/useMemoryConfig.hooks';",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("outside-in: an app-route deep import into a slice is rejected", () => {
+  const violations = collectImportBoundaryViolations(
+    APP_ROUTE,
     "import { useMemoryConfig } from '@/src/features/memory/hooks/useMemoryConfig.hooks';",
   );
   assert.equal(violations.length, 1);

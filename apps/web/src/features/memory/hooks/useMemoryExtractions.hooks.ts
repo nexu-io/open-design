@@ -80,9 +80,16 @@ export function useMemoryExtractions(
       // no-op against an already-removed id; if the request fails we re-fetch
       // to put the row back instead of silently lying.
       setExtractions((prev) => prev.filter((r) => r.id !== id));
-      const ok = await port.deleteExtraction(id);
+      let ok = false;
+      try {
+        ok = await port.deleteExtraction(id);
+      } catch {
+        // A network failure rejects rather than returning the adapter's normal
+        // non-2xx `false` result. Treat both paths alike so the optimistic UI
+        // never claims the server-side row was deleted when it was not.
+      }
       if (!ok) {
-        void reloadExtractions();
+        await reloadExtractions();
       }
     },
     [reloadExtractions, port],
@@ -90,9 +97,14 @@ export function useMemoryExtractions(
 
   const clearExtractions = useCallback(async () => {
     setExtractions([]);
-    const ok = await port.clearExtractionHistory();
+    let ok = false;
+    try {
+      ok = await port.clearExtractionHistory();
+    } catch {
+      // See the per-row delete path above: fetch rejects on transport failure.
+    }
     if (!ok) {
-      void reloadExtractions();
+      await reloadExtractions();
     }
   }, [reloadExtractions, port]);
 
