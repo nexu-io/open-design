@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button, Textarea } from '@open-design/components';
 import type {
+  BrandDetailResponse,
   ConnectorConnectResponse,
   ConnectorDetail,
   ConnectorStatusResponse,
@@ -153,7 +154,20 @@ export interface DesignSystemGenerateSnapshot {
 
 interface CreationProps {
   onBack: () => void;
-  onCreated: (projectId: string, project?: Project, conversationId?: string | null) => void;
+  /** @deprecated Compatibility for older embedders; artifact creation uses onCreateArtifactProject. */
+  onCreated?: (projectId: string, project?: Project, conversationId?: string | null) => void;
+  onCreateArtifactProject?: (input: {
+    name: string;
+    skillId: string | null;
+    designSystemId: string | null;
+    pendingPrompt: string;
+    pluginId: string;
+    pluginType: string;
+    pluginInputs: Record<string, unknown>;
+    metadata: ProjectMetadata;
+    conversationMode: 'design';
+    autoSendFirstMessage: true;
+  }) => Promise<boolean>;
   onProjectPrepared?: (project: Project) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
@@ -204,9 +218,33 @@ type DesignMdPreviewTheme = 'light' | 'dark';
 type DemoExtractionStage = 'form' | 'extracting-logo' | 'logo-review' | 'extracting-system' | 'system-review';
 
 interface DemoExtractionProject {
+  brandId: string;
   projectId: string;
   project?: Project;
   conversationId?: string | null;
+  designSystemId?: string | null;
+}
+
+const DEMO_DESIGN_SYSTEM_READY_ATTEMPTS = 30;
+const DEMO_DESIGN_SYSTEM_READY_INTERVAL_MS = 500;
+
+async function waitForDemoDesignSystem(
+  brandId: string,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < DEMO_DESIGN_SYSTEM_READY_ATTEMPTS; attempt += 1) {
+    const response = await fetch(`/api/brands/${encodeURIComponent(brandId)}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error('Could not read the extracted design system.');
+    const detail = (await response.json()) as BrandDetailResponse;
+    if (detail.meta.designSystemId) return detail.meta.designSystemId;
+    if (detail.meta.status === 'failed' || detail.meta.status === 'needs_input') {
+      return null;
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, DEMO_DESIGN_SYSTEM_READY_INTERVAL_MS));
+  }
+  return null;
 }
 
 interface DemoExtractedFoundation {
@@ -360,7 +398,7 @@ function clearRememberedGenerationJob(designSystemId: string): void {
 
 export function DesignSystemCreationFlow({
   onBack,
-  onCreated,
+  onCreateArtifactProject,
   onProjectPrepared,
   onSystemsRefresh,
   config,
@@ -403,6 +441,7 @@ export function DesignSystemCreationFlow({
   const [demoUploadedLogoUrl, setDemoUploadedLogoUrl] = useState<string | null>(null);
   const [demoProject, setDemoProject] = useState<DemoExtractionProject | null>(null);
   const [demoFoundation, setDemoFoundation] = useState<DemoExtractedFoundation | null>(null);
+  const [demoArtifactCreating, setDemoArtifactCreating] = useState(false);
   const demoLogoUploadRef = useRef<HTMLInputElement>(null);
   const demoExtractionStartedAtRef = useRef<number | null>(null);
   const demoLogoRevealTimerRef = useRef<number | null>(null);
@@ -440,27 +479,53 @@ export function DesignSystemCreationFlow({
   }
 
   async function handleCreateDemoArtifact(artifact: HomeHeroChip, prompt: string) {
-    if (!demoProject) return;
+    if (!demoProject || demoArtifactCreating) return;
+    if (!onCreateArtifactProject) {
+      setError('Project creation is not available from this surface.');
+      return;
+    }
+    if (artifact.action.kind !== 'apply-scenario') {
+      setError('This artifact type is not available for project generation.');
+      return;
+    }
     const generationPrompt = [
       `Create a ${artifact.label} using the extracted design system from ${demoSourceUrl || demoBrandName}.`,
       prompt.trim(),
     ].filter(Boolean).join('\n\n');
+    setDemoArtifactCreating(true);
+    setError(null);
     try {
-      const preparedProject = await patchProject(demoProject.projectId, {
-        pendingPrompt: generationPrompt,
-      });
-      try {
-        window.sessionStorage.setItem(`od:auto-send-first:${demoProject.projectId}`, '1');
-      } catch {
-        // The project still opens with the generated prompt ready to send.
+      const designSystemId = await waitForDemoDesignSystem(demoProject.brandId);
+      if (!designSystemId) {
+        setError('The extracted design system is still preparing. Try again in a moment.');
+        return;
       }
-      onCreated(
-        demoProject.projectId,
-        preparedProject ?? demoProject.project,
-        demoProject.conversationId,
-      );
+      const accepted = await onCreateArtifactProject({
+        name: artifact.label,
+        skillId: null,
+        designSystemId,
+        pendingPrompt: generationPrompt,
+        pluginId: artifact.action.pluginId,
+        pluginType: 'official',
+        pluginInputs: {
+          ...(artifact.action.inputs ?? {}),
+          prompt: prompt.trim(),
+        },
+        metadata: {
+          ...(artifact.action.projectMetadata ?? {}),
+          kind: artifact.action.projectKind,
+          nameSource: 'generated',
+        },
+        conversationMode: 'design',
+        autoSendFirstMessage: true,
+      });
+      if (!accepted) {
+        setError('Could not start artifact generation. Check the daemon and try again.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start artifact generation.');
+    } finally {
+      setDemoArtifactCreating(false);
     }
   }
 
@@ -1085,9 +1150,11 @@ export function DesignSystemCreationFlow({
       setDemoSourceUrl(extractUrl || demoSource);
       setDemoBrandName(result.brandName?.trim() || designSystemDemoLabel(extractUrl || demoSource));
       setDemoProject({
+        brandId: result.id,
         projectId: result.projectId,
         project: projectForCreated,
         conversationId: result.conversationId,
+        designSystemId: result.designSystemId ?? projectForCreated?.designSystemId ?? null,
       });
       const elapsed = performance.now() - (demoExtractionStartedAtRef.current ?? performance.now());
       demoLogoRevealTimerRef.current = window.setTimeout(() => {
@@ -1503,7 +1570,6 @@ export function DesignSystemCreationFlow({
           ) : null}
         </section>
 
-        {error ? <div className="ds-editor-error">{error}</div> : null}
         {embedded ? (
           <div className="ds-setup-actions ds-setup-actions--embedded">
             <Button
@@ -1546,9 +1612,11 @@ export function DesignSystemCreationFlow({
           onUpload={handleDemoLogoUpload}
           onApproveLogo={handleApproveDemoLogo}
           onCreateArtifact={handleCreateDemoArtifact}
+          artifactCreating={demoArtifactCreating}
           canOpenProject={demoProject !== null}
         />
       )}
+      {error ? <div className="ds-editor-error">{error}</div> : null}
       {libraryPickerOpen ? (
         <LibraryPicker
           title={t('dsCreate.libraryPickerTitle')}
@@ -1571,6 +1639,7 @@ function DesignSystemExtractionDemo({
   onUpload,
   onApproveLogo,
   onCreateArtifact,
+  artifactCreating,
   canOpenProject,
 }: {
   stage: Exclude<DemoExtractionStage, 'form'>;
@@ -1582,6 +1651,7 @@ function DesignSystemExtractionDemo({
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onApproveLogo: () => void;
   onCreateArtifact: (artifact: HomeHeroChip, prompt: string) => void;
+  artifactCreating: boolean;
   canOpenProject: boolean;
 }) {
   const label = brandName || 'your brand';
@@ -1744,10 +1814,10 @@ function DesignSystemExtractionDemo({
             <Button
               variant="primary"
               aria-label="Start generating"
-              disabled={!artifactPrompt.trim()}
+              disabled={!artifactPrompt.trim() || artifactCreating}
               onClick={() => onCreateArtifact(selectedArtifact, artifactPrompt)}
             >
-              <Icon name="chevron-right" size={18} />
+              {artifactCreating ? <Spinner size={18} /> : <Icon name="chevron-right" size={18} />}
             </Button>
           </div>
           <div className="ds-artifact-prompt__examples">
