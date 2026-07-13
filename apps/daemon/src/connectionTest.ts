@@ -736,6 +736,9 @@ function appendVersionedApiPath(baseUrl: string, suffix: string): string {
     : `${pathname}/v1${suffix}`;
   return url.toString();
 }
+export function requiresAzureResponsesApi(model: string): boolean {
+  return /^gpt-5\.6(?:[-_]|$)/i.test(model.trim());
+}
 
 function truncateSample(text: unknown): string {
   if (typeof text !== 'string') return '';
@@ -798,6 +801,14 @@ function inspectProviderCompletion(
   if (!obj) return { valid: false };
 
   if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix') {
+    if (
+      protocol === 'azure' &&
+      !Array.isArray(obj.choices) &&
+      (typeof (obj as { output_text?: unknown }).output_text === 'string' ||
+        Array.isArray((obj as { output?: unknown }).output))
+    ) {
+      return { valid: true, sample: 'valid completion' };
+    }
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
@@ -1230,6 +1241,33 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
           : usesVersionedOpenAIPath
             ? ''
             : '2024-10-21';
+
+      if (requiresAzureResponsesApi(model)) {
+        url.pathname = usesVersionedOpenAIPath
+          ? `${basePath}/responses`
+          : `${basePath}/openai/deployments/${encodeURIComponent(model)}/responses`;
+        if (usesVersionedOpenAIPath && !apiVersion) {
+          url.searchParams.delete('api-version');
+        }
+        if (apiVersion) {
+          url.searchParams.set('api-version', apiVersion);
+        }
+        return {
+          url: url.toString(),
+          headers: {
+            'content-type': 'application/json',
+            'api-key': apiKey,
+          },
+          body: {
+            ...(usesVersionedOpenAIPath ? { model } : {}),
+            input: SMOKE_PROMPT,
+            max_output_tokens: PROVIDER_MAX_TOKENS,
+            stream: false,
+          },
+          extractText: extractAzureResponsesText,
+        };
+      }
+
       url.pathname = usesVersionedOpenAIPath
         ? `${basePath}/chat/completions`
         : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
@@ -1330,6 +1368,27 @@ function extractOpenAIMessageText(data: unknown): string {
     | undefined;
   if (typeof first?.message?.content === 'string') return first.message.content;
   if (typeof first?.text === 'string') return first.text;
+  return '';
+}
+function extractAzureResponsesText(data: unknown): string {
+  const obj = data as { output_text?: unknown; output?: unknown };
+  if (typeof obj.output_text === 'string') return obj.output_text;
+  const output = obj.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const content = (item as { content?: unknown })?.content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content) {
+        if (
+          block &&
+          typeof block === 'object' &&
+          typeof (block as { text?: unknown }).text === 'string'
+        ) {
+          return (block as { text: string }).text;
+        }
+      }
+    }
+  }
   return '';
 }
 
