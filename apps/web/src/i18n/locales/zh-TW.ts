@@ -3385,7 +3385,7 @@ export const zhTW: Dict = {
   'dsCreate.missingSourceError': '請加入網站、DESIGN.md、描述、檔案、Figma 來源或備註來建立設計系統。',
   'dsCreate.continueToGeneration': '繼續生成',
   'dsCreate.embeddedTitle': '從你的素材生成',
-  'dsCreate.focusedTitle': '新增你的品牌',
+  'dsCreate.focusedTitle': '新增你的設計系統',
   'dsCreate.focusedBody': '貼上一個網站，Open Design 將從這裡開始。',
   'dsCreate.primaryInputPlaceholder': '請輸入你的網站',
   'dsCreate.embeddedBody': '先加入網站或品牌參考，再補充你已有的來源檔案。',

@@ -187,7 +187,6 @@
 }
 .ds-setup-field textarea {
   min-height: 112px;
-  resize: vertical;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 13px;
@@ -312,11 +311,11 @@
   outline-offset: 3px;
   border-radius: 2px;
 }
-.ds-primary-intake textarea {
+.ds-primary-intake input {
   display: block;
   width: 100%;
-  min-height: 64px;
-  padding: 14px 54px 14px 15px;
+  height: 48px;
+  padding: 0 54px 0 15px;
   resize: vertical;
   border: 0;
   border-radius: var(--radius-large, 8px);
@@ -325,15 +324,15 @@
   background: transparent;
   font: inherit;
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1;
 }
-.ds-primary-intake textarea::placeholder {
+.ds-primary-intake input::placeholder {
   color: color-mix(in srgb, var(--text-muted) 68%, transparent);
 }
 .ds-primary-intake__submit {
   position: absolute;
   right: 11px;
-  bottom: 11px;
+  top: 50%;
   display: inline-grid;
   width: 34px;
   height: 34px;
@@ -344,10 +343,11 @@
   background: var(--accent);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 32%, transparent);
   cursor: pointer;
+  transform: translateY(-50%);
   transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .ds-primary-intake__submit:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: translateY(calc(-50% - 1px));
 }
 .ds-primary-intake__submit:disabled {
   cursor: default;

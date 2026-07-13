@@ -3384,7 +3384,7 @@ export const en: Dict = {
   'dsCreate.missingSourceError': 'Add a website, DESIGN.md, description, file, Figma source, or notes to create a design system.',
   'dsCreate.continueToGeneration': 'Continue to generation',
   'dsCreate.embeddedTitle': 'Generate from your material',
-  'dsCreate.focusedTitle': 'Add your brand',
+  'dsCreate.focusedTitle': 'Add your Design System',
   'dsCreate.focusedBody': 'Paste a website and Open Design will take it from there.',
   'dsCreate.primaryInputPlaceholder': 'Enter your website',
   'dsCreate.embeddedBody': 'Start with a website or brand reference, then add any source files you already have.',

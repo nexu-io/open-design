@@ -383,7 +383,8 @@ export function DesignSystemCreationFlow({
   const githubConnectorRef = useRef<ConnectorDetail | null>(null);
   const githubConnectorLoadedRef = useRef(false);
   const embedded = chrome === 'embedded';
-  const showAdvancedSources = !embedded && !peekOnboardingSessionId();
+  // Keep this demo intake focused on a single website source.
+  const showAdvancedSources = false;
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -1045,8 +1046,12 @@ export function DesignSystemCreationFlow({
           <h2>{t('dsCreate.focusedTitle')}</h2>
           <p>{t('dsCreate.focusedBody')}</p>
           <div className="ds-primary-intake">
-            <textarea
-              rows={2}
+            <input
+              type="url"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={state.company}
               onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
               placeholder={t('dsCreate.primaryInputPlaceholder')}
