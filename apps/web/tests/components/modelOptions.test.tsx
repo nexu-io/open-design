@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CUSTOM_MODEL_SENTINEL,
+  SAME_AS_CHAT_SENTINEL,
   isCustomModel,
   orderModelOptionsByAvailability,
   renderModelOptions,
@@ -196,5 +197,54 @@ describe('SearchableModelSelect', () => {
       expect.objectContaining({ id: 'deepseek-v4-pro' }),
     );
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('pins SAME_AS_CHAT_SENTINEL ahead of the alphabetical model list (regression for #5144)', async () => {
+    // The memory-model picker uses `__same_as_chat__` as the "no override"
+    // sentinel option. SearchableModelSelect must keep it pinned first
+    // (right after the chat 'default' sentinel, when present) so the
+    // memory picker's default option never drifts into the A→Z model list,
+    // and so a search that doesn't match "Same as chat" still surfaces it.
+    const onChange = vi.fn();
+    const options = [
+      { id: SAME_AS_CHAT_SENTINEL, label: 'Same as chat' },
+      { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
+      { id: 'gpt-5', label: 'gpt-5' },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+    ];
+    render(
+      <SearchableModelSelect
+        models={options}
+        value={SAME_AS_CHAT_SENTINEL}
+        onChange={onChange}
+        searchPlaceholder="Search models"
+        searchInputTestId="memory-search"
+        popoverTestId="memory-popover"
+        minSearchableOptions={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const listbox = await screen.findByRole('listbox');
+    const items = await within(listbox).findAllByRole('option');
+    const ids = items.map((option) => option.getAttribute('data-value') ?? option.textContent ?? '');
+    // Sentinel pinned first, then models A→Z
+    expect(ids[0]).toBe(SAME_AS_CHAT_SENTINEL);
+    expect(ids.slice(1)).toEqual([
+      'claude-sonnet-5',
+      'deepseek-v4-pro',
+      'gpt-5',
+    ]);
+
+    // Filter by a query that doesn't match "Same as chat" — the sentinel
+    // must still be present (pinned), otherwise memory users would lose
+    // their default pill as soon as they start typing.
+    const search = screen.getByTestId('memory-search') as HTMLInputElement;
+    fireEvent.change(search, { target: { value: 'gpt' } });
+    const filtered = await within(listbox).findAllByRole('option');
+    const filteredIds = filtered.map((option) => option.getAttribute('data-value') ?? option.textContent ?? '');
+    expect(filteredIds).toContain(SAME_AS_CHAT_SENTINEL);
+    expect(filteredIds).toContain('gpt-5');
+    expect(filteredIds).not.toContain('claude-sonnet-5');
   });
 });

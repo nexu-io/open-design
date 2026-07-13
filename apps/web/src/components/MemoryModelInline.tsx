@@ -46,6 +46,7 @@ import {
 } from '../state/apiProtocols';
 import {
   CUSTOM_MODEL_SENTINEL,
+  SAME_AS_CHAT_SENTINEL,
   SearchableModelSelect,
 } from './modelOptions';
 
@@ -83,7 +84,10 @@ interface Props {
 
 // "No override" sentinel — distinct from CUSTOM_MODEL_SENTINEL so the
 // reducer can switch between "clear override" and "let me type" cleanly.
-const SAME_AS_CHAT_SENTINEL = '__same_as_chat__';
+// Re-exported from ./modelOptions so the searchable selector can pin it
+// ahead of the alphabetical model list (it would otherwise sort by
+// display label, "Same as chat" — usually landing somewhere in the
+// middle of the model ids). See SAME_AS_CHAT_SENTINEL in modelOptions.tsx.
 
 // Pattern-match a model id back to a provider/protocol. CLI mode has
 // no surrounding ApiProtocol to lean on, so we read the prefix the

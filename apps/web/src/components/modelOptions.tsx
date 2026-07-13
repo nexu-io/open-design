@@ -169,8 +169,24 @@ export const SearchableModelSelect = forwardRef<
       }
     }
     return Array.from(merged.values()).sort((a, b) => {
+      // 'default' is the chat-model sentinel used by several pickers — keep
+      // it pinned first so it never drifts into the alphabetical list.
       if (a.id === 'default') return -1;
       if (b.id === 'default') return 1;
+      // 'Same as chat' is the memory-model picker's no-override sentinel —
+      // pin it ahead of the model list too, mirroring 'default' in the chat
+      // picker. Come after 'default' but before any real model id, in case
+      // both sentinels are ever in the same option list.
+      if (a.id === SAME_AS_CHAT_SENTINEL) {
+        if (b.id === 'default') return 1;
+        return -1;
+      }
+      if (b.id === SAME_AS_CHAT_SENTINEL) {
+        if (a.id === 'default') return -1;
+        return 1;
+      }
+      // Custom (type-below) stays last so users can always find it without
+      // searching.
       if (a.id === CUSTOM_MODEL_SENTINEL) return 1;
       if (b.id === CUSTOM_MODEL_SENTINEL) return -1;
       const la = a.label.toLowerCase();
@@ -201,6 +217,7 @@ export const SearchableModelSelect = forwardRef<
       (option) =>
         option.id === value ||
         option.id === CUSTOM_MODEL_SENTINEL ||
+        option.id === SAME_AS_CHAT_SENTINEL ||
         matchesModelSearch(option, normalizedQuery),
     );
   }, [allOptions, normalizedQuery, value]);
@@ -497,3 +514,4 @@ export function isCustomModel(
 }
 
 export const CUSTOM_MODEL_SENTINEL = '__custom__';
+export const SAME_AS_CHAT_SENTINEL = '__same_as_chat__';
