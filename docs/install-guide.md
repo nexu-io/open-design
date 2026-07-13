@@ -60,7 +60,15 @@ Memory limit [384m]:
 | **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
 | **Port** | `7456` | The port the daemon listens on. Must not be in use. |
 | **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`network-security.md`](network-security.md). Leave empty for localhost-only use. |
-| **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
+| **Memory limit** | `384m` | Runtime container memory cap. This is not a Docker image build-host requirement. Raise for large concurrent agent runs. |
+
+> **Runtime vs build resources:** The installer is designed to pull a prebuilt
+> image and start it with `docker compose up -d --no-build`. The `384m` memory
+> default limits the running container only. If the image pull is unavailable and
+> you choose to build from source instead, the build host needs enough memory for
+> TypeScript compilation, the Next.js production build, package deployment, and
+> dependency cleanup. A small VPS that can run the prebuilt image may still run
+> out of memory while building it locally.
 
 After you confirm, the installer:
 
@@ -189,6 +197,8 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 | `Docker daemon is not running` | Docker Desktop not started | Open Docker Desktop or run `sudo systemctl start docker` |
 | `Port 7456 is already in use` | Another service on that port | Re-run with `--port 8080` |
 | Health check times out | Image pull slow or daemon slow to start | Wait and check `docker compose -f deploy/docker-compose.yml logs` |
+| Image pull fails for `ghcr.io/nexu-io/od:latest` | Registry access, tag availability, or authentication issue | Check the image reference and registry access before falling back to a local build. If you build from source, use a larger build host or CI runner; the runtime memory limit does not size the build. |
+| Local Docker build is killed or exits with out-of-memory errors | Build host is too small for TypeScript/Next.js production build steps | Build on a larger temporary machine or CI runner, push the resulting image, then deploy that image to the smaller runtime host with `--no-build`. |
 | `Permission denied` on install.sh | Script not executable | Run `chmod +x deploy/scripts/install.sh` |
 | systemd unit not created | `systemd` not found | Omit `--no-systemd` if systemd is available, or manage via Docker CLI |
 | `.env` has wrong port after re-install | Old backup not restored | Edit `deploy/.env` directly or delete it and re-run |

@@ -43,6 +43,23 @@ Defaults:
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
+### Runtime limits vs local image builds
+
+The memory defaults above apply to the already-built runtime container. They do
+not describe the host resources needed to build the Docker image from source. A
+source build runs TypeScript compilation, the Next.js production build, package
+deployment, and dependency cleanup before the runtime container exists. That
+build path can need substantially more memory than the running service.
+
+If `docker compose pull` cannot fetch `ghcr.io/nexu-io/od:latest`, do not assume
+that a small VPS which can run the published image can also build it locally. Use
+a larger temporary build host, a CI runner, or another machine with enough memory
+to build and push a private image, then run that image on the smaller runtime
+server.
+
+To avoid accidental local builds while installing on a small server, keep using
+`docker compose up -d --no-build` after a successful pull.
+
 Do not publish the daemon directly on a public or shared LAN interface. The API is
 unauthenticated for non-browser clients, so remote deployments should keep Compose
 bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
