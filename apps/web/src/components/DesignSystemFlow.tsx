@@ -379,6 +379,8 @@ export function DesignSystemCreationFlow({
   const [demoUploadedLogoUrl, setDemoUploadedLogoUrl] = useState<string | null>(null);
   const [demoProject, setDemoProject] = useState<DemoExtractionProject | null>(null);
   const demoLogoUploadRef = useRef<HTMLInputElement>(null);
+  const demoExtractionStartedAtRef = useRef<number | null>(null);
+  const demoLogoRevealTimerRef = useRef<number | null>(null);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
   // the daemon creates the project + real transcript immediately, then the
   // programmatic pass registers a usable user:<id> design system in the
@@ -408,6 +410,10 @@ export function DesignSystemCreationFlow({
   useEffect(() => () => {
     if (demoUploadedLogoUrl?.startsWith('blob:')) URL.revokeObjectURL(demoUploadedLogoUrl);
   }, [demoUploadedLogoUrl]);
+
+  useEffect(() => () => {
+    if (demoLogoRevealTimerRef.current != null) window.clearTimeout(demoLogoRevealTimerRef.current);
+  }, []);
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -916,6 +922,7 @@ export function DesignSystemCreationFlow({
     const demoSource = nonGithubSourceUrlsFromState(generationState)[0]
       ?? sourceUrlsFromState(generationState)[0]
       ?? generationState.company.trim();
+    demoExtractionStartedAtRef.current = performance.now();
     setDemoSourceUrl(demoSource);
     setDemoBrandName(designSystemDemoLabel(demoSource));
     setDemoExtractionStage('extracting-logo');
@@ -1025,7 +1032,11 @@ export function DesignSystemCreationFlow({
         project: projectForCreated,
         conversationId: result.conversationId,
       });
-      setDemoExtractionStage('logo-review');
+      const elapsed = performance.now() - (demoExtractionStartedAtRef.current ?? performance.now());
+      demoLogoRevealTimerRef.current = window.setTimeout(() => {
+        setDemoExtractionStage('logo-review');
+        demoLogoRevealTimerRef.current = null;
+      }, Math.max(0, 1_000 - elapsed));
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
@@ -1533,7 +1544,6 @@ function DesignSystemExtractionDemo({
       {stage === 'logo-review' ? (
         <section className="ds-extraction-demo__card">
           <div className="ds-extraction-demo__logo-tile">
-            <span className="ds-extraction-demo__logo-fallback" aria-hidden>{label.slice(0, 1).toUpperCase()}</span>
             <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
           </div>
           <p className="ds-extraction-demo__eyebrow">Logo detected</p>
@@ -1563,7 +1573,6 @@ function DesignSystemExtractionDemo({
           </div>
           <div className="ds-extraction-demo__result-grid">
             <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
-              <span className="ds-extraction-demo__logo-fallback" aria-hidden>{label.slice(0, 1).toUpperCase()}</span>
               <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
             </article>
             <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--about">

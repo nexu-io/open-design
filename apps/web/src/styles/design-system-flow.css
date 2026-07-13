@@ -210,18 +210,6 @@
   max-height: 74%;
   object-fit: contain;
 }
-.ds-extraction-demo__logo-fallback {
-  position: absolute;
-  display: grid;
-  width: 72px;
-  height: 72px;
-  place-items: center;
-  border-radius: 20px;
-  color: var(--accent-contrast, #fff);
-  background: var(--text-strong);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 34px;
-}
 .ds-extraction-demo__file-input {
   position: absolute;
   width: 1px;
