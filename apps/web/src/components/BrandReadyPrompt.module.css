@@ -3,6 +3,7 @@
    tokens) so it reads as a confirmation, not an alert. Center inside the
    workspace panel, not the full viewport, so it never covers the chat composer. */
 .prompt {
+  box-sizing: border-box;
   position: fixed;
   bottom: max(32px, env(safe-area-inset-bottom));
   left: var(--brand-ready-left-offset, 0px);
