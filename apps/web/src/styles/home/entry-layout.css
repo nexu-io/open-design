@@ -3641,26 +3641,45 @@
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-.onboarding-view__form-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
+.onboarding-question-flow__progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
-/* Profile fields as flat, tappable chips (replaces dropdowns). */
-.onboarding-chip-field {
+.onboarding-question-flow__progress span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.onboarding-question-flow__segments {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: -10px;
+}
+
+.onboarding-question-flow__segments i {
+  display: block;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+  transition: background-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-question-flow__segments i.is-complete {
+  background: var(--accent);
+}
+
+.onboarding-question-flow__options {
   min-width: 0;
 }
 
-.onboarding-chip-field__label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
-.onboarding-chip-field__chips {
+.onboarding-question-flow__choices {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

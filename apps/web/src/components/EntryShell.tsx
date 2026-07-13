@@ -1411,6 +1411,7 @@ function OnboardingView({
     source: '',
     email: '',
   });
+  const [profileQuestionIndex, setProfileQuestionIndex] = useState(0);
   // Live mirror of `profile` so closures that fire faster than React
   // commits (rapid dropdown picks, the Finish-setup click after the
   // last onChange) read the latest selection instead of the value the
@@ -1814,6 +1815,57 @@ function OnboardingView({
     { value: 'search', label: t('settings.onboardingSourceSearch') },
     { value: 'event', label: t('settings.onboardingSourceEvent') },
   ];
+  const profileQuestionIds = compactInviteOnboarding
+    ? (['role', 'useCase'] as const)
+    : (['role', 'orgSize', 'useCase', 'source'] as const);
+  const profileQuestionId = profileQuestionIds[profileQuestionIndex] ?? profileQuestionIds[0];
+  const profileQuestions = {
+    role: { label: t('settings.onboardingRoleLabel'), options: roleOptions },
+    orgSize: { label: t('settings.onboardingOrgSizeLabel'), options: orgSizeOptions },
+    useCase: { label: t('settings.onboardingUseCaseLabel'), options: useCaseOptions },
+    source: { label: t('settings.onboardingSourceLabel'), options: sourceOptions },
+  };
+  const profileQuestion = profileQuestions[profileQuestionId];
+
+  function handleProfileQuestionBack(): void {
+    if (profileQuestionIndex === 0) {
+      handleBackWithTracking();
+      return;
+    }
+    emitOnboardingClick('back', 'back');
+    setProfileQuestionIndex((current) => current - 1);
+  }
+
+  function handleProfileQuestionSelect(value: string): void {
+    const current = profileRef.current;
+    const next =
+      profileQuestionId === 'role'
+        ? { ...current, role: value }
+        : profileQuestionId === 'orgSize'
+          ? { ...current, orgSize: value }
+          : profileQuestionId === 'useCase'
+            ? { ...current, useCase: [value] }
+            : { ...current, source: value };
+    profileRef.current = next;
+    setProfile(next);
+
+    if (profileQuestionId === 'role') {
+      emitOnboardingClick('role', 'select_option', { role: value });
+    } else if (profileQuestionId === 'orgSize') {
+      emitOnboardingClick('organization_size', 'select_option', { organization_size: value });
+    } else if (profileQuestionId === 'useCase') {
+      emitOnboardingClick('use_case', 'select_option', { use_case: value });
+    } else {
+      emitOnboardingClick('hear_about_us', 'select_option', { discovery_source: value });
+    }
+
+    if (profileQuestionIndex === profileQuestionIds.length - 1) {
+      void persistOnboardingProfileToMemory();
+      setStep(2);
+      return;
+    }
+    setProfileQuestionIndex((current) => current + 1);
+  }
 
   function cleanOnboardingOptionLabel(label: string): string {
     const trimmed = label.trim();
@@ -2067,9 +2119,6 @@ function OnboardingView({
       return;
     }
     emitOnboardingClick('continue', 'continue');
-    if (step === 1) {
-      void persistOnboardingProfileToMemory();
-    }
     setStep((current) => current + 1);
   }
 
@@ -2763,85 +2812,36 @@ function OnboardingView({
               <button
                 type="button"
                 className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
+                onClick={handleProfileQuestionBack}
                 disabled={onboardingNavigationLocked}
               >
                 <Icon name="chevron-left" size={14} />
                 <span>{t('settings.onboardingBack')}</span>
               </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingProfileTitle')}
-                body={t('settings.onboardingProfileBody')}
-              />
-              <div className="onboarding-view__form-grid">
-                <OnboardingChipField
-                  label={t('settings.onboardingRoleLabel')}
-                  value={profile.role}
-                  options={roleOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('role', 'select_option', {
-                        role: value,
-                      });
-                    }
-                    setProfile((current) => ({ ...current, role: value }));
-                  }}
+              <div className="onboarding-question-flow__progress" aria-label={t('settings.onboardingProfileTitle')}>
+                <span>{t('settings.onboardingProfileTitle')}</span>
+                <span>{profileQuestionIndex + 1} / {profileQuestionIds.length}</span>
+              </div>
+              <div className="onboarding-question-flow__segments" aria-hidden="true">
+                {profileQuestionIds.map((id, index) => (
+                  <i key={id} className={index <= profileQuestionIndex ? 'is-complete' : ''} />
+                ))}
+              </div>
+              <OnboardingPanelHeader title={profileQuestion.label} body={t('settings.onboardingProfileBody')} />
+              <div className="onboarding-question-flow__options">
+                <OnboardingQuestionChoices
+                  options={profileQuestion.options}
+                  selected={
+                    profileQuestionId === 'role'
+                      ? profile.role
+                      : profileQuestionId === 'orgSize'
+                        ? profile.orgSize
+                        : profileQuestionId === 'useCase'
+                          ? profile.useCase[0] ?? ''
+                          : profile.source
+                  }
+                  onSelect={handleProfileQuestionSelect}
                 />
-                {compactInviteOnboarding ? null : (
-                  <OnboardingChipField
-                    label={t('settings.onboardingOrgSizeLabel')}
-                    value={profile.orgSize}
-                    options={orgSizeOptions}
-                    onChange={(value) => {
-                      if (typeof value === 'string' && value) {
-                        emitOnboardingClick('organization_size', 'select_option', {
-                          organization_size: value,
-                        });
-                      }
-                      setProfile((current) => ({ ...current, orgSize: value }));
-                    }}
-                  />
-                )}
-                <OnboardingChipField
-                  label={t('settings.onboardingUseCaseLabel')}
-                  value={profile.useCase}
-                  options={useCaseOptions}
-                  multiple
-                  onChange={(value) => {
-                    if (!Array.isArray(value)) return;
-                    // Multi-select: emit one click per newly added
-                    // value (delta), not per render of the whole
-                    // selection. The dashboard then sees one row per
-                    // use_case chosen. Compare against `profileRef`
-                    // not `profile` — rapid picks can fire onChange
-                    // before React commits the previous pick, so a
-                    // closure-captured `profile.useCase` is one tick
-                    // behind and re-emits the prior pick on every
-                    // subsequent change.
-                    const previousSet = new Set(profileRef.current.useCase);
-                    for (const v of value) {
-                      if (!previousSet.has(v)) {
-                        emitOnboardingClick('use_case', 'select_option', { use_case: v });
-                      }
-                    }
-                    setProfile((current) => ({ ...current, useCase: value }));
-                  }}
-                />
-                {compactInviteOnboarding ? null : (
-                  <OnboardingChipField
-                    label={t('settings.onboardingSourceLabel')}
-                    value={profile.source}
-                    options={sourceOptions}
-                    onChange={(value) => {
-                      if (typeof value === 'string' && value) {
-                        emitOnboardingClick('hear_about_us', 'select_option', {
-                          discovery_source: value,
-                        });
-                      }
-                      setProfile((current) => ({ ...current, source: value }));
-                    }}
-                  />
-                )}
               </div>
             </div>
           ) : null}
@@ -2978,7 +2978,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 3 ? null : (
+          {step === 1 || step === 3 ? null : (
             <div className="onboarding-view__actions">
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
@@ -3501,61 +3501,28 @@ function OnboardingPanelHeader({ title, body }: { title: string; body: string })
   );
 }
 
-type OnboardingChipFieldProps =
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string;
-      onChange: (value: string) => void;
-      multiple?: false;
-    }
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string[];
-      onChange: (value: string[]) => void;
-      multiple: true;
-    };
-
-// Profile fields render their options as flat toggleable chips so every choice
-// is visible and a selection takes one tap instead of opening a dropdown first.
-function OnboardingChipField(props: OnboardingChipFieldProps) {
-  const { label, options } = props;
-  const selected = props.multiple
-    ? props.value
-    : props.value
-      ? [props.value]
-      : [];
-
+function OnboardingQuestionChoices({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: Array<{ value: string; label: string }>;
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
   return (
-    <div className="onboarding-chip-field">
-      <span className="onboarding-chip-field__label">{label}</span>
-      <div className="onboarding-chip-field__chips">
-        {options.map((option) => {
-          const active = selected.includes(option.value);
-          return (
-            <button
-              type="button"
-              key={option.value}
-              className={`onboarding-chip${active ? ' is-selected' : ''}`}
-              aria-pressed={active}
-              onClick={() => {
-                if (props.multiple) {
-                  props.onChange(
-                    active
-                      ? props.value.filter((value) => value !== option.value)
-                      : [...props.value, option.value],
-                  );
-                } else {
-                  props.onChange(active ? '' : option.value);
-                }
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="onboarding-question-flow__choices">
+      {options.map((option) => (
+        <button
+          type="button"
+          key={option.value}
+          className={`onboarding-chip${selected === option.value ? ' is-selected' : ''}`}
+          aria-pressed={selected === option.value}
+          onClick={() => onSelect(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
