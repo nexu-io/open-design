@@ -69,19 +69,26 @@ const LONG_PROMPT =
   'volumetric fog, 85mm, shallow depth of field — line two of a long prompt.';
 
 async function runCli(args: string[], input?: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
+  const { code, stderr } = await new Promise<{ code: number; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', cliEntry, ...args], {
       cwd: daemonRoot,
       env: { ...process.env, OD_PROJECT_ID: 'p1' },
-      stdio: ['pipe', 'ignore', 'ignore'],
+      stdio: ['pipe', 'ignore', 'pipe'],
     });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (c) => (stderr += c));
     child.on('error', reject);
-    // Any exit code is fine — we assert on the request the daemon received,
-    // not the CLI's exit status.
-    child.on('close', () => resolve());
+    child.on('close', (exitCode) => resolve({ code: exitCode ?? -1, stderr }));
     if (input !== undefined) child.stdin.end(input);
     else child.stdin.end();
   });
+  // The fake daemon resolves both /media/generate and the /media/tasks poll, so
+  // the CLI must run the whole flow to a clean exit. Assert exit 0 (surfacing
+  // stderr) so a non-zero exit AFTER the POST — a failure during polling or
+  // result handling — fails the spec instead of passing on the recorded request
+  // alone.
+  expect(code, `od media generate exited ${code}; stderr:\n${stderr}`).toBe(0);
 }
 
 describe('od media generate --prompt-file', () => {
