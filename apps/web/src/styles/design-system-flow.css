@@ -584,6 +584,191 @@
   flex: 0 0 auto;
   min-height: 42px;
 }
+
+.ds-extraction-demo--artifact-flow {
+  width: min(100% - 40px, 940px);
+  padding: clamp(42px, 7vh, 72px) 0 72px;
+}
+
+.ds-artifact-picker,
+.ds-artifact-prompt {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  text-align: center;
+}
+
+.ds-artifact-picker > header,
+.ds-artifact-prompt > header {
+  margin-bottom: 28px;
+}
+
+.ds-artifact-picker h1,
+.ds-artifact-prompt h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(34px, 4.5vw, 52px);
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+
+.ds-artifact-picker header p,
+.ds-artifact-prompt header p {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.ds-artifact-picker__grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ds-artifact-choice {
+  display: grid;
+  min-height: 104px;
+  grid-template-columns: 28px 1fr;
+  align-content: center;
+  gap: 3px 10px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  text-align: left;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ds-artifact-choice:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-strong) 26%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 95%, var(--text-strong) 5%);
+  transform: translateY(-2px);
+}
+
+.ds-artifact-choice.is-selected {
+  border-color: var(--text-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--text-strong) 8%);
+  box-shadow: inset 0 0 0 1px var(--text-strong);
+}
+
+.ds-artifact-choice .od-icon {
+  grid-row: 1 / span 2;
+  width: 22px;
+  height: 22px;
+  align-self: start;
+  color: var(--text-muted);
+}
+
+.ds-artifact-choice strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ds-artifact-choice span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ds-artifact-picker > button {
+  min-width: 160px;
+  margin-top: 20px;
+}
+
+.ds-artifact-prompt {
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
+.ds-artifact-prompt__selection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+  color: var(--text-strong);
+}
+
+.ds-artifact-prompt__selection > .od-icon {
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ds-artifact-prompt__selection strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ds-artifact-prompt__selection button,
+.ds-artifact-prompt__examples button {
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ds-artifact-prompt__selection button {
+  margin-left: 4px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.ds-artifact-prompt__composer {
+  position: relative;
+  width: 100%;
+}
+
+.ds-artifact-prompt__composer textarea {
+  width: 100%;
+  min-height: 190px;
+  resize: none;
+  padding: 22px 76px 22px 22px;
+  border-radius: 16px;
+  background: var(--bg-panel);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.ds-artifact-prompt__composer > button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.ds-artifact-prompt__composer > button .od-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.ds-artifact-prompt__examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 26px;
+  margin-top: 22px;
+}
+
+.ds-artifact-prompt__examples button:hover {
+  color: var(--text-strong);
+}
+
 @media (max-width: 760px) {
   .ds-extraction-demo--result {
     padding-top: 96px;
@@ -595,6 +780,9 @@
   .ds-extraction-demo__kit-grid { grid-template-columns: 1fr; }
   .ds-extraction-demo__next-step { align-items: stretch; flex-direction: column; }
   .ds-extraction-demo__next-step button { width: 100%; }
+  .ds-extraction-demo--artifact-flow { padding-top: 84px; }
+  .ds-artifact-picker__grid { grid-template-columns: 1fr; }
+  .ds-artifact-choice { min-height: 92px; }
 }
 @media (max-width: 960px) {
   .ds-setup-topbar {

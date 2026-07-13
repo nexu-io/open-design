@@ -79,6 +79,7 @@ import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
 import { DesignSystemAssetDropzone } from './DesignSystemAssetDropzone';
 import { BrandPickerModal } from './BrandPickerModal';
+import { orderedCreateChips, type HomeHeroChip } from './home-hero/chips';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
@@ -213,6 +214,15 @@ interface DemoExtractedFoundation {
   bodyFont: string | null;
   colors: Array<{ label: string; hex: string }>;
 }
+
+const DEMO_ARTIFACT_CHOICES = orderedCreateChips()
+  .filter((artifact) => artifact.id !== 'create-brand-kit');
+
+const DEMO_ARTIFACT_PROMPT_EXAMPLES = [
+  'Launch a new product',
+  'Explain a new feature',
+  'Collect early access signups',
+] as const;
 
 interface ResolvedDesignSystemWorkspaceProject {
   projectId: string;
@@ -419,6 +429,31 @@ export function DesignSystemCreationFlow({
   function handleApproveDemoLogo() {
     setDemoFoundation(demoFoundationFromSource(demoSourceUrl));
     setDemoExtractionStage('extracting-system');
+  }
+
+  async function handleCreateDemoArtifact(artifact: HomeHeroChip, prompt: string) {
+    if (!demoProject) return;
+    const generationPrompt = [
+      `Create a ${artifact.label} using the extracted design system from ${demoSourceUrl || demoBrandName}.`,
+      prompt.trim(),
+    ].filter(Boolean).join('\n\n');
+    try {
+      const preparedProject = await patchProject(demoProject.projectId, {
+        pendingPrompt: generationPrompt,
+      });
+      try {
+        window.sessionStorage.setItem(`od:auto-send-first:${demoProject.projectId}`, '1');
+      } catch {
+        // The project still opens with the generated prompt ready to send.
+      }
+      onCreated(
+        demoProject.projectId,
+        preparedProject ?? demoProject.project,
+        demoProject.conversationId,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start artifact generation.');
+    }
   }
 
   useEffect(() => {
@@ -1502,10 +1537,7 @@ export function DesignSystemCreationFlow({
           logoUploadRef={demoLogoUploadRef}
           onUpload={handleDemoLogoUpload}
           onApproveLogo={handleApproveDemoLogo}
-          onOpenProject={() => {
-            if (!demoProject) return;
-            onCreated(demoProject.projectId, demoProject.project, demoProject.conversationId);
-          }}
+          onCreateArtifact={handleCreateDemoArtifact}
           canOpenProject={demoProject !== null}
         />
       )}
@@ -1530,7 +1562,7 @@ function DesignSystemExtractionDemo({
   logoUploadRef,
   onUpload,
   onApproveLogo,
-  onOpenProject,
+  onCreateArtifact,
   canOpenProject,
 }: {
   stage: Exclude<DemoExtractionStage, 'form'>;
@@ -1541,15 +1573,24 @@ function DesignSystemExtractionDemo({
   logoUploadRef: RefObject<HTMLInputElement>;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onApproveLogo: () => void;
-  onOpenProject: () => void;
+  onCreateArtifact: (artifact: HomeHeroChip, prompt: string) => void;
   canOpenProject: boolean;
 }) {
   const label = brandName || 'your brand';
   const isLoading = stage === 'extracting-logo' || stage === 'extracting-system';
   const resultFoundation = foundation ?? demoFoundationFromSource(sourceUrl);
+  const [creationStep, setCreationStep] = useState<'summary' | 'artifact' | 'prompt'>('summary');
+  const [selectedArtifactId, setSelectedArtifactId] = useState('');
+  const [artifactPrompt, setArtifactPrompt] = useState('');
+  const selectedArtifact = DEMO_ARTIFACT_CHOICES.find((artifact) => artifact.id === selectedArtifactId) ?? null;
+  const showSummary = stage === 'system-review' && creationStep === 'summary';
+  const showArtifactFlow = stage === 'system-review' && creationStep !== 'summary';
 
   return (
-    <main className={`ds-extraction-demo${stage === 'system-review' ? ' ds-extraction-demo--result' : ''}`} aria-live="polite">
+    <main
+      className={`ds-extraction-demo${showSummary ? ' ds-extraction-demo--result' : ''}${showArtifactFlow ? ' ds-extraction-demo--artifact-flow' : ''}`}
+      aria-live="polite"
+    >
       {isLoading ? (
         <section className="ds-extraction-demo__loading">
           <span className="ds-extraction-demo__pulse" aria-hidden="true"><Spinner size={22} /></span>
@@ -1581,7 +1622,7 @@ function DesignSystemExtractionDemo({
         </section>
       ) : null}
 
-      {stage === 'system-review' ? (
+      {showSummary ? (
         <>
           <section className="ds-extraction-demo__result-board">
             <header className="ds-extraction-demo__result-heading">
@@ -1627,10 +1668,86 @@ function DesignSystemExtractionDemo({
                 <p>Ready for the next step?</p>
                 <span>Use this design system to create your first artifact.</span>
               </div>
-              <Button variant="primary" onClick={onOpenProject}>Create with this design system</Button>
+              <Button variant="primary" onClick={() => setCreationStep('artifact')}>Create with this design system</Button>
             </footer>
           ) : null}
         </>
+      ) : null}
+
+      {stage === 'system-review' && creationStep === 'artifact' ? (
+        <section className="ds-artifact-picker">
+          <header>
+            <h1>What do you want to create?</h1>
+            <p>Choose an artifact to create with your new design system.</p>
+          </header>
+          <div className="ds-artifact-picker__grid">
+            {DEMO_ARTIFACT_CHOICES.map((artifact) => {
+              const selected = artifact.id === selectedArtifactId;
+              return (
+                <button
+                  type="button"
+                  key={artifact.id}
+                  className={`ds-artifact-choice${selected ? ' is-selected' : ''}`}
+                  aria-pressed={selected}
+                  onClick={() => setSelectedArtifactId(artifact.id)}
+                >
+                  <Icon name={artifact.icon} size={22} />
+                  <strong>{artifact.label}</strong>
+                  <span>{artifact.description ?? artifact.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+          <Button
+            variant="primary"
+            disabled={!selectedArtifact}
+            onClick={() => setCreationStep('prompt')}
+          >
+            Continue
+          </Button>
+        </section>
+      ) : null}
+
+      {stage === 'system-review' && creationStep === 'prompt' && selectedArtifact ? (
+        <section className="ds-artifact-prompt">
+          <header>
+            <h1>What should we create?</h1>
+            <p>Describe the {selectedArtifact.label.toLowerCase()} you want to make with this design system.</p>
+          </header>
+          <div className="ds-artifact-prompt__selection">
+            <Icon name={selectedArtifact.icon} style={{ width: 44, height: 44, fontSize: 22 }} />
+            <strong>{selectedArtifact.label}</strong>
+            <button type="button" onClick={() => setCreationStep('artifact')}>Change</button>
+          </div>
+          <div className="ds-artifact-prompt__composer">
+            <Textarea
+              rows={5}
+              value={artifactPrompt}
+              placeholder={`A ${selectedArtifact.label.toLowerCase()} for…`}
+              autoFocus
+              onChange={(event) => setArtifactPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && artifactPrompt.trim()) {
+                  event.preventDefault();
+                  onCreateArtifact(selectedArtifact, artifactPrompt);
+                }
+              }}
+            />
+            <Button
+              variant="primary"
+              aria-label="Start generating"
+              disabled={!artifactPrompt.trim()}
+              onClick={() => onCreateArtifact(selectedArtifact, artifactPrompt)}
+            >
+              <Icon name="chevron-right" size={18} />
+            </Button>
+          </div>
+          <div className="ds-artifact-prompt__examples">
+            {DEMO_ARTIFACT_PROMPT_EXAMPLES.map((example) => (
+              <button type="button" key={example} onClick={() => setArtifactPrompt(example)}>{example}</button>
+            ))}
+          </div>
+        </section>
       ) : null}
     </main>
   );
