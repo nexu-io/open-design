@@ -705,10 +705,13 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
 });
 
 test('[P1] project detail Figma import uploads a .fig file and stages the suggested prompt', async ({ page }) => {
+  test.setTimeout(60_000);
   const importBodies: string[] = [];
+  const runRequestBodies: Array<Record<string, unknown>> = [];
   const suggestedPrompt = 'Build the current project from figma/DESIGN-context.md.';
 
   await routeComposerPlusFixtures(page);
+  await routeSuccessfulRuns(page, runRequestBodies, 'figma-import-build-run');
   await page.route('**/api/projects/*/figma/import', async (route) => {
     importBodies.push(route.request().postData() ?? '');
     await route.fulfill({
@@ -736,7 +739,7 @@ test('[P1] project detail Figma import uploads a .fig file and stages the sugges
     });
   });
 
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await createProject(page, 'Project Figma import success');
   await expectWorkspaceReady(page);
   const composer = page.getByTestId('chat-composer');
@@ -760,6 +763,15 @@ test('[P1] project detail Figma import uploads a .fig file and stages the sugges
   expect(importBodies[0]).toContain('Keep the original hierarchy.');
   await expect(figmaImport).toBeVisible();
   await expect(input).toContainText(suggestedPrompt);
+  await figmaImport.getByRole('button', { name: 'Close' }).click();
+  await expect(figmaImport).toHaveCount(0);
+
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]?.message).toContain(suggestedPrompt);
 });
 
 test('[P1] project detail Figma import keeps the dialog open and retryable on decode failure', async ({ page }) => {
@@ -954,6 +966,81 @@ test('[P1] project detail composer removing local-code context updates metadata 
   await expect.poll(() => runRequestBodies.length).toBe(1);
   const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; absolutePath?: string }> } | undefined;
   expect(context?.workspaceItems ?? []).toEqual([]);
+});
+
+test('[P1] project detail keeps local-code context when linkedDirs PATCH removal fails', async ({ page }) => {
+  test.setTimeout(60_000);
+  const patchRequests: Array<Record<string, unknown>> = [];
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+
+  await routeComposerPlusFixtures(page);
+  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-remove-failure-run');
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: '/tmp/open-design/local-code-persist' } });
+  });
+  await page.route('**/api/dir-exists', async (route) => {
+    await route.fulfill({ json: { exists: true } });
+  });
+  await page.route('**/api/projects/*', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      patchRequests.push(body);
+      const linkedDirs = (body.metadata as { linkedDirs?: string[] } | undefined)?.linkedDirs ?? [];
+      if (linkedDirs.length === 0) {
+        await route.fulfill({
+          status: 400,
+          json: { error: { code: 'INVALID_LINKED_DIR', message: 'linked dir removal rejected' } },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          project: {
+            id: route.request().url().split('/api/projects/')[1]?.split(/[/?#]/)[0] ?? 'project',
+            name: 'Composer remove context failure',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: body.metadata ?? { kind: 'prototype' },
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await createProject(page, 'Composer remove context failure');
+  await expectWorkspaceReady(page);
+  const composer = page.getByTestId('chat-composer');
+  const input = page.getByTestId('chat-composer-input');
+
+  await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByRole('menuitem', { name: /Link local code/i }).click();
+  const chip = composer.locator('.staged-context--workspace', { hasText: 'local-code-persist' });
+  await expect(chip).toBeVisible();
+
+  await chip.getByRole('button', { name: /local-code-persist/i }).click();
+  await expect.poll(() => patchRequests.length).toBeGreaterThanOrEqual(2);
+  await expect(chip).toBeVisible();
+  await expect(input).toContainText('local-code-persist');
+
+  await input.fill('Run with the local code context after removal failed.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; absolutePath?: string }> } | undefined;
+  expect(context?.workspaceItems ?? []).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        label: 'local-code-persist',
+        absolutePath: '/tmp/open-design/local-code-persist',
+      }),
+    ]),
+  );
 });
 
 test('[P1] project detail composer context actions emit analytics event fields', async ({ page }) => {
@@ -1736,6 +1823,66 @@ test('[P1] project detail active file context is sent with the run and shown on 
   const chip = page.getByTestId('msg-workspace-context-chip').last();
   await expect(chip).toBeVisible();
   await expect(chip).toContainText(uploadedName);
+});
+
+test('[P1] project detail session mode and active file context survive reload in message history', async ({ page }) => {
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-reload-run');
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await createProject(page, 'Workspace context reload contract');
+  await expectWorkspaceReady(page);
+
+  const uploadedName = await uploadTinyHtml(
+    page,
+    'workspace-context-reload.html',
+    '<!doctype html><html><body><main><h1>Workspace Context Reload</h1></main></body></html>',
+  );
+  await expect(tabBySuffix(page, uploadedName)).toHaveAttribute('aria-selected', 'true');
+
+  const modeTrigger = page.getByTestId('session-mode-trigger');
+  await modeTrigger.click();
+  await page.getByRole('menuitemradio', { name: 'Plan mode' }).click();
+  await expect(modeTrigger).toHaveAttribute('aria-label', 'Plan mode');
+
+  await page.getByTestId('chat-composer-input').fill('Persist this file context through reload.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; id?: string }> } | undefined;
+  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+  expect(context?.workspaceItems?.some((item) => item.label === uploadedName || item.id?.includes(uploadedName))).toBe(true);
+  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
+  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
+
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
+  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
+});
+
+test('[P1] active project API defaults to the selected project file from the real workspace', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await createProject(page, 'MCP active context contract');
+  await expectWorkspaceReady(page);
+
+  const uploadedName = await uploadTinyHtml(
+    page,
+    'mcp-active-context.html',
+    '<!doctype html><html><body><main><h1>MCP Active Context</h1></main></body></html>',
+  );
+  const { projectId } = getProjectContextFromUrl(page);
+  await expect(tabBySuffix(page, uploadedName)).toHaveAttribute('aria-selected', 'true');
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('/api/active');
+      const body = (await response.json()) as { projectId?: string; fileName?: string };
+      return `${body.projectId ?? ''}:${body.fileName ?? ''}`;
+    })
+    .toBe(`${projectId}:${uploadedName}`);
 });
 
 test('[P1] project detail HTML version manager previews and restores an older snapshot', async ({ page }) => {
@@ -3084,6 +3231,7 @@ async function routeComposerPlusFixtures(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
   await dismissPrivacyDialog(page);
   await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();

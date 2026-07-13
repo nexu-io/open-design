@@ -3407,10 +3407,17 @@ export function SettingsDialog({
     providerModelsState.result.ok
       ? providerModelsState.result.models ?? []
       : [];
+  const providerModelDiscoveryUnavailable =
+    !isDeploymentCredentialMode &&
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
   const fetchedApiModelOptions =
-    shouldCacheProviderModels
-      ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
-      : fetchedProviderModelsResult;
+    providerModelDiscoveryUnavailable
+      ? []
+      : shouldCacheProviderModels
+        ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
+        : fetchedProviderModelsResult;
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3570,6 +3577,11 @@ export function SettingsDialog({
         const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
         return defaultModel ? [defaultModel] : [];
       }
+      if (providerModelDiscoveryUnavailable) {
+        return selectedProvider?.models?.length
+          ? Array.from(new Set(selectedProvider.models))
+          : [];
+      }
       return Array.from(new Set(
         selectedProvider?.models?.length
           ? selectedProvider.models
@@ -3581,6 +3593,7 @@ export function SettingsDialog({
       deploymentProviderConfig?.defaultModel,
       isDeploymentCredentialMode,
       selectedProvider,
+      providerModelDiscoveryUnavailable,
     ],
   );
   const apiModelOptions = useMemo(

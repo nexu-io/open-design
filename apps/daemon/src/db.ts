@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
+import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
@@ -614,6 +615,7 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
       `SELECT c.project_id AS projectId,
               m.run_id AS runId,
               m.run_status AS status,
+              m.events_json AS eventsJson,
               COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt
          FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
@@ -625,13 +627,26 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
   for (const row of rows) {
     if (!latestByProject.has(row.projectId)) {
       latestByProject.set(row.projectId, {
-        value: normalizeProjectRunStatus(row.status),
+        value: projectDisplayStatusForRunRow(row.status, row.eventsJson),
         updatedAt: Number(row.updatedAt),
         runId: row.runId ?? undefined,
       });
     }
   }
   return latestByProject;
+}
+
+// A terminal `succeeded` run whose PERSISTED events show unfinished declared
+// work (a non-`completed` TodoWrite task) projects as `incomplete`, never
+// `succeeded`, so the project pill can't read "Completed" for a run whose work
+// is not actually done (#1247 / #1060). Derived from the same events the chat
+// footer reads, so the two surfaces cannot disagree, and it survives reload
+// because the events were persisted per-event as the run streamed.
+function projectDisplayStatusForRunRow(status: unknown, eventsJson: unknown) {
+  const normalized = normalizeProjectRunStatus(status);
+  if (normalized !== 'succeeded') return normalized;
+  const events = parseJsonOrUndef(eventsJson);
+  return eventsEndedWithUnfinishedWork(events) ? 'incomplete' : normalized;
 }
 
 export function listLatestConversationRunStatuses(db: SqliteDb) {

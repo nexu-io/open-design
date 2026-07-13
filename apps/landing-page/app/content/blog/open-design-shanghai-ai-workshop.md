@@ -12,13 +12,13 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI 设计真正变得有用，往往发生在大家坐在一起动手试的时候。</p>
-      <p>7 月 11 日，Open Design 将和旦点 AI、以太一起在上海举办一场小型线下实战工作坊。目标很直接：帮助参与者从一个 idea、prompt 或 reference 出发，做出一个可以展示、分享并继续迭代的真实 artifact。</p>
+      <p>7 月 25 日，Open Design 将和旦点 AI、以太一起在上海举办一场小型线下实战工作坊。目标很直接：帮助参与者从一个 idea、prompt 或 reference 出发，做出一个可以展示、分享并继续迭代的真实 artifact。</p>
       <p>这场活动尤其适合学生、开发者、设计师、AI 工具爱好者，以及正在做早期项目的 builder。我们希望大家不只是听一个 demo，而是真正体验一次 agentic design workflow。</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=zh_hero_link">报名上海 AI Workshop</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=zh_hero_link">报名上海 AI Workshop</a></p>
       <table>
         <tbody>
           <tr><th>地点</th><td>食书集 Cook&amp;Book（复旦南苑店），上海市杨浦区五角场街道政肃路 63 号</td></tr>
-          <tr><th>时间</th><td>2026 年 7 月 11 日，19:00-22:00</td></tr>
+          <tr><th>时间</th><td>2026 年 7 月 25 日，19:00-22:00</td></tr>
           <tr><th>形式</th><td>小型线下实战 workshop / meetup</td></tr>
           <tr><th>合作方</th><td>Open Design x 旦点 AI x 以太</td></tr>
           <tr><th>适合人群</th><td>学生、开发者、设计师、AI 工具爱好者、创业项目成员</td></tr>
@@ -60,9 +60,9 @@ i18n:
       <p>你可能是正在探索第一个 AI 设计工作流的学生，也可能是想理解 agent 如何改变前端工作的开发者，或者是正在思考新原型流程的设计师，还可能是希望更快把想法变成 artifact 的项目 builder。</p>
       <p>我们希望每位参与者离开时，都能带走一个更清晰的 workflow，以及一个可以继续迭代的初版作品：AI PPT、个人网页，或其他 Open Design 项目。</p>
 
-      <h2>7 月 11 日，上海见</h2>
+      <h2>7 月 25 日，上海见</h2>
       <p>这会是一场小型 workshop，这样我们才能把体验保持得足够具体、足够贴近现场每个人正在做的东西。</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=zh_final_cta">点击这里报名</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=zh_final_cta">点击这里报名</a></p>
   ja:
     title: "Open Design AI Workshop が上海にやってきます"
     summary: "学生、開発者、デザイナー、AI ツールビルダー向けの上海ハンズオンワークショップ。プロンプトや参考資料を、実際に見せられる AI アーティファクトへ変えていきます。"
@@ -70,12 +70,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI デザインが本当に役に立つ瞬間は、同じ部屋で手を動かして試すときに訪れます。</p>
-      <p>7 月 11 日、Open Design は Dandian AI と Yitai とともに、上海で小規模なハンズオンワークショップを開催します。目的はシンプルです。参加者がアイデア、プロンプト、参考資料から、見せられて共有でき、さらに改善できる実物のアーティファクトを作れるようにすることです。</p>
+      <p>7 月 25 日、Open Design は Dandian AI と Yitai とともに、上海で小規模なハンズオンワークショップを開催します。目的はシンプルです。参加者がアイデア、プロンプト、参考資料から、見せられて共有でき、さらに改善できる実物のアーティファクトを作れるようにすることです。</p>
       <p>このセッションは、学生、開発者、デザイナー、AI ツールに関心のある人、初期プロジェクトの builder に向けています。</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ja_hero_link">上海 AI Workshop に登録する</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ja_hero_link">上海 AI Workshop に登録する</a></p>
       <table><tbody>
         <tr><th>場所</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>日時</th><td>2026 年 7 月 11 日 19:00-22:00</td></tr>
+        <tr><th>日時</th><td>2026 年 7 月 25 日 19:00-22:00</td></tr>
         <tr><th>形式</th><td>小規模なハンズオンワークショップ / ミートアップ</td></tr>
         <tr><th>パートナー</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>対象</th><td>学生、開発者、デザイナー、AI ツール愛好者、スタートアッププロジェクトのメンバー</td></tr>
@@ -99,9 +99,9 @@ i18n:
       </tbody></table>
       <h2>誰に向いているか</h2>
       <p>AI について話すだけでなく、具体的なものを作りたい人に向いています。学生、開発者、デザイナー、プロジェクト builder のいずれでも歓迎です。</p>
-      <h2>7 月 11 日、上海で会いましょう</h2>
+      <h2>7 月 25 日、上海で会いましょう</h2>
       <p>小規模にすることで、部屋にいる一人ひとりの制作に近い、実践的な体験にします。</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ja_final_cta">ここから登録</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ja_final_cta">ここから登録</a></p>
   ko:
     title: "Open Design AI Workshop이 상하이에 옵니다"
     summary: "학생, 개발자, 디자이너, AI 도구 빌더를 위한 상하이 오프라인 실습 워크숍입니다. 프롬프트와 레퍼런스를 실제로 보여줄 수 있는 AI 결과물로 만들어 봅니다."
@@ -109,12 +109,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI 디자인은 사람들이 같은 공간에서 직접 만들어 볼 때 가장 실감 나게 유용해집니다.</p>
-      <p>7월 11일, Open Design은 Dandian AI, Yitai와 함께 상하이에서 작은 실습 워크숍을 엽니다. 목표는 간단합니다. 참가자가 아이디어, 프롬프트, 레퍼런스에서 출발해 보여주고 공유하고 계속 개선할 수 있는 실제 아티팩트를 만들도록 돕는 것입니다.</p>
+      <p>7월 25일, Open Design은 Dandian AI, Yitai와 함께 상하이에서 작은 실습 워크숍을 엽니다. 목표는 간단합니다. 참가자가 아이디어, 프롬프트, 레퍼런스에서 출발해 보여주고 공유하고 계속 개선할 수 있는 실제 아티팩트를 만들도록 돕는 것입니다.</p>
       <p>이 세션은 학생, 개발자, 디자이너, AI 도구 애호가, 초기 프로젝트 빌더에게 특히 잘 맞습니다.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ko_hero_link">상하이 AI Workshop 등록하기</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ko_hero_link">상하이 AI Workshop 등록하기</a></p>
       <table><tbody>
         <tr><th>장소</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>시간</th><td>2026년 7월 11일, 19:00-22:00</td></tr>
+        <tr><th>시간</th><td>2026년 7월 25일, 19:00-22:00</td></tr>
         <tr><th>형식</th><td>소규모 실습 워크숍 / 밋업</td></tr>
         <tr><th>파트너</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>대상</th><td>학생, 개발자, 디자이너, AI 도구 애호가, 스타트업 프로젝트 멤버</td></tr>
@@ -138,9 +138,9 @@ i18n:
       </tbody></table>
       <h2>누가 오면 좋을까</h2>
       <p>AI에 대해 말하는 것에서 멈추지 않고 구체적인 것을 만들고 싶은 사람에게 적합합니다. 학생, 개발자, 디자이너, 프로젝트 빌더 모두 환영합니다.</p>
-      <h2>7월 11일 상하이에서 만나요</h2>
+      <h2>7월 25일 상하이에서 만나요</h2>
       <p>작은 규모로 진행해, 현장의 각 참가자가 만드는 것에 더 가까운 실용적인 경험을 만들겠습니다.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ko_final_cta">여기에서 등록하기</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ko_final_cta">여기에서 등록하기</a></p>
   de:
     title: "Der Open Design AI Workshop kommt nach Shanghai"
     summary: "Ein praktischer Shanghai-Workshop für Studierende, Entwickler, Designer und AI-Tool-Builder, um Prompts und Referenzen in echte AI-Artefakte zu verwandeln."
@@ -148,12 +148,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI Design wird besonders nützlich, wenn Menschen es gemeinsam ausprobieren.</p>
-      <p>Am 11. Juli veranstaltet Open Design mit Dandian AI und Yitai einen kleinen Hands-on-Workshop in Shanghai. Das Ziel ist einfach: Teilnehmende sollen von einer Idee, einem Prompt oder einer Referenz zu einem echten Artefakt kommen, das sie zeigen, teilen und weiter verbessern können.</p>
+      <p>Am 25. Juli veranstaltet Open Design mit Dandian AI und Yitai einen kleinen Hands-on-Workshop in Shanghai. Das Ziel ist einfach: Teilnehmende sollen von einer Idee, einem Prompt oder einer Referenz zu einem echten Artefakt kommen, das sie zeigen, teilen und weiter verbessern können.</p>
       <p>Die Session richtet sich an Studierende, Entwickler, Designer, AI-Tool-Enthusiasten und frühe Projekt-Builder.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=de_hero_link">Für den Shanghai AI Workshop anmelden</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=de_hero_link">Für den Shanghai AI Workshop anmelden</a></p>
       <table><tbody>
         <tr><th>Ort</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Zeit</th><td>11. Juli 2026, 19:00-22:00</td></tr>
+        <tr><th>Zeit</th><td>25. Juli 2026, 19:00-22:00</td></tr>
         <tr><th>Format</th><td>Kleiner Hands-on-Workshop / Meetup</td></tr>
         <tr><th>Partner</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Für</th><td>Studierende, Entwickler, Designer, AI-Tool-Enthusiasten und Startup-Projektmitglieder</td></tr>
@@ -177,9 +177,9 @@ i18n:
       </tbody></table>
       <h2>Wer kommen sollte</h2>
       <p>Komm, wenn du mit AI etwas Konkretes bauen willst, statt nur darüber zu sprechen. Studierende, Entwickler, Designer und Projekt-Builder sind willkommen.</p>
-      <h2>Wir sehen uns am 11. Juli in Shanghai</h2>
+      <h2>Wir sehen uns am 25. Juli in Shanghai</h2>
       <p>Wir halten den Workshop klein, damit die Erfahrung praktisch und nah an den Projekten im Raum bleibt.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=de_final_cta">Hier anmelden</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=de_final_cta">Hier anmelden</a></p>
   fr:
     title: "L'atelier Open Design AI arrive à Shanghai"
     summary: "Un atelier pratique à Shanghai pour étudiants, développeurs, designers et créateurs d'outils IA afin de transformer prompts et références en vrais artefacts IA."
@@ -187,12 +187,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>Le design avec l'IA devient vraiment utile quand on l'essaie ensemble, en construisant.</p>
-      <p>Le 11 juillet, Open Design organise un petit atelier pratique à Shanghai avec Dandian AI et Yitai. L'objectif est simple : aider les participants à passer d'une idée, d'un prompt ou d'une référence à un véritable artefact qu'ils peuvent montrer, partager et améliorer.</p>
+      <p>Le 25 juillet, Open Design organise un petit atelier pratique à Shanghai avec Dandian AI et Yitai. L'objectif est simple : aider les participants à passer d'une idée, d'un prompt ou d'une référence à un véritable artefact qu'ils peuvent montrer, partager et améliorer.</p>
       <p>Cette session s'adresse aux étudiants, développeurs, designers, passionnés d'outils IA et builders de projets en phase early.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=fr_hero_link">S'inscrire à l'atelier AI de Shanghai</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=fr_hero_link">S'inscrire à l'atelier AI de Shanghai</a></p>
       <table><tbody>
         <tr><th>Lieu</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Date</th><td>11 juillet 2026, 19:00-22:00</td></tr>
+        <tr><th>Date</th><td>25 juillet 2026, 19:00-22:00</td></tr>
         <tr><th>Format</th><td>Petit atelier pratique / meetup</td></tr>
         <tr><th>Partenaires</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Pour</th><td>Étudiants, développeurs, designers, passionnés d'outils IA et membres de projets startup</td></tr>
@@ -216,9 +216,9 @@ i18n:
       </tbody></table>
       <h2>Pour qui</h2>
       <p>Venez si vous voulez créer quelque chose de concret avec l'IA, pas seulement en parler. Étudiants, développeurs, designers et builders sont les bienvenus.</p>
-      <h2>Rendez-vous à Shanghai le 11 juillet</h2>
+      <h2>Rendez-vous à Shanghai le 25 juillet</h2>
       <p>Nous gardons le format petit pour que l'expérience reste pratique et proche des projets présents dans la salle.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=fr_final_cta">S'inscrire ici</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=fr_final_cta">S'inscrire ici</a></p>
   ru:
     title: "Open Design AI Workshop пройдет в Шанхае"
     summary: "Практический воркшоп в Шанхае для студентов, разработчиков, дизайнеров и создателей AI-инструментов: превратим промпты и референсы в реальные AI-артефакты."
@@ -226,12 +226,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI-дизайн становится по-настоящему полезным, когда люди пробуют его вместе и сразу что-то делают.</p>
-      <p>11 июля Open Design вместе с Dandian AI и Yitai проведет небольшой практический воркшоп в Шанхае. Цель проста: помочь участникам перейти от идеи, промпта или референса к реальному артефакту, который можно показать, поделиться им и улучшать дальше.</p>
+      <p>25 июля Open Design вместе с Dandian AI и Yitai проведет небольшой практический воркшоп в Шанхае. Цель проста: помочь участникам перейти от идеи, промпта или референса к реальному артефакту, который можно показать, поделиться им и улучшать дальше.</p>
       <p>Сессия подойдет студентам, разработчикам, дизайнерам, энтузиастам AI-инструментов и early-stage builders.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ru_hero_link">Зарегистрироваться на Shanghai AI Workshop</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ru_hero_link">Зарегистрироваться на Shanghai AI Workshop</a></p>
       <table><tbody>
         <tr><th>Где</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Когда</th><td>11 июля 2026, 19:00-22:00</td></tr>
+        <tr><th>Когда</th><td>25 июля 2026, 19:00-22:00</td></tr>
         <tr><th>Формат</th><td>Небольшой практический воркшоп / митап</td></tr>
         <tr><th>Партнеры</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Для кого</th><td>Студенты, разработчики, дизайнеры, энтузиасты AI-инструментов и участники стартап-проектов</td></tr>
@@ -255,9 +255,9 @@ i18n:
       </tbody></table>
       <h2>Кому стоит прийти</h2>
       <p>Приходите, если хотите не просто говорить об AI, а сделать с его помощью что-то конкретное. Мы будем рады студентам, разработчикам, дизайнерам и builders.</p>
-      <h2>Увидимся в Шанхае 11 июля</h2>
+      <h2>Увидимся в Шанхае 25 июля</h2>
       <p>Мы сохраняем небольшой формат, чтобы опыт был практичным и близким к проектам людей в комнате.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ru_final_cta">Зарегистрироваться</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ru_final_cta">Зарегистрироваться</a></p>
   es:
     title: "Open Design AI Workshop llega a Shanghái"
     summary: "Un workshop práctico en Shanghái para estudiantes, desarrolladores, diseñadores y builders de herramientas de IA para convertir prompts y referencias en artefactos reales."
@@ -265,12 +265,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>El diseño con IA se vuelve realmente útil cuando la gente puede probarlo junta y construir algo.</p>
-      <p>El 11 de julio, Open Design organizará un pequeño workshop práctico en Shanghái junto con Dandian AI y Yitai. El objetivo es simple: ayudar a los participantes a pasar de una idea, prompt o referencia a un artefacto real que puedan mostrar, compartir y seguir mejorando.</p>
+      <p>El 25 de julio, Open Design organizará un pequeño workshop práctico en Shanghái junto con Dandian AI y Yitai. El objetivo es simple: ayudar a los participantes a pasar de una idea, prompt o referencia a un artefacto real que puedan mostrar, compartir y seguir mejorando.</p>
       <p>La sesión está pensada para estudiantes, desarrolladores, diseñadores, entusiastas de herramientas de IA y builders de proyectos en etapa temprana.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=es_hero_link">Registrarse al Shanghai AI Workshop</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=es_hero_link">Registrarse al Shanghai AI Workshop</a></p>
       <table><tbody>
         <tr><th>Dónde</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Cuándo</th><td>11 de julio de 2026, 19:00-22:00</td></tr>
+        <tr><th>Cuándo</th><td>25 de julio de 2026, 19:00-22:00</td></tr>
         <tr><th>Formato</th><td>Workshop práctico pequeño / meetup</td></tr>
         <tr><th>Partners</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Para</th><td>Estudiantes, desarrolladores, diseñadores, entusiastas de herramientas de IA y miembros de proyectos startup</td></tr>
@@ -294,9 +294,9 @@ i18n:
       </tbody></table>
       <h2>Quién debería venir</h2>
       <p>Ven si quieres crear algo concreto con IA, no solo hablar de ella. Estudiantes, desarrolladores, diseñadores y builders son bienvenidos.</p>
-      <h2>Nos vemos en Shanghái el 11 de julio</h2>
+      <h2>Nos vemos en Shanghái el 25 de julio</h2>
       <p>Mantenemos el workshop pequeño para que la experiencia sea práctica y cercana a lo que cada persona está construyendo.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=es_final_cta">Registrarse aquí</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=es_final_cta">Registrarse aquí</a></p>
   pt-br:
     title: "O Open Design AI Workshop chega a Xangai"
     summary: "Um workshop prático em Xangai para estudantes, desenvolvedores, designers e builders de ferramentas de IA transformarem prompts e referências em artefatos reais."
@@ -304,12 +304,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>Design com IA fica realmente útil quando as pessoas podem experimentar juntas e construir algo de verdade.</p>
-      <p>Em 11 de julho, a Open Design fará um pequeno workshop prático em Xangai com Dandian AI e Yitai. O objetivo é simples: ajudar participantes a sair de uma ideia, prompt ou referência e chegar a um artefato real que possam mostrar, compartilhar e continuar melhorando.</p>
+      <p>Em 25 de julho, a Open Design fará um pequeno workshop prático em Xangai com Dandian AI e Yitai. O objetivo é simples: ajudar participantes a sair de uma ideia, prompt ou referência e chegar a um artefato real que possam mostrar, compartilhar e continuar melhorando.</p>
       <p>A sessão é especialmente indicada para estudantes, desenvolvedores, designers, entusiastas de ferramentas de IA e builders de projetos iniciais.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ptbr_hero_link">Inscrever-se no Shanghai AI Workshop</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ptbr_hero_link">Inscrever-se no Shanghai AI Workshop</a></p>
       <table><tbody>
         <tr><th>Onde</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Quando</th><td>11 de julho de 2026, 19:00-22:00</td></tr>
+        <tr><th>Quando</th><td>25 de julho de 2026, 19:00-22:00</td></tr>
         <tr><th>Formato</th><td>Pequeno workshop prático / meetup</td></tr>
         <tr><th>Parceiros</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Para</th><td>Estudantes, desenvolvedores, designers, entusiastas de ferramentas de IA e membros de projetos startup</td></tr>
@@ -333,9 +333,9 @@ i18n:
       </tbody></table>
       <h2>Quem deve vir</h2>
       <p>Venha se você quer criar algo concreto com IA, não apenas falar sobre ela. Estudantes, desenvolvedores, designers e builders são bem-vindos.</p>
-      <h2>Nos vemos em Xangai em 11 de julho</h2>
+      <h2>Nos vemos em Xangai em 25 de julho</h2>
       <p>Vamos manter o workshop pequeno para que a experiência seja prática e próxima do que cada pessoa está construindo.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=ptbr_final_cta">Inscreva-se aqui</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=ptbr_final_cta">Inscreva-se aqui</a></p>
   it:
     title: "Open Design AI Workshop arriva a Shanghai"
     summary: "Un workshop pratico a Shanghai per studenti, sviluppatori, designer e builder di strumenti AI per trasformare prompt e reference in veri artefatti AI."
@@ -343,12 +343,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>Il design con l'AI diventa davvero utile quando le persone possono provarlo insieme e costruire qualcosa.</p>
-      <p>L'11 luglio, Open Design organizza un piccolo workshop pratico a Shanghai con Dandian AI e Yitai. L'obiettivo è semplice: aiutare i partecipanti a passare da un'idea, un prompt o una reference a un artefatto reale da mostrare, condividere e migliorare.</p>
+      <p>Il 25 luglio, Open Design organizza un piccolo workshop pratico a Shanghai con Dandian AI e Yitai. L'obiettivo è semplice: aiutare i partecipanti a passare da un'idea, un prompt o una reference a un artefatto reale da mostrare, condividere e migliorare.</p>
       <p>La sessione è pensata per studenti, sviluppatori, designer, appassionati di strumenti AI e builder di progetti early-stage.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=it_hero_link">Registrati allo Shanghai AI Workshop</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=it_hero_link">Registrati allo Shanghai AI Workshop</a></p>
       <table><tbody>
         <tr><th>Dove</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Quando</th><td>11 luglio 2026, 19:00-22:00</td></tr>
+        <tr><th>Quando</th><td>25 luglio 2026, 19:00-22:00</td></tr>
         <tr><th>Formato</th><td>Piccolo workshop pratico / meetup</td></tr>
         <tr><th>Partner</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Per chi</th><td>Studenti, sviluppatori, designer, appassionati di strumenti AI e membri di progetti startup</td></tr>
@@ -372,9 +372,9 @@ i18n:
       </tbody></table>
       <h2>Chi dovrebbe venire</h2>
       <p>Vieni se vuoi creare qualcosa di concreto con l'AI, non solo parlarne. Studenti, sviluppatori, designer e builder sono benvenuti.</p>
-      <h2>Ci vediamo a Shanghai l'11 luglio</h2>
+      <h2>Ci vediamo a Shanghai il 25 luglio</h2>
       <p>Terremo il workshop piccolo per rendere l'esperienza pratica e vicina ai progetti delle persone nella stanza.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=it_final_cta">Registrati qui</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=it_final_cta">Registrati qui</a></p>
   tr:
     title: "Open Design AI Workshop Şanghay'a geliyor"
     summary: "Öğrenciler, geliştiriciler, tasarımcılar ve AI araçlarıyla çalışan builder'lar için; prompt ve referansları gerçek AI artefaktlarına dönüştüren uygulamalı bir Şanghay workshop'u."
@@ -382,12 +382,12 @@ i18n:
     readingTime: 3
     bodyHtml: |
       <p>AI tasarım gerçekten işe yarar hale en çok, insanlar aynı odada deneyip bir şeyler ürettiğinde geliyor.</p>
-      <p>11 Temmuz'da Open Design, Dandian AI ve Yitai ile birlikte Şanghay'da küçük ve uygulamalı bir workshop düzenliyor. Amaç basit: Katılımcıların bir fikir, prompt ya da referanstan başlayıp gösterebilecekleri, paylaşabilecekleri ve geliştirmeye devam edebilecekleri gerçek bir artefakt üretmelerine yardımcı olmak.</p>
+      <p>25 Temmuz'da Open Design, Dandian AI ve Yitai ile birlikte Şanghay'da küçük ve uygulamalı bir workshop düzenliyor. Amaç basit: Katılımcıların bir fikir, prompt ya da referanstan başlayıp gösterebilecekleri, paylaşabilecekleri ve geliştirmeye devam edebilecekleri gerçek bir artefakt üretmelerine yardımcı olmak.</p>
       <p>Bu oturum özellikle öğrenciler, geliştiriciler, tasarımcılar, AI araç meraklıları ve erken aşama proje builder'ları için uygun.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=tr_hero_link">Shanghai AI Workshop'a kayıt ol</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=tr_hero_link">Shanghai AI Workshop'a kayıt ol</a></p>
       <table><tbody>
         <tr><th>Nerede</th><td>Cook&amp;Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai</td></tr>
-        <tr><th>Ne zaman</th><td>11 Temmuz 2026, 19:00-22:00</td></tr>
+        <tr><th>Ne zaman</th><td>25 Temmuz 2026, 19:00-22:00</td></tr>
         <tr><th>Format</th><td>Küçük, uygulamalı workshop / meetup</td></tr>
         <tr><th>Partnerler</th><td>Open Design x Dandian AI x Yitai</td></tr>
         <tr><th>Kimler için</th><td>Öğrenciler, geliştiriciler, tasarımcılar, AI araç meraklıları ve startup proje üyeleri</td></tr>
@@ -411,29 +411,29 @@ i18n:
       </tbody></table>
       <h2>Kimler gelmeli</h2>
       <p>AI hakkında yalnızca konuşmak yerine AI ile somut bir şey üretmek istiyorsanız gelin. Öğrenciler, geliştiriciler, tasarımcılar ve builder'lar davetli.</p>
-      <h2>11 Temmuz'da Şanghay'da görüşürüz</h2>
+      <h2>25 Temmuz'da Şanghay'da görüşürüz</h2>
       <p>Deneyimi pratik ve odadaki insanların ürettiklerine yakın tutmak için workshop'u küçük tutuyoruz.</p>
-      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_11&amp;utm_content=tr_final_cta">Buradan kayıt ol</a></p>
+      <p><a href="https://luma.com/yow2uaf1?tk=HeGopm&amp;utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=shanghai_ai_workshop_2026_07_25&amp;utm_content=tr_final_cta">Buradan kayıt ol</a></p>
 socialImage: "/blog/open-design-shanghai-ai-workshop-cover.jpg"
 ctaKind: event-register
 ctaTitle: "Join the Shanghai AI workshop"
-ctaBody: "Save your spot for the July 11 Open Design AI Workshop in Shanghai."
+ctaBody: "Save your spot for the July 25 Open Design AI Workshop in Shanghai."
 ctaLabel: "Register on Luma ↗"
-ctaHref: "https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_11&utm_content=bottom_cta"
+ctaHref: "https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_25&utm_content=bottom_cta"
 ---
 
 AI design gets more useful when people can try it together.
 
-On July 11, Open Design is hosting a small hands-on workshop in Shanghai with Dandian AI and Yitai. The goal is simple: help participants move from an idea, prompt, or reference into a real artifact they can show, share, and keep improving.
+On July 25, Open Design is hosting a small hands-on workshop in Shanghai with Dandian AI and Yitai. The goal is simple: help participants move from an idea, prompt, or reference into a real artifact they can show, share, and keep improving.
 
 This session is especially for students, developers, designers, AI tool enthusiasts, and early project builders who want to understand how agentic design workflows feel in practice.
 
-[Register for the Shanghai AI Workshop](https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_11&utm_content=hero_link)
+[Register for the Shanghai AI Workshop](https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_25&utm_content=hero_link)
 
 | | |
 |---|---|
 | **Where** | Cook&Book, Fudan Nanyuan, 63 Zhengsu Road, Wujiaochang Subdistrict, Yangpu District, Shanghai |
-| **When** | July 11, 2026, 19:00-22:00 |
+| **When** | July 25, 2026, 19:00-22:00 |
 | **Format** | Small hands-on workshop / meetup |
 | **Partners** | Open Design x Dandian AI x Yitai |
 | **For** | Students, developers, designers, AI tool enthusiasts, and startup project members |
@@ -478,8 +478,8 @@ You might be a student exploring your first AI design workflow, a developer test
 
 By the end, the goal is for every participant to leave with a clearer workflow and a first artifact: an AI PPT, a personal webpage, or another Open Design project they can keep improving.
 
-## Join us in Shanghai on July 11
+## Join us in Shanghai on July 25
 
 This is a small workshop so we can keep the experience practical and close to the people building in the room.
 
-[Register here](https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_11&utm_content=final_cta)
+[Register here](https://luma.com/yow2uaf1?tk=HeGopm&utm_source=open_design_blog&utm_medium=referral&utm_campaign=shanghai_ai_workshop_2026_07_25&utm_content=final_cta)

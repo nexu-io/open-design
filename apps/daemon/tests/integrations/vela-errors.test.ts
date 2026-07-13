@@ -82,6 +82,51 @@ describe('AMR account failure classification', () => {
     expect(failure?.message).toContain('request type');
   });
 
+  it('classifies structured Vela ACP auth-required details without relying on message text', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      runtime: 'opencode',
+      phase: 'event_stream',
+      code: 'auth_required',
+      accountAction: 'relogin',
+      openCodeSessionId: 'ses_test',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
+  });
+
+  it('classifies structured Vela ACP relogin actions even when code is absent', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      accountAction: 'relogin',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
+  });
+
+  it('classifies structured auth-required details through the signal path when the protocol message is generic', () => {
+    const failure = classifyAmrAccountFailureSignal({
+      details: {
+        kind: 'opencode_prompt_error',
+        code: 'auth_required',
+        accountAction: 'relogin',
+      },
+      message: 'json-rpc id 3: Internal error',
+      stderrTail: '',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
+  });
+
   it('does not classify unrelated structured ACP details as AMR balance errors', () => {
     expect(classifyAmrAccountFailureDetails({
       kind: 'opencode_prompt_error',

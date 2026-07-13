@@ -39,6 +39,7 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
 import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
 import {
   attachDesktopChildProcessCrashReporter,
@@ -685,6 +686,12 @@ export async function runDesktopMain(
   });
   const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
 
+  // Start local crash-dump collection before the main window (and its renderer)
+  // is created, directing minidumps into the desktop log tree the diagnostics
+  // export bundles, and snapshot GPU info. Together these make a "Save logs…"
+  // bundle enough to root-cause a native renderer crash (e.g. 0x80000003).
+  setUpDesktopCrashReporter(join(dirname(desktopLogPath), "crashes"));
+  void writeDesktopGpuInfo(join(dirname(desktopLogPath), "gpu-info.json"));
   // Abnormal-exit detection: read the previous run's marker (unclean if the app
   // died without a graceful quit — a main-process crash, OS kill, force-quit
   // after a hang, or power loss), then stamp a fresh dirty marker for this run.

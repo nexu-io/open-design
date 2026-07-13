@@ -115,6 +115,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 지원됨 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 지원됨 | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 지원됨 | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |

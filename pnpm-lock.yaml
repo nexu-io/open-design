@@ -812,6 +812,9 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: 24.12.2

@@ -115,6 +115,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 已支援 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 已支援 | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 已支援 | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 已支援 | `od mcp install copilot` |

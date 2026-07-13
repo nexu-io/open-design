@@ -105,6 +105,11 @@ export type RunFailureMessageKey =
   | 'chat.runError.runtimeConfigMessage'
   | 'chat.runError.quotaExhaustedMessage'
   | 'chat.runError.workspaceCreditsMessage'
+  | 'chat.runError.timedOutMessage'
+  | 'chat.runError.inactivityTimeoutMessage'
+  | 'chat.runError.emptyOutputMessage'
+  | 'chat.runError.sessionExpiredMessage'
+  | 'chat.runError.gitBashMissingMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -126,6 +131,10 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.outputInvalid'
   | 'chat.runError.title.runtimeConfig'
   | 'chat.runError.title.quotaExhausted'
+  | 'chat.runError.title.timedOut'
+  | 'chat.runError.title.emptyOutput'
+  | 'chat.runError.title.sessionExpired'
+  | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -242,9 +251,51 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   ),
 };
 
+// Agent-agnostic failure causes keyed by the daemon's `failure_detail`, resolved
+// BEFORE the AMR/Antigravity agent branches (unlike DETAIL_FAILURE_UI above).
+// These are engine-neutral run outcomes — a timeout, an empty result, a stale
+// resumed session, a missing Git Bash — that carry the same named type + fix for
+// every agent, including AMR. They leak in under the opaque AGENT_EXECUTION_FAILED
+// / process-exit codes, so without this the card would only show the raw stderr.
+const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  // Hard wall-clock timeout for the run (daemon user_action: retry). A plain
+  // retry — optionally with a smaller task — usually gets through.
+  timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.timedOutMessage',
+  ),
+  // The agent stalled (no new output for too long) and was cut off as a
+  // timeout. Distinct copy from a hard timeout, same retry recovery.
+  inactivity_timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.inactivityTimeoutMessage',
+  ),
+  // Run terminated without producing any output (daemon user_action: retry);
+  // usually transient, so name it and offer a straight retry.
+  empty_output: retryWithGuidance(
+    'chat.runError.title.emptyOutput',
+    'chat.runError.emptyOutputMessage',
+  ),
+  // A resumed agent session id went stale; the daemon already cleared it so the
+  // next run starts fresh (#3408). Name it as recoverable and offer Retry.
+  session_resume_expired: retryWithGuidance(
+    'chat.runError.title.sessionExpired',
+    'chat.runError.sessionExpiredMessage',
+  ),
+  // Windows: the agent needs Git Bash to spawn and it isn't installed
+  // (daemon user_action: install_cli). Point at installing Git for Windows,
+  // then retry — same "install the dependency, then re-run" shape as cli_missing.
+  git_bash_missing: retryWithGuidance(
+    'chat.runError.title.gitBashMissing',
+    'chat.runError.gitBashMissingMessage',
+  ),
+};
+
 // Resolve the failure UI for a failed run:
 //   - agent-agnostic root cause (cli missing, prompt too large, model
 //     unavailable, tool loop, bad output, bad runtime def) → named type + fix
+//   - agent-agnostic failure_detail (timeout, empty output, stale resumed
+//     session, missing Git Bash) → named type + retry, for every agent
 //   - AMR agent, auth required      → authorize-and-retry button, clearer copy
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
 //   - AMR agent, tier entitlement   → upgrade button + manual retry
@@ -262,6 +313,12 @@ export function resolveRunFailureUi(
   // of them still gets the specific guidance instead of the generic fallback.
   const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;
   if (agnostic) return agnostic;
+  // Engine-neutral failure_detail (timeout, empty output, stale resumed session,
+  // missing Git Bash) resolves before the agent branches so it applies to every
+  // agent — including AMR, whose branch below otherwise returns a generic retry.
+  const agnosticDetail =
+    typeof detail === 'string' ? AGENT_AGNOSTIC_DETAIL_FAILURE_UI[detail] : undefined;
+  if (agnosticDetail) return agnosticDetail;
   if (agentId === 'amr') {
     if (code === 'AMR_AUTH_REQUIRED') {
       return {
