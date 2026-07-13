@@ -45,6 +45,7 @@ import {
   AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_TIMEOUT_MS,
   amrLoginPollOutcome,
+  amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 
@@ -301,7 +302,19 @@ export function AvatarMenu({
   //InlineModelSwitcher starting/cancelling a sign-in). When a sign-in succeeds
   // elsewhere we refresh local state and stop our own poll if one is running.
   useEffect(() => {
-    const onStatusChange = () => {
+    const onStatusChange = (event: Event) => {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-started') {
+        const startedAt = Date.now();
+        amrLoginStartedAtRef.current = startedAt;
+        setAmrLoginError(null);
+        setAmrLoginPending(true);
+        void startAmrPolling(startedAt);
+      } else if (reason === 'login-canceled') {
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        setAmrLoginError(null);
+      }
       void amrRefreshLoginStatus().then((next) => {
         if (next?.loggedIn) {
           amrStopPolling();
@@ -316,7 +329,7 @@ export function AvatarMenu({
     return () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     };
-  }, [amrRefreshLoginStatus, amrStopPolling]);
+  }, [amrRefreshLoginStatus, amrStopPolling, startAmrPolling]);
   const handleAmrSignIn = useCallback(async () => {
     if (amrLoginPendingRef.current) return;
     amrLoginPendingRef.current = true;
@@ -642,7 +655,6 @@ export function AvatarMenu({
                           type="button"
                           className="avatar-amr-row__sign-in"
                           data-testid="avatar-amr-signin"
-                          disabled={amrLoginPending}
                           title={amrLoginPending ? t('settings.amrCancelSignIn') : undefined}
                           onClick={() => {
                             if (amrLoginPending) {
