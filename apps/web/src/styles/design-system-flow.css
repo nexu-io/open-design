@@ -206,6 +206,8 @@
 .ds-extraction-demo__logo-tile img {
   position: relative;
   z-index: 1;
+  width: 128px;
+  height: 128px;
   max-width: 74%;
   max-height: 74%;
   object-fit: contain;
