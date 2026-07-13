@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button, Textarea } from '@open-design/components';
 import type {
   ConnectorConnectResponse,
@@ -200,6 +200,13 @@ interface DetailProps {
 type ReviewTab = 'system' | 'files';
 type DesignMdMode = 'edit' | 'preview';
 type DesignMdPreviewTheme = 'light' | 'dark';
+type DemoExtractionStage = 'form' | 'extracting-logo' | 'logo-review' | 'extracting-system' | 'system-review';
+
+interface DemoExtractionProject {
+  projectId: string;
+  project?: Project;
+  conversationId?: string | null;
+}
 
 interface ResolvedDesignSystemWorkspaceProject {
   projectId: string;
@@ -366,6 +373,12 @@ export function DesignSystemCreationFlow({
   // disclosure that hides the lower-frequency source inputs.
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [demoExtractionStage, setDemoExtractionStage] = useState<DemoExtractionStage>('form');
+  const [demoSourceUrl, setDemoSourceUrl] = useState('');
+  const [demoBrandName, setDemoBrandName] = useState('');
+  const [demoUploadedLogoUrl, setDemoUploadedLogoUrl] = useState<string | null>(null);
+  const [demoProject, setDemoProject] = useState<DemoExtractionProject | null>(null);
+  const demoLogoUploadRef = useRef<HTMLInputElement>(null);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
   // the daemon creates the project + real transcript immediately, then the
   // programmatic pass registers a usable user:<id> design system in the
@@ -385,6 +398,16 @@ export function DesignSystemCreationFlow({
   const embedded = chrome === 'embedded';
   // Keep this demo intake focused on a single website source.
   const showAdvancedSources = false;
+
+  useEffect(() => {
+    if (demoExtractionStage !== 'extracting-system') return;
+    const timeout = window.setTimeout(() => setDemoExtractionStage('system-review'), 1_650);
+    return () => window.clearTimeout(timeout);
+  }, [demoExtractionStage]);
+
+  useEffect(() => () => {
+    if (demoUploadedLogoUrl?.startsWith('blob:')) URL.revokeObjectURL(demoUploadedLogoUrl);
+  }, [demoUploadedLogoUrl]);
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -654,6 +677,16 @@ export function DesignSystemCreationFlow({
     setState((curr) => ({ ...curr, company: domain }));
   }
 
+  function handleDemoLogoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setDemoUploadedLogoUrl((current) => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+      return URL.createObjectURL(file);
+    });
+    event.target.value = '';
+  }
+
   function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (isImeComposing(event)) return;
     if (event.key !== 'Enter') return;
@@ -880,6 +913,12 @@ export function DesignSystemCreationFlow({
       figFileCount,
       assetFileCount,
     };
+    const demoSource = nonGithubSourceUrlsFromState(generationState)[0]
+      ?? sourceUrlsFromState(generationState)[0]
+      ?? generationState.company.trim();
+    setDemoSourceUrl(demoSource);
+    setDemoBrandName(designSystemDemoLabel(demoSource));
+    setDemoExtractionStage('extracting-logo');
     onBeforeGenerate?.(snapshot);
     setGenerationStarting(true);
     setError(null);
@@ -932,6 +971,7 @@ export function DesignSystemCreationFlow({
         : '';
       const designMdForExtraction = hasDesignMd ? generationState.designMd : fallbackDesignMd;
       if (!extractUrl && !designMdForExtraction) {
+        setDemoExtractionStage('form');
         setError(t('dsCreate.missingSourceError'));
         emitCreateResult('failed', undefined, 'DS_EXTRACT_NO_SOURCE', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_NO_SOURCE' });
@@ -942,6 +982,7 @@ export function DesignSystemCreationFlow({
         designMd: designMdForExtraction,
       });
       if (!result) {
+        setDemoExtractionStage('form');
         setError('Could not start the extraction. Check the link and try again.');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_START_FAILED', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_START_FAILED' });
@@ -977,10 +1018,18 @@ export function DesignSystemCreationFlow({
       } else {
         void onSystemsRefresh?.();
       }
-      onCreated(result.projectId, projectForCreated, result.conversationId);
+      setDemoSourceUrl(extractUrl || demoSource);
+      setDemoBrandName(result.brandName?.trim() || designSystemDemoLabel(extractUrl || demoSource));
+      setDemoProject({
+        projectId: result.projectId,
+        project: projectForCreated,
+        conversationId: result.conversationId,
+      });
+      setDemoExtractionStage('logo-review');
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
+      setDemoExtractionStage('form');
       setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
@@ -1024,6 +1073,7 @@ export function DesignSystemCreationFlow({
         </div>
       )}
 
+      {demoExtractionStage === 'form' ? (
       <main className="ds-setup-form">
         {embedded ? (
           <>
@@ -1417,6 +1467,22 @@ export function DesignSystemCreationFlow({
         ) : null}
         </div>
       </main>
+      ) : (
+        <DesignSystemExtractionDemo
+          stage={demoExtractionStage}
+          brandName={demoBrandName}
+          sourceUrl={demoSourceUrl}
+          logoUrl={demoUploadedLogoUrl ?? brandFaviconUrl(demoSourceUrl, 256)}
+          logoUploadRef={demoLogoUploadRef}
+          onUpload={handleDemoLogoUpload}
+          onApproveLogo={() => setDemoExtractionStage('extracting-system')}
+          onOpenProject={() => {
+            if (!demoProject) return;
+            onCreated(demoProject.projectId, demoProject.project, demoProject.conversationId);
+          }}
+          canOpenProject={demoProject !== null}
+        />
+      )}
       {libraryPickerOpen ? (
         <LibraryPicker
           title={t('dsCreate.libraryPickerTitle')}
@@ -1427,6 +1493,100 @@ export function DesignSystemCreationFlow({
       ) : null}
     </div>
   );
+}
+
+function DesignSystemExtractionDemo({
+  stage,
+  brandName,
+  sourceUrl,
+  logoUrl,
+  logoUploadRef,
+  onUpload,
+  onApproveLogo,
+  onOpenProject,
+  canOpenProject,
+}: {
+  stage: Exclude<DemoExtractionStage, 'form'>;
+  brandName: string;
+  sourceUrl: string;
+  logoUrl: string;
+  logoUploadRef: RefObject<HTMLInputElement>;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApproveLogo: () => void;
+  onOpenProject: () => void;
+  canOpenProject: boolean;
+}) {
+  const label = brandName || 'your brand';
+  const isLoading = stage === 'extracting-logo' || stage === 'extracting-system';
+
+  return (
+    <main className="ds-extraction-demo" aria-live="polite">
+      {isLoading ? (
+        <section className="ds-extraction-demo__loading">
+          <span className="ds-extraction-demo__pulse" aria-hidden="true"><Spinner size={22} /></span>
+          <p className="ds-extraction-demo__eyebrow">{stage === 'extracting-logo' ? 'First, your logo' : 'Building the foundations'}</p>
+          <h1>{stage === 'extracting-logo' ? 'Finding the most likely logo' : 'Extracting color, type, and shape'}</h1>
+          <p>Open Design is reading <strong>{sourceUrl || label}</strong> and assembling the first pass.</p>
+        </section>
+      ) : null}
+
+      {stage === 'logo-review' ? (
+        <section className="ds-extraction-demo__card">
+          <div className="ds-extraction-demo__logo-tile">
+            <span className="ds-extraction-demo__logo-fallback" aria-hidden>{label.slice(0, 1).toUpperCase()}</span>
+            <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+          </div>
+          <p className="ds-extraction-demo__eyebrow">Logo detected</p>
+          <h1>Does this logo look accurate?</h1>
+          <p>If not, upload the right mark and we will use that instead.</p>
+          <input
+            ref={logoUploadRef}
+            className="ds-extraction-demo__file-input"
+            type="file"
+            accept="image/*"
+            onChange={onUpload}
+          />
+          <div className="ds-extraction-demo__actions">
+            <Button variant="default" onClick={() => logoUploadRef.current?.click()}>Upload another</Button>
+            <Button variant="primary" onClick={onApproveLogo}>Looks good</Button>
+          </div>
+        </section>
+      ) : null}
+
+      {stage === 'system-review' ? (
+        <section className="ds-extraction-demo__card ds-extraction-demo__card--system">
+          <div className="ds-extraction-demo__success-mark" aria-hidden>✓</div>
+          <p className="ds-extraction-demo__eyebrow">First pass ready</p>
+          <h1>{label} foundations</h1>
+          <p>We used the confirmed logo to extract a focused starting system.</p>
+          <div className="ds-extraction-demo__foundations">
+            <div>
+              <span>Color</span>
+              <i className="is-ink" /><i className="is-signal" /><i className="is-cloud" />
+            </div>
+            <div>
+              <span>Typography</span>
+              <strong>Aa</strong><b>Clean system sans</b>
+            </div>
+            <div>
+              <span>Shape</span>
+              <em>12 px radius</em>
+            </div>
+          </div>
+          {canOpenProject ? (
+            <Button variant="ghost" className="ds-extraction-demo__project-link" onClick={onOpenProject}>
+              Open the full project <Icon name="chevron-right" size={14} />
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+    </main>
+  );
+}
+
+function designSystemDemoLabel(value: string): string {
+  const label = value.trim().replace(/^https?:\/\//iu, '').replace(/^www\./iu, '').split('/')[0] ?? '';
+  return label || 'your brand';
 }
 
 interface DesignMdPreviewColor {

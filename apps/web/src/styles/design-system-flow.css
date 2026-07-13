@@ -131,6 +131,176 @@
 .ds-setup-form-col {
   min-width: 0;
 }
+.ds-extraction-demo {
+  display: grid;
+  width: min(100% - 40px, 480px);
+  min-height: 100%;
+  place-items: center;
+  margin: 0 auto;
+  padding: clamp(112px, 18vh, 190px) 0 64px;
+  text-align: center;
+}
+.ds-extraction-demo__loading,
+.ds-extraction-demo__card {
+  width: min(100%, 440px);
+}
+.ds-extraction-demo__loading {
+  display: grid;
+  justify-items: center;
+}
+.ds-extraction-demo__pulse {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  margin-bottom: 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.ds-extraction-demo__eyebrow {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ds-extraction-demo h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.ds-extraction-demo h1 + p,
+.ds-extraction-demo__card > p:not(.ds-extraction-demo__eyebrow) {
+  margin: 14px auto 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.ds-extraction-demo__card {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-panel);
+  box-shadow: 0 20px 56px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent);
+}
+.ds-extraction-demo__logo-tile {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 190px;
+  place-items: center;
+  overflow: hidden;
+  margin-bottom: 24px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg) 72%, var(--bg-panel));
+}
+.ds-extraction-demo__logo-tile img {
+  position: relative;
+  z-index: 1;
+  max-width: 74%;
+  max-height: 74%;
+  object-fit: contain;
+}
+.ds-extraction-demo__logo-fallback {
+  position: absolute;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border-radius: 20px;
+  color: var(--accent-contrast, #fff);
+  background: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+}
+.ds-extraction-demo__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+.ds-extraction-demo__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 24px;
+}
+.ds-extraction-demo__actions button {
+  min-height: 40px;
+}
+.ds-extraction-demo__success-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+  font-size: 16px;
+}
+.ds-extraction-demo__foundations {
+  display: grid;
+  gap: 0;
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: left;
+}
+.ds-extraction-demo__foundations > div {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.ds-extraction-demo__foundations > div:first-child {
+  border-top: 0;
+}
+.ds-extraction-demo__foundations span {
+  width: 82px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.ds-extraction-demo__foundations i {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.ds-extraction-demo__foundations .is-ink { background: var(--text-strong); }
+.ds-extraction-demo__foundations .is-signal { background: var(--accent); }
+.ds-extraction-demo__foundations .is-cloud { background: color-mix(in srgb, var(--text-muted) 16%, var(--bg-panel)); }
+.ds-extraction-demo__foundations strong {
+  color: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 500;
+}
+.ds-extraction-demo__foundations b,
+.ds-extraction-demo__foundations em {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 500;
+}
+.ds-extraction-demo__project-link {
+  margin-top: 18px;
+  color: var(--text-muted);
+}
 @media (max-width: 960px) {
   .ds-setup-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
