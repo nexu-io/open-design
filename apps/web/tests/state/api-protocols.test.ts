@@ -44,4 +44,28 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.models).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.models).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('adds Z.AI Global without replacing the China Zhipu preset', () => {
+    const zaiGlobalProvider = KNOWN_PROVIDERS.find(
+      (provider) => provider.baseUrl === 'https://api.z.ai/api/paas/v4',
+    );
+    const zhipuProvider = KNOWN_PROVIDERS.find(
+      (provider) => provider.baseUrl === 'https://open.bigmodel.cn/api/paas/v4',
+    );
+
+    expect(zaiGlobalProvider).toMatchObject({
+      label: 'Z.AI Global',
+      protocol: 'openai',
+      model: 'glm-5.1',
+    });
+    expect(zaiGlobalProvider?.models).toContain('glm-5');
+    expect(zaiGlobalProvider?.models).toContain('glm-4.7-flash');
+
+    expect(zhipuProvider).toMatchObject({
+      label: 'Zhipu',
+      protocol: 'openai',
+      model: 'glm-4.6',
+      models: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
+    });
+  });
 });
