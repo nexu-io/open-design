@@ -74,9 +74,11 @@ sent to PostHog **even when telemetry is turned off**, so that stability problem
 stay visible to the team — including crashes that happen before the app is
 healthy enough to report anything else.
 
-**What a report contains depends on the event.** Every one of them carries your
-anonymous installation ID, the app version, and which build environment you are
-on. Beyond that:
+**What a report contains depends on the event.** They all carry an anonymous
+identifier, the app version, and which build environment you are on. That
+identifier is normally your anonymous installation ID; if it has not been written
+yet — on a first launch, or when a startup fails before the app can read it — a
+synthetic stand-in is used instead. Beyond that:
 
 - **Crashes and unhandled errors** in the app window also include the exception
   type and message, a scrubbed stack trace, the path of the page you were on, and
