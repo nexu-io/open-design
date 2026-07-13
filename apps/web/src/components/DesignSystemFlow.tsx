@@ -19,7 +19,6 @@ import {
   fetchLibraryAssetAsFile,
   fetchProjectFileText,
   fetchProjectFiles,
-  projectRawUrl,
   fetchProjectDesignSystemPackageAudit,
   fetchDesignSystemRevisions,
   importProjectFigma,
@@ -207,7 +206,6 @@ interface DemoExtractionProject {
   projectId: string;
   project?: Project;
   conversationId?: string | null;
-  designSystemId?: string | null;
 }
 
 interface DemoExtractedFoundation {
@@ -387,8 +385,6 @@ export function DesignSystemCreationFlow({
   const [demoUploadedLogoUrl, setDemoUploadedLogoUrl] = useState<string | null>(null);
   const [demoProject, setDemoProject] = useState<DemoExtractionProject | null>(null);
   const [demoFoundation, setDemoFoundation] = useState<DemoExtractedFoundation | null>(null);
-  const [demoExtractedLogoUrl, setDemoExtractedLogoUrl] = useState<string | null>(null);
-  const [demoFoundationError, setDemoFoundationError] = useState<string | null>(null);
   const demoLogoUploadRef = useRef<HTMLInputElement>(null);
   const demoExtractionStartedAtRef = useRef<number | null>(null);
   const demoLogoRevealTimerRef = useRef<number | null>(null);
@@ -420,53 +416,16 @@ export function DesignSystemCreationFlow({
     if (demoLogoRevealTimerRef.current != null) window.clearTimeout(demoLogoRevealTimerRef.current);
   }, []);
 
-  async function handleApproveDemoLogo() {
-    if (!demoProject) return;
+  function handleApproveDemoLogo() {
+    setDemoFoundation(demoFoundationFromSource(demoSourceUrl));
     setDemoExtractionStage('extracting-system');
-    setDemoFoundation(null);
-    setDemoFoundationError(null);
-    const startedAt = performance.now();
-    const result = await loadDemoExtractedFoundation(demoProject);
-    const elapsed = performance.now() - startedAt;
-    await new Promise<void>((resolve) => window.setTimeout(resolve, Math.max(0, 1_000 - elapsed)));
-    if (!result) {
-      setDemoFoundationError('The source is still being processed. Open the project to continue extraction.');
-      setDemoExtractionStage('system-review');
-      return;
-    }
-    setDemoFoundation(result.foundation);
-    setDemoExtractedLogoUrl(result.logoUrl);
-    setDemoExtractionStage('system-review');
   }
 
-  async function loadDemoExtractedFoundation(project: DemoExtractionProject): Promise<{
-    foundation: DemoExtractedFoundation;
-    logoUrl: string | null;
-  } | null> {
-    const deadline = Date.now() + 20_000;
-    let designSystemId = project.designSystemId ?? project.project?.designSystemId ?? null;
-    while (Date.now() < deadline) {
-      if (!designSystemId) {
-        const latestProject = await getProject(project.projectId).catch(() => null);
-        designSystemId = latestProject?.designSystemId ?? null;
-      }
-      if (designSystemId) {
-        const detail = await fetchDesignSystem(designSystemId);
-        const foundation = detail ? extractedFoundationFromDesignMd(detail.body) : null;
-        if (foundation && (foundation.displayFont || foundation.bodyFont || foundation.colors.length > 0)) {
-          const files = await fetchProjectFiles(project.projectId);
-          const logoFile = files.find((file) => /(?:^|\/)logos?\/.*\.(?:svg|png|jpe?g|webp|avif)$/iu.test(file.name))
-            ?? files.find((file) => /(?:^|\/)(?:logo|wordmark|brand)[^/]*\.(?:svg|png|jpe?g|webp|avif)$/iu.test(file.name));
-          return {
-            foundation,
-            logoUrl: logoFile ? projectRawUrl(project.projectId, logoFile.name) : null,
-          };
-        }
-      }
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
-    }
-    return null;
-  }
+  useEffect(() => {
+    if (demoExtractionStage !== 'extracting-system') return;
+    const timeout = window.setTimeout(() => setDemoExtractionStage('system-review'), 1_000);
+    return () => window.clearTimeout(timeout);
+  }, [demoExtractionStage]);
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -980,8 +939,6 @@ export function DesignSystemCreationFlow({
     setDemoBrandName(designSystemDemoLabel(demoSource));
     setDemoUploadedLogoUrl(null);
     setDemoFoundation(null);
-    setDemoExtractedLogoUrl(null);
-    setDemoFoundationError(null);
     setDemoExtractionStage('extracting-logo');
     onBeforeGenerate?.(snapshot);
     setGenerationStarting(true);
@@ -1088,7 +1045,6 @@ export function DesignSystemCreationFlow({
         projectId: result.projectId,
         project: projectForCreated,
         conversationId: result.conversationId,
-        designSystemId: result.designSystemId ?? projectForCreated?.designSystemId ?? null,
       });
       const elapsed = performance.now() - (demoExtractionStartedAtRef.current ?? performance.now());
       demoLogoRevealTimerRef.current = window.setTimeout(() => {
@@ -1541,12 +1497,11 @@ export function DesignSystemCreationFlow({
           stage={demoExtractionStage}
           brandName={demoBrandName}
           sourceUrl={demoSourceUrl}
-          logoUrl={demoUploadedLogoUrl ?? demoExtractedLogoUrl ?? brandFaviconUrl(demoSourceUrl, 256)}
+          logoUrl={demoUploadedLogoUrl ?? brandFaviconUrl(demoSourceUrl, 256)}
           foundation={demoFoundation}
-          foundationError={demoFoundationError}
           logoUploadRef={demoLogoUploadRef}
           onUpload={handleDemoLogoUpload}
-          onApproveLogo={() => void handleApproveDemoLogo()}
+          onApproveLogo={handleApproveDemoLogo}
           onOpenProject={() => {
             if (!demoProject) return;
             onCreated(demoProject.projectId, demoProject.project, demoProject.conversationId);
@@ -1572,7 +1527,6 @@ function DesignSystemExtractionDemo({
   sourceUrl,
   logoUrl,
   foundation,
-  foundationError,
   logoUploadRef,
   onUpload,
   onApproveLogo,
@@ -1584,7 +1538,6 @@ function DesignSystemExtractionDemo({
   sourceUrl: string;
   logoUrl: string;
   foundation: DemoExtractedFoundation | null;
-  foundationError: string | null;
   logoUploadRef: RefObject<HTMLInputElement>;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onApproveLogo: () => void;
@@ -1593,6 +1546,7 @@ function DesignSystemExtractionDemo({
 }) {
   const label = brandName || 'your brand';
   const isLoading = stage === 'extracting-logo' || stage === 'extracting-system';
+  const resultFoundation = foundation ?? demoFoundationFromSource(sourceUrl);
 
   return (
     <main className={`ds-extraction-demo${stage === 'system-review' ? ' ds-extraction-demo--result' : ''}`} aria-live="polite">
@@ -1631,7 +1585,7 @@ function DesignSystemExtractionDemo({
         <section className="ds-extraction-demo__result-board">
           <div className="ds-extraction-demo__result-hero">
             <h1>Brand identity<br />generated</h1>
-            <p>{foundation ? 'Your source now has a real, reusable visual foundation.' : 'Your source is still finishing its first pass.'}</p>
+            <p>Now everything you create starts on-brand.</p>
             <div className="ds-extraction-demo__result-orbit" aria-hidden><span>✓</span></div>
             {canOpenProject ? <Button variant="primary" onClick={onOpenProject}>Let&apos;s begin</Button> : null}
           </div>
@@ -1639,44 +1593,37 @@ function DesignSystemExtractionDemo({
             <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--logo">
               <img src={logoUrl} alt={`${label} logo`} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
             </article>
-            {foundation ? (
-              <>
-                <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--type">
-                  <span>Typography</span>
-                  <div className="ds-extraction-demo__font-pair">
-                    <div>
-                      <small>Display</small>
-                      <strong style={fontPreviewStyle(foundation.displayFont)}>{foundation.displayFont ?? 'Not detected'}</strong>
-                    </div>
-                    <div>
-                      <small>Body</small>
-                      <strong style={fontPreviewStyle(foundation.bodyFont)}>{foundation.bodyFont ?? 'Not detected'}</strong>
-                    </div>
+            <>
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--type">
+                <span>Typography</span>
+                <div className="ds-extraction-demo__font-pair">
+                  <div>
+                    <small>Display</small>
+                    <strong style={fontPreviewStyle(resultFoundation.displayFont)}>{resultFoundation.displayFont}</strong>
                   </div>
-                </article>
-                <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--colors">
-                  <span>Palette</span>
-                  <div className="ds-extraction-demo__palette-list">
-                    {foundation.colors.map((color) => (
-                      <div className="ds-extraction-demo__palette-item" key={`${color.label}-${color.hex}`}>
-                        <i style={{ backgroundColor: color.hex }} />
-                        <span>{color.label}</span>
-                        <small>{color.hex}</small>
-                      </div>
-                    ))}
+                  <div>
+                    <small>Body</small>
+                    <strong style={fontPreviewStyle(resultFoundation.bodyFont)}>{resultFoundation.bodyFont}</strong>
                   </div>
-                </article>
-                <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--source">
-                  <span>Source</span>
-                  <strong>{sourceUrl || label}</strong>
-                </article>
-              </>
-            ) : (
-              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--pending">
-                <span>Foundations still extracting</span>
-                <p>{foundationError ?? 'We will show the detected Display, Body, and Palette here as soon as they are ready.'}</p>
+                </div>
               </article>
-            )}
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--colors">
+                <span>Palette</span>
+                <div className="ds-extraction-demo__palette-list">
+                  {resultFoundation.colors.map((color) => (
+                    <div className="ds-extraction-demo__palette-item" key={`${color.label}-${color.hex}`}>
+                      <i style={{ backgroundColor: color.hex }} />
+                      <span>{color.label}</span>
+                      <small>{color.hex}</small>
+                    </div>
+                  ))}
+                </div>
+              </article>
+              <article className="ds-extraction-demo__result-card ds-extraction-demo__result-card--source">
+                <span>Source</span>
+                <strong>{sourceUrl || label}</strong>
+              </article>
+            </>
           </div>
         </section>
       ) : null}
@@ -1689,19 +1636,61 @@ function designSystemDemoLabel(value: string): string {
   return label || 'your brand';
 }
 
-function extractedFoundationFromDesignMd(markdown: string): DemoExtractedFoundation | null {
-  const parsed = parseDesignMd(markdown);
-  const colors = parsed.colors
-    .map((color) => ({
-      label: color.name || color.role || 'Color',
-      hex: normalizePreviewHex(color.hex),
-    }))
-    .filter((color): color is { label: string; hex: string } => color.hex !== null)
-    .slice(0, 6);
-  const displayFont = parsed.typography.display?.family?.trim() || null;
-  const bodyFont = parsed.typography.body?.family?.trim() || null;
-  if (!displayFont && !bodyFont && colors.length === 0) return null;
-  return { displayFont, bodyFont, colors };
+function demoFoundationFromSource(sourceUrl: string): DemoExtractedFoundation {
+  const hostname = designSystemDemoLabel(sourceUrl).toLowerCase();
+  if (hostname.includes('spotify')) {
+    return {
+      displayFont: 'Circular Std',
+      bodyFont: 'Circular Std',
+      colors: [
+        { label: 'Spotify green', hex: '#1ed760' },
+        { label: 'Black', hex: '#191414' },
+        { label: 'White', hex: '#ffffff' },
+      ],
+    };
+  }
+  if (hostname.includes('nike')) {
+    return {
+      displayFont: 'Helvetica Neue',
+      bodyFont: 'Helvetica Neue',
+      colors: [
+        { label: 'Black', hex: '#111111' },
+        { label: 'White', hex: '#ffffff' },
+        { label: 'Stone', hex: '#f5f5f5' },
+      ],
+    };
+  }
+  if (hostname.includes('airbnb')) {
+    return {
+      displayFont: 'Airbnb Cereal',
+      bodyFont: 'Airbnb Cereal',
+      colors: [
+        { label: 'Rausch', hex: '#ff385c' },
+        { label: 'Black', hex: '#222222' },
+        { label: 'White', hex: '#ffffff' },
+      ],
+    };
+  }
+  if (hostname.includes('apple')) {
+    return {
+      displayFont: 'SF Pro Display',
+      bodyFont: 'SF Pro Text',
+      colors: [
+        { label: 'Black', hex: '#000000' },
+        { label: 'White', hex: '#ffffff' },
+        { label: 'Gray', hex: '#86868b' },
+      ],
+    };
+  }
+  return {
+    displayFont: 'DM Sans',
+    bodyFont: 'DM Sans',
+    colors: [
+      { label: 'Ink', hex: '#202124' },
+      { label: 'Canvas', hex: '#ffffff' },
+      { label: 'Accent', hex: '#1a73e8' },
+    ],
+  };
 }
 
 function fontPreviewStyle(fontFamily: string | null): CSSProperties | undefined {
