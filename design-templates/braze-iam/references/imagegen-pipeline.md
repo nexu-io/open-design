@@ -1,4 +1,4 @@
-# 오브제 이미지 생성 파이프라인 — codex image_gen 규약 + imagegen 서브에이전트 dispatch 지시
+# 오브제 이미지 생성 파이프라인 — gti 생성 규약 + imagegen 서브에이전트 dispatch 지시
 
 > **dispatch 모델 = Opus 고정** (`model: "opus"` — 사용자 결정 2026-07-13). 이
 > 스킬의 서브에이전트(imagegen·빌더·검수) 전부 동일.
@@ -7,20 +7,44 @@
 `image.assets[]`에서 `source:"generate"`인 에셋 전부를 **한 턴에 병렬 dispatch**
 (에셋 간 스타일 앵커 의존 없음 — cardnews의 표지 선행과 다르다). 실패분만 순차
 재시도(성공분 보존, 전체 재생성 금지). 프롬프트는 메인이 아래 스캐폴드로 전량
-조립해 전달하고, 서브에이전트는 실행+검증+경로 반환만 한다(codex 장문 stdout을
-메인 컨텍스트에서 격리). dispatch 도구가 없는 런타임은 인라인 순차로 동일 절차.
+조립해 전달하고, 서브에이전트는 실행+검증+경로 반환만 한다(병렬 실행 + 검증·
+후처리를 메인 컨텍스트에서 격리 — codex exec 폴백 시 장문 stdout 격리 사유도
+부활한다). dispatch 도구가 없는 런타임은 인라인 순차로 동일 절차.
 `source:"library"`(브랜드 캐릭터 컷)와 `source:"css"`(코드 장식)는 생성 호출이
 없다 — library는 파일 복사, css는 빌더가 그린다.
 
 **메인 에이전트가 codex 자체인 런타임**: CLI 재호출(중첩 spawn) 대신 내장
 `image_gen` 도구를 직접 사용해도 된다 — 스캐폴드·산출 경로 계약은 동일.
 
+## 전송 계층 = gti (god-tibo-imagen)
+
+생성 호출은 `gti` CLI가 정본 경로다 — codex exec과 같은 백엔드
+(`chatgpt.com/backend-api/codex/responses`의 `image_generation` 툴,
+`~/.codex/auth.json` 재사용)를 에이전트 루프 없이 단일 HTTP POST로 직접
+호출한다. codex exec 대비 실측 차이 (gti 파일럿 2026-07-13 — 근거표 참조):
+
+- 프롬프트 무재해석 전달 — codex 에이전트의 지시문 재해석 계층이 없다.
+  반환 JSON의 `revisedPrompt`로 모델에 실제 전달된 문장을 확인할 수 있다.
+- `--output <path>` 확정 저장 + 구조화 JSON 반환(`savedPath`·`responseId`·
+  `httpStatus`) — generated_images 스캐빈징·행 감시·stdout 격리 불필요.
+- 소요 ~30-70초/건 (codex exec ~5-7분 대비).
+- `--size` 지정 가능: auto, 1024x1024, 2048x2048, 1536x1024, 2048x1152,
+  3840x2160, 1024x1536, 2160x3840. 단 **캔버스 크기는 비보장** — 1024x1024
+  요청에 1254² 반환 실측. bbox 트림(후처리 표준 2)이 흡수하므로 게이트 아님.
+
+> **⚠️ 리스크**: gti는 비공식 프라이빗 API 의존이라 예고 없이 파손될 수 있다
+> (gti 자체가 기동 시 동일 경고를 출력한다). 파손 시(비 200, 인증 실패,
+> 스키마 변경) 폴백 = ① `gti --provider codex-cli` ② 아래 "폴백 경로
+> (codex exec)" § 의 기존 절차. 폴백 절은 삭제 금지.
+
 **산출 경로 = `{cwd}/assets/` 하위 고정** (`assets/obj-<id>.png`). 중간산출을
 루트에 두면 글롭 위생 문제(cardnews 실측과 동일 원리). 생성 성공분은 삭제 금지.
 
 ## 실행 전제 (미충족 시 정직 안내 후 중단 — 대체 생성 경로 없음)
 
-- codex CLI 0.135+ 로그인 (`codex doctor`) — `image_generation` 피처
+- gti v0.3.1+ 설치 확인 (`gti --version`) — Node.js 20+ 필요
+- codex 로그인 자격 유효 (`~/.codex/auth.json`) — gti가 재사용한다. codex CLI
+  자체(0.135+, `codex doctor`)는 "폴백 경로 (codex exec)" § 에서만 필요
 - python3 + Pillow (알파 검증·키잉 폴백)
 
 ## dispatch 입력
@@ -33,7 +57,8 @@
   모드 `assets/scene-<id>.png`
 - `{prompt}` — 아래 스캐폴드로 조립한 생성 프롬프트 전문 (layer는 오브제
   스캐폴드, scene은 씬 스캐폴드 — 둘 다 아래 §)
-- `{anchor_paths}` — view_image 참조 절대 경로 목록. **오브제 생성은 기본 "없음"**
+- `{anchor_paths}` — 앵커 이미지 절대 경로 목록 (gti `--image <path>` 반복
+  지정으로 첨부, codex exec 폴백에서는 view_image 참조). **오브제 생성은 기본 "없음"**
   — 타사 레퍼런스 스크린샷을 앵커로 쓰는 것은 금지(IP·캐릭터 오염). 예외는 캐릭터
   포함 통짜 컴포지션(아래 "캐릭터 포함 통짜 컴포지션" 절, layer·scene 공통)뿐이며
   그때는 **이중 앵커** — 캐릭터 시트(등재 시, 통째 1장 — 셀 크롭 금지) + 해당
@@ -44,28 +69,25 @@
 너는 Braze IAM 오브제 에셋 생성 전담 에이전트다. 최종 텍스트 반환만이 메인에게
 전달된다 — 잡담 없이 결과만.
 
-1. 실행 (기본 샌드박스는 read-only라 cwd 복사가 실패한다 — 두 플래그 필수):
+1. 실행:
 
    ```bash
-   codex exec -c model="gpt-5.5" --skip-git-repo-check --sandbox workspace-write -C {cwd} "<지시문>" < /dev/null
+   gti --prompt "{prompt}" --model gpt-5.5 --size 1024x1024 --output {cwd}/{out_name}
    ```
 
-   **이미지 생성 모델은 `gpt-5.5` 고정** (`-c model="gpt-5.5"`) — codex 기본 모델
-   (예: `gpt-5.6-luna`)은 image_generation 400 실패, `gpt-5.1-codex*`는 ChatGPT
-   계정 미지원(400). 모델 플래그 누락 시 조용한 전패(도그푸딩 실측). 백그라운드
-   실행 시 stdin 닫기(`< /dev/null`) 필수 — 무한 행 48분 실측.
+   **이미지 생성 모델은 `gpt-5.5` 고정** (`--model gpt-5.5`) — gti 기본값은
+   `gpt-5.4`라 플래그 누락 시 에러 없이 다른 모델로 생성된다 (조용한 스타일
+   드리프트 — codex 시절의 400 전패보다 발견이 늦다). `{anchor_paths}`가
+   "없음"이 아니면 경로마다 `--image <path>`를 반복 지정한다. `{prompt}`는
+   스캐폴드 원문 그대로 전달 — 지시문 조립(view_image 프리앰블·복사 마감
+   문구)은 gti 경로에서 없다. `--size`는 에셋 ratio에 맞춘다 (1:1 =
+   1024x1024, scene 세로 = 1024x1536).
 
-   `<지시문>` 조립: `{anchor_paths}`가 "없음"이 아니면 `먼저 view_image로 다음
-   이미지를 확인하라: {anchor_paths}` 를 앞에 붙이고, `{prompt}` 전문 + `생성된
-   이미지를 어떤 편집·마스킹·후처리도 없이 그대로 {cwd}/{out_name} 으로
-   복사하라` 로 마감한다.
-
-   **행 감시** (stdin을 닫아도 행이 발생한다 — 22분 CPU 0% 실측 2026-07-13):
-   1차 생성 기준시간 ~5-7분. 기준 2배 경과 + CPU 0%면 프로세스 kill 후 재실행.
-   재실행 전 기존 검증 통과본이 있으면 `.verified.bak`로 백업하고 잔여 codex
-   프로세스를 kill한다 (병렬 재실행 레이스가 검증본을 덮어쓴 실측).
-2. `{cwd}/{out_name}` 존재 확인. 없으면 codex stdout에서 저장 경로
-   (`~/.codex/generated_images/<uuid>/ig_*.png`)를 찾아 직접 복사한다.
+   소요 ~30-70초/건 실측 — 단일 HTTP POST 확정 종료라 행 감시가 필요 없다.
+   Bash timeout 180000ms 권장. 실패(비 200 `httpStatus`, 네트워크, 인증)면
+   "폴백 경로 (codex exec)" § 로 전환한다.
+2. 반환 JSON의 `savedPath` = `{cwd}/{out_name}` 확인 + `httpStatus` 200 확인.
+   gti는 확정 저장이므로 파일 부재 = 실패다 — 별도 스캐빈징 없음.
 3. **알파 검증**: 투명 배경 요청 에셋이면 아래로 판정한다(**layer 모드 에셋
    전용** — scene 모드는 배경까지 통째로 그리는 카드 전체 일러스트라 알파
    채널이 없다. 이 판정 자체를 skip한다. 아래 "씬 생성 경로 (scene 모드)" §
@@ -75,19 +97,22 @@
    python3 -c "from PIL import Image; img=Image.open('{cwd}/{out_name}').convert('RGBA'); import sys; sys.exit(0 if any(a<255 for a in img.getchannel('A').getdata()) else 3)"
    ```
 
-   exit 3(알파 없음)이면 크로마키 폴백을 **이 서브에이전트 안에서 1회** 수행:
-   같은 프롬프트의 Background 라인을 `solid pure green background (#00FF00),
-   object does not touch the frame edges`로 교체해 재생성한다. **단 오브제 주
+   exit 3(알파 없음 — 배경을 회색 체커보드 "투명 흉내"로 페인팅해 반환하는
+   실측 포함, gti 파일럿 2026-07-13)이면 크로마키 폴백을 **이 서브에이전트
+   안에서 1회** 수행: 같은 프롬프트의 Background 라인을 `solid pure green
+   background (#00FF00), object does not touch the frame edges. NO
+   checkerboard pattern, NO transparency simulation — one flat color fill
+   only.`로 교체해 재생성한다. **단 오브제 주
    색군이 그린 계열이면 크로마 색을 `#FF00FF`(마젠타)로 교체한다** — Background
    라인과 아래 `--color` 인자 동일 적용 (키 색상-오브제 충돌 방지, 복제 파일럿
-   2026-07-13 선반영). 이때 재생성
-   지시문의 복사 마감 문구는 `생성된 이미지를 {cwd}/{out_name}.chroma.png 로
-   복사하라` — 최종 경로 `{cwd}/{out_name}` 를 덮어쓰지 않는다. 이어서
+   2026-07-13 선반영). 재생성은 `--output {cwd}/{out_name}.chroma.png` 로 직접
+   지정한다 — 최종 경로 `{cwd}/{out_name}` 를 덮어쓰지 않는다. 이어서
    `python3 <스킬 폴더>/scripts/cut_character.py {cwd}/{out_name}.chroma.png {cwd}/{out_name} --color "#00FF00"`
    로 키잉하고, 키잉 성공 후 중간산출 `{cwd}/{out_name}.chroma.png` 를
    삭제한다(assets/ 글롭에 크로마 원본이 남으면 검수·미디어 업로드로 누출).
 4. 반환(1~2줄만): `OK {out_name}` 또는 `FAIL {out_name} — [사유 1줄]`.
-   codex stdout 원문은 반환에 넣지 않는다.
+   gti 반환 JSON 전문(특히 `revisedPrompt`)이나 codex stdout 원문은 반환에
+   넣지 않는다 — 판정에는 `savedPath`·`httpStatus`만 쓴다.
 
 ## 투명 배경 계약
 
@@ -257,10 +282,11 @@ Constraints: no text, no letters, no numbers, no watermark, no
   ≤2. 구 계약의 "엣지 블리드 장식(폴리지·구름·컨페티)"은 이 반려로 폐기 —
   프레임 경계 장식이 필요하면 브랜드 토큰 색 추상 도형(블러 오브·기하 실루엣)만.
 - **사후 마스킹 금지**: 세이프존은 네이티브 구도로만 충족한다. 프롬프트만으로
-  세이프존을 주면 codex가 일러스트 위에 플랫 사각 오버레이를 덮어 "충족"시킨다
-  (캐릭터 허리 절단 실측 2026-07-13). 스캐폴드의 NATIVE composition 문구를
-  유지하고, 복사 마감 지시문도 `생성된 이미지를 어떤 편집·마스킹·후처리도 없이
-  그대로 {cwd}/{out_name} 으로 복사하라`로 조립한다.
+  세이프존을 주면 생성 측이 일러스트 위에 플랫 사각 오버레이를 덮어 "충족"시킨다
+  (codex 에이전트 경로에서 캐릭터 허리 절단 실측 2026-07-13). 스캐폴드의 NATIVE
+  composition 문구를 유지한다. codex exec 폴백 시에는 복사 마감 지시문도
+  `생성된 이미지를 어떤 편집·마스킹·후처리도 없이 그대로 {cwd}/{out_name} 으로
+  복사하라`로 조립한다.
 - **그라디언트 취향 룰**: Background 라인 조립 시 웜→쿨 투컬러 수직 스윕은
   금지한다(프로브 1차 실측 — 크림→블루 스윕을 사용자가 "촌스러움"으로 판정,
   근거표 참조). 허용 = ① 단색 솔리드 ② 동일 색상군 톤온톤 그라디언트 ③ 다크 +
@@ -283,6 +309,38 @@ Constraints: no text, no letters, no numbers, no watermark, no
 3. 전 에셋 확보 후 Step 4b(variant 빌더 dispatch)로 진행 — 빌더에게 에셋
    manifest(파일 경로 + role + placeholder 토큰 `__BRAZE_MEDIA__/<name>`)를 전달.
 
+## 폴백 경로 (codex exec) — gti 파손 시 전용
+
+> gti가 비공식 API 파손·인증 실패로 동작하지 않을 때만 쓴다. 1차 폴백은
+> `gti --provider codex-cli`(gti가 내부에서 codex CLI를 대신 호출), 그것도
+> 불가하면 아래 수동 절차. 스캐폴드·검증·후처리 계약은 동일하고 **실행
+> 계층만** 다르다.
+
+1. 실행 (기본 샌드박스는 read-only라 cwd 복사가 실패한다 — 두 플래그 필수):
+
+   ```bash
+   codex exec -c model="gpt-5.5" --skip-git-repo-check --sandbox workspace-write -C {cwd} "<지시문>" < /dev/null
+   ```
+
+   모델 `gpt-5.5` 고정 사유 — codex 기본 모델(예: `gpt-5.6-luna`)은
+   image_generation 400 실패, `gpt-5.1-codex*`는 ChatGPT 계정 미지원(400).
+   모델 플래그 누락 시 조용한 전패(도그푸딩 실측). 백그라운드 실행 시 stdin
+   닫기(`< /dev/null`) 필수 — 무한 행 48분 실측.
+
+   `<지시문>` 조립: `{anchor_paths}`가 "없음"이 아니면 `먼저 view_image로 다음
+   이미지를 확인하라: {anchor_paths}` 를 앞에 붙이고, `{prompt}` 전문 + `생성된
+   이미지를 어떤 편집·마스킹·후처리도 없이 그대로 {cwd}/{out_name} 으로
+   복사하라` 로 마감한다 (크로마 폴백 재생성이면 `{cwd}/{out_name}.chroma.png`).
+
+   **행 감시** (stdin을 닫아도 행이 발생한다 — 22분 CPU 0% 실측 2026-07-13):
+   1차 생성 기준시간 ~5-7분. 기준 2배 경과 + CPU 0%면 프로세스 kill 후 재실행.
+   재실행 전 기존 검증 통과본이 있으면 `.verified.bak`로 백업하고 잔여 codex
+   프로세스를 kill한다 (병렬 재실행 레이스가 검증본을 덮어쓴 실측).
+2. `{cwd}/{out_name}` 존재 확인. 없으면 codex stdout에서 저장 경로
+   (`~/.codex/generated_images/<uuid>/ig_*.png`)를 찾아 직접 복사한다.
+3. codex 장문 stdout은 메인 컨텍스트에 넣지 않는다 (서브에이전트 격리 사유).
+   이후 알파 검증·크로마 폴백·후처리 표준은 본문 임무 3 이하와 동일.
+
 ## 근거 — 프로브 실측 (2026-07-10)
 
 듀얼 모드(layer/scene)와 위 이중 앵커·세이프존·그라디언트 룰의 근거는 도그푸딩
@@ -301,7 +359,7 @@ Constraints: no text, no letters, no numbers, no watermark, no
 | 엣지 블리드 계약(폴리지·구름·컨페티)이 스토리북/유아 일러스트 배경을 유도 — 사용자 "동화책 같다" 반려 | 씬 스캐폴드 Background를 미니멀 추상 컬러 필드로 재정의, 환경 묘사·스토리북 스타일 금지 상수화, 엣지 블리드 폐기 |
 | "identical proportions" 문구에도 캐릭터가 4등신 치비로 드리프트 (양 모드 공통) | Character 절에 등신비 강제 문구(6 heads tall / no chibify) 필수화 |
 | 세이프존을 프롬프트만 주면 codex가 사후 사각 오버레이로 "충족" (캐릭터 허리 절단) | 스캐폴드 NATIVE composition 문구 + 복사 지시문 "편집·마스킹·후처리 없이" 상수화 |
-| codex exec 행 — stdin 닫아도 22분 CPU 0% | 서브에이전트 임무 1에 행 감시(기준 2배+CPU 0% → kill 재실행, .verified.bak 백업) 명문화 |
+| codex exec 행 — stdin 닫아도 22분 CPU 0% | 행 감시(기준 2배+CPU 0% → kill 재실행, .verified.bak 백업) 명문화 — 현재는 "폴백 경로 (codex exec)" § 전용 |
 
 레퍼런스 보드 전수 분석 반영 (2026-07-13, 재도그푸딩 3차 반려 후 — 실사용 IAM
 25핀, `visual-layout-patterns.md` 헤더 참조):
@@ -326,3 +384,13 @@ Constraints: no text, no letters, no numbers, no watermark, no
 | 그린 계열 오브제 + 그린 크로마 = 키잉 충돌 위험 | 크로마 폴백 색 조건부 마젠타 (임무 3) |
 | 비례 수치 지시(1.4×)에 2.44/1.15/1.97 오실레이션 | 비례는 생성 지시로 강제 금지 — 실측 역산 제어 (후처리 표준 말미) |
 | 상단 세이프존 28% < 실소요 ~32% (아이브로우+헤딩+본문 3줄, 본문-히어로 충돌 실측) | 씬 스캐폴드 TOP ~28% → ~32% 캘리브레이션 |
+
+gti 파일럿 실측 (2026-07-13, signup `obj-lock` 3d-icon 동일 스캐폴드 재생성 —
+전송 계층 교체 검증):
+
+| 실측 | 이 문서 반영 |
+|---|---|
+| 단일 HTTP POST 확정 종료, 소요 69초/36초 (codex exec ~5-7분 대비), `--output` 확정 저장 + 구조화 JSON, dry-run으로 프롬프트 무재해석 전달 확인, 품질 = 기존 codex 산출과 동급 (풀해상 크롭 게이트 통과) | 전송 계층 codex exec → gti 교체. 행 감시·generated_images 스캐빈징·stdout 격리·지시문 조립은 "폴백 경로 (codex exec)" § 로 강등 |
+| gti 기본 모델 = gpt-5.4 — 플래그 누락 시 에러 없이 다른 모델로 생성 | `--model gpt-5.5` 명시 필수 (임무 1) |
+| 1024x1024 요청 → 1254² 반환 (캔버스 크기 비보장) | bbox 트림(후처리 표준 2)이 흡수 — 게이트 아님으로 명기 |
+| 투명 직생성이 회색 체커보드 "투명 흉내" 페인팅으로 반환 (알파 0%) — 알파 검증이 적발, 마젠타 크로마 폴백 + cut_character.py + 풀 디스필(프린지 3,277px→0) 정상 동작 | 알파 검증·크로마 폴백 계약은 전송 계층 무관 존치 재확인. 폴백 Background 교체문에 체커보드·투명 시뮬레이션 금지 문구 추가 |
