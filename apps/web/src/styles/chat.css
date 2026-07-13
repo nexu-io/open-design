@@ -1244,6 +1244,17 @@
   caret-color: var(--accent);
   -webkit-user-modify: read-write-plaintext-only; /* paste-as-plain-text guard */
 }
+/* While the empty composer runs the placeholder typewriter carousel, the
+   carousel draws its own decorative caret trailing the animated text. Suppress
+   the native caret (which sits at offset 0) so the two don't blink at once
+   (#5373). Keyed off the carousel being a later sibling of the editor, so it
+   covers both the chat composer (.composer-input-wrap) and the home hero
+   (.home-hero__prompt-editor) without depending on the wrapper class. The
+   carousel unmounts as soon as the field has text, which restores the native
+   caret automatically. */
+.composer-input-editor:has(~ .home-hero__carousel) [contenteditable='true'] {
+  caret-color: transparent;
+}
 .composer.composer-active-file-mode .composer-input-editor [contenteditable='true'],
 .composer.composer-active-file-mode .composer-input-editor .composer-editable {
   min-height: clamp(150px, 20vh, 210px);
