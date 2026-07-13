@@ -1757,9 +1757,20 @@ function DemoExtractedComponentKit({
           <h3>Data display</h3>
           <div className="ds-extraction-demo__kit-metrics"><strong>10k+<small>Teams reached</small></strong><strong>99.9%<small>Uptime SLA</small></strong><strong>4.9/5<small>Average rating</small></strong></div>
         </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--marketing">
+          <h3>Marketing blocks</h3>
+          <div>
+            <blockquote>“We help teams move from idea to finished work.”<small>— Ada Lovelace, Design lead</small></blockquote>
+            <aside><strong>Pro</strong><b>$29</b><button type="button" style={{ backgroundColor: primary, color: primaryText }}>Start free trial</button></aside>
+          </div>
+        </section>
         <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--alerts">
           <h3>Alerts &amp; progress</h3>
           <p className="is-success">✓ Brand system generated</p><p className="is-warning">! Review a missing source</p><div><i style={{ backgroundColor: primary }} /></div>
+        </section>
+        <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--tags">
+          <h3>Tags</h3>
+          <div>{['Primary', 'New', 'Recommended', 'Internal'].map((tag, index) => <span key={tag} className={index === 0 ? 'is-primary' : ''} style={index === 0 ? { backgroundColor: primary, color: primaryText } : undefined}>{tag}</span>)}</div>
         </section>
         <section className="ds-extraction-demo__kit-section ds-extraction-demo__kit-section--scale">
           <h3>Type scale</h3>

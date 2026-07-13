@@ -584,11 +584,20 @@
 .ds-extraction-demo__kit-metrics { justify-content: space-between; }
 .ds-extraction-demo__kit-metrics strong { font-size: 19px; line-height: 1; }
 .ds-extraction-demo__kit-metrics small { display: block; margin-top: 5px; color: var(--text-muted); font-size: 9px; font-weight: 400; }
+.ds-extraction-demo__kit-section--marketing > div { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; }
+.ds-extraction-demo__kit-section--marketing blockquote { margin: 0; color: var(--demo-kit-ink); font-family: var(--demo-kit-display), Georgia, serif; font-size: 14px; line-height: 1.32; }
+.ds-extraction-demo__kit-section--marketing blockquote small { display: block; margin-top: 8px; color: var(--text-muted); font-family: var(--demo-kit-body), var(--sans); font-size: 9px; }
+.ds-extraction-demo__kit-section--marketing aside { display: grid; gap: 5px; padding: 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); }
+.ds-extraction-demo__kit-section--marketing aside strong { font-size: 10px; }
+.ds-extraction-demo__kit-section--marketing aside b { font-size: 19px; }
+.ds-extraction-demo__kit-section--marketing aside button { min-height: 24px; border: 0; border-radius: 5px; font: inherit; font-size: 9px; }
 .ds-extraction-demo__kit-section--alerts p { margin: 0 0 6px; padding: 7px; border-radius: 5px; font-size: 10px; }
 .ds-extraction-demo__kit-section--alerts .is-success { background: color-mix(in srgb, #27ae60 12%, var(--bg-panel)); color: #17824a; }
 .ds-extraction-demo__kit-section--alerts .is-warning { background: color-mix(in srgb, #f39c12 13%, var(--bg-panel)); color: #a76400; }
 .ds-extraction-demo__kit-section--alerts > div { height: 4px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--text-muted) 14%, var(--bg-panel)); }
 .ds-extraction-demo__kit-section--alerts > div i { display: block; width: 72%; height: 100%; }
+.ds-extraction-demo__kit-section--tags > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.ds-extraction-demo__kit-section--tags span { padding: 4px 7px; border: 1px solid var(--border); border-radius: 99px; color: var(--text-muted); font-size: 10px; }
 .ds-extraction-demo__kit-section--scale { display: grid; gap: 7px; }
 .ds-extraction-demo__kit-section--scale strong { font-family: var(--demo-kit-display), Georgia, serif; font-size: 24px; font-weight: 500; }
 .ds-extraction-demo__kit-section--scale span { font-size: 15px; }
