@@ -184,19 +184,22 @@ export function PluginsView({
   async function finishImport(
     work: () => Promise<PluginInstallOutcome>,
     targetTab: PluginsTab = 'installed',
+    options?: { suppressFailureNotice?: boolean },
   ) {
     setNotice(null);
     const outcome = await work();
     if (outcome.ok) {
-      // Only the success path publishes to the page-level Notice. Failure
-      // outcomes are now surfaced inline inside the import modal (see
-      // PluginImportModal), so we no longer push failure notices to the
-      // page banner — that banner sits behind the modal backdrop and was
-      // effectively invisible while the modal stayed open on failure.
       setNotice(outcome);
       setImportOpen(false);
       await refresh();
       setActiveTab(targetTab);
+    } else if (!options?.suppressFailureNotice) {
+      // Failure on the page-level (non-modal) path: surface it via the
+      // page Notice banner. The modal path skips this because the banner
+      // sits behind the modal backdrop and is invisible while the modal
+      // stays open on failure — the modal renders its own inline Notice
+      // (see `importError` state in PluginImportModal).
+      setNotice(outcome);
     }
     return outcome;
   }
@@ -621,9 +624,21 @@ export function PluginsView({
       {importOpen ? (
         <PluginImportModal
           onClose={() => setImportOpen(false)}
-          onInstallSource={(source) => finishImport(() => installPluginSource(source))}
-          onUploadZip={(file) => finishImport(() => uploadPluginZip(file))}
-          onUploadFolder={(files) => finishImport(() => uploadPluginFolder(files))}
+          onInstallSource={(source) =>
+            finishImport(() => installPluginSource(source), 'installed', {
+              suppressFailureNotice: true,
+            })
+          }
+          onUploadZip={(file) =>
+            finishImport(() => uploadPluginZip(file), 'installed', {
+              suppressFailureNotice: true,
+            })
+          }
+          onUploadFolder={(files) =>
+            finishImport(() => uploadPluginFolder(files), 'installed', {
+              suppressFailureNotice: true,
+            })
+          }
         />
       ) : null}
     </section>
