@@ -99,8 +99,6 @@ import {
   createPluginUseHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
-import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
-import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
@@ -1848,8 +1846,7 @@ function OnboardingView({
     }
 
     if (profileQuestionIndex === profileQuestionIds.length - 1) {
-      void persistOnboardingProfileToMemory();
-      setStep(2);
+      void handleFinishToBuild();
       return;
     }
     setProfileQuestionIndex((current) => current + 1);
@@ -2153,11 +2150,6 @@ function OnboardingView({
     emitOnboardingClick('continue', 'continue');
     emitOnboardingComplete('completed', completionType);
     clearOnboardingSessionId();
-  }
-
-  async function handleFinishToHome(): Promise<void> {
-    await runOnboardingCompletion('completed_without_design_system');
-    onFinish();
   }
 
   async function handleFinishToBuild(): Promise<void> {
@@ -2784,100 +2776,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 2 ? (
-            <div className="onboarding-view__panel onboarding-view__build">
-              <span className="onboarding-view__build-badge">
-                <Icon name="sparkles" size={13} aria-hidden />
-                <span>{t('settings.onboardingDesignTitle')}</span>
-              </span>
-              <div className="onboarding-view__build-layout">
-                <div className="onboarding-view__build-copy">
-                  <div className="onboarding-view__build-head">
-                    <h2>{t('onboarding.buildTitle')}</h2>
-                    <p>{t('onboarding.buildBody')}</p>
-                  </div>
-                  <div className="onboarding-view__build-benefits">
-                    <div>
-                      <Icon name="file-text" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitMemoryTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitMemoryBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="swatchbook" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitAlignedTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitAlignedBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="github" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitSourcesTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitSourcesBody')}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="onboarding-view__build-preview" aria-hidden>
-                  <div className="onboarding-view__build-preview-head">
-                    <span />
-                    <span />
-                    <span />
-                    <strong>DESIGN.md</strong>
-                  </div>
-                  <div className="onboarding-view__build-preview-body">
-                    <small>{t('onboarding.buildPreviewLabel')}</small>
-                    <div className="onboarding-view__build-preview-swatches">
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                    <div className="onboarding-view__build-preview-type">
-                      <strong>Aa</strong>
-                      <span>Aa</span>
-                      <em>Aa</em>
-                    </div>
-                    <div className="onboarding-view__build-preview-lines">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <ul className="onboarding-view__build-chips">
-                {ONBOARDING_ARTIFACT_CHIP_IDS.map((chipId) => (
-                  <li key={chipId}>{homeHeroChipLabel(chipId, t)}</li>
-                ))}
-              </ul>
-              <div className="onboarding-view__build-actions">
-                <button
-                  type="button"
-                  className="onboarding-view__ghost onboarding-view__build-back"
-                  onClick={handleBackWithTracking}
-                >
-                  {t('settings.onboardingBack')}
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-view__secondary"
-                  onClick={() => {
-                    void handleFinishToHome();
-                  }}
-                >
-                  {t('onboarding.buildHome')}
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-view__primary"
-                  onClick={() => {
-                    void handleFinishToBuild();
-                  }}
-                >
-                  <span>{t('onboarding.buildStart')}</span>
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 1 || step === 2 ? null : (
+          {step === 1 ? null : (
             <div className="onboarding-view__actions">
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
