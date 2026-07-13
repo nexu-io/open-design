@@ -11,7 +11,7 @@
 //   - 'cli'    : the agent ships its own `<bin> mcp add/remove/get`. We
 //                shell out to it (like codex-cli.ts) so we inherit the
 //                agent's merge/validation rules instead of editing its
-//                config by hand. Used for claude / codex / kimi.
+//                config by hand. Used for claude / codex / kimi / reasonix.
 //   - 'json'   : the agent reads a JSON config file with a known schema.
 //                We deep-merge one server entry, never clobbering the
 //                rest of the file. Used for cursor / copilot / cline /
@@ -32,6 +32,7 @@ import path from 'node:path';
 export const AGENT_SLUGS = [
   'claude',
   'codex',
+  'reasonix',
   'cursor',
   'copilot',
   'openclaw',
@@ -170,6 +171,19 @@ export function planAgentInstall(
           'mcp', 'add', serverName,
           ...envFlags(spec.env, '--env'),
           '--', spec.command, ...spec.args,
+        ],
+        removeArgv: ['mcp', 'remove', serverName],
+        getArgv: ['mcp', 'get', serverName],
+      };
+    case 'reasonix':
+      return {
+        kind: 'cli',
+        slug,
+        bin: 'reasonix',
+        addArgv: [
+          'mcp', 'add', serverName,
+          ...envFlags(spec.env, '--env'),
+          spec.command, ...spec.args,
         ],
         removeArgv: ['mcp', 'remove', serverName],
         getArgv: ['mcp', 'get', serverName],

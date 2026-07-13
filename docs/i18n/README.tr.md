@@ -115,6 +115,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Destekleniyor | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Destekleniyor | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Destekleniyor | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |

@@ -695,6 +695,11 @@ export type PackagedStartupFailureKind =
   | 'daemon-start'
   | 'web-start'
   | 'path-access'
+  // A sidecar that never reported ready within the status-wait budget — the
+  // pipe/socket never bound in time (e.g. win32 first-launch AV scanning slowing
+  // the daemon cold start), as opposed to a sidecar that exited (`daemon-start` /
+  // `web-start`). Split out so this bucket stops hiding inside `unknown`.
+  | 'status-timeout'
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged

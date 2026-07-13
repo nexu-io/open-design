@@ -97,6 +97,31 @@ describe('resolveRunFailureUi', () => {
     expect(ui.primaryAction).toBe('launch-terminal-switch-model');
   });
 
+  // #895 long tail: lower-frequency failure_detail values the daemon already
+  // classifies (timeout, empty output, stale resumed session, missing Git Bash)
+  // now map to a named type + actionable copy with a plain Retry, for any agent —
+  // the AGENT_EXECUTION_FAILED code alone would only show the raw stderr.
+  it('maps long-tail failure_detail values to a named type + retry guidance for any agent', () => {
+    const cases: Array<[string, string, string]> = [
+      ['timeout', 'chat.runError.title.timedOut', 'chat.runError.timedOutMessage'],
+      ['inactivity_timeout', 'chat.runError.title.timedOut', 'chat.runError.inactivityTimeoutMessage'],
+      ['empty_output', 'chat.runError.title.emptyOutput', 'chat.runError.emptyOutputMessage'],
+      ['session_resume_expired', 'chat.runError.title.sessionExpired', 'chat.runError.sessionExpiredMessage'],
+      ['git_bash_missing', 'chat.runError.title.gitBashMissing', 'chat.runError.gitBashMissingMessage'],
+    ];
+    for (const [detail, titleKey, messageKey] of cases) {
+      for (const agent of ['claude', 'codex', 'amr', null]) {
+        expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', detail, agent)).toMatchObject({
+          primaryAction: 'retry',
+          titleKey,
+          messageKey,
+          secondaryRetry: false,
+          showSwitchCard: false,
+        });
+      }
+    }
+  });
+
   // Agent-agnostic root-cause codes (#895): each carries a named failure type +
   // actionable fix, resolved the same way for any agent, with a plain Retry and
   // no AMR promotion (these aren't "switch to hosted model" cases).

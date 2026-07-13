@@ -166,3 +166,37 @@ describe('public MCP get_file active context defaults', () => {
     expect(lastText(textParts)).toContain('<h1>Active file</h1>');
   });
 });
+
+describe('public MCP get_file active context fallbacks', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) => res.json({ active: false }));
+    app.get('/api/projects/:id/raw/*splat', (_req, res) =>
+      res.set({ 'content-type': 'text/html' }).send('<!doctype html><h1>Explicit file</h1>'),
+    );
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('requires a path when active context is inactive and project/path are omitted', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_file', {});
+    expect('isError' in result && result.isError).toBe(true);
+    expect(contentTexts(result.content).join('\n')).toContain('Open Design has no active project');
+  });
+
+  it('does not stamp active context when project and path are explicit', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_file', {
+      project: PROJECT_ID,
+      path: 'explicit.html',
+    });
+    const textParts = contentTexts(result.content);
+    expect(textParts.some((text) => text.startsWith('[od:active-context'))).toBe(false);
+    expect(lastText(textParts)).toContain('<h1>Explicit file</h1>');
+  });
+});

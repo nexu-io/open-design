@@ -1192,6 +1192,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare and publish prerelease release notes
+        env:
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+          RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-metadata/release-note-plan.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: |
+          pnpm exec tools-release prepare-release-note
+          pnpm exec tools-release publish-release-note
+          pnpm exec tools-release verify-release-note
+
       - name: Publish prerelease metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
@@ -1206,6 +1223,7 @@ jobs:
           RELEASE_CHANNEL: prerelease
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SIGNED: "true"
@@ -1237,6 +1255,7 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_CHANNEL: prerelease
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           WIN_X64_RESULT: ${{ needs.build_win.result }}
         run: pnpm exec tools-release verify-metadata

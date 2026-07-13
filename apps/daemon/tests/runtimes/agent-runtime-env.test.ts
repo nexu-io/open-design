@@ -3,8 +3,14 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 
-import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../../src/server.js';
+import {
+  createAgentRuntimeEnv,
+  createAgentRuntimeToolPrompt,
+  createDaemonDataDirConfiguredAgentEnv,
+  createOpenDesignToolEnv,
+} from '../../src/server.js';
 import { applyAgentLaunchEnv } from '../../src/runtimes/launch.js';
+import { spawnEnvForAgent } from '../../src/runtimes/env.js';
 
 describe('agent runtime tool environment', () => {
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
@@ -85,6 +91,38 @@ describe('agent runtime tool environment', () => {
     );
 
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+  });
+
+  it('keeps wrapper media commands on the daemon data dir even when configured agent env is stale', () => {
+    const base = createAgentRuntimeEnv(
+      { PATH: '/bin', OD_DATA_DIR: '/stale/process/data' },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+    );
+    const configuredAgentEnv = createDaemonDataDirConfiguredAgentEnv({
+      OD_DATA_DIR: '/stale/configured/data',
+    });
+
+    const env = {
+      ...spawnEnvForAgent(
+        'amr',
+        base,
+        configuredAgentEnv,
+      ),
+      ...createOpenDesignToolEnv({
+        daemonUrl: 'http://127.0.0.1:7456',
+        projectDir: '/tmp/project',
+        projectId: 'project-1',
+      }),
+    };
+
+    expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+    expect(env.OPENCODE_TEST_HOME).toBe(
+      path.join(process.env.OD_DATA_DIR ?? '', 'amr', 'opencode-home'),
+    );
+    expect(env.OD_PROJECT_ID).toBe('project-1');
+    expect(env.OD_PROJECT_DIR).toBe('/tmp/project');
   });
 
   it('keeps non-sandbox NO_PROXY behavior unchanged', () => {

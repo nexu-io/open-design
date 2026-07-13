@@ -117,6 +117,7 @@
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ مدعوم | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ مدعوم | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ مدعوم | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ مدعوم | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |

@@ -1506,8 +1506,11 @@ a.avatar-item:visited {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -2px;
-  right: -10px;
+  /* Invariant: the extended hitbox must never cross the inline-start edge —
+     the chat panel's scrollbar gutter sits flush against it (LTR and RTL).
+     Extra grab room is allowed on the workspace (inline-end) side only. */
+  inset-inline-start: 0;
+  inset-inline-end: -8px;
   cursor: col-resize;
 }
 .split-resize-handle::after {

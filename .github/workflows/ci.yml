@@ -919,6 +919,17 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # The needs-validation gate below produces a `handoff/comment` artifact when it ejects a
+      # queued PR, and that production goes through `.github/scripts/handoff.py` (the only
+      # sanctioned source of handoff names and layout). Only the merge_group context can eject,
+      # so pull_request runs skip the checkout entirely.
+      - name: Checkout handoff helper
+        if: ${{ github.event_name == 'merge_group' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: true
+
       - name: Check workspace validation jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -967,6 +978,7 @@ jobs:
           fi
 
       - name: Block merge while the needs-validation label is present
+        id: needs_validation_gate
         # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
         # the merge_group (merge-queue) context — never on pull_request. main requires the merge
         # queue, so every merge passes through merge_group; a needs-validation entry fails this
@@ -992,11 +1004,52 @@ jobs:
           MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" != "merge_group" ]; then
             echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
           else
+            # An ejection is invisible from the PR: this failure runs on the queue's transient
+            # ref, the PR's own checks stay green, and `mergeQueueEntry` just goes null. Leave a
+            # visible trace by producing a `handoff/comment` artifact for the labeled PR; the
+            # trusted `comment.atom.yml` consumer upserts it as a PR comment after this run
+            # completes. Best-effort: a handoff failure must never soften the block itself.
+            emit_ejection_notice() {
+              local pr="$1"
+              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker
+              pr_json="$(gh api "repos/$REPO/pulls/$pr")"
+              pr_head="$(jq -r '.head.sha' <<< "$pr_json")"
+              pr_base="$(jq -r '.base.sha' <<< "$pr_json")"
+              handoff_id="needs-validation-pr-$pr"
+              handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
+              handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
+              mkdir -p "$handoff_dir"
+              marker="<!-- merge-queue-needs-validation -->"
+              {
+                printf '%s\n' "$marker"
+                printf 'Ejected from the merge queue: this PR still carries the `needs-validation` label.\n\n'
+                printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
+                printf 'To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.\n'
+              } > "$handoff_dir/body.md"
+              jq -n \
+                --arg kind "comment" \
+                --arg id "$handoff_id" \
+                --arg head "$pr_head" \
+                --arg base "$pr_base" \
+                --arg marker "$marker" \
+                --argjson schema_version 1 \
+                --argjson pr_number "$pr" \
+                --argjson run_id "$RUN_ID" \
+                '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, marker: $marker}' \
+                > "$handoff_dir/metadata.json"
+              python3 .github/scripts/handoff.py validate comment "$handoff_dir" >/dev/null
+              {
+                echo "comment_created=true"
+                echo "comment_name=$(python3 .github/scripts/handoff.py artifact-name comment "$handoff_id")"
+                echo "comment_path=$handoff_root"
+              } >> "$GITHUB_OUTPUT"
+            }
             # Resolve EVERY merge-group commit to at least one real PR and check its labels.
             # Each queued entry can be recovered from up to three signals:
             #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry only; squash-safe.
@@ -1043,6 +1096,9 @@ jobs:
                 case " $checked " in *" $pr "*) ;; *) checked="$checked $pr";; esac
                 if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
                   echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
+                  # Fail-fast keeps this per-run notice on the FIRST labeled PR found; every
+                  # labeled entry also fails its own queue run, so each still gets its own notice.
+                  emit_ejection_notice "$pr" || echo "::warning::could not produce the ejection-notice handoff for PR #$pr; the block itself still stands."
                   exit 1
                 fi
                 echo "PR #$pr: no needs-validation label."
@@ -1054,6 +1110,15 @@ jobs:
             done
             echo "No 'needs-validation' label in the queued group ($checked ) — clear to merge."
           fi
+
+      # `failure()` is required: the gate exits 1 on the very path that produces the handoff,
+      # and the default `success()` condition would skip this upload exactly when it matters.
+      - name: Upload merge-queue ejection notice handoff
+        if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.needs_validation_gate.outputs.comment_name }}
+          path: ${{ steps.needs_validation_gate.outputs.comment_path }}
 
   runtime_summary:
     name: Runtime summary

@@ -35,6 +35,12 @@ export type ProjectDisplayStatus =
   | 'running'
   | 'awaiting_input'
   | 'succeeded'
+  // Terminal-but-not-really-done: the latest run stamped `succeeded` yet ended
+  // with unfinished declared work (a non-`completed` TodoWrite task, or a
+  // max_tokens truncation). Kept distinct from `succeeded` so the project pill
+  // never reads "Completed" for a run whose work is not actually finished
+  // (#1247 / #1060).
+  | 'incomplete'
   | 'failed'
   | 'canceled';
 

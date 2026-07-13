@@ -59,6 +59,7 @@ export function contentType(name: string): string {
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return "application/x-yaml; charset=utf-8";
   if (name.endsWith(".json")) return "application/json; charset=utf-8";
   if (name.endsWith(".html")) return "text/html; charset=utf-8";
+  if (name.endsWith(".md")) return "text/markdown; charset=utf-8";
   if (name.endsWith(".log") || name.endsWith(".txt")) return "text/plain; charset=utf-8";
   if (name.endsWith(".png")) return "image/png";
   if (name.endsWith(".xml")) return "application/xml; charset=utf-8";

@@ -28,6 +28,7 @@ import {
   getDesignToolboxAction,
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
+import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
@@ -3708,7 +3709,7 @@ export function retryableAssistantMessage(
   const last = messages[messages.length - 1];
   if (!last || last.role !== 'assistant') return null;
   if (last.id !== lastAssistantId) return null;
-  return last.runStatus === 'failed' ? last : null;
+  return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
 export function isAssistantMessageStreaming(

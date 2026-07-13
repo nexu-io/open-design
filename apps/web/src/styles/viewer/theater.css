@@ -1990,6 +1990,10 @@
   background: var(--success);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
 }
+.pet-task-dot[data-pet-task-status="incomplete"] {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 18%, transparent);
+}
 .pet-task-dot[data-pet-task-status="failed"] {
   background: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);

@@ -115,6 +115,7 @@ Dentro do Studio de um projeto, o mesmo design system produz múltiplos tipos de
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Suportado | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Suportado | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Suportado | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Suportado | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Suportado | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Suportado | `od mcp install copilot` |

@@ -2789,7 +2789,7 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const isDeploymentCredentialMode =
     apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment';
-  const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
+  const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
     {
       id: 'anthropic',
@@ -2804,6 +2804,13 @@ export function SettingsDialog({
       protocol: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
+    },
+    {
+      id: 'atlascloud',
+      title: 'Atlas Cloud',
+      protocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
     },
     {
       id: 'google-ai-studio',
@@ -3274,6 +3281,8 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiKeyConsoleLink =
+    selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
   const showProviderPreset =
     !isDeploymentCredentialMode &&
     protocolProviders.length > 0 &&
@@ -3407,10 +3416,16 @@ export function SettingsDialog({
     providerModelsState.result.ok
       ? providerModelsState.result.models ?? []
       : [];
+  const providerModelDiscoveryUnavailable =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
   const fetchedApiModelOptions =
-    shouldCacheProviderModels
-      ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
-      : fetchedProviderModelsResult;
+    providerModelDiscoveryUnavailable
+      ? []
+      : shouldCacheProviderModels
+        ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
+        : fetchedProviderModelsResult;
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3570,6 +3585,11 @@ export function SettingsDialog({
         const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
         return defaultModel ? [defaultModel] : [];
       }
+      if (providerModelDiscoveryUnavailable) {
+        return selectedProvider?.models?.length
+          ? Array.from(new Set(selectedProvider.models))
+          : [];
+      }
       return Array.from(new Set(
         selectedProvider?.models?.length
           ? selectedProvider.models
@@ -3580,6 +3600,7 @@ export function SettingsDialog({
       apiProtocol,
       deploymentProviderConfig?.defaultModel,
       isDeploymentCredentialMode,
+      providerModelDiscoveryUnavailable,
       selectedProvider,
     ],
   );

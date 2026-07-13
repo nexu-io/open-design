@@ -74,12 +74,19 @@ export const grokBuildAgentDef = {
   ],
   // Grok Build CLI v0.1.212+ enforces `-p, --single <PROMPT>` as value-
   // required, while normal OD composed prompts exceed safe argv budgets.
-  // Use the CLI's explicit prompt-file transport instead.
+  // Use the CLI's explicit prompt-file transport instead. Headless runs also
+  // need plan mode disabled and tool calls auto-approved: otherwise a write
+  // request is permission-cancelled while the CLI still exits successfully.
   buildArgs: (_prompt, _imagePaths, _extra = [], options = {}, runtimeContext = {}) => {
     if (!runtimeContext.promptFilePath) {
       throw new Error('grok-build requires runtimeContext.promptFilePath');
     }
-    const args = ['--prompt-file', runtimeContext.promptFilePath];
+    const args = [
+      '--prompt-file',
+      runtimeContext.promptFilePath,
+      '--no-plan',
+      '--always-approve',
+    ];
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }

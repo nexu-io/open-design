@@ -212,6 +212,9 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
       ...(typeof usage.output_tokens === 'number' ? { outputTokens: usage.output_tokens } : {}),
       ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
       ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+      // Persist the terminal stop reason so the project projection can read a
+      // max_tokens truncation as incomplete after reload (#1247 / #1060).
+      ...(typeof data.stopReason === 'string' ? { stopReason: data.stopReason } : {}),
     };
   }
   if (type === 'diagnostic' && typeof data.name === 'string') {

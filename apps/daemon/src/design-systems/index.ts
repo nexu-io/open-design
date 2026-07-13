@@ -1988,6 +1988,89 @@ function classifyDesignSystemFile(
   return 'asset';
 }
 
+// Hidden fingerprint manifest recording the content the generator last wrote for
+// each derived file. `collectDesignSystemFiles` skips dot-prefixed entries, so it
+// is excluded from file listings and ZIP archives; the pull/static allowlists are
+// default-deny, so it is never served either.
+const GENERATED_MANIFEST_FILENAME = '.od-generated.json';
+
+// Manifest keys are posix-relative paths under the design-system root, matching
+// the `collectDesignSystemFiles` relative-path convention.
+function generatedManifestKey(dir: string, targetPath: string): string {
+  return path.relative(dir, targetPath).split(path.sep).join('/');
+}
+
+function hashGeneratedContent(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+function serializeGeneratedManifest(manifest: Record<string, string>): string {
+  const sorted: Record<string, string> = {};
+  for (const [key, value] of Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b))) {
+    sorted[key] = value;
+  }
+  return `${JSON.stringify(sorted, null, 2)}\n`;
+}
+
+// Reading the manifest is fault-tolerant: a missing, malformed, or user-authored
+// same-named file all degrade to "no manifest" (an empty record). That routes the
+// caller into the conservative legacy path (write-if-missing) instead of ever
+// trusting an untrusted file as a source of overwrite decisions.
+async function readGeneratedManifest(dir: string): Promise<Record<string, string>> {
+  const raw = await readFileOptional(path.join(dir, GENERATED_MANIFEST_FILENAME));
+  if (raw === undefined) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
+}
+
+// Regeneration must never discard files a user has customized (issue #323). A
+// generated file is only overwritten when it is still byte-identical to what the
+// generator last wrote (recorded in `.od-generated.json`). Anything the user
+// edited — or any pre-existing file with no recorded fingerprint (legacy systems)
+// — is preserved. Files that are absent are written and fingerprinted. The
+// returned `nextManifest` records fingerprints for every path that will be
+// written/refreshed, preserves the prior fingerprint for kept-but-skipped paths,
+// and drops manifest keys the generator no longer produces.
+async function filterGeneratedWritesPreservingUserEdits(
+  dir: string,
+  writes: AtomicTextFileWrite[],
+  manifest: Record<string, string>,
+): Promise<{ writes: AtomicTextFileWrite[]; nextManifest: Record<string, string> }> {
+  const kept: AtomicTextFileWrite[] = [];
+  const nextManifest: Record<string, string> = {};
+  for (const write of writes) {
+    const key = generatedManifestKey(dir, write.targetPath);
+    const current = await readFileOptional(write.targetPath);
+    if (current === undefined) {
+      // Absent → safe to write.
+      kept.push(write);
+      nextManifest[key] = hashGeneratedContent(write.content);
+      continue;
+    }
+    const recorded = manifest[key];
+    if (recorded !== undefined && hashGeneratedContent(current) === recorded) {
+      // Untouched since the last generation → refresh to the new content.
+      kept.push(write);
+      nextManifest[key] = hashGeneratedContent(write.content);
+      continue;
+    }
+    // User-owned (edited, or a legacy file with no fingerprint) → preserve as-is.
+    // Retain any prior fingerprint so future updates can still compare.
+    if (recorded !== undefined) nextManifest[key] = recorded;
+  }
+  return { writes: kept, nextManifest };
+}
+
 async function writeGeneratedDesignSystemFiles(
   root: string,
   id: string,
@@ -2012,10 +2095,19 @@ async function writeGeneratedDesignSystemFiles(
     mkdir(path.join(dir, 'ui_kits', 'app', 'components'), { recursive: true }),
   ]);
 
+  const manifest = await readGeneratedManifest(dir);
+  const { writes, nextManifest } = await filterGeneratedWritesPreservingUserEdits(
+    dir,
+    generatedDesignSystemFileWrites(dir, input),
+    manifest,
+  );
   await Promise.all(
-    generatedDesignSystemFileWrites(dir, input).map((write) =>
-      writeFile(write.targetPath, write.content, 'utf8')
-    ),
+    writes.map((write) => writeFile(write.targetPath, write.content, 'utf8')),
+  );
+  await writeFile(
+    path.join(dir, GENERATED_MANIFEST_FILENAME),
+    serializeGeneratedManifest(nextManifest),
+    'utf8',
   );
 }
 
@@ -2622,6 +2714,7 @@ async function writeAcceptedUserDesignSystemRevision(
     updatedAt,
     ...(provenance ? { provenance } : {}),
   };
+  const fileChangeWrites = revisionFileChangeWrites(root, dirId, revision.fileChanges);
   const writes: AtomicTextFileWrite[] = [
     { targetPath: designPath, content: revision.proposedBody },
     {
@@ -2631,17 +2724,37 @@ async function writeAcceptedUserDesignSystemRevision(
   ];
   if (artifactMode !== 'agent-managed') {
     const sourceNotes = provenanceToNotes(provenance);
-    writes.push(...generatedDesignSystemFileWrites(base, {
-      title,
-      category,
-      surface,
-      summary: summarize(revision.proposedBody),
-      ...(provenance ? { provenance } : {}),
-      ...(sourceNotes ? { sourceNotes } : {}),
-      body: revision.proposedBody,
-    }));
+    const manifest = await readGeneratedManifest(base);
+    const filtered = await filterGeneratedWritesPreservingUserEdits(
+      base,
+      generatedDesignSystemFileWrites(base, {
+        title,
+        category,
+        surface,
+        summary: summarize(revision.proposedBody),
+        ...(provenance ? { provenance } : {}),
+        ...(sourceNotes ? { sourceNotes } : {}),
+        body: revision.proposedBody,
+      }),
+      manifest,
+    );
+    // Generated writes precede fileChanges; writeTextFilesAtomically keeps the
+    // last write per path, so an explicit fileChange wins over a same-named
+    // derived write. Drop those paths from the manifest so the hand-authored
+    // content is treated as user-owned (preserved) on the next regeneration.
+    const nextManifest = { ...filtered.nextManifest };
+    for (const change of fileChangeWrites) {
+      delete nextManifest[generatedManifestKey(base, change.targetPath)];
+    }
+    writes.push(...filtered.writes);
+    writes.push(...fileChangeWrites);
+    writes.push({
+      targetPath: path.join(base, GENERATED_MANIFEST_FILENAME),
+      content: serializeGeneratedManifest(nextManifest),
+    });
+  } else {
+    writes.push(...fileChangeWrites);
   }
-  writes.push(...revisionFileChangeWrites(root, dirId, revision.fileChanges));
   writes.push({
     targetPath: path.join(base, 'revisions', `${acceptedRevision.id}.json`),
     content: `${JSON.stringify(acceptedRevision, null, 2)}\n`,

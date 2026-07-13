@@ -86,6 +86,12 @@ export interface ChatSseEndPayload {
    *  runtime). Lets the chat offer a Continue affordance without a separate
    *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** True when this terminal run ended with unfinished declared work (a
+   *  non-`completed` TodoWrite task, or a max_tokens truncation). The browser
+   *  reads it straight off the terminal frame and carries it onto the persisted
+   *  assistant message so every status surface avoids showing "Completed" for an
+   *  incomplete run. Mirrors ChatRunStatusResponse.endedWithUnfinishedWork. */
+  endedWithUnfinishedWork?: boolean;
   /** Daemon failure classification for a `failed` run, so the chat can render
    *  specific guidance straight off the terminal frame without a status refetch.
    *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
@@ -115,7 +121,7 @@ export type DaemonAgentPayload =
    */
   | { type: 'tool_input_delta'; id: string; name: string; delta: string }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
-  | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
+  | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number; stopReason?: string | null }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }
   // The agent is stuck repeating failing tool calls (see tool-loop-guard.ts).
   // `action: 'warn'` is an early heads-up the run may be looping; `'halt'` means
