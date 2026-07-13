@@ -16,11 +16,18 @@
 // public-to-public redirects (http->https, apex->www, CDN hops) still work while
 // a public host that 3xx's into private space is refused.
 //
-// Residual: DNS rebinding (a name that resolves public here but private when the
-// platform fetch re-resolves) is not defeated without a pinned dispatcher — the
-// same limitation the codebase's other check-then-fetch SSRF guards carry.
+// DNS rebinding (a name that resolves public during validation but private when
+// the platform fetch re-resolves for the socket) is defeated by pinning the
+// validation to the connection: `fetchExternalBrandAsset` installs a
+// connection-time `lookup` (see `createValidatingLookup`) that rejects the
+// socket if the resolved address is non-public, so the address we validate IS
+// the address we connect to — no separate pre-validation lookup to rebind
+// around. Same pattern as `plugins/plugin-asset-cache.ts`.
 
-import { promises as dnsPromises } from 'node:dns';
+import { promises as dnsPromises, lookup as dnsLookupCb } from 'node:dns';
+import type { LookupFunction } from 'node:net';
+
+import { Agent } from 'undici';
 
 import {
   isBlockedExternalApiHostname,
@@ -79,27 +86,88 @@ export async function assertPublicBrandUrl(url: string): Promise<void> {
   }
 }
 
+type DnsLookupCb = typeof dnsLookupCb;
+
+/**
+ * Wrap a `dns.lookup`-shaped resolver so the resolved address is rejected when
+ * it is non-public. Installed as the undici Agent's connection-time `lookup`, so
+ * the address we validate IS the one the socket connects to — closing the
+ * DNS-rebinding / TOCTOU gap that a separate pre-validation lookup leaves open
+ * (an attacker-controlled name answering public for the check and private for
+ * the connect). Uses the same `isNonPublicHost` predicate as
+ * `assertPublicBrandUrl` so the connect-time and pre-check block sets can't
+ * drift. Exported so the guard can be unit-tested without a live server.
+ */
+export function createValidatingLookup(lookupImpl: DnsLookupCb = dnsLookupCb): LookupFunction {
+  const validatingLookup = (
+    hostname: string,
+    options: unknown,
+    callback?: (err: Error | null, address?: unknown, family?: number) => void,
+  ): void => {
+    const cb = (typeof options === 'function' ? options : callback) as (
+      err: Error | null,
+      address?: unknown,
+      family?: number,
+    ) => void;
+    const opts = (typeof options === 'function' ? {} : (options ?? {})) as Record<string, unknown>;
+    (lookupImpl as unknown as (
+      h: string,
+      o: unknown,
+      c: (e: Error | null, a?: unknown, f?: number) => void,
+    ) => void)(hostname, opts, (err, address, family) => {
+      if (err) return cb(err);
+      const list = Array.isArray(address) ? address : [{ address, family }];
+      for (const entry of list) {
+        const addr = typeof entry === 'string' ? entry : (entry as { address: string }).address;
+        if (isNonPublicHost(String(addr))) {
+          return cb(new Error(`brand asset host resolves to a non-public address: ${addr}`));
+        }
+      }
+      return cb(null, address, family);
+    });
+  };
+  return validatingLookup as unknown as LookupFunction;
+}
+
 const MAX_BRAND_REDIRECTS = 5;
 
 export async function fetchExternalBrandAsset(
   url: string,
   init: RequestInit = {},
+  lookupImpl: DnsLookupCb = dnsLookupCb,
 ): Promise<Response> {
-  let target = url;
-  for (let hop = 0; ; hop += 1) {
-    // Re-validate every hop's host (initial URL and each redirect target) before
-    // the request, so a public site can't 3xx us into private space.
-    await assertPublicBrandUrl(target);
-    const res = await fetch(target, { ...init, redirect: 'manual' });
-    const location =
-      res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
-    if (!location) return res;
-    // Drain the redirect response body before following it or bailing out.
-    if (res.body) await res.body.cancel().catch(() => {});
-    if (hop >= MAX_BRAND_REDIRECTS) {
-      throw new Error(`too many brand asset redirects (> ${MAX_BRAND_REDIRECTS})`);
+  // Pin SSRF validation to the actual outbound connection: the Agent resolves
+  // each host once at connect time and refuses the socket if that exact address
+  // is non-public. This is what defeats DNS rebinding — there is no separate
+  // pre-validation resolve to race. `assertPublicBrandUrl` still runs per hop as
+  // a cheap URL-level pre-check (protocol, literal private IPs, redirect target).
+  const dispatcher = new Agent({
+    connect: { lookup: createValidatingLookup(lookupImpl) },
+  });
+  try {
+    let target = url;
+    for (let hop = 0; ; hop += 1) {
+      // Re-validate every hop's host (initial URL and each redirect target)
+      // before the request, so a public site can't 3xx us into private space.
+      await assertPublicBrandUrl(target);
+      const res = await fetch(target, {
+        ...init,
+        redirect: 'manual',
+        dispatcher: dispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
+      });
+      const location =
+        res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!location) return res;
+      // Drain the redirect response body before following it or bailing out.
+      if (res.body) await res.body.cancel().catch(() => {});
+      if (hop >= MAX_BRAND_REDIRECTS) {
+        throw new Error(`too many brand asset redirects (> ${MAX_BRAND_REDIRECTS})`);
+      }
+      // Resolve a possibly-relative Location; the next loop re-validates it and
+      // the same pinned dispatcher re-binds the new connection.
+      target = new URL(location, target).toString();
     }
-    // Resolve a possibly-relative Location; the next loop re-validates it.
-    target = new URL(location, target).toString();
+  } finally {
+    await dispatcher.close().catch(() => {});
   }
 }
