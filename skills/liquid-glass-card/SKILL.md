@@ -19,6 +19,7 @@ od:
   platform: desktop
   scenario: design
   upstream: "https://kokonutui.com/docs/cards/liquid-glass-card"
+  example_prompt: "Build a liquid-glass 'now playing' card over a warm sunset-gradient background: a frosted glass panel with a track title, artist, a progress slider, and a pill-shaped play button, so the gradient visibly bends through the glass. Then re-tokenize the --lg-* variables to my brand and verify it against references/checklist.md."
   preview:
     type: html
     entry: index.html
@@ -29,6 +30,7 @@ od:
 # liquid-glass-card
 
 > Adapted from KokonutUI (MIT, @dorianbaffier) — https://kokonutui.com/docs/cards/liquid-glass-card
+> Full MIT license and attribution: [`references/LICENSE`](references/LICENSE).
 
 ## What it does
 
@@ -59,6 +61,15 @@ Buttons use the same recipe with `border-radius: 999px` and a stronger displacem
   shadcn/ui `Button` + `Card`, `cn`, `cva`, `lucide-react`, Tailwind v4, and
   `next/image` (swap for `<img>` outside Next). Install via
   `bunx shadcn@latest add @kokonutui/liquid-glass-card` in real app repos.
+
+## Before emitting (required gate)
+
+Before you emit the artifact, run **every P0 gate** in
+[`references/checklist.md`](references/checklist.md): distortion visible over a
+non-flat background, isolated stacking context on each glass root, non-Chromium
+fallback wired, WCAG-AA contrast against the effective backdrop, and `--lg-*`
+tokenized to the active brand. If any P0 gate fails, fix the output and re-check —
+do not ship a glass surface that fails one.
 
 ## Constraints
 

@@ -79,7 +79,7 @@ const GlassFilter = React.memo(
 GlassFilter.displayName = "GlassFilter";
 
 // Liquid Button - extends shadcn Button with glass effect
-const liquidButtonVariants = cva("relative transition-transform duration-300", {
+const liquidButtonVariants = cva("relative isolate transition-transform duration-300", {
   variants: {
     liquidVariant: {
       default: "hover:scale-105",
@@ -128,7 +128,7 @@ function LiquidButton({
 
 // Liquid Glass Card - extends shadcn Card with glass effect
 const liquidGlassCardVariants = cva(
-  "group relative overflow-hidden bg-background/20 backdrop-blur-[2px] transition-all duration-300",
+  "group relative isolate overflow-hidden bg-background/20 backdrop-blur-[2px] transition-all duration-300",
   {
     variants: {
       glassSize: {
@@ -257,14 +257,33 @@ const ProgressBar = React.memo(
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const newTime = Math.min(
-          currentTime + SEEK_JUMP_SECONDS,
-          totalDuration
-        );
-        onSeek(newTime);
+      const clamp = (t: number) =>
+        Math.min(Math.max(MIN_TIME, t), totalDuration);
+      let next: number | null = null;
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowUp":
+          next = clamp(currentTime + SEEK_JUMP_SECONDS);
+          break;
+        case "ArrowLeft":
+        case "ArrowDown":
+          next = clamp(currentTime - SEEK_JUMP_SECONDS);
+          break;
+        case "Home":
+          next = MIN_TIME;
+          break;
+        case "End":
+          next = totalDuration;
+          break;
+        case "Enter":
+        case " ":
+          next = clamp(currentTime + SEEK_JUMP_SECONDS);
+          break;
+        default:
+          return;
       }
+      e.preventDefault();
+      onSeek(next);
     };
 
     return (
@@ -278,6 +297,7 @@ const ProgressBar = React.memo(
           aria-valuemax={totalDuration}
           aria-valuemin={MIN_TIME}
           aria-valuenow={currentTime}
+          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(totalDuration)}`}
           className="relative z-10 h-1 w-full cursor-pointer overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
           onClick={handleClick}
           onKeyDown={handleKeyDown}
@@ -306,7 +326,11 @@ export function NotificationCenter() {
 
     const intervalId = setInterval(() => {
       setCurrentTime((prev) => {
-        if (prev >= TOTAL_DURATION) {
+        // Pause on the tick that REACHES the end. Guarding on `>= TOTAL_DURATION`
+        // never fires: the 44→45 tick returns 45, the effect guard then early-
+        // returns and clears the interval before another tick can run, leaving
+        // the UI stuck on "Pause". Detect the final tick one step early.
+        if (prev >= TOTAL_DURATION - 1) {
           setIsPlaying(false);
           return TOTAL_DURATION;
         }
