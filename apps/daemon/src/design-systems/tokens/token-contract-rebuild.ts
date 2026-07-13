@@ -1,8 +1,13 @@
+/** @module token-contract-rebuild
+ * Assesses a design system's token quality report and prepares a rebuild revision when A1 evidence is weak.
+ * Reads the token contract report, scores against thresholds, and generates a rebuild-request artifact for agent review.
+ */
+
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { DesignSystemTokenContractRebuildDecision } from '@open-design/contracts';
-import type { DesignSystemRevisionFileChange } from './index.js';
+import type { DesignSystemRevisionFileChange } from '../core/index.js';
 
 export type DesignTokenContractRebuildPreparation = {
   decision: DesignSystemTokenContractRebuildDecision;
@@ -48,6 +53,10 @@ type TokenContractReport = {
 const KEY_A1_TOKENS = new Set(['--bg', '--surface', '--fg', '--accent']);
 const WEAK_CONFIDENCE = new Set(['low', 'fallback', 'alias']);
 
+/**
+ * Reads a design system's token contract quality report and decides whether a rebuild is recommended based on A1 coverage and fallback ratios.
+ * If recommended or forced, returns a revision with feedback and a rebuild-request artifact for agent review.
+ */
 export async function prepareDesignTokenContractRebuild(
   root: string,
   id: string,
@@ -130,6 +139,10 @@ export async function prepareDesignTokenContractRebuild(
   };
 }
 
+/**
+ * Evaluates token quality metrics and identifies rebuild triggers based on A1 coverage, fallback ratios, and key weak A1 tokens.
+ * Returns a detailed rebuild decision with reasoning and weak token inventory for agent review.
+ */
 function decideRebuild(
   designSystemId: string,
   report: TokenContractReport,
@@ -189,6 +202,10 @@ function decideRebuild(
   };
 }
 
+/**
+ * Filters and normalizes weak-confidence tokens from the report, focusing on key A1 identity slots.
+ * Returns a clean list of weak tokens with reason and source references for rebuild guidance.
+ */
 function weakReportTokens(report: TokenContractReport): NonNullable<DesignSystemTokenContractRebuildDecision['weakTokens']> {
   return (report.tokens ?? [])
     .filter((token) => {
@@ -208,6 +225,10 @@ function weakReportTokens(report: TokenContractReport): NonNullable<DesignSystem
     }));
 }
 
+/**
+ * Generates agent-facing rebuild feedback describing the quality decision, weak tokens, and review requirements.
+ * Formatted as markdown with timestamped context and actionable guidance for contract improvement.
+ */
 function renderFeedback(
   decision: DesignSystemTokenContractRebuildDecision,
   generatedAt: string,
@@ -230,6 +251,10 @@ function renderFeedback(
   ].join('\n');
 }
 
+/**
+ * Renders a detailed markdown rebuild-request artifact containing quality signals, trigger conditions, weak token evidence, and source snippets.
+ * Designed for agent consumption during token contract rebuilding workflows.
+ */
 function renderRebuildRequest(input: {
   decision: DesignSystemTokenContractRebuildDecision;
   generatedAt: string;
@@ -278,6 +303,10 @@ function renderRebuildRequest(input: {
   ].join('\n');
 }
 
+/**
+ * Appends a rebuild review section to the existing DESIGN.md body, documenting the decision, feedback, and artifact reference.
+ * Preserves the original content and adds timestamped rebuild metadata for version tracking.
+ */
 function appendRebuildSection(
   body: string,
   input: {
@@ -303,6 +332,10 @@ function appendRebuildSection(
   ].join('\n');
 }
 
+/**
+ * Constructs a negative rebuild decision when the design system or its token report is not available for analysis.
+ * Preserves the reason and optional report path for error messaging.
+ */
 function unavailableDecision(
   designSystemId: string,
   forced: boolean,
@@ -320,6 +353,10 @@ function unavailableDecision(
   };
 }
 
+/**
+ * Reads and validates the design system manifest.json, extracting safe source file paths for evidence, tokens, and report.
+ * Returns null if the file is missing, malformed, or has a mismatched schema version or id.
+ */
 async function readManifest(
   baseDir: string,
   expectedId: string,
@@ -345,6 +382,10 @@ async function readManifest(
   }
 }
 
+/**
+ * Reads and parses the token contract quality report from a JSON file, with path safety validation.
+ * Returns null if the path is unsafe, the file is missing, or the content is invalid JSON or not an object.
+ */
 async function readReport(baseDir: string, relativePath: string): Promise<TokenContractReport | null> {
   if (!safeManifestPath(relativePath)) return null;
   try {
@@ -357,6 +398,10 @@ async function readReport(baseDir: string, relativePath: string): Promise<TokenC
   }
 }
 
+/**
+ * Attempts to read text from a relative path within a base directory, with path safety validation.
+ * Returns undefined if the path is unsafe, not provided, or if the file cannot be read; errors are silently suppressed.
+ */
 async function readTextOptional(baseDir: string, relativePath: string | undefined): Promise<string | undefined> {
   if (!relativePath || !safeManifestPath(relativePath)) return undefined;
   try {
@@ -366,6 +411,10 @@ async function readTextOptional(baseDir: string, relativePath: string | undefine
   }
 }
 
+/**
+ * Validates that a path is safe for manifest references: must be a non-empty string, relative, and not escape the base directory.
+ * Returns false for absolute paths, '.', '..', or paths with parent directory traversal.
+ */
 function safeManifestPath(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim().replace(/\\/g, '/');
@@ -374,6 +423,10 @@ function safeManifestPath(value: unknown): value is string {
   return normalized !== '.' && normalized !== '..' && !normalized.startsWith('../') && !normalized.includes('/../');
 }
 
+/**
+ * Validates and extracts a design system directory id from a string, stripping the 'user:' prefix if present.
+ * Returns null if the id contains invalid characters or is '.' or '..'.
+ */
 function sanitizeDesignSystemId(id: string): string | null {
   if (typeof id !== 'string') return null;
   const dirId = id.startsWith('user:') ? id.slice('user:'.length) : id;
@@ -382,10 +435,18 @@ function sanitizeDesignSystemId(id: string): string | null {
   return dirId;
 }
 
+/**
+ * Coerces a value to a finite number, returning undefined if the value is not a number or is non-finite.
+ * Safely extracts numeric fields from loosely-typed JSON structures.
+ */
 function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Truncates a string to 6000 characters for artifact inclusion, adding an ellipsis marker if content was cut.
+ * Returns a fallback message if the input is undefined or empty.
+ */
 function truncateForRequest(value: string | undefined): string {
   const text = value?.trim();
   if (!text) return 'No source token snapshot was available.';

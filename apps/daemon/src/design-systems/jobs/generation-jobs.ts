@@ -1,22 +1,29 @@
+/** @module generation-jobs
+ * In-memory job store for design system generation, revision, and token-contract-rebuild workflows.
+ * Each job runs a fixed step sequence and exposes status/progress for polling by the route layer.
+ */
+
 import { randomUUID } from 'node:crypto';
 
 import {
   createUserDesignSystemRevision,
   createUserDesignSystem,
   listUserDesignSystemFiles,
-  readDesignSystem,
-  type DesignSystemRevision,
-  type DesignSystemRevisionFileChange,
-  type DesignSystemSummary,
-  type UserDesignSystemInput,
-  type UserDesignSystemRevisionInput,
-} from './index.js';
-import type { DesignSystemTokenContractRebuildDecision } from '@open-design/contracts';
+} from '../user/index.js';
 import {
+  readDesignSystem,
   collectDesignSystemSourceContext,
   mergeSourceContextIntoInput,
   type DesignSystemSourceContext,
-} from './source-context.js';
+} from '../catalog/index.js';
+import type {
+  DesignSystemRevision,
+  DesignSystemRevisionFileChange,
+  DesignSystemSummary,
+  UserDesignSystemInput,
+  UserDesignSystemRevisionInput,
+} from '../core/index.js';
+import type { DesignSystemTokenContractRebuildDecision } from '@open-design/contracts';
 
 export type DesignSystemGenerationJobStatus =
   | 'queued'
@@ -114,6 +121,10 @@ export type DesignSystemTokenContractRebuildInput = {
   fileChanges?: DesignSystemRevisionFileChange[];
 };
 
+/**
+ * Creates an in-memory job store for design system generation, revision, and token-contract-rebuild workflows.
+ * Returns an object with `start()`, `revise()`, `rebuildTokenContract()`, and `get()` methods for managing async jobs.
+ */
 export function createDesignSystemGenerationJobStore(options: StoreOptions) {
   const jobs = new Map<string, MutableJob>();
   const createDesignSystem = options.createDesignSystem ?? createUserDesignSystem;
@@ -124,6 +135,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
   const delayMs = options.delayMs ?? 280;
   const idFactory = options.idFactory ?? randomUUID;
 
+  /**
+   * Initiates a design system generation job from user input, enqueueing it for background execution.
+   * Returns an immediate snapshot with status 'queued' and step definitions.
+   */
   function start(input: UserDesignSystemInput): DesignSystemGenerationJob {
     const now = new Date().toISOString();
     const job: MutableJob = {
@@ -141,6 +156,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     return snapshot(job);
   }
 
+  /**
+   * Initiates a design system revision job from user feedback, enqueueing it for background execution.
+   * Returns an immediate snapshot with status 'queued' and revision-specific step definitions.
+   */
   function revise(input: DesignSystemRevisionInput): DesignSystemGenerationJob {
     const now = new Date().toISOString();
     const job: MutableJob = {
@@ -159,6 +178,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     return snapshot(job);
   }
 
+  /**
+   * Initiates a token contract rebuild job from a rebuild decision, enqueueing it for background execution.
+   * Returns an immediate snapshot with status 'queued' and token-rebuild-specific step definitions.
+   */
   function rebuildTokenContract(input: DesignSystemTokenContractRebuildInput): DesignSystemGenerationJob {
     const now = new Date().toISOString();
     const job: MutableJob = {
@@ -177,11 +200,19 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     return snapshot(job);
   }
 
+  /**
+   * Retrieves a job by id, returning a snapshot of its current state.
+   * Returns null if the job does not exist in the store.
+   */
   function get(id: string): DesignSystemGenerationJob | null {
     const job = jobs.get(id);
     return job ? snapshot(job) : null;
   }
 
+  /**
+   * Executes the design system generation workflow: explores source resources, creates a draft, generates files, and prepares review.
+   * Marks the job as succeeded or failed upon completion, with detailed step progress tracking.
+   */
   async function run(job: MutableJob, input: UserDesignSystemInput): Promise<void> {
     try {
       markJob(job, 'running', 'Starting generation');
@@ -217,6 +248,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     }
   }
 
+  /**
+   * Executes the design system revision workflow: reads the current draft, applies user feedback, creates a pending revision, and prepares review.
+   * Marks the job as succeeded or failed upon completion, tracking revision id and step progress.
+   */
   async function runRevision(job: MutableJob, input: DesignSystemRevisionInput): Promise<void> {
     try {
       markJob(job, 'running', 'Starting revision');
@@ -264,6 +299,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     }
   }
 
+  /**
+   * Executes the token contract rebuild workflow: reads the quality report, assesses evidence, drafts a rebuild review, creates a revision, and prepares review.
+   * Marks the job as succeeded or failed upon completion, with detailed step and weak token tracking.
+   */
   async function runTokenContractRebuild(
     job: MutableJob,
     input: DesignSystemTokenContractRebuildInput,
@@ -318,6 +357,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
   return { start, revise, rebuildTokenContract, get };
 }
 
+/**
+ * Executes a single job step: marks it running, executes the async task, and records completion or failure with timestamps.
+ * Updates overall job progress based on completed step count; re-throws errors for caller handling.
+ */
 async function runStep(
   job: MutableJob,
   stepId: string,
@@ -345,6 +388,10 @@ async function runStep(
   }
 }
 
+/**
+ * Updates a job's status and message, touching the updatedAt timestamp.
+ * Used for intermediate job state transitions during execution.
+ */
 function markJob(
   job: MutableJob,
   status: DesignSystemGenerationJobStatus,
@@ -355,6 +402,10 @@ function markJob(
   touch(job);
 }
 
+/**
+ * Marks a job as successfully completed with progress set to 100%, timestamp recorded, and final message set.
+ * Performs a final touch to update the job's updatedAt timestamp.
+ */
 function completeJob(
   job: MutableJob,
   status: Extract<DesignSystemGenerationJobStatus, 'succeeded'>,
@@ -367,6 +418,10 @@ function completeJob(
   touch(job);
 }
 
+/**
+ * Marks a job as failed with an error message and completion timestamp.
+ * Sets status to 'failed' and stores the error detail for debugging and user reporting.
+ */
 function failJob(job: MutableJob, message: string): void {
   job.status = 'failed';
   job.error = message;
@@ -375,16 +430,28 @@ function failJob(job: MutableJob, message: string): void {
   touch(job);
 }
 
+/**
+ * Sets a progress message on a specific job step and touches the job's updatedAt timestamp.
+ * Silent no-op if the step id is not found.
+ */
 function setStepMessage(job: MutableJob, stepId: string, message: string): void {
   const step = job.steps.find((candidate) => candidate.id === stepId);
   if (step) step.message = message;
   touch(job);
 }
 
+/**
+ * Updates a job's updatedAt timestamp to the current time.
+ * Used internally to mark state changes during job execution.
+ */
 function touch(job: MutableJob): void {
   job.updatedAt = new Date().toISOString();
 }
 
+/**
+ * Creates an immutable snapshot of a job's current state, deep-copying the steps array for safe return.
+ * Prevents accidental mutation of internal job state by callers.
+ */
 function snapshot(job: MutableJob): DesignSystemGenerationJob {
   return {
     ...job,
@@ -392,6 +459,10 @@ function snapshot(job: MutableJob): DesignSystemGenerationJob {
   };
 }
 
+/**
+ * Safely invokes source context collection, catching exceptions and returning a graceful fallback with error details.
+ * Prevents a single source fetch failure from aborting the entire generation workflow.
+ */
 async function safeCollectSourceContext(
   collectSourceContext: (input: UserDesignSystemInput) => Promise<DesignSystemSourceContext>,
   input: UserDesignSystemInput,
@@ -406,6 +477,10 @@ async function safeCollectSourceContext(
   }
 }
 
+/**
+ * Generates a human-readable summary of source resources for job progress messaging.
+ * Counts GitHub links, local code references, Figma files, and assets; supplements with GitHub context readability status.
+ */
 function sourceSummary(input: UserDesignSystemInput, context?: DesignSystemSourceContext): string {
   const provenance = input.provenance;
   const counts = [
@@ -422,10 +497,18 @@ function sourceSummary(input: UserDesignSystemInput, context?: DesignSystemSourc
   return `${base}; read ${readable} GitHub repo(s)`;
 }
 
+/**
+ * Normalizes user feedback by trimming whitespace and collapsing multiple consecutive blank lines to a single line.
+ * Prepares feedback for consistent storage and display.
+ */
 function cleanFeedback(value: string): string {
   return value.trim().replace(/\n{3,}/g, '\n\n');
 }
 
+/**
+ * Appends a revision request section to a design document body, preserving the original content.
+ * Returns the updated body with a markdown section, feedback, and timestamped audit trail.
+ */
 function applyRevisionToBody(
   body: string,
   input: { feedback: string; sectionTitle?: string },
@@ -436,6 +519,10 @@ function applyRevisionToBody(
   return `${body.trim()}\n\n## ${title}\n\n${input.feedback}\n\n_Revision job applied at ${stamp}._\n`;
 }
 
+/**
+ * Delays execution for the given milliseconds by returning a resolved promise if delay is zero or non-positive.
+ * Used to simulate realistic job workflow pacing without blocking concurrent operations.
+ */
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));

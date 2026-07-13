@@ -1,9 +1,14 @@
+/** @module github-import
+ * Clones a public GitHub repository and imports it as a design system via the local importer.
+ * Handles shallow clones, branch selection, and commit/branch metadata capture.
+ */
+
 import { execFile } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { containsSymlink } from '../library-install.js';
+import { containsSymlink } from '../../library-install.js';
 import {
   LocalDesignSystemImportError,
   type LocalDesignSystemImportOptions,
@@ -32,6 +37,10 @@ type ExecGitResult = {
   stderr: string | Buffer;
 };
 
+/**
+ * Clones a public GitHub repository (shallow clone at specified branch) and imports it as a design system using the local importer.
+ * Captures branch and commit metadata in the design system manifest.
+ */
 export async function importGitHubDesignSystemProject(
   githubUrl: string,
   tmpRoot: string,
@@ -94,6 +103,10 @@ export async function importGitHubDesignSystemProject(
   }
 }
 
+/**
+ * Parses a GitHub HTTPS URL into structured components (owner, repo, clone URL) with validation.
+ * Throws LocalDesignSystemImportError if the URL is invalid or not a public github.com repository.
+ */
 export function parseGitHubRepoUrl(input: string): ParsedGitHubRepoUrl {
   let url: URL;
   try {
@@ -125,6 +138,9 @@ export function parseGitHubRepoUrl(input: string): ParsedGitHubRepoUrl {
   };
 }
 
+/**
+ * Validates and normalizes a GitHub branch name. Returns undefined if the input is empty/undefined; throws if it contains unsafe characters like `..` or leading slashes.
+ */
 function cleanBranch(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   const trimmed = value.trim();
@@ -135,21 +151,33 @@ function cleanBranch(value: string | undefined): string | undefined {
   return trimmed;
 }
 
+/**
+ * Strips whitespace from a branch name and returns undefined if it is empty or the literal string 'HEAD' (detached HEAD state).
+ */
 function normalizeDetachedBranch(value: string): string | undefined {
   const trimmed = value.trim();
   if (!trimmed || trimmed === 'HEAD') return undefined;
   return trimmed;
 }
 
+/**
+ * Checks if a string is a valid GitHub repository owner or name: alphanumeric plus underscore/hyphen/dot, not starting or ending with a dot.
+ */
 function isGitHubPathSegment(value: string): boolean {
   return /^[A-Za-z0-9_.-]+$/.test(value) && !value.startsWith('.') && !value.endsWith('.');
 }
 
+/**
+ * Executes a git command and returns its stdout as a trimmed string. Timeouts after 20 seconds.
+ */
 async function readGitStdout(gitBin: string, args: string[]): Promise<string> {
   const result = await execGit(gitBin, args, undefined, 20_000);
   return String(result.stdout).trim();
 }
 
+/**
+ * Spawns a git subprocess with a configurable timeout and 1MB output buffer. Throws if the process times out or fails.
+ */
 async function execGit(
   gitBin: string,
   args: string[],
@@ -163,6 +191,9 @@ async function execGit(
   });
 }
 
+/**
+ * Extracts the last line of stderr from a git error, falling back to the message field or coercing to string. Returns a user-friendly error message string.
+ */
 function formatGitError(err: unknown): string {
   if (typeof err === 'object' && err !== null) {
     const stderr = (err as { stderr?: unknown }).stderr;

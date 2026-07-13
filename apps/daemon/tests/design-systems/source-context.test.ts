@@ -4,7 +4,7 @@ import {
   collectDesignSystemSourceContext,
   mergeSourceContextIntoInput,
   type FetchLike,
-} from '../../src/design-systems/source-context.js';
+} from '../../src/design-systems/catalog/source-context.js';
 
 describe('design system source context', () => {
   it('reads GitHub metadata, README, and package context', async () => {

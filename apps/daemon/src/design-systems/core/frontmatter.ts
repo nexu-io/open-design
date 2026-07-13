@@ -1,7 +1,8 @@
-// Minimal YAML front-matter parser. Handles the subset used by SKILL.md in
-// our examples: scalar strings/numbers/booleans, block-literal (|) strings,
-// and flat arrays ("- foo"). Keeps the daemon dep-free. If you need real
-// YAML (nested objects, flow-style, anchors), swap for `yaml` or `js-yaml`.
+/** @module frontmatter
+ * Minimal YAML front-matter parser for SKILL.md and DESIGN.md files.
+ * Handles scalar strings, numbers, booleans, block-literal strings, and flat arrays.
+ * Keeps the daemon dep-free — swap for `yaml`/`js-yaml` if you need nested objects or anchors.
+ */
 
 export type FrontmatterScalar = string | number | boolean | null;
 export type FrontmatterValue = FrontmatterScalar | FrontmatterArray | FrontmatterObject;
@@ -14,6 +15,9 @@ type StackEntry = {
   key: string | null;
 };
 
+/**
+ * Parses YAML front-matter from a string between two `---` delimiters. Returns an empty object and the full string as body if no delimiters are found.
+ */
 export function parseFrontmatter(src: string): { data: FrontmatterObject; body: string } {
   const text = src.replace(/^﻿/, '');
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
@@ -23,6 +27,9 @@ export function parseFrontmatter(src: string): { data: FrontmatterObject; body: 
   return { data: parseYamlSubset(yaml), body };
 }
 
+/**
+ * Internal parser for a limited YAML subset: scalars, flat arrays, and shallow objects. Throws on parsing errors like invalid nesting or container type mismatches.
+ */
 function parseYamlSubset(src: string): FrontmatterObject {
   const lines = src.split(/\r?\n/);
   const root: FrontmatterObject = {};
@@ -144,6 +151,9 @@ function parseYamlSubset(src: string): FrontmatterObject {
   return root;
 }
 
+/**
+ * Coerces a YAML scalar string into a typed value: boolean, null, number, or string. Handles quoted strings, YAML literals (true/false/null/~), and base-10 decimals.
+ */
 function coerce(raw: string | undefined): FrontmatterValue {
   if (raw === undefined) return '';
   let v = raw.trim();

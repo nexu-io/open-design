@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reportRunCompletedFromDaemon } from '../src/langfuse-bridge.js';
-import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
+import { buildPromptStackTelemetry } from '../src/telemetry/index.js';
 
 interface FakeMessage {
   id: string;

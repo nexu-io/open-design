@@ -1,3 +1,8 @@
+/** @module import
+ * Imports a local project directory as an Open Design design system by scanning CSS variables, components, assets, and fonts.
+ * Produces DESIGN.md, tokens.css, design-tokens.json, components.html, preview pages, and source evidence files.
+ */
+
 import { copyFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -7,10 +12,10 @@ import {
   buildDesignTokenContract,
   buildReportWithSelfCheck,
   validateDesignTokenOutputs,
+  extractCssCustomProperties,
   type DesignTokenBinding,
   type DesignTokenContractReport,
-} from './token-contract.js';
-import { extractCssCustomProperties } from './token-evidence.js';
+} from '../tokens/index.js';
 
 export type LocalDesignSystemImportResult = {
   id: string;
@@ -116,6 +121,11 @@ const COMPONENT_EXTENSIONS = new Set(['.tsx', '.jsx', '.vue', '.svelte']);
 const ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico']);
 const FONT_EXTENSIONS = new Set(['.woff', '.woff2', '.ttf', '.otf']);
 const COMPONENT_NAMES = ['Button', 'Input', 'Card', 'Nav', 'Navbar', 'Sidebar'];
+
+/**
+ * Imports a local project directory as an Open Design design system by scanning CSS variables, components, and assets.
+ * Produces DESIGN.md, tokens.css, design-tokens.json, manifest.json, and preview pages in the output directory.
+ */
 export async function importLocalDesignSystemProject(
   sourceRootInput: string,
   userDesignSystemsRoot: string,
@@ -203,6 +213,7 @@ export class LocalDesignSystemImportError extends Error {
   }
 }
 
+/** Scans a project directory to extract CSS variables, components, assets, fonts, and metadata for design system import. */
 async function scanProject(sourceRoot: string): Promise<ProjectScan> {
   const [packageJson, readmeExcerpt, files] = await Promise.all([
     readPackageJson(sourceRoot),
@@ -230,6 +241,7 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
   };
 }
 
+/** Parses package.json to extract package name, description, and detected technology stack. Returns empty values if package.json is not found. */
 async function readPackageJson(
   sourceRoot: string,
 ): Promise<{ name: string | undefined; description: string | undefined; tech: string[] }> {
@@ -253,6 +265,7 @@ async function readPackageJson(
   }
 }
 
+/** Reads and compacts the first available README file from common naming variations, truncating to 1400 characters. */
 async function readReadme(sourceRoot: string): Promise<string | undefined> {
   for (const name of ['README.md', 'README.zh-CN.md', 'readme.md']) {
     try {
@@ -265,6 +278,7 @@ async function readReadme(sourceRoot: string): Promise<string | undefined> {
   return undefined;
 }
 
+/** Recursively walks project directory tree, collecting files up to 900 entries, skipping ignored directories and large files (>512KB). */
 async function walkProject(sourceRoot: string): Promise<Array<{ absPath: string; relPath: string; size: number }>> {
   const out: Array<{ absPath: string; relPath: string; size: number }> = [];
   const queue = [sourceRoot];
@@ -297,6 +311,7 @@ async function walkProject(sourceRoot: string): Promise<Array<{ absPath: string;
   return out;
 }
 
+/** Reads CSS file and extracts all custom property definitions, returning empty array on read error. */
 async function readCssVariables(absPath: string, relPath: string): Promise<CssVariable[]> {
   try {
     const raw = await readFile(absPath, 'utf8');
@@ -306,6 +321,7 @@ async function readCssVariables(absPath: string, relPath: string): Promise<CssVa
   }
 }
 
+/** Probes for Tailwind config file and detects configured token categories (colors, fonts, spacing, etc). */
 async function readTailwindSignals(sourceRoot: string): Promise<string[]> {
   const candidates = [
     'tailwind.config.ts',
@@ -328,6 +344,7 @@ async function readTailwindSignals(sourceRoot: string): Promise<string[]> {
   return [];
 }
 
+/** Filters files for logo/icon/brand assets in common asset directories, limiting to 12 files under 2MB each. */
 async function findAssets(
   sourceRoot: string,
   files: Array<{ absPath: string; relPath: string; size: number }>,
@@ -349,6 +366,7 @@ async function findAssets(
     }));
 }
 
+/** Finds component files by matching common component names (Button, Input, Card, etc), returning up to 10 matches. */
 function findComponentSignals(files: ProjectFile[]): ComponentSignal[] {
   const found = new Map<string, ComponentSignal>();
   for (const file of files) {
@@ -362,6 +380,7 @@ function findComponentSignals(files: ProjectFile[]): ComponentSignal[] {
   return Array.from(found.values()).slice(0, 10);
 }
 
+/** Filters font files under 2MB from the project, limiting to 8 matches. */
 function findFonts(sourceRoot: string, files: ProjectFile[]): FileCandidate[] {
   return files
     .filter((file) => FONT_EXTENSIONS.has(path.extname(file.relPath).toLowerCase()) && file.size <= 2 * 1024 * 1024)
@@ -373,6 +392,7 @@ function findFonts(sourceRoot: string, files: ProjectFile[]): FileCandidate[] {
     }));
 }
 
+/** Copies asset files to the output assets directory, slugifying filenames, and returns relative paths of copied files. */
 async function copyAssets(assets: AssetCandidate[], outDir: string): Promise<string[]> {
   if (assets.length === 0) return [];
   const assetsDir = path.join(outDir, 'assets');
@@ -386,6 +406,7 @@ async function copyAssets(assets: AssetCandidate[], outDir: string): Promise<str
   return copied;
 }
 
+/** Copies font files to the output fonts directory, slugifying filenames, and returns relative paths of copied files. */
 async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string[]> {
   if (fonts.length === 0) return [];
   const fontsDir = path.join(outDir, 'fonts');
@@ -399,6 +420,7 @@ async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string
   return copied;
 }
 
+/** Generates an available design system ID by appending numeric suffixes to a preferred slug until an unused directory name is found. */
 async function nextAvailableSlug(
   root: string,
   preferred: string,
@@ -419,6 +441,7 @@ async function nextAvailableSlug(
   throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'could not allocate design system id');
 }
 
+/** Constructs the design system manifest JSON object containing metadata, file references, preview pages, and source evidence location. */
 function renderManifest(
   id: string,
   name: string,
@@ -489,10 +512,12 @@ function renderManifest(
   };
 }
 
+/** Normalizes import mode input to one of three valid values, defaulting to 'hybrid' for invalid input. */
 function normalizeImportMode(value: unknown): 'normalized' | 'hybrid' | 'verbatim' {
   return value === 'normalized' || value === 'verbatim' || value === 'hybrid' ? value : 'hybrid';
 }
 
+/** Validates and deduplicates a craft-applies list, keeping only valid slug-formatted entries. */
 function normalizeCraftList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -507,6 +532,7 @@ function normalizeCraftList(value: unknown): string[] {
   return out;
 }
 
+/** Generates the DESIGN.md markdown documentation from project scan results, including tokens, components, and agent guidance. */
 function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
   const colors = tokenCandidates(scan.cssVariables, ['color', 'accent', 'primary', 'background', 'surface', 'border'])
     .slice(0, 16)
@@ -553,6 +579,7 @@ function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
   ].join('\n');
 }
 
+/** Generates the USAGE.md markdown guide with read order, highlights, and best practices for using imported design system. */
 function renderUsageMd(name: string, scan: ProjectScan): string {
   const highlights = [
     scan.packageDescription,
@@ -594,6 +621,7 @@ function renderUsageMd(name: string, scan: ProjectScan): string {
   ].join('\n');
 }
 
+/** Renders an HTML fixture page showcasing imported tokens and common UI controls for visual reference. */
 function renderComponentsHtml(name: string, tokensCss: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -639,6 +667,7 @@ ${indentCss(tokensCss, 6)}
 `;
 }
 
+/** Generates and writes six preview HTML pages (colors, typography, spacing, buttons, inputs, app preview) and returns their relative paths. */
 async function writePreviewFiles(
   outDir: string,
   name: string,
@@ -659,6 +688,7 @@ async function writePreviewFiles(
   return pages.map(([fileName]) => `preview/${fileName}`);
 }
 
+/** Writes source evidence including scanned files, token details, contract report, and up to 10 component snippets, returning paths of all written files. */
 async function writeSourceEvidenceFiles(
   outDir: string,
   scan: ProjectScan,
@@ -751,6 +781,7 @@ async function writeSourceEvidenceFiles(
   ];
 }
 
+/** Renders an HTML preview page displaying color tokens with swatches and semantic labels. */
 function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding[]): string {
   const values = new Map(bindings.map((binding) => [binding.name, binding.value]));
   return renderPreviewPage(
@@ -773,6 +804,7 @@ function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding
   );
 }
 
+/** Renders an HTML preview page showcasing typography hierarchy and code styles. */
 function renderTypographyPreview(name: string): string {
   return renderPreviewPage(
     `${name} typography`,
@@ -781,6 +813,7 @@ function renderTypographyPreview(name: string): string {
   );
 }
 
+/** Renders an HTML preview page displaying spacing scale and border radius tokens as visual meters. */
 function renderSpacingPreview(name: string): string {
   return renderPreviewPage(
     `${name} spacing`,
@@ -789,6 +822,7 @@ function renderSpacingPreview(name: string): string {
   );
 }
 
+/** Renders an HTML preview page displaying primary and secondary button styles. */
 function renderButtonsPreview(name: string): string {
   return renderPreviewPage(
     `${name} buttons`,
@@ -797,6 +831,7 @@ function renderButtonsPreview(name: string): string {
   );
 }
 
+/** Renders an HTML preview page displaying text input and textarea form controls. */
 function renderInputsPreview(name: string): string {
   return renderPreviewPage(
     `${name} inputs`,
@@ -805,6 +840,7 @@ function renderInputsPreview(name: string): string {
   );
 }
 
+/** Renders an HTML preview page simulating an app shell with sidebar, displaying design system name and detected components. */
 function renderAppPreview(name: string, scan: ProjectScan): string {
   const componentItems = scan.components.map((component) => `<li>${escapeHtml(component.name)} <code>${escapeHtml(component.relPath)}</code></li>`).join('');
   return renderPreviewPage(
@@ -814,6 +850,7 @@ function renderAppPreview(name: string, scan: ProjectScan): string {
   );
 }
 
+/** Renders a complete HTML preview page template with title, heading, and embedded token styles. */
 function renderPreviewPage(title: string, heading: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -851,6 +888,7 @@ function renderPreviewPage(title: string, heading: string, body: string): string
 `;
 }
 
+/** Generates markdown evidence report detailing scan results including tokens, components, assets, and fonts discovered. */
 function renderEvidenceMd(scan: ProjectScan): string {
   return [
     '# Import Evidence',
@@ -879,14 +917,17 @@ function renderEvidenceMd(scan: ProjectScan): string {
   ].join('\n');
 }
 
+/** Filters tokens matching any of the provided needle keywords in their names. */
 function tokenCandidates(tokens: CssVariable[], needles: string[]): CssVariable[] {
   return tokens.filter((token) => needles.some((needle) => token.name.toLowerCase().includes(needle)));
 }
 
+/** Tests whether a token value is a valid color using hex, rgb, hsl, oklch, or CSS function syntax. */
 function isColorValue(value: string): boolean {
   return /^(#(?:[0-9a-f]{3,8})|rgb[a]?\(|hsl[a]?\(|oklch\(|color-mix\(|var\()/i.test(value.trim());
 }
 
+/** Classifies a file by extension into style, component, asset, font, readme, package, or other category. */
 function classifyScannedFile(relPath: string): string {
   const ext = path.extname(relPath).toLowerCase();
   if (STYLE_EXTENSIONS.has(ext)) return 'style';
@@ -898,6 +939,7 @@ function classifyScannedFile(relPath: string): string {
   return 'other';
 }
 
+/** Infers semantic role (background, surface, accent, spacing, etc) from token name, returning undefined if unrecognized. */
 function inferTokenRole(token: CssVariable): string | undefined {
   const name = token.name.toLowerCase();
   if (['background', 'bg'].some((needle) => name.includes(needle))) return 'background';
@@ -911,6 +953,7 @@ function inferTokenRole(token: CssVariable): string | undefined {
   return undefined;
 }
 
+/** Removes markdown code blocks, images, and normalizes links, returning trimmed text lines (max 16). */
 function compactMarkdown(raw: string): string {
   return raw
     .replace(/```[\s\S]*?```/g, '')
@@ -923,10 +966,12 @@ function compactMarkdown(raw: string): string {
     .join('\n');
 }
 
+/** Removes npm scope prefix and normalizes hyphens/underscores to spaces for human-readable display names. */
 function cleanDisplayName(value: string): string {
   return value.replace(/^@[^/]+\//, '').replace(/[-_]+/g, ' ').trim() || 'Imported Design System';
 }
 
+/** Converts a string to a URL-safe slug: lowercase, removes scope prefix, replaces special chars with hyphens, trims edges. */
 function slugify(value: string): string {
   const slug = value
     .toLowerCase()
@@ -936,15 +981,18 @@ function slugify(value: string): string {
   return slug || 'imported-design-system';
 }
 
+/** Normalizes path separators to forward slashes for consistent relative path representation. */
 function normalizeRel(value: string): string {
   return value.split(path.sep).join('/');
 }
 
+/** Indents each line of CSS by the specified number of spaces. */
 function indentCss(css: string, spaces: number): string {
   const prefix = ' '.repeat(spaces);
   return css.trimEnd().split('\n').map((line) => `${prefix}${line}`).join('\n');
 }
 
+/** Escapes HTML special characters (&, <, >, ") for safe embedding in HTML content. */
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -953,6 +1001,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Type guard that checks if a value is a plain object (not null, not array). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -9,13 +9,11 @@ import type {
   DesignSystemRevision,
   DesignSystemSummary,
   UserDesignSystemInput,
-} from '../design-systems/index.js';
-import type { DesignTokenContractRebuildPreparation } from '../design-systems/token-contract-rebuild.js';
-import type {
+  DesignTokenContractRebuildPreparation,
   DesignSystemGenerationJob,
   DesignSystemRevisionInput,
   DesignSystemTokenContractRebuildInput,
-} from '../design-systems/generation-jobs.js';
+} from '../design-systems/index.js';
 import type { openDatabase } from '../db.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
 

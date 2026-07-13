@@ -277,9 +277,9 @@ import {
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
-import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { createDesignSystemGenerationJobStore } from './design-systems/index.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
-import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { prepareDesignTokenContractRebuild } from './design-systems/index.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
   applyDiffReviewDecisionToCwd,
@@ -357,9 +357,9 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { renderDesignSystemPreview } from './design-systems/index.js';
+import { renderDesignSystemShowcase } from './design-systems/index.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
-import { renderDesignSystemPreview } from './design-systems/preview.js';
-import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
 import {
   createRunLifecycleTracer,
@@ -382,7 +382,7 @@ import {
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
-import { buildPromptStackTelemetry } from './prompt-telemetry.js';
+import { buildPromptStackTelemetry } from './telemetry/index.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
