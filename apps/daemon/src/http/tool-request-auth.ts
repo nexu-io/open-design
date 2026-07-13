@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { ToolTokenGrant, ToolTokenRegistry } from '../tool-tokens.js';
+import type { ToolTokenGrant, ToolTokenRegistry } from '../auth/index.js';
 import { sendApiError } from './api-errors.js';
 
 export function bearerTokenFromRequest(req: Request): string | undefined {
