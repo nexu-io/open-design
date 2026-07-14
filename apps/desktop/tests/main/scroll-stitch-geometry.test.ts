@@ -8,10 +8,12 @@ import { gzip } from 'node:zlib';
 import {
   HIDE_CHROME_SELECTOR,
   activeSlideCaptureOffsetTransform,
+  captureDeckSlide,
   measureAuthoredSlideBox,
   paginateViewportBand,
   readDomToPptxBundleFile,
   requestedRenderSize,
+  restoreActiveSlideCapture,
   runDomToPptx,
   scrollStitchGeometry,
   scrollStitchRowOffset,
@@ -108,6 +110,256 @@ describe('deck capture DOM prep', () => {
     expect(activeSlideCaptureOffsetTransform({ x: 3840, y: -120 })).toBe(
       'translate(-3840px, 120px)',
     );
+  });
+
+  test('off-stage slide capture preserves live content across consecutive exported pages', async () => {
+    class FakeStyle {
+      cssText = '';
+      private readonly values = new Map<string, { priority: string; value: string }>();
+
+      setProperty(name: string, value: string, priority = ''): void {
+        this.values.set(name, { priority, value });
+      }
+
+      getPropertyPriority(name: string): string {
+        return this.values.get(name)?.priority ?? '';
+      }
+
+      getPropertyValue(name: string): string {
+        return this.values.get(name)?.value ?? '';
+      }
+
+      set animation(value: string) {
+        this.setProperty('animation', value);
+      }
+
+      set opacity(value: string) {
+        this.setProperty('opacity', value);
+      }
+
+      set pointerEvents(value: string) {
+        this.setProperty('pointer-events', value);
+      }
+
+      set transition(value: string) {
+        this.setProperty('transition', value);
+      }
+
+      set visibility(value: string) {
+        this.setProperty('visibility', value);
+      }
+
+      set zIndex(value: string) {
+        this.setProperty('z-index', value);
+      }
+
+      removeProperty(name: string): void {
+        this.values.delete(name);
+      }
+
+      clone(): FakeStyle {
+        const style = new FakeStyle();
+        style.cssText = this.cssText;
+        for (const [name, entry] of this.values) {
+          style.setProperty(name, entry.value, entry.priority);
+        }
+        return style;
+      }
+    }
+
+    class FakeElement {
+      children: FakeElement[] = [];
+      id = '';
+      parentElement: FakeElement | null = null;
+      runtimeFrame: symbol | undefined;
+      style = new FakeStyle();
+      classList = { toggle: () => true };
+
+      constructor(
+        private rect: { x: number; y: number } = { x: 32, y: 24 },
+        private readonly restacksChildren = false,
+      ) {}
+
+      get firstElementChild(): FakeElement | null {
+        return this.children[0] ?? null;
+      }
+
+      get parentNode(): FakeElement | null {
+        return this.parentElement;
+      }
+
+      appendChild(child: FakeElement): FakeElement {
+        child.remove();
+        child.parentElement = this;
+        if (this.restacksChildren) child.rect = { x: 0, y: 0 };
+        this.children.push(child);
+        return child;
+      }
+
+      before(sibling: FakeElement): void {
+        this.parentElement?.moveBefore(sibling, this);
+      }
+
+      cloneNode(deep = false): FakeElement {
+        // The source is off-stage because its parent deck is translated. Once
+        // cloned outside that parent, the clone itself starts at the origin,
+        // but runtime-rendered state such as a canvas bitmap is not cloned.
+        const clone = new FakeElement({ x: 0, y: 0 });
+        clone.style = this.style.clone();
+        if (deep) {
+          for (const child of this.children) clone.appendChild(child.cloneNode(true));
+        }
+        return clone;
+      }
+
+      closest(): null {
+        return null;
+      }
+
+      getBoundingClientRect(): DOMRect {
+        return { ...this.rect, height: 540, width: 960 } as DOMRect;
+      }
+
+      remove(): void {
+        if (!this.parentElement) return;
+        this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+        this.parentElement = null;
+        this.clearRuntimeFrames();
+      }
+
+      moveBefore(child: FakeElement, reference: FakeElement | null): void {
+        if (child.parentElement) {
+          child.parentElement.children = child.parentElement.children.filter((entry) => entry !== child);
+        }
+        const index = reference == null ? this.children.length : this.children.indexOf(reference);
+        child.parentElement = this;
+        if (this.restacksChildren) child.rect = { x: 0, y: 0 };
+        this.children.splice(index, 0, child);
+      }
+
+      private clearRuntimeFrames(): void {
+        this.runtimeFrame = undefined;
+        for (const child of this.children) child.clearRuntimeFrames();
+      }
+
+      setAttribute(): void {}
+    }
+
+    const firstRuntimeFrame = Symbol('first painted chart frame');
+    const laterRuntimeFrame = Symbol('later painted chart frame');
+    const firstCanvas = new FakeElement();
+    firstCanvas.runtimeFrame = firstRuntimeFrame;
+    const laterCanvas = new FakeElement();
+    laterCanvas.runtimeFrame = laterRuntimeFrame;
+    const firstSlide = new FakeElement({ x: 1920, y: 0 });
+    firstSlide.style.setProperty('opacity', '1');
+    firstSlide.appendChild(firstCanvas);
+    const laterSlide = new FakeElement({ x: 2880, y: 0 });
+    laterSlide.style.setProperty('opacity', '0');
+    laterSlide.appendChild(laterCanvas);
+    const body = new FakeElement();
+    body.appendChild(firstSlide);
+    body.appendChild(laterSlide);
+    const findById = (root: FakeElement, id: string): FakeElement | null => {
+      if (root.id === id) return root;
+      for (const child of root.children) {
+        const found = findById(child, id);
+        if (found) return found;
+      }
+      return null;
+    };
+    const slidesInDocumentOrder = (root: FakeElement): FakeElement[] => {
+      const slides: FakeElement[] = [];
+      if (root === firstSlide || root === laterSlide) slides.push(root);
+      for (const child of root.children) slides.push(...slidesInDocumentOrder(child));
+      return slides;
+    };
+    const fakeDocument = {
+      body,
+      createElement: () => new FakeElement({ x: 0, y: 0 }, true),
+      getElementById: (id: string) => findById(body, id),
+      querySelectorAll: () => slidesInDocumentOrder(body),
+    };
+    const capturedSlides: FakeElement[] = [];
+    const captureWindow = {
+      webContents: {
+        async executeJavaScript(script: string) {
+          const evaluate = new Function('document', 'requestAnimationFrame', `return ${script};`);
+          const requestAnimationFrame = (callback: (timestamp: number) => void): number => {
+            callback(0);
+            return 0;
+          };
+          return await evaluate(fakeDocument, requestAnimationFrame) as unknown;
+        },
+        async capturePage() {
+          const layer = findById(body, '__od_export_active_slide_capture');
+          const capturedSlide = layer?.children[0]?.children[0];
+          if (!capturedSlide) throw new Error('capture layer has no active slide');
+          capturedSlides.push(capturedSlide);
+          return { runtimeFrame: capturedSlide.children[0]?.runtimeFrame };
+        },
+      },
+    };
+    const browserWindow = captureWindow as unknown as Parameters<typeof captureDeckSlide>[0];
+    const previousDocument = globalThis.document;
+    Object.assign(globalThis, { document: fakeDocument });
+    try {
+      const firstImage = await captureDeckSlide(
+        browserWindow,
+        null,
+        0,
+        { h: 540, w: 960 },
+      );
+
+      const layer = findById(body, '__od_export_active_slide_capture');
+      const offset = layer?.children[0];
+      const capturedSlide = capturedSlides[0];
+
+      // cloneNode(true) would produce a blank canvas. The live slide must be the
+      // sole paintable capture subtree so its current canvas/WebGL/media state is
+      // preserved without rendering the slide's ordinary DOM twice.
+      expect(capturedSlide).toBe(firstSlide);
+      expect(capturedSlide?.children[0]).toBe(firstCanvas);
+      expect(capturedSlide?.children[0]?.runtimeFrame).toBe(firstRuntimeFrame);
+      expect((firstImage as unknown as { runtimeFrame?: symbol }).runtimeFrame).toBe(
+        firstRuntimeFrame,
+      );
+      // Align from the moved slide's live rect. Reusing the source rect would
+      // apply the translated parent's offset a second time and move it off-screen.
+      expect(offset?.style.getPropertyValue('transform')).toBe('translate(0px, 0px)');
+      expect(offset?.style.getPropertyPriority('transform')).toBe('important');
+
+      const laterImage = await captureDeckSlide(
+        browserWindow,
+        null,
+        1,
+        { h: 540, w: 960 },
+      );
+      const laterLayer = findById(body, '__od_export_active_slide_capture');
+      const laterOffset = laterLayer?.children[0];
+      const laterCapturedSlide = capturedSlides[1];
+
+      // captureDeckSlide() selects through showDeckSlide(), which restores the
+      // first off-stage slide before querying and restacking the second. A lost
+      // runtime frame or wrong selector order makes this later export blank or
+      // duplicate the first page instead of returning populated slide content.
+      expect(laterCapturedSlide).toBe(laterSlide);
+      expect(laterCapturedSlide?.children[0]).toBe(laterCanvas);
+      expect(laterCapturedSlide?.children[0]?.runtimeFrame).toBe(laterRuntimeFrame);
+      expect((laterImage as unknown as { runtimeFrame?: symbol }).runtimeFrame).toBe(
+        laterRuntimeFrame,
+      );
+      expect(laterOffset?.style.getPropertyValue('transform')).toBe('translate(0px, 0px)');
+
+      restoreActiveSlideCapture();
+      expect(body.children).toEqual([firstSlide, laterSlide]);
+      expect(firstSlide.children[0]?.runtimeFrame).toBe(firstRuntimeFrame);
+      expect(laterSlide.children[0]?.runtimeFrame).toBe(laterRuntimeFrame);
+      expect(capturedSlides).toEqual([firstSlide, laterSlide]);
+    } finally {
+      restoreActiveSlideCapture();
+      Object.assign(globalThis, { document: previousDocument });
+    }
   });
 });
 
