@@ -1,8 +1,8 @@
 # Instagram card-news (AI background + Pillow overlay) — craft rules
 
 Brand-agnostic technical constraints for producing an Instagram carousel
-card-news set as final PNG files. Pipeline: AI-generated backgrounds (codex
-built-in `image_gen`) + deterministic Pillow text overlay (the skill's
+card-news set as final PNG files. Pipeline: AI-generated backgrounds (`gti`
+CLI, gpt-5.5 — codex exec fallback) + deterministic Pillow text overlay (the skill's
 `scripts/compose_cards.py`). Brand-specific facts (palette, voice, hook
 formulas, logo asset path, disclaimers, account handle) belong in
 `brands/<brand>/` brand context (core `brand.md` + channel deliverable), NOT here.
@@ -20,7 +20,9 @@ this via center 4:5 crop + LANCZOS resize; never ship a raw generated image.
 
 ## 2. Background generation — portrait, no text
 
-Backgrounds come from codex `image_gen`. Every generation prompt MUST: state
+Backgrounds come from the `gti` CLI (gpt-5.5 — the skill's
+`references/imagegen-pipeline.md` owns the transport contract, including the
+codex exec fallback). Every generation prompt MUST: state
 **portrait orientation** (4:5 is not directly supported — the crop guarantees
 the final ratio); forbid text (**"no text, no letters, no watermark"**); and
 instruct the model to keep that card's text zone simple and calm. The text
@@ -46,7 +48,8 @@ the cover image attached as a visual reference ("same style, same palette").
 Per-card unrelated styles are a fail.
 
 If the brand has a mascot/character (registered in the brand's `brands/<brand>/` context),
-every body-background call must attach TWO view_image references: the cover
+every body-background call must attach TWO image references (gti `--image`;
+view_image on the codex fallback): the cover
 anchor (style/palette) AND the brand character reference asset (identity),
 plus a character-lock clause ("Use the exact same character as in the
 reference image — identical proportions, face, eyes, mouth, colors. Do not

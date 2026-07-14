@@ -6,7 +6,7 @@ description: |
   recommends topics when the brief names none (local publish-history
   dedup + trend scan), gathers primary sources, drafts a card-map plan
   with direction options, gates confirmation, generates AI backgrounds
-  (codex image_gen, cover as style anchor) and composes Korean text via
+  (gti/gpt-5.5, cover as style anchor) and composes Korean text via
   Pillow, then self-reviews on 5 axes including a vision-based design
   check. Works for any brand bound to the project via its injected brand
   context (core + cardnews deliverable). Use when the brief asks for a "카드뉴스", "card news",
@@ -37,8 +37,9 @@ od:
 소스 파일 경로는 그 블록의 Source files 라인)에서 로드한다. **브랜드 사실 하드코딩 금지** — 이
 스킬은 채널 규약만 안다.
 
-**실행 전제** (미충족 시 정직 안내 후 중단 — 대체 생성 경로 없음): codex CLI 0.135+
-로그인(`codex doctor`, `image_generation` 피처) / python3 + Pillow / 한글 폰트
+**실행 전제** (미충족 시 정직 안내 후 중단 — 대체 생성 경로 없음): gti v0.3.1+
+(`gti --version`, Node 20+) + codex 로그인 자격(`~/.codex/auth.json` — gti가 재사용;
+codex CLI 자체는 폴백 전용) / python3 + Pillow / 한글 폰트
 (Pretendard 자동 탐색 → 나눔 폴백 → 설치 안내). 상세: `references/imagegen-pipeline.md`.
 
 ## 7단계
