@@ -30,7 +30,7 @@ import type { UntilSignals } from '../until.js';
 import {
   scanRunEventsForUsageAnalytics,
   type RunEventForAnalyticsObservability,
-} from '../../run-analytics-observability.js';
+} from '../../run/index.js';
 
 type SqliteDb = Database.Database;
 

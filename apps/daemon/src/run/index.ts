@@ -24,6 +24,7 @@ export type {
 // analytics — timing, usage, and runtime-type observability
 export {
   runtimeTypeForRunAnalytics,
+  agentProviderIdForRunAnalytics,
   amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
   scanRunEventsForUsageAnalytics,

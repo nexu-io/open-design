@@ -12,8 +12,7 @@ import {
   readToolUseId,
   WRITE_OR_EDIT_TOOL_NAMES,
 } from './run-artifacts.js';
-import { scanRunEventsForUsageAnalytics } from '../run-analytics-observability.js';
-import { runResultFromStatus } from '../run-result.js';
+import { scanRunEventsForUsageAnalytics, runResultFromStatus } from '../run/index.js';
 
 export interface RunEventRecordLike {
   event: string;
