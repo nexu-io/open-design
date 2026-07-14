@@ -5274,6 +5274,20 @@ export async function startServer({
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
       lifecycle.mark('finalize_start');
+      // Persist the transport-level close mechanism before classifying this
+      // attempt. Runtime fatal/stream signals are only known in the close
+      // handler, and the retry classifier reads this diagnostic to distinguish
+      // them from a generic process exit. Clear the pending value immediately
+      // so a scheduled retry cannot inherit the previous attempt's reason.
+      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
+      design.runs.emit(run, 'diagnostic', {
+        type: 'runtime_close',
+        rpc_close_reason: rpcCloseReason,
+        status,
+        ...(typeof code === 'number' ? { exit_code: code } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -5389,14 +5403,6 @@ export async function startServer({
         publishNativeSessionRecoveryMetadata();
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
-      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
       if (executionProfile === 'filesystem' && result === 'success' && visibleAssistantText.trim().length === 0) {
         const fileNames = filesystemWriteFileNamesFromRunEvents(run.events);
         if (fileNames.length > 0) {
@@ -5413,7 +5419,6 @@ export async function startServer({
           });
         }
       }
-      pendingRpcCloseReason = null;
       design.runs.finish(run, status, code, signal);
       return false;
     };
@@ -6920,7 +6925,6 @@ export async function startServer({
         }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
-          retryable: false,
         }));
         return;
       }
