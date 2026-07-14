@@ -6429,6 +6429,7 @@ function HtmlViewer({
   const [manualEditSaving, setManualEditSaving] = useState(false);
   const manualEditSavingRef = useRef(false);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
+  const [manualEditHasPendingStyleDraft, setManualEditHasPendingStyleDraft] = useState(false);
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
@@ -7778,6 +7779,7 @@ function HtmlViewer({
     setManualEditUndone([]);
     setManualEditError(null);
     manualEditPendingStyleRef.current = null;
+    setManualEditHasPendingStyleDraft(false);
     clearManualEditStyleTimer();
   }, [file.name]);
 
@@ -8032,6 +8034,7 @@ function HtmlViewer({
       manualEditTextCommitInFlightRef.current = null;
       setManualEditError(null);
       manualEditPendingStyleRef.current = null;
+      setManualEditHasPendingStyleDraft(false);
       if (manualEditStyleTimerRef.current) {
         clearTimeout(manualEditStyleTimerRef.current);
         manualEditStyleTimerRef.current = null;
@@ -8181,10 +8184,12 @@ function HtmlViewer({
     const nextPending = cancelManualEditPendingStyleSnapshot(manualEditPendingStyleRef.current, id, keys);
     if (!nextPending) {
       manualEditPendingStyleRef.current = null;
+      setManualEditHasPendingStyleDraft(false);
       clearManualEditStyleTimer();
       return;
     }
     manualEditPendingStyleRef.current = nextPending;
+    setManualEditHasPendingStyleDraft(true);
   }
 
   async function handleManualEditStyleChange(id: string, styles: Partial<ManualEditStyles>, label: string) {
@@ -8195,6 +8200,7 @@ function HtmlViewer({
       : styles;
     const pending: ManualEditPendingStyleSave = { id, styles: pendingStyles, label, version };
     manualEditPendingStyleRef.current = pending;
+    setManualEditHasPendingStyleDraft(true);
     setManualEditError(null);
     previewStyleToIframe(id, styles, version);
   }
@@ -8204,6 +8210,7 @@ function HtmlViewer({
     if (!pending) return true;
     if (manualEditSavingRef.current) return false;
     manualEditPendingStyleRef.current = null;
+    setManualEditHasPendingStyleDraft(false);
     return applyManualEdit({ id: pending.id, kind: 'set-style', styles: pending.styles }, pending.label);
   }
 
@@ -8212,6 +8219,7 @@ function HtmlViewer({
     if (!pending) return;
     clearManualEditStyleTimer();
     manualEditPendingStyleRef.current = null;
+    setManualEditHasPendingStyleDraft(false);
     const base = sourceRef.current ?? '';
     const target = pending.id === '__body__'
       ? null
@@ -8553,6 +8561,7 @@ function HtmlViewer({
       } else if (patch.kind === 'remove-element') {
         if (manualEditPendingStyleRef.current?.id === patch.id) {
           manualEditPendingStyleRef.current = null;
+          setManualEditHasPendingStyleDraft(false);
           clearManualEditStyleTimer();
         }
         selectedManualEditTargetIdRef.current = null;
@@ -8597,9 +8606,18 @@ function HtmlViewer({
     setManualEditHistory([]);
     setManualEditUndone([]);
     manualEditPendingStyleRef.current = null;
+    setManualEditHasPendingStyleDraft(false);
     setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
     setManualEditError(message);
     return false;
+  }
+
+  function handleManualEditUndo() {
+    if (manualEditPendingStyleRef.current) {
+      cancelManualEditStyleDraft();
+      return;
+    }
+    void undoManualEdit();
   }
 
   async function undoManualEdit() {
@@ -8739,6 +8757,70 @@ function HtmlViewer({
     setSlideState({ active: target, count });
     postSlide('go', target);
   }
+
+  const latestUndo = useRef(undoManualEdit);
+  const latestRedo = useRef(redoManualEdit);
+  const latestCancel = useRef(cancelManualEditStyleDraft);
+  // Refs so the keydown handler (registered once) always sees the latest values
+  // without needing to be re-registered on every render.
+  const manualEditModeRef = useRef(manualEditMode);
+  const manualEditCanUndoRef = useRef(manualEditHistory.length > 0);
+  const manualEditCanRedoRef = useRef(manualEditUndone.length > 0);
+
+  latestUndo.current = undoManualEdit;
+  latestRedo.current = redoManualEdit;
+  latestCancel.current = cancelManualEditStyleDraft;
+  manualEditModeRef.current = manualEditMode;
+  manualEditCanUndoRef.current = manualEditHistory.length > 0;
+  manualEditCanRedoRef.current = manualEditUndone.length > 0;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const isModifier = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+
+      // Ctrl+Z / Cmd+Z — undo
+      if (isModifier && !event.shiftKey && key === 'z') {
+        // Only intercept when manual edit actually owns the shortcut.
+        // A pending style draft counts as something to undo even without history.
+        const canUndo =
+          manualEditModeRef.current &&
+          (manualEditCanUndoRef.current || Boolean(manualEditPendingStyleRef.current));
+        if (!canUndo) return;
+        event.preventDefault();
+        if (manualEditPendingStyleRef.current) {
+          // If the user is currently tweaking a color/layout property and
+          // hasn't clicked save yet, Ctrl+Z should undo the draft!
+          latestCancel.current();
+          return;
+        }
+        void latestUndo.current();
+        return;
+      }
+
+      // Ctrl+Shift+Z / Cmd+Shift+Z / Ctrl+Y — redo
+      if (isModifier && ((event.shiftKey && key === 'z') || (!event.shiftKey && key === 'y'))) {
+        const canRedo = manualEditModeRef.current && manualEditCanRedoRef.current;
+        if (!canRedo) return;
+        event.preventDefault();
+        void latestRedo.current();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
     const active = htmlPreviewSlideState.get(previewStateKey)?.active;
@@ -10764,10 +10846,7 @@ function HtmlViewer({
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}
       draft={manualEditDraft}
-      history={manualEditHistory}
       error={manualEditError}
-      canUndo={manualEditHistory.length > 0}
-      canRedo={manualEditUndone.length > 0}
       busy={manualEditSaving}
       resetAvailable={manualEditResetAvailable}
       pageStylesEnabled={manualEditPageStylesEnabled}
@@ -10800,12 +10879,6 @@ function HtmlViewer({
       }}
       onResetDraft={() => {
         void resetManualEditPanelDraft();
-      }}
-      onUndo={() => {
-        void undoManualEdit();
-      }}
-      onRedo={() => {
-        void redoManualEdit();
       }}
       floatingClassName={manualEditPageCardActive ? 'manual-edit-page-card' : undefined}
       floatingStyle={selectedManualEditTarget
@@ -11289,6 +11362,38 @@ function HtmlViewer({
               >
                 <RemixIcon name="edit-line" size={15} />
               </button>
+              {manualEditMode ? (
+                <>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-undo"
+                    data-tooltip={t('manualEdit.undo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.undo')}
+                    aria-label={t('manualEdit.undo')}
+                    disabled={!(manualEditHistory.length > 0 || manualEditHasPendingStyleDraft) || manualEditSaving}
+                    onClick={handleManualEditUndo}
+                  >
+                    <RemixIcon name="arrow-go-back-line" size={15} />
+                  </button>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-redo"
+                    data-tooltip={t('manualEdit.redo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.redo')}
+                    aria-label={t('manualEdit.redo')}
+                    disabled={manualEditUndone.length === 0 || manualEditSaving}
+                    onClick={() => {
+                      void redoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-forward-line" size={15} />
+                  </button>
+                </>
+              ) : null}
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 type="button"

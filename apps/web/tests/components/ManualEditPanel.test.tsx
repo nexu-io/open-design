@@ -576,10 +576,7 @@ describe('ManualEditPanel', () => {
           targets={[target]}
           selectedTarget={selectedTarget}
           draft={draft}
-          history={[]}
           error={null}
-          canUndo={false}
-          canRedo={false}
           resetAvailable={resetAvailable}
           pageStylesEnabled={pageStylesEnabled}
           onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
@@ -592,8 +589,6 @@ describe('ManualEditPanel', () => {
           onCancelDraft={onCancelDraft}
           onSaveDraft={onSaveDraft}
           onResetDraft={onResetDraft}
-          onUndo={vi.fn<() => void>()}
-          onRedo={vi.fn<() => void>()}
           floatingStyle={floatingStyle}
           onFloatingPositionChange={onFloatingPositionChange}
         />,

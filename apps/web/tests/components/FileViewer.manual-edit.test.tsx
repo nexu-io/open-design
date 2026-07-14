@@ -475,6 +475,48 @@ describe('FileViewer manual edit regressions', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('clears a pending style draft without popping history or saving when undoing from the titlebar button', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('<!doctype html><html><body><main data-od-id="hero">First</main></body></html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} />);
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+
+    const baseSizeInput = await findStyleInput('Size');
+    expect((baseSizeInput as HTMLInputElement).value).toBe('');
+
+    // Create pending draft
+    fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    expect((baseSizeInput as HTMLInputElement).value).toBe('18');
+
+    // Click toolbar Undo button
+    const undoBtn = screen.getByRole('button', { name: 'Undo' });
+    expect((undoBtn as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(undoBtn);
+
+    // Draft should be cleared, no save should have happened
+    await waitFor(() => {
+      expect((baseSizeInput as HTMLInputElement).value).toBe('');
+    });
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });
 
 function heroTarget(): ManualEditTarget {

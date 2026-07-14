@@ -89,6 +89,8 @@ export type IconName =
   | 'upload'
   | 'trash'
   | 'volume'
+  | 'undo'
+  | 'redo'
   | 'zoom-in'
   | 'zoom-out';
 
@@ -791,6 +793,20 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M11 5 6 9H2v6h4l5 4z" />
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+      );
+    case 'undo':
+      return (
+        <svg {...common}>
+          <path d="M3 7v6h6" />
+          <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+        </svg>
+      );
+    case 'redo':
+      return (
+        <svg {...common}>
+          <path d="M21 7v6h-6" />
+          <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
         </svg>
       );
     case 'maximize':

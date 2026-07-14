@@ -46,10 +46,7 @@ export function ManualEditPanel({
   targets: ManualEditTarget[];
   selectedTarget: ManualEditTarget | null;
   draft: ManualEditDraft;
-  history: ManualEditHistoryEntry[];
   error: string | null;
-  canUndo: boolean;
-  canRedo: boolean;
   busy?: boolean;
   resetAvailable?: boolean;
   pageStylesEnabled?: boolean;
@@ -68,11 +65,10 @@ export function ManualEditPanel({
   onCancelDraft: () => void;
   onSaveDraft: () => void;
   onResetDraft: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
 }) {
   const t = useT();
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
@@ -149,6 +145,7 @@ export function ManualEditPanel({
             </button>
           ) : null}
           <span title={panelTitle}>{panelTitle}</span>
+          
           {onExit ? (
             <button
               type="button"
@@ -239,51 +236,67 @@ export function ManualEditPanel({
           <div className="manual-edit-footer-actions">
             <div className="manual-edit-footer-left">
               {targetForInspector ? (
-                <button
-                  type="button"
-                  className="manual-edit-delete-btn"
-                  aria-label={t('manualEdit.deleteElement')}
-                  title={t('manualEdit.deleteElement')}
-                  disabled={busy}
-                  onClick={() => {
-                    onApplyPatch(
-                      { id: targetForInspector.id, kind: 'remove-element' },
-                      t('manualEdit.deleteElement'),
-                    );
-                  }}
-                >
-                  <Icon name="trash" size={15} />
-                </button>
+                confirmDelete ? (
+                  <div className="manual-edit-delete-confirm">
+                    <button
+                      type="button"
+                      className="manual-edit-delete-btn manual-edit-delete-confirm-action"
+                      aria-label={t('manualEdit.deleteElement')}
+                      title={t('manualEdit.deleteElement')}
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        onApplyPatch(
+                          { id: targetForInspector.id, kind: 'remove-element' },
+                          t('manualEdit.deleteElement'),
+                        );
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="manual-edit-footer-btn subtle"
+                      disabled={busy}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="manual-edit-delete-btn"
+                    aria-label={t('manualEdit.deleteElement')}
+                    title={t('manualEdit.deleteElement')}
+                    disabled={busy}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                )
               ) : null}
             </div>
-            <div className="manual-edit-footer-right">
-              {resetAvailable ? (
+            {targetForInspector ? (
+              <div className="manual-edit-footer-right">
                 <button
                   type="button"
                   className="manual-edit-footer-btn subtle"
                   disabled={busy}
-                  onClick={onResetDraft}
+                  onClick={onCancelDraft}
                 >
-                  {t('ds.reset')}
+                  {t('common.cancel')}
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className="manual-edit-footer-btn subtle"
-                disabled={busy}
-                onClick={onCancelDraft}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="manual-edit-footer-btn primary"
-                disabled={busy}
-                onClick={onSaveDraft}
-              >
-                {t('common.save')}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="manual-edit-footer-btn primary"
+                  disabled={busy}
+                  onClick={onSaveDraft}
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {error ? <div className="manual-edit-error">{error}</div> : null}
