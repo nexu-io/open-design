@@ -857,6 +857,17 @@ export async function fetchConnectorStatuses(options?: {
 let connectorDiscoveryCache: ConnectorDetail[] | null = null;
 let connectorDiscoveryPromise: Promise<ConnectorDetail[]> | null = null;
 
+/**
+ * The one fetch call site for `/api/connectors/discovery`. Every caller
+ * (including the memory slice's `fetchMemoryConnectors`) must route through
+ * this instead of calling `fetch` directly, so the route keeps a single
+ * transport home no matter how each caller shapes its query string or
+ * handles a failed response.
+ */
+export async function fetchConnectorDiscoveryResponse(query = ''): Promise<Response> {
+  return fetch(`/api/connectors/discovery${query}`);
+}
+
 export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {}): Promise<ConnectorDetail[]> {
   if (options.refresh) {
     connectorDiscoveryCache = null;
@@ -868,7 +879,7 @@ export async function fetchConnectorDiscovery(options: { refresh?: boolean } = {
   const promise = (async () => {
     try {
       const params = options.refresh ? '?refresh=true' : '';
-      const resp = await fetch(`/api/connectors/discovery${params}`);
+      const resp = await fetchConnectorDiscoveryResponse(params);
       if (!resp.ok) return [];
       const json = (await resp.json()) as ConnectorDiscoveryResponse;
       const connectors = json.connectors ?? [];

@@ -28,20 +28,23 @@ import ts from "typescript";
 //      static `import ... from`, a dynamic `import("...")` call, and an
 //      `import("...").Type` type-only reference — all three resolve to the
 //      same file.
-//   4. One transport home per route: a route fetched inside a multi-adapter
-//      provider folder (`providers/<resource>/`) must not also be owned by a
-//      second provider folder. An interpolated route template
-//      (`` `/api/memory/${id}` ``) is normalized to its route family
-//      (`/api/memory/*`) before comparison, so two provider folders templating
-//      the same route family are recognized as owning the same route. A plain
-//      component still fetching that route inline is a tracked backlog
-//      (reported, not failed) — forcing every caller to migrate the instant a
-//      provider home appears would turn a bounded single-file slice PR into an
-//      app-wide flag day.
+//   4. One transport home per route: a route fetched inside a provider
+//      resource home — either a multi-adapter folder (`providers/<resource>/`)
+//      or a flat single-file provider (`providers/<resource>.ts`) — must not
+//      also be owned by a second provider home of either shape. An
+//      interpolated route template (`` `/api/memory/${id}` ``) is normalized
+//      to its route family (`/api/memory/*`) before comparison, so two
+//      provider homes templating the same route family are recognized as
+//      owning the same route. A plain component still fetching that route
+//      inline is a tracked backlog (reported, not failed) — forcing every
+//      caller to migrate the instant a provider home appears would turn a
+//      bounded single-file slice PR into an app-wide flag day.
 //
 // The guard is intentionally scoped to migrated surfaces: it only inspects
-// `features/**` and provider *folders* (flat legacy `providers/*.ts` files are
-// left untouched), so it can ship and enforce slice-by-slice.
+// `features/**` for rules 1–3. Rule 4 also inspects every provider resource
+// home (folder or flat file) directly under `providers/`, since a new slice's
+// provider folder can silently duplicate a route a pre-existing flat provider
+// already owns.
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const webSrcDir = path.join(repoRoot, "apps", "web", "src");
@@ -365,26 +368,46 @@ export function fetchedRoutesOf(sourceText: string, fileName = "test.ts"): strin
   return fetchRouteLiteralsOf(source);
 }
 
-/** Provider *folders* (a multi-adapter resource home: `providers/<x>/index.ts`). */
-async function providerResourceFolders(): Promise<string[]> {
+interface ProviderHome {
+  /** The folder (multi-adapter) or file (flat) path identifying this home. */
+  path: string;
+  /** Every source file that belongs to this home. */
+  files: string[];
+}
+
+/**
+ * Every provider resource home directly under `providers/`: a multi-adapter
+ * folder (`providers/<x>/index.ts`) or a flat single-file provider
+ * (`providers/<x>.ts`). Both shapes are declared resource homes and are
+ * compared against each other for route ownership (rule 4) — a flat file
+ * like `registry.ts` owns its fetched routes exactly like a provider folder
+ * does.
+ */
+async function providerResourceHomes(): Promise<ProviderHome[]> {
   let entries;
   try {
     entries = await readdir(providersDir, { withFileTypes: true });
   } catch {
     return [];
   }
-  const folders: string[] = [];
+  const homes: ProviderHome[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const indexTs = path.join(providersDir, entry.name, "index.ts");
-    try {
-      await readFile(indexTs, "utf8");
-      folders.push(path.join(providersDir, entry.name));
-    } catch {
-      // A folder without an index barrel is not a declared resource home.
+    const fullPath = path.join(providersDir, entry.name);
+    if (entry.isDirectory()) {
+      const indexTs = path.join(fullPath, "index.ts");
+      try {
+        await readFile(indexTs, "utf8");
+      } catch {
+        continue; // A folder without an index barrel is not a declared resource home.
+      }
+      homes.push({ path: fullPath, files: await collectSourceFiles(fullPath) });
+      continue;
+    }
+    if (entry.isFile() && sourceExtensions.has(path.extname(entry.name))) {
+      homes.push({ path: fullPath, files: [fullPath] });
     }
   }
-  return folders;
+  return homes;
 }
 
 // Rules 1–3 for every migrated slice file (transport-free, provider-binding,
@@ -424,24 +447,24 @@ async function parseSourceFile(fullPath: string): Promise<ts.SourceFile> {
 }
 
 async function checkTransportHomes(violations: Violation[]): Promise<void> {
-  const folders = await providerResourceFolders();
-  if (folders.length === 0) return;
+  const homes = await providerResourceHomes();
+  if (homes.length === 0) return;
 
-  // route -> the set of provider resource folders that fetch it.
+  // route -> the set of provider resource homes that fetch it.
   const routeOwners = new Map<string, Set<string>>();
-  for (const folder of folders) {
-    for (const fullPath of await collectSourceFiles(folder)) {
+  for (const home of homes) {
+    for (const fullPath of home.files) {
       const source = await parseSourceFile(fullPath);
       for (const route of fetchRouteLiteralsOf(source)) {
         const owners = routeOwners.get(route) ?? new Set<string>();
-        owners.add(folder);
+        owners.add(home.path);
         routeOwners.set(route, owners);
       }
     }
   }
   if (routeOwners.size === 0) return;
 
-  // Hard rule: a route may have at most ONE provider home. Two provider folders
+  // Hard rule: a route may have at most ONE provider home. Two provider homes
   // fetching the same route is the drift the seam exists to prevent. We do NOT
   // fail on a plain component still fetching an owned route inline: forcing
   // every caller to migrate the instant a provider home appears would turn a
@@ -463,7 +486,7 @@ async function checkTransportHomes(violations: Violation[]): Promise<void> {
   const ownedRoutes = new Set(routeOwners.keys());
   const pending = new Set<string>();
   for (const fullPath of await collectSourceFiles(webSrcDir)) {
-    if (folders.some((folder) => fullPath.startsWith(folder + path.sep))) continue;
+    if (homes.some((home) => fullPath === home.path || fullPath.startsWith(home.path + path.sep))) continue;
     if (fullPath.startsWith(featuresDir + path.sep)) continue;
     const source = await parseSourceFile(fullPath);
     for (const route of fetchRouteLiteralsOf(source)) {

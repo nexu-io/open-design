@@ -6,8 +6,10 @@ import type {
   ConnectorMemorySuggestionResponse,
 } from '@open-design/contracts';
 
+import { fetchConnectorDiscoveryResponse } from '../registry';
+
 export async function fetchMemoryConnectors(): Promise<ConnectorDetail[]> {
-  const resp = await fetch('/api/connectors/discovery?hydrateTools=false');
+  const resp = await fetchConnectorDiscoveryResponse('?hydrateTools=false');
   if (!resp.ok) {
     throw new Error(`Connector discovery request failed (${resp.status})`);
   }
