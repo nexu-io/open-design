@@ -46,6 +46,20 @@ import ts from "typescript";
 // home (folder or flat file) directly under `providers/`, since a new slice's
 // provider folder can silently duplicate a route a pre-existing flat provider
 // already owns.
+//
+// Scope statement: this is a best-effort static-analysis guard, not an
+// adversarial security boundary. It is built to catch the common, accidental
+// ways a normal PR can violate the slice architecture — a forgotten port, a
+// stray deep import, a duplicated `fetch` — and has been hardened over several
+// review rounds against real (non-adversarial) bypasses: path aliases,
+// dynamic imports, `require`/`import =`, `globalThis` bracket access, template
+// routes, flat vs. folder provider homes, JS/JSX/symlinked files. It is NOT
+// designed to withstand a deliberately obfuscated bypass (e.g. an import
+// specifier assembled at runtime from string fragments, reflection, or
+// tooling outside this repo's TS/JS build). Finding a new theoretical gap is
+// useful as a follow-up to extend this file; it is not, on its own, a
+// blocking finding against a PR that isn't the one introducing or exploiting
+// that specific gap.
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const webSrcDir = path.join(repoRoot, "apps", "web", "src");
