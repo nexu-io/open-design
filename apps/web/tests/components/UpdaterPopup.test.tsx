@@ -180,7 +180,7 @@ describe('UpdaterPopup', () => {
     expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并自动重启。')).toBeTruthy();
   });
 
-  it('seeds the default silent-update preference when the prompt first appears unset', async () => {
+  it('seeds the default silent-update preference only after daemon config is ready', async () => {
     const persistSilentUpdates = vi.fn(async () => undefined);
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -190,28 +190,63 @@ describe('UpdaterPopup', () => {
       },
     });
 
-    render(<UpdaterPopup onAllowSilentUpdatesChange={persistSilentUpdates} />);
+    const view = render(
+      <UpdaterPopup onAllowSilentUpdatesChange={persistSilentUpdates} />,
+    );
 
     fireEvent.click(await screen.findByTestId('entry-nav-updater'));
-    const checkbox = screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(true);
+    // Before hydration, undefined must not be treated as "no preference".
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
+
+    view.rerender(
+      <UpdaterPopup
+        silentUpdatePreferenceReady
+        onAllowSilentUpdatesChange={persistSilentUpdates}
+      />,
+    );
     await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(true));
   });
 
-  it('persists silent-update toggles immediately and does not reseed an explicit false', async () => {
-    const install = vi.fn(async () => downloadedStatus({
-      installResult: {
-        dryRun: true,
-        openedAt: '2026-05-19T00:00:00.000Z',
-        path: '/tmp/open-design-updater/Open Design Beta.dmg',
-      },
-    }));
+  it('does not seed true over a daemon opt-out that was temporarily undefined during hydration', async () => {
     const persistSilentUpdates = vi.fn(async () => undefined);
     restoreHost = installMockOpenDesignHost({
       host: {
         updater: {
-          install,
-          quit: vi.fn(async () => ({ ok: true as const })),
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    const view = render(
+      <UpdaterPopup onAllowSilentUpdatesChange={persistSilentUpdates} />,
+    );
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
+
+    // Daemon hydrate lands with an explicit opt-out after the prompt opened.
+    view.rerender(
+      <UpdaterPopup
+        allowSilentUpdates={false}
+        silentUpdatePreferenceReady
+        onAllowSilentUpdatesChange={persistSilentUpdates}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(false);
+    });
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
+  });
+
+  it('persists silent-update toggles immediately and reverts when the save fails', async () => {
+    const persistSilentUpdates = vi.fn((value: boolean) => {
+      if (value === true) return Promise.reject(new Error('daemon offline'));
+      return Promise.resolve();
+    });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
           status: vi.fn(async () => downloadedStatus()),
         },
       },
@@ -220,6 +255,7 @@ describe('UpdaterPopup', () => {
     render(
       <UpdaterPopup
         allowSilentUpdates={false}
+        silentUpdatePreferenceReady
         onAllowSilentUpdatesChange={persistSilentUpdates}
       />,
     );
@@ -229,14 +265,14 @@ describe('UpdaterPopup', () => {
     expect(checkbox.checked).toBe(false);
     expect(persistSilentUpdates).not.toHaveBeenCalled();
 
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
+    await act(async () => {
+      fireEvent.click(checkbox);
+    });
     await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(true));
-
-    fireEvent.click(screen.getByTestId('updater-install-button'));
-    await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
-    // Install still re-persists the current checkbox value (true).
-    await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(true));
+    await waitFor(() => {
+      expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(false);
+    });
+    expect(screen.getByTestId('updater-silent-update-error')).toBeTruthy();
   });
 
   it('renders an explicit disabled silent update preference as unchecked', async () => {
@@ -248,7 +284,7 @@ describe('UpdaterPopup', () => {
       },
     });
 
-    render(<UpdaterPopup allowSilentUpdates={false} />);
+    render(<UpdaterPopup allowSilentUpdates={false} silentUpdatePreferenceReady />);
 
     fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(false);

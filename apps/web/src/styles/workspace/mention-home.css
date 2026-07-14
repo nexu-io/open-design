@@ -382,7 +382,10 @@
 }
 
 .updater-popup__error {
+  margin: 0;
   color: var(--red) !important;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 /* Footer stays a single row: long en labels wrap inside the checkbox column;
@@ -397,11 +400,18 @@
   min-width: 0;
 }
 
+.updater-popup__preference {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .updater-popup__checkbox {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  flex: 1 1 0;
   min-width: 0;
   color: var(--text-muted);
   font-size: 12px;

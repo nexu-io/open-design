@@ -96,6 +96,8 @@ interface Props {
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  /** True after daemon app-config has been fetched (daemon-owned prefs are trustworthy). */
+  daemonConfigLoaded?: boolean;
   onSkillsRefresh?: () => Promise<void> | void;
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
@@ -255,6 +257,7 @@ export function EntryView({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
+  daemonConfigLoaded = false,
   onSkillsRefresh,
   onSkillsChanged,
   onRefreshAgents,
@@ -377,6 +380,7 @@ export function EntryView({
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
       onConfigPersist={onConfigPersist}
+      daemonConfigLoaded={daemonConfigLoaded}
       onSkillsRefresh={onSkillsRefresh}
       onSkillsChanged={onSkillsChanged}
       onRefreshAgents={onRefreshAgents}
