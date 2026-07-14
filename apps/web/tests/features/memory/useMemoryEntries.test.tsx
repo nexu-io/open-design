@@ -132,6 +132,46 @@ describe('useMemoryEntries — reload + filter', () => {
     act(() => result.current.setFilter('project'));
     expect(result.current.filtered.map((e) => e.id)).toEqual(['b']);
   });
+
+  it('ignores a stale reload() that resolves after a newer reload() already committed', async () => {
+    const coord = makeCoord();
+    const forA = deferred<MemoryListResponse>();
+    const forB = deferred<MemoryListResponse>();
+    const fetchMemoryList = vi.fn().mockReturnValueOnce(forA.promise).mockReturnValueOnce(forB.promise);
+    const port = makePort({ fetchMemoryList, fetchMemoryTree: vi.fn(async () => []) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    let reloadA!: Promise<void>;
+    act(() => {
+      reloadA = result.current.reload();
+    });
+    let reloadB!: Promise<void>;
+    act(() => {
+      reloadB = result.current.reload();
+    });
+
+    // The newer request (B) resolves first and commits.
+    await act(async () => {
+      forB.resolve(listResponse({ rootDir: '/memories-b', entries: [summary('b-only')] }));
+      await reloadB;
+    });
+    expect(result.current.rootDir).toBe('/memories-b');
+    expect(coord.hydrateConfig).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rootDir: '/memories-b' }),
+    );
+
+    // The abandoned older request (A) resolves late; it must not overwrite the
+    // newer snapshot or re-hydrate the config flags off stale data.
+    await act(async () => {
+      forA.resolve(listResponse({ rootDir: '/memories-a', entries: [summary('a-only')] }));
+      await reloadA;
+    });
+    expect(result.current.rootDir).toBe('/memories-b');
+    expect(result.current.entries.map((e) => e.id)).toEqual(['b-only']);
+    expect(coord.hydrateConfig).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rootDir: '/memories-b' }),
+    );
+  });
 });
 
 describe('useMemoryEntries — create / delete / index', () => {

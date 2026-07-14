@@ -102,10 +102,15 @@ export function useMemoryExtractions(
 
   const reloadExtractions = useCallback(async () => {
     setIsRefreshing(true);
+    // Capture the revision BEFORE the read starts: mount, SSE frames, and
+    // delete/clear flows can all trigger reload() concurrently, so the fetch
+    // that lands must reconcile against local state rather than overwrite it
+    // — the same seam onDeleteExtraction/clearExtractions already use for
+    // their own recovery reads.
+    const sinceRevision = extractionRevision.current;
     try {
       const next = await port.fetchExtractions();
-      const revision = updateExtractions(next);
-      for (const row of next) rowRevisionRef.current.set(row.id, revision);
+      reconcileConfirmedExtractions(next, sinceRevision);
       setLoadError(null);
       return next;
     } catch {
@@ -116,7 +121,7 @@ export function useMemoryExtractions(
     } finally {
       setIsRefreshing(false);
     }
-  }, [port, updateExtractions]);
+  }, [port, reconcileConfirmedExtractions]);
 
   const applyExtractionEvent = useCallback((ev: MemoryExtractionEvent) => {
     if (!ev || !ev.id) return;
@@ -178,6 +183,12 @@ export function useMemoryExtractions(
         }
       } else {
         pendingDeletionIds.current.delete(id);
+        // Stamp the tombstone now instead of waiting for the SSE 'deleted'
+        // echo: a reload() racing this delete can otherwise resolve with a
+        // pre-delete snapshot after the server has already confirmed removal,
+        // and reconcileConfirmedExtractions would resurrect the row because
+        // deletedAtRevisionRef has no entry for it yet.
+        deletedAtRevisionRef.current.set(id, optimisticRevision);
       }
     },
     [extractions, port, reconcileConfirmedExtractions, updateExtractions],
@@ -207,6 +218,10 @@ export function useMemoryExtractions(
         }
         setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
       }
+    } else {
+      // Stamp the tombstone now instead of waiting for the SSE 'cleared'
+      // echo — see the per-row delete path above for why.
+      clearedAtRevisionRef.current = optimisticRevision;
     }
   }, [extractions, port, reconcileConfirmedExtractions, updateExtractions]);
 

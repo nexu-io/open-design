@@ -99,6 +99,11 @@ export function useMemoryEntries(
   // by id alone can't distinguish that case since both requests share an id.
   const previewRequestTokenRef = useRef(0);
   const editRequestTokenRef = useRef(0);
+  // reload() is the shared read path for mount, SSE change events, save/delete
+  // flows, and connector refreshes, so overlapping calls are expected. Gate
+  // every state commit behind a monotonic token so an older reload() that
+  // resolves after a newer one can never overwrite the fresher snapshot.
+  const reloadRequestTokenRef = useRef(0);
 
   useEffect(() => {
     if (!editingTarget) return;
@@ -113,6 +118,7 @@ export function useMemoryEntries(
   }, [rootDir, fireFlash]);
 
   const reload = useCallback(async () => {
+    const token = ++reloadRequestTokenRef.current;
     try {
       const list = await port.fetchMemoryList();
       // The flat list is the primary saved-memory surface. A tree is an
@@ -124,6 +130,9 @@ export function useMemoryEntries(
       } catch {
         // Keep the last confirmed list and render without tree affordances.
       }
+      // A newer reload() already committed its snapshot; this older response
+      // must not regress it (or hydrateConfig a just-succeeded toggle back).
+      if (reloadRequestTokenRef.current !== token) return;
       hydrateConfig(list);
       setRootDir(list.rootDir);
       setIndex(list.index);
@@ -133,6 +142,7 @@ export function useMemoryEntries(
     } catch {
       // Do not invent an empty "success" response: leave the last confirmed
       // state intact and let the shell render this explicit failure instead.
+      if (reloadRequestTokenRef.current !== token) return;
       setLoadError(LOAD_ERROR_MESSAGE);
     }
   }, [port, hydrateConfig]);

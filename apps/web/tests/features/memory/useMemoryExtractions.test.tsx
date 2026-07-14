@@ -61,6 +61,61 @@ describe('useMemoryExtractions — load + derived', () => {
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
+  it('does not resurrect a row a newer SSE "deleted" frame removed while reloadExtractions() was in flight', async () => {
+    let resolveFetch!: (rows: MemoryExtractionRecord[]) => void;
+    const fetchPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const port = makePort({ fetchExtractions: vi.fn(() => fetchPromise) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloading = result.current.reloadExtractions();
+    });
+    // A live 'deleted' frame removes 'a' while the reload's own read is still
+    // in flight.
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'deleted' })));
+    expect(result.current.extractions).toHaveLength(0);
+
+    // The reload's stale snapshot (fetched before the delete) resolves late.
+    await act(async () => {
+      resolveFetch([record('a')]);
+      await reloading;
+    });
+
+    // The delete landed after the reload's read began, so it must win.
+    expect(result.current.extractions.map((row) => row.id)).not.toContain('a');
+  });
+
+  it('does not regress a newer SSE phase transition with a stale reloadExtractions() snapshot', async () => {
+    let resolveFetch!: (rows: MemoryExtractionRecord[]) => void;
+    const fetchPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const port = makePort({ fetchExtractions: vi.fn(() => fetchPromise) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'running' })));
+
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloading = result.current.reloadExtractions();
+    });
+    // 'a' advances to 'success' while the reload's own read is still in flight.
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'success' })));
+
+    // The reload's stale snapshot (fetched while 'a' was still 'running') resolves late.
+    await act(async () => {
+      resolveFetch([record('a', { phase: 'running' })]);
+      await reloading;
+    });
+
+    // The live phase transition is newer than the reload's read and must not
+    // be regressed back to 'running'.
+    expect(result.current.extractions.find((row) => row.id === 'a')?.phase).toBe('success');
+  });
+
   it('shows the no-provider banner only for the latest skipped/no-provider record', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));
@@ -130,6 +185,43 @@ describe('useMemoryExtractions — delete + clear', () => {
     });
 
     expect(port.deleteExtraction).toHaveBeenCalledWith('a');
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+  });
+
+  it('does not let a racing reloadExtractions() resurrect a row whose delete already succeeded, before the SSE echo arrives', async () => {
+    let resolveFetch!: (rows: MemoryExtractionRecord[]) => void;
+    const fetchPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(async () => true),
+      fetchExtractions: vi.fn(() => fetchPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    // A reload (e.g. from mount) starts and its read is still in flight.
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloading = result.current.reloadExtractions();
+    });
+
+    // The delete succeeds server-side while that reload's read is in flight —
+    // deliberately before any SSE 'deleted' echo for it arrives.
+    await act(async () => {
+      await result.current.onDeleteExtraction('a');
+    });
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+
+    // The reload's snapshot — fetched before the delete completed — resolves late.
+    await act(async () => {
+      resolveFetch([record('a'), record('b')]);
+      await reloading;
+    });
+
+    // The tombstone must be stamped the moment the delete succeeds, not only
+    // when the SSE echo lands, or this stale snapshot resurrects 'a'.
     expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
   });
 
