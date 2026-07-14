@@ -112,6 +112,26 @@ export function UpdaterPopup({
     setAllowSilentUpdatesChecked(allowSilentUpdates ?? true);
   }, [allowSilentUpdates, installState]);
 
+  // Prompt show-up seed: if the preference has never been set, write the default
+  // (true) once. Already-persisted true/false is only read — reopening the
+  // prompt must not clobber the user's choice.
+  useEffect(() => {
+    if (!panelOpen) return;
+    if (allowSilentUpdates !== undefined) return;
+    if (onAllowSilentUpdatesChange == null) return;
+    setAllowSilentUpdatesChecked(true);
+    void Promise.resolve(onAllowSilentUpdatesChange(true)).catch(() => undefined);
+  }, [allowSilentUpdates, onAllowSilentUpdatesChange, panelOpen]);
+
+  const handleSilentUpdatesChange = useCallback(
+    (next: boolean) => {
+      setAllowSilentUpdatesChecked(next);
+      if (onAllowSilentUpdatesChange == null) return;
+      void Promise.resolve(onAllowSilentUpdatesChange(next)).catch(() => undefined);
+    },
+    [onAllowSilentUpdatesChange],
+  );
+
   useEffect(() => {
     let mounted = true;
     const applyStatus = (status: OpenDesignHostUpdaterStatusSnapshot) => {
@@ -329,7 +349,7 @@ export function UpdaterPopup({
             onInstall={() => {
               void installAndQuit();
             }}
-            onSilentUpdatesChange={setAllowSilentUpdatesChecked}
+            onSilentUpdatesChange={handleSilentUpdatesChange}
           />
         ) : null}
       </AnimatePresence>
