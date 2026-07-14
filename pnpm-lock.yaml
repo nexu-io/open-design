@@ -251,6 +251,9 @@ importers:
 
   apps/packaged:
     dependencies:
+      '@open-design/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@open-design/daemon':
         specifier: workspace:*
         version: link:../daemon

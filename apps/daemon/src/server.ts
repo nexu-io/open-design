@@ -582,6 +582,7 @@ import {
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -2569,6 +2570,13 @@ export async function startServer({
     isLocalSameOrigin,
     resolvedPortRef,
   };
+  const attributionService = registerAttributionRoutes(app, {
+    analytics: analyticsService,
+    appConfig: { readAppConfig },
+    http: httpDeps,
+    paths: { RUNTIME_DATA_DIR },
+    env: process.env,
+  });
   const pathDeps = {
     PROJECT_ROOT,
     PROJECTS_DIR,
@@ -2793,7 +2801,15 @@ export async function startServer({
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
   };
-  const appConfigDeps = { readAppConfig, writeAppConfig };
+  const appConfigDeps = {
+    readAppConfig,
+    writeAppConfig,
+    onAppConfigWritten: () => {
+      void attributionService.processPending().catch((err: unknown) => {
+        console.warn('[attribution] pending claim failed', err);
+      });
+    },
+  };
   const orbitDeps = { orbitService };
   const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
   const researchDeps = { searchResearch, ResearchError };

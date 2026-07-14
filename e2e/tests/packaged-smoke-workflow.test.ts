@@ -54,6 +54,8 @@ const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
+const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
+const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
 const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
@@ -1522,8 +1524,10 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, productionWorkflow, script] = await Promise.all([
+    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
       readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
+      readFile(landingPageCiWorkflowPath, "utf8"),
+      readFile(landingPageStagingWorkflowPath, "utf8"),
       readFile(landingPageProductionWorkflowPath, "utf8"),
       readFile(landingPageDailyFeishuScriptPath, "utf8"),
     ]);
@@ -1550,6 +1554,19 @@ process.stdin.on("end", () => {
     expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
     expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
     expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
+
+    // Wrangler Pages ignores custom --config paths. Before every staging
+    // migration/deploy, replace the default config with staging's isolated
+    // bindings so preview/staging traffic can never touch production KV/D1.
+    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
+      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
+      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
+      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
+      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
+      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
+    }
+    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
+    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
 
     expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
     expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');

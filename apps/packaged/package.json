@@ -24,6 +24,7 @@
     "typecheck": "pnpm --filter @open-design/desktop build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/contracts": "workspace:*",
     "@open-design/daemon": "workspace:*",
     "@open-design/desktop": "workspace:*",
     "@open-design/launcher-proto": "workspace:*",

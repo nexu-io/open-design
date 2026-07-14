@@ -60,9 +60,11 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  openExternalUrl,
   uploadProjectFiles,
   replaceProjectWorkingDir,
 } from './providers/registry';
+import { openFirstPartyExternalLinkFromClick } from './first-party-external-link';
 import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
@@ -387,6 +389,15 @@ function AppInner() {
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   useModalWindowDragGuard();
+  useEffect(() => {
+    const onFirstPartyExternalLink = (event: MouseEvent) => openFirstPartyExternalLinkFromClick(
+      event,
+      (url) => { void openExternalUrl(url); },
+    );
+    // React handlers append AMR attribution while the event bubbles; bridge the final URL afterwards.
+    document.addEventListener('click', onFirstPartyExternalLink);
+    return () => document.removeEventListener('click', onFirstPartyExternalLink);
+  }, []);
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
