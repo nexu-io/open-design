@@ -541,7 +541,7 @@ export const playwrightUiScenarios: UiScenario[] = [
   },
   {
     id: 'uploaded-image-renders-in-preview',
-    title: 'Uploaded reference images render correctly in generated deck preview',
+    title: 'Uploaded reference images render correctly in generated page preview',
     kind: 'workspace',
     flow: 'uploaded-image-renders-in-preview',
     automated: true,
@@ -551,7 +551,7 @@ export const playwrightUiScenarios: UiScenario[] = [
       projectName: 'Uploaded image preview render',
       tab: 'prototype',
     },
-    prompt: 'Use uploaded brand images inside a generated deck preview',
+    prompt: 'Use uploaded brand images inside a generated page preview',
     expectedFiles: [
       {
         name: 'brand.png',
@@ -565,7 +565,7 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
     expectedPreviewText: 'Image Preview',
     notes: [
-      'Seeds an image plus relative HTML reference and asserts the preview iframe loads the image.',
+      'Uploads an image through the real Design Files control, references it by generated root-relative HTML path, and asserts the preview iframe decodes it.',
     ],
   },
   {
