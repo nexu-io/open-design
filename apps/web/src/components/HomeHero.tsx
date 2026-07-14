@@ -120,6 +120,9 @@ export interface ExamplePromptInfo {
 
 interface Props {
   active?: boolean;
+  /** Reuse the full composer without repeating the Home brand lockup. */
+  focused?: boolean;
+  hiddenTemplateIds?: string[];
   // Arms the first-run guidance trail (prototype chip → first preset
   // card sheen). Tri-state: true = brand-new user (no projects), false =
   // existing user, undefined = projects still loading — the guide neither
@@ -264,6 +267,8 @@ const EMPTY_CONNECTOR_OPTIONS: ConnectorDetail[] = [];
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
     active = true,
+    focused = false,
+    hiddenTemplateIds = EMPTY_INPUT_NAMES,
     prompt,
     onPromptChange,
     onSubmit,
@@ -633,8 +638,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // Excludes action chips (Brand Kit / Figma) that navigate away instead of
   // seeding a template, so the dropdown matches the rail's template set.
   const templateChips = useMemo(
-    () => orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario'),
-    [],
+    () => orderedCreateChips().filter(
+      (chip) => chip.action.kind === 'apply-scenario' && !hiddenTemplateIds.includes(chip.id),
+    ),
+    [hiddenTemplateIds],
   );
   const activeExamplePlugins = useMemo(
     () =>
@@ -1085,11 +1092,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   let optionRenderIndex = 0;
 
   return (
-    <section className="home-hero" data-testid="home-hero">
-      <span className="home-hero__logo-wrap">
-        <img className="home-hero__logo" src="/logo-03.svg" alt="Open Design" />
-      </span>
-      <h1 className="home-hero__title">{t('homeHero.title')}</h1>
+    <section
+      className={`home-hero${focused ? ' home-hero--focused' : ''}`}
+      data-testid="home-hero"
+    >
+      {focused ? null : (
+        <>
+          <span className="home-hero__logo-wrap">
+            <img className="home-hero__logo" src="/logo-03.svg" alt="Open Design" />
+          </span>
+          <h1 className="home-hero__title">{t('homeHero.title')}</h1>
+        </>
+      )}
 
       <div className="home-hero__composer-card">
       <div
@@ -1745,22 +1759,25 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               {t('homeHero.startWithTemplate')}
               <Icon name="chevron-down" size={13} aria-hidden />
             </button>
-            <span className="home-hero__template-or">or</span>
             {onStartBlankProject ? (
-              <button
-                type="button"
-                className="home-hero__blank-project"
-                data-testid="home-hero-blank-project"
-                onClick={onStartBlankProject}
-              >
-                创建一个空白项目
-                <Icon name="chevron-right" size={13} aria-hidden />
-              </button>
+              <>
+                <span className="home-hero__template-or">or</span>
+                <button
+                  type="button"
+                  className="home-hero__blank-project"
+                  data-testid="home-hero-blank-project"
+                  onClick={onStartBlankProject}
+                >
+                  创建一个空白项目
+                  <Icon name="chevron-right" size={13} aria-hidden />
+                </button>
+              </>
             ) : null}
           </div>
           {templatesExpanded ? (
             <RailGroup
               group="create"
+              hiddenChipIds={hiddenTemplateIds}
               activeChipId={activeChipId}
               pendingChipId={pendingChipId}
               pendingPluginId={pendingPluginId}
@@ -2813,6 +2830,7 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
 
 interface RailGroupProps {
   group: ChipGroup;
+  hiddenChipIds?: string[];
   activeChipId: string | null;
   pendingChipId: string | null;
   pendingPluginId: string | null;
@@ -2829,6 +2847,7 @@ interface RailGroupProps {
 
 function RailGroup({
   group,
+  hiddenChipIds = EMPTY_INPUT_NAMES,
   activeChipId,
   pendingChipId,
   pendingPluginId,
@@ -2844,8 +2863,9 @@ function RailGroup({
   // build scenarios in a fixed order (see `orderedCreateChips`); every other
   // group renders in catalog order.
   const chips = useMemo(
-    () => (group === 'create' ? orderedCreateChips() : chipsForGroup(group)),
-    [group],
+    () => (group === 'create' ? orderedCreateChips() : chipsForGroup(group))
+      .filter((chip) => !hiddenChipIds.includes(chip.id)),
+    [group, hiddenChipIds],
   );
   const isTabs = variant === 'tabs';
 

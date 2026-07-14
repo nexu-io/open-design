@@ -14,6 +14,20 @@ export function Spinner({ size = 14, label }: SpinnerProps) {
   );
 }
 
+/**
+ * Quiet full-page loading indicator. The staggered bars create a soft wave
+ * without exposing implementation progress or adding visible status copy.
+ */
+export function WaveLoader({ label = 'Loading' }: { label?: string }) {
+  return (
+    <span className="loading-wave" role="status" aria-label={label}>
+      {Array.from({ length: 5 }, (_, index) => (
+        <span key={index} aria-hidden />
+      ))}
+    </span>
+  );
+}
+
 interface SkeletonProps {
   width?: number | string;
   height?: number | string;

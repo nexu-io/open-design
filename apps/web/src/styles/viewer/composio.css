@@ -2139,6 +2139,31 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
 }
 .loading-spinner-label { font-size: 12px; }
 
+.loading-wave {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-strong);
+}
+.loading-wave > span {
+  width: 4px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: loading-wave 1s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+  transform-origin: center;
+}
+.loading-wave > span:nth-child(2) { animation-delay: 80ms; }
+.loading-wave > span:nth-child(3) { animation-delay: 160ms; }
+.loading-wave > span:nth-child(4) { animation-delay: 240ms; }
+.loading-wave > span:nth-child(5) { animation-delay: 320ms; }
+
+@keyframes loading-wave {
+  0%, 60%, 100% { height: 10px; opacity: .36; }
+  30% { height: 32px; opacity: 1; }
+}
+
 .skeleton-block,
 .skeleton-shimmer {
   display: inline-block;
@@ -2179,6 +2204,14 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   color: var(--text-muted);
 }
 .centered-loader-label { font-size: 13px; letter-spacing: 0.01em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-wave > span {
+    animation: none;
+    height: 18px;
+    opacity: .7;
+  }
+}
 
 /* ============================================================
    Resizable entry sidebar

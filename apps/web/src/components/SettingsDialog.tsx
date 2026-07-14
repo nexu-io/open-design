@@ -163,6 +163,7 @@ import {
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
+import { NEWSLETTER_EMAIL_RE, subscribeNewsletter } from '../lib/newsletter';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -3569,6 +3570,14 @@ export function SettingsDialog({
                   <p className="hint">完成提示音、浏览器通知和任务状态提醒。</p>
                 </div>
                 <NotificationsSection cfg={cfg} setCfg={setCfg} />
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.onboardingNewsletterTitle')}</h3>
+                  <p className="hint">{t('settings.onboardingNewsletterBody')}</p>
+                </div>
+                <NewsletterSettingsSection />
               </div>
 
               <div className="settings-general-block">
@@ -7847,6 +7856,40 @@ function NotificationsSection({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function NewsletterSettingsSection() {
+  const { t } = useI18n();
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (submitting || !NEWSLETTER_EMAIL_RE.test(email.trim().toLowerCase())) return;
+    setSubmitting(true);
+    await subscribeNewsletter(email);
+    setSubmitting(false);
+  }
+
+  return (
+    <form className="settings-newsletter" onSubmit={(event) => void handleSubmit(event)}>
+      <label className="settings-general-field">
+        <span className="settings-general-label">{t('newsletter.label')}</span>
+        <input
+          className="settings-newsletter__input"
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          placeholder={t('newsletter.placeholder')}
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+      </label>
+      <Button type="submit" disabled={submitting}>
+        {submitting ? t('common.loading') : t('common.save')}
+      </Button>
+    </form>
   );
 }
 

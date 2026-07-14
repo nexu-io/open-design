@@ -99,8 +99,6 @@ import {
   createPluginUseHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
-import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
-import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
@@ -217,13 +215,6 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-// Newsletter signup endpoint. Lives on the marketing site (Cloudflare Pages
-// Function backed by KV), so this is a cross-origin POST from the desktop
-// client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
-// it at a local `wrangler pages dev` instance during development.
-const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
-const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 
@@ -239,7 +230,6 @@ type OnboardingProfileState = {
   orgSize: string;
   useCase: string[];
   source: string;
-  email: string;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -393,7 +383,7 @@ interface Props {
   onCreateDesignSystem?: () => void;
   // NOTE: first-run onboarding intentionally no longer hosts guided
   // design-system creation. The previous step-3 design-system surface was
-  // replaced by the newsletter and brand-extraction steps, so EntryShell does
+  // replaced by the brand-extraction follow-up, so EntryShell does
   // not accept a `renderDesignSystemCreation` renderer. Guided creation stays
   // reachable from the standalone `design-system-create` route and the
   // Design Systems tab; do not re-thread an onboarding renderer here.
@@ -1377,7 +1367,6 @@ function OnboardingView({
   const [amrStatusResolved, setAmrStatusResolved] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
-  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [providerTestState, setProviderTestState] = useState<
@@ -1407,8 +1396,8 @@ function OnboardingView({
     orgSize: '',
     useCase: [] as string[],
     source: '',
-    email: '',
   });
+  const [profileQuestionIndex, setProfileQuestionIndex] = useState(0);
   // Live mirror of `profile` so closures that fire faster than React
   // commits (rapid dropdown picks, the Finish-setup click after the
   // last onChange) read the latest selection instead of the value the
@@ -1669,8 +1658,7 @@ function OnboardingView({
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
     if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    if (stepIdx === 2) return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
-    return { area: 'design_system', stepIndex: '4', stepName: 'design_system' };
+    return { area: 'design_system', stepIndex: '3', stepName: 'design_system' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1764,7 +1752,6 @@ function OnboardingView({
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
-    t('settings.onboardingStepNewsletter'),
     t('settings.onboardingStepDesignSystem'),
   ];
   const isLastStep = step === steps.length - 1;
@@ -1812,6 +1799,56 @@ function OnboardingView({
     { value: 'search', label: t('settings.onboardingSourceSearch') },
     { value: 'event', label: t('settings.onboardingSourceEvent') },
   ];
+  const profileQuestionIds = compactInviteOnboarding
+    ? (['role', 'useCase'] as const)
+    : (['role', 'orgSize', 'useCase', 'source'] as const);
+  const profileQuestionId = profileQuestionIds[profileQuestionIndex] ?? profileQuestionIds[0];
+  const profileQuestions = {
+    role: { label: t('settings.onboardingRoleLabel'), options: roleOptions },
+    orgSize: { label: t('settings.onboardingOrgSizeLabel'), options: orgSizeOptions },
+    useCase: { label: t('settings.onboardingUseCaseLabel'), options: useCaseOptions },
+    source: { label: t('settings.onboardingSourceLabel'), options: sourceOptions },
+  };
+  const profileQuestion = profileQuestions[profileQuestionId];
+
+  function handleProfileQuestionBack(): void {
+    if (profileQuestionIndex === 0) {
+      handleBackWithTracking();
+      return;
+    }
+    emitOnboardingClick('back', 'back');
+    setProfileQuestionIndex((current) => current - 1);
+  }
+
+  function handleProfileQuestionSelect(value: string): void {
+    const current = profileRef.current;
+    const next =
+      profileQuestionId === 'role'
+        ? { ...current, role: value }
+        : profileQuestionId === 'orgSize'
+          ? { ...current, orgSize: value }
+          : profileQuestionId === 'useCase'
+            ? { ...current, useCase: [value] }
+            : { ...current, source: value };
+    profileRef.current = next;
+    setProfile(next);
+
+    if (profileQuestionId === 'role') {
+      emitOnboardingClick('role', 'select_option', { role: value });
+    } else if (profileQuestionId === 'orgSize') {
+      emitOnboardingClick('organization_size', 'select_option', { organization_size: value });
+    } else if (profileQuestionId === 'useCase') {
+      emitOnboardingClick('use_case', 'select_option', { use_case: value });
+    } else {
+      emitOnboardingClick('hear_about_us', 'select_option', { discovery_source: value });
+    }
+
+    if (profileQuestionIndex === profileQuestionIds.length - 1) {
+      void handleFinishToBuild();
+      return;
+    }
+    setProfileQuestionIndex((current) => current + 1);
+  }
 
   function cleanOnboardingOptionLabel(label: string): string {
     const trimmed = label.trim();
@@ -2031,7 +2068,6 @@ function OnboardingView({
   }
 
   function handleBackWithTracking(): void {
-    if (newsletterSubmitting) return;
     // The secondary button only renders for step > 0 — the Connect step has no
     // earlier step and no Skip affordance — so this is always a real Back.
     // (The former step-0 "Skip" path, which emitted the onboarding `skip` /
@@ -2041,7 +2077,6 @@ function OnboardingView({
     setStep((current) => current - 1);
   }
   async function handlePrimaryAction() {
-    if (newsletterSubmitting) return;
     // Connect gate: the button is `aria-disabled` (not natively disabled, so it
     // can still surface its tooltip on hover), so guard the click here — a
     // blocked Continue must not advance past the Connect step.
@@ -2065,9 +2100,6 @@ function OnboardingView({
       return;
     }
     emitOnboardingClick('continue', 'continue');
-    if (step === 1) {
-      void persistOnboardingProfileToMemory();
-    }
     setStep((current) => current + 1);
   }
 
@@ -2099,10 +2131,9 @@ function OnboardingView({
   }
 
   // Shared finish work for the final step, independent of where the user lands
-  // next. Emits the About-you snapshot + completion analytics exactly once
-  // (both are idempotent per session), submits the newsletter if an email was
-  // entered, then clears the session. Reading `profileRef` captures the user's
-  // final picks even on a fast click before React commits the latest state.
+  // next. Emits the About-you snapshot + completion analytics exactly once and
+  // clears the session. Reading `profileRef` captures the user's final picks
+  // even on a fast click before React commits the latest state.
   // Callers pick the destination: home (`onFinish`) or the design-system
   // create flow (`onGoBuild`).
   // `completionType` distinguishes the final-step fork (C2, tracking spec §3.1):
@@ -2114,26 +2145,12 @@ function OnboardingView({
   ): Promise<void> {
     emitAboutYouSubmit();
     void persistOnboardingProfileToMemory();
-    const newsletterEmail = profileRef.current.email;
-    const shouldSubmitNewsletter =
-      NEWSLETTER_EMAIL_RE.test(newsletterEmail.trim().toLowerCase());
-    if (shouldSubmitNewsletter) {
-      setNewsletterSubmitting(true);
-      await submitNewsletterEmail(newsletterEmail);
-    }
     emitOnboardingClick('continue', 'continue');
     emitOnboardingComplete('completed', completionType);
     clearOnboardingSessionId();
   }
 
-  async function handleFinishToHome(): Promise<void> {
-    if (newsletterSubmitting) return;
-    await runOnboardingCompletion('completed_without_design_system');
-    onFinish();
-  }
-
   async function handleFinishToBuild(): Promise<void> {
-    if (newsletterSubmitting) return;
     await runOnboardingCompletion('completed_with_design_system');
     onGoBuild();
   }
@@ -2295,31 +2312,6 @@ function OnboardingView({
       use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
       discovery_source: snapshot.source || 'unknown',
     });
-  }
-
-  // Optional newsletter signup captured on the Newsletter step. The last-step
-  // button shows loading while this settles; failures are swallowed so
-  // onboarding completion never depends on the marketing site. A blank or
-  // malformed email is simply skipped. Only a boolean opt-in is tracked — the
-  // address itself is never sent to analytics.
-  async function submitNewsletterEmail(rawEmail: string): Promise<void> {
-    const email = rawEmail.trim().toLowerCase();
-    if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
-    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
-    try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'client' }),
-        signal: controller.signal,
-      });
-    } catch {
-      // Swallow — onboarding completion must not depend on the marketing site.
-    } finally {
-      window.clearTimeout(timeout);
-    }
   }
 
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
@@ -2502,10 +2494,7 @@ function OnboardingView({
     step,
   ]);
 
-  const onboardingNavigationLocked = newsletterSubmitting;
-  const primaryActionLabel = isLastStep && newsletterSubmitting
-    ? t('common.loading')
-    : step === 0 && amrLoginPending
+  const primaryActionLabel = step === 0 && amrLoginPending
     ? t('settings.amrSigningIn')
     : step === 0 && amrSelectedAndSignedOut
       ? t('settings.amrSignInToContinue')
@@ -2757,227 +2746,35 @@ function OnboardingView({
           ) : null}
 
           {step === 1 ? (
-            <div className="onboarding-view__panel">
+            <div className="onboarding-view__panel onboarding-view__panel--profile-question">
               <button
                 type="button"
                 className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
+                onClick={handleProfileQuestionBack}
               >
                 <Icon name="chevron-left" size={14} />
                 <span>{t('settings.onboardingBack')}</span>
               </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingProfileTitle')}
-                body={t('settings.onboardingProfileBody')}
-              />
-              <div className="onboarding-view__form-grid">
-                <OnboardingChipField
-                  label={t('settings.onboardingRoleLabel')}
-                  value={profile.role}
-                  options={roleOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('role', 'select_option', {
-                        role: value,
-                      });
-                    }
-                    setProfile((current) => ({ ...current, role: value }));
-                  }}
-                />
-                {compactInviteOnboarding ? null : (
-                  <OnboardingChipField
-                    label={t('settings.onboardingOrgSizeLabel')}
-                    value={profile.orgSize}
-                    options={orgSizeOptions}
-                    onChange={(value) => {
-                      if (typeof value === 'string' && value) {
-                        emitOnboardingClick('organization_size', 'select_option', {
-                          organization_size: value,
-                        });
-                      }
-                      setProfile((current) => ({ ...current, orgSize: value }));
-                    }}
-                  />
-                )}
-                <OnboardingChipField
-                  label={t('settings.onboardingUseCaseLabel')}
-                  value={profile.useCase}
-                  options={useCaseOptions}
-                  multiple
-                  onChange={(value) => {
-                    if (!Array.isArray(value)) return;
-                    // Multi-select: emit one click per newly added
-                    // value (delta), not per render of the whole
-                    // selection. The dashboard then sees one row per
-                    // use_case chosen. Compare against `profileRef`
-                    // not `profile` — rapid picks can fire onChange
-                    // before React commits the previous pick, so a
-                    // closure-captured `profile.useCase` is one tick
-                    // behind and re-emits the prior pick on every
-                    // subsequent change.
-                    const previousSet = new Set(profileRef.current.useCase);
-                    for (const v of value) {
-                      if (!previousSet.has(v)) {
-                        emitOnboardingClick('use_case', 'select_option', { use_case: v });
-                      }
-                    }
-                    setProfile((current) => ({ ...current, useCase: value }));
-                  }}
-                />
-                {compactInviteOnboarding ? null : (
-                  <OnboardingChipField
-                    label={t('settings.onboardingSourceLabel')}
-                    value={profile.source}
-                    options={sourceOptions}
-                    onChange={(value) => {
-                      if (typeof value === 'string' && value) {
-                        emitOnboardingClick('hear_about_us', 'select_option', {
-                          discovery_source: value,
-                        });
-                      }
-                      setProfile((current) => ({ ...current, source: value }));
-                    }}
-                  />
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingNewsletterTitle')}
-                body={t('settings.onboardingNewsletterBody')}
-              />
-              <label className="onboarding-view__email-field">
-                <span className="onboarding-view__email-label">
-                  {t('newsletter.label')}
-                </span>
-                <input
-                  className="onboarding-view__email-input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={t('newsletter.placeholder')}
-                  value={profile.email}
-                  onChange={(event) =>
-                    setProfile((current) => ({ ...current, email: event.target.value }))
+              <OnboardingPanelHeader title={profileQuestion.label} body={t('settings.onboardingProfileBody')} />
+              <div className="onboarding-question-flow__options">
+                <OnboardingQuestionChoices
+                  options={profileQuestion.options}
+                  selected={
+                    profileQuestionId === 'role'
+                      ? profile.role
+                      : profileQuestionId === 'orgSize'
+                        ? profile.orgSize
+                        : profileQuestionId === 'useCase'
+                          ? profile.useCase[0] ?? ''
+                          : profile.source
                   }
+                  onSelect={handleProfileQuestionSelect}
                 />
-              </label>
-            </div>
-          ) : null}
-
-
-          {step === 3 ? (
-            <div className="onboarding-view__panel onboarding-view__build">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <span className="onboarding-view__build-badge">
-                <Icon name="sparkles" size={13} aria-hidden />
-                <span>{t('settings.onboardingDesignTitle')}</span>
-              </span>
-              <div className="onboarding-view__build-layout">
-                <div className="onboarding-view__build-copy">
-                  <div className="onboarding-view__build-head">
-                    <h2>{t('onboarding.buildTitle')}</h2>
-                    <p>{t('onboarding.buildBody')}</p>
-                  </div>
-                  <div className="onboarding-view__build-benefits">
-                    <div>
-                      <Icon name="file-text" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitMemoryTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitMemoryBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="swatchbook" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitAlignedTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitAlignedBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="github" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitSourcesTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitSourcesBody')}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="onboarding-view__build-preview" aria-hidden>
-                  <div className="onboarding-view__build-preview-head">
-                    <span />
-                    <span />
-                    <span />
-                    <strong>DESIGN.md</strong>
-                  </div>
-                  <div className="onboarding-view__build-preview-body">
-                    <small>{t('onboarding.buildPreviewLabel')}</small>
-                    <div className="onboarding-view__build-preview-swatches">
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                    <div className="onboarding-view__build-preview-type">
-                      <strong>Aa</strong>
-                      <span>Aa</span>
-                      <em>Aa</em>
-                    </div>
-                    <div className="onboarding-view__build-preview-lines">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <ul className="onboarding-view__build-chips">
-                {ONBOARDING_ARTIFACT_CHIP_IDS.map((chipId) => (
-                  <li key={chipId}>{homeHeroChipLabel(chipId, t)}</li>
-                ))}
-              </ul>
-              <div className="onboarding-view__build-actions">
-                <button
-                  type="button"
-                  className="onboarding-view__secondary"
-                  onClick={() => {
-                    void handleFinishToHome();
-                  }}
-                  disabled={newsletterSubmitting}
-                >
-                  {t('onboarding.buildHome')}
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-view__primary"
-                  onClick={() => {
-                    void handleFinishToBuild();
-                  }}
-                  disabled={newsletterSubmitting}
-                  aria-busy={newsletterSubmitting ? true : undefined}
-                >
-                  <span>{t('onboarding.buildStart')}</span>
-                </button>
               </div>
             </div>
           ) : null}
 
-          {step === 3 ? null : (
+          {step === 1 ? null : (
             <div className="onboarding-view__actions">
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
@@ -3000,11 +2797,10 @@ function OnboardingView({
                   connectGateTooltip ? ' od-tooltip' : ''
                 }`}
                 onClick={handlePrimaryAction}
-                disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
+                disabled={amrLoginPending || amrLoginCancelPending}
                 aria-disabled={connectStepBlocked || undefined}
                 data-tooltip={connectGateTooltip ?? undefined}
                 data-tooltip-placement="top"
-                aria-busy={newsletterSubmitting ? true : undefined}
               >
                 <span>{primaryActionLabel}</span>
               </button>
@@ -3500,61 +3296,28 @@ function OnboardingPanelHeader({ title, body }: { title: string; body: string })
   );
 }
 
-type OnboardingChipFieldProps =
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string;
-      onChange: (value: string) => void;
-      multiple?: false;
-    }
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string[];
-      onChange: (value: string[]) => void;
-      multiple: true;
-    };
-
-// Profile fields render their options as flat toggleable chips so every choice
-// is visible and a selection takes one tap instead of opening a dropdown first.
-function OnboardingChipField(props: OnboardingChipFieldProps) {
-  const { label, options } = props;
-  const selected = props.multiple
-    ? props.value
-    : props.value
-      ? [props.value]
-      : [];
-
+function OnboardingQuestionChoices({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: Array<{ value: string; label: string }>;
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
   return (
-    <div className="onboarding-chip-field">
-      <span className="onboarding-chip-field__label">{label}</span>
-      <div className="onboarding-chip-field__chips">
-        {options.map((option) => {
-          const active = selected.includes(option.value);
-          return (
-            <button
-              type="button"
-              key={option.value}
-              className={`onboarding-chip${active ? ' is-selected' : ''}`}
-              aria-pressed={active}
-              onClick={() => {
-                if (props.multiple) {
-                  props.onChange(
-                    active
-                      ? props.value.filter((value) => value !== option.value)
-                      : [...props.value, option.value],
-                  );
-                } else {
-                  props.onChange(active ? '' : option.value);
-                }
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="onboarding-question-flow__choices">
+      {options.map((option) => (
+        <button
+          type="button"
+          key={option.value}
+          className={`onboarding-chip${selected === option.value ? ' is-selected' : ''}`}
+          aria-pressed={selected === option.value}
+          onClick={() => onSelect(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

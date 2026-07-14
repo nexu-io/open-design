@@ -16,6 +16,10 @@
   min-height: 100%;
   justify-content: center;
 }
+.home-view--focused {
+  min-height: 0;
+  justify-content: flex-start;
+}
 /* The hero block self-constrains to a readable column even though
    its parent now stretches to ~1440px so the plugin gallery can
    spread out. Recent projects + plugins-home keep full width. */
@@ -37,6 +41,10 @@
      (304px left the fold cutting mid-image; -52px aligns it). The parent
      still contributes ~16px above. */
   padding: 281px 0 var(--spacing-4);
+}
+.home-hero--focused {
+  gap: var(--spacing-4);
+  padding: 0;
 }
 .home-hero__brand {
   position: relative;
@@ -663,6 +671,7 @@
   padding: 0;
   font-size: var(--font-size-14);
   font-weight: 500;
+  text-align: left;
 }
 .home-hero__lexical .composer-input-placeholder {
   top: 0;

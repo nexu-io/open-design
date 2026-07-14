@@ -1192,4 +1192,22 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(skipClicks).toHaveLength(0);
     expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
+
+  it('shows no Skip affordance on profile questions', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue \(signed in\)/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Your role' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
+  });
+
 });

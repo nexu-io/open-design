@@ -11,6 +11,8 @@ import {
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
+  resolveDemoArtifactDesignSystemId,
+  resolveDemoComposerDesignSystemId,
 } from '../../src/components/DesignSystemFlow';
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import type { AppConfig, Conversation, DesignSystemDetail, DesignSystemSummary, Project, ProjectFile } from '../../src/types';
@@ -321,6 +323,18 @@ describe('DesignSystemCreationFlow', () => {
   // background.
   // Source-material specs below exercise the current handoff by staging files
   // into the backing brand project after kickoff and before navigation.
+  it('opens the demo composer with a stable mock design system while extraction is pending', () => {
+    expect(resolveDemoComposerDesignSystemId({
+      brandId: 'acme-com',
+      designSystemId: null,
+    })).toBe('demo:acme-com');
+    expect(resolveDemoArtifactDesignSystemId({
+      requestedId: 'demo:acme-com',
+      composerId: 'demo:acme-com',
+      projectDesignSystemId: null,
+    })).toBeNull();
+  });
+
   it('renders the new create surface copy with the active non-English locale', () => {
     render(
       <I18nProvider initial="zh-CN">
