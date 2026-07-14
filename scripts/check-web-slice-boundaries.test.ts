@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
+import { rm, symlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
-import { collectImportBoundaryViolations, fetchedRoutesOf, resolveWebImport } from "./check-web-slice-boundaries.ts";
+import {
+  checkWebSliceBoundaries,
+  collectImportBoundaryViolations,
+  fetchedRoutesOf,
+  resolveWebImport,
+} from "./check-web-slice-boundaries.ts";
 
 const ORCHESTRATOR = "apps/web/src/components/MemorySection.tsx";
 const APP_ROUTE = "apps/web/app/[[...slug]]/page.tsx";
@@ -32,6 +39,15 @@ test("outside-in: an @/-aliased deep import into a slice is rejected too", () =>
   const violations = collectImportBoundaryViolations(
     ORCHESTRATOR,
     "import { useMemoryConfig } from '@/src/features/memory/hooks/useMemoryConfig.hooks';",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("outside-in: a differently cased alias path cannot evade the slice boundary", () => {
+  const violations = collectImportBoundaryViolations(
+    ORCHESTRATOR,
+    "import { useMemoryConfig } from '@/src/FEATURES/memory/hooks/useMemoryConfig.hooks';",
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
@@ -125,6 +141,20 @@ test("provider binding: only dependencies.ts may import providers/ (alias includ
   );
 });
 
+test("provider binding: the exception is limited to the slice-root dependencies.ts", () => {
+  for (const featureFile of [
+    "apps/web/src/features/memory/components/dependencies.ts",
+    "apps/web/src/features/dependencies.ts",
+  ]) {
+    const violations = collectImportBoundaryViolations(
+      featureFile,
+      "import { memoryConfigPort } from '@/src/providers/memory/config';",
+    );
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]?.message ?? "", /only dependencies\.ts may bind a provider/);
+  }
+});
+
 test("bare package specifiers never touch the slice boundary", () => {
   assert.deepEqual(
     collectImportBoundaryViolations(ORCHESTRATOR, "import { useCallback } from 'react';"),
@@ -139,6 +169,34 @@ test("outside-in: a dynamic import() deep-importing a slice is rejected, same as
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("outside-in: CommonJS and TypeScript require forms cannot deep-import a slice", () => {
+  for (const sourceText of [
+    "const memory = require('@/src/features/memory/hooks/useMemoryConfig.hooks');",
+    "import memory = require('@/src/features/memory/hooks/useMemoryConfig.hooks');",
+  ]) {
+    const violations = collectImportBoundaryViolations(ORCHESTRATOR, sourceText);
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+  }
+});
+
+test("outside-in: deep re-exports are blocked while import-looking text is ignored", () => {
+  const reExport = collectImportBoundaryViolations(
+    ORCHESTRATOR,
+    "export { useMemoryConfig } from '@/src/features/memory/hooks/useMemoryConfig.hooks';",
+  );
+  assert.equal(reExport.length, 1);
+  assert.match(reExport[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+
+  assert.deepEqual(
+    collectImportBoundaryViolations(
+      ORCHESTRATOR,
+      "const example = \\\"import x from '@/src/features/memory/hooks/useMemoryConfig.hooks'\\\"; // require('@/src/features/memory/hooks/useMemoryConfig.hooks')",
+    ),
+    [],
+  );
 });
 
 test("outside-in: a dynamic import() of the slice's public barrel is allowed", () => {
@@ -174,6 +232,15 @@ test("transport-free: globalThis.fetch inside a slice file is flagged the same a
   assert.match(qualified[0]?.message ?? "", /uses `fetch`/);
 });
 
+test("transport-free: bracketed globalThis access is flagged too", () => {
+  const violations = collectImportBoundaryViolations(
+    "apps/web/src/features/memory/hooks/useMemoryConfig.hooks.ts",
+    "async function f() { await globalThis['fetch']('/api/memory'); }",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /uses `fetch`/);
+});
+
 test("transport-free: a plain object's own `.window` property is not mistaken for the global", () => {
   const featureFile = "apps/web/src/features/memory/hooks/useMemoryConfig.hooks.ts";
   assert.deepEqual(
@@ -195,4 +262,43 @@ test("fetchedRoutesOf: two differently-shaped interpolations collapse to the SAM
   const b = fetchedRoutesOf("fetch(`/api/memory/${otherId}`, { method: 'DELETE' });");
   assert.deepEqual(a, b);
   assert.deepEqual(a, ["/api/memory/*"]);
+});
+
+test("fetchedRoutesOf: TypeScript assertions do not hide a literal route", () => {
+  assert.deepEqual(fetchedRoutesOf("fetch(('/api/memory/tree' as string));"), ["/api/memory/tree"]);
+});
+
+test("real guard scans JavaScript, symlinked feature files, and qualified provider fetches", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("creating test symlinks needs elevated privileges on some Windows hosts");
+    return;
+  }
+
+  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const featureDir = path.join(repoRoot, "apps/web/src/features");
+  const srcDir = path.join(repoRoot, "apps/web/src");
+  const providersDir = path.join(srcDir, "providers");
+  const paths = {
+    javascriptFeature: path.join(featureDir, "__slice-boundary-fixture__.js"),
+    moduleJavascriptFeature: path.join(featureDir, "__slice-boundary-fixture__.mjs"),
+    jsxFeature: path.join(featureDir, "__slice-boundary-fixture__.jsx"),
+    symlinkedFeature: path.join(featureDir, "__slice-boundary-fixture-link__.ts"),
+    symlinkTarget: path.join(srcDir, "__slice-boundary-fixture-target__.ts"),
+    qualifiedProvider: path.join(providersDir, "__slice-boundary-fixture-qualified.ts"),
+    bareProvider: path.join(providersDir, "__slice-boundary-fixture-bare.ts"),
+  };
+
+  try {
+    await writeFile(paths.javascriptFeature, "fetch('/api/__slice-boundary-js-fixture');\n");
+    await writeFile(paths.moduleJavascriptFeature, "fetch('/api/__slice-boundary-mjs-fixture');\n");
+    await writeFile(paths.jsxFeature, "export const Fixture = <button onClick={() => fetch('/api/__slice-boundary-jsx-fixture')} />;\n");
+    await writeFile(paths.symlinkTarget, "globalThis['fetch']('/api/__slice-boundary-symlink-fixture');\n");
+    await symlink(paths.symlinkTarget, paths.symlinkedFeature);
+    await writeFile(paths.qualifiedProvider, "globalThis['fetch']('/api/__slice-boundary-provider-fixture');\n");
+    await writeFile(paths.bareProvider, "fetch('/api/__slice-boundary-provider-fixture');\n");
+
+    assert.equal(await checkWebSliceBoundaries(), false);
+  } finally {
+    await Promise.all(Object.values(paths).map((fixturePath) => rm(fixturePath, { force: true })));
+  }
 });

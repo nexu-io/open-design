@@ -53,14 +53,23 @@ export function useMemoryExtractions(
   const clearedAtRevisionRef = useRef(0);
   const deletedAtRevisionRef = useRef(new Map<string, number>());
   const rowRevisionRef = useRef(new Map<string, number>());
+  // Mirrors `extractions` synchronously. setExtractions() only ever runs
+  // through updateExtractions() below, so this ref and the state it drives
+  // are always resolved together — callers that need the array a mutation
+  // actually committed (not just a revision number) can read it immediately,
+  // without waiting on React's next render.
+  const extractionsRef = useRef<MemoryExtractionRecord[]>([]);
   const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
     extractionRevision.current += 1;
-    setExtractions(next);
+    const resolved = typeof next === 'function' ? next(extractionsRef.current) : next;
+    extractionsRef.current = resolved;
+    setExtractions(resolved);
     return extractionRevision.current;
   }, []);
   const reconcileConfirmedExtractions = useCallback(
-    (confirmed: MemoryExtractionRecord[], sinceRevision: number) => {
+    (confirmed: MemoryExtractionRecord[], sinceRevision: number): MemoryExtractionRecord[] => {
       const pending = new Set(pendingDeletionIds.current);
+      const confirmedIds = new Set(confirmed.map((row) => row.id));
       // A clear that landed after this recovery began supersedes the whole
       // confirmed snapshot — nothing from it should come back.
       const accepted =
@@ -79,11 +88,17 @@ export function useMemoryExtractions(
       const revision = updateExtractions((current) => {
         // Live rows keep their newest-first positions (taking the confirmed
         // content where the snapshot is still authoritative for that id, and
-        // never resurrecting a row another optimistic delete still owns);
-        // rows the snapshot restores slot back in by start time so they never
-        // jump ahead of frames that arrived after the recovery read.
+        // never resurrecting a row another optimistic delete still owns).
+        // A row the confirmed read no longer has (evicted server-side, or
+        // removed by another client) is dropped too, UNLESS a local change
+        // advanced it after this read began — then the read simply hasn't
+        // caught up yet and the local copy must survive.
         const survivors = current
-          .filter((row) => !pending.has(row.id))
+          .filter((row) => {
+            if (pending.has(row.id)) return false;
+            if (confirmedIds.has(row.id)) return true;
+            return (rowRevisionRef.current.get(row.id) ?? 0) > sinceRevision;
+          })
           .map((row) => acceptedById.get(row.id) ?? row);
         const survivorIds = new Set(survivors.map((row) => row.id));
         const merged = [...survivors];
@@ -96,6 +111,7 @@ export function useMemoryExtractions(
         return merged;
       });
       for (const row of accepted) rowRevisionRef.current.set(row.id, revision);
+      return extractionsRef.current;
     },
     [updateExtractions],
   );
@@ -110,9 +126,12 @@ export function useMemoryExtractions(
     const sinceRevision = extractionRevision.current;
     try {
       const next = await port.fetchExtractions();
-      reconcileConfirmedExtractions(next, sinceRevision);
+      // Return what actually got committed, not the raw fetch — reconciliation
+      // can drop/keep rows differently than the raw response (a real caller,
+      // useMemoryConnectors, reads this return value directly).
+      const merged = reconcileConfirmedExtractions(next, sinceRevision);
       setLoadError(null);
-      return next;
+      return merged;
     } catch {
       // Keep the last confirmed history instead of presenting a synthetic empty
       // list when the daemon cannot be reached.

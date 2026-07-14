@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
 
@@ -12,7 +12,8 @@ import ts from "typescript";
 //   1. Slice files are transport-free — no `fetch`, `EventSource`,
 //      `XMLHttpRequest`, `WebSocket`, `localStorage`, `sessionStorage`,
 //      `window`, or `document`, whether reached as a bare identifier or
-//      qualified through `globalThis.<name>`. Transport lives behind a
+//      qualified through `globalThis.<name>` or `globalThis["name"]`.
+//      Transport lives behind a
 //      provider + port.
 //   2. Only a slice's `dependencies.ts` may import from `providers/`. Every
 //      other feature file depends on the port, not the adapter.
@@ -59,7 +60,10 @@ const WEB_ROOT_REL = "apps/web";
 const FEATURES_REL = "apps/web/src/features";
 const PROVIDERS_REL = "apps/web/src/providers";
 
-const sourceExtensions = new Set([".ts", ".tsx"]);
+// `allowJs` is enabled by apps/web/tsconfig.json, and TypeScript accepts the
+// Node module suffixes too. Every source extension it can include must be
+// scanned; otherwise changing a feature or provider's suffix becomes a bypass.
+const sourceExtensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
 
 // Bare globals that count as transport/DOM reach when used inside a slice file.
 const forbiddenSliceGlobals = new Set([
@@ -84,14 +88,21 @@ function repositoryPath(fullPath: string): string {
 }
 
 function scriptKindFor(fileName: string): ts.ScriptKind {
-  return fileName.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  if (fileName.endsWith(".tsx") || fileName.endsWith(".jsx")) return ts.ScriptKind.TSX;
+  return /\.(?:js|mjs|cjs)$/.test(fileName) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
 }
 
 function lineOf(source: ts.SourceFile, position: number): number {
   return source.getLineAndCharacterOfPosition(position).line + 1;
 }
 
-async function collectSourceFiles(directory: string): Promise<string[]> {
+async function collectSourceFiles(directory: string, ancestorDirectories = new Set<string>()): Promise<string[]> {
+  // readdir's Dirent methods do not follow symlinks. A symlinked feature file
+  // or directory still participates in the module graph at its lexical path,
+  // so follow it while tracking real ancestor directories to avoid cycles.
+  const realDirectory = await realpath(directory).catch(() => directory);
+  if (ancestorDirectories.has(realDirectory)) return [];
+  const nextAncestors = new Set(ancestorDirectories).add(realDirectory);
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
@@ -103,7 +114,16 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "node_modules" || entry.name === "dist") continue;
-      files.push(...(await collectSourceFiles(fullPath)));
+      files.push(...(await collectSourceFiles(fullPath, nextAncestors)));
+      continue;
+    }
+    if (entry.isSymbolicLink()) {
+      const target = await stat(fullPath).catch(() => null);
+      if (target?.isDirectory()) {
+        files.push(...(await collectSourceFiles(fullPath, nextAncestors)));
+      } else if (target?.isFile() && sourceExtensions.has(path.extname(entry.name))) {
+        files.push(fullPath);
+      }
       continue;
     }
     if (entry.isFile() && sourceExtensions.has(path.extname(entry.name))) {
@@ -114,7 +134,13 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
 }
 
 function isUnderRel(candidate: string, root: string): boolean {
-  return candidate === root || candidate.startsWith(root + "/");
+  const normalizedCandidate = candidate.toLowerCase();
+  const normalizedRoot = root.toLowerCase();
+  return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(normalizedRoot + "/");
+}
+
+function isSameRelPath(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
 }
 
 /**
@@ -126,12 +152,12 @@ function isUnderRel(candidate: string, root: string): boolean {
 function sliceOfRel(rel: string): string | null {
   if (!isUnderRel(rel, FEATURES_REL) || rel === FEATURES_REL) return null;
   const segments = rel.slice(FEATURES_REL.length + 1).split("/");
-  return segments.length > 1 ? (segments[0] ?? null) : null;
+  return segments.length > 1 ? (segments[0]?.toLowerCase() ?? null) : null;
 }
 
 function isSliceBarrelImport(resolved: string, slice: string): boolean {
   const barrel = `${FEATURES_REL}/${slice}`;
-  return resolved === barrel || resolved === `${barrel}/index`;
+  return isSameRelPath(resolved, barrel) || isSameRelPath(resolved, `${barrel}/index`);
 }
 
 /**
@@ -181,7 +207,11 @@ export function collectImportBoundaryViolations(
 
   const isFeatureFile = isUnderRel(importerRepoPath, FEATURES_REL) && importerRepoPath !== FEATURES_REL;
   const importerSlice = isFeatureFile ? sliceOfRel(importerRepoPath) : null;
-  const isDependenciesFile = path.posix.basename(importerRepoPath) === "dependencies.ts";
+  // The provider-binding exception is for a slice's root binder only. A
+  // nested `components/dependencies.ts` (or a loose features/dependencies.ts)
+  // is not that binder and must not become an alternate transport home.
+  const isDependenciesFile =
+    importerSlice !== null && isSameRelPath(importerRepoPath, `${FEATURES_REL}/${importerSlice}/dependencies.ts`);
 
   // Rule 1 — transport/DOM globals are not allowed in slice files.
   if (isFeatureFile) {
@@ -241,12 +271,11 @@ export function collectImportBoundaryViolations(
 
 /**
  * Every module specifier a file resolves to at build/runtime: static
- * `import`/`export ... from "..."` declarations, dynamic `import("...")`
- * calls, and `import("...").Type` type-only references. A slice boundary
- * enforced only against the static form is not enforced — a deep import
- * rewritten as `await import("@/src/features/<slice>/hooks/...")` or an
- * `import("...").SomeType` type reference would resolve to the exact same
- * file and must be checked identically.
+ * `import`/`export ... from "..."` declarations, CommonJS/TypeScript require
+ * forms, dynamic `import("...")` calls, and `import("...").Type` type-only
+ * references. A slice boundary enforced only against one syntactic form is
+ * not enforced — every form resolves to the same file and must be checked
+ * identically.
  */
 function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; node: ts.Node }> {
   const specifiers: Array<{ specifier: string; node: ts.Node }> = [];
@@ -258,8 +287,16 @@ function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; n
     ) {
       specifiers.push({ specifier: node.moduleSpecifier.text, node });
     } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteralLike(node.moduleReference.expression)
+    ) {
+      specifiers.push({ specifier: node.moduleReference.expression.text, node });
+    } else if (
       ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require")) &&
       node.arguments[0] &&
       ts.isStringLiteralLike(node.arguments[0])
     ) {
@@ -305,15 +342,11 @@ function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
     const firstArg = ts.isCallExpression(node) ? node.arguments[0] : undefined;
     if (
       ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "fetch" &&
+      isGlobalFetchExpression(node.expression) &&
       firstArg
     ) {
-      if (ts.isStringLiteralLike(firstArg)) {
-        routes.push(firstArg.text);
-      } else if (ts.isTemplateExpression(firstArg)) {
-        routes.push(templateRouteFamily(firstArg));
-      }
+      const route = routeLiteralOf(firstArg);
+      if (route !== null) routes.push(route);
     }
     ts.forEachChild(node, visit);
   };
@@ -321,23 +354,59 @@ function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
   return routes;
 }
 
+/** Literal routes remain literal when parenthesized or narrowed with TS syntax. */
+function routeLiteralOf(expression: ts.Expression): string | null {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  if (ts.isStringLiteralLike(current)) return current.text;
+  return ts.isTemplateExpression(current) ? templateRouteFamily(current) : null;
+}
+
+/** Direct `fetch` and its `globalThis.fetch` / `globalThis["fetch"]` twins. */
+function isGlobalFetchExpression(expression: ts.Expression): boolean {
+  return (
+    (ts.isIdentifier(expression) && expression.text === "fetch") || globalThisPropertyName(expression) === "fetch"
+  );
+}
+
+/** The statically named member read directly from globalThis, if any. */
+function globalThisPropertyName(node: ts.Node): string | null {
+  if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "globalThis") {
+    return node.name.text;
+  }
+  if (
+    ts.isElementAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "globalThis" &&
+    node.argumentExpression &&
+    ts.isStringLiteralLike(node.argumentExpression)
+  ) {
+    return node.argumentExpression.text;
+  }
+  return null;
+}
+
 /**
  * Bare-identifier uses of a forbidden global (not a property name / import),
- * plus the qualified `globalThis.<forbidden>` form. A bare `fetch` and
- * `globalThis.fetch` reach the exact same transport; scoping the check to
- * unqualified identifiers alone would let `globalThis.<global>` stand in as
+ * plus the qualified `globalThis.<forbidden>` and `globalThis["forbidden"]`
+ * forms. A bare `fetch` and either globalThis form reach the exact same
+ * transport; scoping the check to unqualified identifiers alone would leave
  * an unchecked alias for every forbidden global.
  */
 function forbiddenGlobalUses(source: ts.SourceFile): Array<{ name: string; position: number }> {
   const uses: Array<{ name: string; position: number }> = [];
   const visit = (node: ts.Node): void => {
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "globalThis" &&
-      forbiddenSliceGlobals.has(node.name.text)
-    ) {
-      uses.push({ name: node.name.text, position: node.name.getStart(source) });
+    const globalThisProperty = globalThisPropertyName(node);
+    if (globalThisProperty && forbiddenSliceGlobals.has(globalThisProperty)) {
+      uses.push({ name: globalThisProperty, position: node.getStart(source) });
       return;
     }
     if (ts.isIdentifier(node) && forbiddenSliceGlobals.has(node.text)) {

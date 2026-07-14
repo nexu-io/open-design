@@ -48,6 +48,66 @@ describe('useMemoryExtractions — load + derived', () => {
     expect(result.current.isRefreshing).toBe(false);
   });
 
+  it('drops a row the confirmed snapshot no longer has, when nothing local advanced it after the read began', async () => {
+    // 'a' fell off the server (capacity eviction, or removed by another
+    // client) without ever going through this client's own delete/clear.
+    const port = makePort({ fetchExtractions: vi.fn(async () => [record('b')]) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    await act(async () => {
+      await result.current.reloadExtractions();
+    });
+
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+  });
+
+  it("reloadExtractions()'s return value reflects what actually committed, not the raw fetch response", async () => {
+    let resolveDelete!: (ok: boolean) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    let resolveReload!: (rows: MemoryExtractionRecord[]) => void;
+    const reloadPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveReload = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => reloadPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let deletion!: Promise<void>;
+    act(() => {
+      deletion = result.current.onDeleteExtraction('a');
+    });
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloading = result.current.reloadExtractions();
+    });
+
+    let returned: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      // The reload's server read still includes 'a' — the delete hasn't been
+      // confirmed server-side yet — but the local pending deletion must win.
+      resolveReload([record('a'), record('b')]);
+      returned = await reloading;
+    });
+
+    // The pre-fix code returned the raw fetch response here; it must instead
+    // reflect the reconciled result the hook actually committed to state.
+    expect(returned.map((r) => r.id)).not.toContain('a');
+    expect(result.current.extractions.map((r) => r.id)).toEqual(returned.map((r) => r.id));
+
+    await act(async () => {
+      resolveDelete(true);
+      await deletion;
+    });
+  });
+
   it('keeps the prior rows and exposes a failure when the history reload rejects', async () => {
     const port = makePort({ fetchExtractions: vi.fn(async () => { throw new Error('offline'); }) });
     const { result } = renderHook(() => useMemoryExtractions(port));
