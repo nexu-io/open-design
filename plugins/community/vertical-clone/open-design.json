@@ -1,0 +1,79 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "vertical-clone",
+  "title": "Vertical — Framer portfolio clone",
+  "title_i18n": {
+    "en": "Vertical — Framer portfolio clone",
+    "zh-CN": "Vertical — Framer 作品集复刻",
+    "ko": "Vertical — Framer 포트폴리오 클론"
+  },
+  "version": "0.1.0",
+  "description": "Faithful visual clone of vertical.framer.media — a 14-section dark/green editorial portfolio with self-hosted Figtree + Fragment Mono fonts, 42 real photos, 3 background videos, and Lenis smooth scroll. Packaged from a finished Open Design project (index.html + styles.css + 107 harvested assets).",
+  "description_i18n": {
+    "en": "Faithful visual clone of vertical.framer.media — a 14-section dark/green editorial portfolio with self-hosted Figtree + Fragment Mono fonts, 42 real photos, 3 background videos, and Lenis smooth scroll. Packaged from a finished Open Design project (index.html + styles.css + 107 harvested assets).",
+    "zh-CN": "vertical.framer.media 的忠实视觉复刻——14 段深黑/电光绿编辑型作品集，自托管 Figtree + Fragment Mono 字体、42 张真实摄影、3 段背景视频，以及 Lenis 惯性滚动。由已完成的 Open Design 项目（index.html + styles.css + 107 个收获资产）打包而成。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OneHub",
+    "url": "https://github.com/ryanjordan11"
+  },
+  "homepage": "https://github.com/ryanjordan11/vertical-clone",
+  "plugin": {
+    "repo": "github:ryanjordan11/vertical-clone"
+  },
+  "tags": [
+    "website-clone",
+    "framer",
+    "editorial",
+    "portfolio",
+    "dark-theme",
+    "visual-recreation",
+    "html"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "scenario",
+    "scenario": "plugin-sharing",
+    "preview": {
+      "type": "html",
+      "entry": "examples/vertical-clone/index.html",
+      "motion": "scroll"
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Package the vertical.framer.media clone I just finished (index.html + styles.css + 107 harvested assets) as an Open Design plugin so I can install it into My plugins and open a PR to the Open Design community catalog.",
+        "zh-CN": "把我刚做完的 vertical.framer.media 复刻（index.html + styles.css + 107 个收获资产）打包成 Open Design 插件，让我能安装到 My plugins 并提交 PR 到 Open Design 社区目录。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "examples/vertical-clone/index.html",
+          "title": "Vertical — faithful Framer portfolio clone"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "sourceUrl",
+        "type": "string",
+        "required": false,
+        "label": "Source URL",
+        "placeholder": "https://vertical.framer.media/"
+      }
+    ]
+  }
+}
