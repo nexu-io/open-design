@@ -90,6 +90,11 @@ export function useMemoryEntries(
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorNameRef = useRef<HTMLInputElement | null>(null);
   const editingTarget = editing?.id ?? (editing ? 'new' : null);
+  // Track the id each in-flight fetchMemoryEntry() call is for, so a stale
+  // response from an abandoned preview/edit selection can't clobber a newer
+  // one that resolved first.
+  const latestPreviewRequestRef = useRef<string | null>(null);
+  const latestEditRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!editingTarget) return;
@@ -152,13 +157,16 @@ export function useMemoryEntries(
   const openPreview = useCallback(
     async (id: string) => {
       if (previewId === id) {
+        latestPreviewRequestRef.current = null;
         setPreviewId(null);
         setPreviewBody(null);
         return;
       }
+      latestPreviewRequestRef.current = id;
       setPreviewId(id);
       setPreviewBody(null);
       const entry = await port.fetchMemoryEntry(id);
+      if (latestPreviewRequestRef.current !== id) return;
       setPreviewBody(entry?.body ?? '');
     },
     [previewId, port],
@@ -166,8 +174,9 @@ export function useMemoryEntries(
 
   const startEdit = useCallback(
     async (id: string) => {
+      latestEditRequestRef.current = id;
       const entry = await port.fetchMemoryEntry(id);
-      if (!entry) return;
+      if (!entry || latestEditRequestRef.current !== id) return;
       openEditor();
       setEditing({
         id: entry.id,
@@ -181,11 +190,13 @@ export function useMemoryEntries(
   );
 
   const startNew = useCallback(() => {
+    latestEditRequestRef.current = null;
     openEditor();
     setEditing({ ...EMPTY_DRAFT });
   }, [openEditor]);
 
   const cancelEdit = useCallback(() => {
+    latestEditRequestRef.current = null;
     setEditing(null);
   }, []);
 

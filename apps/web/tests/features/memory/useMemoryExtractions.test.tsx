@@ -316,6 +316,46 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
+  it('reconciles a newer SSE row into the recovered list when a failed clear\'s recovery fetch succeeds after an intervening event', async () => {
+    let resolveClear!: (value: boolean) => void;
+    let resolveRecovery!: (value: MemoryExtractionRecord[]) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const port = makePort({
+      clearExtractionHistory: vi.fn(() => clearPromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let clearing: Promise<void>;
+    act(() => {
+      clearing = result.current.clearExtractions();
+    });
+    // A live event arrives while the failed clear is waiting on its recovery
+    // fetch, advancing the revision past the clear's optimistic snapshot.
+    act(() => result.current.applyExtractionEvent(record('newer', { phase: 'running' })));
+
+    await act(async () => {
+      resolveClear(false);
+      await Promise.resolve();
+      // The daemon's confirmed history still has the original row 'a' — the
+      // clear was rejected server-side.
+      resolveRecovery([record('a')]);
+      await clearing!;
+    });
+
+    // Both the confirmed 'a' row and the newer live-arrived row must survive;
+    // the recovery must reconcile instead of being dropped by the stale
+    // revision check or overwriting the newer SSE state.
+    expect(result.current.extractions.map((row) => row.id).sort()).toEqual(['a', 'newer']);
+    expect(result.current.loadError).toBeNull();
+  });
+
   it('ignores an extraction event with no id', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));

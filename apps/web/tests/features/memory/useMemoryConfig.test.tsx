@@ -15,6 +15,15 @@ function makePort(patchConfig = vi.fn(async () => true)): MemoryConfigPort {
   return { patchConfig };
 }
 
+/** A promise plus its own resolve, so a test can control exactly when a PATCH settles. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 function listResponse(over: Partial<MemoryListResponse> = {}): MemoryListResponse {
   return {
     enabled: true,
@@ -108,6 +117,71 @@ describe('useMemoryConfig', () => {
       await result.current.onToggleHook('verifyEnabled', false);
     });
     expect(result.current.hookFlags.verifyEnabled).toBe(false);
+  });
+
+  it('settles the master switch at true when two overlapping PATCHes both fail, regardless of resolution order', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    // true -> false (request A), then immediately false -> true (request B),
+    // before either PATCH has settled.
+    let toggleA!: Promise<void>;
+    let toggleB!: Promise<void>;
+    act(() => {
+      toggleA = result.current.onToggleEnabled(false);
+    });
+    act(() => {
+      toggleB = result.current.onToggleEnabled(true);
+    });
+    expect(result.current.enabled).toBe(true);
+
+    // Request A (the stale one) settles first and fails.
+    await act(async () => {
+      first.resolve(false);
+      await toggleA;
+    });
+    // A must not clobber B's still-pending optimistic value.
+    expect(result.current.enabled).toBe(true);
+
+    // Request B (the latest one) settles last and also fails.
+    await act(async () => {
+      second.resolve(false);
+      await toggleB;
+    });
+    // Neither PATCH was ever accepted by the server, so the switch must land
+    // back on the original confirmed value, not on request A's own guess.
+    expect(result.current.enabled).toBe(true);
+  });
+
+  it('settles a per-hook flag at its confirmed value when two overlapping PATCHes both fail, regardless of resolution order', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    let toggleA!: Promise<void>;
+    let toggleB!: Promise<void>;
+    act(() => {
+      toggleA = result.current.onToggleHook('profileEnabled', false);
+    });
+    act(() => {
+      toggleB = result.current.onToggleHook('profileEnabled', true);
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
+
+    await act(async () => {
+      first.resolve(false);
+      await toggleA;
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
+
+    await act(async () => {
+      second.resolve(false);
+      await toggleB;
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
   });
 
   it('hydrate maps a list response onto every flag (missing => true)', () => {

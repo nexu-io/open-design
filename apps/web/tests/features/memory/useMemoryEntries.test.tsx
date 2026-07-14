@@ -71,6 +71,15 @@ function savedEntry(over: Partial<MemoryEntry> = {}): MemoryEntry {
   return { ...summary('saved'), body: 'body', ...over };
 }
 
+/** A promise plus its own resolve, so a test can control exactly when fetchMemoryEntry() settles. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('useMemoryEntries — reload + filter', () => {
   it('reload hydrates config from the shared GET and fills list state', async () => {
     const coord = makeCoord();
@@ -231,6 +240,70 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
       await result.current.openPreview('gone');
     });
     expect(result.current.previewBody).toBe('');
+  });
+
+  it('ignores a stale openPreview() resolution when the user already moved on to a newer id', async () => {
+    const forA = deferred<MemoryEntry | null>();
+    const forB = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi.fn((id: string) => (id === 'a' ? forA.promise : forB.promise));
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    let openA!: Promise<void>;
+    let openB!: Promise<void>;
+    act(() => {
+      openA = result.current.openPreview('a');
+    });
+    act(() => {
+      openB = result.current.openPreview('b');
+    });
+    expect(result.current.previewId).toBe('b');
+
+    // The abandoned request for 'a' resolves AFTER the newer request for 'b'.
+    await act(async () => {
+      forB.resolve(savedEntry({ id: 'b', body: 'body b' }));
+      await openB;
+    });
+    expect(result.current.previewBody).toBe('body b');
+
+    await act(async () => {
+      forA.resolve(savedEntry({ id: 'a', body: 'body a' }));
+      await openA;
+    });
+    // The stale 'a' response must not overwrite the current 'b' preview.
+    expect(result.current.previewId).toBe('b');
+    expect(result.current.previewBody).toBe('body b');
+  });
+
+  it('ignores a stale startEdit() resolution when the user already moved on to a newer id', async () => {
+    const coord = makeCoord();
+    const forA = deferred<MemoryEntry | null>();
+    const forB = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi.fn((id: string) => (id === 'a' ? forA.promise : forB.promise));
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    let editA!: Promise<void>;
+    let editB!: Promise<void>;
+    act(() => {
+      editA = result.current.startEdit('a');
+    });
+    act(() => {
+      editB = result.current.startEdit('b');
+    });
+
+    await act(async () => {
+      forB.resolve(savedEntry({ id: 'b', name: 'Entry B' }));
+      await editB;
+    });
+    expect(result.current.editing?.id).toBe('b');
+
+    await act(async () => {
+      forA.resolve(savedEntry({ id: 'a', name: 'Entry A' }));
+      await editA;
+    });
+    // The stale 'a' response must not clobber the newer 'b' draft.
+    expect(result.current.editing?.id).toBe('b');
   });
 
   it('startEdit opens the editor for a found entry and no-ops when missing', async () => {

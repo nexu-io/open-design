@@ -153,9 +153,11 @@ export function useMemoryExtractions(
     if (!ok) {
       try {
         const confirmed = await port.fetchExtractions();
-        if (extractionRevision.current === optimisticRevision) {
-          updateExtractions(confirmed);
-        }
+        // Reconcile rather than overwrite: a newer SSE frame may have already
+        // advanced the revision while this recovery fetch was in flight, and
+        // dropping the confirmed response entirely would leave the failed
+        // clear's rows missing from state.
+        reconcileConfirmedExtractions(confirmed);
         setLoadError(null);
       } catch {
         if (extractionRevision.current === optimisticRevision) {
@@ -164,7 +166,7 @@ export function useMemoryExtractions(
         setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
       }
     }
-  }, [extractions, port, updateExtractions]);
+  }, [extractions, port, reconcileConfirmedExtractions, updateExtractions]);
 
   // The "no API key" banner only shows when the most recent attempt skipped for
   // that specific reason. We don't show it for memory-disabled (the user's own

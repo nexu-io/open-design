@@ -11,7 +11,7 @@
 //   - `useWiredMemoryConfig()` (the wirer, bottom of file) binds the real
 //     provider port and is the default the orchestrator injects as a prop, so
 //     production callers pass nothing while tests swap the whole hook.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type {
   MemoryListResponse,
 } from '@open-design/contracts';
@@ -45,29 +45,66 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const [rewriteEnabled, setRewriteEnabled] = useState(true);
   const [verifyEnabled, setVerifyEnabled] = useState(true);
 
+  // Each toggle flips its own state optimistically the instant it's clicked, so
+  // two overlapping PATCHes for the SAME setting must not let an earlier
+  // request's rollback stomp a later one's outcome. Track, per setting, the
+  // last server-confirmed value and a request sequence number: a rollback only
+  // applies when it belongs to the most recently issued request for that
+  // setting, and it always restores the last confirmed value (never another
+  // in-flight request's own optimistic guess).
+  const enabledConfirmedRef = useRef(true);
+  const enabledSeqRef = useRef(0);
+  const hookConfirmedRef = useRef<Record<MemoryConfigFlagKey, boolean>>({
+    chatExtractionEnabled: true,
+    profileEnabled: true,
+    rewriteEnabled: true,
+    verifyEnabled: true,
+  });
+  const hookSeqRef = useRef<Record<MemoryConfigFlagKey, number>>({
+    chatExtractionEnabled: 0,
+    profileEnabled: 0,
+    rewriteEnabled: 0,
+    verifyEnabled: 0,
+  });
+
   const hydrate = useCallback((list: MemoryListResponse) => {
-    setEnabled(list.enabled);
-    setChatExtractionEnabled(list.chatExtractionEnabled !== false);
-    setProfileEnabled(list.profileEnabled !== false);
-    setRewriteEnabled(list.rewriteEnabled !== false);
-    setVerifyEnabled(list.verifyEnabled !== false);
+    const next = {
+      enabled: list.enabled,
+      chatExtractionEnabled: list.chatExtractionEnabled !== false,
+      profileEnabled: list.profileEnabled !== false,
+      rewriteEnabled: list.rewriteEnabled !== false,
+      verifyEnabled: list.verifyEnabled !== false,
+    };
+    setEnabled(next.enabled);
+    setChatExtractionEnabled(next.chatExtractionEnabled);
+    setProfileEnabled(next.profileEnabled);
+    setRewriteEnabled(next.rewriteEnabled);
+    setVerifyEnabled(next.verifyEnabled);
+    enabledConfirmedRef.current = next.enabled;
+    hookConfirmedRef.current = {
+      chatExtractionEnabled: next.chatExtractionEnabled,
+      profileEnabled: next.profileEnabled,
+      rewriteEnabled: next.rewriteEnabled,
+      verifyEnabled: next.verifyEnabled,
+    };
   }, []);
 
   const onToggleEnabled = useCallback(
     async (next: boolean) => {
-      // Optimistic flip; keep the prior value so a rejected PATCH (the provider
-      // signals a non-2xx write with `false`) or a thrown transport error rolls
-      // the master switch back — mirroring the per-flag path below.
-      const previous = enabled;
+      const seq = ++enabledSeqRef.current;
       setEnabled(next);
       let ok = false;
       try {
         ok = await port.patchConfig(enabledPatch(next));
       } finally {
-        if (!ok) setEnabled(previous);
+        if (ok) {
+          enabledConfirmedRef.current = next;
+        } else if (enabledSeqRef.current === seq) {
+          setEnabled(enabledConfirmedRef.current);
+        }
       }
     },
-    [enabled, port],
+    [port],
   );
 
   // Map each hook key to its setter so a single optimistic-set + rollback path
@@ -87,19 +124,17 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const onToggleHook = useCallback(
     async (key: MemoryConfigFlagKey, next: boolean) => {
       const setter = setters[key];
-      // Optimistic flip; capture the prior flag inside the functional update so a
-      // rejected PATCH (the provider signals a non-2xx write with `false`) or a
-      // thrown transport error restores it — mirroring onToggleEnabled above.
-      let previous = next;
-      setter((current) => {
-        previous = current;
-        return next;
-      });
+      const seq = ++hookSeqRef.current[key];
+      setter(() => next);
       let ok = false;
       try {
         ok = await port.patchConfig(singleFlagPatch(key, next));
       } finally {
-        if (!ok) setter(() => previous);
+        if (ok) {
+          hookConfirmedRef.current[key] = next;
+        } else if (hookSeqRef.current[key] === seq) {
+          setter(() => hookConfirmedRef.current[key]);
+        }
       }
     },
     [port, setters],
