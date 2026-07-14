@@ -158,8 +158,10 @@ export function resolveWebImport(importerRepoPath: string, specifier: string): s
  * file, given its repo-relative POSIX path and its text. Pure and disk-free so
  * the guard is unit-testable; the disk walkers below just feed it every file.
  * Whether the importer lives inside `features/**` decides which rules apply:
- * feature files get the transport-free + provider-binding + cross-slice rules,
- * everything else gets the outside-in barrel rule.
+ * feature files get the transport-free + provider-binding rules, files inside
+ * a named slice get the cross-slice rule, and everything without a slice of
+ * its own — including a loose top-level `features/*.ts` file — gets the
+ * outside-in barrel rule.
  */
 export function collectImportBoundaryViolations(
   importerRepoPath: string,
@@ -203,26 +205,26 @@ export function collectImportBoundaryViolations(
           message: `feature file imports \`${specifier}\` from providers/ — only dependencies.ts may bind a provider`,
         });
       }
-
-      // Rule 3 (in-slice) — cross-slice imports must go through the sibling barrel.
-      if (importerSlice) {
-        const targetSlice = sliceOfRel(resolved);
-        if (targetSlice && targetSlice !== importerSlice && !isSliceBarrelImport(resolved, targetSlice)) {
-          violations.push({
-            filePath: importerRepoPath,
-            lineNumber,
-            message: `deep import into slice \`${targetSlice}\` — import its public barrel \`features/${targetSlice}\` instead`,
-          });
-        }
-      }
-      continue;
     }
 
-    // Rule 3 (outside-in) — a file outside features/ may reach a slice only
-    // through its public barrel, so the boundary the slice publishes is the
-    // boundary every consumer sees.
     const targetSlice = sliceOfRel(resolved);
-    if (targetSlice && !isSliceBarrelImport(resolved, targetSlice)) {
+    if (importerSlice) {
+      // Rule 3 (in-slice) — cross-slice imports must go through the sibling barrel.
+      if (targetSlice && targetSlice !== importerSlice && !isSliceBarrelImport(resolved, targetSlice)) {
+        violations.push({
+          filePath: importerRepoPath,
+          lineNumber,
+          message: `deep import into slice \`${targetSlice}\` — import its public barrel \`features/${targetSlice}\` instead`,
+        });
+      }
+    } else if (targetSlice && !isSliceBarrelImport(resolved, targetSlice)) {
+      // Rule 3 (outside-in) — any consumer with no slice of its own may reach
+      // a slice only through its public barrel, so the boundary the slice
+      // publishes is the boundary every consumer sees. That covers files
+      // outside features/ AND loose top-level `features/*.ts` files, which are
+      // feature files but belong to no slice (`sliceOfRel` is null for them);
+      // exempting those would leave a slice-less spot inside features/ from
+      // which every slice's internals are reachable.
       violations.push({
         filePath: importerRepoPath,
         lineNumber,

@@ -33,7 +33,12 @@ export async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {
 
 export async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> {
   const resp = await fetch(`/api/memory/${encodeURIComponent(id)}`);
-  if (!resp.ok) return null;
+  // Only a genuine not-found maps to null. A 5xx or other transport failure
+  // is not "this entry doesn't exist" — collapsing both into null let the
+  // caller silently render an empty preview or a no-op edit for what is
+  // actually a required read that failed.
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`Memory entry request failed (${resp.status})`);
   const json = (await resp.json()) as { entry: MemoryEntry };
   return json.entry ?? null;
 }

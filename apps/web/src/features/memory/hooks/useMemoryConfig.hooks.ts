@@ -23,6 +23,78 @@ import {
   type MemoryConfigFlagKey,
 } from '../rules';
 
+/** One coalesced write intent: the latest desired value for a setting, plus
+ *  every caller awaiting the PATCH that will carry it. */
+interface PendingConfigWrite {
+  value: boolean;
+  settlers: Array<{ resolve: () => void; reject: (error: unknown) => void }>;
+}
+
+/** Per-setting write queue: at most one PATCH on the wire, at most one queued
+ *  intent — a toggle issued while a write is queued replaces the queued value
+ *  instead of stacking behind it. */
+interface ConfigWriteQueue {
+  inFlight: boolean;
+  pending: PendingConfigWrite | null;
+}
+
+function newConfigWriteQueue(): ConfigWriteQueue {
+  return { inFlight: false, pending: null };
+}
+
+/**
+ * Enqueue one desired value for a setting; the returned promise settles when
+ * the PATCH that carries it does (rejecting with the transport error when that
+ * PATCH throws). Writes are serialized per queue, so the server can never
+ * apply two of this setting's PATCHes in the wrong order: a rapid sequence of
+ * toggles coalesces to the latest intent, and that intent is what the last
+ * request on the wire carries. `onSettled` receives whether the write was
+ * accepted and whether a newer intent is already queued — a failure with a
+ * newer intent queued must not roll anything back, because the newer write
+ * supersedes it.
+ */
+function enqueueConfigWrite(
+  queue: ConfigWriteQueue,
+  value: boolean,
+  send: (value: boolean) => Promise<boolean>,
+  onSettled: (ok: boolean, value: boolean, hasNewerIntent: boolean) => void,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (queue.pending) {
+      queue.pending.value = value;
+      queue.pending.settlers.push({ resolve, reject });
+    } else {
+      queue.pending = { value, settlers: [{ resolve, reject }] };
+    }
+    if (queue.inFlight) return;
+    queue.inFlight = true;
+    void (async () => {
+      try {
+        while (queue.pending) {
+          const { value: desired, settlers } = queue.pending;
+          queue.pending = null;
+          let ok = false;
+          let thrown: unknown;
+          let didThrow = false;
+          try {
+            ok = await send(desired);
+          } catch (error) {
+            didThrow = true;
+            thrown = error;
+          }
+          onSettled(ok, desired, queue.pending !== null);
+          for (const settler of settlers) {
+            if (didThrow) settler.reject(thrown);
+            else settler.resolve();
+          }
+        }
+      } finally {
+        queue.inFlight = false;
+      }
+    })();
+  });
+}
+
 /** Everything the config UI (master toggle + hooks panel) needs from the hook. */
 export interface MemoryConfigController {
   /** Master memory switch. */
@@ -45,26 +117,26 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const [rewriteEnabled, setRewriteEnabled] = useState(true);
   const [verifyEnabled, setVerifyEnabled] = useState(true);
 
-  // Each toggle flips its own state optimistically the instant it's clicked, so
-  // two overlapping PATCHes for the SAME setting must not let an earlier
-  // request's rollback stomp a later one's outcome. Track, per setting, the
-  // last server-confirmed value and a request sequence number: a rollback only
-  // applies when it belongs to the most recently issued request for that
-  // setting, and it always restores the last confirmed value (never another
-  // in-flight request's own optimistic guess).
+  // Each toggle flips its own state optimistically the instant it's clicked,
+  // but the PATCHes themselves are serialized per setting through a write
+  // queue: rollback bookkeeping alone would keep the LOCAL state consistent
+  // while still letting two concurrent PATCHes land server-side in the wrong
+  // order and persist stale intent. The confirmed refs remember the last
+  // server-acknowledged value, so a failed write with no newer intent queued
+  // rolls back to server truth — never to another request's optimistic guess.
   const enabledConfirmedRef = useRef(true);
-  const enabledSeqRef = useRef(0);
+  const enabledQueueRef = useRef(newConfigWriteQueue());
   const hookConfirmedRef = useRef<Record<MemoryConfigFlagKey, boolean>>({
     chatExtractionEnabled: true,
     profileEnabled: true,
     rewriteEnabled: true,
     verifyEnabled: true,
   });
-  const hookSeqRef = useRef<Record<MemoryConfigFlagKey, number>>({
-    chatExtractionEnabled: 0,
-    profileEnabled: 0,
-    rewriteEnabled: 0,
-    verifyEnabled: 0,
+  const hookQueuesRef = useRef<Record<MemoryConfigFlagKey, ConfigWriteQueue>>({
+    chatExtractionEnabled: newConfigWriteQueue(),
+    profileEnabled: newConfigWriteQueue(),
+    rewriteEnabled: newConfigWriteQueue(),
+    verifyEnabled: newConfigWriteQueue(),
   });
 
   const hydrate = useCallback((list: MemoryListResponse) => {
@@ -90,19 +162,17 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   }, []);
 
   const onToggleEnabled = useCallback(
-    async (next: boolean) => {
-      const seq = ++enabledSeqRef.current;
+    (next: boolean) => {
       setEnabled(next);
-      let ok = false;
-      try {
-        ok = await port.patchConfig(enabledPatch(next));
-      } finally {
-        if (ok) {
-          enabledConfirmedRef.current = next;
-        } else if (enabledSeqRef.current === seq) {
-          setEnabled(enabledConfirmedRef.current);
-        }
-      }
+      return enqueueConfigWrite(
+        enabledQueueRef.current,
+        next,
+        (value) => port.patchConfig(enabledPatch(value)),
+        (ok, value, hasNewerIntent) => {
+          if (ok) enabledConfirmedRef.current = value;
+          else if (!hasNewerIntent) setEnabled(enabledConfirmedRef.current);
+        },
+      );
     },
     [port],
   );
@@ -122,20 +192,18 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   );
 
   const onToggleHook = useCallback(
-    async (key: MemoryConfigFlagKey, next: boolean) => {
+    (key: MemoryConfigFlagKey, next: boolean) => {
       const setter = setters[key];
-      const seq = ++hookSeqRef.current[key];
       setter(() => next);
-      let ok = false;
-      try {
-        ok = await port.patchConfig(singleFlagPatch(key, next));
-      } finally {
-        if (ok) {
-          hookConfirmedRef.current[key] = next;
-        } else if (hookSeqRef.current[key] === seq) {
-          setter(() => hookConfirmedRef.current[key]);
-        }
-      }
+      return enqueueConfigWrite(
+        hookQueuesRef.current[key],
+        next,
+        (value) => port.patchConfig(singleFlagPatch(key, value)),
+        (ok, value, hasNewerIntent) => {
+          if (ok) hookConfirmedRef.current[key] = value;
+          else if (!hasNewerIntent) setter(() => hookConfirmedRef.current[key]);
+        },
+      );
     },
     [port, setters],
   );

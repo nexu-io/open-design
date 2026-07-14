@@ -80,6 +80,28 @@ test("outside-in: a trailing-slash barrel import is still treated as the barrel"
   );
 });
 
+test("outside-in: a loose top-level features/ file deep-importing a slice is rejected", () => {
+  // `sliceOfRel` is null for a file directly under features/, but that file is
+  // still an outside-slice consumer — it must not be a slice-less spot from
+  // which slice internals are reachable.
+  const violations = collectImportBoundaryViolations(
+    "apps/web/src/features/libraryUi.ts",
+    "import { useMemoryConfig } from './memory/hooks/useMemoryConfig.hooks';",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("outside-in: a loose top-level features/ file may still import a slice's public barrel", () => {
+  assert.deepEqual(
+    collectImportBoundaryViolations(
+      "apps/web/src/features/libraryUi.ts",
+      "import { MemorySection } from './memory';",
+    ),
+    [],
+  );
+});
+
 test("cross-slice: importing a sibling slice's barrel is allowed", () => {
   assert.deepEqual(
     collectImportBoundaryViolations(SIBLING_SLICE_FILE, "import { MemorySection } from '../../memory';"),

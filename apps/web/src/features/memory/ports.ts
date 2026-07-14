@@ -30,6 +30,7 @@ export interface MemoryConfigPort {
 export interface MemoryEntriesPort {
   fetchMemoryList(): Promise<MemoryListResponse>;
   fetchMemoryTree(): Promise<MemoryTreeNode[]>;
+  /** Resolves `null` only for a genuine not-found; rejects on other failures. */
   fetchMemoryEntry(id: string): Promise<MemoryEntry | null>;
   saveMemoryEntry(draft: DraftEntry): Promise<MemoryEntry | null>;
   deleteMemoryEntry(id: string): Promise<boolean>;

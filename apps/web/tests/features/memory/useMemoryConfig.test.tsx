@@ -184,6 +184,103 @@ describe('useMemoryConfig', () => {
     expect(result.current.hookFlags.profileEnabled).toBe(true);
   });
 
+  it('serializes a fast master true -> false -> true sequence so the last PATCH on the wire carries the latest intent, even when the earlier request settles last', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    // true -> false (request A, slow), then false -> true (request B) while A
+    // is still in flight. B's PATCH must NOT race A on the wire.
+    let toggleA!: Promise<void>;
+    let toggleB!: Promise<void>;
+    act(() => {
+      toggleA = result.current.onToggleEnabled(false);
+    });
+    act(() => {
+      toggleB = result.current.onToggleEnabled(true);
+    });
+    expect(patchConfig).toHaveBeenCalledTimes(1);
+    expect(patchConfig).toHaveBeenCalledWith({ enabled: false });
+
+    // B's response is "ready" before A even settles — the reverse-completion
+    // order that used to let the server persist the stale `false`.
+    second.resolve(true);
+    await act(async () => {
+      first.resolve(true);
+      await toggleA;
+      await toggleB;
+    });
+
+    // The latest intent was the LAST write the server saw, so the persisted
+    // value matches the latest user action.
+    expect(patchConfig).toHaveBeenCalledTimes(2);
+    expect(patchConfig).toHaveBeenLastCalledWith({ enabled: true });
+    expect(result.current.enabled).toBe(true);
+  });
+
+  it('serializes a fast per-hook toggle sequence the same way', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    let toggleA!: Promise<void>;
+    let toggleB!: Promise<void>;
+    act(() => {
+      toggleA = result.current.onToggleHook('profileEnabled', false);
+    });
+    act(() => {
+      toggleB = result.current.onToggleHook('profileEnabled', true);
+    });
+    expect(patchConfig).toHaveBeenCalledTimes(1);
+    expect(patchConfig).toHaveBeenCalledWith({ profileEnabled: false });
+
+    second.resolve(true);
+    await act(async () => {
+      first.resolve(true);
+      await toggleA;
+      await toggleB;
+    });
+
+    expect(patchConfig).toHaveBeenCalledTimes(2);
+    expect(patchConfig).toHaveBeenLastCalledWith({ profileEnabled: true });
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
+  });
+
+  it('coalesces toggles queued behind an in-flight PATCH down to the latest intent', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    // Three rapid flips: the two issued while the first PATCH is in flight
+    // collapse into ONE follow-up write carrying only the final value.
+    let toggleA!: Promise<void>;
+    let toggleB!: Promise<void>;
+    let toggleC!: Promise<void>;
+    act(() => {
+      toggleA = result.current.onToggleEnabled(false);
+    });
+    act(() => {
+      toggleB = result.current.onToggleEnabled(true);
+    });
+    act(() => {
+      toggleC = result.current.onToggleEnabled(false);
+    });
+    expect(patchConfig).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      first.resolve(true);
+      second.resolve(true);
+      await Promise.all([toggleA, toggleB, toggleC]);
+    });
+
+    expect(patchConfig).toHaveBeenCalledTimes(2);
+    expect(patchConfig).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.enabled).toBe(false);
+  });
+
   it('hydrate maps a list response onto every flag (missing => true)', () => {
     const { result } = renderHook(() => useMemoryConfig(makePort()));
     act(() =>

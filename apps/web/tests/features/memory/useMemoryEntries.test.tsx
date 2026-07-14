@@ -71,13 +71,15 @@ function savedEntry(over: Partial<MemoryEntry> = {}): MemoryEntry {
   return { ...summary('saved'), body: 'body', ...over };
 }
 
-/** A promise plus its own resolve, so a test can control exactly when fetchMemoryEntry() settles. */
+/** A promise plus its own resolve/reject, so a test can control exactly when and how fetchMemoryEntry() settles. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe('useMemoryEntries — reload + filter', () => {
@@ -256,13 +258,110 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
     expect(result.current.previewBody).toBeNull();
   });
 
-  it('defaults the preview body to empty string when the entry is missing', async () => {
+  it('defaults the preview body to empty string when the entry is missing (a 404 is not a failure)', async () => {
     const port = makePort({ fetchMemoryEntry: vi.fn(async () => null) });
     const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
     await act(async () => {
       await result.current.openPreview('gone');
     });
     expect(result.current.previewBody).toBe('');
+    expect(result.current.loadError).toBeNull();
+  });
+
+  it('surfaces a failed preview read as loadError instead of rendering an empty preview', async () => {
+    const port = makePort({
+      fetchMemoryEntry: vi.fn(async () => {
+        throw new Error('Memory entry request failed (500)');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+    await act(async () => {
+      await result.current.openPreview('a');
+    });
+
+    // The preview is reset (not stuck loading, not an invented empty body) and
+    // the failure is explicit.
+    expect(result.current.previewId).toBeNull();
+    expect(result.current.previewBody).toBeNull();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
+  it('surfaces a failed edit read as loadError instead of a silent no-op', async () => {
+    const coord = makeCoord();
+    const port = makePort({
+      fetchMemoryEntry: vi.fn(async () => {
+        throw new Error('Memory entry request failed (503)');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+    await act(async () => {
+      await result.current.startEdit('a');
+    });
+
+    expect(coord.openEditor).not.toHaveBeenCalled();
+    expect(result.current.editing).toBeNull();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
+  it("ignores a stale openPreview() failure once a newer preview took over", async () => {
+    const forA = deferred<MemoryEntry | null>();
+    const forB = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi.fn((id: string) => (id === 'a' ? forA.promise : forB.promise));
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    let openA!: Promise<void>;
+    let openB!: Promise<void>;
+    act(() => {
+      openA = result.current.openPreview('a');
+    });
+    act(() => {
+      openB = result.current.openPreview('b');
+    });
+
+    await act(async () => {
+      forB.resolve(savedEntry({ id: 'b', body: 'body b' }));
+      await openB;
+    });
+    await act(async () => {
+      forA.reject(new Error('Memory entry request failed (500)'));
+      await openA;
+    });
+
+    // The abandoned request's failure must not clobber the newer preview or
+    // raise an error the user's current action never hit.
+    expect(result.current.previewId).toBe('b');
+    expect(result.current.previewBody).toBe('body b');
+    expect(result.current.loadError).toBeNull();
+  });
+
+  it("ignores a stale startEdit() failure once a newer edit took over", async () => {
+    const forA = deferred<MemoryEntry | null>();
+    const forB = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi.fn((id: string) => (id === 'a' ? forA.promise : forB.promise));
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    let editA!: Promise<void>;
+    let editB!: Promise<void>;
+    act(() => {
+      editA = result.current.startEdit('a');
+    });
+    act(() => {
+      editB = result.current.startEdit('b');
+    });
+
+    await act(async () => {
+      forB.resolve(savedEntry({ id: 'b', name: 'Entry B' }));
+      await editB;
+    });
+    await act(async () => {
+      forA.reject(new Error('Memory entry request failed (500)'));
+      await editA;
+    });
+
+    expect(result.current.editing?.id).toBe('b');
+    expect(result.current.loadError).toBeNull();
   });
 
   it('ignores a stale openPreview() resolution when the user already moved on to a newer id', async () => {
@@ -409,6 +508,7 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
     });
     expect(coord.openEditor).not.toHaveBeenCalled();
     expect(result.current.editing).toBeNull();
+    expect(result.current.loadError).toBeNull(); // a 404 is a no-op, not a failure
 
     (port.fetchMemoryEntry as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       savedEntry({ id: 'a', name: 'Edit me' }),

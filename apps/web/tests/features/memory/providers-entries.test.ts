@@ -14,7 +14,7 @@ import {
 
 const originalFetch = globalThis.fetch;
 
-function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json?: () => Promise<unknown> }) {
+function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; status?: number; json?: () => Promise<unknown> }) {
   const fn = vi.fn(async (url: unknown, init?: RequestInit) => impl(String(url), init) as unknown as Response);
   globalThis.fetch = fn as unknown as typeof fetch;
   return fn;
@@ -46,7 +46,7 @@ describe('entries transport', () => {
     await expect(fetchMemoryTree()).rejects.toThrow('Memory tree request failed');
   });
 
-  it('returns the entry, null when absent, and null on failure', async () => {
+  it('returns the entry, and null only when it genuinely does not exist', async () => {
     mockFetch((url) => {
       expect(url).toBe('/api/memory/user_role');
       return { ok: true, json: async () => ({ entry: { id: 'user_role' } }) };
@@ -54,8 +54,15 @@ describe('entries transport', () => {
     expect(await fetchMemoryEntry('user_role')).toEqual({ id: 'user_role' });
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
     expect(await fetchMemoryEntry('x')).toBeNull();
-    mockFetch(() => ({ ok: false }));
+    mockFetch(() => ({ ok: false, status: 404 }));
     expect(await fetchMemoryEntry('x')).toBeNull();
+  });
+
+  it('rejects rather than mapping a 5xx entry read to null', async () => {
+    mockFetch(() => ({ ok: false, status: 500 }));
+    await expect(fetchMemoryEntry('x')).rejects.toThrow('Memory entry request failed (500)');
+    mockFetch(() => ({ ok: false, status: 503 }));
+    await expect(fetchMemoryEntry('x')).rejects.toThrow('Memory entry request failed (503)');
   });
 
   it('POSTs to /api/memory when the draft has no id', async () => {

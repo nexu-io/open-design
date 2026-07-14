@@ -502,6 +502,89 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.extractions).toEqual([]);
   });
 
+  it('keeps a same-id phase transition that lands during a failed delete\'s recovery instead of restoring the snapshot\'s older phase', async () => {
+    let resolveDelete!: (value: boolean) => void;
+    let resolveRecovery!: (value: MemoryExtractionRecord[]) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('b', { startedAt: 1_000 })));
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'running', startedAt: 2_000 })));
+
+    let deletion: Promise<void>;
+    act(() => {
+      // Fails to delete 'b'.
+      deletion = result.current.onDeleteExtraction('b');
+    });
+    // While the failed delete's recovery fetch is in flight, the live stream
+    // advances 'a' from running to success.
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'success', startedAt: 2_000 })));
+
+    await act(async () => {
+      resolveDelete(false);
+      await Promise.resolve();
+      // The recovery snapshot was captured BEFORE the transition landed, so
+      // it still holds 'a' at the older running phase.
+      resolveRecovery([
+        record('a', { phase: 'running', startedAt: 2_000 }),
+        record('b', { startedAt: 1_000 }),
+      ]);
+      await deletion!;
+    });
+
+    // 'b' comes back (its delete really failed), but the newer local phase of
+    // 'a' survives — latest event wins over the stale snapshot — and the list
+    // stays newest-first.
+    expect(result.current.extractions.map((row) => `${row.id}:${row.phase}`)).toEqual([
+      'a:success',
+      'b:success',
+    ]);
+  });
+
+  it('keeps a row that arrived during a failed clear\'s recovery ahead of the older rows the snapshot restores', async () => {
+    let resolveClear!: (value: boolean) => void;
+    let resolveRecovery!: (value: MemoryExtractionRecord[]) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const port = makePort({
+      clearExtractionHistory: vi.fn(() => clearPromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('old', { startedAt: 1_000 })));
+
+    let clearing: Promise<void>;
+    act(() => {
+      clearing = result.current.clearExtractions();
+    });
+    // A brand-new attempt starts while the failed clear's recovery fetch is
+    // still in flight.
+    act(() => result.current.applyExtractionEvent(record('newer', { phase: 'running', startedAt: 3_000 })));
+
+    await act(async () => {
+      resolveClear(false);
+      await Promise.resolve();
+      resolveRecovery([record('old', { startedAt: 1_000 })]);
+      await clearing!;
+    });
+
+    // The restored row must slot in BEHIND the newer live arrival, not be
+    // blindly prepended ahead of it.
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['newer', 'old']);
+  });
+
   it('ignores an extraction event with no id', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));

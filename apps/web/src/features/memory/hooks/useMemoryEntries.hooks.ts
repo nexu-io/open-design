@@ -38,6 +38,8 @@ export interface MemoryEntriesCoordination {
   closeEditor: () => void;
 }
 
+const LOAD_ERROR_MESSAGE = "Memory data couldn't be loaded. Try again shortly.";
+
 export interface MemoryEntriesController {
   /** Non-null when the list/tree transport failed; callers retain prior state. */
   loadError?: string | null;
@@ -131,7 +133,7 @@ export function useMemoryEntries(
     } catch {
       // Do not invent an empty "success" response: leave the last confirmed
       // state intact and let the shell render this explicit failure instead.
-      setLoadError("Memory data couldn't be loaded. Try again shortly.");
+      setLoadError(LOAD_ERROR_MESSAGE);
     }
   }, [port, hydrateConfig]);
 
@@ -167,7 +169,20 @@ export function useMemoryEntries(
       const token = ++previewRequestTokenRef.current;
       setPreviewId(id);
       setPreviewBody(null);
-      const entry = await port.fetchMemoryEntry(id);
+      let entry;
+      try {
+        // The port resolves null only for a genuine not-found; a 5xx/transport
+        // failure rejects and must surface as a failed read, not render as an
+        // empty preview.
+        entry = await port.fetchMemoryEntry(id);
+      } catch {
+        // A stale request's failure must not clobber a newer action's state.
+        if (previewRequestTokenRef.current !== token) return;
+        setPreviewId(null);
+        setPreviewBody(null);
+        setLoadError(LOAD_ERROR_MESSAGE);
+        return;
+      }
       if (previewRequestTokenRef.current !== token) return;
       setPreviewBody(entry?.body ?? '');
     },
@@ -177,7 +192,15 @@ export function useMemoryEntries(
   const startEdit = useCallback(
     async (id: string) => {
       const token = ++editRequestTokenRef.current;
-      const entry = await port.fetchMemoryEntry(id);
+      let entry;
+      try {
+        entry = await port.fetchMemoryEntry(id);
+      } catch {
+        // A stale request's failure must not clobber a newer action's state.
+        if (editRequestTokenRef.current !== token) return;
+        setLoadError(LOAD_ERROR_MESSAGE);
+        return;
+      }
       if (!entry || editRequestTokenRef.current !== token) return;
       openEditor();
       setEditing({

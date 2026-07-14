@@ -43,13 +43,16 @@ export function useMemoryExtractions(
   const extractionRevision = useRef(0);
   const pendingDeletionIds = useRef(new Set<string>());
   // A confirmed-history fetch answers "what did the server have", but it can
-  // resolve after a NEWER destructive SSE event (a remote 'cleared' or
-  // 'deleted' frame) has already removed rows locally. Reconciling that stale
-  // snapshot naively would resurrect what the newer event just removed, so
-  // every destructive event stamps the revision it landed at; reconciliation
-  // discards any confirmed row whose removal is younger than the recovery.
+  // resolve after NEWER local changes: a destructive SSE event (a remote
+  // 'cleared' or 'deleted' frame) that removed rows, or an ordinary phase
+  // transition that advanced one. Reconciling that stale snapshot naively
+  // would resurrect removed rows or regress advanced ones, so every change
+  // stamps the revision it landed at — destructive events per removal, and
+  // every row-content change per row — and reconciliation keeps whichever
+  // side is younger than the recovery read.
   const clearedAtRevisionRef = useRef(0);
   const deletedAtRevisionRef = useRef(new Map<string, number>());
+  const rowRevisionRef = useRef(new Map<string, number>());
   const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
     extractionRevision.current += 1;
     setExtractions(next);
@@ -58,25 +61,41 @@ export function useMemoryExtractions(
   const reconcileConfirmedExtractions = useCallback(
     (confirmed: MemoryExtractionRecord[], sinceRevision: number) => {
       const pending = new Set(pendingDeletionIds.current);
-      updateExtractions((current) => {
-        // A clear that landed after this recovery began supersedes the whole
-        // confirmed snapshot — nothing from it should come back.
-        const reconciled =
-          clearedAtRevisionRef.current > sinceRevision
-            ? []
-            : confirmed.filter((row) => {
-                if (pending.has(row.id)) return false;
-                const deletedAt = deletedAtRevisionRef.current.get(row.id);
-                return deletedAt === undefined || deletedAt <= sinceRevision;
-              });
-        const confirmedIds = new Set(reconciled.map((row) => row.id));
-        // Retain live frames that arrived after the recovery read, while never
-        // resurrecting a row another optimistic delete still owns.
-        return [
-          ...reconciled,
-          ...current.filter((row) => !pending.has(row.id) && !confirmedIds.has(row.id)),
-        ];
+      // A clear that landed after this recovery began supersedes the whole
+      // confirmed snapshot — nothing from it should come back.
+      const accepted =
+        clearedAtRevisionRef.current > sinceRevision
+          ? []
+          : confirmed.filter((row) => {
+              if (pending.has(row.id)) return false;
+              const deletedAt = deletedAtRevisionRef.current.get(row.id);
+              if (deletedAt !== undefined && deletedAt > sinceRevision) return false;
+              // Any row the live stream touched after the recovery read began
+              // is newer than the snapshot — keep the local copy, not the
+              // fetched one, so a phase transition never regresses.
+              return (rowRevisionRef.current.get(row.id) ?? 0) <= sinceRevision;
+            });
+      const acceptedById = new Map(accepted.map((row) => [row.id, row] as const));
+      const revision = updateExtractions((current) => {
+        // Live rows keep their newest-first positions (taking the confirmed
+        // content where the snapshot is still authoritative for that id, and
+        // never resurrecting a row another optimistic delete still owns);
+        // rows the snapshot restores slot back in by start time so they never
+        // jump ahead of frames that arrived after the recovery read.
+        const survivors = current
+          .filter((row) => !pending.has(row.id))
+          .map((row) => acceptedById.get(row.id) ?? row);
+        const survivorIds = new Set(survivors.map((row) => row.id));
+        const merged = [...survivors];
+        for (const row of accepted) {
+          if (survivorIds.has(row.id)) continue;
+          const at = merged.findIndex((existing) => existing.startedAt < row.startedAt);
+          if (at === -1) merged.push(row);
+          else merged.splice(at, 0, row);
+        }
+        return merged;
       });
+      for (const row of accepted) rowRevisionRef.current.set(row.id, revision);
     },
     [updateExtractions],
   );
@@ -85,7 +104,8 @@ export function useMemoryExtractions(
     setIsRefreshing(true);
     try {
       const next = await port.fetchExtractions();
-      updateExtractions(next);
+      const revision = updateExtractions(next);
+      for (const row of next) rowRevisionRef.current.set(row.id, revision);
       setLoadError(null);
       return next;
     } catch {
@@ -115,7 +135,7 @@ export function useMemoryExtractions(
     // Merge by id: phase transitions for an in-flight attempt collapse onto a
     // single row instead of stacking N entries. New ids are unshifted so the
     // latest appears at the top.
-    updateExtractions((prev) => {
+    const revision = updateExtractions((prev) => {
       const existing = prev.findIndex((r) => r.id === ev.id);
       if (existing >= 0) {
         const next = prev.slice();
@@ -124,6 +144,7 @@ export function useMemoryExtractions(
       }
       return [ev, ...prev].slice(0, 30);
     });
+    rowRevisionRef.current.set(ev.id, revision);
   }, [updateExtractions]);
 
   const onDeleteExtraction = useCallback(
