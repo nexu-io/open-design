@@ -55,6 +55,92 @@ export type CritiqueLogEvent =
       runId: string;
       cause: string;
       error?: string;
+    }
+  // --- Loop Engine events (Phase 12: Loop Engineering) ---
+  | {
+      event: 'loop_disabled';
+      projectId: string;
+      runId: string;
+    }
+  | {
+      event: 'loop_enabled';
+      projectId: string;
+      maxIterations: number;
+      strategy: string;
+    }
+  | {
+      event: 'loop_started';
+      projectId: string;
+      adapter: string;
+      maxIterations: number;
+      strategy: string;
+    }
+  | {
+      event: 'loop_aborted';
+      projectId: string;
+      iteration: number;
+      reason: string;
+    }
+  | {
+      event: 'loop_iteration_start';
+      projectId: string;
+      iteration: number;
+    }
+  | {
+      event: 'loop_fix_triggered';
+      projectId: string;
+      iteration: number;
+      mustFixCount: number;
+    }
+  | {
+      event: 'loop_fix_completed';
+      projectId: string;
+      iteration: number;
+      fixDurationMs: number;
+      artifactMime?: string;
+    }
+  | {
+      event: 'loop_fix_failed';
+      projectId: string;
+      iteration: number;
+      error: string;
+    }
+  | {
+      event: 'loop_iteration_end';
+      projectId: string;
+      iteration: number;
+      status: string;
+      composite: number | null;
+      converged: boolean;
+      runDurationMs?: number;
+    }
+  | {
+      event: 'loop_iteration_error';
+      projectId: string;
+      iteration: number;
+      error: string;
+    }
+  | {
+      event: 'loop_exhausted';
+      projectId: string;
+      totalIterations: number;
+    }
+  | {
+      event: 'loop_lessons_loaded';
+      projectId: string;
+      adapter: string;
+    }
+  | {
+      event: 'loop_skills_distilled';
+      projectId: string;
+      lessonCount: number;
+      categories: string[];
+      outputPath: string;
+    }
+  | {
+      event: 'loop_skills_distill_error';
+      projectId: string;
+      error: string;
     };
 
 /**

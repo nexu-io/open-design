@@ -11,6 +11,8 @@ export interface CritiqueFeedback {
   bestRound: number;
   finalStatus: CritiqueRunStatus;
   rounds: CritiqueRoundSummary[];
+  /** Outer Loop Memory: 来自历史循环的经验教训（供 Agent 参考） */
+  historicalLessons?: string | null;
 }
 
 export function extractFeedbackFromEvents(
@@ -42,14 +44,25 @@ export function extractFeedbackFromEvents(
 
 /** 将反馈格式化为 Agent 可用的修复 prompt */
 export function formatFeedbackAsPrompt(feedback: CritiqueFeedback): string {
-  const lines: string[] = [
-    '## 设计评审团反馈',
-    '',
-    `综合得分: ${feedback.bestComposite.toFixed(2)}`,
-    `评审轮次: ${feedback.bestRound}`,
-    `最终状态: ${feedback.finalStatus}`,
-    '',
-  ];
+  const lines: string[] = [];
+
+  // --- Outer Loop Memory: 历史经验先置 ---
+  if (feedback.historicalLessons) {
+    lines.push(feedback.historicalLessons);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('## 当前设计的评审反馈');
+    lines.push('');
+  } else {
+    lines.push('## 设计评审团反馈');
+    lines.push('');
+  }
+
+  lines.push(`综合得分: ${feedback.bestComposite.toFixed(2)}`);
+  lines.push(`评审轮次: ${feedback.bestRound}`);
+  lines.push(`最终状态: ${feedback.finalStatus}`);
+  lines.push('');
 
   if (feedback.mustFixItems.length > 0) {
     lines.push('### 必须修复项 (Must Fix)', '');

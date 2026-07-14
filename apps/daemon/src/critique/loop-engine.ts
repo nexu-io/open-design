@@ -28,6 +28,7 @@ import {
   critiqueLoopExhaustedTotal,
 } from './metrics-loop.js';
 import { logCritique } from '../logging/critique.js';
+import { loadLessonsAsContext } from './lessons-loop.js';
 
 // ============================================================================
 // 类型定义
@@ -48,8 +49,10 @@ export interface LoopEngineParams {
   bus: CritiqueSseBus;
   projectId: string;
   artifactDir: string;
+  /** 项目工作目录，用于加载 Outer Loop Memory (.loop/lessons.md) */
+  projectDir: string;
   adapter: string;
-  skill?: string;
+  skill: string | undefined;
   conversationId?: string | null;
   signal?: AbortSignal;
   /** 为每次迭代提供新的 stdout 流（由 spawn handler 注入） */
@@ -101,8 +104,8 @@ function shouldRetry(result: OrchestratorResult, rounds: CritiqueRoundSummary[])
 
 export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopEngineResult> {
   const {
-    loopCfg, critiqueCfg, fixFn, db, bus, projectId, artifactDir, adapter,
-    skill = 'unknown', conversationId = null, signal,
+    loopCfg, critiqueCfg, fixFn, db, bus, projectId, artifactDir, projectDir,
+    adapter, skill = 'unknown', conversationId = null, signal,
     createStdout, createChild, createChildExitPromise,
   } = params;
 
@@ -114,6 +117,12 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
   const startTime = Date.now();
   const iterations: LoopIterationResult[] = [];
   let accumulatedFeedback: ReturnType<typeof extractFeedbackFromEvents> | null = null;
+
+  // --- Outer Loop Memory: 加载历史经验 ---
+  const historicalLessons = await loadLessonsAsContext(projectDir);
+  if (historicalLessons) {
+    logCritique({ event: 'loop_lessons_loaded', projectId, adapter });
+  }
 
   logCritique({ event: 'loop_started', projectId, adapter, maxIterations: loopCfg.maxIterations, strategy: loopCfg.loopStrategy });
 
@@ -196,6 +205,12 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
 
       if (shouldRetry(orchestratorResult, orchestratorResult.rounds)) {
         accumulatedFeedback = extractFeedbackFromEvents([], orchestratorResult.rounds, orchestratorResult.status);
+        // 首次添加反馈时，注入历史经验（Outer Loop Memory）
+        if (historicalLessons) {
+          accumulatedFeedback.historicalLessons = loopCfg.feedbackAggregation === 'cumulative'
+            ? historicalLessons
+            : null;
+        }
         continue;
       }
 
