@@ -6157,6 +6157,28 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      //
+      // Also normalize the BYOK provider shape: web side sends
+      // `{ protocol, ... }` via the chat body as `byokProvider`,
+      // but memory-llm.pickProvider expects `{ provider, ... }`
+      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
+      // same mapping the web pre-turn path does (ProjectView.tsx
+      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      const memoryChatProvider: {
+        provider?: string;
+        apiKey?: string;
+        baseUrl?: string;
+        apiVersion?: string;
+        model?: string;
+      } | null = byokProvider
+        ? {
+            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
+            apiKey: (byokProvider as { apiKey?: string }).apiKey,
+            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
+            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            model: (byokProvider as { model?: string }).model,
+          }
+        : null;
       const memoryOptions = {
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
@@ -6164,7 +6186,7 @@ export async function startServer({
         // Forward the per-call BYOK provider snapshot so pickProvider()
         // can run "Same as chat" extraction against the user's actual
         // provider/endpoint/model instead of falling back to defaults.
-        chatProvider: byokProvider ?? null,
+        chatProvider: memoryChatProvider,
         // Scope the extractor's duplicate-turn de-dup to this conversation, so a
         // re-fired turn collapses but an identical (message, reply) in another
         // conversation is still examined.
