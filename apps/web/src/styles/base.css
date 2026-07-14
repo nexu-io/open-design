@@ -1,6 +1,13 @@
 * { box-sizing: border-box; }
 
-html, body, #root { height: 100%; margin: 0; }
+html {
+  height: 100%;
+  margin: 0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body, #root { height: 100%; margin: 0; }
 
 body {
   font-family: var(--sans);
@@ -10,6 +17,19 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .od-loading-shell {

@@ -9,6 +9,8 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   height: 100vh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg-app);
   overflow: hidden;
 }
@@ -21,6 +23,8 @@
   width: 100vw;
   max-width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -62,7 +66,7 @@
   -webkit-app-region: drag;
   overflow: hidden;
   position: relative;
-  z-index: 120;
+  z-index: var(--z-chrome);
 }
 .workspace-tabs-chrome.app-chrome-header::after {
   content: '';
@@ -142,7 +146,7 @@
   gap: 0;
   padding-left: 0;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
   /* Horizontal scroll inside the strip — tabs keep their natural width
      and the strip itself scrolls when it overflows the chrome. This
      replaces the previous "slice to N visible + overflow chip" model
@@ -192,7 +196,7 @@
   transition-timing-function: var(--ease-out);
   -webkit-app-region: no-drag;
   cursor: default;
-  z-index: 1;
+  z-index: var(--z-base);
   will-change: transform;
 }
 /* The pinned Home tab has no close button, so it drops the close column and
@@ -353,7 +357,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 1100;
+  z-index: var(--z-drawer);
   -webkit-app-region: no-drag;
 }
 .workspace-tabs-popover,
@@ -496,7 +500,7 @@
 }
 .workspace-tab-preview {
   position: fixed;
-  z-index: 140;
+  z-index: var(--z-overlay);
   box-sizing: border-box;
   min-width: 220px;
   display: flex;
@@ -1045,7 +1049,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 80;
+  z-index: var(--z-popover);
   min-width: 280px;
   padding: 6px;
   background: var(--bg-panel);
@@ -1436,7 +1440,7 @@ a.avatar-item:visited {
 .comment-left-host {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  z-index: var(--z-raised);
   display: flex;
   width: 100%;
   height: 100%;
@@ -1542,4 +1546,19 @@ a.avatar-item:visited {
 }
 .split-resize-handle:focus-visible {
   outline: none;
+}
+
+/* Mobile split collapse: on narrow viewports the chat panel (460px) exceeds the
+   phone screen. Force single-column so the chat fills the viewport; the workspace
+   clips off below overflow:hidden. split-focus preserves its existing behaviour
+   (JS hides the chat slot via [hidden] and the workspace takes full width). */
+@media (max-width: 599px) {
+  .split:not(.split-focus) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .split:not(.split-focus) .split-resize-handle,
+  .split:not(.split-focus) .split-edit-divider {
+    display: none;
+  }
 }

@@ -14,7 +14,7 @@
   height: 38px;
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: var(--z-sticky);
 }
 .chat-project-back {
   width: 28px;
@@ -1074,12 +1074,13 @@
 
 .composer {
   padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
   background: transparent;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 .split:has(.session-mode-toggle__popover),
 .split-chat-slot:has(.session-mode-toggle__popover),
@@ -1095,7 +1096,7 @@
 .composer:has(.composer-tools-menu),
 .composer:has(.composer-design-toolbox-menu),
 .composer:has(.composer-import-menu) {
-  z-index: 80;
+  z-index: var(--z-popover);
 }
 .chat-composer-slot {
   flex: 0 0 auto;
@@ -1572,7 +1573,7 @@
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  z-index: 1502;
+  z-index: var(--z-compose);
   display: flex;
   width: max-content;
   max-width: calc(100vw - 32px);
@@ -2346,7 +2347,7 @@
 .staged-preview-modal {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2546,4 +2547,22 @@
   white-space: nowrap;
   max-width: 106px;
   line-height: 12px;
+}
+
+/* Mobile: reduz padding horizontal do log e do composer em viewports estreitos.
+   padding-inline não toca padding-top/bottom nem o safe-area do composer. */
+@media (max-width: 599px) {
+  .chat-log  { padding-inline: 12px; }
+  .composer  { padding-inline: 10px; }
+}
+
+/* Reduced-motion: animações de loop infinito (.chat-loading-dot,
+   .chat-loading-sheen) não são cobertas de forma adequada pelo guard global
+   de animation-duration; interromper com animation:none é o tratamento correto
+   para vestibular disorder. Segue padrão já presente para .msg e .run-error. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-loading-state,
+  .chat-loading-mark span,
+  .chat-loading-lines span,
+  .composer-toolbox-standalone-popup { animation: none; }
 }
