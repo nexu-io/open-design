@@ -18,6 +18,7 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
+  trackSettingsAboutClick,
   trackSettingsAppearanceClick,
   trackSettingsByokModelsFetchResult,
   trackSettingsByokTestResult,
@@ -5669,12 +5670,19 @@ export function SettingsDialog({
                   <input
                     checked={cfg.allowSilentUpdates === true}
                     type="checkbox"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextAllowSilentUpdates = event.currentTarget.checked;
                       setCfg((current) => ({
                         ...current,
-                        allowSilentUpdates: event.currentTarget.checked,
-                      }))
-                    }
+                        allowSilentUpdates: nextAllowSilentUpdates,
+                      }));
+                      trackSettingsAboutClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'about',
+                        element: 'silent_updates_toggle',
+                        silent_updates_status: nextAllowSilentUpdates ? 'on' : 'off',
+                      });
+                    }}
                   />
                   <span className="settings-about-toggle-copy">
                     <span>{t('settings.allowSilentUpdates')}</span>

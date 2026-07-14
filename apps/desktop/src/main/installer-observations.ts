@@ -7,7 +7,9 @@ import type { DesktopUpdateChannel } from "@open-design/sidecar-proto";
 export const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 export const INSTALLER_OBSERVATION_KIND = "installer_apply_observation";
 
-export type InstallerObservationArtifactType = "dmg" | "installer";
+export type InstallerObservationArtifactType = "dmg" | "installer" | "payload";
+// Only meaningful for payload applies: how the apply was triggered.
+export type InstallerObservationApplyTrigger = "silent_startup" | "manual";
 export type InstallerObservationResult = "pending" | "success" | "not_applied" | "unknown";
 export type InstallerObservationReason =
   | "installer_open_requested"
@@ -20,6 +22,7 @@ export type InstallerObservationReason =
 export type InstallerObservationSummary = {
   arch: string;
   artifactType: InstallerObservationArtifactType;
+  applyTrigger?: InstallerObservationApplyTrigger;
   attemptedAt: string;
   channel: DesktopUpdateChannel;
   flowId: string;
@@ -37,6 +40,7 @@ export type InstallerObservationSummary = {
 export type PendingInstallerObservationInput = {
   arch: string;
   artifactType: InstallerObservationArtifactType;
+  applyTrigger?: InstallerObservationApplyTrigger;
   attemptedAt: string;
   channel: DesktopUpdateChannel;
   flowId?: string;
@@ -99,6 +103,7 @@ export async function writePendingInstallerObservation(
   const summary: InstallerObservationSummary = {
     arch: input.arch,
     artifactType: input.artifactType,
+    ...(input.applyTrigger == null ? {} : { applyTrigger: input.applyTrigger }),
     attemptedAt: input.attemptedAt,
     channel: input.channel,
     flowId,

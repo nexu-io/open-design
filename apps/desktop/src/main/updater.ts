@@ -61,6 +61,7 @@ import { releaseChannelFromVersion } from "@open-design/release";
 import {
   markInstallerObservationOpenFailed,
   writePendingInstallerObservation,
+  type InstallerObservationApplyTrigger,
   type InstallerObservationArtifactType,
   type InstallerObservationHandle,
 } from "./installer-observations.js";
@@ -322,7 +323,7 @@ export type DesktopUpdater = {
   config: DesktopUpdaterConfig;
   downloadUpdate(): Promise<DesktopUpdateStatusSnapshot>;
   handle(action: DesktopUpdateAction): Promise<DesktopUpdateStatusSnapshot>;
-  installUpdate(): Promise<DesktopUpdateStatusSnapshot>;
+  installUpdate(options?: { applyTrigger?: InstallerObservationApplyTrigger }): Promise<DesktopUpdateStatusSnapshot>;
   shouldAutoCheck(): boolean;
   snapshot(): DesktopUpdateStatusSnapshot;
   status(): Promise<DesktopUpdateStatusSnapshot>;
@@ -889,7 +890,7 @@ function selectedPackageLauncherArtifact(config: DesktopUpdaterConfig, preferPay
 }
 
 function installerObservationArtifactType(value: string | undefined): InstallerObservationArtifactType | null {
-  if (value === "dmg" || value === "installer") return value;
+  if (value === "dmg" || value === "installer" || value === "payload") return value;
   return null;
 }
 
@@ -2924,7 +2925,10 @@ export function createDesktopUpdater(
     }
   }
 
-  async function writeInstallObservation(attemptedAt: string): Promise<InstallerObservationHandle | null> {
+  async function writeInstallObservation(
+    attemptedAt: string,
+    applyTrigger?: InstallerObservationApplyTrigger,
+  ): Promise<InstallerObservationHandle | null> {
     if (config.openDryRun) return null;
     if (config.installerObservationRoot == null || config.namespace == null) return null;
     if (activeRelease == null) return null;
@@ -2934,6 +2938,7 @@ export function createDesktopUpdater(
       return await writePendingInstallerObservation({
         arch: activeRelease.ref.arch,
         artifactType,
+        ...(applyTrigger == null ? {} : { applyTrigger }),
         attemptedAt,
         channel: activeRelease.ref.channel,
         fromVersion: config.currentVersion,
@@ -2995,7 +3000,9 @@ export function createDesktopUpdater(
     return { ...result, launchPath };
   }
 
-  async function installUpdate(): Promise<DesktopUpdateStatusSnapshot> {
+  async function installUpdate(
+    installOptions?: { applyTrigger?: InstallerObservationApplyTrigger },
+  ): Promise<DesktopUpdateStatusSnapshot> {
     const unsupported = unsupportedStatus();
     if (unsupported != null) return unsupported;
     if (installResult != null) {
@@ -3040,6 +3047,11 @@ export function createDesktopUpdater(
     if (activeRelease.ref.artifact.type === "payload") {
       try {
         const appliedAt = now().toISOString();
+        // Record the payload apply before relaunch (which quits the app). The
+        // next launch classifies success/not_applied by comparing versions and
+        // emits `update_apply_observed`. `apply_trigger` distinguishes the
+        // silent-startup auto-apply from a manual "install & restart" click.
+        await writeInstallObservation(appliedAt, installOptions?.applyTrigger ?? "manual");
         await activatePreparedLauncherPayloadRelease({
           activeRelease,
           config,
@@ -3135,7 +3147,7 @@ export function createDesktopUpdater(
           return this.installUpdate();
       }
     },
-    installUpdate: () => serialized(installUpdate),
+    installUpdate: (options) => serialized(() => installUpdate(options)),
     shouldAutoCheck: () => config.enabled && config.autoCheck,
     snapshot,
     async status() {
@@ -3241,7 +3253,7 @@ export function createDesktopUpdaterScheduler(
         try {
           const enabled = await options.startupSilentPayloadUpdate.isEnabled();
           if (enabled) {
-            status = await updater.installUpdate();
+            status = await updater.installUpdate({ applyTrigger: "silent_startup" });
             if (status.installResult != null) {
               stop("silent-payload-installed");
               options.startupSilentPayloadUpdate.requestQuit();

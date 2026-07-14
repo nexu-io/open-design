@@ -8,6 +8,7 @@ import { installMockOpenDesignHost } from '@open-design/host/testing';
 
 import { UpdaterPopup } from '../../src/components/UpdaterPopup';
 import { I18nProvider } from '../../src/i18n';
+import * as analyticsEvents from '../../src/analytics/events';
 
 function idleStatus(): OpenDesignHostUpdaterStatusSnapshot {
   return {
@@ -214,6 +215,56 @@ describe('UpdaterPopup', () => {
 
     await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(false));
     await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+  });
+
+  it('tracks the silent-update toggle and carries its state into the install click', async () => {
+    const clickSpy = vi.spyOn(analyticsEvents, 'trackUpdateIndicatorClick');
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install: vi.fn(async () => downloadedStatus({
+            installResult: {
+              dryRun: true,
+              openedAt: '2026-05-19T00:00:00.000Z',
+              path: '/tmp/open-design-updater/Open Design Beta.dmg',
+            },
+          })),
+          quit: vi.fn(async () => ({ ok: true as const })),
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    clickSpy.mockClear();
+
+    // Unchecking the default-on checkbox reports a toggle click with the new state.
+    fireEvent.click(screen.getByTestId('updater-silent-update-checkbox'));
+    expect(clickSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        page_name: 'home',
+        area: 'update_prompt',
+        element: 'silent_updates_toggle',
+        action: 'toggle',
+        silent_updates_status: 'off',
+      }),
+    );
+
+    clickSpy.mockClear();
+    // Installing carries the current (now off) silent-update state.
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    expect(clickSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        area: 'update_prompt',
+        element: 'install_update',
+        action: 'install',
+        silent_updates_status: 'off',
+      }),
+    );
   });
 
   it('renders an explicit disabled silent update preference as unchecked', async () => {

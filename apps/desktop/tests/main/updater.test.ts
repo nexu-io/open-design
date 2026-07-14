@@ -620,6 +620,109 @@ describe("desktop updater", () => {
     }
   });
 
+  it("writes a payload apply observation tagged with the apply trigger (silent vs manual)", async () => {
+    async function applyPayloadWithTrigger(
+      installOptions: { applyTrigger?: "silent_startup" | "manual" } | undefined,
+    ): Promise<Record<string, unknown>> {
+      const root = makeRoot();
+      const observationRoot = join(root, "observations", "installer");
+      const fixture = await createUpdaterFixture({
+        channel: "beta",
+        includePayload: true,
+        payloadBody: "open design windows payload fixture",
+        platform: "win",
+        version: "1.0.0-beta.2",
+      });
+      const launcherRuntimePath = join(root, "launcher", "runtime.json");
+      const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
+      const versionRoot = join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions");
+      try {
+        await mkdir(join(root, "installed"), { recursive: true });
+        await writeFile(launcherLaunchPath, "");
+        await mkdir(join(versionRoot, "1.0.0-beta.1"), { recursive: true });
+        await writeFile(
+          launcherRuntimePath,
+          `${JSON.stringify({
+            active: { generation: 0, version: "1.0.0-beta.1" },
+            channel: "beta",
+            lastSuccessful: { generation: 0, version: "1.0.0-beta.1" },
+            namespace: "release-beta-win",
+            schemaVersion: LAUNCHER_SCHEMA_VERSION,
+          })}\n`,
+        );
+        const updater = createDesktopUpdater({
+          arch: "x64",
+          currentVersion: "1.0.0-beta.1",
+          downloadRoot: join(root, "updates"),
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.1",
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+          installerObservationRoot: observationRoot,
+          launcherRoot: root,
+          launcherLaunchPath,
+          launcherRuntimePath,
+          namespace: "release-beta-win",
+          source: SIDECAR_SOURCES.PACKAGED,
+        }, {
+          extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+            await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+            await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+            await writeFile(
+              join(destinationRoot, "manifest.json"),
+              `${JSON.stringify({
+                channel: "beta",
+                entry: { cwd: "payload", executable: "payload/Open Design.exe" },
+                namespace: "release-beta-win",
+                payloadRoot: "payload",
+                platform: "win32",
+                schemaVersion: LAUNCHER_SCHEMA_VERSION,
+                version: "1.0.0-beta.2",
+              })}\n`,
+            );
+            await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+          },
+          launchAppAfterQuit: async () => ({ helperLogPath: join(root, "updates", "helpers", "open.log") }),
+          processExecPath: "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe",
+          processPid: 4242,
+        });
+
+        const checked = await updater.checkForUpdates();
+        expect(checked.artifact?.type).toBe("payload");
+        const installed = await updater.installUpdate(installOptions);
+        expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
+
+        const flowIds = await readdir(observationRoot);
+        expect(flowIds).toHaveLength(1);
+        return JSON.parse(
+          await readFile(join(observationRoot, flowIds[0] ?? "", "summary.json"), "utf8"),
+        ) as Record<string, unknown>;
+      } finally {
+        await fixture.close();
+        rmSync(root, { force: true, recursive: true });
+      }
+    }
+
+    // Startup silent auto-apply is tagged silent_startup ...
+    const silent = await applyPayloadWithTrigger({ applyTrigger: "silent_startup" });
+    expect(silent).toMatchObject({
+      artifactType: "payload",
+      applyTrigger: "silent_startup",
+      fromVersion: "1.0.0-beta.1",
+      toVersion: "1.0.0-beta.2",
+      result: "pending",
+    });
+
+    // ... and a manual "install & restart" click defaults to manual.
+    const manual = await applyPayloadWithTrigger(undefined);
+    expect(manual).toMatchObject({
+      artifactType: "payload",
+      applyTrigger: "manual",
+      toVersion: "1.0.0-beta.2",
+    });
+  });
+
   // Stone 1 — installed-base escape hatch: a feed that declares a launcher-contract
   // schema this build cannot interpret, or a minimum launcher/build version newer
   // than this build, must route to the full installer instead of an in-place

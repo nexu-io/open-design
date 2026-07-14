@@ -377,18 +377,30 @@ export type TrackingUpdateApplyElapsedBucket =
   | 'gt_7d'
   | 'unknown';
 
+// How a payload apply was triggered. `silent_startup`: the auto-apply on
+// launch when the user left silent updates enabled (no click). `manual`:
+// the user pressed "install & restart" in the update prompt on a payload
+// artifact. dmg/installer artifacts are always manual (installer route);
+// the field is optional so historical installer observations stay valid.
+export type TrackingUpdateApplyTrigger = 'silent_startup' | 'manual';
+
 export interface UpdateApplyObservedProps {
   flow_id: string;
   channel: ReleaseChannel;
   namespace: string;
   platform: string;
   arch: string;
-  artifact_type: 'dmg' | 'installer';
+  // `payload` is the in-place launcher update the silent-update path applies
+  // on startup; `dmg`/`installer` are the classic installer-open route.
+  artifact_type: 'dmg' | 'installer' | 'payload';
   from_version: string;
   to_version: string;
   result: TrackingUpdateApplyResult;
   reason: TrackingUpdateApplyReason;
   elapsed_bucket: TrackingUpdateApplyElapsedBucket;
+  // Present for payload applies so silent-startup vs manual can be split;
+  // absent on legacy installer observations.
+  apply_trigger?: TrackingUpdateApplyTrigger;
 }
 
 // Discriminated union over the four surfaces that fire

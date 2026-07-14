@@ -190,6 +190,21 @@ export function UpdaterPopup({
     setPanelOpen(false);
   }, [analytics.track, installBusy, versionProps]);
 
+  const handleSilentUpdatesChange = useCallback(
+    (nextAllowSilentUpdates: boolean) => {
+      setAllowSilentUpdatesChecked(nextAllowSilentUpdates);
+      trackUpdateIndicatorClick(analytics.track, {
+        page_name: 'home',
+        area: 'update_prompt',
+        element: 'silent_updates_toggle',
+        action: 'toggle',
+        silent_updates_status: nextAllowSilentUpdates ? 'on' : 'off',
+        ...versionProps,
+      });
+    },
+    [analytics.track, versionProps],
+  );
+
   useEffect(() => {
     if (!panelOpen) return;
     const onDocClick = (event: MouseEvent) => {
@@ -219,6 +234,7 @@ export function UpdaterPopup({
       area: 'update_prompt',
       element: 'install_update',
       action: 'install',
+      silent_updates_status: allowSilentUpdatesChecked ? 'on' : 'off',
       ...versionProps,
     });
     try {
@@ -329,7 +345,7 @@ export function UpdaterPopup({
             onInstall={() => {
               void installAndQuit();
             }}
-            onSilentUpdatesChange={setAllowSilentUpdatesChecked}
+            onSilentUpdatesChange={handleSilentUpdatesChange}
           />
         ) : null}
       </AnimatePresence>

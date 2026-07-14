@@ -232,10 +232,17 @@ export interface StudioOnboardingHintClickProps {
 export interface UpdateIndicatorClickProps {
   page_name: 'home';
   area: 'update_indicator' | 'update_prompt';
-  element: 'ready_indicator' | 'later' | 'install_update';
-  action: 'open_prompt' | 'dismiss' | 'install';
+  // `silent_updates_toggle`: the "allow silent updates" checkbox inside the
+  // update prompt (action `toggle`). `install_update` carries the toggle
+  // state at install time via `silent_updates_status`.
+  element: 'ready_indicator' | 'later' | 'install_update' | 'silent_updates_toggle';
+  action: 'open_prompt' | 'dismiss' | 'install' | 'toggle';
   app_version_before?: string;
   app_version_after?: string;
+  // On/off state of the "allow silent updates" preference. Present on the
+  // `silent_updates_toggle` click (the new value after toggling) and on the
+  // `install_update` click (the value carried into the install).
+  silent_updates_status?: 'on' | 'off';
 }
 
 export interface WhatsNewPopupClickProps {
@@ -1460,6 +1467,16 @@ export interface SettingsAppearanceClickProps {
   color?: string;
 }
 
+// Settings > About: the "allow silent updates" toggle. Mirrors the update
+// prompt checkbox (same preference), but reached from Settings rather than
+// the update popup. `silent_updates_status` is the value after toggling.
+export interface SettingsAboutClickProps {
+  page_name: TrackingSettingsPage;
+  area: 'about';
+  element: 'silent_updates_toggle';
+  silent_updates_status: 'on' | 'off';
+}
+
 export interface SettingsNotificationsClickProps {
   page_name: TrackingSettingsPage;
   area: 'notifications';
@@ -1600,6 +1617,7 @@ export type UiClickProps =
   | SettingsConnectorsClickProps
   | SettingsLanguageClickProps
   | SettingsAppearanceClickProps
+  | SettingsAboutClickProps
   | SettingsNotificationsClickProps
   | SettingsPetsClickProps
   | SettingsPrivacyClickProps

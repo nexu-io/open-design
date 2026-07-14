@@ -5,6 +5,7 @@ import type {
   TrackingUpdateApplyElapsedBucket,
   TrackingUpdateApplyReason,
   TrackingUpdateApplyResult,
+  TrackingUpdateApplyTrigger,
   UpdateApplyObservedProps,
 } from '@open-design/contracts/analytics';
 import {
@@ -21,7 +22,7 @@ const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';
 const INSTALLER_OBSERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-type InstallerObservationArtifactType = 'dmg' | 'installer';
+type InstallerObservationArtifactType = 'dmg' | 'installer' | 'payload';
 type InstallerObservationChannel = ReleaseChannel;
 type InstallerObservationDeliveryStatus =
   | 'submitted'
@@ -33,6 +34,9 @@ type InstallerObservationDeliveryStatus =
 export type InstallerObservationSummary = {
   arch: string;
   artifactType: InstallerObservationArtifactType;
+  // Only written for payload applies; distinguishes silent-startup auto-apply
+  // from a manual "install & restart" click. Absent on installer observations.
+  applyTrigger?: TrackingUpdateApplyTrigger;
   attemptedAt: string;
   channel: InstallerObservationChannel;
   delivery?: {
@@ -104,7 +108,10 @@ function isInstallerObservationSummary(value: unknown): value is InstallerObserv
     isReleaseChannel(channel) &&
     typeof value.platform === 'string' &&
     typeof value.arch === 'string' &&
-    (artifactType === 'dmg' || artifactType === 'installer') &&
+    (artifactType === 'dmg' || artifactType === 'installer' || artifactType === 'payload') &&
+    (value.applyTrigger === undefined ||
+      value.applyTrigger === 'silent_startup' ||
+      value.applyTrigger === 'manual') &&
     typeof value.fromVersion === 'string' &&
     typeof value.toVersion === 'string' &&
     typeof value.attemptedAt === 'string' &&
@@ -205,6 +212,7 @@ function eventProperties(
     result: classification.result,
     reason: classification.reason,
     elapsed_bucket: classification.elapsedBucket,
+    ...(summary.applyTrigger ? { apply_trigger: summary.applyTrigger } : {}),
   } satisfies UpdateApplyObservedProps;
   return props as unknown as Record<string, unknown>;
 }
