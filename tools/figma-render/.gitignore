@@ -1,0 +1,4 @@
+.gitignore for node_modules
+node_modules/
+dist/
+test-output/
