@@ -170,6 +170,23 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.extractions.map((r) => r.id).sort()).toEqual(['a', 'b']);
   });
 
+  it('restores the optimistic row when delete and its recovery reload both fail', async () => {
+    const port = makePort({
+      deleteExtraction: vi.fn(async () => false),
+      fetchExtractions: vi.fn(async () => { throw new Error('offline'); }),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    await act(async () => {
+      await result.current.onDeleteExtraction('a');
+    });
+
+    expect(result.current.extractions.map((row) => row.id).sort()).toEqual(['a', 'b']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
   it('clearExtractions empties the list and calls the port', async () => {
     const port = makePort({ clearExtractionHistory: vi.fn(async () => true) });
     const { result } = renderHook(() => useMemoryExtractions(port));
@@ -216,6 +233,22 @@ describe('useMemoryExtractions — delete + clear', () => {
 
     expect(port.fetchExtractions).toHaveBeenCalledOnce();
     expect(result.current.extractions.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('restores optimistic history when clear and its recovery reload both fail', async () => {
+    const port = makePort({
+      clearExtractionHistory: vi.fn(async () => false),
+      fetchExtractions: vi.fn(async () => { throw new Error('offline'); }),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    await act(async () => {
+      await result.current.clearExtractions();
+    });
+
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['a']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
   it('ignores an extraction event with no id', async () => {

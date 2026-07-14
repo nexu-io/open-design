@@ -88,7 +88,8 @@ export function useMemoryExtractions(
       // instant. The SSE 'deleted' event will arrive moments later and is a
       // no-op against an already-removed id; if the request fails we re-fetch
       // to put the row back instead of silently lying.
-      setExtractions((prev) => prev.filter((r) => r.id !== id));
+      const previous = extractions;
+      setExtractions(previous.filter((r) => r.id !== id));
       let ok = false;
       try {
         ok = await port.deleteExtraction(id);
@@ -98,13 +99,21 @@ export function useMemoryExtractions(
         // never claims the server-side row was deleted when it was not.
       }
       if (!ok) {
-        await reloadExtractions();
+        try {
+          const confirmed = await port.fetchExtractions();
+          setExtractions(confirmed);
+          setLoadError(null);
+        } catch {
+          setExtractions(previous);
+          setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
+        }
       }
     },
-    [reloadExtractions, port],
+    [extractions, port],
   );
 
   const clearExtractions = useCallback(async () => {
+    const previous = extractions;
     setExtractions([]);
     let ok = false;
     try {
@@ -113,9 +122,16 @@ export function useMemoryExtractions(
       // See the per-row delete path above: fetch rejects on transport failure.
     }
     if (!ok) {
-      await reloadExtractions();
+      try {
+        const confirmed = await port.fetchExtractions();
+        setExtractions(confirmed);
+        setLoadError(null);
+      } catch {
+        setExtractions(previous);
+        setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
+      }
     }
-  }, [reloadExtractions, port]);
+  }, [extractions, port]);
 
   // The "no API key" banner only shows when the most recent attempt skipped for
   // that specific reason. We don't show it for memory-disabled (the user's own
