@@ -148,6 +148,64 @@ describe('concurrent run per-conversation guard (#5490)', () => {
     expect(raceCaptures.length).toBe(1);
     expect(raceSessions.size).toBe(1);
   });
+
+  it('rejects a second concurrent project-only (MCP/SDK) run on the default conversation', async () => {
+    // The public McpRunCreateRequest requires only projectId; those callers send
+    // NO conversationId, so the daemon resolves the project's default (earliest)
+    // conversation and binds the run to it. Two such requests raced onto ONE
+    // project must not both create — that forks the native session on the default
+    // conversation exactly as an explicit-conversationId race would. A guard that
+    // only inspected the raw requestBody.conversationId (undefined here) missed
+    // this path; resolving + claiming the default id up front closes it. One is
+    // 202, the other 409 CONVERSATION_BUSY, before any snapshot pin or upsert.
+    workDir = await mkdtemp(path.join(os.tmpdir(), 'od-concurrent-mcp-'));
+    const capturePath = path.join(workDir, 'spawn-capture.jsonl');
+    const fakeClaude = await writeSessionCapturingClaude(workDir, 'claude-capture', capturePath);
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.OD_TEST_SESSION_CAPTURE = capturePath;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const project = await createProject(started.url, 'mcp');
+    const beforeUserMessages = await userMessageCount(started.url, project);
+
+    const [r1, r2] = await Promise.all([
+      startProjectOnlyRunRaw(started.url, project.projectId),
+      startProjectOnlyRunRaw(started.url, project.projectId),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses, `expected one 202 + one 409, got ${JSON.stringify([r1.status, r2.status])}`)
+      .toEqual([202, 409]);
+    const rejected = [r1, r2].find((r) => r.status === 409);
+    expect(rejected?.code).toBe('CONVERSATION_BUSY');
+
+    const accepted = [r1, r2].find((r) => r.status === 202);
+    await waitForTerminal(started.url, accepted!.runId!);
+
+    // Exactly one native session on the default conversation — no fork.
+    const captures = await readCapturesForProject(capturePath, project.projectId);
+    const sessions = new Set(captures.map((c) => c.sessionId).filter(Boolean));
+    expect(captures.length).toBe(1);
+    expect(sessions.size).toBe(1);
+
+    // The rejected request left NO durable side effect: exactly one new user
+    // message (the admitted run's fallback upsert), none from the 409'd one.
+    const afterUserMessages = await userMessageCount(started.url, project);
+    expect(afterUserMessages - beforeUserMessages).toBe(1);
+  });
 });
 
 async function writeSessionCapturingClaude(
@@ -303,6 +361,50 @@ async function startRunRaw(
   if (runResponse.status !== 202) return { status: runResponse.status };
   const body = await runResponse.json() as { runId: string };
   return { status: 202, runId: body.runId };
+}
+
+// McpRunCreateRequest shape: projectId + message only, NO conversationId. The
+// daemon must resolve and reserve the project's default conversation for the
+// concurrency guard to fire on this documented MCP/SDK path.
+async function startProjectOnlyRunRaw(
+  url: string,
+  projectId: string,
+): Promise<{ status: number; runId?: string; code?: string }> {
+  const runResponse = await fetch(`${url}/api/runs`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-od-analytics-device-id': 'concurrent-session-test',
+      'x-od-analytics-session-id': 'concurrent-session-session',
+      'x-od-analytics-client-type': 'web',
+    },
+    body: JSON.stringify({
+      projectId,
+      agentId: 'claude',
+      message: 'reproduce concurrent native session fork (mcp)',
+    }),
+  });
+  if (runResponse.status === 202) {
+    const body = await runResponse.json() as { runId: string };
+    return { status: 202, runId: body.runId };
+  }
+  const body = await runResponse.json().catch(() => ({})) as { error?: { code?: string } };
+  const code = body.error?.code;
+  return code === undefined
+    ? { status: runResponse.status }
+    : { status: runResponse.status, code };
+}
+
+async function userMessageCount(
+  url: string,
+  project: { projectId: string; conversationId: string },
+): Promise<number> {
+  const response = await fetch(
+    `${url}/api/projects/${encodeURIComponent(project.projectId)}/conversations/${encodeURIComponent(project.conversationId)}/messages`,
+  );
+  expect(response.status).toBe(200);
+  const body = await response.json() as { messages: Array<{ role?: string }> };
+  return body.messages.filter((m) => m.role === 'user').length;
 }
 
 async function waitForTerminal(url: string, runId: string): Promise<RunStatus> {

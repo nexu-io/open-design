@@ -492,6 +492,44 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     return true;
   };
 
+  // Resolve — WITHOUT creating anything — the project's default conversation: the
+  // earliest one (createdAt, id tiebreak). Read-only and deterministic, so the
+  // pre-await claim below and the MCP/SDK fallback later in the handler agree on
+  // one id. Returns null if the project has no conversation yet.
+  const resolveDefaultConversationId = (projectId: string): string | null => {
+    try {
+      const convs = toConversationRecords(listConversations(db, projectId));
+      if (convs.length === 0) return null;
+      const earliest = [...convs].sort((a, b) => {
+        const aCreated = Number(a?.createdAt);
+        const bCreated = Number(b?.createdAt);
+        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+          return aCreated - bCreated;
+        }
+        return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+      })[0];
+      return earliest && typeof earliest.id === 'string' && earliest.id ? earliest.id : null;
+    } catch (err) {
+      console.warn('[runs] default conversation resolution failed', err);
+      return null;
+    }
+  };
+
+  // The canonical conversation a /api/runs request will bind to: an explicit
+  // conversationId, or (for MCP/SDK project-only requests — McpRunCreateRequest
+  // requires only projectId) the project's default conversation. Claiming this
+  // up front closes the concurrent-fork window (#5490) on that path too, which a
+  // check on the raw requestBody.conversationId (undefined there) would miss.
+  const canonicalConversationIdForRequest = (requestBody: JsonRecord): string | null => {
+    if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      return requestBody.conversationId;
+    }
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      return resolveDefaultConversationId(requestBody.projectId);
+    }
+    return null;
+  };
+
   const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
@@ -547,8 +585,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // persistent preparation (plugin-snapshot pinning, message upsert, run
     // create), so a rejected request leaves no durable side effects. The claim
     // is taken synchronously here so two true-concurrent submits can't both slip
-    // past before the run (created several awaits below) exists.
-    if (!claimConversationOrReject(requestBody.conversationId, res)) return;
+    // past before the run (created several awaits below) exists. We resolve the
+    // canonical conversation first so a project-only MCP/SDK request claims the
+    // same default conversation the fallback below will bind it to.
+    if (!claimConversationOrReject(canonicalConversationIdForRequest(requestBody), res)) return;
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
@@ -668,19 +708,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       (typeof meta.conversationId !== 'string' || !meta.conversationId)
     ) {
       try {
-        const convs = toConversationRecords(listConversations(db, meta.projectId));
-        const defaultConv = convs.length > 0
-          ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
-          : null;
-        if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
-          meta.conversationId = defaultConv.id;
+        // Same resolver the pre-await claim used, so the run binds to exactly
+        // the conversation that was reserved for it (#5490).
+        const defaultConvId = resolveDefaultConversationId(meta.projectId);
+        if (defaultConvId) {
+          meta.conversationId = defaultConvId;
           if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
             meta.assistantMessageId = randomUUID();
           }
@@ -689,7 +721,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               ? meta.message
               : null;
           if (promptForUserMessage) {
-            upsertMessage(db, defaultConv.id, {
+            upsertMessage(db, defaultConvId, {
               id: randomUUID(),
               role: 'user',
               content: promptForUserMessage,
