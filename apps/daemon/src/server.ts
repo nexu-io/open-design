@@ -6161,6 +6161,10 @@ export async function startServer({
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Forward the per-call BYOK provider snapshot so pickProvider()
+        // can run "Same as chat" extraction against the user's actual
+        // provider/endpoint/model instead of falling back to defaults.
+        chatProvider: byokProvider ?? null,
         // Scope the extractor's duplicate-turn de-dup to this conversation, so a
         // re-fired turn collapses but an identical (message, reply) in another
         // conversation is still examined.
