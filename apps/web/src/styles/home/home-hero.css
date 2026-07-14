@@ -32,6 +32,8 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+/* The brand glyph is a self-shaped superellipse tile (rendered through
+   .od-brand-glyph), so it needs no panel disc behind it. */
 .home-hero__brand-mark {
   position: absolute;
   top: 50%;
@@ -39,21 +41,6 @@
   transform: translateY(-50%);
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 2px;
-}
-.home-hero__brand-mark img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 .home-hero__brand-name {
   font-family: var(--serif);

@@ -2561,7 +2561,7 @@ function OnboardingView({
         </div>
         <div className="onboarding-cloud__center">
           <span
-            className="onboarding-cloud__logo"
+            className="onboarding-cloud__logo od-brand-glyph"
             role="img"
             aria-label="Open Design"
           />
