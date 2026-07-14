@@ -136,16 +136,6 @@ function cornerRadiusStyle(node: FigmaNode): string {
   return vals.join(' ');
 }
 
-function resolveSize(node: FigmaNode): { w: number; h: number } {
-  if (node.absoluteBoundingBox) {
-    return { w: node.absoluteBoundingBox.width, h: node.absoluteBoundingBox.height };
-  }
-  if (node.size) {
-    return { w: node.size.x ?? 0, h: node.size.y ?? 0 };
-  }
-  return { w: 0, h: 0 };
-}
-
 export function renderNode(node: FigmaNode, depth: number, opts: RenderOptions, parentTransform?: Mat2x3 | null): string {
   if (node.visible === false) return '';
 
@@ -170,13 +160,14 @@ export function renderNode(node: FigmaNode, depth: number, opts: RenderOptions, 
   }
 
   if (node.type === 'CANVAS') {
-    const { w, h } = resolveSize(node);
+    const cw = node.absoluteBoundingBox?.width ?? node.size?.x ?? 1440;
+    const ch = node.absoluteBoundingBox?.height ?? node.size?.y ?? 900;
     const bg = paintToCssBg(node.fillPaints?.[0], opts.imagesBase) || '#ffffff';
     const children = (node.children ?? [])
       .map((c) => renderNode(c, depth + 1, opts, childTransform))
       .filter(Boolean)
       .join('\n');
-    return `<div class="od-page" data-page="${escapeHtml(node.name || '')}" style="width:${Math.round(w)}px;height:${Math.round(h)}px;position:relative;overflow:hidden;background:${bg};margin:0 auto;">
+    return `<div class="od-page" data-page="${escapeHtml(node.name || '')}" style="width:${Math.round(cw)}px;height:${Math.round(ch)}px;position:relative;overflow:hidden;background:${bg};margin:0 auto;">
 ${indent(children, 2)}
 </div>`;
   }
@@ -320,7 +311,7 @@ ${indent(children, 2)}
 
   // Generic rectangle/leaf
   const children2 = (node.children ?? [])
-    .map((c) => renderNode(c, depth + 1, opts))
+    .map((c) => renderNode(c, depth + 1, opts, childTransform))
     .filter(Boolean)
     .join('\n');
   const allStyles2 = [styleAttr, bgCss || 'background:rgba(0,0,0,0.05)', ...(strokeCss ? [`border:${strokeCss}`] : []), effectCss].filter(Boolean).join(';');
@@ -328,16 +319,16 @@ ${indent(children, 2)}
   return `<div data-od-id="${nodeId(node)}" data-od-name="${escapeAttr(node.name || '')}" data-type="${node.type?.toLowerCase() || 'unknown'}" style="${allStyles2}">${inner2}</div>`;
 }
 
-function indent(text: string, spaces: number): string {
+export function indent(text: string, spaces: number): string {
   const pad = ' '.repeat(spaces);
   return text.split('\n').map((line) => (line.trim() ? pad + line : line)).join('\n');
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function escapeAttr(s: string): string {
+export function escapeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 

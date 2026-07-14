@@ -1,4 +1,5 @@
 // Figma effect → CSS value conversion
+import { colorToCss } from './paint-to-css';
 
 interface FigEffect {
   type?: string;
@@ -10,10 +11,11 @@ interface FigEffect {
   blendMode?: string;
 }
 
+const SHADOW_COLOR = { r: 0, g: 0, b: 0, a: 0.25 };
+
 export function effectsToCss(effects: FigEffect[] | undefined): string {
   if (!effects?.length) return '';
   const parts: string[] = [];
-
   let backdropFilter = '';
   let filter = '';
 
@@ -21,24 +23,13 @@ export function effectsToCss(effects: FigEffect[] | undefined): string {
     if (e.visible === false) continue;
     switch (e.type) {
       case 'DROP_SHADOW': {
-        const color = e.color
-          ? `rgba(${Math.round(e.color.r * 255)},${Math.round(e.color.g * 255)},${Math.round(e.color.b * 255)},${(e.color.a ?? 1).toFixed(2)})`
-          : 'rgba(0,0,0,0.25)';
-        const ox = e.offset?.x ?? 0;
-        const oy = e.offset?.y ?? 4;
-        const r = e.radius ?? 4;
-        const s = e.spread ?? 0;
-        parts.push(`${ox}px ${oy}px ${r}px ${s}px ${color}`);
+        const clr = colorToCss(e.color ?? SHADOW_COLOR);
+        parts.push(`${e.offset?.x ?? 0}px ${e.offset?.y ?? 4}px ${e.radius ?? 4}px ${e.spread ?? 0}px ${clr}`);
         break;
       }
       case 'INNER_SHADOW': {
-        const color = e.color
-          ? `rgba(${Math.round(e.color.r * 255)},${Math.round(e.color.g * 255)},${Math.round(e.color.b * 255)},${(e.color.a ?? 1).toFixed(2)})`
-          : 'rgba(0,0,0,0.25)';
-        const ox = e.offset?.x ?? 0;
-        const oy = e.offset?.y ?? 4;
-        const r = e.radius ?? 4;
-        parts.push(`inset ${ox}px ${oy}px ${r}px ${color}`);
+        const clr = colorToCss(e.color ?? SHADOW_COLOR);
+        parts.push(`inset ${e.offset?.x ?? 0}px ${e.offset?.y ?? 4}px ${e.radius ?? 4}px ${clr}`);
         break;
       }
       case 'BACKGROUND_BLUR':

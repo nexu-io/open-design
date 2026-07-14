@@ -36,26 +36,6 @@ export interface ParsedNode {
   transform?: { m00: number; m01: number; m02: number; m10: number; m11: number; m12: number };
 }
 
-function isFigmaNode(node: unknown): node is Record<string, unknown> {
-  return typeof node === 'object' && node !== null;
-}
-
-function walkNodes(
-  node: Record<string, unknown>,
-  parent: ParsedNode | null,
-  childrenMap: Map<string, Record<string, unknown>[]>,
-  fn: (node: ParsedNode, parent: ParsedNode | null) => void
-): void {
-  const cast = node as unknown as ParsedNode;
-  fn(cast, parent);
-  const id = nodeId(cast as Parameters<typeof nodeId>[0]);
-  const children = id ? (childrenMap.get(id) ?? []) : [];
-  if (!cast.children) cast.children = [];
-  for (const child of children) {
-    walkNodes(child, cast, childrenMap, fn);
-  }
-}
-
 export interface FigmaFileData {
   nodes: ParsedNode[];
   nodeCount: number;

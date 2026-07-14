@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseFig, nodeId } from 'openfig-core';
-import { renderNode } from './renderer';
+import { renderNode, indent, escapeHtml } from './renderer';
 
 function main(): void {
   const args = process.argv.slice(2);
@@ -150,16 +150,6 @@ ${links}
 </body>
 </html>`;
 }
-
-function indent(text: string, spaces: number): string {
-  const pad = ' '.repeat(spaces);
-  return text.split('\n').map((line) => (line.trim() ? pad + line : line)).join('\n');
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 function detectImageExt(bytes: Uint8Array): string {
   if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'png';
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
