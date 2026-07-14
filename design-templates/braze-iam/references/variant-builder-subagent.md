@@ -21,7 +21,9 @@
   `source:"css"` 에셋은 `- (css) | role: decor | note: <기획안 note>` 형식 (파일 없음 — 코드로 그린다)
 - `{image_mode}` — 기획안 `image.mode` 값 (`"layer"` 또는 `"scene"`, 기본 `"layer"`) —
   임무 2 발송본 작성의 모드 분기 입력
-- `{composition}` — 기획안 image.composition 배치 스케치 문장
+- `{composition}` — **해당 variant의 `layout.variants.{label}`** (§2 유형 + 존
+  스케치 — visual-layout-patterns.md §12.3 분화 설계에 따라 A/B가 다른 것이 기본.
+  구 기획안은 `image.composition` 공용 스케치)
 - `{out_dir}` — 산출 디렉토리 절대 경로
 - `{skill_scripts_dir}` — 스킬 scripts/ 절대 경로 (placeholder 폴백 시 make_preview.py 위치)
 
@@ -36,26 +38,27 @@
    - 카피 = 기획안 variants[{label}] heading·body 그대로 (재작성 금지 — 카피
      변경이 필요하면 FAIL로 사유 반환, 메인이 기획 수정)
    - 이미지·컴포지션은 `{image_mode}`로 분기:
-     - **`layer`** (기존 문법 + 강화): 룩 = 활성 `{design_md_path}` 그대로 준수
-       (배경 = 브랜드 토큰 CSS, 이미지 배경 금지 — `visual-layout-patterns.md`
-       §5). 이미지 = `{asset_manifest}`의 url 그대로: `src="<CDN URL>"` 또는 CSS
+     - **`layer`** (기존 문법 + 강화): 룩 = 활성 `{design_md_path}` 그대로 준수.
+       배경 = 브랜드 토큰 CSS 기본 (**생성 이미지 배경 금지** — 배경 포함 생성은
+       scene 모드 전용). 예외: `{composition}` 스케치가 오버레이형(§1-b)으로
+       `library` 비주얼 풀블리드를 명시한 경우만 manifest의 library URL을 배경으로
+       사용 — 이때 가독 조건(스크림/여백존/색 반전) 스케치를 그대로 구현.
+       이미지 = `{asset_manifest}`의 url 그대로: `src="<CDN URL>"` 또는 CSS
        `url(<CDN URL>)` (폴백 manifest면 token 그대로: `src="__BRAZE_MEDIA__/<name>"`).
        **data-URI 삽입 절대 금지** (Braze
        에디터 버퍼링 실측 — 발송본 룰). 히어로는 manifest의 **투명 PNG 정확히
        1장** 배치 — **콜라주 조립 금지**: 분리 생성된 복수 PNG를 물리 상호작용
        처럼 겹쳐 배치하지 않는다 (물리적으로 맞물린 복합 오브제는 생성 단계에서
-       이미 통합된 통짜 PNG로 manifest에 들어온다). CSS 장식(`source:"css"`)은 허용.
-       컴포지션 = `{composition}` 스케치대로 레이어 배치 — position/z-index/
-       scale/겹침. 히어로 스케일·기울임·부유감·시선 흐름은
-       `visual-layout-patterns.md` §6. **존 순서 = brief ③-b composition
-       스케치 고정** — variant 간 차별화는 카피·컬러 포인트·마이크로 인터랙션
-       + **히어로 소품/타이포 교체 (brief ③-b가 variant별 히어로를 명시한
-       경우만 — 빌더 임의 교체 금지)**. 존 순서·레이아웃 구조·팔레트 공식
-       재해석 금지 (A/B 테스트 변인 오염 방지 — 도그푸딩 실측 2026-07-10.
-       히어로 차별화 허용 = 카피-비주얼 정합이 히어로 동일성보다 우선 —
-       룰 완화 2026-07-13: 질문형 카피에 완료-상태 소품이 답을 스포일러하는
-       모순 실측). 그림자·플로트 애니메이션은 CSS
-       (`interaction-standard.md` 준수)
+       이미 통합된 통짜 PNG로 manifest에 들어온다). CSS 장식(`source:"css"`)·
+       카드 중첩·엣지 블리드·코너 프레이밍 등 §6 비물리 CSS 기법은 허용.
+       컴포지션 = `{composition}` 스케치(해당 variant의 유형+존 스케치)대로
+       레이어 배치 — position/z-index/scale/겹침. 히어로 스케일·기울임·부유감·
+       시선 흐름은 `visual-layout-patterns.md` §6. **존 구조 = 받은 스케치에
+       충실** — A/B 레이아웃 분화는 기획(`layout.variants`)이 설계하며 (§12.3,
+       사용자 결정 2026-07-14 — 구 "존 순서 A/B 공통 고정" 룰의 기본값 역전),
+       빌더의 임의 분화·임의 통일·스케치 재해석은 금지. 히어로 소품/타이포도
+       스케치·manifest 명시분만 (빌더 임의 교체 금지). 그림자·플로트 애니메이션은
+       CSS (`interaction-standard.md` 준수)
      - **`scene`** (신설): 카드 배경 = `background: url(<씬 에셋의 manifest url>)
        center / cover` (폴백 시 `url(__BRAZE_MEDIA__/scene-<id>.png)` — **data-URI
        삽입 절대 금지** 불변). 구조 = 텍스트존(상단, 씬의 상단 세이프존 위) → spacer

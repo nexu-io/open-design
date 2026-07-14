@@ -41,10 +41,10 @@ Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 
 
 Braze Custom-HTML IAM을 **브랜드-어그노스틱 워크플로우**로 제작한다.
 
-- **인터뷰 5축**: 목적 · 타겟 · 형식(사이즈/레이아웃) · 톤 · 비주얼 방향
+- **인터뷰 6축**: 목적 · 타겟 · 형식(사이즈) · 톤 · 비주얼 방향 · 레이아웃 지시(지정/자율)
 - **트리거 이벤트는 인터뷰하지 않는다**: Braze 캠페인 콘솔에서 직접 설정 (BRAZE-DOMAIN §5.1-5.2 — IAM은 SDK 커스텀 이벤트로만 발화, API로 발화 불가). 기획안에 후보 1~2개를 명시한다.
 - **Variant 수는 2개 고정 (A/B)**: 인터뷰에서 묻지 않는다.
-- **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 5축 중 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. 5번째 축 `q-visual`(비주얼 방향)은 §5.1 필드가 아니다 — CLI 플래그 없이 기획안 `image.mode`로만 기록된다 (Step 3). `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
+- **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 6축 중 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. `q-visual`(비주얼 방향)과 `q-layout`(레이아웃 지시)은 §5.1 필드가 아니다 — CLI 플래그 없이 기획안 `image.mode`·`layout`으로만 기록된다 (Step 3). `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
 - **산출물 = Braze-ready Custom HTML 파일 2개 (Variant A/B)** → 대시보드 붙여넣기 핸드오프 (BRAZE-DOMAIN §4.4)
 
 > **선행 필수 — 활성 브랜드 컨텍스트 확인**: 타겟·페르소나·브랜드 보이스·금지어·딥링크 카탈로그는 Claude 사전 지식에 없는 브랜드-사내 사실이다. 추측 금지. IAM 제작 시작 시 **system prompt의 "Active brand" + "Brand deliverable context" 블록**을 먼저 확인해 정본 컨텍스트를 확보한다 (소스 파일 경로는 그 블록의 Source files 라인).
@@ -100,7 +100,7 @@ Source files 라인이 가리키는 경로를 전달한다)
 
 **`<question-form>` 아티팩트로만 진행한다.** AskUserQuestion 도구·인라인 폼 금지 (AGENTS.md "Asking the user questions").
 
-인터뷰 = **5축만** 물어본다. 트리거 이벤트는 묻지 않는다 (Braze 캠페인 콘솔 설정, BRAZE-DOMAIN §5.1).
+인터뷰 = **6축만** 물어본다. 트리거 이벤트는 묻지 않는다 (Braze 캠페인 콘솔 설정, BRAZE-DOMAIN §5.1).
 
 ```xml
 <question-form id="braze-iam-interview">
@@ -153,6 +153,15 @@ Source files 라인이 가리키는 경로를 전달한다)
       <choice value="recommend">Claude 추천 (목적·톤 기반)</choice>
     </choices>
   </question>
+
+  <question id="q-layout" type="single-choice" required="true">
+    <label>레이아웃 방향을 선택하세요.</label>
+    <choices>
+      <choice value="auto">Claude 자율 — 캠페인에 맞는 레이아웃을 Claude가 설계 (기본, 창작 변형 포함)</choice>
+      <choice value="specified">직접 지정 — 원하는 레이아웃·레퍼런스 방향을 알려주세요</choice>
+    </choices>
+    <hint>지정 예: "수직 스택 화이트 모달", "좌텍스트-우비주얼 분할", "풀블리드 비주얼에 텍스트 오버레이", 또는 참고 이미지 설명. 유형 어휘는 visual-layout-patterns.md §2 9형.</hint>
+  </question>
 </question-form>
 ```
 
@@ -177,10 +186,20 @@ Source files 라인이 가리키는 경로를 전달한다)
 - 기획안에만 기록, 실제 설정은 Braze 콘솔에서 담당자가 수행
 
 **비주얼 방향 결정** (`q-visual`="recommend"일 때만 — `layer`/`scene`을 직접 선택했으면 그대로 적용):
-- `layer` 기본 — scene 모드는 **존치 보류 중** (2026-07-13, 레퍼런스 보드 25핀에
-  카드 전체 씬 0핀 — `references/visual-layout-patterns.md` §10). 임팩트·프리미엄
-  연출은 layer 배경 변형 (c) 다크+오브제 글로우로 먼저 검토
+- scene 존치 보류는 **해제됨** (2026-07-14, 139핀 재분석 — 풀블리드 비주얼 카드
+  ~40핀, `references/visual-layout-patterns.md` §10). `layer`/`scene`을 동급
+  선택지로 검토: 오버레이형·몰입 연출 = scene, 디자인시스템 룩·존 분리 = layer
 - 기획안 카드에 선택 근거 1줄 명시
+
+**레이아웃 결정** (`q-layout` 기반 — `visual-layout-patterns.md` §12 정본):
+- `specified`: 지정 내용을 기획안 `layout.specified`에 기록하고 그 안에서 설계.
+  지정이 §11 안티패턴과 충돌하면 충돌 지점을 보고하고 사용자 판단을 받는다.
+- `auto`: §2 9형 전 어휘에서 자율 선택 — **무근거 기본값 금지** (센터 모달
+  라이트+수직 스택을 고르려면 선택 근거 필요). 등재 패턴의 조합·변형·신규 구조
+  창작 허용 (§12.2 — 하드 가드레일 불변, brief에 `창작 레이아웃 — 근거` 명시).
+- **Variant 분화 (§12.3)**: A/B는 최소 1축 구조 분화(유형/존 문법/히어로 유형)가
+  기본 — `layout.variants.A/B` + `layout.divergenceAxis`에 기록. 사용자가 "카피만
+  A/B"를 명시하면 동일 레이아웃 오버라이드 (brief 기록).
 
 인터뷰 응답을 수집한 뒤 아래 CLI로 daemon에 등록한다:
 
@@ -206,6 +225,7 @@ od braze interview <braze_message_id> \
 | `q-target` (타겟 세그먼트) | `--segment "<condition>"` | 선택; Braze 세그먼트 조건 문자열 |
 | `q-purpose` (목적) | 기획안 `summary`/`--emphasis` 로 녹인다 | `--purpose`/`--target` 플래그는 존재하지 않음 |
 | `q-visual` (비주얼 방향) | 없음 | CLI 플래그 없음 — 기획안 `image.mode`에만 기록 (Step 3) |
+| `q-layout` (레이아웃 지시) | 없음 | CLI 플래그 없음 — 기획안 `layout`에만 기록 (Step 3) |
 
 **필수 플래그 기본값 가이드**:
 - `--delivery`: 트리거 기반 발화 = `action_based` (기본 권장), 예약 발송 = `scheduled`
@@ -230,6 +250,16 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
     { "label": "A", "angle": "<디자인 접근 A>", "heading": "<타이틀 영역 후킹 카피 A>", "body": "<본문 영역 카피 A>" },
     { "label": "B", "angle": "<디자인 접근 B>", "heading": "<타이틀 영역 후킹 카피 B>", "body": "<본문 영역 카피 B>" }
   ],
+  "layout": {
+    "directive": "auto",
+    "specified": null,
+    "variants": {
+      "A": { "type": "센터 모달 (라이트) — 수직 스택", "composition": "<A 존 스케치 — 전 존 나열>" },
+      "B": { "type": "분할형 (좌텍스트-우비주얼)", "composition": "<B 존 스케치 — 전 존 나열>" }
+    },
+    "divergenceAxis": "<유형|존 문법|히어로 유형 — A/B 구조 분화 축 1줄. 사용자 오버라이드(카피만 A/B) 시 \"동일 레이아웃 — 사용자 지정\">",
+    "creative": null
+  },
   "targeting": {
     "segment": "<세그먼트 조건>",
     "triggerEvent": "session_start",
@@ -279,11 +309,18 @@ EOF
   없음**. 목적·톤 기반 선택 근거는 `references/visual-layout-patterns.md` §3.
 - 오브제 concept = 메시지 메타포 (§4 사례표) — "보여야 하는 것"을 concept에,
   오독 위험 요소를 note에 기록.
-- `composition` = 레이어 배치 스케치 1문장 — **7단 존 스택 전 존 나열**
-  (아이브로우 필→헤드라인→서브→히어로→가격·조건→풀폭 CTA→dismissal, 선택
-  슬롯은 접되 순서 불변 — visual-layout-patterns.md §1. 존 누락 시 병렬 빌더
-  발산 실측). `scene` 모드는 세이프존 스케치(상단 텍스트존/하단 CTA존)를 함께
-  명시한다.
+- **레이아웃·컴포지션 = `layout` 필드가 정본 (v2)**: `layout.variants.A/B`에
+  variant별 §2 유형 + 존 스케치를 각각 기록한다. 존 스케치는 선택한 존 문법
+  계열(visual-layout-patterns.md §1 — 수직 스택/오버레이형/분할형)의 **전 존
+  나열** (수직 스택 = 아이브로우 필→헤드라인→서브→히어로→가격·조건→CTA→dismissal
+  — 선택 슬롯은 접되 순서 불변, `variants[].body`가 있으면 서브카피 슬롯에
+  "서브카피 = body"로 표기. 존 누락·해석 여지 시 병렬 빌더 발산 실측 2026-07-13).
+  오버레이형은 가독 조건(스크림/여백존/색 반전) 1개를, 분할형은 좌우 폭 배분을
+  스케치에 명시. `image.composition`은 구 필드 — layout.variants가 있으면 생략
+  가능, 병기 시 A 기준 서술로 취급. `scene` 모드는 세이프존 스케치(상단
+  텍스트존/하단 CTA존)를 함께 명시한다.
+- `layout.divergenceAxis` = A/B 구조 분화 축 (§12.3 — 기본 의무, 사용자 오버라이드
+  시 "동일 레이아웃 — 사용자 지정"). 창작 레이아웃이면 `layout.creative`에 근거 1줄.
 - 스키마는 daemon 계약 변경 없음 — `braze_plan_v1`은 JSON blob 저장이라 필드
   추가는 하위 호환 (검증 = version 체크뿐, braze-routes.ts). `image.mode`
   필드도 동일 근거로 스키마 변경 없음. 기획안 카드에 에셋 표
@@ -387,7 +424,9 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
 ③-b **컴포지션 플랜** (image.needed=true일 때)
 - `mode`(layer/scene) 명기 + `scene`이면 세이프존 스케치(상단 텍스트존/하단 CTA존) 포함
 - 에셋 표: id / source / style / concept / ratio (CDN URL은 Step 4a-b 업로드 후 manifest에서 확정 — brief에는 기입하지 않는다)
-- composition 스케치 + 레이아웃 유형 (visual-layout-patterns.md §2 5형 중 선택 근거)
+- **레이아웃 플랜**: `layout.directive`(auto/specified — specified면 지정 내용),
+  variant별 유형 + 존 스케치 (visual-layout-patterns.md §2 9형 중 선택 근거),
+  분화 축(§12.3 — 오버라이드 시 그 사실), 창작 레이아웃이면 `창작 레이아웃 — 근거` 표기(§12.2)
 - library 컷 원본 경로 (브랜드 에셋 라이브러리 기준)
 
 ④ **부록**
@@ -468,7 +507,9 @@ python3 <스킬 폴더>/scripts/upload_media.py --name-prefix iam-<braze_message
 1. `Read: design-templates/braze-iam/references/variant-builder-subagent.md`
 2. Variant A/B **2개 병렬 dispatch** — 입력(brief 경로·기획안 전문·브랜드 컨텍스트
    소스 경로·DESIGN.md·references 5종+craft·에셋 manifest(**Step 4a-b의 CDN URL
-   포함**)·composition·`{image_mode}`·산출 디렉토리)을 지시문 계약대로 채운다.
+   포함**)·**해당 variant의 `layout.variants.{label}` 유형+존 스케치**(=`{composition}`)·
+   `{image_mode}`·산출 디렉토리)을 지시문 계약대로 채운다. A/B 스케치가 다른 것이
+   기본이다 (§12.3 분화 — 빌더가 아니라 기획이 분화를 설계).
 3. 각 빌더 산출 = 발송본 `variant-x.html`(이미지 src = Media Library CDN URL 직기입,
    FileViewer 프리뷰 겸용 — 별도 프리뷰 파일 없음). 반환 `OK ...` 2건 확인.
    **placeholder 폴백 시에만** 종전 듀얼 산출(발송본 placeholder + 프리뷰
@@ -691,6 +732,7 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - Braze REST 자격(`BRAZE_REST_API_KEY`)은 env/`~/.config/marketing-ax/braze.env`에서만 — 문서·HTML·로그·반환 텍스트에 노출 금지
 - 이미지 생성 = gti `gpt-5.5` 고정 (codex exec 폴백) + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
 - 서브에이전트 위임 실패(도구 없음) 시 인라인 동일 절차 — 단계 생략 금지
-- 캐릭터 IAM 전면 미포함 (2026-07-13 사용자 결정, 라이브러리 컷 포함) — 히어로는 의미-지시 소품 or HTML 숫자 타이포 (references/visual-layout-patterns.md §3)
+- 캐릭터 IAM 전면 미포함 (2026-07-13 사용자 결정, 라이브러리 컷 포함) — 히어로는 references/visual-layout-patterns.md §3 등재 유형에서 선택
+- 레이아웃 = visual-layout-patterns.md §12: 지시 모드(auto/specified) + auto 무근거 기본값 금지 + A/B 최소 1축 구조 분화 기본(사용자 "카피만 A/B" 오버라이드 가능) + 창작 레이아웃은 brief에 근거 표기 (2026-07-14 사용자 결정)
 - 물리적으로 맞물린 복합 오브제 = 통짜 통합 생성 1건. 분리 생성한 PNG를 CSS로 겹쳐 조립하는 콜라주 금지 (도그푸딩 반려 실측 2026-07-10)
 - `scene` 모드 씬 = 텍스트·글자·숫자 절대 금지 + STRICT 세이프존(상단 텍스트존/하단 CTA존) 강제 — references/imagegen-pipeline.md
