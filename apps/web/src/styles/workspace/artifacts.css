@@ -3334,7 +3334,7 @@
   width: 32px;
   height: 18px;
   border-radius: var(--radius-pill);
-  background: var(--border-strong);
+  background: var(--toggle-track-off);
   transition: background 160ms var(--ease-out);
 }
 .toggle-row-switch::after {
@@ -3397,7 +3397,7 @@
   width: 28px;
   height: 16px;
   border-radius: var(--radius-pill);
-  background: var(--border-strong);
+  background: var(--toggle-track-off);
   transition: background 160ms var(--ease-out);
 }
 .compact-toggle-switch::after {
