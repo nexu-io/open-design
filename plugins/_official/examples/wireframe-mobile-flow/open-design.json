@@ -24,6 +24,7 @@
     "en": "Wireframe Mobile Flow"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-06-25T03:56:14Z",
   "description": "A lo-fi mobile app flow wireframe — three to four phone frames in a row (onboarding → home feed → item detail → confirm), greybox content inside each device, dashed connector arrows with numbered step labels, and sticky-note annotations. Use when the brief asks for \"mobile wireframe\", \"app flow\", \"user flow\", \"lo-fi mobile\", \"low fidelity\", \"移动端线框\", or \"App 流程图\".",
   "description_i18n": {
     "zh-CN": "低保真移动端应用流程线框图，将三到四个手机屏幕排成一行（引导 → 首页信息流 → 商品详情 → 确认），每个设备内为灰盒占位内容，屏幕间用带编号步骤标签的虚线箭头连接，并配有便签注释。适用于「移动端线框」「App 流程」「用户流程」「低保真移动端」「低保真」「移动端线框」「App 流程图」等需求。",

@@ -24,6 +24,7 @@
     "en": "Dithered"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Dot-pattern rendering technique that simulates shades with a limited palette for nostalgic, retro, high-contrast visuals.",
   "description_i18n": {
     "zh-CN": "使用点阵图案渲染技术，在有限色板下模拟明暗层次，呈现怀旧复古的高对比度视觉效果。",

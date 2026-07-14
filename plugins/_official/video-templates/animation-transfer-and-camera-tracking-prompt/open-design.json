@@ -24,6 +24,7 @@
     "en": "Animation transfer and camera tracking prompt"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A technical prompt for Seedance 2.0 that applies a specific motion reference to a character while maintaining fixed camera tracking.",
   "description_i18n": {
     "zh-CN": "为 Seedance 2.0 提供的技术提示词，将特定动作参考应用到角色上，同时保持固定的相机跟踪。",

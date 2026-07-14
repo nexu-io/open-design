@@ -16,6 +16,7 @@
     "en": "Horizontal Parallax Gallery"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A horizontal-scroll WebGL gallery (Three.js): frames glide sideways with lerp smoothing and each image parallaxes its texture (UV shift) by its position in the viewport.",
   "description_i18n": {
     "zh-CN": "横向滚动 WebGL 画廊（Three.js）：画框随 lerp 平滑横移，每张图按其在视口的位置做纹理视差（UV 位移）。",

@@ -24,6 +24,7 @@
     "uk": "Генерація медіа (типовий сценарій)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T12:54:33Z",
   "description": "Default scenario plugin for image, video, and audio projects. Routes through the media-* atoms based on the project kind and wraps the result in a live artifact.",
   "description_i18n": {
     "en": "Default scenario plugin for image, video, and audio projects. Routes through the media-* atoms based on the project kind and wraps the result in a live artifact.",

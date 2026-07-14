@@ -16,6 +16,7 @@
     "en": "Distortion & Grain"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A vertical gallery (Three.js) where planes bend with scroll velocity, ripple under the cursor via simplex noise, and carry a film grain.",
   "description_i18n": {
     "zh-CN": "竖向图廊（Three.js）：平面随滚动速度弯曲、在光标处经单纯形噪声起伏失真，并带胶片颗粒。",

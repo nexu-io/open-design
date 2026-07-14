@@ -24,6 +24,7 @@
     "uk": "Експорт у Next.js"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T13:50:19Z",
   "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a Next.js App Router handoff.",
   "description_i18n": {
     "en": "Starter downstream export plugin for turning an accepted Open Design artifact into a Next.js App Router handoff.",

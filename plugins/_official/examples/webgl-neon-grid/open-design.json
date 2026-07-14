@@ -24,6 +24,7 @@
     "en": "Neon Grid"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a synthwave neon-grid scene — a perspective floor grid scrolling toward a banded retro sun under a neon starfield — rendered at 60fps as a single self-contained index.html.",
   "description_i18n": {
     "zh-CN": "构建一个 synthwave 霓虹网格场景——透视地面网格朝着带状复古落日滚动，铺在霓虹星空之下——以 60fps 渲染，作为单个自包含的 index.html。",

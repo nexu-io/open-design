@@ -16,6 +16,7 @@
     "en": "Voronoi Cells"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A self-contained WebGL2 hero: a living Voronoi network with drifting feature points, palette-keyed cells and glowing boundaries; move the cursor to push the cells.",
   "description_i18n": {
     "zh-CN": "自包含 WebGL2 主视觉：活的 Voronoi 网络，漂移特征点、按调色板着色的细胞与发光边界；移动光标推挤细胞。",

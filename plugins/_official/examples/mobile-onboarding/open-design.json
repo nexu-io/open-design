@@ -24,6 +24,7 @@
     "en": "Mobile Onboarding"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A multi-screen mobile onboarding flow rendered as three phone frames side by side — splash, value-prop, sign-in. Status bar, swipe dots, primary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS onboarding\", \"phone signup\", or \"移动端引导\".",
   "description_i18n": {
     "zh-CN": "多屏幕移动引导流程，呈现为三个并排的手机框架——启动页、价值主张、登录页。包含状态栏、滑动指示点和主要CTA按钮。适用于需要'移动端引导'、'iOS引导'、'手机注册'或'移动端引导'的场景。",

@@ -24,6 +24,7 @@
     "en": "Web Prototype Taste Soft"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`.",
   "description_i18n": {
     "zh-CN": "Apple 级柔和风格网页原型。银灰/奶油色画布，双边框卡片，嵌套按钮 CTA，大圆角，弹性动效和环境网格。基于 Leonxlnx/taste-skill 的 soft-skill 及第 4-8 节。",

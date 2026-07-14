@@ -24,6 +24,7 @@
     "en": "Wireframe Greybox"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-06-25T03:56:14Z",
   "description": "A crisp greybox / blueprint lo-fi wireframe of a desktop SaaS dashboard — neutral grey blocks, image placeholders with a diagonal-cross X, lorem-bar text, a schematic chart panel, and monospace redline annotations on a 12-column grid. Use when the brief asks for \"greybox\", \"blueprint wireframe\", \"lo-fi dashboard\", \"low fidelity\", \"线框图\", or \"灰盒原型\".",
   "description_i18n": {
     "zh-CN": "桌面端 SaaS 仪表盘的清晰灰盒/蓝图低保真线框图——中性灰色块、带对角叉号的图片占位符、lorem 文本条、示意图表面板，以及 12 栏栅格上的等宽标注。适用于「灰盒」「蓝图线框」「低保真仪表盘」「低保真」「线框图」「灰盒原型」等需求。",

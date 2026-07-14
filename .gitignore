@@ -98,3 +98,6 @@ growth/**
 # Agent long-running task memory
 .task/
 deploy/agent-bins/
+
+# Looper harness attachments (bug screenshots etc.) — agent scratch, not repo content
+.looper-attachments/

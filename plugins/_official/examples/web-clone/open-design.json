@@ -9,6 +9,7 @@
     "zh-TW": "網站復刻"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-10T03:28:06Z",
   "description": "Clone or visually recreate a website using source-first reconnaissance, route crawling, interaction probes, asset capture, and post-clone audit notes.",
   "description_i18n": {
     "en": "Clone or visually recreate a website using source-first reconnaissance, route crawling, interaction probes, asset capture, and post-clone audit notes.",
