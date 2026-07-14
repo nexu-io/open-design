@@ -6170,6 +6170,7 @@ export async function startServer({
         baseUrl?: string;
         apiVersion?: string;
         model?: string;
+        requiresApiKey?: boolean;
       } | null = byokProvider
         ? {
             provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
@@ -6177,6 +6178,7 @@ export async function startServer({
             baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
             apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
             model: (byokProvider as { model?: string }).model,
+            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
           }
         : null;
       const memoryOptions = {
