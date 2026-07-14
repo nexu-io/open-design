@@ -33,12 +33,6 @@ export function defaultCritiqueLoopConfig(): CritiqueLoopConfig {
 // 扩展 CritiqueConfig（需合并到 contracts/critique.ts）
 // ============================================================================
 
-declare module '@open-design/contracts/critique' {
-  interface CritiqueConfig {
-    loop?: CritiqueLoopConfig;
-  }
-}
-
 // ============================================================================
 // 循环事件
 // ============================================================================

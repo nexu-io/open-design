@@ -11,10 +11,10 @@
 
 import type { ChildProcess } from 'node:child_process';
 import type Database from 'better-sqlite3';
-import type { CritiqueConfig, OrchestratorResult } from '@open-design/contracts/critique';
+import type { CritiqueConfig } from '@open-design/contracts/critique';
 import type { CritiqueLoopConfig } from './loop-types.js';
 import type { CritiqueSseBus, OrchestratorParams } from './orchestrator.js';
-import { runOrchestrator } from './orchestrator.js';
+import { runOrchestrator, type OrchestratorResult } from './orchestrator.js';
 import { startCritiqueLoop, type FixFunction, type LoopEngineResult } from './loop-engine.js';
 import { extractFeedbackFromEvents, formatFeedbackAsPrompt, type CritiqueFeedback } from './loop-feedback.js';
 import { logCritique } from '../logging/critique.js';
@@ -109,7 +109,7 @@ export async function runOrchestratorWithLoop(
 // ============================================================================
 
 async function persistLessons(
-  db: Database,
+  db: Database.Database,
   projectId: string,
   projectDir: string,
   result: LoopEngineResult,
@@ -194,4 +194,3 @@ export function summarizeLoopResult(result: LoopEngineResult): string {
 
 export { formatFeedbackAsPrompt, extractFeedbackFromEvents };
 export type { CritiqueFeedback };
-
