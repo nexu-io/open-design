@@ -260,7 +260,14 @@ function isSessionResumeExpiredText(text: string): boolean {
 function isPromptTooLargeText(text: string): boolean {
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
-  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
+  //
+  // Oversized input that triggers a provider-level stream parsing error
+  // (e.g. "unexpected char at the end of chunk size") should also land here
+  // instead of being classified as a generic upstream disconnect. When the
+  // payload exceeds what the selected model or provider can process, the
+  // chunked transfer encoding often breaks mid-stream, producing this
+  // specific parse error. See #5605.
+  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx|unexpected char .+ (?:at the end of|at) chunk size|content is too long|内容过长|request too large|payload too large|request entity too large)\b/i
     .test(text);
 }
 
