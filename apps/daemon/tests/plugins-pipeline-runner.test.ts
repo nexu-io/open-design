@@ -28,7 +28,7 @@ import { runPipelineForRun } from '../src/plugins/pipeline-runner.js';
 import { listIterationsForRun } from '../src/plugins/pipeline.js';
 import { respondSurface } from '../src/genui/registry.js';
 import { findPendingByRunAndSurfaceId } from '../src/genui/store.js';
-import type { RunEventForAnalyticsObservability } from '../src/run-analytics-observability.js';
+import type { RunEventForAnalyticsObservability } from '../src/run/index.js';
 import {
   clearAtomWorkers,
   registerAtomWorker,
