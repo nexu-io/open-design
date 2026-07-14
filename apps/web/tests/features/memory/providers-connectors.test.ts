@@ -10,7 +10,11 @@ import {
 
 const originalFetch = globalThis.fetch;
 
-function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json?: () => Promise<unknown> }) {
+function mockFetch(impl: (url: string, init?: RequestInit) => {
+  ok: boolean;
+  status?: number;
+  json?: () => Promise<unknown>;
+}) {
   const fn = vi.fn(async (url: unknown, init?: RequestInit) => impl(String(url), init) as unknown as Response);
   globalThis.fetch = fn as unknown as typeof fetch;
   return fn;
@@ -22,13 +26,13 @@ afterEach(() => {
 });
 
 describe('connectors transport', () => {
-  it('returns the discovered connectors, [] when absent, and [] on failure', async () => {
+  it('returns discovered connectors, [] when absent, and rejects on failure', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({ connectors: [{ id: 'notion' }] }) }));
     expect(await fetchMemoryConnectors()).toEqual([{ id: 'notion' }]);
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
     expect(await fetchMemoryConnectors()).toEqual([]);
-    mockFetch(() => ({ ok: false }));
-    expect(await fetchMemoryConnectors()).toEqual([]);
+    mockFetch(() => ({ ok: false, status: 503 }));
+    await expect(fetchMemoryConnectors()).rejects.toThrow('Connector discovery request failed');
   });
 
   it('omits chatAgentId/chatModel from the body when not provided', async () => {

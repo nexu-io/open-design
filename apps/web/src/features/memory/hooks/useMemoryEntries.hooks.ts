@@ -105,10 +105,16 @@ export function useMemoryEntries(
 
   const reload = useCallback(async () => {
     try {
-      const [list, tree] = await Promise.all([
-        port.fetchMemoryList(),
-        port.fetchMemoryTree(),
-      ]);
+      const list = await port.fetchMemoryList();
+      // The flat list is the primary saved-memory surface. A tree is an
+      // enhancement for hierarchy-aware rendering, so a transient tree
+      // failure must not hide otherwise readable memories or their controls.
+      let tree: MemoryTreeNode[] = [];
+      try {
+        tree = await port.fetchMemoryTree();
+      } catch {
+        // Keep the last confirmed list and render without tree affordances.
+      }
       hydrateConfig(list);
       setRootDir(list.rootDir);
       setIndex(list.index);

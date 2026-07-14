@@ -155,6 +155,7 @@ export function MemorySection({
     connectorContextBytes,
     connectorStatus,
     connectorError,
+    connectorLoadError,
     connectingConnectorIds,
     pendingConnectorAuthIds,
     connectorConnectErrors,
@@ -482,6 +483,7 @@ export function MemorySection({
           selectedConnectorSuggestions={selectedConnectorSuggestions}
           connectorStatus={connectorStatus}
           connectorError={connectorError}
+          connectorLoadError={connectorLoadError}
           connectorAttempts={connectorAttempts}
           connectorContextBytes={connectorContextBytes}
           connectorExtractions={connectorExtractions}

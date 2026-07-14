@@ -83,6 +83,8 @@ export interface MemoryConnectorsController {
   connectorContextBytes: number;
   connectorStatus: string | null;
   connectorError: string | null;
+  /** Non-null when the connector catalogue could not be refreshed. */
+  connectorLoadError: string | null;
   connectingConnectorIds: Set<string>;
   pendingConnectorAuthIds: Set<string>;
   connectorConnectErrors: Record<string, string>;
@@ -128,6 +130,7 @@ export function useMemoryConnectors(
   const [connectorContextBytes, setConnectorContextBytes] = useState(0);
   const [connectorStatus, setConnectorStatus] = useState<string | null>(null);
   const [connectorError, setConnectorError] = useState<string | null>(null);
+  const [connectorLoadError, setConnectorLoadError] = useState<string | null>(null);
   const [connectingConnectorIds, setConnectingConnectorIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -150,12 +153,17 @@ export function useMemoryConnectors(
   const reloadConnectors = useCallback(async () => {
     setConnectorsLoading(true);
     try {
-      const statusesPromise = port.fetchConnectorStatuses();
-      const connectorsPromise = port.fetchMemoryConnectors();
-      const statuses = await statusesPromise;
+      const statuses = await port.fetchConnectorStatuses();
       setConnectorStatuses(statuses);
       setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
-      setConnectors(applyMemoryConnectorStatuses(await connectorsPromise, statuses));
+      const next = await port.fetchMemoryConnectors();
+      setConnectors(applyMemoryConnectorStatuses(next, statuses));
+      setConnectorLoadError(null);
+    } catch {
+      // Discovery is required for the real catalogue. Keep prior details rather
+      // than replacing them with synthetic empty rows, and make the outage
+      // visible to the user.
+      setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
     } finally {
       setConnectorsLoading(false);
     }
@@ -456,6 +464,7 @@ export function useMemoryConnectors(
     connectorContextBytes,
     connectorStatus,
     connectorError,
+    connectorLoadError,
     connectingConnectorIds,
     pendingConnectorAuthIds,
     connectorConnectErrors,

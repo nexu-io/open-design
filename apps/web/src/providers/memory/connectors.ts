@@ -8,7 +8,9 @@ import type {
 
 export async function fetchMemoryConnectors(): Promise<ConnectorDetail[]> {
   const resp = await fetch('/api/connectors/discovery?hydrateTools=false');
-  if (!resp.ok) return [];
+  if (!resp.ok) {
+    throw new Error(`Connector discovery request failed (${resp.status})`);
+  }
   const json = (await resp.json()) as ConnectorDiscoveryResponse;
   return json.connectors ?? [];
 }

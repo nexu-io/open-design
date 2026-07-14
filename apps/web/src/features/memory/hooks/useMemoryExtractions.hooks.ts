@@ -3,7 +3,7 @@
 // injected port; the SSE EventSource itself lives in providers/memory/events.ts
 // (transport can't sit in a feature file), so the orchestrator opens the stream
 // and feeds each `extraction` frame to `applyExtractionEvent` here.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import type {
   MemoryExtractionEvent,
   MemoryExtractionRecord,
@@ -37,12 +37,21 @@ export function useMemoryExtractions(
   const [extractions, setExtractions] = useState<MemoryExtractionRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Every local optimistic change and every live frame advances this revision.
+  // A failed mutation may restore its pre-mutation snapshot only if nothing
+  // newer has changed the history while its request/recovery fetch was pending.
+  const extractionRevision = useRef(0);
+  const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
+    extractionRevision.current += 1;
+    setExtractions(next);
+    return extractionRevision.current;
+  }, []);
 
   const reloadExtractions = useCallback(async () => {
     setIsRefreshing(true);
     try {
       const next = await port.fetchExtractions();
-      setExtractions(next);
+      updateExtractions(next);
       setLoadError(null);
       return next;
     } catch {
@@ -53,7 +62,7 @@ export function useMemoryExtractions(
     } finally {
       setIsRefreshing(false);
     }
-  }, [port]);
+  }, [port, updateExtractions]);
 
   const applyExtractionEvent = useCallback((ev: MemoryExtractionEvent) => {
     if (!ev || !ev.id) return;
@@ -61,17 +70,17 @@ export function useMemoryExtractions(
     // from the buffer, either by the per-row delete button or the "Clear"
     // affordance at the top.
     if (ev.phase === 'cleared') {
-      setExtractions([]);
+      updateExtractions([]);
       return;
     }
     if (ev.phase === 'deleted') {
-      setExtractions((prev) => prev.filter((r) => r.id !== ev.id));
+      updateExtractions((prev) => prev.filter((r) => r.id !== ev.id));
       return;
     }
     // Merge by id: phase transitions for an in-flight attempt collapse onto a
     // single row instead of stacking N entries. New ids are unshifted so the
     // latest appears at the top.
-    setExtractions((prev) => {
+    updateExtractions((prev) => {
       const existing = prev.findIndex((r) => r.id === ev.id);
       if (existing >= 0) {
         const next = prev.slice();
@@ -80,7 +89,7 @@ export function useMemoryExtractions(
       }
       return [ev, ...prev].slice(0, 30);
     });
-  }, []);
+  }, [updateExtractions]);
 
   const onDeleteExtraction = useCallback(
     async (id: string) => {
@@ -89,7 +98,7 @@ export function useMemoryExtractions(
       // no-op against an already-removed id; if the request fails we re-fetch
       // to put the row back instead of silently lying.
       const previous = extractions;
-      setExtractions(previous.filter((r) => r.id !== id));
+      const optimisticRevision = updateExtractions(previous.filter((r) => r.id !== id));
       let ok = false;
       try {
         ok = await port.deleteExtraction(id);
@@ -101,20 +110,24 @@ export function useMemoryExtractions(
       if (!ok) {
         try {
           const confirmed = await port.fetchExtractions();
-          setExtractions(confirmed);
+          if (extractionRevision.current === optimisticRevision) {
+            updateExtractions(confirmed);
+          }
           setLoadError(null);
         } catch {
-          setExtractions(previous);
+          if (extractionRevision.current === optimisticRevision) {
+            updateExtractions(previous);
+          }
           setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
         }
       }
     },
-    [extractions, port],
+    [extractions, port, updateExtractions],
   );
 
   const clearExtractions = useCallback(async () => {
     const previous = extractions;
-    setExtractions([]);
+    const optimisticRevision = updateExtractions([]);
     let ok = false;
     try {
       ok = await port.clearExtractionHistory();
@@ -124,14 +137,18 @@ export function useMemoryExtractions(
     if (!ok) {
       try {
         const confirmed = await port.fetchExtractions();
-        setExtractions(confirmed);
+        if (extractionRevision.current === optimisticRevision) {
+          updateExtractions(confirmed);
+        }
         setLoadError(null);
       } catch {
-        setExtractions(previous);
+        if (extractionRevision.current === optimisticRevision) {
+          updateExtractions(previous);
+        }
         setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
       }
     }
-  }, [extractions, port]);
+  }, [extractions, port, updateExtractions]);
 
   // The "no API key" banner only shows when the most recent attempt skipped for
   // that specific reason. We don't show it for memory-disabled (the user's own

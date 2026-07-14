@@ -187,6 +187,41 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
+  it('preserves newer SSE state when failed-delete recovery also fails', async () => {
+    let resolveDelete!: (value: boolean) => void;
+    let rejectRecovery!: (reason?: unknown) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((_, reject) => {
+      rejectRecovery = reject;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let deletion: Promise<void>;
+    act(() => {
+      deletion = result.current.onDeleteExtraction('a');
+    });
+    // A live event arrives while the failed delete is waiting to recover.
+    act(() => result.current.applyExtractionEvent(record('newer', { phase: 'running' })));
+
+    await act(async () => {
+      resolveDelete(false);
+      await Promise.resolve();
+      rejectRecovery(new Error('offline'));
+      await deletion!;
+    });
+
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['newer', 'b']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
   it('clearExtractions empties the list and calls the port', async () => {
     const port = makePort({ clearExtractionHistory: vi.fn(async () => true) });
     const { result } = renderHook(() => useMemoryExtractions(port));

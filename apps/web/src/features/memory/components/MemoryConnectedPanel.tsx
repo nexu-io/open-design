@@ -40,6 +40,7 @@ export function MemoryConnectedPanel({
   selectedConnectorSuggestions,
   connectorStatus,
   connectorError,
+  connectorLoadError,
   connectorAttempts,
   connectorContextBytes,
   connectorExtractions,
@@ -73,6 +74,7 @@ export function MemoryConnectedPanel({
   selectedConnectorSuggestions: MemorySuggestion[];
   connectorStatus: string | null;
   connectorError: string | null;
+  connectorLoadError: string | null;
   connectorAttempts: ConnectorMemoryAttempt[];
   connectorContextBytes: number;
   connectorExtractions: MemoryExtractionRecord[];
@@ -117,6 +119,11 @@ export function MemoryConnectedPanel({
             </button>
           </div>
           <div className="memory-connector-workbench">
+            {connectorLoadError ? (
+              <div role="alert" className="memory-connector-result is-error">
+                {connectorLoadError}
+              </div>
+            ) : null}
             <div className="memory-connector-picker-head">
               <div>
                 <h4>Choose sources</h4>

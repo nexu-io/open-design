@@ -91,6 +91,25 @@ describe('useMemoryConnectors — catalogue + selection', () => {
     expect(result.current.connectedCount).toBe(1);
   });
 
+  it('preserves the last catalogue and surfaces a load error when discovery fails', async () => {
+    const fetchMemoryConnectors = vi
+      .fn<MemoryConnectorsPort['fetchMemoryConnectors']>()
+      .mockResolvedValueOnce([connector('notion')])
+      .mockRejectedValueOnce(new Error('discovery offline'));
+    const port = makePort({ fetchMemoryConnectors });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+
+    expect(result.current.memoryConnectors.find((item) => item.id === 'notion')?.name).toBe('notion');
+    expect(result.current.connectorLoadError).toMatch(/couldn't be loaded/);
+  });
+
   it('keeps only connected apps in selectedConnectedConnectorIds and labels the scan', async () => {
     const port = makePort({
       fetchConnectorStatuses: vi.fn(async () => ({ notion: { status: 'connected' } }) as ConnectorStatusMap),
