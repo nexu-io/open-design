@@ -180,9 +180,12 @@ export function useMemoryExtractions(
     } catch {
       if (reloadGenerationRef.current !== generation) return extractionsRef.current;
       // Keep the last confirmed history instead of presenting a synthetic empty
-      // list when the daemon cannot be reached.
+      // list when the daemon cannot be reached — and return that same
+      // preserved state, not a fabricated empty array, since a real caller
+      // (useMemoryConnectors.onSuggestConnectorMemory) reads this return
+      // value directly to look for a just-written extraction.
       setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
-      return [];
+      return extractionsRef.current;
     } finally {
       inFlightReloadsRef.current -= 1;
       if (inFlightReloadsRef.current <= 0) {

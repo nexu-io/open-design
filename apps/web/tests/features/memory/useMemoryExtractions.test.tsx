@@ -387,6 +387,23 @@ describe('useMemoryExtractions — load + derived', () => {
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
+  it("returns the preserved state (not a fabricated empty array) when the history reload rejects", async () => {
+    const port = makePort({ fetchExtractions: vi.fn(async () => { throw new Error('offline'); }) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('saved')));
+
+    let returned: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      returned = await result.current.reloadExtractions();
+    });
+
+    // A real caller (useMemoryConnectors.onSuggestConnectorMemory) reads this
+    // return value directly to look for a just-written extraction; a
+    // fabricated [] here would hide rows the UI still shows.
+    expect(returned.map((row) => row.id)).toEqual(['saved']);
+    expect(returned).toEqual(result.current.extractions);
+  });
+
   it('does not resurrect a row a newer SSE "deleted" frame removed while reloadExtractions() was in flight', async () => {
     let resolveFetch!: (rows: MemoryExtractionRecord[]) => void;
     const fetchPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
