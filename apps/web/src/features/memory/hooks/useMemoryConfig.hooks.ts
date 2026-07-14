@@ -16,6 +16,7 @@ import type {
   MemoryListResponse,
 } from '@open-design/contracts';
 import type { MemoryConfigPort } from '../ports';
+import { createAsyncCommitGuard } from '../async-commit-guard';
 import { memoryConfigPort } from '../dependencies';
 import {
   enabledPatch,
@@ -109,9 +110,12 @@ export interface MemoryConfigController {
   onToggleEnabled: (next: boolean) => Promise<void>;
   /** Flip one per-hook flag (optimistic; rolls back on a failed PATCH). */
   onToggleHook: (key: MemoryConfigFlagKey, next: boolean) => Promise<void>;
-  /** Populate every flag from a freshly-fetched memory list response. Called by
-   *  the shared list reload so one GET hydrates config + entries together. */
-  hydrate: (list: MemoryListResponse) => void;
+  /** Capture the current config generation before beginning a shared list
+   *  reload. A local toggle invalidates earlier captures. */
+  captureHydrationRevision: () => number;
+  /** Populate every flag from a freshly-fetched memory list response, but only
+   *  if it was captured before the same config generation. */
+  hydrate: (list: MemoryListResponse, revision: number) => void;
 }
 
 export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController {
@@ -142,8 +146,18 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
     rewriteEnabled: newConfigWriteQueue(),
     verifyEnabled: newConfigWriteQueue(),
   });
+  // List reloads are owned by useMemoryEntries, while writes live here. This
+  // guard joins the two lifetimes: a reload captures before its GET begins and
+  // hydrate ignores it when a toggle has invalidated that snapshot meanwhile.
+  const hydrationGuardRef = useRef(createAsyncCommitGuard());
 
-  const hydrate = useCallback((list: MemoryListResponse) => {
+  const captureHydrationRevision = useCallback(
+    () => hydrationGuardRef.current.capture(),
+    [],
+  );
+
+  const hydrate = useCallback((list: MemoryListResponse, revision: number) => {
+    if (!hydrationGuardRef.current.isCurrent(revision)) return;
     const next = {
       enabled: list.enabled,
       chatExtractionEnabled: list.chatExtractionEnabled !== false,
@@ -179,6 +193,7 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
 
   const onToggleEnabled = useCallback(
     (next: boolean) => {
+      hydrationGuardRef.current.invalidate();
       setEnabled(next);
       return enqueueConfigWrite(
         enabledQueueRef.current,
@@ -209,6 +224,7 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
 
   const onToggleHook = useCallback(
     (key: MemoryConfigFlagKey, next: boolean) => {
+      hydrationGuardRef.current.invalidate();
       const setter = setters[key];
       setter(() => next);
       return enqueueConfigWrite(
@@ -234,7 +250,14 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
     [profileEnabled, rewriteEnabled, verifyEnabled, chatExtractionEnabled],
   );
 
-  return { enabled, hookFlags, onToggleEnabled, onToggleHook, hydrate };
+  return {
+    enabled,
+    hookFlags,
+    onToggleEnabled,
+    onToggleHook,
+    captureHydrationRevision,
+    hydrate,
+  };
 }
 
 /**

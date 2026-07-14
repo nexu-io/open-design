@@ -24,6 +24,7 @@ import type {
 } from '@open-design/contracts';
 import { copyToClipboard } from '../../../runtime/clipboard';
 import { memoryEntriesPort } from '../dependencies';
+import { createAsyncCommitGuard } from '../async-commit-guard';
 import type { MemoryEntriesPort } from '../ports';
 import type { DraftEntry, FlashKind } from '../types';
 import { EMPTY_DRAFT } from '../constants';
@@ -33,7 +34,8 @@ import { EMPTY_DRAFT } from '../constants';
  *  editor modal the orchestrator owns. */
 export interface MemoryEntriesCoordination {
   fireFlash: (kind: FlashKind) => void;
-  hydrateConfig: (list: MemoryListResponse) => void;
+  captureConfigHydrationRevision: () => number;
+  hydrateConfig: (list: MemoryListResponse, revision: number) => void;
   openEditor: () => void;
   closeEditor: () => void;
 }
@@ -76,7 +78,13 @@ export function useMemoryEntries(
   port: MemoryEntriesPort,
   coord: MemoryEntriesCoordination,
 ): MemoryEntriesController {
-  const { fireFlash, hydrateConfig, openEditor, closeEditor } = coord;
+  const {
+    fireFlash,
+    captureConfigHydrationRevision,
+    hydrateConfig,
+    openEditor,
+    closeEditor,
+  } = coord;
 
   const [rootDir, setRootDir] = useState('');
   const [index, setIndex] = useState('');
@@ -103,7 +111,7 @@ export function useMemoryEntries(
   // flows, and connector refreshes, so overlapping calls are expected. Gate
   // every state commit behind a monotonic token so an older reload() that
   // resolves after a newer one can never overwrite the fresher snapshot.
-  const reloadRequestTokenRef = useRef(0);
+  const reloadCommitGuardRef = useRef(createAsyncCommitGuard());
 
   useEffect(() => {
     if (!editingTarget) return;
@@ -118,7 +126,8 @@ export function useMemoryEntries(
   }, [rootDir, fireFlash]);
 
   const reload = useCallback(async () => {
-    const token = ++reloadRequestTokenRef.current;
+    const token = reloadCommitGuardRef.current.begin();
+    const configHydrationRevision = captureConfigHydrationRevision();
     try {
       const list = await port.fetchMemoryList();
       // The flat list is the primary saved-memory surface. A tree is an
@@ -132,8 +141,8 @@ export function useMemoryEntries(
       }
       // A newer reload() already committed its snapshot; this older response
       // must not regress it (or hydrateConfig a just-succeeded toggle back).
-      if (reloadRequestTokenRef.current !== token) return;
-      hydrateConfig(list);
+      if (!reloadCommitGuardRef.current.isCurrent(token)) return;
+      hydrateConfig(list, configHydrationRevision);
       setRootDir(list.rootDir);
       setIndex(list.index);
       setEntries(list.entries);
@@ -142,10 +151,10 @@ export function useMemoryEntries(
     } catch {
       // Do not invent an empty "success" response: leave the last confirmed
       // state intact and let the shell render this explicit failure instead.
-      if (reloadRequestTokenRef.current !== token) return;
+      if (!reloadCommitGuardRef.current.isCurrent(token)) return;
       setLoadError(LOAD_ERROR_MESSAGE);
     }
-  }, [port, hydrateConfig]);
+  }, [port, captureConfigHydrationRevision, hydrateConfig]);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return entries;

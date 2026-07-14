@@ -60,6 +60,7 @@ function makePort(over: Partial<MemoryEntriesPort> = {}): MemoryEntriesPort {
 function makeCoord(over: Partial<MemoryEntriesCoordination> = {}): MemoryEntriesCoordination {
   return {
     fireFlash: vi.fn(),
+    captureConfigHydrationRevision: vi.fn(() => 0),
     hydrateConfig: vi.fn(),
     openEditor: vi.fn(),
     closeEditor: vi.fn(),
@@ -93,7 +94,7 @@ describe('useMemoryEntries — reload + filter', () => {
       await result.current.reload();
     });
 
-    expect(coord.hydrateConfig).toHaveBeenCalledWith(list);
+    expect(coord.hydrateConfig).toHaveBeenCalledWith(list, 0);
     expect(result.current.rootDir).toBe('/memories');
     expect(result.current.index).toBe('- [name-a](a.md)');
     expect(result.current.entries.map((e) => e.id)).toEqual(['a', 'b']);
@@ -158,6 +159,7 @@ describe('useMemoryEntries — reload + filter', () => {
     expect(result.current.rootDir).toBe('/memories-b');
     expect(coord.hydrateConfig).toHaveBeenLastCalledWith(
       expect.objectContaining({ rootDir: '/memories-b' }),
+      0,
     );
 
     // The abandoned older request (A) resolves late; it must not overwrite the
@@ -170,6 +172,7 @@ describe('useMemoryEntries — reload + filter', () => {
     expect(result.current.entries.map((e) => e.id)).toEqual(['b-only']);
     expect(coord.hydrateConfig).toHaveBeenLastCalledWith(
       expect.objectContaining({ rootDir: '/memories-b' }),
+      0,
     );
   });
 });

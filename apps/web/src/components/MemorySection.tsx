@@ -69,6 +69,7 @@ export function MemorySection({
     hookFlags,
     onToggleEnabled,
     onToggleHook,
+    captureHydrationRevision: captureConfigHydrationRevision,
     hydrate: hydrateConfig,
   } = useConfig();
   const { flash, fireFlash } = useFlash();
@@ -119,7 +120,13 @@ export function MemorySection({
     onSave,
     onDelete,
     onSaveIndex,
-  } = useEntries({ fireFlash, hydrateConfig, openEditor, closeEditor });
+  } = useEntries({
+    fireFlash,
+    captureConfigHydrationRevision,
+    hydrateConfig,
+    openEditor,
+    closeEditor,
+  });
   // Recent LLM-extraction attempts, newest first. The hook owns the one-shot
   // fetch, the SSE merge (fed by the orchestrator's stream below), the relative-
   // time clock, and delete/clear. The orchestrator keeps only cross-cluster

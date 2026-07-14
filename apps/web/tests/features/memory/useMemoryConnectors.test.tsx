@@ -72,6 +72,14 @@ function makeCoord(over: Partial<MemoryConnectorsCoordination> = {}): MemoryConn
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('useMemoryConnectors — catalogue + selection', () => {
   it('always surfaces the six memory-connector apps and marks connected ones', async () => {
     const port = makePort({
@@ -221,6 +229,36 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
 
     expect(result.current.pendingConnectorAuthIds.has('notion')).toBe(false);
     expect(port.notifyConnectorsChanged).toHaveBeenCalled();
+  });
+
+  it('keeps the newer callback refresh when an older pending-auth poll resolves last', async () => {
+    const poll = deferred<ConnectorStatusMap>();
+    const callback = deferred<ConnectorStatusMap>();
+    const port = makePort({
+      fetchConnectorStatuses: vi.fn()
+        .mockReturnValueOnce(poll.promise)
+        .mockReturnValueOnce(callback.promise),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let pollRefresh!: Promise<void>;
+    let callbackRefresh!: Promise<void>;
+    act(() => {
+      pollRefresh = result.current.refreshConnectorStatuses();
+      callbackRefresh = result.current.refreshConnectorStatuses();
+    });
+
+    await act(async () => {
+      callback.resolve({ notion: { status: 'connected' } });
+      await callbackRefresh;
+    });
+    expect(result.current.connectorStatuses.notion?.status).toBe('connected');
+
+    await act(async () => {
+      poll.resolve({ notion: { status: 'available' } });
+      await pollRefresh;
+    });
+    expect(result.current.connectorStatuses.notion?.status).toBe('connected');
   });
 });
 

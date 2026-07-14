@@ -42,6 +42,7 @@ import type {
 } from '@open-design/contracts';
 import { memoryConnectorsPort } from '../dependencies';
 import type { MemoryConnectorsPort } from '../ports';
+import { createAsyncCommitGuard } from '../async-commit-guard';
 import type { ConnectorMemoryAttempt, ConnectorStatusMap } from '../types';
 import {
   MEMORY_CONNECTOR_APP_IDS,
@@ -139,6 +140,10 @@ export function useMemoryConnectors(
   );
   const [connectorConnectErrors, setConnectorConnectErrors] = useState<Record<string, string>>({});
   const connectorsRef = useRef(connectors);
+  // The OAuth poll and popup callback can overlap. They both write the same
+  // status domain, so only the newest refresh may commit its snapshot.
+  const connectorStatusCommitGuardRef = useRef(createAsyncCommitGuard());
+  const connectorReloadGuardRef = useRef(createAsyncCommitGuard());
 
   useEffect(() => {
     connectorsRef.current = connectors;
@@ -151,21 +156,29 @@ export function useMemoryConnectors(
   }, [pendingConnectorAuthIds, port]);
 
   const reloadConnectors = useCallback(async () => {
+    const revision = connectorStatusCommitGuardRef.current.begin();
+    const reloadRevision = connectorReloadGuardRef.current.begin();
     setConnectorsLoading(true);
     try {
       const statuses = await port.fetchConnectorStatuses();
+      if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
       setConnectorStatuses(statuses);
       setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
       const next = await port.fetchMemoryConnectors();
+      if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
       setConnectors(applyMemoryConnectorStatuses(next, statuses));
       setConnectorLoadError(null);
     } catch {
       // Discovery is required for the real catalogue. Keep prior details rather
       // than replacing them with synthetic empty rows, and make the outage
       // visible to the user.
-      setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
+      if (connectorStatusCommitGuardRef.current.isCurrent(revision)) {
+        setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
+      }
     } finally {
-      setConnectorsLoading(false);
+      if (connectorReloadGuardRef.current.isCurrent(reloadRevision)) {
+        setConnectorsLoading(false);
+      }
     }
   }, [port]);
 
@@ -239,7 +252,9 @@ export function useMemoryConnectors(
   }, []);
 
   const refreshConnectorStatuses = useCallback(async () => {
+    const revision = connectorStatusCommitGuardRef.current.begin();
     const statuses = await port.fetchConnectorStatuses();
+    if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
     const statusChanged = connectorStatusesChanged(connectorsRef.current, statuses);
     setConnectorStatuses(statuses);
     setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));

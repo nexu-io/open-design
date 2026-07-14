@@ -6,10 +6,11 @@
 // PATCH, and hydration off the shared memory-list GET.
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { MemoryListResponse } from '@open-design/contracts';
+import type { MemoryListResponse, MemoryTreeNode } from '@open-design/contracts';
 
 import { useMemoryConfig } from '../../../src/features/memory/hooks/useMemoryConfig.hooks';
-import type { MemoryConfigPort } from '../../../src/features/memory/ports';
+import { useMemoryEntries } from '../../../src/features/memory/hooks/useMemoryEntries.hooks';
+import type { MemoryConfigPort, MemoryEntriesPort } from '../../../src/features/memory/ports';
 
 function makePort(patchConfig = vi.fn(async () => true)): MemoryConfigPort {
   return { patchConfig };
@@ -295,7 +296,10 @@ describe('useMemoryConfig', () => {
     // This represents a list GET that observed the old server state before
     // the PATCH above was applied.
     act(() => {
-      result.current.hydrate(listResponse({ enabled: true }));
+      result.current.hydrate(
+        listResponse({ enabled: true }),
+        result.current.captureHydrationRevision(),
+      );
     });
     expect(result.current.enabled).toBe(false);
 
@@ -320,7 +324,10 @@ describe('useMemoryConfig', () => {
     // The stale list must not replace this flag's optimistic state (or its
     // rollback baseline) while the matching PATCH is still outstanding.
     act(() => {
-      result.current.hydrate(listResponse({ profileEnabled: true }));
+      result.current.hydrate(
+        listResponse({ profileEnabled: true }),
+        result.current.captureHydrationRevision(),
+      );
     });
     expect(result.current.hookFlags.profileEnabled).toBe(false);
 
@@ -331,11 +338,61 @@ describe('useMemoryConfig', () => {
     expect(result.current.hookFlags.profileEnabled).toBe(false);
   });
 
+  it('does not let a reload begun before a successful toggle hydrate its stale server snapshot afterward', async () => {
+    const list = deferred<MemoryListResponse>();
+    const patch = deferred<boolean>();
+    const configPort = makePort(vi.fn().mockReturnValueOnce(patch.promise));
+    const entriesPort: MemoryEntriesPort = {
+      fetchMemoryList: vi.fn().mockReturnValueOnce(list.promise),
+      fetchMemoryTree: vi.fn(async () => [] as MemoryTreeNode[]),
+      fetchMemoryEntry: vi.fn(async () => null),
+      saveMemoryEntry: vi.fn(async () => null),
+      deleteMemoryEntry: vi.fn(async () => true),
+      saveMemoryIndex: vi.fn(async () => true),
+    };
+    const { result } = renderHook(() => {
+      const config = useMemoryConfig(configPort);
+      const entries = useMemoryEntries(entriesPort, {
+        fireFlash: vi.fn(),
+        captureConfigHydrationRevision: config.captureHydrationRevision,
+        hydrateConfig: config.hydrate,
+        openEditor: vi.fn(),
+        closeEditor: vi.fn(),
+      });
+      return { config, entries };
+    });
+
+    let reload!: Promise<void>;
+    act(() => {
+      reload = result.current.entries.reload();
+    });
+
+    let toggle!: Promise<void>;
+    act(() => {
+      toggle = result.current.config.onToggleEnabled(false);
+    });
+    await act(async () => {
+      patch.resolve(true);
+      await toggle;
+    });
+    expect(result.current.config.enabled).toBe(false);
+
+    // The list request started first and observed the old value. Its response
+    // must not regress the now-confirmed toggle merely because the PATCH has
+    // already settled by the time it arrives.
+    await act(async () => {
+      list.resolve(listResponse({ enabled: true }));
+      await reload;
+    });
+    expect(result.current.config.enabled).toBe(false);
+  });
+
   it('hydrate maps a list response onto every flag (missing => true)', () => {
     const { result } = renderHook(() => useMemoryConfig(makePort()));
     act(() =>
       result.current.hydrate(
         listResponse({ enabled: false, profileEnabled: false }),
+        result.current.captureHydrationRevision(),
       ),
     );
 
