@@ -4,11 +4,11 @@
  * Managed-download root ownership and directory lifecycle. Reads/writes the
  * ownership sentinel that marks a base directory as Open Design-owned, refuses to
  * take over foreign/non-empty directories, ensures the `.state`/`.partial`/`.locks`
- * scratch layout exists, and resets an owned base by clearing its contents.
+ * scratch layout exists, and refuses to take over a foreign/non-empty base.
  * Depends on constants, errors, and the fs-io primitives.
  */
 
-import { lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { lstat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { LOCK_DIR, PARTIAL_DIR, STATE_DIR, STORE_KIND, STORE_SCHEMA_VERSION, STORE_SENTINEL } from "./constants.js";
@@ -42,23 +42,6 @@ async function writeSentinel(basePath: string): Promise<void> {
     kind: STORE_KIND,
     schemaVersion: STORE_SCHEMA_VERSION,
   } satisfies StoreSentinel);
-}
-
-/**
- * Clear all contents of an owned base and re-establish the sentinel and scratch
- * directories. Refuses to touch a base that is not owned.
- */
-export async function resetOwnedBase(basePath: string): Promise<void> {
-  const sentinel = await readJson<unknown>(join(basePath, STORE_SENTINEL));
-  if (!isStoreSentinel(sentinel)) {
-    throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED, `download base is not owned: ${basePath}`);
-  }
-  const entries = await readdir(basePath).catch(() => []);
-  for (const entry of entries) {
-    await rm(join(basePath, entry), { force: true, recursive: true }).catch(() => undefined);
-  }
-  await writeSentinel(basePath);
-  await ensureStoreDirs(basePath);
 }
 
 /**

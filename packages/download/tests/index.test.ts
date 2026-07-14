@@ -200,7 +200,7 @@ describe("managed download package", () => {
     }
   });
 
-  it("quick-fails a checksum mismatch after resetting owned state", async () => {
+  it("quick-fails a checksum mismatch after clearing target state", async () => {
     const fixture = await startFixture("wrong bytes");
     const root = tmpRoot("checksum-mismatch");
     await expect(
@@ -390,6 +390,34 @@ describe("managed download package", () => {
     }
   });
 
+  it("does not remove a target held by a live external lock", async () => {
+    const body = "locked remove payload";
+    const fixture = await startFixture(body);
+    const root = tmpRoot("remove-live-lock");
+    const basePath = join(root, "downloads");
+    try {
+      const result = await managedDownload({
+        basePath,
+        bucket: "updates",
+        fileName: "installer.bin",
+        payload: { checksum: { algorithm: "sha256", value: sha256(body) }, url: fixture.url },
+      });
+      const targetLockPath = lockPath(basePath, "updates", "installer.bin");
+      writeFileSync(targetLockPath, JSON.stringify({
+        createdAt: new Date().toISOString(),
+        pid: process.pid,
+      }));
+
+      await expect(removeManagedDownload({ basePath, bucket: "updates", fileName: "installer.bin" })).rejects.toMatchObject({
+        code: MANAGED_DOWNLOAD_ERROR_CODES.TARGET_LOCKED,
+      });
+      expect(readFileSync(result.path, "utf8")).toBe(body);
+      expect(existsSync(targetLockPath)).toBe(true);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("prunes managed data older than the default one-day window", async () => {
     const body = "old payload";
     const fixture = await startFixture(body);
@@ -437,6 +465,43 @@ describe("managed download package", () => {
       expect(fixture.requests.length).toBeGreaterThanOrEqual(2);
     } finally {
       await fixture.close();
+    }
+  });
+
+  it("preserves other targets when repairing corrupt state", async () => {
+    const firstBody = "first payload";
+    const secondBody = "second payload";
+    const firstFixture = await startFixture(firstBody);
+    const secondFixture = await startFixture(secondBody);
+    const root = tmpRoot("target-reset");
+    const basePath = join(root, "downloads");
+    try {
+      const first = await managedDownload({
+        basePath,
+        bucket: "cache",
+        fileName: "first.bin",
+        payload: { checksum: { algorithm: "sha256", value: sha256(firstBody) }, url: firstFixture.url },
+      });
+      const second = await managedDownload({
+        basePath,
+        bucket: "cache",
+        fileName: "second.bin",
+        payload: { checksum: { algorithm: "sha256", value: sha256(secondBody) }, url: secondFixture.url },
+      });
+      writeFileSync(first.path, "tampered bytes");
+
+      await managedDownload({
+        basePath,
+        bucket: "cache",
+        fileName: "first.bin",
+        payload: { checksum: { algorithm: "sha256", value: sha256(firstBody) }, url: firstFixture.url },
+      });
+
+      expect(readFileSync(second.path, "utf8")).toBe(secondBody);
+      expect(secondFixture.requests).toHaveLength(1);
+    } finally {
+      await firstFixture.close();
+      await secondFixture.close();
     }
   });
 });
