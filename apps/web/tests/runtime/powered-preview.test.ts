@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildProjectPoweredFileUrl } from '@open-design/contracts';
 import {
   resolvePoweredBaseOrigin,
   swapLoopbackHost,
 } from '../../src/runtime/powered-preview';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('swapLoopbackHost', () => {
   it('swaps 127.0.0.1 <-> localhost, preserving scheme and port', () => {
@@ -24,7 +28,14 @@ describe('swapLoopbackHost', () => {
 
 describe('resolvePoweredBaseOrigin', () => {
   it('returns the host-swapped loopback origin for powered previews', () => {
+    vi.stubGlobal('window', {
+      location: { origin: 'http://127.0.0.1:17456' },
+    });
+
     expect(resolvePoweredBaseOrigin('http://127.0.0.1:17456')).toBe('http://localhost:17456');
+    vi.stubGlobal('window', {
+      location: { origin: 'http://localhost:17456' },
+    });
     expect(resolvePoweredBaseOrigin('http://localhost:17456')).toBe('http://127.0.0.1:17456');
   });
 
@@ -35,6 +46,22 @@ describe('resolvePoweredBaseOrigin', () => {
   it('returns null when no preview-only host swap exists', () => {
     expect(resolvePoweredBaseOrigin('http://192.168.1.20:17456')).toBeNull();
     expect(resolvePoweredBaseOrigin('https://example.com')).toBeNull();
+  });
+
+  it('does not send a reverse-proxied app shell to the browser loopback interface', () => {
+    vi.stubGlobal('window', {
+      location: { origin: 'https://design.example.com' },
+    });
+
+    expect(resolvePoweredBaseOrigin('http://127.0.0.1:17456')).toBeNull();
+  });
+
+  it('keeps powered previews available to the packaged app custom protocol', () => {
+    vi.stubGlobal('window', {
+      location: { origin: 'od://app' },
+    });
+
+    expect(resolvePoweredBaseOrigin('http://127.0.0.1:17456')).toBe('http://localhost:17456');
   });
 
   it('returns null for an unparseable base', () => {
