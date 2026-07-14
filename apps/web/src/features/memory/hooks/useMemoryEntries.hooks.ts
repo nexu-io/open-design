@@ -90,11 +90,13 @@ export function useMemoryEntries(
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorNameRef = useRef<HTMLInputElement | null>(null);
   const editingTarget = editing?.id ?? (editing ? 'new' : null);
-  // Track the id each in-flight fetchMemoryEntry() call is for, so a stale
-  // response from an abandoned preview/edit selection can't clobber a newer
-  // one that resolved first.
-  const latestPreviewRequestRef = useRef<string | null>(null);
-  const latestEditRequestRef = useRef<string | null>(null);
+  // Each preview/edit action gets its own monotonic token, so a stale
+  // fetchMemoryEntry() response can never win over a newer action — even one
+  // that re-selects the SAME id (close then reopen, or cancel then restart
+  // the same entry) while the abandoned request is still in flight. Tracking
+  // by id alone can't distinguish that case since both requests share an id.
+  const previewRequestTokenRef = useRef(0);
+  const editRequestTokenRef = useRef(0);
 
   useEffect(() => {
     if (!editingTarget) return;
@@ -157,16 +159,16 @@ export function useMemoryEntries(
   const openPreview = useCallback(
     async (id: string) => {
       if (previewId === id) {
-        latestPreviewRequestRef.current = null;
+        previewRequestTokenRef.current += 1;
         setPreviewId(null);
         setPreviewBody(null);
         return;
       }
-      latestPreviewRequestRef.current = id;
+      const token = ++previewRequestTokenRef.current;
       setPreviewId(id);
       setPreviewBody(null);
       const entry = await port.fetchMemoryEntry(id);
-      if (latestPreviewRequestRef.current !== id) return;
+      if (previewRequestTokenRef.current !== token) return;
       setPreviewBody(entry?.body ?? '');
     },
     [previewId, port],
@@ -174,9 +176,9 @@ export function useMemoryEntries(
 
   const startEdit = useCallback(
     async (id: string) => {
-      latestEditRequestRef.current = id;
+      const token = ++editRequestTokenRef.current;
       const entry = await port.fetchMemoryEntry(id);
-      if (!entry || latestEditRequestRef.current !== id) return;
+      if (!entry || editRequestTokenRef.current !== token) return;
       openEditor();
       setEditing({
         id: entry.id,
@@ -190,13 +192,13 @@ export function useMemoryEntries(
   );
 
   const startNew = useCallback(() => {
-    latestEditRequestRef.current = null;
+    editRequestTokenRef.current += 1;
     openEditor();
     setEditing({ ...EMPTY_DRAFT });
   }, [openEditor]);
 
   const cancelEdit = useCallback(() => {
-    latestEditRequestRef.current = null;
+    editRequestTokenRef.current += 1;
     setEditing(null);
   }, []);
 

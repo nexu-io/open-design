@@ -356,6 +356,83 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.loadError).toBeNull();
   });
 
+  it('does not resurrect a row that a newer SSE "deleted" event removed after a failed delete\'s recovery snapshot was taken', async () => {
+    let resolveDelete!: (value: boolean) => void;
+    let resolveRecovery!: (value: MemoryExtractionRecord[]) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let deletion: Promise<void>;
+    act(() => {
+      // Fails to delete 'a'.
+      deletion = result.current.onDeleteExtraction('a');
+    });
+    // A remote client deletes 'b' while the failed-delete recovery for 'a' is
+    // still in flight.
+    act(() => result.current.applyExtractionEvent(record('b', { phase: 'deleted' })));
+
+    await act(async () => {
+      resolveDelete(false);
+      await Promise.resolve();
+      // The recovery snapshot was captured server-side BEFORE 'b' was
+      // deleted, so it still lists both rows.
+      resolveRecovery([record('a'), record('b')]);
+      await deletion!;
+    });
+
+    // 'a' comes back (the failed delete really did fail), but 'b' must stay
+    // gone — the newer destructive event is more authoritative than the
+    // stale pre-event snapshot.
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['a']);
+  });
+
+  it('does not resurrect any row after a newer SSE "cleared" event lands during a failed clear\'s recovery fetch', async () => {
+    let resolveClear!: (value: boolean) => void;
+    let resolveRecovery!: (value: MemoryExtractionRecord[]) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    const port = makePort({
+      clearExtractionHistory: vi.fn(() => clearPromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let clearing: Promise<void>;
+    act(() => {
+      clearing = result.current.clearExtractions();
+    });
+    // A remote client clears the whole history while this failed clear's
+    // recovery fetch is still in flight.
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'cleared' })));
+
+    await act(async () => {
+      resolveClear(false);
+      await Promise.resolve();
+      // Stale pre-clear snapshot from the server.
+      resolveRecovery([record('a')]);
+      await clearing!;
+    });
+
+    // The newer remote clear supersedes the stale confirmed snapshot.
+    expect(result.current.extractions).toEqual([]);
+  });
+
   it('ignores an extraction event with no id', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));

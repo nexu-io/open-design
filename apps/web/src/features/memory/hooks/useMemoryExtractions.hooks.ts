@@ -42,24 +42,44 @@ export function useMemoryExtractions(
   // newer has changed the history while its request/recovery fetch was pending.
   const extractionRevision = useRef(0);
   const pendingDeletionIds = useRef(new Set<string>());
+  // A confirmed-history fetch answers "what did the server have", but it can
+  // resolve after a NEWER destructive SSE event (a remote 'cleared' or
+  // 'deleted' frame) has already removed rows locally. Reconciling that stale
+  // snapshot naively would resurrect what the newer event just removed, so
+  // every destructive event stamps the revision it landed at; reconciliation
+  // discards any confirmed row whose removal is younger than the recovery.
+  const clearedAtRevisionRef = useRef(0);
+  const deletedAtRevisionRef = useRef(new Map<string, number>());
   const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
     extractionRevision.current += 1;
     setExtractions(next);
     return extractionRevision.current;
   }, []);
-  const reconcileConfirmedExtractions = useCallback((confirmed: MemoryExtractionRecord[]) => {
-    const pending = new Set(pendingDeletionIds.current);
-    updateExtractions((current) => {
-      const reconciled = confirmed.filter((row) => !pending.has(row.id));
-      const confirmedIds = new Set(reconciled.map((row) => row.id));
-      // Retain live frames that arrived after the recovery read, while never
-      // resurrecting a row another optimistic delete still owns.
-      return [
-        ...reconciled,
-        ...current.filter((row) => !pending.has(row.id) && !confirmedIds.has(row.id)),
-      ];
-    });
-  }, [updateExtractions]);
+  const reconcileConfirmedExtractions = useCallback(
+    (confirmed: MemoryExtractionRecord[], sinceRevision: number) => {
+      const pending = new Set(pendingDeletionIds.current);
+      updateExtractions((current) => {
+        // A clear that landed after this recovery began supersedes the whole
+        // confirmed snapshot — nothing from it should come back.
+        const reconciled =
+          clearedAtRevisionRef.current > sinceRevision
+            ? []
+            : confirmed.filter((row) => {
+                if (pending.has(row.id)) return false;
+                const deletedAt = deletedAtRevisionRef.current.get(row.id);
+                return deletedAt === undefined || deletedAt <= sinceRevision;
+              });
+        const confirmedIds = new Set(reconciled.map((row) => row.id));
+        // Retain live frames that arrived after the recovery read, while never
+        // resurrecting a row another optimistic delete still owns.
+        return [
+          ...reconciled,
+          ...current.filter((row) => !pending.has(row.id) && !confirmedIds.has(row.id)),
+        ];
+      });
+    },
+    [updateExtractions],
+  );
 
   const reloadExtractions = useCallback(async () => {
     setIsRefreshing(true);
@@ -84,11 +104,12 @@ export function useMemoryExtractions(
     // from the buffer, either by the per-row delete button or the "Clear"
     // affordance at the top.
     if (ev.phase === 'cleared') {
-      updateExtractions([]);
+      clearedAtRevisionRef.current = updateExtractions([]);
       return;
     }
     if (ev.phase === 'deleted') {
-      updateExtractions((prev) => prev.filter((r) => r.id !== ev.id));
+      const revision = updateExtractions((prev) => prev.filter((r) => r.id !== ev.id));
+      deletedAtRevisionRef.current.set(ev.id, revision);
       return;
     }
     // Merge by id: phase transitions for an in-flight attempt collapse onto a
@@ -126,7 +147,7 @@ export function useMemoryExtractions(
         pendingDeletionIds.current.delete(id);
         try {
           const confirmed = await port.fetchExtractions();
-          reconcileConfirmedExtractions(confirmed);
+          reconcileConfirmedExtractions(confirmed, optimisticRevision);
           setLoadError(null);
         } catch {
           if (extractionRevision.current === optimisticRevision) {
@@ -157,7 +178,7 @@ export function useMemoryExtractions(
         // advanced the revision while this recovery fetch was in flight, and
         // dropping the confirmed response entirely would leave the failed
         // clear's rows missing from state.
-        reconcileConfirmedExtractions(confirmed);
+        reconcileConfirmedExtractions(confirmed, optimisticRevision);
         setLoadError(null);
       } catch {
         if (extractionRevision.current === optimisticRevision) {

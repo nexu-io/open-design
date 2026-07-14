@@ -306,6 +306,76 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
     expect(result.current.editing?.id).toBe('b');
   });
 
+  it('ignores a stale openPreview() resolution when the SAME id is closed then reopened before it settles', async () => {
+    const first = deferred<MemoryEntry | null>();
+    const second = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    let openFirst!: Promise<void>;
+    act(() => {
+      openFirst = result.current.openPreview('a');
+    });
+    // Close before the first request settles (previewId === 'a' toggles it off).
+    await act(async () => {
+      await result.current.openPreview('a');
+    });
+    let openSecond!: Promise<void>;
+    act(() => {
+      openSecond = result.current.openPreview('a');
+    });
+
+    // The abandoned first request resolves after the reopen.
+    await act(async () => {
+      first.resolve(savedEntry({ id: 'a', body: 'stale body' }));
+      await openFirst;
+    });
+    expect(result.current.previewBody).toBeNull(); // still awaiting the second request
+
+    await act(async () => {
+      second.resolve(savedEntry({ id: 'a', body: 'fresh body' }));
+      await openSecond;
+    });
+    expect(result.current.previewBody).toBe('fresh body');
+  });
+
+  it('ignores a stale startEdit() resolution when the SAME id is cancelled then restarted before it settles', async () => {
+    const first = deferred<MemoryEntry | null>();
+    const second = deferred<MemoryEntry | null>();
+    const fetchMemoryEntry = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const port = makePort({ fetchMemoryEntry });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    let editFirst!: Promise<void>;
+    act(() => {
+      editFirst = result.current.startEdit('a');
+    });
+    act(() => result.current.cancelEdit());
+    let editSecond!: Promise<void>;
+    act(() => {
+      editSecond = result.current.startEdit('a');
+    });
+
+    await act(async () => {
+      first.resolve(savedEntry({ id: 'a', name: 'Stale name' }));
+      await editFirst;
+    });
+    expect(result.current.editing).toBeNull(); // still awaiting the second request
+
+    await act(async () => {
+      second.resolve(savedEntry({ id: 'a', name: 'Fresh name' }));
+      await editSecond;
+    });
+    expect(result.current.editing?.name).toBe('Fresh name');
+  });
+
   it('startEdit opens the editor for a found entry and no-ops when missing', async () => {
     const coord = makeCoord();
     const port = makePort({ fetchMemoryEntry: vi.fn(async () => null) });
