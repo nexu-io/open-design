@@ -125,18 +125,19 @@ describe('runSideEffectsForRun — event-based detection', () => {
   });
 
   it('prefers sideEffectLedger over scanning events', () => {
+    const ledger: import('../src/runtimes/run-lifecycle-analytics.js').RunSideEffectLedger = {
+      userVisibleOutputSeen: false,
+      toolCallSeen: false,
+      directArtifactEventSeen: false,
+      liveArtifactSeen: false,
+      artifactPaths: new Set(['/tmp/a.html']),
+      designSystemFileWritten: false,
+      previewModulePaths: new Set(),
+      pendingWritePathById: new Map(),
+    };
     const run = {
-      sideEffectLedger: {
-        userVisibleOutputSeen: false,
-        toolCallSeen: false,
-        directArtifactEventSeen: false,
-        liveArtifactSeen: false,
-        artifactPaths: new Set(['/tmp/a.html']),
-        designSystemFileWritten: false,
-        previewModulePaths: new Set(),
-        pendingWritePathById: new Map(),
-      },
-      events: [],
+      sideEffectLedger: ledger,
+      events: [] as unknown[],
     };
     const se = runSideEffectsForRun(run);
     // sideEffectLedger.artifactPaths.size > 0 → artifactWriteSeen=true
