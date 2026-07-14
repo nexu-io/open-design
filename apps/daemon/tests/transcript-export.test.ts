@@ -30,7 +30,7 @@ import {
 import {
   exportProjectTranscript,
   TranscriptExportLockedError,
-} from '../src/transcript-export.js';
+} from '../src/export/index.js';
 
 const PROJECT_ID = 'project-1';
 const FIXED_NOW = () => new Date('2026-05-04T12:00:00.000Z');

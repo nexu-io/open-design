@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildDesktopPdfExportInput } from '../src/pdf-export.js';
+import { buildDesktopPdfExportInput } from '../src/export/index.js';
 import { startServer } from '../src/server.js';
 
 describe('buildDesktopPdfExportInput', () => {

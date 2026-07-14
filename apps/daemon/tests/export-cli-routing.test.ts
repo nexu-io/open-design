@@ -6,8 +6,8 @@ import {
   buildExportCliResultEnvelope,
   buildExportCliRequestBody,
   resolveExportCliDeckMode,
-} from '../src/export-cli-request.js';
-import { exportRoutePath } from '../src/export-cli-routing.js';
+} from '../src/export/index.js';
+import { exportRoutePath } from '../src/export/index.js';
 
 describe('exportRoutePath', () => {
   it('routes pdf to the raster /export/pdf-image path, not the vector /export route', () => {

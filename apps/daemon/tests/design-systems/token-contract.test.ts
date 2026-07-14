@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDesignTokenContract,
   validateDesignTokenOutputs,
-} from '../../src/design-systems/token-contract.js';
+} from '../../src/design-systems/tokens/token-contract.js';
 
 describe('design token contract builder', () => {
   it('maps source evidence into TOKEN_SCHEMA without emitting source aliases', () => {

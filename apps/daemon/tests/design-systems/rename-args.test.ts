@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseDesignSystemRenameArgs } from '../../src/design-systems/rename-args.js';
+import { parseDesignSystemRenameArgs } from '../../src/design-systems/core/rename-args.js';
 
 describe('parseDesignSystemRenameArgs', () => {
   it('reads the id positional and the title from --title', () => {

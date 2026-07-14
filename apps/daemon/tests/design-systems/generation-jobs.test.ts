@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createDesignSystemGenerationJobStore,
   type DesignSystemGenerationJob,
-} from '../../src/design-systems/generation-jobs.js';
+} from '../../src/design-systems/jobs/generation-jobs.js';
 import {
   createUserDesignSystem,
   listUserDesignSystemRevisions,
