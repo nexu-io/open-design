@@ -206,12 +206,70 @@ describe('concurrent run per-conversation guard (#5490)', () => {
     const afterUserMessages = await userMessageCount(started.url, project);
     expect(afterUserMessages - beforeUserMessages).toBe(1);
   });
+
+  it('holds the reservation across a client disconnect during async prep (retry cannot fork)', async () => {
+    // The claim must follow HANDLER execution, not response lifetime. A run
+    // handler does real async work before design.runs.create — plugin snapshot
+    // resolution, config reads, agent detection. A client disconnect does NOT
+    // cancel that handler; it runs on to create the run. If the claim were
+    // released on the response's 'close', a normal timeout/retry would then see
+    // neither a claim nor an active run and be admitted, and both handlers would
+    // reach create — the exact native-session fork this PR prevents.
+    //
+    // Here the first request omits agentId, so the handler blocks in
+    // detectAgents on a `--version` probe stalled ~1.2s; its socket is aborted
+    // mid-probe. The retry on the same default conversation must still be
+    // refused (409), and only the first request's single run/session survives.
+    workDir = await mkdtemp(path.join(os.tmpdir(), 'od-concurrent-abort-'));
+    const capturePath = path.join(workDir, 'spawn-capture.jsonl');
+    const fakeClaude = await writeSessionCapturingClaude(workDir, 'claude-capture', capturePath, 1200);
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.OD_TEST_SESSION_CAPTURE = capturePath;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const project = await createProject(started.url, 'abort');
+
+    // Fire the first request and abort it 500ms in — while it is still blocked in
+    // the version probe holding the claim.
+    const abortedFirst = startProjectOnlyRunAborted(started.url, project.projectId, 500);
+
+    // After the abort, retry the same conversation (this one carries agentId so
+    // it does not itself block; it should hit the claim and be refused).
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    const retry = await startProjectOnlyRunRaw(started.url, project.projectId);
+    expect(retry.status, `retry must be refused while the disconnected handler still owns the conversation, got ${retry.status}`)
+      .toBe(409);
+    expect(retry.code).toBe('CONVERSATION_BUSY');
+    expect(await abortedFirst).toBe('aborted');
+
+    // The disconnected handler runs on and creates exactly one run; the retry
+    // created none. Only one native session ever materializes — no fork.
+    await waitForCaptureCount(capturePath, project.projectId, 1);
+    const captures = await readCapturesForProject(capturePath, project.projectId);
+    const sessions = new Set(captures.map((c) => c.sessionId).filter(Boolean));
+    expect(captures.length).toBe(1);
+    expect(sessions.size).toBe(1);
+  });
 });
 
 async function writeSessionCapturingClaude(
   dir: string,
   name: string,
   capturePath: string,
+  versionDelayMs = 0,
 ): Promise<string> {
   const bin = path.join(dir, name);
   // Records the native session identity the daemon spawned it with (--resume
@@ -219,41 +277,50 @@ async function writeSessionCapturingClaude(
   // then emits a clean successful stream-json turn and holds ~600ms before exit
   // so two racing runs are BOTH still resolving as create-turns (neither has
   // persisted its session yet). Synchronous writes so nothing is lost on exit.
+  //
+  // versionDelayMs > 0 stalls the `--version` detection probe by that long: the
+  // run handler blocks inside detectAgents (a real pre-create async step) while
+  // still holding its conversation claim, so a test can disconnect that request
+  // mid-probe and prove the claim is not released early.
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const argv = process.argv.slice(2);
 function w(s) { fs.writeSync(1, s); }
-if (argv.includes('--version')) { w('claude-code 1.0.0-session-capture\\n'); process.exit(0); }
-if (argv.includes('--help')) { w('Usage: claude -p [--include-partial-messages] [--add-dir DIR]\\n'); process.exit(0); }
+if (argv.includes('--version')) {
+  const emit = () => { w('claude-code 1.0.0-session-capture\\n'); process.exit(0); };
+  if (${versionDelayMs} > 0) setTimeout(emit, ${versionDelayMs}); else emit();
+} else if (argv.includes('--help')) {
+  w('Usage: claude -p [--include-partial-messages] [--add-dir DIR]\\n'); process.exit(0);
+} else {
+  function argValue(flag) {
+    const i = argv.indexOf(flag);
+    return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null;
+  }
+  const resumeId = argValue('--resume');
+  const newId = argValue('--session-id');
+  const mode = resumeId ? 'resume' : newId ? 'create' : 'none';
+  const sessionId = resumeId || newId || null;
+  try {
+    fs.appendFileSync(
+      ${JSON.stringify(capturePath)},
+      JSON.stringify({ mode, sessionId, cwd: process.cwd() }) + '\\n',
+    );
+  } catch {}
 
-function argValue(flag) {
-  const i = argv.indexOf(flag);
-  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null;
+  const echo = sessionId || 'sess-unknown';
+  w(JSON.stringify({ type: 'system', subtype: 'init', model: 'm', session_id: echo }) + '\\n');
+  w(JSON.stringify({
+    type: 'assistant',
+    message: { id: 'msg-' + echo.slice(0, 8), content: [{ type: 'text', text: 'done' }], stop_reason: 'end_turn' },
+  }) + '\\n');
+  w(JSON.stringify({
+    type: 'result', subtype: 'success', is_error: false,
+    session_id: echo, num_turns: 1, duration_api_ms: 10, total_cost_usd: 0,
+  }) + '\\n');
+  // Hold both racing runs alive as create-turns long enough that neither has
+  // persisted its session before the other resolves.
+  setTimeout(() => process.exit(0), 600);
 }
-const resumeId = argValue('--resume');
-const newId = argValue('--session-id');
-const mode = resumeId ? 'resume' : newId ? 'create' : 'none';
-const sessionId = resumeId || newId || null;
-try {
-  fs.appendFileSync(
-    ${JSON.stringify(capturePath)},
-    JSON.stringify({ mode, sessionId, cwd: process.cwd() }) + '\\n',
-  );
-} catch {}
-
-const echo = sessionId || 'sess-unknown';
-w(JSON.stringify({ type: 'system', subtype: 'init', model: 'm', session_id: echo }) + '\\n');
-w(JSON.stringify({
-  type: 'assistant',
-  message: { id: 'msg-' + echo.slice(0, 8), content: [{ type: 'text', text: 'done' }], stop_reason: 'end_turn' },
-}) + '\\n');
-w(JSON.stringify({
-  type: 'result', subtype: 'success', is_error: false,
-  session_id: echo, num_turns: 1, duration_api_ms: 10, total_cost_usd: 0,
-}) + '\\n');
-// Hold both racing runs alive as create-turns long enough that neither has
-// persisted its session before the other resolves.
-setTimeout(() => process.exit(0), 600);
 `, 'utf8');
   await chmod(bin, 0o755);
   return bin;
@@ -393,6 +460,51 @@ async function startProjectOnlyRunRaw(
   return code === undefined
     ? { status: runResponse.status }
     : { status: runResponse.status, code };
+}
+
+// Fires a project-only /api/runs with NO agentId, so the handler enters the
+// slow detectAgents `--version` probe (a real pre-create async step) while
+// holding the conversation claim, then aborts the socket mid-probe. Resolves to
+// 'aborted' once the client connection is torn down; the daemon handler keeps
+// running regardless (a disconnect does not cancel it).
+async function startProjectOnlyRunAborted(
+  url: string,
+  projectId: string,
+  abortAfterMs: number,
+): Promise<string> {
+  const controller = new AbortController();
+  const pending = fetch(`${url}/api/runs`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-od-analytics-device-id': 'concurrent-session-test',
+      'x-od-analytics-session-id': 'concurrent-session-session',
+      'x-od-analytics-client-type': 'web',
+    },
+    body: JSON.stringify({
+      projectId,
+      message: 'reproduce disconnect-retry native session fork',
+    }),
+    signal: controller.signal,
+  })
+    .then(() => 'completed')
+    .catch((err: Error) => (err.name === 'AbortError' ? 'aborted' : `error:${err.message}`));
+  await new Promise((resolve) => setTimeout(resolve, abortAfterMs));
+  controller.abort();
+  return pending;
+}
+
+async function waitForCaptureCount(
+  capturePath: string,
+  projectId: string,
+  target: number,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 15_000) {
+    const caps = await readCapturesForProject(capturePath, projectId);
+    if (caps.length >= target) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }
 
 async function userMessageCount(
