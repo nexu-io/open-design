@@ -1,0 +1,19 @@
+{
+  "candidateId": "97091354-c2a3-44f6-8ef7-64025f08d171",
+  "projectId": "routine-b0331fa6-32d5-46f7-a9ae-1b91909bdd3c",
+  "runId": "7548b51b-67b2-4ef3-a28e-5743def8aadc",
+  "conversationId": "routine-conv-7618ef78-a731-4c1e-bc45-c9da777f19b8",
+  "provenance": {
+    "summary": "Detected from DESIGN-SYSTEM-PROPOSAL.md after a successful run.",
+    "detectedAt": 1784009600881
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "DESIGN-SYSTEM-PROPOSAL.md",
+      "label": "DESIGN-SYSTEM-PROPOSAL.md",
+      "size": 18616,
+      "copied": true
+    }
+  ]
+}
