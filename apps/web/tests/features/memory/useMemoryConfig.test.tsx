@@ -281,6 +281,56 @@ describe('useMemoryConfig', () => {
     expect(result.current.enabled).toBe(false);
   });
 
+  it('does not let hydration overwrite an in-flight optimistic master toggle', async () => {
+    const patch = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(patch.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    let toggle!: Promise<void>;
+    act(() => {
+      toggle = result.current.onToggleEnabled(false);
+    });
+    expect(result.current.enabled).toBe(false);
+
+    // This represents a list GET that observed the old server state before
+    // the PATCH above was applied.
+    act(() => {
+      result.current.hydrate(listResponse({ enabled: true }));
+    });
+    expect(result.current.enabled).toBe(false);
+
+    await act(async () => {
+      patch.resolve(true);
+      await toggle;
+    });
+    expect(result.current.enabled).toBe(false);
+  });
+
+  it('does not let hydration overwrite an in-flight optimistic hook toggle', async () => {
+    const patch = deferred<boolean>();
+    const patchConfig = vi.fn().mockReturnValueOnce(patch.promise);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    let toggle!: Promise<void>;
+    act(() => {
+      toggle = result.current.onToggleHook('profileEnabled', false);
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(false);
+
+    // The stale list must not replace this flag's optimistic state (or its
+    // rollback baseline) while the matching PATCH is still outstanding.
+    act(() => {
+      result.current.hydrate(listResponse({ profileEnabled: true }));
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(false);
+
+    await act(async () => {
+      patch.resolve(true);
+      await toggle;
+    });
+    expect(result.current.hookFlags.profileEnabled).toBe(false);
+  });
+
   it('hydrate maps a list response onto every flag (missing => true)', () => {
     const { result } = renderHook(() => useMemoryConfig(makePort()));
     act(() =>

@@ -108,6 +108,272 @@ describe('useMemoryExtractions — load + derived', () => {
     });
   });
 
+  it('does not resurrect a row whose delete succeeds while a reload that started at the same revision is still awaiting its own stale read', async () => {
+    let resolveDelete!: (ok: boolean) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    let resolveReload!: (rows: MemoryExtractionRecord[]) => void;
+    const reloadPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveReload = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => reloadPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let deletion!: Promise<void>;
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      // Both start at the SAME client revision: the reload captures its
+      // sinceRevision right after the delete's own optimistic removal, before
+      // the delete's own request has settled either way.
+      deletion = result.current.onDeleteExtraction('a');
+      reloading = result.current.reloadExtractions();
+    });
+
+    // The delete succeeds first and stamps its tombstone...
+    await act(async () => {
+      resolveDelete(true);
+      await deletion;
+    });
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+
+    // ...then the racing reload's OWN read resolves with stale, pre-delete
+    // data: its GET reached the server before the DELETE did, even though the
+    // client-side optimistic removal happened first and the two share a
+    // revision number.
+    let returned: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      resolveReload([record('a'), record('b')]);
+      returned = await reloading;
+    });
+
+    expect(returned.map((r) => r.id)).not.toContain('a');
+    expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+  });
+
+  it('does not resurrect either row when two overlapping deletes both succeed while a stale reload is still in flight', async () => {
+    let resolveDeleteA!: (ok: boolean) => void;
+    const deleteAPromise = new Promise<boolean>((resolve) => {
+      resolveDeleteA = resolve;
+    });
+    let resolveDeleteB!: (ok: boolean) => void;
+    const deleteBPromise = new Promise<boolean>((resolve) => {
+      resolveDeleteB = resolve;
+    });
+    let resolveReload!: (rows: MemoryExtractionRecord[]) => void;
+    const reloadPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveReload = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn((id: string) => (id === 'a' ? deleteAPromise : deleteBPromise)),
+      fetchExtractions: vi.fn(() => reloadPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let deletionA!: Promise<void>;
+    let deletionB!: Promise<void>;
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      // Two deletes fired back-to-back in the same tick, before either has
+      // re-rendered, plus a reload capturing the same starting revision.
+      deletionA = result.current.onDeleteExtraction('a');
+      deletionB = result.current.onDeleteExtraction('b');
+      reloading = result.current.reloadExtractions();
+    });
+
+    // Both deletes succeed before the reload's own read resolves.
+    await act(async () => {
+      resolveDeleteA(true);
+      await deletionA;
+      resolveDeleteB(true);
+      await deletionB;
+    });
+    expect(result.current.extractions).toEqual([]);
+
+    // The reload's own GET raced ahead of both DELETEs and returns stale,
+    // pre-delete data for both rows.
+    let returned: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      resolveReload([record('a'), record('b')]);
+      returned = await reloading;
+    });
+
+    expect(returned).toEqual([]);
+    expect(result.current.extractions).toEqual([]);
+  });
+
+  it('does not resurrect a row when clearExtractions succeeds at the same revision a stale reload started at', async () => {
+    let resolveClear!: (ok: boolean) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    let resolveReload!: (rows: MemoryExtractionRecord[]) => void;
+    const reloadPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveReload = resolve;
+    });
+    const port = makePort({
+      clearExtractionHistory: vi.fn(() => clearPromise),
+      fetchExtractions: vi.fn(() => reloadPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let clearing!: Promise<void>;
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      clearing = result.current.clearExtractions();
+      reloading = result.current.reloadExtractions();
+    });
+
+    await act(async () => {
+      resolveClear(true);
+      await clearing;
+    });
+    expect(result.current.extractions).toEqual([]);
+
+    let returned: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      resolveReload([record('a')]);
+      returned = await reloading;
+    });
+
+    expect(returned).toEqual([]);
+    expect(result.current.extractions).toEqual([]);
+  });
+
+  it('does not leave a row resurrected by a failed delete\'s recovery in place once a concurrent clear succeeds', async () => {
+    let resolveDelete!: (ok: boolean) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    let resolveRecovery!: (rows: MemoryExtractionRecord[]) => void;
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    let resolveClear!: (ok: boolean) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+      clearExtractionHistory: vi.fn(() => clearPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let deletion!: Promise<void>;
+    let clearing!: Promise<void>;
+    act(() => {
+      deletion = result.current.onDeleteExtraction('a');
+      clearing = result.current.clearExtractions();
+    });
+
+    // The delete fails; its recovery read (still in flight when the clear
+    // succeeds below) resolves with a stale, pre-clear snapshot that still
+    // has 'a'.
+    await act(async () => {
+      resolveDelete(false);
+      await Promise.resolve();
+      resolveRecovery([record('a')]);
+      await deletion;
+    });
+    // At this point the failed-delete recovery has (incorrectly, in
+    // isolation) resurrected 'a' — that's expected; the clear below must
+    // still win.
+
+    await act(async () => {
+      resolveClear(true);
+      await clearing;
+    });
+
+    expect(result.current.extractions).toEqual([]);
+  });
+
+  it('discards a stale reload response once a newer reloadExtractions() call has already started', async () => {
+    let resolveA!: (rows: MemoryExtractionRecord[]) => void;
+    const promiseA = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveA = resolve;
+    });
+    let resolveB!: (rows: MemoryExtractionRecord[]) => void;
+    const promiseB = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveB = resolve;
+    });
+    let call = 0;
+    const port = makePort({
+      fetchExtractions: vi.fn(() => (++call === 1 ? promiseA : promiseB)),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let reloadingA!: Promise<MemoryExtractionRecord[]>;
+    let reloadingB!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloadingA = result.current.reloadExtractions();
+      reloadingB = result.current.reloadExtractions();
+    });
+
+    // B — the LATER-started call — resolves first, correctly reflecting that
+    // the row is now gone server-side.
+    let returnedB: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      resolveB([]);
+      returnedB = await reloadingB;
+    });
+    expect(returnedB).toEqual([]);
+    expect(result.current.extractions).toEqual([]);
+
+    // A — the EARLIER-started call — resolves later with stale data that
+    // still has the row. A newer call already committed, so A's response
+    // must be discarded outright rather than reconciled.
+    let returnedA: MemoryExtractionRecord[] = [];
+    await act(async () => {
+      resolveA([record('a')]);
+      returnedA = await reloadingA;
+    });
+    expect(returnedA).toEqual([]);
+    expect(result.current.extractions).toEqual([]);
+    expect(result.current.isRefreshing).toBe(false);
+  });
+
+  it('keeps a row pending through a failed delete\'s recovery while an overlapping SAME-id delete is still in flight', async () => {
+    let resolveFirst!: (ok: boolean) => void;
+    const firstPromise = new Promise<boolean>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondPromise = new Promise<boolean>(() => {}); // never resolves during this test
+    let call = 0;
+    const port = makePort({
+      deleteExtraction: vi.fn(() => (++call === 1 ? firstPromise : secondPromise)),
+      fetchExtractions: vi.fn(async () => [record('a')]),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.onDeleteExtraction('a');
+      void result.current.onDeleteExtraction('a'); // second call, same id, left in flight
+    });
+
+    await act(async () => {
+      resolveFirst(false);
+      await first;
+    });
+
+    // The second delete for the same id is still in flight, so the confirmed
+    // recovery read (which still shows 'a' server-side) must not resurrect it
+    // while that second request could still succeed.
+    expect(result.current.extractions.map((r) => r.id)).not.toContain('a');
+  });
+
   it('keeps the prior rows and exposes a failure when the history reload rejects', async () => {
     const port = makePort({ fetchExtractions: vi.fn(async () => { throw new Error('offline'); }) });
     const { result } = renderHook(() => useMemoryExtractions(port));

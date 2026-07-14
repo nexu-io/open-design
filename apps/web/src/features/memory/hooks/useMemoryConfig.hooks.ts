@@ -42,6 +42,10 @@ function newConfigWriteQueue(): ConfigWriteQueue {
   return { inFlight: false, pending: null };
 }
 
+function hasUnsettledConfigWrite(queue: ConfigWriteQueue): boolean {
+  return queue.inFlight || queue.pending !== null;
+}
+
 /**
  * Enqueue one desired value for a setting; the returned promise settles when
  * the PATCH that carries it does (rejecting with the transport error when that
@@ -147,18 +151,30 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
       rewriteEnabled: list.rewriteEnabled !== false,
       verifyEnabled: list.verifyEnabled !== false,
     };
-    setEnabled(next.enabled);
-    setChatExtractionEnabled(next.chatExtractionEnabled);
-    setProfileEnabled(next.profileEnabled);
-    setRewriteEnabled(next.rewriteEnabled);
-    setVerifyEnabled(next.verifyEnabled);
-    enabledConfirmedRef.current = next.enabled;
-    hookConfirmedRef.current = {
-      chatExtractionEnabled: next.chatExtractionEnabled,
-      profileEnabled: next.profileEnabled,
-      rewriteEnabled: next.rewriteEnabled,
-      verifyEnabled: next.verifyEnabled,
-    };
+
+    // A list response can have raced an optimistic PATCH. Keep both the
+    // visible value and its rollback baseline untouched until that setting's
+    // queue settles; the write's onSettled callback then reconciles it.
+    if (!hasUnsettledConfigWrite(enabledQueueRef.current)) {
+      setEnabled(next.enabled);
+      enabledConfirmedRef.current = next.enabled;
+    }
+    if (!hasUnsettledConfigWrite(hookQueuesRef.current.chatExtractionEnabled)) {
+      setChatExtractionEnabled(next.chatExtractionEnabled);
+      hookConfirmedRef.current.chatExtractionEnabled = next.chatExtractionEnabled;
+    }
+    if (!hasUnsettledConfigWrite(hookQueuesRef.current.profileEnabled)) {
+      setProfileEnabled(next.profileEnabled);
+      hookConfirmedRef.current.profileEnabled = next.profileEnabled;
+    }
+    if (!hasUnsettledConfigWrite(hookQueuesRef.current.rewriteEnabled)) {
+      setRewriteEnabled(next.rewriteEnabled);
+      hookConfirmedRef.current.rewriteEnabled = next.rewriteEnabled;
+    }
+    if (!hasUnsettledConfigWrite(hookQueuesRef.current.verifyEnabled)) {
+      setVerifyEnabled(next.verifyEnabled);
+      hookConfirmedRef.current.verifyEnabled = next.verifyEnabled;
+    }
   }, []);
 
   const onToggleEnabled = useCallback(
