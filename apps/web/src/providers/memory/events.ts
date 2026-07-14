@@ -18,18 +18,25 @@ export interface MemoryEventHandlers {
 export function subscribeMemoryEvents(handlers: MemoryEventHandlers): () => void {
   const es = new EventSource('/api/memory/events');
   es.addEventListener('change', (raw) => {
+    // Only the parse is guarded: a malformed frame is swallowed, but a real
+    // bug thrown by the subscriber's own handler must still surface instead
+    // of looking identical to a bad frame.
+    let event: MemoryChangeEvent;
     try {
-      handlers.onChange(JSON.parse((raw as MessageEvent).data) as MemoryChangeEvent);
+      event = JSON.parse((raw as MessageEvent).data) as MemoryChangeEvent;
     } catch {
-      // Malformed — ignore.
+      return;
     }
+    handlers.onChange(event);
   });
   es.addEventListener('extraction', (raw) => {
+    let event: MemoryExtractionEvent;
     try {
-      handlers.onExtraction(JSON.parse((raw as MessageEvent).data) as MemoryExtractionEvent);
+      event = JSON.parse((raw as MessageEvent).data) as MemoryExtractionEvent;
     } catch {
-      // Malformed — ignore.
+      return;
     }
+    handlers.onExtraction(event);
   });
   return () => {
     es.close();

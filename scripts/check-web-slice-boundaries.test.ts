@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { collectImportBoundaryViolations, resolveWebImport } from "./check-web-slice-boundaries.ts";
+import { collectImportBoundaryViolations, fetchedRoutesOf, resolveWebImport } from "./check-web-slice-boundaries.ts";
 
 const ORCHESTRATOR = "apps/web/src/components/MemorySection.tsx";
 const APP_ROUTE = "apps/web/app/[[...slug]]/page.tsx";
@@ -108,4 +108,69 @@ test("bare package specifiers never touch the slice boundary", () => {
     collectImportBoundaryViolations(ORCHESTRATOR, "import { useCallback } from 'react';"),
     [],
   );
+});
+
+test("outside-in: a dynamic import() deep-importing a slice is rejected, same as a static import", () => {
+  const violations = collectImportBoundaryViolations(
+    ORCHESTRATOR,
+    "async function load() { await import('@/src/features/memory/hooks/useMemoryConfig.hooks'); }",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("outside-in: a dynamic import() of the slice's public barrel is allowed", () => {
+  assert.deepEqual(
+    collectImportBoundaryViolations(
+      ORCHESTRATOR,
+      "async function load() { await import('../features/memory'); }",
+    ),
+    [],
+  );
+});
+
+test("outside-in: an import(\"...\").Type type-only deep reference into a slice is rejected", () => {
+  const violations = collectImportBoundaryViolations(
+    ORCHESTRATOR,
+    "type Cfg = import('@/src/features/memory/hooks/useMemoryConfig.hooks').MemoryConfigController;",
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]?.message ?? "", /deep import into slice `memory` from outside features\//);
+});
+
+test("transport-free: globalThis.fetch inside a slice file is flagged the same as bare fetch", () => {
+  const featureFile = "apps/web/src/features/memory/hooks/useMemoryConfig.hooks.ts";
+  const bare = collectImportBoundaryViolations(featureFile, "async function f() { await fetch('/api/memory'); }");
+  assert.equal(bare.length, 1);
+  assert.match(bare[0]?.message ?? "", /uses `fetch`/);
+
+  const qualified = collectImportBoundaryViolations(
+    featureFile,
+    "async function f() { await globalThis.fetch('/api/memory'); }",
+  );
+  assert.equal(qualified.length, 1);
+  assert.match(qualified[0]?.message ?? "", /uses `fetch`/);
+});
+
+test("transport-free: a plain object's own `.window` property is not mistaken for the global", () => {
+  const featureFile = "apps/web/src/features/memory/hooks/useMemoryConfig.hooks.ts";
+  assert.deepEqual(
+    collectImportBoundaryViolations(featureFile, "const cfg = { window: 'unrelated' }; cfg.window;"),
+    [],
+  );
+});
+
+test("fetchedRoutesOf: a no-substitution template literal is a plain route", () => {
+  assert.deepEqual(fetchedRoutesOf("fetch(`/api/memory/tree`);"), ["/api/memory/tree"]);
+});
+
+test("fetchedRoutesOf: an interpolated template route normalizes to its route family", () => {
+  assert.deepEqual(fetchedRoutesOf("fetch(`/api/memory/${encodeURIComponent(id)}`);"), ["/api/memory/*"]);
+});
+
+test("fetchedRoutesOf: two differently-shaped interpolations collapse to the SAME family", () => {
+  const a = fetchedRoutesOf("fetch(`/api/memory/${encodeURIComponent(id)}`);");
+  const b = fetchedRoutesOf("fetch(`/api/memory/${otherId}`, { method: 'DELETE' });");
+  assert.deepEqual(a, b);
+  assert.deepEqual(a, ["/api/memory/*"]);
 });

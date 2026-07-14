@@ -11,7 +11,9 @@ import ts from "typescript";
 //
 //   1. Slice files are transport-free — no `fetch`, `EventSource`,
 //      `XMLHttpRequest`, `WebSocket`, `localStorage`, `sessionStorage`,
-//      `window`, or `document`. Transport lives behind a provider + port.
+//      `window`, or `document`, whether reached as a bare identifier or
+//      qualified through `globalThis.<name>`. Transport lives behind a
+//      provider + port.
 //   2. Only a slice's `dependencies.ts` may import from `providers/`. Every
 //      other feature file depends on the port, not the adapter.
 //   3. No cross-slice deep imports: a slice may import another slice only
@@ -22,13 +24,20 @@ import ts from "typescript";
 //      (`../features/<slice>/...`) and the `@/*` path-alias form of a deep
 //      import are rejected — `apps/web/tsconfig.json` maps `@/*` onto the
 //      `apps/web` root, so `@/src/features/<slice>/...` resolves to the same
-//      file and must not be a boundary escape hatch.
+//      file and must not be a boundary escape hatch. This applies equally to a
+//      static `import ... from`, a dynamic `import("...")` call, and an
+//      `import("...").Type` type-only reference — all three resolve to the
+//      same file.
 //   4. One transport home per route: a route fetched inside a multi-adapter
 //      provider folder (`providers/<resource>/`) must not also be owned by a
-//      second provider folder. A plain component still fetching that route
-//      inline is a tracked backlog (reported, not failed) — forcing every
-//      caller to migrate the instant a provider home appears would turn a
-//      bounded single-file slice PR into an app-wide flag day.
+//      second provider folder. An interpolated route template
+//      (`` `/api/memory/${id}` ``) is normalized to its route family
+//      (`/api/memory/*`) before comparison, so two provider folders templating
+//      the same route family are recognized as owning the same route. A plain
+//      component still fetching that route inline is a tracked backlog
+//      (reported, not failed) — forcing every caller to migrate the instant a
+//      provider home appears would turn a bounded single-file slice PR into an
+//      app-wide flag day.
 //
 // The guard is intentionally scoped to migrated surfaces: it only inspects
 // `features/**` and provider *folders* (flat legacy `providers/*.ts` files are
@@ -225,6 +234,15 @@ export function collectImportBoundaryViolations(
   return violations;
 }
 
+/**
+ * Every module specifier a file resolves to at build/runtime: static
+ * `import`/`export ... from "..."` declarations, dynamic `import("...")`
+ * calls, and `import("...").Type` type-only references. A slice boundary
+ * enforced only against the static form is not enforced — a deep import
+ * rewritten as `await import("@/src/features/<slice>/hooks/...")` or an
+ * `import("...").SomeType` type reference would resolve to the exact same
+ * file and must be checked identically.
+ */
 function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; node: ts.Node }> {
   const specifiers: Array<{ specifier: string; node: ts.Node }> = [];
   const visit = (node: ts.Node): void => {
@@ -234,6 +252,19 @@ function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; n
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       specifiers.push({ specifier: node.moduleSpecifier.text, node });
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      specifiers.push({ specifier: (node.arguments[0] as ts.StringLiteralLike).text, node });
+    } else if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteralLike(node.argument.literal)
+    ) {
+      specifiers.push({ specifier: node.argument.literal.text, node });
     }
     ts.forEachChild(node, visit);
   };
@@ -241,7 +272,28 @@ function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; n
   return specifiers;
 }
 
-/** First-argument route literals of `fetch(...)` calls in a source file. */
+/**
+ * Collapse an interpolated route template (`` `/api/memory/${id}` ``) into a
+ * family key (`/api/memory/*`) so two provider folders templating the same
+ * route family are recognized as sharing one route, not as two unrelated
+ * literals. Every interpolated span collapses to the same `*` placeholder —
+ * the guard only needs to know the route SHAPE collides, not the values.
+ */
+function templateRouteFamily(template: ts.TemplateExpression): string {
+  let route = template.head.text;
+  for (const span of template.templateSpans) {
+    route += "*" + span.literal.text;
+  }
+  return route;
+}
+
+/**
+ * First-argument route (or route family) of `fetch(...)` calls in a source
+ * file. A plain string/no-substitution-template literal is used as-is; a
+ * template WITH interpolation (`` `/api/memory/${id}` ``) is normalized to
+ * its route family so it registers ownership the same way a same-shaped
+ * literal would.
+ */
 function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
   const routes: string[] = [];
   const visit = (node: ts.Node): void => {
@@ -250,10 +302,13 @@ function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === "fetch" &&
-      firstArg &&
-      ts.isStringLiteralLike(firstArg)
+      firstArg
     ) {
-      routes.push(firstArg.text);
+      if (ts.isStringLiteralLike(firstArg)) {
+        routes.push(firstArg.text);
+      } else if (ts.isTemplateExpression(firstArg)) {
+        routes.push(templateRouteFamily(firstArg));
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -261,10 +316,25 @@ function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
   return routes;
 }
 
-/** Bare-identifier uses of a forbidden global (not a property name / import). */
+/**
+ * Bare-identifier uses of a forbidden global (not a property name / import),
+ * plus the qualified `globalThis.<forbidden>` form. A bare `fetch` and
+ * `globalThis.fetch` reach the exact same transport; scoping the check to
+ * unqualified identifiers alone would let `globalThis.<global>` stand in as
+ * an unchecked alias for every forbidden global.
+ */
 function forbiddenGlobalUses(source: ts.SourceFile): Array<{ name: string; position: number }> {
   const uses: Array<{ name: string; position: number }> = [];
   const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "globalThis" &&
+      forbiddenSliceGlobals.has(node.name.text)
+    ) {
+      uses.push({ name: node.name.text, position: node.name.getStart(source) });
+      return;
+    }
     if (ts.isIdentifier(node) && forbiddenSliceGlobals.has(node.text)) {
       const parent = node.parent;
       const isPropertyName =
@@ -281,6 +351,16 @@ function forbiddenGlobalUses(source: ts.SourceFile): Array<{ name: string; posit
   };
   visit(source);
   return uses;
+}
+
+/**
+ * Route (or route family) of every `fetch(...)` call in a source string.
+ * Exported alongside `collectImportBoundaryViolations` so the route-family
+ * normalization is unit-testable without touching disk.
+ */
+export function fetchedRoutesOf(sourceText: string, fileName = "test.ts"): string[] {
+  const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true, scriptKindFor(fileName));
+  return fetchRouteLiteralsOf(source);
 }
 
 /** Provider *folders* (a multi-adapter resource home: `providers/<x>/index.ts`). */
