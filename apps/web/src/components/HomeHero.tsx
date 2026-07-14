@@ -2384,6 +2384,7 @@ function PluginPromptPresetCard({
             pluginId={record.id}
             pluginTitle={title}
             preview={preview}
+            eager={odMode === 'deck'}
           />
           {active ? (
             <span className="home-hero__plugin-preset-check" aria-hidden>
