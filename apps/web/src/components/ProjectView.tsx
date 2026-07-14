@@ -3918,6 +3918,7 @@ export function ProjectView({
                 nextFiles,
                 touchedFilePaths,
                 project.id,
+                projectDetail.resolvedDir,
               ) ?? [],
               recoveredExistingArtifact,
             );
@@ -3929,6 +3930,7 @@ export function ProjectView({
                 touchedFilePaths,
                 nextFiles,
                 project.id,
+                projectDetail.resolvedDir,
               ),
             });
             if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
@@ -4240,6 +4242,7 @@ export function ProjectView({
                     nextFiles,
                     touchedFilePaths,
                     project.id,
+                    projectDetail.resolvedDir,
                   ) ?? [],
                   recoveredExistingArtifact,
                 );
@@ -4251,6 +4254,7 @@ export function ProjectView({
                     touchedFilePaths,
                     nextFiles,
                     project.id,
+                    projectDetail.resolvedDir,
                   ),
                 });
                 if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
@@ -5679,6 +5683,7 @@ export function ProjectView({
                 nextFiles,
                 traceTouchedFilePaths,
                 project.id,
+                projectDetail.resolvedDir,
               ) ?? [];
               const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
                 ...autoOpenArtifactOptions,
@@ -5688,6 +5693,7 @@ export function ProjectView({
                   traceTouchedFilePaths,
                   nextFiles,
                   project.id,
+                  projectDetail.resolvedDir,
                 ),
               });
               if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
@@ -9745,6 +9751,7 @@ export function computeTraceObjectFiles(
   next: readonly ProjectFile[],
   touchedPaths: Iterable<string> = [],
   projectId?: string,
+  projectRoot?: string | null,
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
@@ -9753,7 +9760,7 @@ export function computeTraceObjectFiles(
     byName.set(file.name, { ...file, traceObjectReason: 'new' });
   }
   for (const rawPath of touchedPaths) {
-    const file = findTouchedProjectFile(rawPath, next, projectId);
+    const file = findTouchedProjectFile(rawPath, next, projectId, projectRoot);
     if (!file) continue;
     byName.set(file.name, {
       ...file,
@@ -9767,10 +9774,40 @@ function findTouchedProjectFile(
   rawPath: string,
   files: readonly ProjectFile[],
   projectId?: string,
+  projectRoot?: string | null,
 ): ProjectFile | null {
-  const normalized = normalizeComparableFilePath(rawPath);
-  if (!normalized) return null;
+  const slashed = rawPath.replace(/\\/g, '/');
+  // Lexically resolve `.`/`..` first: a path whose `..` climbs above its own
+  // anchor can never be proven to stay anywhere, so it is rejected outright —
+  // before any suffix matching could pair it with an in-project file.
+  const segments = lexicallyNormalizePathSegments(slashed);
+  if (!segments || segments.length === 0) return null;
+  let normalized = segments.join('/');
+  // A managed-project alias (`…/projects/<projectId>/…`) identifies the file's
+  // project-relative form regardless of where the alias mount lives, so it is
+  // trusted as-is; containment below only anchors paths without that marker.
   const managedProjectRelativePath = relativePathFromManagedProjectAlias(normalized, projectId);
+  if (!managedProjectRelativePath && isAbsoluteToolPath(slashed)) {
+    const rootSegments = projectRoot
+      ? lexicallyNormalizePathSegments(projectRoot.replace(/\\/g, '/'))
+      : null;
+    if (rootSegments && rootSegments.length > 0) {
+      // An absolute tool path is only trusted when it provably lives under
+      // the project root: require the root's segments as a prefix and match
+      // on the remaining project-relative form (/workspace/index.html →
+      // index.html). Out-of-root paths (including `..` escapes that resolve
+      // outside the root) are rejected here rather than falling through to
+      // suffix matching, where /tmp/site/index.html could otherwise pick the
+      // project's own index.html.
+      if (segments.length <= rootSegments.length) return null;
+      for (let i = 0; i < rootSegments.length; i += 1) {
+        if (segments[i] !== rootSegments[i]) return null;
+      }
+      normalized = segments.slice(rootSegments.length).join('/');
+    }
+    // Without a usable root there is no anchor to judge containment against;
+    // keep the legacy suffix behavior below.
+  }
   const comparablePaths = managedProjectRelativePath
     ? [normalized, managedProjectRelativePath]
     : [normalized];
@@ -9833,6 +9870,26 @@ function normalizeComparableFilePath(value: string): string {
     .join('/');
 }
 
+// Lexically resolve `.`/`..` segments. Returns null when a `..` climbs above
+// the path's own anchor — such a path cannot be proven to resolve anywhere.
+function lexicallyNormalizePathSegments(path: string): string[] | null {
+  const out: string[] = [];
+  for (const part of path.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+function isAbsoluteToolPath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+}
+
 // Resolve the agent's raw Write/Edit tool paths (absolute or partial) to
 // project file NAMES for selectAutoOpenTurnArtifact's touched-file
 // restriction. Paths that do not resolve to a project file (out-of-project
@@ -9842,10 +9899,11 @@ export function resolveAgentTouchedFileNames(
   touchedPaths: Iterable<string>,
   files: readonly ProjectFile[],
   projectId?: string,
+  projectRoot?: string | null,
 ): Set<string> {
   const names = new Set<string>();
   for (const rawPath of touchedPaths) {
-    const file = findTouchedProjectFile(rawPath, files, projectId);
+    const file = findTouchedProjectFile(rawPath, files, projectId, projectRoot);
     if (file) names.add(file.name);
   }
   return names;
