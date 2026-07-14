@@ -17,6 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyChatRunCloseStatus,
+  shouldSalvageLateTeardown,
 } from '../src/runtimes/chat-run-lifecycle.js';
 import {
   runSideEffectsForRun,
@@ -52,6 +53,43 @@ describe('classifyChatRunCloseStatus — plain exit', () => {
       .toBe('canceled');
     expect(classifyChatRunCloseStatus({ ...base, cancelRequested: true, code: 1, artifactProducedThisRun: false }))
       .toBe('canceled');
+  });
+});
+
+describe('shouldSalvageLateTeardown — #5528 precise gate', () => {
+  // Verifies mrcfps blocker 2: salvage only triggers on verified late
+  // teardown conditions, NOT on every fatal/stream error after an artifact.
+  it('returns false when no artifacts were produced', () => {
+    expect(shouldSalvageLateTeardown({ code: 0, signal: null, artifactWriteSeen: false, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: null, signal: 'SIGTERM', artifactWriteSeen: false, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: 130, signal: null, artifactWriteSeen: false, liveArtifactSeen: false }))
+      .toBe(false);
+  });
+
+  it('returns true for verified teardown conditions with artifacts', () => {
+    expect(shouldSalvageLateTeardown({ code: 0, signal: null, artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(true);
+    expect(shouldSalvageLateTeardown({ code: null, signal: 'SIGTERM', artifactWriteSeen: false, liveArtifactSeen: true }))
+      .toBe(true);
+    expect(shouldSalvageLateTeardown({ code: 130, signal: null, artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(true);
+  });
+
+  it('returns false for real provider/protocol errors with partial artifacts', () => {
+    // These must NOT be salvaged — they should go through the normal failure
+    // path so users see the real provider error.
+    expect(shouldSalvageLateTeardown({ code: 1, signal: null, artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: 2, signal: 'SIGKILL', artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: null, signal: 'SIGKILL', artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: null, signal: null, artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(false);
+    expect(shouldSalvageLateTeardown({ code: 137, signal: 'SIGKILL', artifactWriteSeen: true, liveArtifactSeen: false }))
+      .toBe(false);
   });
 });
 

@@ -41,6 +41,29 @@ export function resolveActiveInactivityTimeoutMs(params: {
   return params.inactivityTimeoutMs;
 }
 
+/**
+ * Gate for #5528: salvage a teardown error ONLY when the agent completed its
+ * work (clean exit or close-timeout kill) AND the run produced artifacts. Real
+ * provider/protocol/init errors with partial artifacts still go through the
+ * normal failure path so the existing 7613 reconciliation and the failure
+ * surface remain authoritative.
+ */
+export function shouldSalvageLateTeardown(params: {
+  code: number | null;
+  signal: NodeJS.Signals | string | null;
+  artifactWriteSeen: boolean;
+  liveArtifactSeen: boolean;
+}): boolean {
+  if (!params.artifactWriteSeen && !params.liveArtifactSeen) return false;
+  // Agent completed work before the close: code 0 (clean), null+SIGTERM
+  // (force-killed during close timeout), or 130 (handled SIGTERM + exit).
+  return (
+    params.code === 0 ||
+    (params.code === null && params.signal === 'SIGTERM') ||
+    params.code === 130
+  );
+}
+
 export function classifyChatRunCloseStatus(params: {
   cancelRequested: boolean;
   code: number | null;
@@ -59,11 +82,24 @@ export function classifyChatRunCloseStatus(params: {
       (params.code === 130 && params.signal === null)
     );
   if (acpForcedShutdown) return 'succeeded';
-  const artifactQuietShutdown =
-    params.artifactQuietShutdownRequested &&
-    params.code === null &&
-    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
-  if (artifactQuietShutdown) return 'succeeded';
+  if (params.artifactQuietShutdownRequested &&
+      params.code === null &&
+      (params.signal === 'SIGTERM' || params.signal === 'SIGKILL')) return 'succeeded';
+  // #5528: late teardown salvage. When the run produced artifacts AND the
+  // close condition looks like a teardown (clean exit, SIGTERM kill, or
+  // SIGTERM-handled exit 130), keep the run as 'succeeded' so the existing
+  // 7613 reconciliation runs and the produced-files snapshot is persisted.
+  // Real provider/protocol errors with partial artifacts (code !== 0 &&
+  // signal !== SIGTERM, or any code === null + non-SIGTERM signal) fall
+  // through to the existing failure/succeeded paths below.
+  if (shouldSalvageLateTeardown({
+    code: params.code,
+    signal: params.signal,
+    artifactWriteSeen: params.artifactProducedThisRun,
+    liveArtifactSeen: params.artifactProducedThisRun,
+  })) {
+    return 'succeeded';
+  }
   if (params.code != null && params.code !== 0 && params.artifactProducedThisRun) {
     return 'succeeded';
   }

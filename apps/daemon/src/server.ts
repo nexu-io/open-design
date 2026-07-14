@@ -94,6 +94,7 @@ import {
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
+  shouldSalvageLateTeardown,
   looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
@@ -7329,36 +7330,33 @@ export async function startServer({
         ));
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
-      // Helper: when teardown fails but the run already produced artifacts,
-      // preserve the run as 'succeeded' with a diagnostic instead of a plain
-      // failure. Returns true if the teardown was salvaged (caller should
-      // return), false if no artifacts were found (caller should fall through
-      // to the normal failure path).
-      const salvageTeardownWithArtifact = (reason, fallbackCode) => {
-        const sideEffects = runSideEffectsForRun(run);
-        const artifactProduced = sideEffects.artifactWriteSeen || sideEffects.liveArtifactSeen;
-        if (!artifactProduced) return false;
+      // #5528: when ACP has a fatal RPC error (e.g. teardown timeout after the
+      // agent completed its work), emit a diagnostic but do NOT short-circuit
+      // finishWithRetryDecision — let the run fall through to the normal
+      // classifyChatRunCloseStatus + reconciliation path at 7528 so that the
+      // existing HTML manifest reconciliation and assistant-message snapshot
+      // logic (line 7613) runs naturally.
+      if (acpSession?.hasFatalError()) {
         design.runs.emit(run, 'diagnostic', {
           type: 'acp_teardown_after_artifact',
-          reason,
+          reason: 'fatal_rpc_error_during_close',
           exit_code: code ?? null,
           signal: signal ?? null,
         });
         markRpcCloseReason('acp_teardown_after_artifact');
-        finishWithRetryDecision('succeeded', fallbackCode, signal ?? null);
-        return true;
-      };
-      if (acpSession?.hasFatalError()) {
-        if (salvageTeardownWithArtifact('fatal_rpc_error_during_close', code ?? 1)) return;
-        markRpcCloseReason('fatal_rpc_error');
-        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
+      // #5528: same diagnostic-but-fall-through pattern for stream errors during
+      // close. The run status is determined by classifyChatRunCloseStatus below.
       if (agentStreamError) {
-        if (salvageTeardownWithArtifact('stream_error_during_close', code === 0 ? 1 : (code ?? 1))) return;
-        markRpcCloseReason('stream_error');
-        return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
+        design.runs.emit(run, 'diagnostic', {
+          type: 'acp_teardown_after_artifact',
+          reason: 'stream_error_during_close',
+          exit_code: code ?? null,
+          signal: signal ?? null,
+        });
+        markRpcCloseReason('acp_teardown_after_artifact');
       }
       if (
         code !== 0 &&
