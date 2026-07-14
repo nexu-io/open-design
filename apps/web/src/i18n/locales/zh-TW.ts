@@ -3367,6 +3367,7 @@ export const zhTW: Dict = {
   "qf.choose": "請選擇…",
   "qf.customLabel": "自定义填写",
   "qf.customPlaceholder": "输入你自己的答案…",
+  "qf.otherOption": "其他",
   "qf.required": "必填",
   "qf.lockedSubmitted": "答案已傳送，代理將在本次工作階段後續使用。",
   "qf.lockedPrev": "該表單來自先前的對話。",

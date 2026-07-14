@@ -3128,6 +3128,7 @@ export const ru: Dict = {
   'qf.choose': 'Выберите…',
   'qf.customLabel': 'Свой ответ',
   'qf.customPlaceholder': 'Введите свой ответ...',
+  'qf.otherOption': 'Другое',
   'qf.required': 'обязательно',
   'qf.lockedSubmitted': 'Ответы отправлены — агент будет использовать их до конца сессии.',
   'qf.lockedPrev': 'Эта форма из предыдущего хода.',

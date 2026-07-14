@@ -3356,6 +3356,7 @@ export const zhCN: Dict = {
   "qf.choose": "请选择…",
   "qf.customLabel": "自定义填写",
   "qf.customPlaceholder": "输入你自己的答案…",
+  "qf.otherOption": "其他",
   "qf.required": "必填",
   "qf.lockedSubmitted": "答案已发送，代理将在本次会话后续使用。",
   "qf.lockedPrev": "该表单来自此前的对话。",

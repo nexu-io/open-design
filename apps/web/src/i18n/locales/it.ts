@@ -3128,6 +3128,7 @@ export const it: Dict = {
   'qf.choose': 'Scegli…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Altro',
   'qf.required': 'richiesto',
   'qf.lockedSubmitted': 'Risposte inviate — l\'agente le usa per il resto della sessione.',
   'qf.lockedPrev': 'Questo modulo proviene da un turno precedente.',

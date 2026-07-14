@@ -3142,6 +3142,7 @@ export const en: Dict = {
   'qf.choose': 'Choose…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Other',
   'qf.required': 'required',
   'qf.lockedSubmitted': 'Answers sent — agent is using these for the rest of the session.',
   'qf.lockedPrev': 'This form is from a previous turn.',

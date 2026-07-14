@@ -3128,6 +3128,7 @@ export const ar: Dict = {
   'qf.choose': 'اختر...',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'أخرى',
   'qf.required': 'مطلوب',
   'qf.lockedSubmitted': 'تم إرسال الإجابات - يستخدمها الوكيل لبقية الجلسة.',
   'qf.lockedPrev': 'هذا النموذج من دور سابق.',

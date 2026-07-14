@@ -3128,6 +3128,7 @@ export const fa: Dict = {
   'qf.choose': 'انتخاب کنید…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'سایر',
   'qf.required': 'الزامی',
   'qf.lockedSubmitted': 'پاسخ‌ها ارسال شدند — عامل از این‌ها برای بقیه جلسه استفاده می‌کند.',
   'qf.lockedPrev': 'این فرم از یک نوبت قبلی است.',

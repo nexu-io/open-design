@@ -3128,6 +3128,7 @@ export const ja: Dict = {
   'qf.choose': '選択…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'その他',
   'qf.required': '必須',
   'qf.lockedSubmitted': '回答を送信しました — エージェントがセッション終了まで参照します。',
   'qf.lockedPrev': 'このフォームは前のターンのものです。',

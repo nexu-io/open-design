@@ -3917,6 +3917,7 @@ export interface Dict {
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
+  'qf.otherOption': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;

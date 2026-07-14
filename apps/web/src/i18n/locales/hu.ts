@@ -3128,6 +3128,7 @@ export const hu: Dict = {
   'qf.choose': 'Válassz…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Egyéb',
   'qf.required': 'kötelező',
   'qf.lockedSubmitted': 'Válaszok elküldve — az ügynök ezeket használja a folyamat további részében.',
   'qf.lockedPrev': 'Ez az űrlap egy korábbi körből származik.',

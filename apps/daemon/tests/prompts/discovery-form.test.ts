@@ -87,3 +87,44 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     );
   });
 });
+
+describe('discovery.ts form prefill contract', () => {
+  // Every emitted <question-form> ships a brief-inferred recommended `default`
+  // per question so the user can submit the form unchanged. The web renderer
+  // already honours `default`/`defaultValue` (question-form.ts parseDefaultValue
+  // + QuestionForm initial state); these markers keep the instruction side and
+  // the example anchors from regressing.
+  it('instructs a recommended default prefill on every question', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'Prefill every question with a recommended `default`',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'a form the user can submit unchanged and still get a sensible build',
+    );
+  });
+
+  it('prefills the router form too, without loosening its verbatim guard', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'Do not rename, tailor, drop, reorder, or rewrite the `taskType` options',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      "set each question's `default` to your brief-inferred recommendation",
+    );
+  });
+
+  it('exempts the verbatim task-type router form from the 5-question cap', () => {
+    // Reviewer finding on #5603: the hard cap said "never more than 5" while
+    // the locked router form above it carries six fields — two frozen
+    // instructions the model could not satisfy at once. The cap now names the
+    // router form as its one sanctioned exception; both must stay present.
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'The one sanctioned exception is the verbatim `<question-form id="task-type">` router form',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('never a reason to trim the router form');
+  });
+
+  it('anchors the pattern with a concrete default in the example forms', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"default": "pick_direction"');
+  });
+});

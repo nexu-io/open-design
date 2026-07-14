@@ -3128,6 +3128,7 @@ export const id: Dict = {
   'qf.choose': 'Pilih',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Lainnya',
   'qf.required': 'Wajib',
   'qf.lockedSubmitted': 'Jawaban terkunci setelah dikirim.',
   'qf.lockedPrev': 'Jawaban sebelumnya',

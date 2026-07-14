@@ -3128,6 +3128,7 @@ export const ko: Dict = {
   'qf.choose': '선택하세요…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': '기타',
   'qf.required': '필수',
   'qf.lockedSubmitted': '답변이 전송되었습니다 — 에이전트가 이 답변을 활용하여 남은 세션을 진행합니다.',
   'qf.lockedPrev': '이전에 완료된 턴의 양식입니다.',

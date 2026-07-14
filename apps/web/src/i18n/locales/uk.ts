@@ -3128,6 +3128,7 @@ export const uk: Dict = {
   'qf.choose': 'Виберіть…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Інше',
   'qf.required': 'обов\'язково',
   'qf.lockedSubmitted': 'Відповіді надіслано — агент використовуватиме їх для решти сеансу.',
   'qf.lockedPrev': 'Ця форма з попередньої черги.',

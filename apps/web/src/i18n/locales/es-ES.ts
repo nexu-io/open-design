@@ -3128,6 +3128,7 @@ export const esES: Dict = {
   'qf.choose': 'Elige…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Otro',
   'qf.required': 'obligatorio',
   'qf.lockedSubmitted': 'Respuestas enviadas: el agente las usará durante el resto de la sesión.',
   'qf.lockedPrev': 'Este formulario es de un turno anterior.',

@@ -3128,6 +3128,7 @@ export const th: Dict = {
   'qf.choose': 'จิ้มเลือกเถอะ…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'อื่นๆ',
   'qf.required': 'เป็นของต้องจัดให้เสมอ',
   'qf.lockedSubmitted': 'ข้อมูลรับไปสู่มือเอเจนต์แบบไม่มีตกค้าง เพื่อต่อความรันได้จนเสร็จสิ้น',
   'qf.lockedPrev': 'หน้าจอกรอบนี้มาจากแบบข้อมูลผ่านแล้ว',

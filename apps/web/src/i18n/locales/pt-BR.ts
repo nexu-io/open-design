@@ -3128,6 +3128,7 @@ export const ptBR: Dict = {
   'qf.choose': 'Escolha…',
   'qf.customLabel': 'Custom answer',
   'qf.customPlaceholder': 'Type your own answer...',
+  'qf.otherOption': 'Outro',
   'qf.required': 'obrigatório',
   'qf.lockedSubmitted': 'Respostas enviadas — o agente usará isso pelo resto da sessão.',
   'qf.lockedPrev': 'Este formulário é de um turno anterior.',
