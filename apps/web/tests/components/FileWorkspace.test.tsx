@@ -1432,6 +1432,47 @@ describe('FileWorkspace launcher tab creation', () => {
     );
   });
 
+  it('anchors the browser snapshot toast inside the workspace pane', async () => {
+    // The Download Page progress/result toast is workspace-owned UI. Rendered
+    // as a bare fixed .od-toast it centers on the whole viewport, drifting
+    // over the chat pane and covering the composer send area in split view;
+    // the anchor scopes it to the workspace pane instead.
+    const browserTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Browser',
+      title: 'Example',
+      url: 'https://example.com',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [browserTab],
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('emit-browser-snapshot-success'));
+
+    const toast = await waitFor(() => {
+      const node = document.querySelector<HTMLElement>('.od-toast');
+      expect(node?.textContent).toContain('Saved page snapshot');
+      return node as HTMLElement;
+    });
+    expect(toast.closest('.workspace-toast-anchor')).toBeTruthy();
+    expect(toast.closest('[data-testid="file-workspace"]')).toBeTruthy();
+  });
+
   it('anchors a new browser after the visible tab tail', async () => {
     const onTabsStateChange = vi.fn();
     const rootBrowserTab = {

@@ -3668,24 +3668,32 @@ export function FileWorkspace({
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
+      {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
+          the viewport's: a bare fixed .od-toast centers across the whole
+          window, drifting over the chat pane and covering the composer send
+          area in split view. */}
       {browserSnapshotToast ? (
-        <Toast
-          message={browserSnapshotToast.message}
-          details={browserSnapshotToast.details}
-          actionLabel={browserSnapshotToast.actionLabel}
-          className={browserSnapshotToast.className}
-          onAction={browserSnapshotToast.onAction}
-          role={browserSnapshotToast.role}
-          tone={browserSnapshotToast.tone}
-          ttlMs={browserSnapshotToast.ttlMs}
-          onDismiss={() => setBrowserSnapshotToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={browserSnapshotToast.message}
+            details={browserSnapshotToast.details}
+            actionLabel={browserSnapshotToast.actionLabel}
+            className={browserSnapshotToast.className}
+            onAction={browserSnapshotToast.onAction}
+            role={browserSnapshotToast.role}
+            tone={browserSnapshotToast.tone}
+            ttlMs={browserSnapshotToast.ttlMs}
+            onDismiss={() => setBrowserSnapshotToast(null)}
+          />
+        </div>
       ) : launcherToast ? (
-        <Toast
-          message={launcherToast}
-          role="alert"
-          onDismiss={() => setLauncherToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={launcherToast}
+            role="alert"
+            onDismiss={() => setLauncherToast(null)}
+          />
+        </div>
       ) : null}
       <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so

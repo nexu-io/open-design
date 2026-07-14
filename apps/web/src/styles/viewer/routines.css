@@ -163,6 +163,35 @@
 .project-actions-toast-anchor .od-toast.leaving {
   animation: none;
 }
+/* Workspace-owned toasts (Download Page snapshot progress/result, tab
+   launcher errors) anchor to the workspace pane's bottom-center instead of
+   the viewport's, so they never drift over the chat pane or the composer
+   send area in split view. Requires `.workspace` to be the
+   containing block — see `position: relative` in workspace/drawer.css. */
+.workspace-toast-anchor {
+  position: absolute;
+  inset: auto 24px 24px;
+  display: flex;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+}
+.workspace-toast-anchor .od-toast {
+  /* Relative (not static) so the absolutely-positioned close/action controls
+     keep the toast itself as their containing block. */
+  position: relative;
+  inset: auto;
+  transform: none;
+  animation: none;
+  pointer-events: auto;
+}
+.workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
+  width: min(460px, 100%);
+  max-width: 100%;
+}
+.workspace-toast-anchor .od-toast.leaving {
+  animation: none;
+}
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
   background: color-mix(in srgb, var(--success, #2da44e) 14%, var(--bg));
