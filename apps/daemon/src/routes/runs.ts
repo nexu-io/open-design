@@ -459,15 +459,38 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
 
   // A conversation may drive exactly one native agent session at a time; a
   // second concurrent run on the same conversationId forks the single
-  // (conversation_id, agent_id) agent_sessions row (#5490). Called
-  // synchronously immediately before design.runs.create so the winner's run is
-  // already registered when the loser checks.
-  const conversationHasActiveRun = (conversationId: unknown): boolean =>
-    typeof conversationId === 'string' &&
-    conversationId.length > 0 &&
-    design.runs
-      .list({ conversationId })
-      .some((r) => !design.runs.isTerminal(r.status));
+  // (conversation_id, agent_id) agent_sessions row (#5490).
+  const conversationHasActiveRun = (conversationId: string): boolean =>
+    design.runs.list({ conversationId }).some((r) => !design.runs.isTerminal(r.status));
+
+  // In-flight conversation claims, held synchronously from the busy-check until
+  // the run is created (after which conversationHasActiveRun covers it). We must
+  // reject BEFORE any durable preparation (plugin-snapshot pinning, message
+  // upsert), but the run isn't created until several awaits later — so a plain
+  // pre-await check would let two true-concurrent submits both pass. The claim
+  // bridges that window: it is added synchronously (no await between the check
+  // and the add), so the race loser sees it. Released when the response ends.
+  const conversationRunClaims = new Set<string>();
+  const claimConversationOrReject = (
+    conversationId: unknown,
+    res: ApiResponse,
+  ): boolean => {
+    if (typeof conversationId !== 'string' || !conversationId) return true;
+    if (conversationRunClaims.has(conversationId) || conversationHasActiveRun(conversationId)) {
+      sendApiError(
+        res,
+        409,
+        'CONVERSATION_BUSY',
+        'another run is already active on this conversation; retry after it finishes',
+      );
+      return false;
+    }
+    conversationRunClaims.add(conversationId);
+    const release = () => conversationRunClaims.delete(conversationId);
+    res.on('finish', release);
+    res.on('close', release);
+    return true;
+  };
 
   const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
@@ -520,6 +543,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
+    // Reject a second concurrent run on the same conversation (#5490) BEFORE any
+    // persistent preparation (plugin-snapshot pinning, message upsert, run
+    // create), so a rejected request leaves no durable side effects. The claim
+    // is taken synchronously here so two true-concurrent submits can't both slip
+    // past before the run (created several awaits below) exists.
+    if (!claimConversationOrReject(requestBody.conversationId, res)) return;
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
@@ -681,22 +710,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
         ? normalizeConversationSessionMode(meta.sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
-    // Reject a second concurrent run on the same conversation (#5490). Two runs
-    // racing on one conversationId both resolve as create-turns and fork the
-    // single agent_sessions row (last-writer-wins), silently orphaning one
-    // turn's native session. The web UI already serializes via the disabled send
-    // button; this guards the HTTP / od CLI / embedding-agent paths. The
-    // check-then-create below is synchronous (no await between), so the run the
-    // winner registers is visible to the loser's check. 409 lets the caller
-    // retry once the active run finishes.
-    if (conversationHasActiveRun(meta.conversationId)) {
-      return sendApiError(
-        res,
-        409,
-        'CONVERSATION_BUSY',
-        'another run is already active on this conversation; retry after it finishes',
-      );
-    }
     const run = design.runs.create(meta);
     try {
       pinAssistantMessageOnRunCreate(db, run);
@@ -1496,14 +1509,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     };
     // Same per-conversation concurrency guard as POST /api/runs (#5490): a second
     // concurrent run on one conversation would fork the agent_sessions row.
-    if (conversationHasActiveRun(requestBody.conversationId)) {
-      return sendApiError(
-        res,
-        409,
-        'CONVERSATION_BUSY',
-        'another run is already active on this conversation; retry after it finishes',
-      );
-    }
+    // /api/chat has no durable writes before this point, so the claim + the
+    // synchronous create below are enough.
+    if (!claimConversationOrReject(requestBody.conversationId, res)) return;
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
