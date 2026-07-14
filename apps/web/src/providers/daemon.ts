@@ -325,15 +325,49 @@ export interface DaemonStreamOptions {
 
 export interface DaemonReattachOptions {
   runId: string;
+  projectId?: string | null;
+  conversationId?: string | null;
   signal: AbortSignal;
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+  /** Publish a current-run success outcome to the app-level upgrade gate. */
+  publishRunFinishedEvent?: boolean;
 }
 
 export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+export const DAEMON_RUN_FINISHED_EVENT = 'open-design:daemon-run-finished';
+
+export interface DaemonRunFinishedEventDetail {
+  runId: string;
+  projectId: string;
+  conversationId: string;
+  result: 'success';
+  artifactCount: number;
+}
+
+export function publishDaemonRunFinishedEvent(
+  detail: DaemonRunFinishedEventDetail,
+): void {
+  if (
+    typeof window === 'undefined'
+    || !detail.runId.trim()
+    || !detail.projectId.trim()
+    || !detail.conversationId.trim()
+    || detail.result !== 'success'
+    || !Number.isFinite(detail.artifactCount)
+    || detail.artifactCount <= 0
+  ) {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent<DaemonRunFinishedEventDetail>(
+    DAEMON_RUN_FINISHED_EVENT,
+    { detail },
+  ));
+}
+
 export const GENERIC_DAEMON_DISCONNECT_MESSAGE =
   'daemon stream disconnected before run completed';
 export const GENERIC_DAEMON_DISCONNECT_CODE = 'DAEMON_STREAM_DISCONNECTED';
@@ -703,6 +737,9 @@ export async function streamViaDaemon({
       initialLastEventId,
       onRunStatus: emitRunStatus,
       onRunEventId,
+      projectId,
+      conversationId,
+      publishRunFinishedEvent: true,
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
@@ -992,6 +1029,9 @@ async function consumeDaemonRun({
   initialLastEventId,
   onRunStatus,
   onRunEventId,
+  projectId,
+  conversationId,
+  publishRunFinishedEvent,
 }: DaemonReattachOptions & { agentId?: string }): Promise<void> {
   let acc = '';
   let stderrBuf = '';
@@ -1019,6 +1059,11 @@ async function consumeDaemonRun({
   // frame — both mirror the same finalize-time classification.
   let endFailureCategory: ChatRunStatusResponse['failureCategory'] = null;
   let endFailureDetail: ChatRunStatusResponse['failureDetail'] = null;
+  let resolvedArtifactCount: number | undefined;
+  const reportArtifactCount = (value: unknown) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
+    resolvedArtifactCount = value;
+  };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
@@ -1161,6 +1206,7 @@ async function consumeDaemonRun({
             if (event.data.resumable === true) endResumable = true;
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
+            reportArtifactCount(event.data.artifactCount);
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
@@ -1187,6 +1233,7 @@ async function consumeDaemonRun({
           // run-error UI on reconnect.
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
+          reportArtifactCount(status.artifactCount);
           onRunStatus?.(endStatus);
           break;
         }
@@ -1218,6 +1265,7 @@ async function consumeDaemonRun({
         if (status.resumable === true) endResumable = true;
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
+        reportArtifactCount(status.artifactCount);
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
@@ -1277,6 +1325,23 @@ async function consumeDaemonRun({
         ),
       );
       return;
+    }
+    if (
+      publishRunFinishedEvent
+      && Boolean(projectId?.trim())
+      && Boolean(conversationId?.trim())
+      && serverDeclaredSuccess
+      && endStatus === 'succeeded'
+      && resolvedArtifactCount !== undefined
+      && resolvedArtifactCount > 0
+    ) {
+      publishDaemonRunFinishedEvent({
+        runId,
+        projectId: projectId!,
+        conversationId: conversationId!,
+        result: 'success',
+        artifactCount: resolvedArtifactCount,
+      });
     }
     handlers.onDone(acc);
   } finally {

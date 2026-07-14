@@ -32,6 +32,8 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
+import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
 import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
@@ -87,6 +89,10 @@ import {
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
+import {
+  amrArtifactUpgradeHomeMockOffer,
+  type AmrArtifactUpgradeHomeOffer,
+} from './runtime/amr-artifact-upgrade';
 import {
   createDesignSystemProjectFromProject,
   createProject,
@@ -401,6 +407,14 @@ function AppInner() {
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
+    () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
+      ? amrArtifactUpgradeHomeMockOffer(window.location.search)
+      : null,
+  );
+  const amrArtifactUpgradeHomeMock = amrArtifactUpgradeHomeMockConfig !== null;
+  const [amrArtifactUpgradeHomeOffer, setAmrArtifactUpgradeHomeOffer] =
+    useState<AmrArtifactUpgradeHomeOffer | null>(() => amrArtifactUpgradeHomeMockConfig);
   // Surfaced when a Home-picked working dir could not be applied to a freshly
   // created project (expired/invalid desktop token, daemon rejection). Without
   // this the failure was swallowed and the user believed their folder was in
@@ -628,6 +642,10 @@ function AppInner() {
   // globals effect below reads it; the sync effects live next to the
   // other AMR plumbing further down.
   const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+  const resolvedAmrPlan =
+    amrLoginStatus?.account?.plan?.trim()
+    || amrLoginStatus?.user?.plan?.trim()
+    || null;
   // Child surfaces report status snapshots, not login events. Deduplicate the
   // signed-in transition here: restarting the model poll for every Settings
   // snapshot updates `agents`, which makes Settings fetch status again and
@@ -2464,6 +2482,39 @@ function AppInner() {
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
+        artifactUpgradeSlot={
+          amrArtifactUpgradeHomeOffer ? (
+            <AmrArtifactUpgradeHomeCard
+              key={amrArtifactUpgradeHomeOffer.sessionKey}
+              profile={amrLoginStatus?.profile ?? null}
+              metricsConsent={config.telemetry?.metrics === true}
+              installationId={config.installationId}
+              onViewArtifact={() => {
+                if (
+                  !amrArtifactUpgradeHomeOffer.projectId
+                  || !amrArtifactUpgradeHomeOffer.conversationId
+                ) {
+                  navigate({ kind: 'home', view: 'projects' });
+                  return;
+                }
+                navigate({
+                  kind: 'project',
+                  projectId: amrArtifactUpgradeHomeOffer.projectId,
+                  conversationId: amrArtifactUpgradeHomeOffer.conversationId,
+                  fileName: amrArtifactUpgradeHomeOffer.fileName,
+                });
+              }}
+              onDismiss={() => {
+                if (amrArtifactUpgradeHomeMock) return;
+                setAmrArtifactUpgradeHomeOffer((current) =>
+                  current?.sessionKey === amrArtifactUpgradeHomeOffer.sessionKey
+                    ? null
+                    : current,
+                );
+              }}
+            />
+          ) : undefined
+        }
       />
     );
   }
@@ -2490,6 +2541,27 @@ function AppInner() {
         />
       )}
       <TooltipLayer />
+      <AmrArtifactUpgradeGate
+        homeVisible={route.kind === 'home' && route.view === 'home'}
+        activeProjectId={route.kind === 'project' ? route.projectId : null}
+        activeConversationId={
+          route.kind === 'project' ? route.conversationId ?? null : null
+        }
+        activeFileName={route.kind === 'project' ? route.fileName : null}
+        plan={resolvedAmrPlan}
+        planResolved={
+          amrLoginStatus !== null
+          && (amrLoginStatus.loggedIn === false || resolvedAmrPlan !== null)
+        }
+        profile={amrLoginStatus?.profile ?? null}
+        metricsConsent={config.telemetry?.metrics === true}
+        installationId={config.installationId}
+        onHomeOfferChange={
+          amrArtifactUpgradeHomeMock
+            ? undefined
+            : setAmrArtifactUpgradeHomeOffer
+        }
+      />
       <AnimatePresence>
       {settingsOpen ? (
         <SettingsDialog

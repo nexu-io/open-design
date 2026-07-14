@@ -32,6 +32,7 @@ import {
   fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
+  publishDaemonRunFinishedEvent,
   reattachDaemonRun,
   reportChatRunFeedback,
   streamViaDaemon,
@@ -55,6 +56,7 @@ import {
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
+import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
@@ -119,7 +121,7 @@ import {
 } from '../runtime/design-delivery';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
-import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
+import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -226,7 +228,7 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
-import type { ChatSendMeta } from './ChatComposer';
+import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -1663,7 +1665,6 @@ export function ProjectView({
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
     {
       snapshot: AmrWalletSnapshot;
-      plan: string | null;
       resolve: (decision: AmrLowBalanceDecision) => void;
     } | null
   >(null);
@@ -4079,11 +4080,18 @@ export function ProjectView({
           reattachTextBuffersRef.current.delete(textBuffer);
         };
 
+        const shouldPublishRunFinishedEvent =
+          isActiveRunStatus(message.runStatus)
+          || spuriouslyFailedPending
+          || recoverableGenericDisconnectFailed;
         void reattachDaemonRun({
           runId,
+          projectId: project.id,
+          conversationId: reattachConversationId,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
+          publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           handlers: {
             onDelta: (delta) => {
               // First payload from the resumed stream is real recovery — the daemon is
@@ -4345,6 +4353,19 @@ export function ProjectView({
                     const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
                     if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                     if (latestRunStatus?.status === 'succeeded') setError(null);
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && latestRunStatus?.status === 'succeeded'
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
                     // Unlike the recoverArtifacts sibling below, this row's
                     // endedAt was already stamped synchronously above (~4041)
                     // at disconnect time — `prev.endedAt` is never null here,
@@ -4418,6 +4439,18 @@ export function ProjectView({
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                   } else if (latestRunStatus.status === 'succeeded') {
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
                     clearProjectTimeout(backoffTimer);
                     setError(null);
                     // If the resumed stream already replayed some content/events
@@ -4991,20 +5024,22 @@ export function ProjectView({
             // Low balance: pause THIS send while the reminder dialog waits
             // for a decision. 'proceed' resumes the very same send below —
             // a continuation, not a re-submit.
-            const plan = await resolveAmrLowBalancePlan(gate.snapshot);
+            const plan = await resolveAmrPlan(gate.snapshot);
             if (messagesConversationIdRef.current !== activeConversationId) {
               queueGateSend();
               return false;
             }
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            // Same conversation-switch guard for the dialog-open window; the
-            // payload is parked (not sent) so nothing is lost either way.
-            if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
-              parkBlockedSend();
-              return false;
+            if (isPaidAmrPlan(plan)) {
+              const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
+                setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+              });
+              setAmrLowBalanceWarn(null);
+              // Same conversation-switch guard for the dialog-open window; the
+              // payload is parked (not sent) so nothing is lost either way.
+              if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
+                parkBlockedSend();
+                return false;
+              }
             }
           }
           amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
@@ -5764,6 +5799,15 @@ export function ProjectView({
                 const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                 } else if (latestRunStatus.status === 'succeeded') {
+                  if (typeof latestRunStatus.artifactCount === 'number') {
+                    publishDaemonRunFinishedEvent({
+                      runId: runIdForGenericDisconnect,
+                      projectId: project.id,
+                      conversationId: runConversationId,
+                      result: 'success',
+                      artifactCount: latestRunStatus.artifactCount,
+                    });
+                  }
                   clearProjectTimeout(backoffTimer);
                   // Advance the outer endedAt so updateConversationLatestRun()
                   // below adopts this same authoritative terminal timestamp,
@@ -6220,6 +6264,26 @@ export function ProjectView({
       byokVideoModelOptionsPV,
       byokSpeechModelOptionsPV,
     ],
+  );
+
+  const handleComposerSend = useCallback(
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[],
+      meta?: ChatSendMeta,
+    ): Promise<ChatSendOutcome> => {
+      if (activeConversationId) {
+        const decision = await requestAmrArtifactUpgrade({
+          projectId: project.id,
+          conversationId: activeConversationId,
+          source: 'chat_send',
+        });
+        if (decision === 'cancel') return 'restore-draft';
+      }
+      void handleSend(prompt, attachments, commentAttachments, meta);
+    },
+    [activeConversationId, handleSend, project.id],
   );
 
   // Cancel every in-flight run for the current conversation (the user's own
@@ -7269,7 +7333,7 @@ export function ProjectView({
 	            sendDisabled: currentConversationSendDisabled,
             queuedItems: currentConversationQueuedItems,
             error: conversationLoadError ?? error,
-            onSend: handleSend,
+            onSend: handleComposerSend,
             onRetry: handleRetry,
             onStop: handleStop,
             onRemoveQueuedSend: removeQueuedChatSend,
@@ -7290,7 +7354,7 @@ export function ProjectView({
       error,
       handleAssistantFeedback,
       handleRetry,
-      handleSend,
+      handleComposerSend,
       handleStop,
       messages,
       removeQueuedChatSend,
@@ -8602,7 +8666,7 @@ export function ProjectView({
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-              onSend={handleSend}
+              onSend={handleComposerSend}
               onRetry={handleRetry}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
@@ -8961,7 +9025,6 @@ export function ProjectView({
       {amrLowBalanceWarn ? (
         <AmrLowBalanceDialog
           balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-          plan={amrLowBalanceWarn.plan}
           profile={amrLowBalanceWarn.snapshot.profile}
           entrySource="chat_low_balance_warn_recharge"
           metricsConsent={config.telemetry?.metrics === true}

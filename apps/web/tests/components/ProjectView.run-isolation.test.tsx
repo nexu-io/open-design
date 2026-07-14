@@ -28,6 +28,7 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
+const publishDaemonRunFinishedEvent = vi.fn();
 const fetchVelaLoginStatus = vi.fn();
 const fetchAmrWalletSnapshot = vi.fn();
 const launchAntigravityOauth = vi.fn();
@@ -64,6 +65,7 @@ vi.mock('../../src/providers/daemon', () => ({
   launchAntigravityOauth: (...args: unknown[]) => launchAntigravityOauth(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
+  publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -733,7 +735,7 @@ describe('ProjectView conversation run isolation', () => {
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
-      user: null,
+      user: { id: 'u-paid', plan: 'plus' },
       balanceUsd: '1.20',
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
@@ -769,6 +771,41 @@ describe('ProjectView conversation run isolation', () => {
     expect(streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'amr' }),
     );
+  });
+
+  it('does not soft-block a Free user with a low AMR wallet', async () => {
+    conversationAMessages = [];
+    fetchAmrWalletSnapshot.mockResolvedValue({
+      status: 'available',
+      profile: 'prod',
+      user: { id: 'u-free', plan: 'free' },
+      balanceUsd: '1.20',
+      updatedAt: null,
+      fetchedAt: '2026-07-13T00:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    });
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
   });
 
   it('keeps an AMR send queued when the user switches conversations during the gate check', async () => {

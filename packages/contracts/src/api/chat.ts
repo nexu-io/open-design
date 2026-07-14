@@ -490,6 +490,9 @@ export interface ChatRunStatusResponse {
    *  Judged by the canonical `todoSnapshotHasUnfinishedWork` predicate so it can
    *  never diverge from the chat footer's `unfinishedTodosFromEvents`. */
   endedWithUnfinishedWork?: boolean;
+  /** Authoritative artifact files created or modified by this run. Mirrors
+   *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
+  artifactCount?: number;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */

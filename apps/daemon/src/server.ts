@@ -116,6 +116,9 @@ import {
   foldEventIntoRunSideEffectLedger,
   resolveRunProjectKindForAnalytics,
   retryFinalResultForRunStatus,
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
   runRetryEventsForAnalytics,
   runSideEffectsForRun,
   scanRunEventsForFinishedProps,
@@ -4617,29 +4620,66 @@ export async function startServer({
             : null;
       return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
     };
-    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
-      if (!run?.id || !run.projectId) return;
-      const artifactBaseline = runArtifactBaselines.peek(run.id);
-      if (!artifactBaseline || artifactBaseline.contended) return;
-      let diff;
-      try {
-        diff = diffRunArtifacts(
-          artifactBaseline.before,
-          snapshotProjectArtifacts(artifactBaseline.cwd),
-        );
-      } catch {
-        return;
+    const resolveRunArtifactOutcomeBeforeFinish = () => {
+      if (!run?.id) return null;
+      if (run.artifactOutcome) return run.artifactOutcome;
+
+      const artifactBaseline = runArtifactBaselines.take(run.id);
+      const fallbackOutcome = () => ({
+        artifactCount: runArtifactCountForRun(run),
+        designSystemCreated: runDesignSystemCreatedForRun(run),
+        previewModuleCount: runPreviewModuleCountForRun(run),
+      });
+      let outcome;
+      if (!artifactBaseline || artifactBaseline.contended) {
+        outcome = fallbackOutcome();
+      } else {
+        try {
+          const diff = diffRunArtifacts(
+            artifactBaseline.before,
+            snapshotProjectArtifacts(artifactBaseline.cwd),
+          );
+          outcome = {
+            artifactCount: diff.touched,
+            artifactsCreated: diff.created,
+            artifactsModified: diff.modified,
+            designSystemCreated: diff.designSystemCreated,
+            previewModuleCount: diff.previewModuleCount,
+            projectRoot: artifactBaseline.cwd,
+            diff,
+          };
+        } catch {
+          outcome = fallbackOutcome();
+        }
       }
+      run.artifactCount = outcome.artifactCount;
+      run.artifactOutcome = outcome;
+      return outcome;
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const outcome = resolveRunArtifactOutcomeBeforeFinish();
+      if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
       await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
-        projectRoot: artifactBaseline.cwd,
-        diff,
+        projectRoot: outcome.projectRoot,
+        diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
         metadata: projectRecord?.metadata,
       });
+    };
+    // Chain onto the run service's terminal chokepoint so startup rejection,
+    // direct cancellation, shutdown, and every explicit finish path all consume
+    // their filesystem baseline before the terminal SSE frame is published.
+    const previousOnFinalize = run.onFinalize;
+    run.onFinalize = () => {
+      try {
+        previousOnFinalize?.();
+      } finally {
+        resolveRunArtifactOutcomeBeforeFinish();
+      }
     };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,

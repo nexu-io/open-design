@@ -207,6 +207,8 @@ type DesignToolboxResource =
   | (DesignToolboxResourceBase & { kind: 'connector'; connector: ConnectorDetail })
   | (DesignToolboxResourceBase & { kind: 'file'; file: ProjectFile });
 
+export type ChatSendOutcome = void | 'restore-draft';
+
 interface Props {
   projectId: string | null;
   projectFiles: ProjectFile[];
@@ -236,7 +238,7 @@ interface Props {
     attachments: ChatAttachment[],
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
-  ) => void;
+  ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onStop: () => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
@@ -1170,6 +1172,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
+    function finishComposedSend(
+      outcome: ChatSendOutcome | Promise<ChatSendOutcome>,
+      pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
+    ) {
+      void Promise.resolve(outcome).then(
+        (result) => {
+          if (result === 'restore-draft') {
+            if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+              pendingEntryFromRef.current = pendingMetadata.entryFrom;
+            }
+            if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+              pendingSessionModeRef.current = pendingMetadata.sessionMode;
+            }
+            return;
+          }
+          reset();
+        },
+        () => {
+          if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+            pendingEntryFromRef.current = pendingMetadata.entryFrom;
+          }
+          if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+            pendingSessionModeRef.current = pendingMetadata.sessionMode;
+          }
+        },
+      );
+    }
+
     function sendComposedTurn(
       prompt: string,
       attachments: ChatAttachment[],
@@ -1202,8 +1232,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
-      onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
-      reset();
+      finishComposedSend(
+        onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
+        { entryFrom: pendingEntryFrom, sessionMode: pendingSessionMode },
+      );
       return true;
     }
 
@@ -2385,19 +2417,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(hatched, staged, nextCommentAttachments, contextMeta);
-        reset();
+        finishComposedSend(onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(search.prompt, staged, nextCommentAttachments, {
-          ...contextMeta,
-          research: { enabled: true, query: search.query },
-        });
-        reset();
+        finishComposedSend(
+          onSend(search.prompt, staged, nextCommentAttachments, {
+            ...contextMeta,
+            research: { enabled: true, query: search.query },
+          }),
+        );
         return;
       }
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) {
