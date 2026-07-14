@@ -320,17 +320,22 @@ Constraints: no text, no letters, no numbers, no watermark, no
   외 오브제 등장)은 **재생성 1회** — 검수 서브에이전트로 넘기기 전에 imagegen
   서브에이전트 자신이 산출 이미지를 육안(비전)으로 확인해 세이프존 위반
   여부를 자가확인한다.
-- 발송본 HTML: `background: url(__BRAZE_MEDIA__/scene-<id>.png) center / cover`
-  + HTML 텍스트존·CTA존 오버레이. 프리뷰는 make_preview.py 기계 변환 (기존
-  레이어 모드와 동일 절차).
+- 발송본 HTML: `background: url(<씬 에셋의 Media Library CDN URL>) center / cover`
+  (placeholder 폴백 시 `url(__BRAZE_MEDIA__/scene-<id>.png)` + 프리뷰
+  make_preview.py 기계 변환) + HTML 텍스트존·CTA존 오버레이 (기존 레이어
+  모드와 동일 절차 — 업로드는 순서 계약 3).
 
 ## 순서 계약
 
 1. `mkdir -p {cwd}/assets` (메인) → `source:"generate"` 에셋 전부 병렬 dispatch.
 2. 실패분만 순차 재시도 1회. 재실패 시 해당 에셋을 기획안에서 css/생략으로
    강등할지 사용자에게 보고 (조용한 누락 금지).
-3. 전 에셋 확보 후 Step 4b(variant 빌더 dispatch)로 진행 — 빌더에게 에셋
-   manifest(파일 경로 + role + placeholder 토큰 `__BRAZE_MEDIA__/<name>`)를 전달.
+3. 전 에셋 확보 후 **메인이 직접 Media Library 업로드** (SKILL.md Step 4a-b —
+   `scripts/upload_media.py`, 자격 env/`~/.config/marketing-ax/braze.env`) →
+   반환 `{에셋 파일명: CDN URL}` 매핑 확보. 업로드 불가 시 placeholder 폴백
+   (종전 `__BRAZE_MEDIA__/<name>` 토큰 경로) — 폴백 사실을 사용자에게 보고.
+4. Step 4b(variant 빌더 dispatch)로 진행 — 빌더에게 에셋 manifest(파일 경로 +
+   role + CDN URL — 폴백 시 placeholder 토큰 `__BRAZE_MEDIA__/<name>`)를 전달.
 
 ## 폴백 경로 (codex exec) — gti 파손 시 전용
 

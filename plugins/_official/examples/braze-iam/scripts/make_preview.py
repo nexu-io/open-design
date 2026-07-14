@@ -5,6 +5,8 @@ Key Features: __BRAZE_MEDIA__/<name> 치환 (img src + CSS url()), base64 인라
 Dependencies: 표준 라이브러리만 (base64, pathlib, re, argparse)
 Notes: 발송본에 data-URI를 넣으면 Braze 에디터가 버퍼링됨(실무 실측) — 프리뷰 파일은
        FileViewer 확인 전용이며 발송본과 이 스크립트로만 분기한다 (수기 2벌 금지, drift 방지).
+       placeholder 폴백 경로 전용 (2026-07-14) — 기본 경로는 upload_media.py가 Media Library
+       CDN URL을 발송본에 직기입하므로 프리뷰 변환이 필요 없다 (SKILL.md Step 4a-b).
 """
 import argparse
 import base64

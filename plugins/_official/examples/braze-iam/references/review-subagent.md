@@ -8,7 +8,11 @@
 채점표를 수행한다. **report-only — 수정 반영은 메인이 한다.** dispatch 프롬프트에
 다음 입력을 채워 넣는다:
 
-- `{variant_html_paths}` — 발송본·프리뷰 4파일 절대 경로 (A/B × 발송본/프리뷰)
+- `{variant_html_paths}` — 발송본 2파일 절대 경로 (A/B — 이미지 src = Media
+  Library CDN URL, 프리뷰 겸용). **placeholder 폴백 시** 발송본·프리뷰 4파일
+  (A/B × 발송본/프리뷰)
+- `{upload_manifest}` — Step 4a-b 업로드 반환 `{에셋 파일명: CDN URL}` 매핑
+  (폴백 시 "없음") — 발송본 src 값 대조 정본
 - `{asset_png_paths}` — assets/*.png 전장 절대 경로 (없으면 "없음")
 - `{brief_path}` / `{plan_json}` — brief.md 경로 + 기획안 전문 (image.assets 포함)
 - `{image_mode}` — 기획안 `image.mode` 값 (`"layer"`/`"scene"` — 디자인·컴포지션 축
@@ -30,8 +34,8 @@
 최종 텍스트 반환만이 메인에게 전달된다.
 
 1. Read: `{craft_path}`, `{design_md_path}`, `{brand_context_paths}`,
-   `{brief_path}`, `{references}`, HTML 4파일 전부, 그리고 **에셋 PNG 전장을 직접
-   Read(비전 검토)**. 전부 직접 읽고 판단한다 — 메인의 요약을 신뢰하지 않는다.
+   `{brief_path}`, `{references}`, `{variant_html_paths}` 전부, 그리고 **에셋 PNG
+   전장을 직접 Read(비전 검토)**. 전부 직접 읽고 판단한다 — 메인의 요약을 신뢰하지 않는다.
 2. 채점 5축 (각 축 감점 사유를 개별 발견으로 기록):
    - **Braze 기술** — craft 체크리스트 전 항목: brazeBridge만(appboyBridge = P0)·
      모든 호출 BridgeReady 안·logClick 매핑('0'/'1'/커스텀, 캠페인당 ≤100 고유명)·
@@ -43,8 +47,8 @@
      카피 셀프오딧 (design-taste 흡수 2026-07-13): 문법 깨진 문장·참조 불명
      문구·억지 은유(AI 헛똑똑 카피) = P1, 근거 없는 정밀 수치(브리프·브랜드
      데이터에 없는 "92%"·"4.1×" 급 스펙 연출) = P1.
-   - **디자인·컴포지션 (비전)** — 에셋 PNG(`scene` 모드는 씬 PNG) + 프리뷰 렌더
-     구조 검토. `{image_mode}`로 분기: 공통 항목 + `layer`/`scene` 전용 항목.
+   - **디자인·컴포지션 (비전)** — 에셋 PNG(`scene` 모드는 씬 PNG) + 발송본
+     (폴백 시 프리뷰) 렌더 구조 검토. `{image_mode}`로 분기: 공통 항목 + `layer`/`scene` 전용 항목.
      - 공통 (양 모드):
        · **캐릭터 등장 = P0** (2026-07-13 사용자 결정 — 생성이든 라이브러리 컷이든
          IAM에 캐릭터 전면 미포함. 캐논 얼굴 재현 불가 3연속 실측. 아래 캐논 대조
@@ -114,9 +118,13 @@
      판정 금지 — Braze는 태그 안 변수 중첩을 허용한다). 형식(`{{${}}}`/
      `{{custom_attribute.${}}}`), 카탈로그 내 식별자만(카탈로그 밖 = P0),
      abort_message가 루프 밖, nil 체크 형식(`{% if {{${attr}}} == nil %}` — 정본).
-   - **듀얼 산출 정합** — 발송본에 `data:image` 잔존 = P0, 프리뷰에
-     `__BRAZE_MEDIA__` 잔존 = P0, 두 파일의 DOM 구조 동일성(요소·id 순서 diff —
-     src/url 값만 달라야 함, 다르면 P0. make_preview.py 이외 수기 개입 신호).
+   - **산출-미디어 정합** — 발송본에 `data:image` 잔존 = P0 (경로 무관 상수).
+     URL 경로(기본): 발송본의 모든 이미지 src/url() 값이 `{upload_manifest}`의
+     CDN URL과 정확히 일치 = 필수, manifest에 없는 이미지 URL·`__BRAZE_MEDIA__`
+     잔존 = P0 (업로드 누락 또는 URL 임의 구성 신호). placeholder 폴백 시(구
+     듀얼 정합): 프리뷰에 `__BRAZE_MEDIA__` 잔존 = P0, 발송본·프리뷰 두 파일의
+     DOM 구조 동일성(요소·id 순서 diff — src/url 값만 달라야 함, 다르면 P0.
+     make_preview.py 이외 수기 개입 신호).
 3. 반환 형식 (이 구조 그대로):
 
    ## 검수 결과
@@ -127,9 +135,11 @@
    ### P1 (권고)
    - [variant/파일·위치] 문제 — 근거
    ### 축별 점수
-   - 기술: NN, 카피·톤: NN, 디자인·컴포지션: NN, Liquid: NN, 듀얼 정합: NN
+   - 기술: NN, 카피·톤: NN, 디자인·컴포지션: NN, Liquid: NN, 산출-미디어 정합: NN
 
 메인 에이전트: P0·감점 항목을 수정한 뒤 **재검수 1회**(신규 dispatch, 같은 지시).
-카피·마크업만 수정이면 에셋 재생성 없이 발송본 수정 → make_preview.py 재실행으로
-반영한다(결정성 계약 — 검수 루프 저비용). MAX_ITERATIONS 3 초과 시 발송 보류
+카피·마크업만 수정이면 에셋 재생성·재업로드 없이 발송본만 수정한다 (placeholder
+폴백 시에는 make_preview.py 재실행 병행 — 결정성 계약, 검수 루프 저비용).
+에셋 PNG를 재생성한 경우에만 upload_media.py 재업로드 → 새 URL로 발송본 갱신.
+MAX_ITERATIONS 3 초과 시 발송 보류
 권고 + 점수·발견목록을 사용자에게 보고하고 판단을 위임한다.

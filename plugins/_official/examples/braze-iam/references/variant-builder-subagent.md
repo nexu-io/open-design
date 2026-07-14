@@ -14,13 +14,16 @@
 - `{design_md_path}` — `design-systems/<brand>/DESIGN.md` 절대 경로
 - `{references}` — 스킬 references 5종 절대 경로 (size-patterns, format-design-guide,
   interaction-standard, liquid-guide, visual-layout-patterns) + `craft/braze-custom-html.md`
-- `{asset_manifest}` — 에셋 목록: `- assets/obj-ticket.png | role: object | token: __BRAZE_MEDIA__/obj-ticket.png` 형식.
+- `{asset_manifest}` — 에셋 목록: `- assets/obj-ticket.png | role: object | url: https://braze-images.com/...` 형식
+  (url = Step 4a-b Media Library 업로드 반환 CDN URL 정본 — 빌더는 이 값을 그대로
+  기입하며 임의 구성·추측 금지). **placeholder 폴백 시**(메인이 manifest에 명시)
+  `url:` 대신 `token: __BRAZE_MEDIA__/obj-ticket.png` 형식.
   `source:"css"` 에셋은 `- (css) | role: decor | note: <기획안 note>` 형식 (파일 없음 — 코드로 그린다)
 - `{image_mode}` — 기획안 `image.mode` 값 (`"layer"` 또는 `"scene"`, 기본 `"layer"`) —
   임무 2 발송본 작성의 모드 분기 입력
 - `{composition}` — 기획안 image.composition 배치 스케치 문장
 - `{out_dir}` — 산출 디렉토리 절대 경로
-- `{skill_scripts_dir}` — 스킬 scripts/ 절대 경로 (make_preview.py 위치)
+- `{skill_scripts_dir}` — 스킬 scripts/ 절대 경로 (placeholder 폴백 시 make_preview.py 위치)
 
 ## 서브에이전트 임무 (dispatch 프롬프트 본문)
 
@@ -35,8 +38,9 @@
    - 이미지·컴포지션은 `{image_mode}`로 분기:
      - **`layer`** (기존 문법 + 강화): 룩 = 활성 `{design_md_path}` 그대로 준수
        (배경 = 브랜드 토큰 CSS, 이미지 배경 금지 — `visual-layout-patterns.md`
-       §5). 이미지 = `{asset_manifest}`의 token 그대로: `src="__BRAZE_MEDIA__/<name>"`
-       또는 CSS `url(__BRAZE_MEDIA__/<name>)`. **data-URI 삽입 절대 금지** (Braze
+       §5). 이미지 = `{asset_manifest}`의 url 그대로: `src="<CDN URL>"` 또는 CSS
+       `url(<CDN URL>)` (폴백 manifest면 token 그대로: `src="__BRAZE_MEDIA__/<name>"`).
+       **data-URI 삽입 절대 금지** (Braze
        에디터 버퍼링 실측 — 발송본 룰). 히어로는 manifest의 **투명 PNG 정확히
        1장** 배치 — **콜라주 조립 금지**: 분리 생성된 복수 PNG를 물리 상호작용
        처럼 겹쳐 배치하지 않는다 (물리적으로 맞물린 복합 오브제는 생성 단계에서
@@ -52,9 +56,9 @@
        룰 완화 2026-07-13: 질문형 카피에 완료-상태 소품이 답을 스포일러하는
        모순 실측). 그림자·플로트 애니메이션은 CSS
        (`interaction-standard.md` 준수)
-     - **`scene`** (신설): 카드 배경 = `background: url(__BRAZE_MEDIA__/scene-<id>.png)
-       center / cover` (발송본 placeholder 룰 동일 — **data-URI 삽입 절대
-       금지** 불변). 구조 = 텍스트존(상단, 씬의 상단 세이프존 위) → spacer
+     - **`scene`** (신설): 카드 배경 = `background: url(<씬 에셋의 manifest url>)
+       center / cover` (폴백 시 `url(__BRAZE_MEDIA__/scene-<id>.png)` — **data-URI
+       삽입 절대 금지** 불변). 구조 = 텍스트존(상단, 씬의 상단 세이프존 위) → spacer
        (flex) → CTA존(하단, 씬의 하단 세이프존 위). `visual-layout-patterns.md` §5
        "배경 = CSS" 문법은 scene 모드에 적용하지 않는다 (배경이 곧 씬 에셋).
        CSS 장식 오브젝트는 씬에 이미 포함 — 추가 CSS 장식은 최소화. 타이포는
@@ -68,15 +72,19 @@
      파일, Android 딥링크 onClick에 closeMessage() 금지, 프리뷰 폴백 스크립트
      블록 금지, raw rgba 금지(브랜드 토큰)
    - Liquid 변수가 있으면 `liquid-guide.md` 형식, 카탈로그 내 식별자만
-3. 프리뷰 기계 변환 (수기 2벌 작성 금지 — drift 방지):
+3. 프리뷰 기계 변환 — **placeholder 폴백 시에만** (URL manifest면 발송본이
+   FileViewer 프리뷰 겸용이라 이 단계 skip. 수기 2벌 작성 금지 — drift 방지):
 
    ```bash
    python3 {skill_scripts_dir}/make_preview.py {out_dir}/variant-{label소문자}.html {out_dir}/assets
    ```
 
-4. 자가체크 1회: 발송본에 `data:image` 잔존 = 실패, 프리뷰에 `__BRAZE_MEDIA__`
-   잔존 = 실패. 모드별 1항목 추가 — `layer`: 히어로 PNG가 1장인가(물리 상호작용
-   콜라주 없음), `scene`: 씬 `url()` 참조가 placeholder 형식인가 + 텍스트·CTA가
-   세이프존 위에 있는가. 전부 통과해야 OK.
-5. 반환(≤3줄): `OK variant-{label소문자}.html variant-{label소문자}-preview.html`
-   + 자가체크 요약 1줄. 실패 시 `FAIL variant-{label소문자} — [사유 1줄]`.
+4. 자가체크 1회: 발송본에 `data:image` 잔존 = 실패. URL manifest면 모든 이미지
+   src/url()이 manifest url 값과 정확히 일치하는가(`__BRAZE_MEDIA__` 잔존 = 실패
+   — 업로드 누락 신호로 FAIL 반환), 폴백이면 프리뷰에 `__BRAZE_MEDIA__` 잔존 =
+   실패. 모드별 1항목 추가 — `layer`: 히어로 PNG가 1장인가(물리 상호작용
+   콜라주 없음), `scene`: 씬 `url()` 참조가 manifest url(폴백 시 placeholder)
+   형식인가 + 텍스트·CTA가 세이프존 위에 있는가. 전부 통과해야 OK.
+5. 반환(≤3줄): `OK variant-{label소문자}.html` (폴백 시
+   `variant-{label소문자}-preview.html` 병기) + 자가체크 요약 1줄. 실패 시
+   `FAIL variant-{label소문자} — [사유 1줄]`.

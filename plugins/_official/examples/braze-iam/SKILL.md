@@ -30,7 +30,7 @@ od:
 
 <!--
 Role: Braze Custom-HTML IAM 7단계 제작 워크플로우 — brand-agnostic OD 포트, layer/scene 듀얼 비주얼 모드
-Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안(image.mode 듀얼 비주얼 layer/scene 컴포지션 확장), od braze CLI 통합, 오브제 imagegen·Variant A/B 빌더·검수 서브에이전트 위임(인라인 폴백), 듀얼 산출(발송본 placeholder/프리뷰 data-URI)
+Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안(image.mode 듀얼 비주얼 layer/scene 컴포지션 확장), od braze CLI 통합, 오브제 imagegen·Variant A/B 빌더·검수 서브에이전트 위임(인라인 폴백), Media Library 자동 업로드(발송본에 CDN URL 직기입 — placeholder/프리뷰 듀얼 산출은 업로드 불가 시 폴백)
 Dependencies: 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록), BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide, imagegen-pipeline, variant-builder-subagent, review-subagent, visual-layout-patterns)
 Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 특정 어트리뷰트) 하드코딩 금지. 브랜드 사실은 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드.
 -->
@@ -386,7 +386,7 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
 
 ③-b **컴포지션 플랜** (image.needed=true일 때)
 - `mode`(layer/scene) 명기 + `scene`이면 세이프존 스케치(상단 텍스트존/하단 CTA존) 포함
-- 에셋 표: id / source / style / concept / ratio / placeholder 토큰(`__BRAZE_MEDIA__/obj-<id>.png`)
+- 에셋 표: id / source / style / concept / ratio (CDN URL은 Step 4a-b 업로드 후 manifest에서 확정 — brief에는 기입하지 않는다)
 - composition 스케치 + 레이아웃 유형 (visual-layout-patterns.md §2 5형 중 선택 근거)
 - library 컷 원본 경로 (브랜드 에셋 라이브러리 기준)
 
@@ -438,16 +438,41 @@ od braze brief <braze_message_id> --brief-file <path>
 
 dispatch 도구가 없는 런타임 = 인라인 순차로 동일 계약 (imagegen-pipeline.md 절차 그대로).
 
+## Step 4a-b — Media Library 업로드 (메인 직접)
+
+`image.needed=false`면 skip. 전 에셋 검증 통과 후 **메인이 직접** 업로드한다 —
+수 초·결정적 작업이라 위임 오버헤드가 더 크다 (compose·갤러리 Write와 동일 원리).
+
+```bash
+python3 <스킬 폴더>/scripts/upload_media.py --name-prefix iam-<braze_message_id>- \
+  --json {artifact_dir}/assets/*.png
+```
+
+- 자격 = env `BRAZE_REST_API_KEY`·`BRAZE_REST_ENDPOINT` (media_library.create 권한
+  키). 미설정 시 `~/.config/marketing-ax/braze.env` 자동 탐색 — 샘플은 스킬
+  `scripts/braze.env.example`. **키를 문서·HTML·로그에 남기지 않는다.**
+- 반환 JSON `uploaded` = `{에셋 파일명: CDN URL}` — 이 매핑이 Step 4b 빌더
+  manifest의 `url` 필드 정본이다.
+- `--name-prefix iam-<messageId>-` 필수 — Media Library 표시명 충돌 회피
+  (동일 name 재업로드 시 Braze 측 동작이 문서 불명이라 캠페인별 유니크 이름으로 방어).
+- **부분 실패**(exit 1, `failed` 배열)면 성공분은 URL 사용, 실패분만 재시도 1회 →
+  재실패 시 해당 에셋만 placeholder 폴백(아래) + Step 7 수동 업로드 안내. 조용한 누락 금지.
+- **전체 불가**(exit 2 자격 미설정, 403 API 비활성)면 **placeholder 폴백 경로**로
+  전환: 종전 계약 그대로 발송본에 `__BRAZE_MEDIA__/<name>` 토큰 기입 + 프리뷰
+  make_preview.py 듀얼 산출 + Step 7 수동 업로드·치환. 폴백 사용 사실을 사용자에게 보고.
+
 ## Step 4b — Variant 제작 (빌더 서브에이전트 위임)
 
 메인은 제작하지 않는다:
 
 1. `Read: design-templates/braze-iam/references/variant-builder-subagent.md`
 2. Variant A/B **2개 병렬 dispatch** — 입력(brief 경로·기획안 전문·브랜드 컨텍스트
-   소스 경로·DESIGN.md·references 5종+craft·에셋 manifest·composition·`{image_mode}`·
-   산출 디렉토리)을 지시문 계약대로 채운다.
-3. 각 빌더 산출 = 발송본 `variant-x.html`(placeholder) + 프리뷰
-   `variant-x-preview.html`(make_preview.py 기계 변환). 반환 `OK ...` 2건 확인.
+   소스 경로·DESIGN.md·references 5종+craft·에셋 manifest(**Step 4a-b의 CDN URL
+   포함**)·composition·`{image_mode}`·산출 디렉토리)을 지시문 계약대로 채운다.
+3. 각 빌더 산출 = 발송본 `variant-x.html`(이미지 src = Media Library CDN URL 직기입,
+   FileViewer 프리뷰 겸용 — 별도 프리뷰 파일 없음). 반환 `OK ...` 2건 확인.
+   **placeholder 폴백 시에만** 종전 듀얼 산출(발송본 placeholder + 프리뷰
+   `variant-x-preview.html` make_preview.py 기계 변환).
 4. FAIL 반환 시: 사유가 카피/기획 문제면 Step 3 수정 후 재dispatch, 실행 문제면
    해당 variant만 재dispatch 1회.
 
@@ -532,11 +557,12 @@ brazeBridge.BridgeReady(function() {
 ## Step 5 — 검수 (report-only 서브에이전트)
 
 1. `Read: design-templates/braze-iam/references/review-subagent.md`
-2. 신선 컨텍스트 검수자 **1 dispatch** — 입력(HTML 4파일·에셋 PNG 전장·brief·
+2. 신선 컨텍스트 검수자 **1 dispatch** — 입력(HTML 2파일(A/B 발송본 — placeholder
+   폴백 시 프리뷰 포함 4파일)·에셋 PNG 전장·업로드 manifest(URL 매핑)·brief·
    기획안·브랜드 컨텍스트·DESIGN.md·craft·references·`{image_mode}`)을 지시문
    계약대로 채운다. 검수자는 report-only — 채점표·P0/P1 목록만 반환한다.
-3. **수정 반영은 메인**: P0·감점 항목을 발송본에 수정 → `make_preview.py` 재실행
-   (프리뷰 수기 수정 금지) → 재검수 dispatch 1회.
+3. **수정 반영은 메인**: P0·감점 항목을 발송본에 수정 → 재검수 dispatch 1회.
+   (placeholder 폴백 시에만 `make_preview.py` 재실행 — 프리뷰 수기 수정 금지.)
 4. dispatch 불가 런타임 = 아래 체크리스트로 인라인 자가검수 (동일 채점표).
 
 ### Braze 기술 체크리스트
@@ -613,11 +639,13 @@ HTML IAM은 REST API로 전송 불가 (BRAZE-DOMAIN §4.1-4.2). 수동 핸드오
 
 1. Braze 대시보드 → Campaigns → Create Campaign → In-App Message
 2. Message type: **Custom HTML**
-2-b. **미디어 업로드 (image.needed=true일 때)**: `{artifact_dir}/assets/*.png`
-   목록을 표로 제시 → Braze 대시보드 Media Library에 업로드 → 발송본의
-   `__BRAZE_MEDIA__/<name>`을 업로드된 미디어 URL로 치환하라고 안내한다
-   (에디터 붙여넣기 전 수행). **data-URI 인라인 발송본 금지** — Braze 에디터
-   버퍼링 실측. `variant-x-preview.html`은 로컬 FileViewer 확인 전용이다.
+2-b. **미디어 확인 (image.needed=true일 때)**: 에셋은 Step 4a-b에서 이미 Media
+   Library에 업로드돼 발송본에 CDN URL이 기입돼 있다 — 업로드 표시명
+   (`iam-<messageId>-...`)과 URL 목록만 표로 제시해 대시보드에서 확인 가능하게
+   한다. **placeholder 폴백을 쓴 경우에만** 종전 수동 절차: `{artifact_dir}/assets/*.png`
+   목록 제시 → 대시보드 Media Library 수동 업로드 → 발송본의
+   `__BRAZE_MEDIA__/<name>`을 업로드된 URL로 치환 안내 (에디터 붙여넣기 전 수행).
+   **data-URI 인라인 발송본 금지** — Braze 에디터 버퍼링 실측.
 3. `variant-a.html` / `variant-b.html` 내용을 HTML 에디터에 붙여넣기 (또는 HTML Upload 기능 사용)
 4. 트리거 이벤트 설정: 기획안의 후보 트리거 중 선택 (BRAZE-DOMAIN §5.2)
 5. 타겟 세그먼트·빈도 제한 설정
@@ -640,7 +668,7 @@ A: variant-a.html (<상태>)
 B: variant-b.html (<상태>)
 기획안: braze_plan_v1 (DB)
 기획 문서: braze/<messageId>-<slug>/brief.md (디자인 프로젝트 파일)
-에셋: assets/*.png N건 — Media Library 업로드 + placeholder 치환 필요
+에셋: assets/*.png N건 — Media Library 업로드 완료 (URL 발송본 기입) / 폴백 시: 수동 업로드 + placeholder 치환 필요
 
 Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-DOMAIN §4.4)
 트리거 이벤트 설정 후보: <candidates>
@@ -659,8 +687,9 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - 이미지: PNG/JPEG/GIF만. WebP 금지 (BRAZE-DOMAIN §1.3)
 - CTA ≤ 2개 (BRAZE-DOMAIN §1.2)
 - HTML IAM은 REST로 전달 불가 → 대시보드 수동 핸드오프 (BRAZE-DOMAIN §4.4)
-- 발송본에 data-URI 금지 (에디터 버퍼링) — placeholder `__BRAZE_MEDIA__/<name>` 유지, 프리뷰만 인라인
-- 이미지 생성 = codex `gpt-5.5` 고정 + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
+- 발송본에 data-URI 금지 (에디터 버퍼링) — 이미지 src = Media Library CDN URL (Step 4a-b 자동 업로드). 업로드 불가 시에만 placeholder `__BRAZE_MEDIA__/<name>` + 프리뷰 인라인 폴백
+- Braze REST 자격(`BRAZE_REST_API_KEY`)은 env/`~/.config/marketing-ax/braze.env`에서만 — 문서·HTML·로그·반환 텍스트에 노출 금지
+- 이미지 생성 = gti `gpt-5.5` 고정 (codex exec 폴백) + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
 - 서브에이전트 위임 실패(도구 없음) 시 인라인 동일 절차 — 단계 생략 금지
 - 캐릭터 IAM 전면 미포함 (2026-07-13 사용자 결정, 라이브러리 컷 포함) — 히어로는 의미-지시 소품 or HTML 숫자 타이포 (references/visual-layout-patterns.md §3)
 - 물리적으로 맞물린 복합 오브제 = 통짜 통합 생성 1건. 분리 생성한 PNG를 CSS로 겹쳐 조립하는 콜라주 금지 (도그푸딩 반려 실측 2026-07-10)

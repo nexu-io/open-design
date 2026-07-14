@@ -221,9 +221,9 @@ radial 스포트라이트. 팔레트는 항상 브랜드 토큰 기반.
   실루엣)만 (`imagegen-pipeline.md` 씬 스캐폴드가 프롬프트 정본).
 - **그라디언트**: §5 그라디언트 취향 룰(웜→쿨 투컬러 스윕 금지, 허용 3형)을 그대로
   따른다.
-- **발송본 HTML**: `background: url(__BRAZE_MEDIA__/scene-<id>.png) center / cover`
-  + HTML 텍스트존(상단)·CTA존(하단) 오버레이. 프리뷰는 make_preview.py 기계
-  변환(기존 동일).
+- **발송본 HTML**: `background: url(<씬 에셋의 Media Library CDN URL>) center / cover`
+  (placeholder 폴백 시 `url(__BRAZE_MEDIA__/scene-<id>.png)` + 프리뷰
+  make_preview.py 기계 변환) + HTML 텍스트존(상단)·CTA존(하단) 오버레이.
 - **캔버스**: 세로 1024×1536 생성 (모달 카드 aspect).
 - **§2와의 관계**: scene 모드는 주로 센터 모달·풀시트 유형에 적용되지만, 레이아웃
   유형 선택 자체는 §2 5형 표를 그대로 따른다 — scene은 새 레이아웃 유형이 아니라
