@@ -148,11 +148,16 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
-  it('preserves canonical default task-type options under locale overrides', () => {
+  it('localizes zh-CN task-type display copy while preserving canonical route values', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
+    expect(prompt).toContain('For the default task-type form in Simplified Chinese, use copy like:');
+    expect(prompt).toContain('- title: `选择任务类型`');
+    expect(prompt).toContain('`想生成什么？`');
+    expect(prompt).toContain('`原型` [value: `Prototype`]');
+    expect(prompt).toContain('`实时看板` [value: `Live artifact`]');
     expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
+      'Keep the `taskType` option `value`s exact and unlocalized while translating their display `label`s.',
     );
     for (const option of [
       'Prototype',
@@ -164,19 +169,18 @@ describe('composeSystemPrompt', () => {
       'Audio',
       'Other',
     ]) {
-      expect(prompt).toContain(`"${option}"`);
+      expect(prompt).toContain(`"value": "${option}"`);
     }
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
+    expect(prompt).not.toContain('keep the `taskType` option labels as the canonical routing choices');
   });
 
-  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+  it('keeps task-type route values stable for zh-TW while allowing localized labels', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-TW' });
 
     expect(prompt).toContain('# UI locale override');
     expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
     expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
+      'Keep the `taskType` option `value`s exact and unlocalized while translating their display `label`s.',
     );
     for (const option of [
       'Prototype',
@@ -188,11 +192,10 @@ describe('composeSystemPrompt', () => {
       'Audio',
       'Other',
     ]) {
-      expect(prompt).toContain(`"${option}"`);
+      expect(prompt).toContain(`"value": "${option}"`);
     }
     expect(prompt).not.toContain('快速简报 — 30 秒');
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
+    expect(prompt).not.toContain('keep the `taskType` option labels as the canonical routing choices');
   });
 
   it('treats an active design system as the visual direction', () => {

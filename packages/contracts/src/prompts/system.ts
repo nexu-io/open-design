@@ -78,7 +78,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
     '# UI locale override',
     '',
     `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
-    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
+    'For the default task-type form, localize its title, description, question labels, placeholders, and option labels to the UI locale. Keep the `taskType` option `value`s exact and unlocalized while translating their display `label`s. The stable values are `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, and `Other`; do not translate or reorder them.',
   ];
   if (normalized === 'zh-CN') {
     lines.push(
@@ -93,6 +93,16 @@ function renderUiLocalePrompt(locale: string | undefined): string {
       '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
       '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
       '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
+      '',
+      'For the default task-type form in Simplified Chinese, use copy like:',
+      '- title: `选择任务类型`',
+      '- description: `我会将任务交给合适的 Open Design 工作流，并一次性确认需求。已为你预填，可直接发送，也可先调整。`',
+      '- taskType label/options: `想生成什么？` / `原型` [value: `Prototype`], `实时看板` [value: `Live artifact`], `幻灯片` [value: `Slide deck`], `图片` [value: `Image`], `视频` [value: `Video`], `HyperFrames` [value: `HyperFrames`], `音频` [value: `Audio`], `其他` [value: `Other`]',
+      '- audience label/placeholder: `目标用户是谁？` / `例如：早期投资人、开发者工具采购方、内部高管评审`',
+      '- brand label/options: `品牌背景` / `帮我选择一个方向`, `我有品牌规范 — 我会提供`, `匹配参考网站 / 截图 — 我会附上`',
+      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面、30 秒视频`',
+      '- speaker-notes label: `幻灯片需要演讲者备注吗？`',
+      '- constraints label/placeholder: `有什么重要限制？` / `目标用户、品牌、格式、长度、宽高比、参考资料、需要避免的内容……`',
     );
   }
   return lines.join('\n');

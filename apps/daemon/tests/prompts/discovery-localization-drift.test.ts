@@ -37,13 +37,29 @@ const taskTypeFormPaths = [
   'plugins/_official/scenarios/od-default/SKILL.md',
 ] as const;
 
+const taskTypeLocalizationRule =
+  "Localize the task-type form's user-facing title, description, question labels, placeholders, and option `label`s to the UI locale. Keep the form and question `id`s, option `value`s, ordering, and `allowCustom: false` unchanged.";
+
+const taskTypeRouteValues = [
+  'Prototype',
+  'Live artifact',
+  'Slide deck',
+  'Image',
+  'Video',
+  'HyperFrames',
+  'Audio',
+  'Other',
+] as const;
+
 describe('task-type form contract parity', () => {
   it.each(taskTypeFormPaths)('%s carries lang and pins taskType allowCustom: false', (path) => {
     const source = readFileSync(resolve(repoRoot, path), 'utf8');
+    const normalizedSource = source.replaceAll('\\`', '`');
     const formStart = source.indexOf('<question-form id="task-type"');
     expect(formStart).toBeGreaterThanOrEqual(0);
     const form = source.slice(formStart, source.indexOf('</question-form>', formStart));
 
+    expect(normalizedSource).toContain(taskTypeLocalizationRule);
     expect(form).toContain('"lang": "en"');
     const taskTypeIdx = form.indexOf('"id": "taskType"');
     expect(taskTypeIdx).toBeGreaterThanOrEqual(0);
@@ -51,5 +67,9 @@ describe('task-type form contract parity', () => {
     // before its options array closes the question.
     const taskTypeSlice = form.slice(taskTypeIdx, form.indexOf('"id":', taskTypeIdx + 1));
     expect(taskTypeSlice).toContain('"allowCustom": false');
+    for (const routeValue of taskTypeRouteValues) {
+      expect(taskTypeSlice).toContain(`"label": "${routeValue}"`);
+      expect(taskTypeSlice).toContain(`"value": "${routeValue}"`);
+    }
   });
 });

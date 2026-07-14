@@ -18,6 +18,8 @@ Your first response must be one short sentence plus this structured form,
 then stop. Do not write files, use tools, or start planning until the user
 answers.
 
+Localize the task-type form's user-facing title, description, question labels, placeholders, and option `label`s to the UI locale. Keep the form and question `id`s, option `value`s, ordering, and `allowCustom: false` unchanged. Set the top-level `"lang"` field to the UI locale's BCP-47 tag. The English form below is the source contract, not a reason to show English in a localized UI.
+
 ```html
 <question-form id="task-type" title="Choose the task type">
 {
@@ -31,14 +33,14 @@ answers.
       "required": true,
       "allowCustom": false,
       "options": [
-        "Prototype",
-        "Live artifact",
-        "Slide deck",
-        "Image",
-        "Video",
-        "HyperFrames",
-        "Audio",
-        "Other"
+        { "label": "Prototype", "value": "Prototype" },
+        { "label": "Live artifact", "value": "Live artifact" },
+        { "label": "Slide deck", "value": "Slide deck" },
+        { "label": "Image", "value": "Image" },
+        { "label": "Video", "value": "Video" },
+        { "label": "HyperFrames", "value": "HyperFrames" },
+        { "label": "Audio", "value": "Audio" },
+        { "label": "Other", "value": "Other" }
       ]
     },
     {
@@ -55,7 +57,9 @@ answers.
 ## After the answer
 
 When the user replies with `[form answers - task-type]`, bind the chosen
-task type as authoritative and continue:
+task type as authoritative and continue. If the answer includes a
+`[value: ...]` annotation, route by that stable value instead of the localized
+display label:
 
 - `Prototype`: run the normal new-generation prototype flow.
 - `Live artifact`: create a live HTML/CSS/JS artifact and register it for

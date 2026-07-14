@@ -36,7 +36,7 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "reference_match"');
   });
 
-  it('keeps the eight canonical task-type options', () => {
+  it('keeps the eight canonical task-type route values separate from localizable labels', () => {
     const options = [
       'Prototype',
       'Live artifact',
@@ -48,8 +48,12 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
       'Other',
     ];
     for (const option of options) {
-      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"${option}"`);
+      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"label": "${option}"`);
+      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"value": "${option}"`);
     }
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      "Localize the task-type form's user-facing title, description, question labels, placeholders, and option `label`s to the UI locale.",
+    );
   });
 
   it('forbids the agent from emitting a second Quick brief form after task-type answers', () => {
@@ -103,9 +107,9 @@ describe('discovery.ts form prefill contract', () => {
     );
   });
 
-  it('prefills the router form too, without loosening its verbatim guard', () => {
+  it('prefills the router form while keeping route values stable and labels localizable', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Do not rename, tailor, drop, reorder, or rewrite the `taskType` options',
+      'Keep the form and question `id`s, option `value`s, ordering, and `allowCustom: false` unchanged.',
     );
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
       "set each question's `default` to your brief-inferred recommendation",
