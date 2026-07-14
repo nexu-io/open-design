@@ -96,7 +96,7 @@ function buildPageHtml(page: any, doc: any, opts: { imagesBase?: string }): stri
   const h = page.size?.y ?? page.absoluteBoundingBox?.height ?? 900;
 
   const childrenHtml = (page.children ?? [])
-    .map((c: any) => renderNode(c, 1, opts))
+    .map((c: any) => renderNode(c, 1, opts, null))
     .filter(Boolean)
     .join('\n');
 

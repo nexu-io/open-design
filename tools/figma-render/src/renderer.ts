@@ -4,6 +4,55 @@
 import { paintToCssBg, pickStrokeCss, pickFirstSolidColor } from './paint-to-css';
 import { effectsToCss } from './effects-to-css';
 
+// ── 2×3 Affine Matrix composition ──
+// Figma stores transforms as [[m00,m01,m02],[m10,m11,m12]]
+// Compose: result_point = parent × child × local_point
+
+type Mat2x3 = [[number,number,number],[number,number,number]];
+
+function matMultiply(a: Mat2x3 | null, b: Mat2x3 | null): Mat2x3 | null {
+  if (!a && !b) return null;
+  if (!a) return b;
+  if (!b) return a;
+  return [
+    [a[0][0]*b[0][0] + a[0][1]*b[1][0], a[0][0]*b[0][1] + a[0][1]*b[1][1], a[0][0]*b[0][2] + a[0][1]*b[1][2] + a[0][2]],
+    [a[1][0]*b[0][0] + a[1][1]*b[1][0], a[1][0]*b[0][1] + a[1][1]*b[1][1], a[1][0]*b[0][2] + a[1][1]*b[1][2] + a[1][2]],
+  ];
+}
+
+function applyTransform(t: Mat2x3 | null, x: number, y: number): { x: number; y: number } {
+  if (!t) return { x, y };
+  return { x: t[0][0]*x + t[0][1]*y + t[0][2], y: t[1][0]*x + t[1][1]*y + t[1][2] };
+}
+
+function resolveNodeTransform(node: any, parentTransform: Mat2x3 | null): { absolute: Mat2x3 | null; pos: { x: number; y: number }; size: { w: number; h: number } } {
+  // Extract local transform
+  let local: Mat2x3 | null = null;
+  const t = node.transform;
+  if (Array.isArray(t) && t.length >= 2) {
+    local = [t[0] as [number,number,number], t[1] as [number,number,number]];
+  } else if (t && typeof t === 'object') {
+    local = [[t.m00??1, t.m01??0, t.m02??0], [t.m10??0, t.m11??1, t.m12??0]];
+  }
+  const absolute = matMultiply(parentTransform, local);
+
+  // Position — apply absolute transform to origin
+  const pos = applyTransform(absolute, 0, 0);
+
+  // Size — apply scale from local transform, fallback to node.size or absoluteBoundingBox
+  const nodeSize = node.size ?? {};
+  let w = node.absoluteBoundingBox?.width ?? nodeSize.x ?? 0;
+  let h = node.absoluteBoundingBox?.height ?? nodeSize.y ?? 0;
+
+  // If we have a transform but no absoluteBoundingBox, approximate size from local scale
+  if ((!w || !h) && local) {
+    w = w || Math.abs(local[0][0]) * (nodeSize.x ?? 100);
+    h = h || Math.abs(local[1][1]) * (nodeSize.y ?? 100);
+  }
+
+  return { absolute, pos, size: { w, h } };
+}
+
 interface FigmaNode {
   guid?: { sessionID: number; localID: number };
   type?: string;
@@ -97,12 +146,24 @@ function resolveSize(node: FigmaNode): { w: number; h: number } {
   return { w: 0, h: 0 };
 }
 
-export function renderNode(node: FigmaNode, depth: number, opts: RenderOptions): string {
+export function renderNode(node: FigmaNode, depth: number, opts: RenderOptions, parentTransform?: Mat2x3 | null): string {
   if (node.visible === false) return '';
+
+  // Compute absolute transform and position from parent chain
+  const xform = resolveNodeTransform(node as any, parentTransform ?? null);
+  const box = { x: xform.pos.x, y: xform.pos.y, width: xform.size.w, height: xform.size.h };
+  // Use absoluteBoundingBox for size when available (more accurate)
+  if (node.absoluteBoundingBox) {
+    box.width = node.absoluteBoundingBox.width;
+    box.height = node.absoluteBoundingBox.height;
+  }
+
+  // Accumulate this node's transform for children
+  const childTransform = xform.absolute;
+
   if (node.type === 'DOCUMENT') {
-    // Document just renders children
     const children = (node.children ?? [])
-      .map((c) => renderNode(c, depth + 1, opts))
+      .map((c) => renderNode(c, depth + 1, opts, childTransform))
       .filter(Boolean)
       .join('\n');
     return children;
@@ -112,35 +173,24 @@ export function renderNode(node: FigmaNode, depth: number, opts: RenderOptions):
     const { w, h } = resolveSize(node);
     const bg = paintToCssBg(node.fillPaints?.[0], opts.imagesBase) || '#ffffff';
     const children = (node.children ?? [])
-      .map((c) => renderNode(c, depth + 1, opts))
+      .map((c) => renderNode(c, depth + 1, opts, childTransform))
       .filter(Boolean)
       .join('\n');
-    return `<div class="od-page" data-page="${escapeHtml(node.name || '')}" style="width:${w}px;height:${h}px;position:relative;overflow:hidden;background:${bg};margin:0 auto;">
+    return `<div class="od-page" data-page="${escapeHtml(node.name || '')}" style="width:${Math.round(w)}px;height:${Math.round(h)}px;position:relative;overflow:hidden;background:${bg};margin:0 auto;">
 ${indent(children, 2)}
 </div>`;
   }
 
-  // Box/size — prefer absoluteBoundingBox, fall back to transform + size
-  let box = node.absoluteBoundingBox;
-  if (!box) {
-    const t = (node as any).transform;
-    const sz = node.size;
-    if (t && sz) {
-      // transform is [[m00,m01,m02],[m10,m11,m12]] — 2x3 affine
-      const row0 = Array.isArray(t) ? t[0] : (t as any)?.m00 !== undefined ? [(t as any).m00, (t as any).m01, (t as any).m02] : null;
-      const row1 = Array.isArray(t) ? t[1] : (t as any)?.m10 !== undefined ? [(t as any).m10, (t as any).m11, (t as any).m12] : null;
-      if (row0 && row1) {
-        box = { x: row0[2] ?? 0, y: row1[2] ?? 0, width: sz.x ?? 0, height: sz.y ?? 0 };
-      }
-    }
-    if (!box && sz) {
-      box = { x: 0, y: 0, width: sz.x ?? 0, height: sz.y ?? 0 };
-    }
+  // Use absoluteBoundingBox position when available (fig-decode.ts pre-computes it)
+  if (node.absoluteBoundingBox) {
+    box.x = node.absoluteBoundingBox.x;
+    box.y = node.absoluteBoundingBox.y;
   }
-  if (!box) {
+
+  if (box.width === 0 && box.height === 0) {
     // No geometry, render children inline if any
     return (node.children ?? [])
-      .map((c) => renderNode(c, depth + 1, opts))
+      .map((c) => renderNode(c, depth + 1, opts, childTransform))
       .filter(Boolean)
       .join('\n');
   }
@@ -254,7 +304,7 @@ ${indent(children, 2)}
   // Container with children
   if (isContainer) {
     const children = (node.children ?? [])
-      .map((c) => renderNode(c, depth + 1, opts))
+      .map((c) => renderNode(c, depth + 1, opts, childTransform))
       .filter(Boolean)
       .join('\n');
     const allStyles = [styleAttr, bgCss, ...(strokeCss ? [`border:${strokeCss}`] : []), effectCss].filter(Boolean).join(';');
