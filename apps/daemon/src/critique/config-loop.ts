@@ -34,8 +34,11 @@ function parseEnabled(raw: string | undefined, fallback: boolean): boolean {
 
 function parseStrategy(raw: string | undefined, fallback: LoopStrategy): LoopStrategy {
   if (!raw) return fallback;
-  const v = raw.trim().toLowerCase();
-  if ((LOOP_STRATEGIES as readonly string[]).includes(v)) return v as LoopStrategy;
+  const v = raw.trim();
+  const canonical = (LOOP_STRATEGIES as readonly string[]).find(
+    (s) => s.toLowerCase() === v.toLowerCase(),
+  );
+  if (canonical) return canonical as LoopStrategy;
   throw new RangeError(`OD_CRITIQUE_LOOP_STRATEGY: expected ${LOOP_STRATEGIES.join('|')}, got "${v}"`);
 }
 
