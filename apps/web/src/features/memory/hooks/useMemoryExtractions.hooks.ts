@@ -41,11 +41,25 @@ export function useMemoryExtractions(
   // A failed mutation may restore its pre-mutation snapshot only if nothing
   // newer has changed the history while its request/recovery fetch was pending.
   const extractionRevision = useRef(0);
+  const pendingDeletionIds = useRef(new Set<string>());
   const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
     extractionRevision.current += 1;
     setExtractions(next);
     return extractionRevision.current;
   }, []);
+  const reconcileConfirmedExtractions = useCallback((confirmed: MemoryExtractionRecord[]) => {
+    const pending = new Set(pendingDeletionIds.current);
+    updateExtractions((current) => {
+      const reconciled = confirmed.filter((row) => !pending.has(row.id));
+      const confirmedIds = new Set(reconciled.map((row) => row.id));
+      // Retain live frames that arrived after the recovery read, while never
+      // resurrecting a row another optimistic delete still owns.
+      return [
+        ...reconciled,
+        ...current.filter((row) => !pending.has(row.id) && !confirmedIds.has(row.id)),
+      ];
+    });
+  }, [updateExtractions]);
 
   const reloadExtractions = useCallback(async () => {
     setIsRefreshing(true);
@@ -98,6 +112,7 @@ export function useMemoryExtractions(
       // no-op against an already-removed id; if the request fails we re-fetch
       // to put the row back instead of silently lying.
       const previous = extractions;
+      pendingDeletionIds.current.add(id);
       const optimisticRevision = updateExtractions(previous.filter((r) => r.id !== id));
       let ok = false;
       try {
@@ -108,11 +123,10 @@ export function useMemoryExtractions(
         // never claims the server-side row was deleted when it was not.
       }
       if (!ok) {
+        pendingDeletionIds.current.delete(id);
         try {
           const confirmed = await port.fetchExtractions();
-          if (extractionRevision.current === optimisticRevision) {
-            updateExtractions(confirmed);
-          }
+          reconcileConfirmedExtractions(confirmed);
           setLoadError(null);
         } catch {
           if (extractionRevision.current === optimisticRevision) {
@@ -120,9 +134,11 @@ export function useMemoryExtractions(
           }
           setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
         }
+      } else {
+        pendingDeletionIds.current.delete(id);
       }
     },
-    [extractions, port, updateExtractions],
+    [extractions, port, reconcileConfirmedExtractions, updateExtractions],
   );
 
   const clearExtractions = useCallback(async () => {

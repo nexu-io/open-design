@@ -222,6 +222,36 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 
+  it('reconciles a failed delete while another overlapping delete succeeds', async () => {
+    let resolveA!: (value: boolean) => void;
+    let resolveB!: (value: boolean) => void;
+    const deleteA = new Promise<boolean>((resolve) => { resolveA = resolve; });
+    const deleteB = new Promise<boolean>((resolve) => { resolveB = resolve; });
+    const port = makePort({
+      deleteExtraction: vi.fn((id: string) => id === 'a' ? deleteA : deleteB),
+      fetchExtractions: vi.fn(async () => [record('a')]),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let removeA: Promise<void>;
+    let removeB: Promise<void>;
+    act(() => {
+      removeA = result.current.onDeleteExtraction('a');
+      removeB = result.current.onDeleteExtraction('b');
+    });
+
+    await act(async () => {
+      resolveB(true);
+      await removeB!;
+      resolveA(false);
+      await removeA!;
+    });
+
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['a']);
+  });
+
   it('clearExtractions empties the list and calls the port', async () => {
     const port = makePort({ clearExtractionHistory: vi.fn(async () => true) });
     const { result } = renderHook(() => useMemoryExtractions(port));
