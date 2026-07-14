@@ -76,6 +76,22 @@ describe('MemoryManualEditor', () => {
     expect(onEditingChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'project' }));
   });
 
+  it('reports description and body edits', () => {
+    const { onEditingChange } = renderEditor({ editing: { ...newDraft, name: 'X' } });
+
+    fireEvent.change(screen.getByPlaceholderText('One sentence — what is this memory about?'), {
+      target: { value: 'New description' },
+    });
+    expect(onEditingChange).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'New description' }),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/Rule one/), {
+      target: { value: 'New body' },
+    });
+    expect(onEditingChange).toHaveBeenCalledWith(expect.objectContaining({ body: 'New body' }));
+  });
+
   it('disables save while the draft name is blank and enables it once filled', () => {
     const { rerender } = renderEditor({ editing: newDraft });
     expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();

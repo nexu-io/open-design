@@ -97,6 +97,29 @@ describe('useMemoryEntries — reload + filter', () => {
     expect(result.current.entries.map((e) => e.id)).toEqual(['a', 'b']);
   });
 
+  it('keeps the last confirmed list and surfaces an error when the list fetch rejects', async () => {
+    const coord = makeCoord();
+    const list = listResponse();
+    const port = makePort({
+      fetchMemoryList: vi.fn(async () => list),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.entries.map((e) => e.id)).toEqual(['a', 'b']);
+
+    (port.fetchMemoryList as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => {
+      await result.current.reload();
+    });
+
+    // The prior confirmed entries survive; the failure surfaces as loadError
+    // instead of being papered over with an invented empty list.
+    expect(result.current.entries.map((e) => e.id)).toEqual(['a', 'b']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
   it('filters entries by the active type filter', async () => {
     const { result } = renderHook(() => useMemoryEntries(makePort(), makeCoord()));
     await act(async () => {

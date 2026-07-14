@@ -252,6 +252,37 @@ describe('useMemoryExtractions — delete + clear', () => {
     expect(result.current.extractions.map((row) => row.id)).toEqual(['a']);
   });
 
+  it('excludes a still-pending overlapping delete from a failed delete\'s reconciled recovery', async () => {
+    let resolveA!: (value: boolean) => void;
+    const deleteA = new Promise<boolean>((resolve) => { resolveA = resolve; });
+    const deleteB = new Promise<boolean>(() => {}); // never resolves during this test
+    const port = makePort({
+      deleteExtraction: vi.fn((id: string) => id === 'a' ? deleteA : deleteB),
+      // The server still has both rows — B's delete hasn't landed yet either.
+      fetchExtractions: vi.fn(async () => [record('a'), record('b')]),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+    act(() => result.current.applyExtractionEvent(record('b')));
+
+    let removeA: Promise<void>;
+    act(() => {
+      removeA = result.current.onDeleteExtraction('a');
+      void result.current.onDeleteExtraction('b'); // left in flight, deliberately unresolved
+    });
+
+    await act(async () => {
+      resolveA(false);
+      await removeA!;
+    });
+
+    // 'a' comes back from the confirmed recovery (its delete really failed),
+    // but 'b' must NOT be resurrected — its own delete is still pending, so
+    // the recovery's confirmed snapshot must defer to that in-flight removal.
+    expect(result.current.extractions.map((row) => row.id)).toContain('a');
+    expect(result.current.extractions.map((row) => row.id)).not.toContain('b');
+  });
+
   it('clearExtractions empties the list and calls the port', async () => {
     const port = makePort({ clearExtractionHistory: vi.fn(async () => true) });
     const { result } = renderHook(() => useMemoryExtractions(port));
@@ -313,6 +344,44 @@ describe('useMemoryExtractions — delete + clear', () => {
     });
 
     expect(result.current.extractions.map((row) => row.id)).toEqual(['a']);
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
+  it('preserves newer SSE state when failed-clear recovery also fails', async () => {
+    let resolveClear!: (value: boolean) => void;
+    let rejectRecovery!: (reason?: unknown) => void;
+    const clearPromise = new Promise<boolean>((resolve) => {
+      resolveClear = resolve;
+    });
+    const recoveryPromise = new Promise<MemoryExtractionRecord[]>((_, reject) => {
+      rejectRecovery = reject;
+    });
+    const port = makePort({
+      clearExtractionHistory: vi.fn(() => clearPromise),
+      fetchExtractions: vi.fn(() => recoveryPromise),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a')));
+
+    let clearing: Promise<void>;
+    act(() => {
+      clearing = result.current.clearExtractions();
+    });
+    // A live event arrives while the failed clear is waiting to recover.
+    act(() => result.current.applyExtractionEvent(record('newer', { phase: 'running' })));
+
+    await act(async () => {
+      resolveClear(false);
+      await Promise.resolve();
+      rejectRecovery(new Error('offline'));
+      await clearing!;
+    });
+
+    // The revision advanced past the clear's own optimistic snapshot before
+    // the (also-failing) recovery settled, so the rollback must be skipped —
+    // clobbering the newer live state with the stale pre-clear snapshot would
+    // be wrong even though the recovery itself failed too.
+    expect(result.current.extractions.map((row) => row.id)).toEqual(['newer']);
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 

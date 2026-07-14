@@ -55,6 +55,11 @@ describe('MemoryExtractionCard', () => {
     expect(document.querySelector('.memory-extraction-failure')).not.toBeNull();
   });
 
+  it('renders the skip-reason line for a skipped record', () => {
+    renderCard({ phase: 'skipped', reason: 'no-provider' });
+    expect(screen.getByText('No API key configured for LLM memory extraction.')).toBeInTheDocument();
+  });
+
   it('wires the delete action', () => {
     const { onDelete } = renderCard();
     fireEvent.click(screen.getByLabelText('Delete'));

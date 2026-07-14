@@ -169,6 +169,34 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
     expect(result.current.pendingConnectorAuthIds.has('figma')).toBe(false);
   });
 
+  it('ignores a re-entrant connect call for the same connector while one is already in flight', async () => {
+    let resolveConnect!: (value: { connector: ConnectorDetail }) => void;
+    const connectConnector = vi.fn(
+      () => new Promise<{ connector: ConnectorDetail }>((resolve) => { resolveConnect = resolve; }),
+    );
+    const port = makePort({ connectConnector });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let first: Promise<void>;
+    act(() => {
+      first = result.current.onConnectMemoryConnector('notion');
+    });
+    expect(result.current.connectingConnectorIds.has('notion')).toBe(true);
+
+    // A second call for the SAME connector while the first is still in
+    // flight must be a no-op — it must not fire a second connect request.
+    await act(async () => {
+      await result.current.onConnectMemoryConnector('notion');
+    });
+    expect(connectConnector).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveConnect({ connector: connector('notion', { status: 'connected' }) });
+      await first!;
+    });
+    expect(result.current.connectingConnectorIds.has('notion')).toBe(false);
+  });
+
   it('refreshConnectorStatuses clears a resolved pending auth and notifies on change', async () => {
     const statuses: { current: ConnectorStatusMap } = { current: {} };
     const port = makePort({
@@ -614,6 +642,21 @@ describe('useMemoryConnectors — selection + suggestion toggles + guards', () =
     });
     const notion = result.current.memoryConnectors.find((c) => c.id === 'notion');
     expect(notion?.status).toBe('available');
+  });
+
+  it("uses the live status's own status when the app is missing from the fetched catalogue", async () => {
+    const port = makePort({
+      fetchMemoryConnectors: vi.fn(async () => [] as ConnectorDetail[]),
+      // Unlike the fallback case above, the status entry HAS a real status —
+      // the synthetic catalogue entry must use it, not default to "available".
+      fetchConnectorStatuses: vi.fn(async () => ({ notion: { status: 'connected' } }) as ConnectorStatusMap),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    const notion = result.current.memoryConnectors.find((c) => c.id === 'notion');
+    expect(notion?.status).toBe('connected');
   });
 });
 
