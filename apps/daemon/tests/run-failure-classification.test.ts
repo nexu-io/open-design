@@ -1421,6 +1421,61 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
   });
 });
 
+describe('classifyRunFailure — oversized input reclassified as prompt_too_large (#5605)', () => {
+  it('classifies upstream stream chunk-size parse errors from oversized input as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: {"id":"evt_f5f749daf0015WfwpYrh4M3f3s","properties":{"error":{"data":{"message":"\\"[code=upstream_error] Error reading stream: unexpected char \'n\' at the end of chunk size. Expected \'\\\\r\'\\""},"name":"UnknownError"},"sessionID":"ses_0a08b7d93ffewe9kKOZA4xfGA8"},"type":"session.error"}',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+  });
+
+  it('classifies "content is too long" errors as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Error: content is too long for the selected model',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+  });
+
+  it('classifies Chinese "内容过长" errors as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      '错误: 内容过长，请缩短输入',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+  });
+
+  it('classifies "payload too large" errors as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Request failed: payload too large for provider',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+  });
+});
+
 describe('classifyRunFailure — custom Anthropic endpoint disconnects', () => {
   it('classifies configured custom Anthropic endpoint drops as stream_disconnected', () => {
     const result = classify(
