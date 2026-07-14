@@ -68,6 +68,7 @@ function renderPanel(props: Partial<Parameters<typeof MemoryConnectedPanel>[0]> 
         selectedConnectorSuggestions={[]}
         connectorStatus={null}
         connectorError={null}
+        connectorLoadError={null}
         connectorAttempts={[]}
         connectorContextBytes={0}
         connectorExtractions={[]}
