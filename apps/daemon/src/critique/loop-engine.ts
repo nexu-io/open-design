@@ -45,7 +45,7 @@ export interface LoopEngineParams {
   loopCfg: CritiqueLoopConfig;
   critiqueCfg: CritiqueConfig;
   fixFn: FixFunction;
-  db: Database;
+  db: Database.Database;
   bus: CritiqueSseBus;
   projectId: string;
   artifactDir: string;
@@ -92,7 +92,7 @@ function shouldRetry(result: OrchestratorResult, rounds: CritiqueRoundSummary[])
   if (result.status === 'interrupted' || result.status === 'failed' || result.status === 'degraded') return false;
   if (result.status === 'below_threshold') return true;
   if (result.status === 'shipped' && rounds.length > 0) {
-    const lastRound = rounds[rounds.length - 1];
+    const lastRound = rounds[rounds.length - 1]!;
     if (lastRound.mustFix > 0) return true;
   }
   return false;
@@ -126,7 +126,7 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
 
   logCritique({ event: 'loop_started', projectId, adapter, maxIterations: loopCfg.maxIterations, strategy: loopCfg.loopStrategy });
 
-  bus.emit(loopEventToSse({ type: 'loop_started', projectId, maxIterations: loopCfg.maxIterations }));
+  emitLoopEvent(bus, { type: 'loop_started', projectId, maxIterations: loopCfg.maxIterations });
 
   for (let iteration = 1; iteration <= loopCfg.maxIterations; iteration++) {
     if (signal?.aborted) {
@@ -136,11 +136,11 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
 
     logCritique({ event: 'loop_iteration_start', projectId, iteration });
 
-    bus.emit(loopEventToSse({
+    emitLoopEvent(bus, {
       type: 'loop_iteration_start', projectId, iteration,
       totalMaxIterations: loopCfg.maxIterations,
       hasPriorFeedback: accumulatedFeedback !== null,
-    }));
+    });
 
     // --- 触发修复 ---
     if (accumulatedFeedback !== null) {
@@ -148,19 +148,19 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
       try {
         logCritique({ event: 'loop_fix_triggered', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length });
 
-        bus.emit(loopEventToSse({ type: 'loop_fix_started', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length }));
+        emitLoopEvent(bus, { type: 'loop_fix_started', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length });
 
         const { artifactContent, artifactMime } = await fixFn(accumulatedFeedback, iteration);
         const fixDurationMs = Date.now() - fixStart;
 
         logCritique({ event: 'loop_fix_completed', projectId, iteration, fixDurationMs, artifactMime });
-        bus.emit(loopEventToSse({ type: 'loop_fix_completed', projectId, iteration, fixDurationMs }));
+        emitLoopEvent(bus, { type: 'loop_fix_completed', projectId, iteration, fixDurationMs });
 
         await fs.mkdir(artifactDir, { recursive: true });
         await fs.writeFile(`${artifactDir}/fix-i${iteration}.html`, artifactContent, 'utf-8');
       } catch (err) {
         logCritique({ event: 'loop_fix_failed', projectId, iteration, error: err instanceof Error ? err.message : String(err) });
-        bus.emit(loopEventToSse({ type: 'loop_fix_failed', projectId, iteration, error: err instanceof Error ? err.message : String(err) }));
+        emitLoopEvent(bus, { type: 'loop_fix_failed', projectId, iteration, error: err instanceof Error ? err.message : String(err) });
         if (iterations.length > 0) return buildResult('exhausted', iterations, null, startTime);
         throw err;
       }
@@ -177,20 +177,20 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
         artifactDir, adapter, skill,
         cfg: critiqueCfg, db, bus,
         stdout: accumulatedFeedback !== null ? createStdout(iteration, accumulatedFeedback) : createStdout(iteration, null),
-        signal,
-        child: createChild?.(iteration),
-        childExitPromise: createChildExitPromise?.(iteration),
+        ...(signal !== undefined ? { signal } : {}),
+        ...(createChild?.(iteration) !== undefined ? { child: createChild!(iteration) } : {}),
+        ...(createChildExitPromise?.(iteration) !== undefined ? { childExitPromise: createChildExitPromise!(iteration) } : {}),
       });
 
       const converged = hasConverged(orchestratorResult, critiqueCfg);
       iterations.push({ iteration, orchestratorResult, converged });
 
-      bus.emit(loopEventToSse({
+      emitLoopEvent(bus, {
         type: 'loop_iteration_end', projectId, iteration,
         status: orchestratorResult.status,
         composite: orchestratorResult.composite ?? 0,
         converged,
-      }));
+      });
 
       logCritique({
         event: 'loop_iteration_end', projectId, iteration,
@@ -226,10 +226,10 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
   critiqueLoopExhaustedTotal.inc({ adapter, skill, reason: 'max_iterations' });
   logCritique({ event: 'loop_exhausted', projectId, totalIterations: loopCfg.maxIterations });
 
-  bus.emit(loopEventToSse({
+  emitLoopEvent(bus, {
     type: 'loop_exhausted', projectId, totalIterations: loopCfg.maxIterations,
     bestComposite: getBestComposite(iterations),
-  }));
+  });
 
   return buildResult('exhausted', iterations, null, startTime);
 }
@@ -237,6 +237,11 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
 // ============================================================================
 // 辅助函数
 // ============================================================================
+
+/** 向 SSE bus 发送循环事件（类型适配：LoopEvent 不在 CritiqueSseEvent 联合中） */
+function emitLoopEvent(bus: { emit(e: { event: string; data: unknown }): void }, event: LoopEvent): void {
+  bus.emit(loopEventToSse(event));
+}
 
 function buildResult(
   status: LoopEngineResult['status'],

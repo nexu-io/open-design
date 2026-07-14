@@ -35,8 +35,8 @@ export function extractFeedbackFromEvents(
     }
   }
 
-  const best = rounds.length > 0
-    ? rounds.reduce((a, b) => (b.composite > a.composite ? b : a), rounds[0])
+  const best: { n: number; composite: number } = rounds.length > 0
+    ? rounds.reduce<CritiqueRoundSummary>((a, b) => (b.composite > a.composite ? b : a), rounds[0]!)
     : { n: 0, composite: 0 };
 
   return { mustFixItems, dimNotes, bestComposite: best.composite, bestRound: best.n, finalStatus, rounds };

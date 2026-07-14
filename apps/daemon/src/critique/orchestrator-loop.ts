@@ -11,9 +11,9 @@
 
 import type { ChildProcess } from 'node:child_process';
 import type Database from 'better-sqlite3';
-import type { CritiqueConfig, OrchestratorResult } from '@open-design/contracts/critique';
+import type { CritiqueConfig } from '@open-design/contracts/critique';
 import type { CritiqueLoopConfig } from './loop-types.js';
-import type { CritiqueSseBus, OrchestratorParams } from './orchestrator.js';
+import type { CritiqueSseBus, OrchestratorParams, OrchestratorResult } from './orchestrator.js';
 import { runOrchestrator } from './orchestrator.js';
 import { startCritiqueLoop, type FixFunction, type LoopEngineResult } from './loop-engine.js';
 import { extractFeedbackFromEvents, formatFeedbackAsPrompt, type CritiqueFeedback } from './loop-feedback.js';
@@ -40,7 +40,12 @@ export async function runOrchestratorWithLoop(
 
   if (!loopCfg.enabled) {
     logCritique({ event: 'loop_disabled', projectId: baseParams.projectId, runId: baseParams.runId });
-    return runOrchestrator({ ...baseParams, stdout: createStdout(1, null), child: createChild?.(1), childExitPromise: createChildExitPromise?.(1) });
+    return runOrchestrator({
+      ...baseParams,
+      stdout: createStdout(1, null),
+      ...(createChild?.(1) !== undefined ? { child: createChild!(1) } : {}),
+      ...(createChildExitPromise?.(1) !== undefined ? { childExitPromise: createChildExitPromise!(1) } : {}),
+    });
   }
 
   critiqueLoopEnabled.set({ enabled: '1' }, 1);
@@ -54,8 +59,11 @@ export async function runOrchestratorWithLoop(
     projectId: baseParams.projectId, artifactDir: baseParams.artifactDir,
     projectDir,
     adapter: baseParams.adapter, skill: baseParams.skill,
-    conversationId: baseParams.conversationId, signal: baseParams.signal,
-    createStdout, createChild, createChildExitPromise,
+    conversationId: baseParams.conversationId,
+    ...(baseParams.signal !== undefined ? { signal: baseParams.signal } : {}),
+    createStdout,
+    ...(createChild !== undefined ? { createChild } : {}),
+    ...(createChildExitPromise !== undefined ? { createChildExitPromise } : {}),
   });
 
   critiqueLoopEnabled.set({ enabled: '0' }, 0);
@@ -109,7 +117,7 @@ export async function runOrchestratorWithLoop(
 // ============================================================================
 
 async function persistLessons(
-  db: Database,
+  db: Database.Database,
   projectId: string,
   projectDir: string,
   result: LoopEngineResult,

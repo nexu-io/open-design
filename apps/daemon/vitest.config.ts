@@ -8,7 +8,6 @@ export default defineConfig({
     fileParallelism: false,
     include: [
       'tests/**/*.test.{ts,tsx,js,mjs,cjs}',
-      'src/**/__tests__/*.test.{ts,tsx,js,mjs,cjs}',
     ],
     setupFiles: ['tests/setup.ts'],
     testTimeout: 20_000,

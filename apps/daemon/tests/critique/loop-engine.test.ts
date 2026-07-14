@@ -9,16 +9,16 @@
  * - loadLoopConfigFromEnv: 配置解析
  * - formatFeedbackAsPrompt: 反馈格式化
  *
- * 运行: vitest apps/daemon/src/critique/__tests__/loop-engine.test.ts
+ * 运行: vitest apps/daemon/tests/critique/loop-engine.test.ts
  */
 
 import { describe, it, expect } from 'vitest';
-import type { LoopEngineResult } from '../loop-engine.js';
-import { extractFeedbackFromEvents, type CritiqueFeedback } from '../loop-feedback.js';
-import { loadLoopConfigFromEnv } from '../config-loop.js';
-import { formatFeedbackAsPrompt, summarizeLoopResult } from '../orchestrator-loop.js';
-import { defaultCritiqueLoopConfig } from '../loop-types.js';
-import type { CritiqueLoopConfig } from '../loop-types.js';
+import type { LoopEngineResult } from '../../src/critique/loop-engine.js';
+import { extractFeedbackFromEvents, type CritiqueFeedback } from '../../src/critique/loop-feedback.js';
+import { loadLoopConfigFromEnv } from '../../src/critique/config-loop.js';
+import { formatFeedbackAsPrompt, summarizeLoopResult } from '../../src/critique/orchestrator-loop.js';
+import { defaultCritiqueLoopConfig } from '../../src/critique/loop-types.js';
+import type { CritiqueLoopConfig } from '../../src/critique/loop-types.js';
 
 // ============================================================================
 // extractFeedback 测试
@@ -292,16 +292,7 @@ describe('summarizeLoopResult', () => {
 // ============================================================================
 
 describe('startCritiqueLoop (integration)', () => {
-  // 这些测试需要完整的 mock 环境
-  // 在实际部署中由 CI 管线运行
-
   it('TODO: 完整循环流程集成测试 — 需要 mock spawn handler', () => {
-    // 集成测试需要:
-    // 1. Mock SQLite 数据库
-    // 2. Mock SSE 总线
-    // 3. Mock 适配器 stdout 流
-    // 4. Mock 修复函数
-    // 5. 验证完整的循环生命周期
-    expect(true).toBe(true); // 占位
+    expect(true).toBe(true);
   });
 });

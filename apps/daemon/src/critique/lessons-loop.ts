@@ -63,7 +63,7 @@ export interface LessonSummary {
 // DDL 迁移
 // ============================================================================
 
-export function migrateLessonSchema(db: Database): void {
+export function migrateLessonSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS critique_loop_lessons (
       id            TEXT PRIMARY KEY,
@@ -96,7 +96,7 @@ export function migrateLessonSchema(db: Database): void {
 
 /** 记录一条经验教训 */
 export function recordLesson(
-  db: Database,
+  db: Database.Database,
   lesson: Omit<LoopLesson, 'id' | 'createdAt'>,
 ): LoopLesson {
   const id = `lesson-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -128,7 +128,7 @@ export function recordLesson(
 
 /** 当循环收敛时，标记其修复经验为有效 */
 export function markLessonsEffective(
-  db: Database,
+  db: Database.Database,
   loopId: string,
   effectiveness: number,
 ): void {
@@ -145,7 +145,7 @@ export function markLessonsEffective(
 
 /** 加载项目最近的经验教训 */
 export function loadRecentLessons(
-  db: Database,
+  db: Database.Database,
   projectId: string,
   limit = 20,
 ): LoopLesson[] {
@@ -167,7 +167,7 @@ export function loadRecentLessons(
 
 /** 按类别加载经验教训 */
 export function loadLessonsByCategory(
-  db: Database,
+  db: Database.Database,
   projectId: string,
   category: LessonCategory,
   limit = 10,
@@ -190,7 +190,7 @@ export function loadLessonsByCategory(
 
 /** 按有效性筛选已验证的经验 */
 export function loadEffectiveLessons(
-  db: Database,
+  db: Database.Database,
   projectId: string,
   minEffectiveness = 7,
   limit = 20,
@@ -213,7 +213,7 @@ export function loadEffectiveLessons(
 
 /** 获取经验总结（用于周期性 review） */
 export function getLessonSummary(
-  db: Database,
+  db: Database.Database,
   projectId: string,
 ): LessonSummary[] {
   const rows = db.prepare(`

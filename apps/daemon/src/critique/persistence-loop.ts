@@ -45,7 +45,7 @@ export interface CritiqueLoopIterationRow {
  * 创建循环相关表
  * 应在数据库初始化时调用
  */
-export function migrateLoopSchema(db: Database): void {
+export function migrateLoopSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS critique_loops (
       id                TEXT PRIMARY KEY,
@@ -96,7 +96,7 @@ export function migrateLoopSchema(db: Database): void {
 /**
  * 插入循环运行记录
  */
-export function insertCritiqueLoop(db: Database, row: Omit<CritiqueLoopRow, 'started_at' | 'finished_at'>): void {
+export function insertCritiqueLoop(db: Database.Database, row: Omit<CritiqueLoopRow, 'started_at' | 'finished_at'>): void {
   const stmt = db.prepare(`
     INSERT INTO critique_loops (id, project_id, status, max_iterations, total_iterations, best_composite, final_artifact_path)
     VALUES (@id, @project_id, @status, @max_iterations, @total_iterations, @best_composite, @final_artifact_path)
@@ -108,7 +108,7 @@ export function insertCritiqueLoop(db: Database, row: Omit<CritiqueLoopRow, 'sta
  * 更新循环运行记录
  */
 export function updateCritiqueLoop(
-  db: Database,
+  db: Database.Database,
   loopId: string,
   updates: Partial<Pick<CritiqueLoopRow, 'status' | 'total_iterations' | 'best_composite' | 'final_artifact_path'>>,
 ): void {
@@ -150,7 +150,7 @@ export function updateCritiqueLoop(
  * 插入循环迭代记录
  */
 export function insertLoopIteration(
-  db: Database,
+  db: Database.Database,
   row: Omit<CritiqueLoopIterationRow, 'started_at' | 'finished_at'>,
 ): void {
   const stmt = db.prepare(`
@@ -166,7 +166,7 @@ export function insertLoopIteration(
  * 更新循环迭代记录（标记完成）
  */
 export function finishLoopIteration(
-  db: Database,
+  db: Database.Database,
   iterationId: string,
   updates: { status: string; composite: number | null },
 ): void {
@@ -180,7 +180,7 @@ export function finishLoopIteration(
 /**
  * 查询项目的循环历史
  */
-export function getProjectLoops(db: Database, projectId: string, limit = 20): CritiqueLoopRow[] {
+export function getProjectLoops(db: Database.Database, projectId: string, limit = 20): CritiqueLoopRow[] {
   return db
     .prepare(
       `SELECT * FROM critique_loops WHERE project_id = ? ORDER BY started_at DESC LIMIT ?`,
@@ -192,7 +192,7 @@ export function getProjectLoops(db: Database, projectId: string, limit = 20): Cr
  * 查询单个循环的迭代详情
  */
 export function getLoopIterations(
-  db: Database,
+  db: Database.Database,
   loopId: string,
 ): CritiqueLoopIterationRow[] {
   return db
@@ -203,7 +203,7 @@ export function getLoopIterations(
 /**
  * 获取活跃（未完成）的循环
  */
-export function getActiveLoops(db: Database): CritiqueLoopRow[] {
+export function getActiveLoops(db: Database.Database): CritiqueLoopRow[] {
   return db
     .prepare(`SELECT * FROM critique_loops WHERE status = 'running' ORDER BY started_at ASC`)
     .all() as CritiqueLoopRow[];

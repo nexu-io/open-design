@@ -204,6 +204,8 @@ import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
+import { runOrchestratorWithLoop } from './critique/orchestrator-loop.js';
+import { defaultCritiqueLoopConfig } from './critique/loop-types.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
@@ -12851,7 +12853,8 @@ export async function startServer({
           });
         });
         try {
-          const orchestratorResult = await runOrchestrator({
+          const loopCfg = critiqueCfg.loop ?? defaultCritiqueLoopConfig();
+          const orchestratorResult = await runOrchestratorWithLoop({
             runId: critiqueRunId,
             projectId: typeof projectId === 'string' ? projectId : '',
             conversationId: typeof conversationId === 'string' ? conversationId : null,
@@ -12871,10 +12874,13 @@ export async function startServer({
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,
-            stdout: stdoutIterable,
-            child,
-            childExitPromise,
             signal: critiqueAbort.signal,
+            loopCfg,
+            projectDir: effectiveCwd,
+            fixFn: async () => ({ artifactContent: '', artifactMime: 'text/html' }),
+            createStdout: () => stdoutIterable,
+            createChild: () => child,
+            createChildExitPromise: () => childExitPromise,
           });
           // Map the critique terminal status to the chat run lifecycle.
           // 'shipped' and 'below_threshold' both ran to a ship decision and

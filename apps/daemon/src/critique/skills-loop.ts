@@ -56,7 +56,7 @@ const SKILL_FILE = 'critique-fix.md';
  *   2. 手动触发 `od skills distill`
  */
 export async function distillSkillsFromLessons(
-  db: Database,
+  db: Database.Database,
   cwd: string,
   projectId: string,
 ): Promise<SkillDistillResult> {
@@ -110,7 +110,7 @@ export async function distillSkillsFromLessons(
  * 检查是否需要重新提炼（增量判断）
  */
 export function shouldDistillSkills(
-  db: Database,
+  db: Database.Database,
   projectId: string,
 ): boolean {
   const effectiveLessons = loadEffectiveLessons(db, projectId, MIN_EFFECTIVENESS, 100);

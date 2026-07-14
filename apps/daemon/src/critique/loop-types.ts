@@ -30,13 +30,15 @@ export function defaultCritiqueLoopConfig(): CritiqueLoopConfig {
 }
 
 // ============================================================================
-// 扩展 CritiqueConfig（需合并到 contracts/critique.ts）
+// 扩展 CritiqueConfig（loop 字段尚未合并到 contracts/critique.ts）
+// 使用本地扩展类型，避免对 contracts 中 type alias 做无效的 module augmentation
 // ============================================================================
 
-declare module '@open-design/contracts/critique' {
-  interface CritiqueConfig {
-    loop?: CritiqueLoopConfig;
-  }
+import type { CritiqueConfig } from '@open-design/contracts/critique';
+
+/** 带 loop 扩展的 CritiqueConfig，供 daemon 侧使用 */
+export interface ExtendedCritiqueConfig extends CritiqueConfig {
+  loop?: CritiqueLoopConfig;
 }
 
 // ============================================================================

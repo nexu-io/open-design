@@ -9,7 +9,7 @@
  * - distillSkillsFromLessons / shouldDistillSkills
  * - formatFeedbackAsPrompt (historicalLessons 字段)
  *
- * 运行: vitest apps/daemon/src/critique/__tests__/lessons-skills.test.ts
+ * 运行: vitest apps/daemon/tests/critique/lessons-skills.test.ts
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -30,12 +30,12 @@ import {
   loadLessonsAsContext,
   formatLessonsAsContext,
   formatLessonsAsSkillInjection,
-} from '../lessons-loop.js';
+} from '../../src/critique/lessons-loop.js';
 
-import { distillSkillsFromLessons, shouldDistillSkills } from '../skills-loop.js';
-import { formatFeedbackAsPrompt } from '../loop-feedback.js';
-import type { CritiqueFeedback } from '../loop-feedback.js';
-import type { LoopLesson, LessonCategory, LessonSeverity } from '../lessons-loop.js';
+import { distillSkillsFromLessons, shouldDistillSkills } from '../../src/critique/skills-loop.js';
+import { formatFeedbackAsPrompt } from '../../src/critique/loop-feedback.js';
+import type { CritiqueFeedback } from '../../src/critique/loop-feedback.js';
+import type { LoopLesson, LessonCategory, LessonSeverity } from '../../src/critique/lessons-loop.js';
 
 // ============================================================================
 // 辅助函数
@@ -140,11 +140,11 @@ describe('loadRecentLessons', () => {
 
     const resultA = loadRecentLessons(db, 'proj-A', 10);
     expect(resultA).toHaveLength(1);
-    expect(resultA[0].problem).toBe('A 的问题');
+    expect(resultA[0]!.problem).toBe('A 的问题');
 
     const resultB = loadRecentLessons(db, 'proj-B', 10);
     expect(resultB).toHaveLength(1);
-    expect(resultB[0].problem).toBe('B 的问题');
+    expect(resultB[0]!.problem).toBe('B 的问题');
   });
 });
 
@@ -169,7 +169,7 @@ describe('loadLessonsByCategory', () => {
 
     const brandLessons = loadLessonsByCategory(db, 'proj-test-001', 'brand', 10);
     expect(brandLessons).toHaveLength(1);
-    expect(brandLessons[0].problem).toBe('品牌色错误');
+    expect(brandLessons[0]!.problem).toBe('品牌色错误');
   });
 
   it('无匹配类别时应返回空数组', () => {
@@ -196,8 +196,8 @@ describe('loadEffectiveLessons', () => {
 
     const effective = loadEffectiveLessons(db, 'proj-test-001', 7, 20);
     expect(effective).toHaveLength(2);
-    expect(effective[0].problem).toBe('高有效'); // 按 effectiveness DESC
-    expect(effective[1].problem).toBe('中有效');
+    expect(effective[0]!.problem).toBe('高有效'); // 按 effectiveness DESC
+    expect(effective[1]!.problem).toBe('中有效');
   });
 
   it('默认阈值应为 7', () => {
@@ -242,7 +242,7 @@ describe('markLessonsEffective', () => {
     recordLesson(db, makeLesson({ loopId: 'loop-B', effectiveness: 5 }));
     markLessonsEffective(db, 'loop-B', 9);
     const lessons = loadRecentLessons(db, 'proj-test-001', 20);
-    expect(lessons[0].effectiveness).toBe(5); // 已有值不被覆盖
+    expect(lessons[0]!.effectiveness).toBe(5); // 已有值不被覆盖
   });
 
   it('应只更新指定 loopId 的 lesson', () => {
@@ -254,8 +254,8 @@ describe('markLessonsEffective', () => {
     const lessonsA = loadRecentLessons(db, 'proj-test-001', 20).filter((l) => l.loopId === 'loop-A');
     const lessonsB = loadRecentLessons(db, 'proj-test-001', 20).filter((l) => l.loopId === 'loop-B');
 
-    expect(lessonsA[0].effectiveness).toBe(8);
-    expect(lessonsB[0].effectiveness).toBeNull();
+    expect(lessonsA[0]!.effectiveness).toBe(8);
+    expect(lessonsB[0]!.effectiveness).toBeNull();
   });
 });
 
@@ -296,9 +296,9 @@ describe('getLessonSummary', () => {
     recordLesson(db, makeLesson({ category: 'color' }));
 
     const summary = getLessonSummary(db, 'proj-test-001');
-    expect(summary[0].category).toBe('color'); // color: 3 条
-    expect(summary[1].category).toBe('brand');  // brand: 2 条
-    expect(summary[2].category).toBe('a11y');   // a11y: 1 条
+    expect(summary[0]!.category).toBe('color'); // color: 3 条
+    expect(summary[1]!.category).toBe('brand');  // brand: 2 条
+    expect(summary[2]!.category).toBe('a11y');   // a11y: 1 条
   });
 
   it('空数据库应返回空数组', () => {

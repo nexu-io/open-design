@@ -1,5 +1,7 @@
 import { defaultCritiqueConfig, FALLBACK_POLICIES } from '@open-design/contracts/critique';
 import type { CritiqueConfig } from '@open-design/contracts/critique';
+import { loadLoopConfigFromEnv } from './config-loop.js';
+import type { ExtendedCritiqueConfig } from './loop-types.js';
 
 /**
  * Load CritiqueConfig from process.env. Keys map 1:1 to OD_CRITIQUE_*.
@@ -9,7 +11,7 @@ import type { CritiqueConfig } from '@open-design/contracts/critique';
  *
  * @see specs/current/critique-theater.md § Configuration (env vars)
  */
-export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CritiqueConfig {
+export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ExtendedCritiqueConfig {
   const defaults = defaultCritiqueConfig();
 
   const enabled = parseEnabled(env['OD_CRITIQUE_ENABLED'], defaults.enabled);
@@ -38,6 +40,7 @@ export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env):
     totalTimeoutMs,
     parserMaxBlockBytes,
     fallbackPolicy,
+    loop: loadLoopConfigFromEnv(env),
   };
 }
 
