@@ -527,6 +527,112 @@
   line-height: 1.45;
 }
 
+.creator-content-panel {
+  margin-top: 12px;
+}
+
+.creator-content-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, .7fr) minmax(0, 1.8fr);
+  gap: 16px;
+}
+
+.creator-content-sidebar,
+.creator-content-editor,
+.creator-content-create,
+.creator-content-fields,
+.creator-content-storyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.creator-content-create,
+.creator-content-fields--top {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.creator-content-create .creator-list__action {
+  grid-column: 1 / -1;
+}
+
+.creator-content-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-content-editor fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md);
+}
+
+.creator-content-editor legend {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.creator-content-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.creator-content-editor input,
+.creator-content-editor select,
+.creator-content-editor textarea,
+.creator-content-create input,
+.creator-content-create select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.creator-content-editor textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.creator-content-storyboard > .creator-list {
+  margin-top: 8px;
+}
+
+.creator-content-storyboard .creator-list__item label + label {
+  margin-top: 8px;
+}
+
+@media (max-width: 960px) {
+  .creator-content-layout,
+  .creator-content-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .creator-content-create,
+  .creator-content-fields--top {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Saved automations ---------- */
 
 .automations-saved {

@@ -2,7 +2,12 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChatRunStatusResponse, Project, Routine } from '@open-design/contracts';
+import type {
+  ChatRunStatusResponse,
+  CreatorContentProjectData,
+  Project,
+  Routine,
+} from '@open-design/contracts';
 
 import { TasksView } from '../../src/components/TasksView';
 import * as router from '../../src/router';
@@ -39,6 +44,7 @@ function mockTasksViewFetch({
   creatorRuns = [],
   creatorProjectData = {},
   creatorMediaData = {},
+  creatorContentData = {},
   creatorMediaFailures = [],
 }: {
   routines?: Routine[];
@@ -46,6 +52,7 @@ function mockTasksViewFetch({
   creatorRuns?: ChatRunStatusResponse[];
   creatorProjectData?: Record<string, CreatorProjectData>;
   creatorMediaData?: Record<string, { assets: Array<{ id: string; fileName: string; kind: string; relativePath: string; availability: string }>; taskLinks: Array<{ taskId: string; assetId: string }> }>;
+  creatorContentData?: Record<string, CreatorContentProjectData>;
   creatorMediaFailures?: string[];
 } = {}) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -81,6 +88,14 @@ function mockTasksViewFetch({
       const projectId = decodeURIComponent(creatorMediaRead[1]!);
       if (creatorMediaFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'media unavailable' }), { status: 503 });
       return new Response(JSON.stringify(creatorMediaData[projectId] ?? { roots: [], assets: [], taskLinks: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    const creatorContentRead = /^\/api\/projects\/([^/]+)\/creator-content$/.exec(url);
+    if (creatorContentRead && (!init || init.method === undefined)) {
+      const projectId = decodeURIComponent(creatorContentRead[1]!);
+      return new Response(JSON.stringify(creatorContentData[projectId] ?? { contentProjects: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }
     if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ templates: [] }), {
@@ -1584,5 +1599,104 @@ describe('TasksView page shell', () => {
       expect(allTab.getAttribute('aria-selected')).toBe('false');
       expect(orbitTab.getAttribute('aria-selected')).toBe('true');
     });
+  });
+
+  it('creates a content project and saves its brief, outline, storyboard, and retrospective', async () => {
+    const creatorProject: Project = {
+      id: 'project-content-1', name: '内容项目', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    };
+    const writes: Array<{ url: string; body: Record<string, unknown> }> = [];
+    mockTasksViewFetch({ creatorProjects: [creatorProject] });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/projects/project-content-1/creator-content' && init?.method === 'POST') {
+        writes.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(JSON.stringify({ content: {
+          id: 'creator-content:1', projectId: creatorProject.id, title: '校园黄昏短片', status: 'idea',
+          brief: {}, outline: {}, storyboardItems: [], retrospective: {}, taskIds: [],
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        } }), { status: 201, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/projects/project-content-1/creator-content/creator-content%3A1' && init?.method === 'PATCH') {
+        writes.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.change(screen.getByLabelText('Content title'), { target: { value: '校园黄昏短片' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create content' }));
+    fireEvent.change(await screen.findByLabelText('Brief topic'), { target: { value: '毕业前的傍晚' } });
+    fireEvent.change(screen.getByLabelText('Outline opening'), { target: { value: '下课铃' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add storyboard item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add storyboard item' }));
+    fireEvent.change(screen.getAllByLabelText('Storyboard purpose')[0]!, { target: { value: '建立时间' } });
+    fireEvent.change(screen.getAllByLabelText('Storyboard purpose')[1]!, { target: { value: '跟拍离开教室' } });
+    fireEvent.change(screen.getByLabelText('Retrospective learnings'), { target: { value: '保留环境声' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save content' }));
+
+    await waitFor(() => expect(writes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ url: '/api/projects/project-content-1/creator-content', body: { title: '校园黄昏短片', status: 'idea' } }),
+      expect.objectContaining({ url: '/api/projects/project-content-1/creator-content/creator-content%3A1', body: expect.objectContaining({
+        brief: expect.objectContaining({ topic: '毕业前的傍晚' }),
+        outline: expect.objectContaining({ opening: '下课铃' }),
+        storyboardItems: expect.arrayContaining([expect.objectContaining({ purpose: '建立时间' }), expect.objectContaining({ purpose: '跟拍离开教室' })]),
+        retrospective: expect.objectContaining({ learnings: '保留环境声' }),
+      }) }),
+    ])));
+  });
+
+  it('shows missing storyboard media and never offers it as a new candidate', async () => {
+    const creatorProject: Project = { id: 'project-content-media-1', name: '内容素材项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-content-media-1': { contentProjects: [{
+        id: 'creator-content:1', projectId: creatorProject.id, title: '校园黄昏短片', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [],
+        storyboardItems: [{ id: 'creator-storyboard:1', position: 1, purpose: '开场', mediaAssetIds: ['creator-media:missing'], createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorMediaData: { 'project-content-media-1': { assets: [
+        { id: 'creator-media:missing', fileName: 'missing.jpg', kind: 'image', relativePath: 'missing.jpg', availability: 'missing' },
+        { id: 'creator-media:available', fileName: 'available.jpg', kind: 'image', relativePath: 'available.jpg', availability: 'available' },
+      ], taskLinks: [] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit content 校园黄昏短片' }));
+    expect(screen.getAllByText('Missing').length).toBeGreaterThan(0);
+    const candidates = screen.getByLabelText('Storyboard media candidate');
+    expect(within(candidates).queryByRole('option', { name: 'missing.jpg' })).toBeNull();
+    expect(within(candidates).getByRole('option', { name: 'available.jpg' })).toBeTruthy();
+  });
+
+  it('asks for confirmation before deleting a content project', async () => {
+    const creatorProject: Project = { id: 'project-content-delete-1', name: '删除内容项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const deleteCalls: string[] = [];
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    mockTasksViewFetch({ creatorProjects: [creatorProject], creatorContentData: { 'project-content-delete-1': { contentProjects: [{
+      id: 'creator-content:1', projectId: creatorProject.id, title: '校园黄昏短片', status: 'idea', brief: {}, outline: {}, storyboardItems: [], retrospective: {}, taskIds: [],
+      createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+    }] } } });
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input.toString() === '/api/projects/project-content-delete-1/creator-content/creator-content%3A1' && init?.method === 'DELETE') {
+        deleteCalls.push(input.toString());
+        return new Response(null, { status: 204 });
+      }
+      return baseFetch(input, init);
+    }) as typeof fetch;
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete content 校园黄昏短片' }));
+    expect(deleteCalls).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete content 校园黄昏短片' }));
+    await waitFor(() => expect(deleteCalls).toEqual(['/api/projects/project-content-delete-1/creator-content/creator-content%3A1']));
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
   });
 });
