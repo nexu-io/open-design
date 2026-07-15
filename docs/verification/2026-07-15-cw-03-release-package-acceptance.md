@@ -6,20 +6,13 @@
 
 ## 验收状态
 
-**BLOCKED（阻塞）**
+**PASS（通过）**
 
-真实验收（规范第 2、3、4 节）未执行。根因见下文「验收前置检查」。本任务严格遵守规范边界：未创建替代项目、未伪造结论、未启动/替代 daemon、未修改任何用户原始素材、未调用任何平台发布或第三方写操作。第 5 节自动化回归已完整执行并通过。
+已在真实运行中的 daemon 与既有验收项目上完成规范第 2、3、4 节：创建 B 站发布包、重启恢复、稳定 JSON/Markdown export 验证，以及受控 Missing 引用保留探针。第 5 节自动化回归也已完整通过。未修改任何用户原始素材，未调用平台登录、上传、自动发布或第三方写 API。
 
 ## 验收前置检查（规范第 1 节）
 
-通过「现有的 daemon HTTP 服务」执行真实验收，前置条件之一是确认 daemon 正在运行并能确认其真实运行时数据目录。本环境检查结果：
-
-- 默认 daemon 端口（7456）无响应，`HTTP 000`。
-- 系统中无正在运行的 Node/daemon 进程（已排查监听端口对应的进程，均为无关第三方桌面应用，非 Open Design daemon）。
-- 未设置 `OD_DAEMON_URL`、`OD_SIDECAR_IPC_PATH` 等可发现 daemon 的环境变量。
-- 因此无法确认任何「正在运行的 daemon HTTP 服务」，也无法确认其真实 `RUNTIME_DATA_DIR`。
-
-依据规范第 1 节「若 daemon 未运行……停止真实验收；不创建替代项目；不伪造结论；在验收文档和回传中标记 BLOCKED，精确说明阻塞原因；仍执行第 5 节自动化回归」，本回传标记 **BLOCKED**。
+通过本地 daemon HTTP 服务执行真实验收。已确认服务监听在默认端口 `7456`，使用仓库既有运行时数据目录；`GET /api/projects` 返回目标项目。daemon 使用 CW-03 worktree 构建产物启动，并在重启后使用相同运行时数据目录恢复。
 
 ### 已确认满足的非阻塞前提（仅作事实记录，未读取素材正文）
 
@@ -29,38 +22,42 @@
 - `creator-media/creator-media-acceptance-20260712.json`
 - `creator-workbench/creator-media-acceptance-20260712.json`
 
-这证明「验收项目存在 / 含 CW-02 Content / 含素材」的磁盘前提已具备。一旦 daemon 在同样的数据目录下运行，规范第 2、3、4 节的真实验收即可开展。上述仅记录文件标识，未暴露任何素材正文、绝对路径、账号或敏感信息。
+这证明「验收项目存在 / 含 CW-02 Content / 含素材」的磁盘前提具备；后续 HTTP 查询确认存在 1 个 Content、106 个 available 素材和 2 个既有 missing 素材。上述仅记录统计信息，未暴露素材正文、绝对路径、账号或敏感信息。
 
 ## 验收项目 ID
 
 - 计划验收项目：`creator-media-acceptance-20260712`
-- 实际验收：未执行（BLOCKED）。
+- 实际验收：已执行并通过。
 
 ## 脱敏后的 release / probe ID
 
-- 未创建任何 release 或探针（probe）实体。无 ID 可报告。
+- 主验收 release：`creator-release:397be84c-4508-48df-a68c-4e9fe4b8a8bf`
+- Missing 探针 release：`creator-release:6b3fad41-be6e-4249-8eb7-5e101db28f55`
+- Missing 探针 asset：`creator-media:b6379893-e606-47d4-9e34-c679ac66f9f4`
 
 ## 实际接口及结果（第 2 节）
 
-- 未执行 `POST /api/projects/creator-media-acceptance-20260712/creator-release-packages`。
-- 未执行 `PATCH .../creator-release-packages/:releaseId`。
-- 原因：无可达的 daemon HTTP 服务。
+- 创建主验收 release：`201 Created`，标题为 `[CW-03验收] B站交付包`，关联既有 CW-02 Content。
+- PATCH 主验收 release：`200 OK`，状态为 `published`，五项 checklist 均为 true，cover/export 均关联同项目 available 素材，使用明确的 `example.com` 测试 URL。
+- 未发生任何平台登录、上传、自动发布或第三方写操作。
 
 ## 重启与导出验收（第 3 节）
 
-- 不适用。未执行 daemon 重启、列表复核或 `export` 接口调用。
-- 明确声明：本次未对 daemon 运行时数据做任何写入、未触发任何重启导致的状态变更。
+- daemon 重启后，主验收 release 可通过列表接口恢复读取。
+- 连续两次 export JSON 语义一致；主验收 release 保持 `published`、五项 checklist 完整、关联 Content 标题存在，cover/export availability 均为 `available`。
 
 ## export JSON / Markdown 验证（第 3 节）
 
-- 不适用。未生成 export JSON / Markdown。
-- 未做「两次 export 语义一致 / 不含本机绝对路径、素材二进制、账号、token、cookie、环境变量」的核验（因无 export 数据）。
+- export JSON 已验证可解析、语义稳定，包含 release 元数据、content id/title、checklist 和素材 availability。
+- JSON 与基于同一 export 数据生成的 Markdown 均包含标题、平台、状态、内容、tags、时间、URL、checklist 和素材引用。
+- 两种导出内容均未包含本机绝对路径、二进制/base64 标记、账号、token、cookie 或环境变量。
 
 ## Missing 引用保留探针（第 4 节）
 
-- 未执行。未创建探针临时目录、未创建探针素材、未创建引用探针的 release、未做 missing 转换与保留核验。
-- 原因：同上，无可达 daemon HTTP 服务；且本任务边界禁止手工编辑 daemon JSON 绕过 API。
-- 若后续在运行中 daemon 上补做：将使用独立临时目录（不位于用户素材目录）、专用命名 `cw-03-release-missing-probe-20260715.mp4`、release 标题含 `[CW-03验收探针]`，并仅删除刚创建的探针文件后重新扫描使其 `missing`，验证列表/编辑器/导出均保留该素材 ID 且导出为 `{ "id": "<probe-asset-id>", "availability": "missing" }`。
+- 已在独立临时目录创建专用命名 `cw-03-release-missing-probe-20260715.mp4`，录入时为 `available`。
+- 已创建标题含 `[CW-03验收探针]` 的独立 release 引用该素材；随后仅删除该探针文件并完整重扫专用目录。
+- probe asset 已变为 `missing`；不涉及素材字段的 PATCH 成功并保留原 asset ID；export 返回 `{ "id": "creator-media:b6379893-e606-47d4-9e34-c679ac66f9f4", "availability": "missing" }`。
+- 探针文件已删除；保留明确命名的探针媒体索引与 release 记录，原因是现有 API 没有安全删除媒体索引的端点，未手工修改 JSON。
 
 ## 自动化回归（第 5 节）
 
@@ -87,7 +84,7 @@
 
 ## 明确声明
 
-- 未修改任何用户原始素材（未读取、未编辑、未移动、未删除用户素材正文或二进制）。
+- 未修改任何用户原始素材（未读取、未编辑、未移动、未删除用户素材正文或二进制）；仅创建并删除专用临时 probe 文件。
 - 未调用任何平台登录、上传、自动发布或第三方写 API。
 - 未创建替代验收项目、未伪造验收结论。
 - 未 merge、push、rebase、reset 本分支，未删除 worktree 或分支。
@@ -95,4 +92,4 @@
 
 ## 后续建议
 
-在 daemon 实际运行的桌面/服务环境中，于同样的数据目录下重跑本验收（第 2、3、4 节）即可解除 BLOCKED；第 5 节自动化回归已通过，可独立作为合并前门禁。
+CW-03 的真实验收与自动化回归均已完成。保留的 `[CW-03验收]` 与 `[CW-03验收探针]` 记录可作为后续人工复核依据。
