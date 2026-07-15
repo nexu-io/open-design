@@ -501,6 +501,10 @@ function AppInner() {
   // so they don't race ahead of the daemon-stored choice and overwrite it
   // with a freshly picked first-available agent.
   const [daemonConfigLoaded, setDaemonConfigLoaded] = useState(false);
+  // True only when GET /api/app-config returned a real config object. Used to
+  // gate silent-update default seeding: a failed/null fetch must not be treated
+  // as "no preference yet" or we would overwrite a daemon-backed opt-out.
+  const [daemonAppConfigReady, setDaemonAppConfigReady] = useState(false);
   // Narrower flag dedicated to the Composio API key hydration. The key is
   // persisted by the daemon (and only reflected back via apiKeyConfigured
   // + apiKeyTail), so after a dev-server restart there is a window where
@@ -882,6 +886,7 @@ function AppInner() {
         setProjectsLoading(false);
         setPromptTemplatesLoading(false);
         setDaemonConfigLoaded(true);
+        setDaemonAppConfigReady(false);
         // Composio hydration also depends on the daemon. With no daemon
         // we just keep whatever localStorage already held; drop the
         // skeleton so the Settings → Connectors input reflects state.
@@ -1054,10 +1059,12 @@ function AppInner() {
           navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
         }
         setDaemonConfigLoaded(true);
+        // Only a non-null GET payload means we actually observed daemon prefs.
+        setDaemonAppConfigReady(daemonConfig != null);
         // Composio key hydration is part of this same daemon-config
         // fetch — by the time we land here the daemon has either
         // returned the saved-key shape (apiKeyConfigured + tail) or
-        // it errored and we kept whatever localStorage held. Either
+        // it errored and we kept whatever localStorage already held. Either
         // way it is safe to drop the skeleton.
         setComposioConfigLoading(false);
       });
@@ -1204,6 +1211,25 @@ function AppInner() {
       return merged;
     });
     return result.providers;
+  }, []);
+
+  /**
+   * Non-optimistic write for the daemon-owned silent-update preference.
+   * Unlike handleConfigPersist (which setConfig before awaiting the daemon),
+   * this only commits app-wide state after /api/app-config succeeds, so a
+   * failed save cannot leave Settings / remounted popups on the rejected value.
+   */
+  const handleSilentUpdatePreferenceChange = useCallback(async (allowSilentUpdates: boolean) => {
+    const next: AppConfig = {
+      ...latestPersistedConfigRef.current,
+      allowSilentUpdates,
+    };
+    await syncConfigToDaemon(next, { throwOnError: true });
+    latestPersistedConfigRef.current = next;
+    setConfig((prev) => ({ ...prev, allowSilentUpdates }));
+    // saveConfig strips daemon-owned keys from localStorage; in-memory config
+    // still carries allowSilentUpdates for the rest of the session.
+    saveConfig(next);
   }, []);
 
   /**
@@ -2464,7 +2490,8 @@ function AppInner() {
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
         onConfigPersist={handleConfigPersist}
-        daemonConfigLoaded={daemonConfigLoaded}
+        daemonAppConfigReady={daemonAppConfigReady}
+        onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
         onSkillsRefresh={refreshSkills}
         onSkillsChanged={handleSkillsChanged}
         onRefreshAgents={refreshAgents}

@@ -388,8 +388,10 @@ interface Props {
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
-  /** True after daemon app-config has been fetched (daemon-owned prefs are trustworthy). */
-  daemonConfigLoaded?: boolean;
+  /** True only when GET /api/app-config returned a real config object. */
+  daemonAppConfigReady?: boolean;
+  /** Non-optimistic daemon write for the silent-update preference. */
+  onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
   onSkillsRefresh?: () => Promise<void> | void;
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
@@ -506,7 +508,8 @@ export function EntryShell({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
-  daemonConfigLoaded = false,
+  daemonAppConfigReady = false,
+  onSilentUpdatePreferenceChange,
   onSkillsRefresh,
   onSkillsChanged,
   onRefreshAgents,
@@ -1067,9 +1070,10 @@ export function EntryShell({
             </div>
             <UpdaterPopup
               allowSilentUpdates={config.allowSilentUpdates}
-              silentUpdatePreferenceReady={daemonConfigLoaded}
-              onAllowSilentUpdatesChange={(allowSilentUpdates) =>
-                onConfigPersist({ ...config, allowSilentUpdates })
+              silentUpdatePreferenceReady={daemonAppConfigReady}
+              onAllowSilentUpdatesChange={
+                onSilentUpdatePreferenceChange
+                  ?? ((allowSilentUpdates) => onConfigPersist({ ...config, allowSilentUpdates }))
               }
             />
             <WhatsNewPopup active={view === 'home'} />

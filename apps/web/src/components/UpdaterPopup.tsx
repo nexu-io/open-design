@@ -94,6 +94,18 @@ export function UpdaterPopup({
   const [allowSilentUpdatesChecked, setAllowSilentUpdatesChecked] = useState(() => allowSilentUpdates ?? true);
   const [silentUpdatesPersistError, setSilentUpdatesPersistError] = useState<string | null>(null);
   const [silentUpdatesPersisting, setSilentUpdatesPersisting] = useState(false);
+  // Seed bookkeeping must outlive effect dependency churn: a successful
+  // parent setConfig(true) re-runs the seed effect mid-flight; we must not
+  // cancel the in-flight finally (that stranded the checkbox disabled).
+  const seedInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const clearHandoffWatchdog = useCallback(() => {
     if (handoffWatchdogRef.current == null) return;
@@ -119,40 +131,38 @@ export function UpdaterPopup({
 
   useEffect(() => {
     if (installState !== 'idle') return;
-    // Until daemon config is hydrated, undefined may still mean "loading a
-    // saved false" — keep the optimistic default only for display, and let
-    // the explicit prop win once it arrives.
+    // Until a successful daemon GET has landed, undefined may still mean
+    // "loading a saved false" — keep the optimistic default only for display.
     if (!silentUpdatePreferenceReady && allowSilentUpdates === undefined) return;
     setAllowSilentUpdatesChecked(allowSilentUpdates ?? true);
     setSilentUpdatesPersistError(null);
   }, [allowSilentUpdates, installState, silentUpdatePreferenceReady]);
 
-  // Prompt show-up seed: only after daemon config has loaded. If the
-  // preference is still undefined then, write the default (true) once.
-  // Already-persisted true/false is only read — reopening must not clobber
-  // a user opt-out that was temporarily invisible during hydration.
+  // Prompt show-up seed: only after a *successful* daemon config fetch.
+  // If the preference is still undefined then, write the default (true) once.
+  // Bookkeeping uses a ref so a successful parent re-render mid-flight does
+  // not cancel clearing `silentUpdatesPersisting`.
   useEffect(() => {
     if (!panelOpen) return;
     if (!silentUpdatePreferenceReady) return;
     if (allowSilentUpdates !== undefined) return;
     if (onAllowSilentUpdatesChange == null) return;
-    let cancelled = false;
+    if (seedInFlightRef.current) return;
+
+    seedInFlightRef.current = true;
     setAllowSilentUpdatesChecked(true);
     setSilentUpdatesPersistError(null);
     setSilentUpdatesPersisting(true);
     void Promise.resolve(onAllowSilentUpdatesChange(true))
       .catch(() => {
-        if (cancelled) return;
-        // Seed failed: leave checkbox true for this session's UI default, but
-        // surface that it was not saved so the user is not misled.
+        if (!mountedRef.current) return;
         setSilentUpdatesPersistError(t('settings.autosaveError'));
       })
       .finally(() => {
-        if (!cancelled) setSilentUpdatesPersisting(false);
+        seedInFlightRef.current = false;
+        if (!mountedRef.current) return;
+        setSilentUpdatesPersisting(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [
     allowSilentUpdates,
     onAllowSilentUpdatesChange,
@@ -169,12 +179,15 @@ export function UpdaterPopup({
       if (onAllowSilentUpdatesChange == null) return;
       setSilentUpdatesPersisting(true);
       try {
+        // Parent must be non-optimistic for this daemon-owned key: only
+        // commit app-wide config after the daemon write succeeds.
         await onAllowSilentUpdatesChange(next);
       } catch {
+        if (!mountedRef.current) return;
         setAllowSilentUpdatesChecked(previous);
         setSilentUpdatesPersistError(t('settings.autosaveError'));
       } finally {
-        setSilentUpdatesPersisting(false);
+        if (mountedRef.current) setSilentUpdatesPersisting(false);
       }
     },
     [allowSilentUpdatesChecked, onAllowSilentUpdatesChange, t],

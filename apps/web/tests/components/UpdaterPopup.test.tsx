@@ -180,7 +180,7 @@ describe('UpdaterPopup', () => {
     expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并自动重启。')).toBeTruthy();
   });
 
-  it('seeds the default silent-update preference only after daemon config is ready', async () => {
+  it('seeds the default silent-update preference only after a successful daemon GET', async () => {
     const persistSilentUpdates = vi.fn(async () => undefined);
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -196,7 +196,7 @@ describe('UpdaterPopup', () => {
 
     fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(true);
-    // Before hydration, undefined must not be treated as "no preference".
+    // Before a successful GET, undefined must not be treated as "no preference".
     expect(persistSilentUpdates).not.toHaveBeenCalled();
 
     view.rerender(
@@ -206,6 +206,32 @@ describe('UpdaterPopup', () => {
       />,
     );
     await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(true));
+  });
+
+  it('does not seed when daemon GET failed (ready=false) even if bootstrap finished', async () => {
+    const persistSilentUpdates = vi.fn(async () => undefined);
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(
+      <UpdaterPopup
+        // Bootstrap completed but GET returned null — must not seed over a
+        // daemon-backed opt-out we never successfully read.
+        silentUpdatePreferenceReady={false}
+        onAllowSilentUpdatesChange={persistSilentUpdates}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(persistSilentUpdates).not.toHaveBeenCalled();
   });
 
   it('does not seed true over a daemon opt-out that was temporarily undefined during hydration', async () => {
@@ -239,10 +265,59 @@ describe('UpdaterPopup', () => {
     expect(persistSilentUpdates).not.toHaveBeenCalled();
   });
 
-  it('persists silent-update toggles immediately and reverts when the save fails', async () => {
-    const persistSilentUpdates = vi.fn((value: boolean) => {
-      if (value === true) return Promise.reject(new Error('daemon offline'));
-      return Promise.resolve();
+  it('re-enables the checkbox after seed when the parent re-renders with the saved true', async () => {
+    let resolveSave: (() => void) | null = null;
+    const persistSilentUpdates = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    const view = render(
+      <UpdaterPopup
+        silentUpdatePreferenceReady
+        onAllowSilentUpdatesChange={persistSilentUpdates}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    await waitFor(() => expect(persistSilentUpdates).toHaveBeenCalledWith(true));
+    const checkbox = screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement;
+    expect(checkbox.disabled).toBe(true);
+
+    // Real parent shape: config updates mid-flight when the write is accepted.
+    view.rerender(
+      <UpdaterPopup
+        allowSilentUpdates={true}
+        silentUpdatePreferenceReady
+        onAllowSilentUpdatesChange={persistSilentUpdates}
+      />,
+    );
+
+    await act(async () => {
+      resolveSave?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).disabled).toBe(false);
+    });
+    expect(screen.queryByTestId('updater-silent-update-error')).toBeNull();
+  });
+
+  it('persists silent-update toggles immediately and reverts when the non-optimistic save fails', async () => {
+    // Parent-shaped: only mutate app config after the daemon write succeeds.
+    let appConfig: { allowSilentUpdates?: boolean } = { allowSilentUpdates: false };
+    const persistSilentUpdates = vi.fn(async (value: boolean) => {
+      await Promise.reject(new Error('daemon offline'));
+      appConfig = { allowSilentUpdates: value };
     });
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -254,7 +329,7 @@ describe('UpdaterPopup', () => {
 
     render(
       <UpdaterPopup
-        allowSilentUpdates={false}
+        allowSilentUpdates={appConfig.allowSilentUpdates}
         silentUpdatePreferenceReady
         onAllowSilentUpdatesChange={persistSilentUpdates}
       />,
@@ -273,6 +348,8 @@ describe('UpdaterPopup', () => {
       expect((screen.getByTestId('updater-silent-update-checkbox') as HTMLInputElement).checked).toBe(false);
     });
     expect(screen.getByTestId('updater-silent-update-error')).toBeTruthy();
+    // App-wide config must not keep the rejected value.
+    expect(appConfig.allowSilentUpdates).toBe(false);
   });
 
   it('renders an explicit disabled silent update preference as unchecked', async () => {
