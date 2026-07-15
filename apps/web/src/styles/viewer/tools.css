@@ -544,12 +544,19 @@
   right: 0;
   z-index: var(--viewer-action-menu-z);
   /* #5663: was 168px, which wrapped the first option's helper copy
-     ("Speaker notes in popup window" / "演讲者备注会在弹窗中打开") onto
-     a second line and made the menu feel cramped. Widened so the longest
-     localized helper stays on one line at the base 12px font; the
-     present-menu-copy column can still grow beyond this minimum if a
-     future localization needs more room. */
-  min-width: 260px;
+     (e.g. "Speaker notes in popup window" / "演讲者备注会在弹窗中打开" /
+     "Notes de présentation dans une fenêtre popup" /
+     "Заметки докладчика во всплывающем окне") onto a second line and made
+     the menu feel cramped. Instead of a hardcoded pixel width that has to
+     be re-tuned for every locale, the menu now sizes to its content
+     (`width: max-content`) so the longest localized helper stays on one
+     line, clamped to a viewport-relative max so a runaway translation
+     cannot push the popover off-screen. The hint `<small>` is also pinned
+     to `white-space: nowrap` so the one-line guarantee holds even when
+     the column itself is narrower than the hint. */
+  width: max-content;
+  min-width: min(220px, 80vw);
+  max-width: min(560px, 90vw);
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -590,6 +597,10 @@
   font-size: 11px;
   font-weight: 500;
   line-height: 1.2;
+  /* #5663: keep the localized helper on a single line; the parent
+     .present-menu uses width: max-content so the column grows to
+     fit this text instead of wrapping it. */
+  white-space: nowrap;
 }
 
 .share-menu { position: relative; display: inline-block; }
