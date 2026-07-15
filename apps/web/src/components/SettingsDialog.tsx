@@ -5710,8 +5710,12 @@ export function SettingsDialog({
                         try {
                           await onSilentUpdatePreferenceChange(allowSilentUpdates);
                           if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                          // Only advance the baseline for this daemon-owned field.
+                          // Spreading autosaveLatestRef would stamp any concurrent
+                          // draft (theme, accent, …) as already saved and let the
+                          // generic autosave skip a real onPersist for that edit.
                           autosaveLastSavedRef.current = {
-                            ...autosaveLatestRef.current,
+                            ...autosaveLastSavedRef.current,
                             allowSilentUpdates,
                           };
                           setAutosaveStatus('saved');

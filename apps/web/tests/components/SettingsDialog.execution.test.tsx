@@ -5173,6 +5173,66 @@ describe('SettingsDialog about interactions', () => {
     expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1);
   });
 
+  it('still autosaves an unrelated edit that lands during a silent-update save', async () => {
+    // Regression: success must only advance autosaveLastSavedRef for
+    // allowSilentUpdates. Spreading the whole latest draft would mark a
+    // concurrent theme (etc.) change as already saved and skip onPersist.
+    let resolveSave: (() => void) | null = null;
+    const onSilentUpdatePreferenceChange = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        allowSilentUpdates: false,
+        theme: 'light',
+        accentColor: '#2563eb',
+      },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    fireEvent.click(screen.getByTestId('settings-allow-silent-updates'));
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement).disabled,
+      ).toBe(true);
+    });
+    expect(onPersist).not.toHaveBeenCalled();
+
+    // Concurrent persisted edit while the silent-update request is in flight.
+    fireEvent.click(screen.getByRole('button', { name: /Appearance/i }));
+    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+
+    // Resolve silent-update AFTER the concurrent edit is in draft. The success
+    // path must not stamp this accent into autosaveLastSavedRef.
+    await act(async () => {
+      resolveSave?.();
+      await Promise.resolve();
+    });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#059669',
+      }),
+      {},
+    );
+  });
+
   it('does not read event.currentTarget inside the silent-updates setCfg updater', async () => {
     // Source invariant: functional updaters must not close over event.currentTarget
     // (null after the native/React event handler returns under pending lanes).
