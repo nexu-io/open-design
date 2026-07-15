@@ -605,7 +605,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog();
 
     for (const providerName of [
-      'SiliconFlow',
+      'SiliconFlow (CN)',
+      'SiliconFlow (Global)',
       'Alibaba Qwen',
       'Volcengine Ark',
       'Baidu Qianfan',
@@ -616,7 +617,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     }
 
     for (const untranslatedName of [
-      '硅基流动',
+      '硅基流动（中国）',
+      '硅基流动（全球）',
       '千问',
       '火山引擎',
       '百度千帆',
@@ -645,7 +647,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
 
     for (const providerName of [
-      '硅基流动',
+      '硅基流动（中国）',
+      '硅基流动（全球）',
       '千问',
       '火山引擎',
       '百度千帆',

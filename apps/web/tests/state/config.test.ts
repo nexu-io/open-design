@@ -5,6 +5,7 @@ import {
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
+  KNOWN_PROVIDERS,
   loadConfig,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
@@ -18,6 +19,27 @@ import type { AppConfig } from '../../src/types';
 
 const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
+
+describe('KNOWN_PROVIDERS', () => {
+  it('includes separate SiliconFlow CN and Global presets', () => {
+    expect(
+      KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('SiliconFlow')),
+    ).toEqual([
+      expect.objectContaining({
+        label: 'SiliconFlow (CN)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        model: 'deepseek-ai/DeepSeek-V3.1',
+      }),
+      expect.objectContaining({
+        label: 'SiliconFlow (Global)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.com/v1',
+        model: 'deepseek-ai/DeepSeek-V3.1',
+      }),
+    ]);
+  });
+});
 
 vi.stubGlobal('localStorage', {
   getItem: vi.fn((key: string) => store.get(key) ?? null),
@@ -883,6 +905,25 @@ describe('loadConfig', () => {
     expect(config.baseUrl).toBe('https://api.deepseek.com');
     expect(config.model).toBe('deepseek-chat');
     expect(config.apiProtocol).toBe('openai');
+    expect(config.configMigrationVersion).toBe(1);
+  });
+
+  it('migrates legacy SiliconFlow Global configs to the known OpenAI preset', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.siliconflow.com/v1',
+      model: 'deepseek-ai/DeepSeek-V3.1',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('openai');
+    expect(config.apiProviderBaseUrl).toBe('https://api.siliconflow.com/v1');
     expect(config.configMigrationVersion).toBe(1);
   });
 

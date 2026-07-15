@@ -390,7 +390,8 @@ export interface Dict {
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.providerPreset': string;
-  'settings.byokProviderSiliconFlow': string;
+  'settings.byokProviderSiliconFlowCn': string;
+  'settings.byokProviderSiliconFlowGlobal': string;
   'settings.byokProviderQwen': string;
   'settings.byokProviderVolcengine': string;
   'settings.byokProviderQianfan': string;

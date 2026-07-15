@@ -223,9 +223,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
-    label: 'SiliconFlow',
+    label: 'SiliconFlow (CN)',
     protocol: 'openai',
     baseUrl: 'https://api.siliconflow.cn/v1',
+    model: 'deepseek-ai/DeepSeek-V3.1',
+    models: [
+      'deepseek-ai/DeepSeek-V3.1',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    ],
+  },
+  {
+    label: 'SiliconFlow (Global)',
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.com/v1',
     model: 'deepseek-ai/DeepSeek-V3.1',
     models: [
       'deepseek-ai/DeepSeek-V3.1',

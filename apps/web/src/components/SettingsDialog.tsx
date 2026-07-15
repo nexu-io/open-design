@@ -2761,10 +2761,17 @@ export function SettingsDialog({
       model: '',
     },
     {
-      id: 'siliconflow',
-      title: t('settings.byokProviderSiliconFlow'),
+      id: 'siliconflow-cn',
+      title: t('settings.byokProviderSiliconFlowCn'),
       protocol: 'openai',
       baseUrl: 'https://api.siliconflow.cn/v1',
+      model: 'deepseek-ai/DeepSeek-V3.1',
+    },
+    {
+      id: 'siliconflow-global',
+      title: t('settings.byokProviderSiliconFlowGlobal'),
+      protocol: 'openai',
+      baseUrl: 'https://api.siliconflow.com/v1',
       model: 'deepseek-ai/DeepSeek-V3.1',
     },
     {
