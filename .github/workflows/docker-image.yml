@@ -98,14 +98,14 @@ jobs:
           # spec §15.1 tag scheme:
           #   - vX.Y.Z push             → :X.Y.Z + :latest
           #   - workflow_call (stable)  → :<release_version> + optional :latest
-          #   - PR / manual validate    → local-only sha tags (never pushed)
+          #   - PR / manual validate    → local-only sha tags (only when not publishing)
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=${{ inputs.release_version }},enable=${{ inputs.release_version != '' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ inputs.publish_latest == true }}
-            type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ github.event_name == 'pull_request' }}
-            type=sha,prefix=manual-sha-,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request' }}
+            type=sha,prefix=manual-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
 

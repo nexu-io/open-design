@@ -361,6 +361,11 @@ describe("packaged smoke workflow", () => {
     expect(dockerMode).toContain('[ -n "${RELEASE_VERSION:-}" ]');
     // Shell condition must not treat literal workflow_call as the publish signal.
     expect(dockerMode).not.toMatch(/\[\s*"\$EVENT_NAME"\s*=\s*"workflow_call"\s*\]/);
+    // Smoke-only sha tags must be disabled whenever publish mode is true (release
+    // callers are workflow_dispatch with release_version, and would otherwise push
+    // manual-sha-* alongside the real version tags).
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request'");
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch'");
     expect(commentWorkflow).toContain("workflows: [ci]");
     // comment.atom consumes merge_group runs too, so the needs-validation gate can surface a
     // queue-ejection notice on the PR; autofix/report stay pull_request-only trusted consumers.
