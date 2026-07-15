@@ -543,7 +543,13 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: var(--viewer-action-menu-z);
-  min-width: 168px;
+  /* #5663: was 168px, which wrapped the first option's helper copy
+     ("Speaker notes in popup window" / "演讲者备注会在弹窗中打开") onto
+     a second line and made the menu feel cramped. Widened so the longest
+     localized helper stays on one line at the base 12px font; the
+     present-menu-copy column can still grow beyond this minimum if a
+     future localization needs more room. */
+  min-width: 260px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
