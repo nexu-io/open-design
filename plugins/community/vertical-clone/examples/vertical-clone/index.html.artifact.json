@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "generated-plugin/examples/vertical-clone/index.html",
+  "entry": "generated-plugin/examples/vertical-clone/index.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-07-14T23:45:36.863Z",
+  "updatedAt": "2026-07-14T23:45:36.863Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}
