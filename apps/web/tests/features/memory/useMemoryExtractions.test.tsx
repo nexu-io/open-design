@@ -459,6 +459,30 @@ describe('useMemoryExtractions — load + derived', () => {
     expect(result.current.extractions.find((row) => row.id === 'a')?.phase).toBe('success');
   });
 
+  it('uses a confirmed terminal phase when a reload started before a same-id running SSE frame', async () => {
+    let resolveFetch!: (rows: MemoryExtractionRecord[]) => void;
+    const fetchPromise = new Promise<MemoryExtractionRecord[]>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const port = makePort({ fetchExtractions: vi.fn(() => fetchPromise) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+
+    let reloading!: Promise<MemoryExtractionRecord[]>;
+    act(() => {
+      reloading = result.current.reloadExtractions();
+    });
+    // The stream reaches the client while the GET is in flight, but the GET's
+    // server snapshot is already terminal and therefore more progressed.
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'running' })));
+
+    await act(async () => {
+      resolveFetch([record('a', { phase: 'success', finishedAt: 2_000 })]);
+      await reloading;
+    });
+
+    expect(result.current.extractions.find((row) => row.id === 'a')?.phase).toBe('success');
+  });
+
   it('shows the no-provider banner only for the latest skipped/no-provider record', async () => {
     const port = makePort();
     const { result } = renderHook(() => useMemoryExtractions(port));
@@ -529,6 +553,54 @@ describe('useMemoryExtractions — delete + clear', () => {
 
     expect(port.deleteExtraction).toHaveBeenCalledWith('a');
     expect(result.current.extractions.map((r) => r.id)).toEqual(['b']);
+  });
+
+  it('does not resurrect a confirmed delete when a delayed phase frame for that id arrives', async () => {
+    const port = makePort({ deleteExtraction: vi.fn(async () => true) });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'running' })));
+
+    await act(async () => {
+      await result.current.onDeleteExtraction('a');
+    });
+    act(() => result.current.applyExtractionEvent(record('a', {
+      phase: 'success',
+      finishedAt: 2_000,
+    })));
+
+    expect(result.current.extractions.map((row) => row.id)).not.toContain('a');
+  });
+
+  it('keeps a running row hidden while its delete is pending, then restores its progressed phase after failure', async () => {
+    let resolveDelete!: (ok: boolean) => void;
+    const deletePromise = new Promise<boolean>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const port = makePort({
+      deleteExtraction: vi.fn(() => deletePromise),
+      fetchExtractions: vi.fn(async () => [record('a', {
+        phase: 'success',
+        finishedAt: 2_000,
+      })]),
+    });
+    const { result } = renderHook(() => useMemoryExtractions(port));
+    act(() => result.current.applyExtractionEvent(record('a', { phase: 'running' })));
+
+    let deletion!: Promise<void>;
+    act(() => {
+      deletion = result.current.onDeleteExtraction('a');
+    });
+    act(() => result.current.applyExtractionEvent(record('a', {
+      phase: 'success',
+      finishedAt: 2_000,
+    })));
+    expect(result.current.extractions).toEqual([]);
+
+    await act(async () => {
+      resolveDelete(false);
+      await deletion;
+    });
+    expect(result.current.extractions.find((row) => row.id === 'a')?.phase).toBe('success');
   });
 
   it('does not let a racing reloadExtractions() resurrect a row whose delete already succeeded, before the SSE echo arrives', async () => {

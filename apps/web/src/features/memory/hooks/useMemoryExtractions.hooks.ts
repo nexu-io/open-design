@@ -11,6 +11,46 @@ import type {
 import { memoryExtractionsPort } from '../dependencies';
 import type { MemoryExtractionsPort } from '../ports';
 
+function phaseProgress(phase: MemoryExtractionRecord['phase']): number {
+  // A record only moves from running to one terminal result.  The terminal
+  // results do not have an ordering among themselves, but all are more
+  // authoritative than running regardless of which transport reached the
+  // browser last.
+  return phase === 'running' ? 0 : 1;
+}
+
+/**
+ * Resolve two versions of the same persisted attempt without using browser
+ * reception order. Terminal phase progression is authoritative; when both
+ * sides are terminal, the completion timestamp breaks a real tie. Equivalent
+ * records are merged so a confirmed read can fill fields an earlier stream
+ * frame did not yet contain without erasing fields it omitted.
+ */
+function reconcileExtractionRecord(
+  local: MemoryExtractionRecord,
+  confirmed: MemoryExtractionRecord,
+): MemoryExtractionRecord {
+  const localProgress = phaseProgress(local.phase);
+  const confirmedProgress = phaseProgress(confirmed.phase);
+  if (confirmedProgress > localProgress) return confirmed;
+  if (confirmedProgress < localProgress) return local;
+
+  const localFinishedAt = local.finishedAt ?? Number.NEGATIVE_INFINITY;
+  const confirmedFinishedAt = confirmed.finishedAt ?? Number.NEGATIVE_INFINITY;
+  if (confirmedFinishedAt > localFinishedAt) return confirmed;
+  if (confirmedFinishedAt < localFinishedAt) return local;
+
+  // `id` identifies one attempt, so `startedAt` should normally be equal.
+  // Still, prefer the later source if malformed/legacy data disagrees.
+  if (confirmed.startedAt > local.startedAt) return confirmed;
+  if (confirmed.startedAt < local.startedAt) return local;
+  // A real attempt never changes from one terminal result to another. If
+  // legacy/malformed payloads disagree without a timestamp that orders them,
+  // retain the existing value rather than making reception order decide.
+  if (confirmed.phase !== local.phase) return local;
+  return { ...local, ...confirmed };
+}
+
 export interface MemoryExtractionsController {
   /** Non-null when the extraction-history read failed. */
   loadError?: string | null;
@@ -46,6 +86,10 @@ export function useMemoryExtractions(
   // Set's single membership means the first call to settle would delete the
   // key out from under the second, still-in-flight call.
   const pendingDeletionCounts = useRef(new Map<string, number>());
+  // A running extraction is user-deletable. Buffer phase frames for an id
+  // while its delete is pending so they cannot visibly undo the optimistic
+  // removal, but replay the best one if that delete ultimately fails.
+  const deferredDeletionEvents = useRef(new Map<string, MemoryExtractionEvent>());
   const markPendingDeletion = useCallback((id: string) => {
     pendingDeletionCounts.current.set(id, (pendingDeletionCounts.current.get(id) ?? 0) + 1);
   }, []);
@@ -97,10 +141,7 @@ export function useMemoryExtractions(
               if (pending.has(row.id)) return false;
               const deletedAt = deletedAtRevisionRef.current.get(row.id);
               if (deletedAt !== undefined && deletedAt > sinceRevision) return false;
-              // Any row the live stream touched after the recovery read began
-              // is newer than the snapshot — keep the local copy, not the
-              // fetched one, so a phase transition never regresses.
-              return (rowRevisionRef.current.get(row.id) ?? 0) <= sinceRevision;
+              return true;
             });
       const acceptedById = new Map(accepted.map((row) => [row.id, row] as const));
       const revision = updateExtractions((current) => {
@@ -133,7 +174,10 @@ export function useMemoryExtractions(
             if (confirmedIds.has(row.id)) return true;
             return rowRevision > sinceRevision;
           })
-          .map((row) => acceptedById.get(row.id) ?? row);
+          .map((row) => {
+            const confirmedRow = acceptedById.get(row.id);
+            return confirmedRow ? reconcileExtractionRecord(row, confirmedRow) : row;
+          });
         const survivorIds = new Set(survivors.map((row) => row.id));
         const merged = [...survivors];
         for (const row of accepted) {
@@ -201,12 +245,26 @@ export function useMemoryExtractions(
     // from the buffer, either by the per-row delete button or the "Clear"
     // affordance at the top.
     if (ev.phase === 'cleared') {
+      deferredDeletionEvents.current.clear();
       clearedAtRevisionRef.current = updateExtractions([]);
       return;
     }
     if (ev.phase === 'deleted') {
+      deferredDeletionEvents.current.delete(ev.id);
       const revision = updateExtractions((prev) => prev.filter((r) => r.id !== ev.id));
       deletedAtRevisionRef.current.set(ev.id, revision);
+      return;
+    }
+    // Once an id has been confirmed deleted, it can never be reintroduced:
+    // ids are attempt UUIDs. A delayed frame on the SSE connection may have
+    // been emitted before the DELETE response won the fetch race.
+    if (deletedAtRevisionRef.current.has(ev.id)) return;
+    if (pendingDeletionCounts.current.has(ev.id)) {
+      const deferred = deferredDeletionEvents.current.get(ev.id);
+      deferredDeletionEvents.current.set(
+        ev.id,
+        deferred ? reconcileExtractionRecord(deferred, ev) : ev,
+      );
       return;
     }
     // Merge by id: phase transitions for an in-flight attempt collapse onto a
@@ -216,7 +274,7 @@ export function useMemoryExtractions(
       const existing = prev.findIndex((r) => r.id === ev.id);
       if (existing >= 0) {
         const next = prev.slice();
-        next[existing] = ev;
+        next[existing] = reconcileExtractionRecord(next[existing]!, ev);
         return next;
       }
       return [ev, ...prev].slice(0, 30);
@@ -248,6 +306,11 @@ export function useMemoryExtractions(
       }
       if (!ok) {
         unmarkPendingDeletion(id);
+        if (!pendingDeletionCounts.current.has(id)) {
+          const deferred = deferredDeletionEvents.current.get(id);
+          deferredDeletionEvents.current.delete(id);
+          if (deferred) applyExtractionEvent(deferred);
+        }
         try {
           const confirmed = await port.fetchExtractions();
           reconcileConfirmedExtractions(confirmed, optimisticRevision);
@@ -260,6 +323,9 @@ export function useMemoryExtractions(
         }
       } else {
         unmarkPendingDeletion(id);
+        if (!pendingDeletionCounts.current.has(id)) {
+          deferredDeletionEvents.current.delete(id);
+        }
         // Re-assert the removal against whatever the array actually holds
         // right now, rather than trusting the optimistic removal is still
         // intact: a concurrent mutation's OWN recovery reconciliation can run
@@ -282,7 +348,14 @@ export function useMemoryExtractions(
         deletedAtRevisionRef.current.set(id, revision);
       }
     },
-    [port, reconcileConfirmedExtractions, updateExtractions, markPendingDeletion, unmarkPendingDeletion],
+    [
+      port,
+      reconcileConfirmedExtractions,
+      updateExtractions,
+      markPendingDeletion,
+      unmarkPendingDeletion,
+      applyExtractionEvent,
+    ],
   );
 
   const clearExtractions = useCallback(async () => {
