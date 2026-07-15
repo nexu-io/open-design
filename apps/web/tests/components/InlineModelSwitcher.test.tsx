@@ -704,7 +704,11 @@ describe('InlineModelSwitcher AMR row', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip).toHaveTextContent('Tenant gateway');
+    expect(chip).not.toHaveTextContent('BYOK');
+
+    fireEvent.click(chip);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith({

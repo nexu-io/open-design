@@ -669,10 +669,13 @@ export function InlineModelSwitcher({
 
   // Chip text — keep it tight so the pill doesn't wrap on small viewports.
   // CLI: "Claude · Sonnet 4.5"; BYOK: "Anthropic · sonnet-4.5".
+  // Deployment mode is API execution without browser-held BYOK credentials.
   const chipMode =
     config.mode === 'daemon'
       ? t('inlineSwitcher.chipCli')
-      : t('inlineSwitcher.chipByok');
+      : credentialSource === 'deployment'
+        ? deploymentProviderConfig?.label?.trim() || 'Deployment'
+        : t('inlineSwitcher.chipByok');
   const chipPrimary =
     config.mode === 'daemon'
       ? currentAgent
