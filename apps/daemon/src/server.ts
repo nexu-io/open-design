@@ -524,6 +524,7 @@ import { registerCreatorWorkbenchRoutes } from './routes/creator-workbench.js';
 import { registerCreatorMediaRoutes } from './routes/creator-media.js';
 import { registerCreatorContentRoutes } from './routes/creator-content.js';
 import { registerCreatorReleaseRoutes } from './routes/creator-release.js';
+import { registerCreatorPerformanceRoutes } from './routes/creator-performance.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -3761,6 +3762,11 @@ export async function startServer({
     projectStore: { getProject },
   });
   registerCreatorReleaseRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    projectStore: { getProject },
+  });
+  registerCreatorPerformanceRoutes(app, {
     db,
     paths: { RUNTIME_DATA_DIR },
     projectStore: { getProject },
