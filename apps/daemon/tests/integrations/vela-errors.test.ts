@@ -56,6 +56,32 @@ describe('AMR account failure classification', () => {
     });
   });
 
+  it('classifies structured tier_model_not_entitled details as an upgrade-required AMR error', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      code: 'tier_model_not_entitled',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_TIER_UPGRADE_REQUIRED',
+      action: 'upgrade',
+    });
+    expect(failure?.message).toContain('does not include this model');
+  });
+
+  it('classifies structured tier_request_kind_not_entitled details as an upgrade-required AMR error', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      code: 'tier_request_kind_not_entitled',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_TIER_UPGRADE_REQUIRED',
+      action: 'upgrade',
+    });
+    expect(failure?.message).toContain('request type');
+  });
+
   it('does not classify unrelated structured ACP details as AMR balance errors', () => {
     expect(classifyAmrAccountFailureDetails({
       kind: 'opencode_prompt_error',
@@ -106,6 +132,26 @@ describe('AMR account failure classification', () => {
     expect(failure).toMatchObject({
       code: 'AMR_AUTH_REQUIRED',
       action: 'relogin',
+    });
+  });
+
+  it('classifies raw tier entitlement error codes into user-friendly upgrade copy', () => {
+    expect(
+      classifyAmrAccountFailure(
+        'HTTP 403 [code=tier_model_not_entitled] model access denied for current tier',
+      ),
+    ).toMatchObject({
+      code: 'AMR_TIER_UPGRADE_REQUIRED',
+      action: 'upgrade',
+    });
+
+    expect(
+      classifyAmrAccountFailure(
+        'HTTP 403 [code=tier_request_kind_not_entitled] image generation is not allowed for current tier',
+      ),
+    ).toMatchObject({
+      code: 'AMR_TIER_UPGRADE_REQUIRED',
+      action: 'upgrade',
     });
   });
 

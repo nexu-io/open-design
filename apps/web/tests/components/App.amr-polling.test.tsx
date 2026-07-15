@@ -272,6 +272,45 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
   });
 
+  it('refreshes AMR status and model catalog when returning from an external upgrade flow', async () => {
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'locked-model', label: 'locked-model', enabled: false }],
+      })
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'unlocked-model', label: 'unlocked-model', enabled: true }],
+      });
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      user: null,
+      configPath: '/tmp/amr-config.json',
+      account: { plan: 'pro' },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('locked-model');
+    });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => {
+      expect(mockedFetchVelaLoginStatus).toHaveBeenCalledWith({ refresh: true });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('unlocked-model');
+    });
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+  });
+
   it('starts AMR preset polling before the agent probe resolves', { timeout: 10_000 }, async () => {
     let resolveAgents!: (value: Array<{
       id: string;

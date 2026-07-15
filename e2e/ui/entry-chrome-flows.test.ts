@@ -1,9 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request } from '@playwright/test';
 import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
-const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
+const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
+const WEBGL_AURORA_PREVIEW_HTML = readFileSync(
+  new URL('../../plugins/_official/examples/webgl-aurora-veil/example.html', import.meta.url),
+  'utf8',
+);
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
   title: 'Localized Plugin',
@@ -214,6 +219,120 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
+});
+
+test('[P1] onboarding recommendation creates a project with prefilled first prompt context', async ({ page }) => {
+  const createdBodies: Array<Record<string, unknown>> = [];
+  const runBodies: Array<Record<string, unknown>> = [];
+  const projectId = `onboarding-recommendation-${Date.now()}`;
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: false,
+        agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
+      }),
+    );
+  }, STORAGE_KEY);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: false,
+            agentId: 'mock',
+            skillId: null,
+            designSystemId: null,
+            agentModels: {},
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    createdBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      json: {
+        project: {
+          id: projectId,
+          name: 'Product UI Prototype',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          pendingPrompt: createdBodies[0]?.pendingPrompt,
+          metadata: createdBodies[0]?.metadata ?? { kind: 'prototype' },
+        },
+        conversationId: `${projectId}-conversation`,
+      },
+    });
+  });
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    runBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"recommendation-should-not-auto-send"}',
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /Engineer$/i }).click();
+  await page.getByRole('button', { name: /Product design/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: 'Go to home' }).click();
+
+  await expect(page.getByTestId('home-recommendation')).toBeVisible();
+  await page.getByTestId('home-recommendation-start').click();
+
+  await expect.poll(() => createdBodies.length).toBe(1);
+  const body = createdBodies[0] as {
+    pendingPrompt?: string;
+    metadata?: { kind?: string };
+  };
+  expect(body.pendingPrompt ?? '').toContain('product');
+  expect(typeof body.metadata?.kind).toBe('string');
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+  await expect
+    .poll(() => page.evaluate((id) => window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`), projectId))
+    .toContain('product_ui_prototype');
+  const firstLoopEntry = await page.evaluate((id) => {
+    const raw = window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`);
+    return raw ? JSON.parse(raw) as { recommendationId?: string; productType?: string } : null;
+  }, projectId);
+  expect(firstLoopEntry).toMatchObject({
+    productType: 'product_ui',
+    recommendationId: 'product_ui_prototype',
+  });
+  await page.waitForTimeout(500);
+  expect(runBodies).toHaveLength(0);
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
@@ -1207,6 +1326,242 @@ test('[P2] home starters html details modal exposes header actions and closes fr
 
   await dialog.locator('.ds-modal-close').click();
   await expect(dialog).toHaveCount(0);
+});
+
+test('[P1] home starters WebGL example previews render real canvas output', async ({ page }) => {
+  const webglPlugins = [
+    makeStarterPlugin({
+      id: 'example-webgl-aurora-veil',
+      title: 'WebGL Aurora Veil',
+      description: 'Pure shader WebGL example.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl2', 'powered-preview'],
+      previewEntry: './example.html',
+    }),
+    makeStarterPlugin({
+      id: 'example-webgl-depth-gallery',
+      title: 'WebGL Depth Gallery',
+      description: 'Asset gallery WebGL example.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl2', 'gallery', 'powered-preview'],
+      previewEntry: './example.html',
+    }),
+  ];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: webglPlugins } });
+  });
+  for (const plugin of webglPlugins) {
+    await page.route(`**/api/plugins/${plugin.id}/preview`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+        body: webglCanvasPreview(plugin.title),
+      });
+    });
+  }
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+
+  for (const plugin of webglPlugins) {
+    const card = home.locator(`article.plugins-home__card[data-plugin-id="${plugin.id}"]`);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: new RegExp(`View details for ${plugin.title}`, 'i') }).click();
+
+    const dialog = page.getByRole('dialog', { name: new RegExp(`${plugin.title} preview`, 'i') });
+    await expect(dialog).toBeVisible();
+    const frame = dialog.frameLocator(`iframe[title^="${plugin.title}"]`);
+    await expect(frame.locator('canvas#scene')).toBeVisible();
+    await expect.poll(async () => frame.locator('canvas#scene').evaluate((canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+      const { data } = ctx.getImageData(0, 0, 16, 16);
+      return Array.from(data).some((value, index) => index % 4 !== 3 && value > 0);
+    })).toBe(true);
+    await expect(frame.getByTestId('webgl-mode')).toContainText(/webgl2|2d-fallback/);
+    await expect(dialog).not.toContainText(/Couldn't load|No preview/i);
+    await dialog.locator('.ds-modal-close').click();
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
+test('[P1] home starters WebGL example previews resize the real canvas backing store', async ({ page }) => {
+  await page.setViewportSize({ width: 1240, height: 720 });
+
+  const plugin = makeStarterPlugin({
+    id: 'example-webgl-aurora-veil',
+    title: 'Aurora Veil',
+    description: 'Pure shader WebGL example.',
+    mode: 'prototype',
+    featured: true,
+    tags: ['webgl2', 'powered-preview'],
+    previewEntry: './example.html',
+  });
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [plugin] } });
+  });
+  await page.route(`**/api/plugins/${plugin.id}/preview`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: WEBGL_AURORA_PREVIEW_HTML,
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  const card = home.locator(`article.plugins-home__card[data-plugin-id="${plugin.id}"]`);
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: /View details for Aurora Veil/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /Aurora Veil preview/i });
+  await expect(dialog).toBeVisible();
+  const canvas = dialog.frameLocator('iframe[title^="Aurora Veil"]').locator('canvas#gl');
+  await expect(canvas).toBeVisible();
+
+  await setPreviewFrameWidth(dialog, 640);
+  await expect.poll(async () => {
+    const metrics = await webglCanvasMetrics(canvas);
+    return metrics.cssWidth > 0 && metrics.cssWidth <= 660 && metrics.backingWidth >= metrics.cssWidth;
+  }).toBe(true);
+  const narrow = await webglCanvasMetrics(canvas);
+
+  await setPreviewFrameWidth(dialog, 980);
+  await expect.poll(async () => {
+    const metrics = await webglCanvasMetrics(canvas);
+    return metrics.cssWidth > narrow.cssWidth + 200 && metrics.backingWidth >= metrics.cssWidth;
+  }, { timeout: 10_000 }).toBe(true);
+});
+
+test('[P1] Community templates sort toggle switches to newest order and persists after reload', async ({ page }) => {
+  const hotVisual = {
+    ...makeStarterPlugin({
+      id: 'sort-hot-visual',
+      title: 'Sort Hot Visual',
+      description: 'Rich visual card that wins the hot ranking.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl', 'animation', 'gallery', 'prototype'],
+      previewEntry: './example.html',
+    }),
+    installedAt: 10,
+    updatedAt: 10,
+  };
+  const newestPlain = {
+    ...makeStarterPlugin({
+      id: 'sort-newest-plain',
+      title: 'Sort Newest Plain',
+      description: 'Plain recent template.',
+      mode: 'prototype',
+      tags: ['utility'],
+    }),
+    installedAt: 30,
+    updatedAt: 30,
+  };
+  const middlePlain = {
+    ...makeStarterPlugin({
+      id: 'sort-middle-plain',
+      title: 'Sort Middle Plain',
+      description: 'Middle recent template.',
+      mode: 'prototype',
+      tags: ['utility'],
+    }),
+    installedAt: 20,
+    updatedAt: 20,
+  };
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [hotVisual, middlePlain, newestPlain] } });
+  });
+  await page.route('**/api/plugins/sort-hot-visual/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><h1>Sort Hot Visual Preview</h1></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  let home = await revealHomeTemplates(page);
+  const cardIds = async () => home.locator('article.plugins-home__card').evaluateAll((cards) =>
+    cards.map((card) => card.getAttribute('data-plugin-id')),
+  );
+
+  await expect(home.getByTestId('plugins-home-sort-hot')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-hot-visual', 'sort-middle-plain', 'sort-newest-plain']);
+
+  await home.getByTestId('plugins-home-sort-newest').click();
+  await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await gotoEntryHome(page);
+  home = await revealHomeTemplates(page);
+  await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
+});
+
+test('[P1] home starters html details sidebar handle stays clickable after info pane scroll', async ({ page }) => {
+  const htmlPlugin = makeStarterPlugin({
+    id: 'html-scroll-sidebar-plugin',
+    title: 'HTML Scroll Sidebar Plugin',
+    description: 'A richly described HTML starter with enough metadata to scroll.',
+    mode: 'prototype',
+    featured: true,
+    query: 'Use the {{topic}} template.',
+    inputs: [{ name: 'topic', type: 'string', default: 'sidebar scroll' }],
+    previewEntry: './example.html',
+    tags: ['prototype', 'webgl', 'gallery', 'animation', 'landing-page', 'dashboard'],
+    authorName: 'Open Design',
+    context: {
+      skills: [{ path: './SKILL.md' }, { path: './QA.md' }],
+      assets: ['./example.html', './textures/noise.png', './textures/depth.png'],
+    },
+    pipeline: {
+      stages: [
+        { id: 'plan', atoms: ['outline', 'requirements'] },
+        { id: 'compose', atoms: ['layout', 'motion', 'handoff'] },
+        { id: 'verify', atoms: ['responsive', 'accessibility', 'export'] },
+      ],
+    },
+  });
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [htmlPlugin] } });
+  });
+  await page.route('**/api/plugins/html-scroll-sidebar-plugin/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main style="min-height:1800px"><h1>Scrollable Preview</h1></main></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  await home.locator('article.plugins-home__card[data-plugin-id="html-scroll-sidebar-plugin"]').click();
+
+  const dialog = page.getByRole('dialog', { name: /HTML Scroll Sidebar Plugin preview/i });
+  await expect(dialog).toBeVisible();
+  const expandHandle = dialog.locator('.ds-modal-stage-handle.is-expand');
+  await expect(expandHandle).toBeVisible();
+  await expandHandle.click();
+
+  const sidebar = dialog.locator('.ds-modal-sidebar');
+  await expect(sidebar).toBeVisible();
+  await sidebar.locator('.plugin-info-pane').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  const collapseHandle = dialog.locator('.ds-modal-stage-handle.is-collapse');
+  await expect(collapseHandle).toBeVisible();
+  await expect(collapseHandle).toBeInViewport();
+  await collapseHandle.click();
+  await expect(sidebar).toHaveCount(0);
+  await expect(dialog.locator('.ds-modal-stage-handle.is-expand')).toBeVisible();
 });
 
 test('[P2] home starters html details modal shows metadata links and supports copy query', async ({ page }) => {
@@ -2399,4 +2754,46 @@ function makeStarterPlugin({
       },
     },
   } as const;
+}
+
+function webglCanvasPreview(label: string): string {
+  return `<!doctype html>
+<html>
+  <body>
+    <canvas id="scene" width="64" height="64" aria-label="${label}"></canvas>
+    <p data-testid="webgl-mode"></p>
+    <script>
+      const canvas = document.getElementById('scene');
+      const gl = document.createElement('canvas').getContext('webgl2');
+      document.querySelector('[data-testid="webgl-mode"]').textContent = gl ? 'webgl2' : '2d-fallback';
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 64, 64);
+      gradient.addColorStop(0, '#14b8a6');
+      gradient.addColorStop(1, '#f97316');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(24, 24, 16, 16);
+    </script>
+  </body>
+</html>`;
+}
+
+async function webglCanvasMetrics(canvas: Locator) {
+  return canvas.evaluate((element: HTMLCanvasElement) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      backingWidth: element.width,
+      backingHeight: element.height,
+      cssWidth: Math.round(rect.width),
+      cssHeight: Math.round(rect.height),
+    };
+  });
+}
+
+async function setPreviewFrameWidth(dialog: Locator, width: number) {
+  await dialog.locator('.ds-modal-stage-iframe-scaler').evaluate((element: HTMLElement, nextWidth) => {
+    element.style.width = `${nextWidth}px`;
+    element.style.maxWidth = 'none';
+  }, width);
 }

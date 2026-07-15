@@ -40,6 +40,11 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
+import {
+  attachDesktopChildProcessCrashReporter,
+  reportDesktopObservabilityEvent,
+  reportPriorDesktopUncleanExits,
+} from "./observability.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
 import {
@@ -221,29 +226,6 @@ function resolveDaemonBaseUrl(
     }
     return baseUrl;
   };
-}
-
-// Best-effort POST of a desktop observability event (abnormal exit, child-process
-// crash) to the daemon's safety-event bridge — the same path desktop_renderer_crash
-// uses; the daemon relays it to PostHog with device_id = installationId. Never
-// throws: failing to report must not affect startup or shutdown.
-async function reportDesktopObservabilityEvent(
-  discoverBaseUrl: () => Promise<string>,
-  event: string,
-  properties: Record<string, unknown>,
-): Promise<boolean> {
-  try {
-    const baseUrl = await discoverBaseUrl();
-    const res = await fetch(new URL("/api/observability/event", baseUrl).toString(), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ event, properties }),
-    });
-    return res.ok;
-  } catch {
-    // best-effort observability, never a failure path
-    return false;
-  }
 }
 
 export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
@@ -885,33 +867,21 @@ export async function runDesktopMain(
     console.warn("[open-design desktop] prior session(s) ended abnormally (no clean shutdown)", {
       count: previousUncleanSessions.length,
     });
-    for (const crash of previousUncleanSessions) {
-      void reportDesktopObservabilityEvent(discoverDaemonBaseUrl, "desktop_unclean_exit", {
-        previous_version: crash.version,
-        previous_session_id: crash.sessionId,
-        previous_started_at: crash.startedAt,
-        current_version: app.getVersion(),
-      }).then((reported) => {
-        if (reported) clearReportedCrash({ stateFilePath: sessionStatePath }, crash.sessionId);
-      });
-    }
+    void reportPriorDesktopUncleanExits({
+      previousUncleanSessions,
+      currentVersion: app.getVersion(),
+      stateFilePath: sessionStatePath,
+      report: (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+      clearReported: clearReportedCrash,
+    });
   }
   // GPU / utility child-process crashes: the window keeps running but degraded
   // (a GPU-process crash is a common cause of a window that then goes blank or
   // vanishes), and the child can't report itself. `clean-exit` is normal teardown.
-  app.on("child-process-gone", (_event, details) => {
-    if (details.reason === "clean-exit") return;
-    console.error("[open-design desktop] child-process-gone", {
-      type: details.type,
-      reason: details.reason,
-      exitCode: details.exitCode,
-    });
-    void reportDesktopObservabilityEvent(discoverDaemonBaseUrl, "desktop_child_process_crash", {
-      process_type: details.type,
-      reason: details.reason,
-      exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
-    });
-  });
+  attachDesktopChildProcessCrashReporter(
+    app,
+    (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+  );
   disposeMenu = installDesktopMenu(runtime, options);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),

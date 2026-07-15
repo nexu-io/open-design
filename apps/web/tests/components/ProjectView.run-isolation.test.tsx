@@ -726,7 +726,7 @@ describe('ProjectView conversation run isolation', () => {
       status: 'available',
       profile: 'prod',
       user: null,
-      balanceUsd: '3.00',
+      balanceUsd: '1.20',
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,

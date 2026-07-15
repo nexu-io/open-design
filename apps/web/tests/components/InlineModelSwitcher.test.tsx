@@ -190,6 +190,32 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(chip.getAttribute('aria-label')).toMatch(/·/u);
   });
 
+  it('shows an explicit AMR default choice instead of the concrete catalog fallback', () => {
+    renderSwitcher(
+      {
+        agentId: 'amr',
+        agentModels: { amr: { model: 'default', reasoning: 'default' } },
+      },
+      [
+        {
+          ...amrAgent,
+          models: [
+            { id: 'kimi-k2.6', label: 'Kimi K2.6', default: true },
+            { id: 'glm-5.1', label: 'GLM 5.1' },
+          ],
+        },
+      ],
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip.getAttribute('aria-label')).toContain('Open Design');
+    expect(chip.getAttribute('aria-label')).toContain('default');
+    expect(chip.getAttribute('aria-label')).not.toContain('Kimi K2.6');
+
+    fireEvent.click(chip);
+    expect(screen.getByTestId('inline-model-switcher-agent-model')).toHaveTextContent('default');
+  });
+
   it('does not show the AMR reminder dot when AMR is already selected', () => {
     renderSwitcher({}, [amrAgent, codexAgent]);
 

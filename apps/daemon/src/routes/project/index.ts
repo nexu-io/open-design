@@ -31,6 +31,7 @@ import {
   deleteUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
+  propagateWorkspaceProjectRename,
 } from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
@@ -2122,6 +2123,31 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
+      }
+      if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
+        // Design-system workspace projects mirror their design system's
+        // title: the workspace ensure re-stamps the project name from the
+        // registry on every open, so a rename applied only to the project
+        // row silently reverts. Write the rename through to the design
+        // system so both records agree.
+        const existing = getProject(db, req.params.id);
+        if (existing) {
+          // Decide from the post-patch shape (updateProject merges the
+          // patch shallowly over the row), so a PATCH that also rebinds
+          // or detaches the design system only ever renames the system
+          // the project remains bound to after this request.
+          const propagation = await propagateWorkspaceProjectRename(
+            USER_DESIGN_SYSTEMS_DIR,
+            { ...existing, ...patch },
+            patch.name,
+          );
+          if (propagation === 'failed') {
+            return sendApiError(
+              res, 409, 'CONFLICT',
+              'rename could not be written through to the bound design system; project left unchanged',
+            );
+          }
+        }
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)

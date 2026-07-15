@@ -844,9 +844,10 @@ export interface VelaLoginStatus {
 //   POST /api/integrations/vela/login/cancel — terminate a still-pending login
 //   POST /api/integrations/vela/logout   — clear ~/.amr auth and Settings-backed AMR auth env
 // The Settings UI polls /status after kicking off /login to detect completion.
-export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
+export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}): Promise<VelaLoginStatus | null> {
   try {
-    const resp = await fetch('/api/integrations/vela/status');
+    const query = options.refresh ? '?refresh=1' : '';
+    const resp = await fetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as VelaLoginStatus;
   } catch {

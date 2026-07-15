@@ -9,7 +9,11 @@ import { AgentIcon } from './AgentIcon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
-import { SearchableModelSelect } from './modelOptions';
+import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
+import {
+  orderModelOptionsByAvailability,
+  SearchableModelSelect,
+} from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
@@ -171,6 +175,11 @@ export function AvatarMenu({
     () => agents.find((a) => a.id === config.agentId) ?? null,
     [agents, config.agentId],
   );
+  const currentAgentModelOptions = useMemo(() => {
+    const models = currentAgent?.models ?? [];
+    if (currentAgent?.id !== 'amr') return models;
+    return orderModelOptionsByAvailability(models);
+  }, [currentAgent]);
 
   const installedAgents = orderAgentsWithOpenDesignFirst(
     agents.filter((a) => a.available && isVisibleLocalCliAgent(a)),
@@ -246,8 +255,9 @@ export function AvatarMenu({
   // hasn't touched the picker yet so the labels don't read as empty.
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
+  const normalizedCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
   const currentModelId =
-    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+    normalizedCurrentChoice.model ?? defaultAgentModelId(currentAgent);
   const currentReasoningId =
     currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
   const currentModelLabel = currentAgent?.models?.find(
@@ -517,7 +527,7 @@ export function AvatarMenu({
                             model: value,
                           })
                         }
-                        models={currentAgent.models}
+                        models={currentAgentModelOptions}
                         additionalOptions={
                           currentModelId &&
                           !currentAgent.models.some((m) => m.id === currentModelId)
@@ -533,6 +543,44 @@ export function AvatarMenu({
                         searchInputTestId="avatar-model-search"
                         popoverTestId="avatar-model-popover"
                         minSearchableOptions={5}
+                        disabledOptionHint={
+                          currentAgent.id === 'amr'
+                            ? (option) =>
+                                option.enabled === false
+                                  ? t('settings.amrModelUpgradeHint')
+                                  : null
+                            : undefined
+                        }
+                        onDisabledOptionUpgrade={
+                          currentAgent.id === 'amr'
+                            ? () => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'avatar_amr_upgrade',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config.telemetry?.metrics === true,
+                                  },
+                                );
+                                const deviceId = amrHandoffDeviceId({
+                                  metricsConsent:
+                                    config.telemetry?.metrics === true,
+                                  resolvedDeviceId: getResolvedDeviceId(),
+                                  installationId: config.installationId,
+                                });
+                                window.open(
+                                  attributedAmrUrl(
+                                    amrPlansUrl,
+                                    attribution,
+                                    deviceId,
+                                  ),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }
+                            : undefined
+                        }
                       />
                     </label>
                   ) : null}

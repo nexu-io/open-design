@@ -2,12 +2,9 @@ import type { Dict } from '../i18n/types';
 import type { AgentModelOption } from '../types';
 
 export type ModelCapabilityTag =
-  | 'fast'
-  | 'value'
-  | 'balanced'
-  | 'reasoning'
-  | 'premium'
-  | 'coding';
+  | 'standard'
+  | 'advanced'
+  | 'bestQuality';
 
 export type ModelCostTier = 'upToHalf' | 'halfToOne' | 'oneToFour' | 'overFour';
 
@@ -15,24 +12,18 @@ export const MODEL_CAPABILITY_TAG_LABEL_KEYS: Record<
   ModelCapabilityTag,
   keyof Dict
 > = {
-  fast: 'modelCapability.fast',
-  value: 'modelCapability.value',
-  balanced: 'modelCapability.balanced',
-  reasoning: 'modelCapability.reasoning',
-  premium: 'modelCapability.premium',
-  coding: 'modelCapability.coding',
+  standard: 'modelCapability.standard',
+  advanced: 'modelCapability.advanced',
+  bestQuality: 'modelCapability.bestQuality',
 };
 
 export const MODEL_CAPABILITY_TAG_DESCRIPTION_KEYS: Record<
   ModelCapabilityTag,
   keyof Dict
 > = {
-  fast: 'modelCapability.fastDescription',
-  value: 'modelCapability.valueDescription',
-  balanced: 'modelCapability.balancedDescription',
-  reasoning: 'modelCapability.reasoningDescription',
-  premium: 'modelCapability.premiumDescription',
-  coding: 'modelCapability.codingDescription',
+  standard: 'modelCapability.standardDescription',
+  advanced: 'modelCapability.advancedDescription',
+  bestQuality: 'modelCapability.bestQualityDescription',
 };
 
 export const MODEL_COST_TIER_LABEL_KEYS: Record<ModelCostTier, keyof Dict> = {
@@ -49,28 +40,24 @@ const NON_MODEL_IDS = new Set([
   '__same_as_chat__',
 ]);
 
-const KNOWN_MODEL_FAMILIES = [
-  'claude',
-  'codex',
-  'command',
-  'deepseek',
-  'doubao',
-  'ernie',
-  'gemini',
-  'glm',
-  'gpt',
-  'grok',
-  'kimi',
-  'llama',
-  'mimo',
-  'minimax',
-  'mistral',
-  'mixtral',
-  'o1',
-  'o3',
-  'o4',
-  'qwen',
-];
+const BEST_QUALITY_MODELS = [
+  'fable5',
+  'opus4.8',
+  'gpt5.5pro',
+  'grok4.5',
+  'gemini3.1-pro',
+].map(compactModelName);
+
+const ADVANCED_MODELS = [
+  'opus4.7',
+  'opus4.6',
+  'sonnet5',
+  'deepseek-v4-pro',
+  'gpt-5.5',
+  'kimi-k2.7-code',
+  'qwen3.7-max',
+  'glm-5.2',
+].map(compactModelName);
 
 export function getModelCapabilityTag(
   model: Pick<AgentModelOption, 'id' | 'label'>,
@@ -78,22 +65,14 @@ export function getModelCapabilityTag(
   const haystack = getModelHaystack(model);
   if (!haystack) return null;
 
-  if (/(^|[-\s])(codex|coder?|coding|codestral)([-\s]|$)|[-\s]k2\.7-code\b/.test(haystack)) {
-    return 'coding';
+  const compact = compactModelName(haystack);
+  if (BEST_QUALITY_MODELS.some((modelKey) => compact.includes(modelKey))) {
+    return 'bestQuality';
   }
-  if (/(^|[-\s])(o1|o3|o4|r1|reasoner|reasoning|thinking)([-\s]|$)/.test(haystack)) {
-    return 'reasoning';
+  if (ADVANCED_MODELS.some((modelKey) => compact.includes(modelKey))) {
+    return 'advanced';
   }
-  if (/(^|[-\s])(flash|haiku|instant|turbo)([-\s]|$)/.test(haystack)) {
-    return 'fast';
-  }
-  if (/(^|[-\s])(mini|nano|lite|small|oss|air)([-\s]|$)/.test(haystack)) {
-    return 'value';
-  }
-  if (/(^|[-\s])(fable|opus|pro|ultra|max)([-\s]|$)|\bgpt-5\b/.test(haystack)) {
-    return 'premium';
-  }
-  return 'balanced';
+  return 'standard';
 }
 
 export function getModelCostTier(
@@ -116,16 +95,9 @@ function getModelHaystack(
   if (NON_MODEL_IDS.has(id)) return null;
 
   const label = model.label.trim().toLowerCase();
-  const haystack = `${id} ${label}`.replace(/[_/]+/g, '-');
-  return isLikelyModelName(haystack) ? haystack : null;
+  return `${id} ${label}`.replace(/[_/]+/g, '-');
 }
 
-function isLikelyModelName(value: string): boolean {
-  return KNOWN_MODEL_FAMILIES.some((family) =>
-    new RegExp(`(^|[-\\s])${escapeRegExp(family)}([-\\s.]|$)`).test(value),
-  );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function compactModelName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }

@@ -133,6 +133,17 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
+  it('offers upgrade + manual retry for an AMR tier entitlement failure', () => {
+    const ui = resolveRunFailureUi('AMR_TIER_UPGRADE_REQUIRED', 'amr');
+    expect(ui).toMatchObject({
+      primaryAction: 'upgrade',
+      titleKey: 'chat.amrBalanceGate.title',
+      messageKey: null,
+      secondaryRetry: true,
+      showSwitchCard: false,
+    });
+  });
+
   it('falls back to plain retry for other AMR failures', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'amr');
     expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false });

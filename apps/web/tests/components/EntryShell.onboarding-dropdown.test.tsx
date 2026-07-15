@@ -153,9 +153,9 @@ describe('OnboardingDropdown', () => {
           {
             value: 'deepseek-v4-flash',
             label: 'deepseek-v4-flash',
-            meta: 'Lowest cost',
-            tag: 'Fast',
-            tagKind: 'fast',
+            meta: 'Low cost',
+            tag: 'Standard',
+            tagKind: 'standard',
           },
         ]}
         onChange={vi.fn()}
@@ -165,10 +165,10 @@ describe('OnboardingDropdown', () => {
     fireEvent.click(screen.getByRole('button', { name: /deepseek-v4-flash/ }));
 
     const option = screen.getByRole('option', { name: /^deepseek-v4-flash$/ });
-    expect(option.textContent).toContain('Lowest cost');
-    expect(option.textContent).toContain('Fast');
+    expect(option.textContent).toContain('Low cost');
+    expect(option.textContent).toContain('Standard');
     expect(option).toHaveAccessibleName('deepseek-v4-flash');
-    expect(option).toHaveAccessibleDescription('Lowest cost Fast');
+    expect(option).toHaveAccessibleDescription('Low cost Standard');
     expect(option.querySelector('[data-description]')).toBeNull();
     expect(option.querySelector('[data-label]')).toBeNull();
   });

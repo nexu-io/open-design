@@ -107,6 +107,7 @@ import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent, removeErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
+import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -1641,7 +1642,11 @@ export function ProjectView({
   // Soft low-balance warning holding a pending send: the dialog resolves the
   // promise the gate is awaiting ('proceed' continues the very same send).
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
+    {
+      snapshot: AmrWalletSnapshot;
+      plan: string | null;
+      resolve: (decision: AmrLowBalanceDecision) => void;
+    } | null
   >(null);
   // Conversations with a balance-gate check currently in flight. Sends that
   // arrive during the check queue instead of racing a duplicate run through
@@ -4861,8 +4866,13 @@ export function ProjectView({
             // Low balance: pause THIS send while the reminder dialog waits
             // for a decision. 'proceed' resumes the very same send below —
             // a continuation, not a re-submit.
+            const plan = await resolveAmrLowBalancePlan(gate.snapshot);
+            if (messagesConversationIdRef.current !== activeConversationId) {
+              queueGateSend();
+              return false;
+            }
             const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+              setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
             });
             setAmrLowBalanceWarn(null);
             // Same conversation-switch guard for the dialog-open window; the
@@ -8757,6 +8767,7 @@ export function ProjectView({
       {amrLowBalanceWarn ? (
         <AmrLowBalanceDialog
           balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
+          plan={amrLowBalanceWarn.plan}
           profile={amrLowBalanceWarn.snapshot.profile}
           entrySource="chat_low_balance_warn_recharge"
           metricsConsent={config.telemetry?.metrics === true}

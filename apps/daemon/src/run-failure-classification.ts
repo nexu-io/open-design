@@ -550,6 +550,19 @@ export function classifyRunFailure(
   }
 
   if (
+    errorCode === 'AMR_TIER_UPGRADE_REQUIRED' ||
+    amrFailure?.code === 'AMR_TIER_UPGRADE_REQUIRED'
+  ) {
+    return classification(
+      'entitlement_required',
+      'amr_tier_upgrade_required',
+      'session_init',
+      false,
+      'upgrade',
+    );
+  }
+
+  if (
     errorCode === 'AMR_AUTH_REQUIRED' ||
     errorCode === 'AGENT_AUTH_REQUIRED' ||
     errorCode === 'UNAUTHORIZED' ||

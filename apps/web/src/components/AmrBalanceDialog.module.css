@@ -4,11 +4,39 @@
  * 220ms pop-in (scale 0.97 + opacity, custom cubic-bezier). */
 
 .panel {
+  position: relative;
   width: 400px;
   align-items: center;
   text-align: center;
   padding: 32px 28px 20px;
   gap: 0;
+}
+
+.closeButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.closeButton:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .iconBadge {

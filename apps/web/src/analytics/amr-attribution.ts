@@ -41,6 +41,7 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   handoff_amr_website: 'artifact',
   chat_error_authorize_retry: 'chat_panel',
   chat_error_recharge: 'chat_panel',
+  chat_error_upgrade: 'chat_panel',
   chat_balance_gate_upgrade: 'chat_panel',
   home_balance_gate_upgrade: 'home',
   chat_low_balance_warn_recharge: 'chat_panel',
