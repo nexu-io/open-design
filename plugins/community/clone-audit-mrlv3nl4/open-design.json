@@ -4,7 +4,7 @@
   "name": "clone-audit-mrlv3nl4",
   "title": "Clone Audit",
   "version": "0.1.0",
-  "description": "Audit Skill Cloning the Website",
+  "description": "Audit website clones for fidelity gaps, tracking code, source-brand and language residue, placeholders, and risky external dependencies.",
   "od": {
     "kind": "skill",
     "taskKind": "new-generation",

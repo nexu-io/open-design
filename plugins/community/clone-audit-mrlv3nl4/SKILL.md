@@ -1,68 +1,102 @@
+---
+name: clone-audit-mrlv3nl4
+description: Audit cloned or reimplemented websites for fidelity gaps, tracking scripts, source-brand and language residue, placeholders, and risky external dependencies. Use before handoff or deployment, or when asked to review a website clone for cleanup and readiness.
+---
+
 # Clone Audit
 
-- Project: /Users/godbest/Library/Application Support/Open Design/namespaces/release-stable/data/projects/688fba5a-2ead-4de3-9390-de6bca2160f1
-- Scanned files: 15
-- Findings: 42
+Audit the requested website-clone workspace and produce an evidence-based
+deployment-readiness report. Inspect the current target; never reuse findings
+from an earlier project or run.
 
-## 保真度硬伤（字体 / 图片 / 颜色）
-- 未发现
+## Establish scope
 
-## 追踪脚本 / 统计像素
-- .od-skills/web-clone-2a8d76c934/SKILL.md:155 · Google Tag Manager · `googletagmanager`
+1. Confirm the target root and the intended output language.
+2. Identify any supplied source site, screenshots, design tokens, or other
+   fidelity references. If none are available, mark visual fidelity as not
+   checked instead of guessing.
+3. Inventory relevant HTML, CSS, JavaScript or TypeScript, assets, metadata,
+   configuration, and dependency manifests. Respect explicit exclusions.
+4. Prefer static inspection. Do not execute untrusted project code, install
+   packages, or make network requests unless the user authorizes it.
 
-## 原站品牌残留
-- assets/fonts/fonts.css:1 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:5 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:7 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:9 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:11 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:13 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:15 · brand residue: sidequests.today · `sidequests.today`
-- assets/fonts/fonts.css:19 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:301 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:513 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:518 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:525 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:530 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:561 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:565 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:569 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:584 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:590 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:594 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:598 · brand residue: sidequests.today · `sidequests.today`
-- sidequests-today.html:602 · brand residue: sidequests.today · `sidequests.today`
+Treat `references/source-1-CLONE_AUDIT.md` only as historical provenance. Do
+not copy its paths, counts, or findings into a new audit unless the current
+target independently confirms them.
 
-## 日文残留
-- 未发现
+## Run the checks
 
-## TODO / 占位内容
-- .od-skills/web-clone-2a8d76c934/SKILL.md:265 · TODO / placeholder content · `TODO`
-- .od-skills/web-clone-2a8d76c934/SKILL.md:280 · TODO / placeholder content · `TODO`
-- .od-skills/web-clone-2a8d76c934/references/deliverables.md:137 · TODO / placeholder content · `TODO`
-- .od-skills/web-clone-2a8d76c934/references/design-dna.md:41 · TODO / placeholder content · `TODO`
+Inspect each category and record the evidence used:
 
-## 外部依赖 / 外链风险
-- .mcp.json:5 · external URL · `http://localhost:38451/mcp`
-- .od-skills/web-clone-2a8d76c934/SKILL.md:64 · external URL · `https://raw.githubusercontent.com/`
-- .od-skills/web-clone-2a8d76c934/SKILL.md:171 · external URL · `http://127.0.0.1:`
-- .od-skills/web-clone-2a8d76c934/SKILL.md:176 · external URL · `http://127.0.0.1:`
-- .od-skills/web-clone-2a8d76c934/SKILL.md:183 · external URL · `http://127.0.0.1:`
-- .od-skills/web-clone-2a8d76c934/references/design-dna.md:7 · external URL · `https://github.com/zanwei/design-dna`
-- .od-skills/web-clone-2a8d76c934/references/effect-extraction.md:6 · external URL · `https://github.com/lixiaolin94/skills`
-- .od-skills/web-clone-2a8d76c934/references/marbles-case.md:3 · external URL · `https://chiuhans111.github.io/marbles/`
-- .od-skills/web-clone-2a8d76c934/references/static-mirror.md:38 · external URL · `https://use.typekit.net/`
-- .od-skills/web-clone-2a8d76c934/references/static-mirror.md:49 · external URL · `https://use.typekit.net/`
-- .od-skills/web-clone-2a8d76c934/references/static-mirror.md:51 · external URL · `https://use\.typekit\.net/`
-- assets/css/sidequests.today/4bf3a239d0c28e6f-bfd765ccbf.css:2 · external URL · `https://tailwindcss.com`
-- package-lock.json:13 · external URL · `https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz`
-- package-lock.json:28 · external URL · `https://registry.npmjs.org/playwright/-/playwright-1.61.1.tgz`
-- package-lock.json:47 · external URL · `https://registry.npmjs.org/playwright-core/-/playwright-core-1.61.1.tgz`
-- sidequests-today.html:632 · external URL · `https://twitter.com/bona_lupan`
+1. **Fidelity assets and styles** — compare against supplied references for
+   missing or substituted fonts and images, broken asset paths, incorrect
+   colors, and materially different layout or styling.
+2. **Tracking scripts and pixels** — find analytics, tag managers, advertising
+   pixels, telemetry beacons, and unexpected third-party scripts.
+3. **Source-brand residue** — find source brand names, domains, metadata,
+   social links, asset paths, comments, and copy that should have been replaced.
+4. **Language residue** — find unintended text in languages outside the target
+   locale, excluding code identifiers and legitimate proper nouns.
+5. **TODOs and placeholders** — find TODO or FIXME markers, lorem ipsum,
+   template copy, dummy links, test credentials, and unfinished states.
+6. **External dependencies and link risk** — inspect remote URLs, CDNs,
+   localhost or development endpoints, external fonts and media, package
+   downloads, and dependencies that may fail, leak data, or violate deployment
+   constraints.
 
-## 结论
-- 需要处理上面的残留项后再声明可部署。
+Open the surrounding context before reporting a match. Deduplicate repeated
+instances that share one root cause, but list every affected file or meaningful
+location.
 
-## Provenance
+## Classify evidence
 
-Formalized by Open Design from candidate b057ce9f-1a6f-4651-bd78-610d4553b65c.
+For every finding, include:
+
+- severity: `blocker`, `high`, `medium`, or `low`;
+- a repository-relative `file:line` location when available;
+- the matched identifier or a short, non-sensitive excerpt;
+- why it matters; and
+- a concrete recommended action.
+
+Keep these states distinct:
+
+- **Confirmed finding** — directly supported by inspected evidence.
+- **Checked; none found** — the category was inspected and no issue was found.
+- **Not checked / unverifiable** — required context, reference material, or
+  access was unavailable.
+
+Never turn an unverified suspicion into a confirmed finding. Do not expose
+machine-local absolute paths, secrets, tokens, or personal data in the report.
+
+## Produce the report
+
+Use this structure:
+
+```markdown
+# Clone Audit
+
+## Scope and coverage
+- Target: <portable project label or repository-relative path>
+- Fidelity reference: <provided, not provided, or unavailable>
+- Exclusions or limitations: <items or none>
+
+## Findings
+### <category>
+| Severity | Evidence | Why it matters | Recommended action |
+| --- | --- | --- | --- |
+| <level> | `<relative/file:line>` — <identifier> | <impact> | <action> |
+
+## Checked; none found
+- <category>
+
+## Not checked / unverifiable
+- <category>: <reason>
+
+## Deployment readiness
+<Ready, ready with follow-ups, or not ready> — <brief evidence-based reason>
+```
+
+Use **not ready** when confirmed unresolved findings can break the deployed
+experience, expose tracking or sensitive data unexpectedly, or leave material
+source-brand or placeholder content. Otherwise state any follow-ups and explain
+why they do or do not block deployment.
