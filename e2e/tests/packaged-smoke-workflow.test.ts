@@ -352,6 +352,15 @@ describe("packaged smoke workflow", () => {
     // Publish stays tag/call only — no continuous main-branch image push.
     expect(dockerTrigger).not.toContain("branches: [main]");
     expect(dockerTrigger).not.toMatch(/push:\s*\n\s*branches:/);
+    // Publish mode must not key only on event_name == workflow_call (caller keeps
+    // its own event name). Release calls pass release_version / publish_latest.
+    const dockerMode = sectionBetween(dockerWorkflow, "Resolve publish mode", "Set up QEMU");
+    expect(dockerMode).toContain("RELEASE_VERSION");
+    expect(dockerMode).toContain("PUBLISH_LATEST");
+    expect(dockerMode).toContain('[ "$EVENT_NAME" = "push" ]');
+    expect(dockerMode).toContain('[ -n "${RELEASE_VERSION:-}" ]');
+    // Shell condition must not treat literal workflow_call as the publish signal.
+    expect(dockerMode).not.toMatch(/\[\s*"\$EVENT_NAME"\s*=\s*"workflow_call"\s*\]/);
     expect(commentWorkflow).toContain("workflows: [ci]");
     // comment.atom consumes merge_group runs too, so the needs-validation gate can surface a
     // queue-ejection notice on the PR; autofix/report stay pull_request-only trusted consumers.

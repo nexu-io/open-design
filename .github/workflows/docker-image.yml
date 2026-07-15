@@ -51,20 +51,27 @@ jobs:
       - name: Resolve publish mode
         id: mode
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest }}
         run: |
           set -euo pipefail
-          # Publish only on tag push or release workflow_call. PR and manual
-          # dispatch are validate-only (no registry write).
-          case "${{ github.event_name }}" in
-            push|workflow_call)
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-              echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          # Publish on:
+          #   - tag push (event_name=push with tags filter), or
+          #   - reusable release call that passes release_version / publish_latest.
+          # Do NOT key on event_name == 'workflow_call': nested reusable workflows
+          # keep the *caller's* event name (usually workflow_dispatch), so that
+          # check never matches and stable GHCR publish would silently become a
+          # smoke-only build.
+          if [ "$EVENT_NAME" = "push" ] || [ -n "${RELEASE_VERSION:-}" ] || [ "${PUBLISH_LATEST:-}" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            # pull_request and standalone workflow_dispatch: smoke only
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up QEMU
         if: ${{ steps.mode.outputs.publish == 'true' }}
