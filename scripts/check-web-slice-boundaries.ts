@@ -460,11 +460,11 @@ interface ProviderHome {
 
 /**
  * Every provider resource home directly under `providers/`: a multi-adapter
- * folder (`providers/<x>/index.ts`) or a flat single-file provider
- * (`providers/<x>.ts`). Both shapes are declared resource homes and are
- * compared against each other for route ownership (rule 4) — a flat file
- * like `registry.ts` owns its fetched routes exactly like a provider folder
- * does.
+ * folder (`providers/<x>/index.<ext>`, any supported source extension) or a
+ * flat single-file provider (`providers/<x>.ts`). Both shapes are declared
+ * resource homes and are compared against each other for route ownership
+ * (rule 4) — a flat file like `registry.ts` owns its fetched routes exactly
+ * like a provider folder does.
  */
 async function providerResourceHomes(): Promise<ProviderHome[]> {
   let entries;
@@ -477,12 +477,22 @@ async function providerResourceHomes(): Promise<ProviderHome[]> {
   for (const entry of entries) {
     const fullPath = path.join(providersDir, entry.name);
     if (entry.isDirectory()) {
-      const indexTs = path.join(fullPath, "index.ts");
-      try {
-        await readFile(indexTs, "utf8");
-      } catch {
-        continue; // A folder without an index barrel is not a declared resource home.
+      // `sourceExtensions` covers every source shape this guard scans
+      // (.ts/.tsx/.js/.jsx/.mts/.cts/.mjs/.cjs) — the folder-root check must
+      // match, or a JS/MJS-backed provider folder (`index.js`, `index.mjs`)
+      // silently fails to register as a declared resource home even though
+      // its own files are otherwise fully scanned by rule 4.
+      let hasIndex = false;
+      for (const ext of sourceExtensions) {
+        try {
+          await readFile(path.join(fullPath, `index${ext}`), "utf8");
+          hasIndex = true;
+          break;
+        } catch {
+          // Try the next supported extension.
+        }
       }
+      if (!hasIndex) continue; // A folder without an index barrel is not a declared resource home.
       homes.push({ path: fullPath, files: await collectSourceFiles(fullPath) });
       continue;
     }

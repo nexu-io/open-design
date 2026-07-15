@@ -30,8 +30,13 @@ export async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> 
   // actually a required read that failed.
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error(`Memory entry request failed (${resp.status})`);
-  const json = (await resp.json()) as { entry: MemoryEntry };
-  return json.entry ?? null;
+  const json = (await resp.json()) as { entry?: MemoryEntry };
+  // A 2xx response is a required read succeeding — it must carry the entry.
+  // Falling back to null here would be the same masking bug as above: a
+  // malformed success payload would render as "not found" instead of
+  // surfacing the backend regression.
+  if (!json.entry) throw new Error('Memory entry request succeeded without an entry');
+  return json.entry;
 }
 
 export async function saveMemoryEntry(draft: UpsertMemoryRequest): Promise<MemoryEntry | null> {

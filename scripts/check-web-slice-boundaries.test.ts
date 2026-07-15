@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
+import test, { mock } from "node:test";
 
 import {
   checkWebSliceBoundaries,
@@ -300,5 +300,50 @@ test("real guard scans JavaScript, symlinked feature files, and qualified provid
     assert.equal(await checkWebSliceBoundaries(), false);
   } finally {
     await Promise.all(Object.values(paths).map((fixturePath) => rm(fixturePath, { force: true })));
+  }
+});
+
+test("real guard: a JS-backed provider folder (index.js) is recognized as a resource home for rule 4", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("creating test symlinks needs elevated privileges on some Windows hosts");
+    return;
+  }
+
+  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const providersDir = path.join(repoRoot, "apps/web/src/providers");
+  const jsFolder = path.join(providersDir, "__slice-boundary-fixture-jsfolder");
+  const paths = {
+    jsFolderIndex: path.join(jsFolder, "index.js"),
+    duplicateFlatProvider: path.join(providersDir, "__slice-boundary-fixture-jsfolder-dup.ts"),
+  };
+  const route = "/api/__slice-boundary-jsfolder-route";
+
+  const errors: string[] = [];
+  const errorSpy = mock.method(console, "error", (...args: unknown[]) => {
+    errors.push(args.join(" "));
+  });
+
+  try {
+    await mkdir(jsFolder, { recursive: true });
+    // A provider folder rooted at index.js (not index.ts) must still register
+    // as a declared resource home — otherwise a second home for the SAME
+    // route silently escapes rule 4's "one transport home per route" check.
+    await writeFile(paths.jsFolderIndex, `fetch(${JSON.stringify(route)});\n`);
+    await writeFile(paths.duplicateFlatProvider, `fetch(${JSON.stringify(route)});\n`);
+
+    assert.equal(await checkWebSliceBoundaries(), false);
+    const routeViolation = errors.find((line) => line.includes(route) && line.includes("provider homes"));
+    assert.ok(
+      routeViolation,
+      `expected a 'one transport home per route' violation for ${route}, got: ${errors.join("\n")}`,
+    );
+    assert.ok(
+      routeViolation!.includes("__slice-boundary-fixture-jsfolder"),
+      `expected the JS-backed provider folder to be named as one of the route's homes, got: ${routeViolation}`,
+    );
+  } finally {
+    errorSpy.mock.restore();
+    await rm(jsFolder, { recursive: true, force: true });
+    await rm(paths.duplicateFlatProvider, { force: true });
   }
 });

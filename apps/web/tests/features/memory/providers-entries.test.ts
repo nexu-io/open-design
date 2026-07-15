@@ -52,8 +52,6 @@ describe('entries transport', () => {
       return { ok: true, json: async () => ({ entry: { id: 'user_role' } }) };
     });
     expect(await fetchMemoryEntry('user_role')).toEqual({ id: 'user_role' });
-    mockFetch(() => ({ ok: true, json: async () => ({}) }));
-    expect(await fetchMemoryEntry('x')).toBeNull();
     mockFetch(() => ({ ok: false, status: 404 }));
     expect(await fetchMemoryEntry('x')).toBeNull();
   });
@@ -63,6 +61,13 @@ describe('entries transport', () => {
     await expect(fetchMemoryEntry('x')).rejects.toThrow('Memory entry request failed (500)');
     mockFetch(() => ({ ok: false, status: 503 }));
     await expect(fetchMemoryEntry('x')).rejects.toThrow('Memory entry request failed (503)');
+  });
+
+  it('rejects rather than mapping a malformed 2xx entry read (missing entry) to null', async () => {
+    mockFetch(() => ({ ok: true, json: async () => ({}) }));
+    await expect(fetchMemoryEntry('x')).rejects.toThrow(
+      'Memory entry request succeeded without an entry',
+    );
   });
 
   it('POSTs to /api/memory when the draft has no id', async () => {
