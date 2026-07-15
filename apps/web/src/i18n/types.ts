@@ -390,6 +390,12 @@ export interface Dict {
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.providerPreset': string;
+  'settings.byokProviderSiliconFlow': string;
+  'settings.byokProviderQwen': string;
+  'settings.byokProviderVolcengine': string;
+  'settings.byokProviderQianfan': string;
+  'settings.byokProviderMimo': string;
+  'settings.byokProviderZhipu': string;
   'settings.protocolGroupProtocols': string;
   'settings.protocolGroupGateways': string;
   'settings.customProvider': string;

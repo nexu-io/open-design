@@ -2762,7 +2762,7 @@ export function SettingsDialog({
     },
     {
       id: 'siliconflow',
-      title: '硅基流动',
+      title: t('settings.byokProviderSiliconFlow'),
       protocol: 'openai',
       baseUrl: 'https://api.siliconflow.cn/v1',
       model: 'deepseek-ai/DeepSeek-V3.1',
@@ -2832,21 +2832,21 @@ export function SettingsDialog({
     },
     {
       id: 'qwen',
-      title: '千问',
+      title: t('settings.byokProviderQwen'),
       protocol: 'openai',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       model: 'qwen-plus',
     },
     {
       id: 'volcengine',
-      title: '火山引擎',
+      title: t('settings.byokProviderVolcengine'),
       protocol: 'openai',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       model: 'doubao-seed-1-6',
     },
     {
       id: 'qianfan',
-      title: '百度千帆',
+      title: t('settings.byokProviderQianfan'),
       protocol: 'openai',
       baseUrl: 'https://qianfan.baidubce.com/v2',
       model: 'ernie-4.5-turbo-128k',
@@ -2860,7 +2860,7 @@ export function SettingsDialog({
     },
     {
       id: 'mimo',
-      title: '小米 MiMo',
+      title: t('settings.byokProviderMimo'),
       protocol: 'openai',
       baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
       model: 'mimo-v2.5-pro',
@@ -2881,7 +2881,7 @@ export function SettingsDialog({
     },
     {
       id: 'zhipu',
-      title: '智谱',
+      title: t('settings.byokProviderZhipu'),
       protocol: 'openai',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
       model: 'glm-4.6',

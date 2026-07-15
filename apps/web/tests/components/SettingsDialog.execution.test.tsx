@@ -601,6 +601,61 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     ).toBe('https://platform.openai.com/api-keys');
   });
 
+  it('renders English-facing names for built-in BYOK gateway providers', () => {
+    renderSettingsDialog();
+
+    for (const providerName of [
+      'SiliconFlow',
+      'Alibaba Qwen',
+      'Volcengine Ark',
+      'Baidu Qianfan',
+      'Xiaomi MiMo',
+      'Zhipu AI',
+    ]) {
+      expect(screen.getByRole('tab', { name: providerName })).toBeTruthy();
+    }
+
+    for (const untranslatedName of [
+      '硅基流动',
+      '千问',
+      '火山引擎',
+      '百度千帆',
+      '小米 MiMo',
+      '智谱',
+    ]) {
+      expect(screen.queryByRole('tab', { name: untranslatedName })).toBeNull();
+    }
+  });
+
+  it('keeps built-in BYOK gateway provider names localized in Simplified Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <SettingsDialog
+          initial={baseConfig}
+          agents={availableAgents}
+          daemonLive={true}
+          appVersionInfo={null}
+          initialSection="execution"
+          onPersist={vi.fn()}
+          onPersistComposioKey={vi.fn()}
+          onClose={vi.fn()}
+          onRefreshAgents={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    for (const providerName of [
+      '硅基流动',
+      '千问',
+      '火山引擎',
+      '百度千帆',
+      '小米 MiMo',
+      '智谱',
+    ]) {
+      expect(screen.getByRole('tab', { name: providerName })).toBeTruthy();
+    }
+  });
+
   it('isolates API key draft and visibility by BYOK provider preset', () => {
     renderSettingsDialog({
       apiProtocol: 'openai',
@@ -1181,7 +1236,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByText('Model discovery is not available for this protocol.')).toBeTruthy();
 
     fetchProviderModelsMock.mockClear();
-    fireEvent.click(screen.getByRole('tab', { name: '小米 MiMo' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Xiaomi MiMo' }));
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     expect(fetchProviderModelsMock).not.toHaveBeenCalled();
@@ -1521,7 +1576,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiProviderBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: '智谱' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Zhipu AI' }));
 
     expect(await screen.findByText('✓ Loaded 8 models from your account.')).toBeTruthy();
     fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
