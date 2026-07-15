@@ -12,16 +12,14 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
-import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
-import type { CritiqueConfig, PanelEvent, CritiqueRunStatus, CritiqueRoundSummary, CritiqueSseEvent } from '@open-design/contracts/critique';
-import { panelEventToSse } from '@open-design/contracts/critique';
+import type { CritiqueConfig, CritiqueRunStatus } from '@open-design/contracts/critique';
 import type { CritiqueLoopConfig, LoopEvent } from './loop-types.js';
 import { loopEventToSse } from './loop-types.js';
 import type { CritiqueSseBus } from './orchestrator.js';
 import { runOrchestrator, type OrchestratorParams, type OrchestratorResult } from './orchestrator.js';
-import { extractFeedbackFromEvents } from './loop-feedback.js';
-import { generateLoopRunId, createEmptyStdout } from './loop-utils.js';
+import { aggregateCritiqueFeedback, extractFeedbackFromEvents } from './loop-feedback.js';
+import { generateLoopRunId } from './loop-utils.js';
 import {
   critiqueLoopIterationsTotal,
   critiqueLoopConvergedTotal,
@@ -34,17 +32,10 @@ import { loadLessonsAsContext } from './lessons-loop.js';
 // 类型定义
 // ============================================================================
 
-/** 修复函数签名：接收反馈，返回修复后的产物 */
-export type FixFunction = (
-  feedback: ReturnType<typeof extractFeedbackFromEvents>,
-  iteration: number,
-) => Promise<{ artifactContent: string; artifactMime: string }>;
-
 /** 循环引擎参数 */
 export interface LoopEngineParams {
   loopCfg: CritiqueLoopConfig;
   critiqueCfg: CritiqueConfig;
-  fixFn: FixFunction;
   db: Database.Database;
   bus: CritiqueSseBus;
   projectId: string;
@@ -55,10 +46,18 @@ export interface LoopEngineParams {
   skill: string | undefined;
   conversationId?: string | null;
   signal?: AbortSignal;
-  /** 为每次迭代提供新的 stdout 流（由 spawn handler 注入） */
-  createStdout: (iteration: number, feedback: ReturnType<typeof extractFeedbackFromEvents> | null) => AsyncIterable<string>;
-  createChild?: (iteration: number) => Pick<ChildProcess, 'kill'>;
-  createChildExitPromise?: (iteration: number) => Promise<{ code: number | null; signal: string | null }>;
+  /** 为每次迭代创建一个新的 agent 进程及其输出资源 */
+  createIteration: (
+    iteration: number,
+    feedback: ReturnType<typeof extractFeedbackFromEvents> | null,
+    runId: string,
+  ) => IterationResources | Promise<IterationResources>;
+}
+
+export interface IterationResources {
+  stdout: AsyncIterable<string>;
+  child: Pick<ChildProcess, 'kill'>;
+  childExitPromise: Promise<{ code: number | null; signal: string | null }>;
 }
 
 /** 单次循环迭代结果 */
@@ -70,7 +69,7 @@ export interface LoopIterationResult {
 
 /** 循环引擎最终结果 */
 export interface LoopEngineResult {
-  status: 'converged' | 'exhausted' | 'interrupted' | 'failed';
+  status: 'converged' | 'exhausted' | 'interrupted' | 'timed_out' | 'degraded' | 'failed';
   totalIterations: number;
   iterations: LoopIterationResult[];
   finalArtifactPath: string | null;
@@ -82,20 +81,44 @@ export interface LoopEngineResult {
 // 裁决函数
 // ============================================================================
 
-function hasConverged(result: OrchestratorResult, cfg: CritiqueConfig): boolean {
-  if (result.status !== 'shipped') return false;
-  if (result.composite === null) return false;
-  return result.composite >= cfg.scoreThreshold - 1e-9;
+function hasConverged(
+  result: OrchestratorResult,
+  cfg: CritiqueConfig,
+  strategy: CritiqueLoopConfig['loopStrategy'],
+): boolean {
+  if (result.status !== 'shipped' && result.status !== 'below_threshold') return false;
+  const lastRound = result.rounds[result.rounds.length - 1];
+  if (result.composite === null || lastRound === undefined) return false;
+
+  const scorePasses = result.composite >= cfg.scoreThreshold - 1e-9;
+  const mustFixPasses = lastRound.mustFix === 0;
+  switch (strategy) {
+    case 'score_only':
+      return scorePasses;
+    case 'mustFix_only':
+      return mustFixPasses;
+    case 'converge':
+      return scorePasses && mustFixPasses;
+  }
 }
 
-function shouldRetry(result: OrchestratorResult, rounds: CritiqueRoundSummary[]): boolean {
-  if (result.status === 'interrupted' || result.status === 'failed' || result.status === 'degraded') return false;
-  if (result.status === 'below_threshold') return true;
-  if (result.status === 'shipped' && rounds.length > 0) {
-    const lastRound = rounds[rounds.length - 1]!;
-    if (lastRound.mustFix > 0) return true;
+function shouldRetry(result: OrchestratorResult): boolean {
+  return result.status === 'below_threshold' || result.status === 'shipped';
+}
+
+function terminalLoopStatus(status: CritiqueRunStatus): LoopEngineResult['status'] {
+  switch (status) {
+    case 'interrupted':
+    case 'timed_out':
+    case 'degraded':
+    case 'failed':
+      return status;
+    case 'shipped':
+    case 'below_threshold':
+      return 'exhausted';
+    case 'legacy':
+      return 'failed';
   }
-  return false;
 }
 
 // ============================================================================
@@ -104,9 +127,9 @@ function shouldRetry(result: OrchestratorResult, rounds: CritiqueRoundSummary[])
 
 export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopEngineResult> {
   const {
-    loopCfg, critiqueCfg, fixFn, db, bus, projectId, artifactDir, projectDir,
+    loopCfg, critiqueCfg, db, bus, projectId, artifactDir, projectDir,
     adapter, skill = 'unknown', conversationId = null, signal,
-    createStdout, createChild, createChildExitPromise,
+    createIteration,
   } = params;
 
   if (!loopCfg.enabled) throw new Error('startCritiqueLoop: loopCfg.enabled must be true');
@@ -115,6 +138,9 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
   }
 
   const startTime = Date.now();
+  const loopDeadline = loopCfg.loopTotalTimeoutMs > 0
+    ? startTime + loopCfg.loopTotalTimeoutMs
+    : null;
   const iterations: LoopIterationResult[] = [];
   let accumulatedFeedback: ReturnType<typeof extractFeedbackFromEvents> | null = null;
 
@@ -131,7 +157,14 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
   for (let iteration = 1; iteration <= loopCfg.maxIterations; iteration++) {
     if (signal?.aborted) {
       logCritique({ event: 'loop_aborted', projectId, iteration, reason: 'external_signal' });
+      emitLoopEvent(bus, { type: 'loop_aborted', projectId, iteration, reason: 'external_signal' });
       return buildResult('interrupted', iterations, null, startTime);
+    }
+    const remainingLoopMs = loopDeadline === null ? null : loopDeadline - Date.now();
+    if (remainingLoopMs !== null && remainingLoopMs <= 0) {
+      logCritique({ event: 'loop_aborted', projectId, iteration, reason: 'total_timeout' });
+      emitLoopEvent(bus, { type: 'loop_aborted', projectId, iteration, reason: 'total_timeout' });
+      return buildResult('timed_out', iterations, null, startTime);
     }
 
     logCritique({ event: 'loop_iteration_start', projectId, iteration });
@@ -142,48 +175,36 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
       hasPriorFeedback: accumulatedFeedback !== null,
     });
 
-    // --- 触发修复 ---
-    if (accumulatedFeedback !== null) {
-      const fixStart = Date.now();
-      try {
-        logCritique({ event: 'loop_fix_triggered', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length });
-
-        emitLoopEvent(bus, { type: 'loop_fix_started', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length });
-
-        const { artifactContent, artifactMime } = await fixFn(accumulatedFeedback, iteration);
-        const fixDurationMs = Date.now() - fixStart;
-
-        logCritique({ event: 'loop_fix_completed', projectId, iteration, fixDurationMs, artifactMime });
-        emitLoopEvent(bus, { type: 'loop_fix_completed', projectId, iteration, fixDurationMs });
-
-        await fs.mkdir(artifactDir, { recursive: true });
-        await fs.writeFile(`${artifactDir}/fix-i${iteration}.html`, artifactContent, 'utf-8');
-      } catch (err) {
-        logCritique({ event: 'loop_fix_failed', projectId, iteration, error: err instanceof Error ? err.message : String(err) });
-        emitLoopEvent(bus, { type: 'loop_fix_failed', projectId, iteration, error: err instanceof Error ? err.message : String(err) });
-        if (iterations.length > 0) return buildResult('exhausted', iterations, null, startTime);
-        throw err;
-      }
-    }
-
     // --- 提交评审 ---
     const runId = generateLoopRunId(projectId, iteration);
     const runStart = Date.now();
 
     try {
+      const iterationResources = await createIteration(iteration, accumulatedFeedback, runId);
+      const iterationTimeoutMs = Math.max(1, Math.floor(Math.min(
+        critiqueCfg.totalTimeoutMs,
+        loopCfg.fixTimeoutMs,
+        remainingLoopMs ?? Number.POSITIVE_INFINITY,
+      )));
+      const iterationCritiqueCfg = {
+        ...critiqueCfg,
+        perRoundTimeoutMs: Math.min(critiqueCfg.perRoundTimeoutMs, iterationTimeoutMs),
+        totalTimeoutMs: iterationTimeoutMs,
+      };
       const orchestratorResult = await runOrchestrator({
         runId, projectId, conversationId,
         artifactId: `loop-i${iteration}-${runId}`,
         artifactDir, adapter, skill,
-        cfg: critiqueCfg, db, bus,
-        stdout: accumulatedFeedback !== null ? createStdout(iteration, accumulatedFeedback) : createStdout(iteration, null),
+        cfg: iterationCritiqueCfg, db, bus,
+        stdout: iterationResources.stdout,
         ...(signal !== undefined ? { signal } : {}),
-        ...(createChild?.(iteration) !== undefined ? { child: createChild!(iteration) } : {}),
-        ...(createChildExitPromise?.(iteration) !== undefined ? { childExitPromise: createChildExitPromise!(iteration) } : {}),
+        child: iterationResources.child,
+        childExitPromise: iterationResources.childExitPromise,
       });
 
-      const converged = hasConverged(orchestratorResult, critiqueCfg);
+      const converged = hasConverged(orchestratorResult, critiqueCfg, loopCfg.loopStrategy);
       iterations.push({ iteration, orchestratorResult, converged });
+      critiqueLoopIterationsTotal.inc({ adapter, skill, iteration: String(iteration) });
 
       emitLoopEvent(bus, {
         type: 'loop_iteration_end', projectId, iteration,
@@ -200,25 +221,42 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
 
       if (converged) {
         critiqueLoopConvergedTotal.inc({ adapter, skill });
+        emitLoopEvent(bus, {
+          type: 'loop_converged',
+          projectId,
+          totalIterations: iterations.length,
+          finalComposite: orchestratorResult.composite ?? 0,
+          totalDurationMs: Date.now() - startTime,
+        });
         return buildResult('converged', iterations, orchestratorResult.artifactPath, startTime);
       }
 
-      if (shouldRetry(orchestratorResult, orchestratorResult.rounds)) {
-        accumulatedFeedback = extractFeedbackFromEvents([], orchestratorResult.rounds, orchestratorResult.status);
-        // 首次添加反馈时，注入历史经验（Outer Loop Memory）
+      if (shouldRetry(orchestratorResult)) {
+        const currentFeedback = extractFeedbackFromEvents(
+          orchestratorResult.events,
+          orchestratorResult.rounds,
+          orchestratorResult.status,
+        );
+        accumulatedFeedback = aggregateCritiqueFeedback(
+          accumulatedFeedback,
+          currentFeedback,
+          loopCfg.feedbackAggregation,
+        );
         if (historicalLessons) {
-          accumulatedFeedback.historicalLessons = loopCfg.feedbackAggregation === 'cumulative'
-            ? historicalLessons
-            : null;
+          accumulatedFeedback.historicalLessons = historicalLessons;
         }
         continue;
       }
 
       critiqueLoopExhaustedTotal.inc({ adapter, skill, reason: orchestratorResult.status });
-      return buildResult('exhausted', iterations, null, startTime);
+      return buildResult(
+        terminalLoopStatus(orchestratorResult.status),
+        iterations,
+        orchestratorResult.artifactPath,
+        startTime,
+      );
     } catch (err) {
       logCritique({ event: 'loop_iteration_error', projectId, iteration, error: err instanceof Error ? err.message : String(err) });
-      if (iterations.length > 0) return buildResult('exhausted', iterations, null, startTime);
       return buildResult('failed', iterations, null, startTime);
     }
   }

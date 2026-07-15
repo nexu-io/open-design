@@ -42,6 +42,35 @@ export function extractFeedbackFromEvents(
   return { mustFixItems, dimNotes, bestComposite: best.composite, bestRound: best.n, finalStatus, rounds };
 }
 
+export function aggregateCritiqueFeedback(
+  previous: CritiqueFeedback | null,
+  current: CritiqueFeedback,
+  mode: 'cumulative' | 'last_round',
+): CritiqueFeedback {
+  if (mode === 'last_round' || previous === null) return current;
+
+  const mustFixItems = [...new Set([...previous.mustFixItems, ...current.mustFixItems])];
+  const dimNotes = [...previous.dimNotes, ...current.dimNotes].filter((note, index, all) => {
+    const key = `${note.role}\u0000${note.round}\u0000${note.dimName}\u0000${note.dimScore}\u0000${note.dimNote}`;
+    return all.findIndex((candidate) =>
+      `${candidate.role}\u0000${candidate.round}\u0000${candidate.dimName}\u0000${candidate.dimScore}\u0000${candidate.dimNote}` === key,
+    ) === index;
+  });
+  const best = current.bestComposite >= previous.bestComposite ? current : previous;
+
+  return {
+    mustFixItems,
+    dimNotes,
+    bestComposite: best.bestComposite,
+    bestRound: best.bestRound,
+    finalStatus: current.finalStatus,
+    rounds: [...previous.rounds, ...current.rounds],
+    ...((current.historicalLessons ?? previous.historicalLessons) !== undefined
+      ? { historicalLessons: current.historicalLessons ?? previous.historicalLessons ?? null }
+      : {}),
+  };
+}
+
 /** 将反馈格式化为 Agent 可用的修复 prompt */
 export function formatFeedbackAsPrompt(feedback: CritiqueFeedback): string {
   const lines: string[] = [];

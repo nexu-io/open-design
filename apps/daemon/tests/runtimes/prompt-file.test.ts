@@ -35,3 +35,22 @@ test('preparePromptFileForAgent is a no-op unless promptViaFile is enabled', asy
 
   assert.equal(await preparePromptFileForAgent(agent, 'prompt', 'label'), null);
 });
+
+test('preparePromptFileForAgent isolates prompts across loop iterations', async () => {
+  const agent = minimalAgentDef({
+    id: 'prompt-file-agent',
+    name: 'Prompt File Agent',
+    bin: 'prompt-file-agent',
+    promptViaFile: true,
+  });
+  const first = await preparePromptFileForAgent(agent, 'first prompt', 'run-loop-1');
+  const second = await preparePromptFileForAgent(agent, 'second prompt with feedback', 'run-loop-2');
+
+  assert.ok(first);
+  assert.ok(second);
+  assert.notEqual(first.path, second.path);
+  assert.equal(await fs.readFile(first.path, 'utf8'), 'first prompt');
+  assert.equal(await fs.readFile(second.path, 'utf8'), 'second prompt with feedback');
+
+  await Promise.all([first.cleanup(), second.cleanup()]);
+});

@@ -9,67 +9,77 @@
  * 使用方式: 在 server.ts / cli.ts 的 spawn handler 中用 runOrchestratorWithLoop 替换 runOrchestrator
  */
 
-import type { ChildProcess } from 'node:child_process';
 import type Database from 'better-sqlite3';
 import type { CritiqueConfig } from '@open-design/contracts/critique';
 import type { CritiqueLoopConfig } from './loop-types.js';
 import type { CritiqueSseBus, OrchestratorParams, OrchestratorResult } from './orchestrator.js';
 import { runOrchestrator } from './orchestrator.js';
-import { startCritiqueLoop, type FixFunction, type LoopEngineResult } from './loop-engine.js';
+import { startCritiqueLoop, type IterationResources, type LoopEngineResult } from './loop-engine.js';
 import { extractFeedbackFromEvents, formatFeedbackAsPrompt, type CritiqueFeedback } from './loop-feedback.js';
 import { logCritique } from '../logging/critique.js';
 import { critiqueLoopEnabled } from './metrics-loop.js';
-import { recordLesson, appendLessonToFile, loadLessonsAsContext } from './lessons-loop.js';
+import { recordLesson, appendLessonToFile } from './lessons-loop.js';
 import { distillSkillsFromLessons } from './skills-loop.js';
-import type { LessonCategory, LessonSeverity } from './lessons-loop.js';
+import type { LessonCategory } from './lessons-loop.js';
 
 export interface OrchestratorLoopParams extends Omit<OrchestratorParams, 'stdout'> {
   loopCfg: CritiqueLoopConfig;
-  fixFn: FixFunction;
   /** 项目工作目录，用于 Outer Loop Memory 文件读写 */
   projectDir: string;
-  createStdout: (iteration: number, feedback: CritiqueFeedback | null) => AsyncIterable<string>;
-  createChild?: (iteration: number) => Pick<ChildProcess, 'kill'>;
-  createChildExitPromise?: (iteration: number) => Promise<{ code: number | null; signal: string | null }>;
+  /** 为每次迭代创建一个新的 agent 进程及其输出资源 */
+  createIteration: (
+    iteration: number,
+    feedback: CritiqueFeedback | null,
+    runId: string,
+  ) => IterationResources | Promise<IterationResources>;
 }
 
 export async function runOrchestratorWithLoop(
   params: OrchestratorLoopParams,
 ): Promise<OrchestratorResult | LoopEngineResult> {
-  const { loopCfg, fixFn, projectDir, createStdout, createChild, createChildExitPromise, ...baseParams } = params;
+  const { loopCfg, projectDir, createIteration, ...baseParams } = params;
 
   if (!loopCfg.enabled) {
     logCritique({ event: 'loop_disabled', projectId: baseParams.projectId, runId: baseParams.runId });
+    const iteration = await createIteration(1, null, baseParams.runId);
     return runOrchestrator({
       ...baseParams,
-      stdout: createStdout(1, null),
-      ...(createChild?.(1) !== undefined ? { child: createChild!(1) } : {}),
-      ...(createChildExitPromise?.(1) !== undefined ? { childExitPromise: createChildExitPromise!(1) } : {}),
+      stdout: iteration.stdout,
+      child: iteration.child,
+      childExitPromise: iteration.childExitPromise,
     });
   }
 
   critiqueLoopEnabled.set({ enabled: '1' }, 1);
   logCritique({ event: 'loop_enabled', projectId: baseParams.projectId, maxIterations: loopCfg.maxIterations, strategy: loopCfg.loopStrategy });
 
-  const loopId = `critique-loop-${baseParams.projectId.slice(0, 8)}-${Date.now().toString(36)}`;
+  let result: LoopEngineResult;
+  try {
+    result = await startCritiqueLoop({
+      loopCfg, critiqueCfg: baseParams.cfg,
+      db: baseParams.db, bus: baseParams.bus,
+      projectId: baseParams.projectId, artifactDir: baseParams.artifactDir,
+      projectDir,
+      adapter: baseParams.adapter, skill: baseParams.skill,
+      conversationId: baseParams.conversationId,
+      ...(baseParams.signal !== undefined ? { signal: baseParams.signal } : {}),
+      createIteration,
+    });
+  } finally {
+    critiqueLoopEnabled.set({ enabled: '0' }, 0);
+  }
 
-  const result = await startCritiqueLoop({
-    loopCfg, critiqueCfg: baseParams.cfg, fixFn,
-    db: baseParams.db, bus: baseParams.bus,
-    projectId: baseParams.projectId, artifactDir: baseParams.artifactDir,
-    projectDir,
-    adapter: baseParams.adapter, skill: baseParams.skill,
-    conversationId: baseParams.conversationId,
-    ...(baseParams.signal !== undefined ? { signal: baseParams.signal } : {}),
-    createStdout,
-    ...(createChild !== undefined ? { createChild } : {}),
-    ...(createChildExitPromise !== undefined ? { createChildExitPromise } : {}),
-  });
-
-  critiqueLoopEnabled.set({ enabled: '0' }, 0);
-
-  // --- Outer Loop Memory: 记录经验教训 ---
-  await persistLessons(baseParams.db, baseParams.projectId, projectDir, result);
+  // Outer-loop memory is supplemental. A persistence failure must not replace
+  // an already-resolved critique result with a failed chat run.
+  try {
+    await persistLessons(baseParams.db, baseParams.projectId, projectDir, result);
+  } catch (err) {
+    logCritique({
+      event: 'loop_lessons_persist_error',
+      projectId: baseParams.projectId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // --- Outer Loop Skills: 收敛后提炼技能文件 ---
   if (result.status === 'converged') {
@@ -95,19 +105,18 @@ export async function runOrchestratorWithLoop(
     }
   }
 
-  const last = result.iterations[result.iterations.length - 1];
-  if (result.status === 'converged' && last) {
-    return {
-      status: 'shipped', composite: result.bestComposite,
-      rounds: last.orchestratorResult.rounds,
-      transcriptPath: last.orchestratorResult.transcriptPath,
-      artifactPath: result.finalArtifactPath,
-    };
-  }
-
+  const last = result.iterations[result.iterations.length - 1]?.orchestratorResult;
+  const status = result.status === 'converged'
+    ? 'shipped'
+    : result.status === 'exhausted'
+      ? 'below_threshold'
+      : result.status;
   return {
-    status: result.status === 'exhausted' ? 'below_threshold' : 'failed',
-    composite: result.bestComposite, rounds: [], transcriptPath: null,
+    status,
+    composite: result.bestComposite,
+    rounds: last?.rounds ?? [],
+    events: last?.events ?? [],
+    transcriptPath: last?.transcriptPath ?? null,
     artifactPath: result.finalArtifactPath,
   };
 }
@@ -192,6 +201,12 @@ export function summarizeLoopResult(result: LoopEngineResult): string {
     case 'interrupted':
       lines.push(`⏸️ 循环被中断，已完成 ${result.totalIterations} 轮。`);
       break;
+    case 'timed_out':
+      lines.push(`⏱️ 循环超时，已完成 ${result.totalIterations} 轮。`);
+      break;
+    case 'degraded':
+      lines.push('⚠️ 评审适配器降级，循环已停止。');
+      break;
     case 'failed':
       lines.push('❌ 循环失败。');
       break;
@@ -202,4 +217,3 @@ export function summarizeLoopResult(result: LoopEngineResult): string {
 
 export { formatFeedbackAsPrompt, extractFeedbackFromEvents };
 export type { CritiqueFeedback };
-

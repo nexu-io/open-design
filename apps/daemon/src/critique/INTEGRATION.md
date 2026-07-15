@@ -16,7 +16,7 @@
 | `persistence-loop.ts` | `apps/daemon/src/critique/persistence-loop.ts` | 循环数据持久化 |
 | `metrics-loop.ts` | `apps/daemon/src/critique/metrics-loop.ts` | Prometheus 指标 |
 | `critique-loop.ts` | `packages/contracts/src/critique-loop.ts` | 契约类型定义 |
-| `loop-engine.test.ts` | `apps/daemon/src/critique/__tests__/loop-engine.test.ts` | 单元测试 |
+| `loop-engine.test.ts` | `apps/daemon/tests/critique/loop-engine.test.ts` | 单元测试 |
 
 ## 需要修改的现有文件
 
@@ -99,31 +99,23 @@ export {
 
 ```ts
 import { runOrchestratorWithLoop } from './critique/orchestrator-loop.js';
-import type { CritiqueFeedback } from './critique/loop-engine.js';
+import { formatFeedbackAsPrompt } from './critique/loop-feedback.js';
 
 // 在 spawn handler 中:
 const result = await runOrchestratorWithLoop({
   // ... 现有参数 ...
   loopCfg: critiqueCfg.loop,
-  fixFn: async (feedback: CritiqueFeedback, iteration: number) => {
-    // 1. 构造修复 prompt
-    const fixPrompt = formatFeedbackAsPrompt(feedback);
-    
-    // 2. 调用 agent 重新生成产物
-    const artifact = await agentSpawner.regenerate({
-      projectId,
-      feedback: fixPrompt,
-      previousArtifact: lastArtifactPath,
+  createIteration: async (iteration, feedback, iterationRunId) => {
+    const prompt = feedback
+      ? `${composedPrompt}\n\n${formatFeedbackAsPrompt(feedback)}`
+      : composedPrompt;
+    // 每轮必须创建独立进程、stdout 和退出 Promise。prompt-file 适配器
+    // 也必须为本轮写入新的 prompt 文件，不能复用首轮路径。
+    return agentSpawner.spawnIteration({
+      iteration,
+      iterationRunId,
+      prompt,
     });
-    
-    return {
-      artifactContent: artifact.content,
-      artifactMime: artifact.mimeType,
-    };
-  },
-  createStdout: async (iteration: number, feedback: CritiqueFeedback | null) => {
-    // 返回新的 agent 输出流
-    return agentSpawner.spawnStdout();
   },
 });
 ```
@@ -200,10 +192,10 @@ OD_CRITIQUE_LOOP_FEEDBACK_AGGREGATION=cumulative
 
 ```bash
 # 运行单元测试
-pnpm vitest apps/daemon/src/critique/__tests__/loop-engine.test.ts
+pnpm --filter @open-design/daemon exec vitest run tests/critique/loop-engine.test.ts
 
 # 运行所有 critique 测试
-pnpm vitest apps/daemon/src/critique/__tests__/
+pnpm --filter @open-design/daemon test
 ```
 
 ## 循环策略说明

@@ -205,6 +205,7 @@ import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
 import { runOrchestratorWithLoop } from './critique/orchestrator-loop.js';
+import { formatFeedbackAsPrompt } from './critique/loop-feedback.js';
 import { defaultCritiqueLoopConfig } from './critique/loop-types.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
@@ -12330,13 +12331,13 @@ export async function startServer({
         inactivityTimer = null;
       }
     };
-    const scheduleForcedChildShutdown = () => {
-      if (!child) return;
+    const scheduleForcedChildShutdown = (targetChild = run.child ?? child) => {
+      if (!targetChild) return;
       setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGTERM');
+        if (!targetChild.killed) targetChild.kill('SIGTERM');
       }, inactivityKillGraceMs).unref?.();
       setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGKILL');
+        if (!targetChild.killed) targetChild.kill('SIGKILL');
       }, inactivityKillGraceMs * 2).unref?.();
     };
     const failForInactivity = () => {
@@ -12360,8 +12361,9 @@ export async function startServer({
         if (acpSession?.abort) {
           acpSession.abort();
         }
-        if (child && !child.killed) child.kill('SIGTERM');
-        scheduleForcedChildShutdown();
+        const targetChild = run.child ?? child;
+        if (targetChild && !targetChild.killed) targetChild.kill('SIGTERM');
+        scheduleForcedChildShutdown(targetChild);
         return;
       }
       // OpenCode retries a 429 usage-limit silently and emits nothing on
@@ -12408,8 +12410,9 @@ export async function startServer({
       if (acpSession?.abort) {
         acpSession.abort();
       }
-      if (child && !child.killed) child.kill('SIGTERM');
-      scheduleForcedChildShutdown();
+      const targetChild = run.child ?? child;
+      if (targetChild && !targetChild.killed) targetChild.kill('SIGTERM');
+      scheduleForcedChildShutdown(targetChild);
     };
     const activeInactivityTimeoutMs = () =>
       resolveActiveInactivityTimeoutMs({
@@ -12826,6 +12829,7 @@ export async function startServer({
           abort: critiqueAbort,
           startedAt: Date.now(),
         });
+        const registeredCritiqueRunIds = new Set([critiqueRunId]);
 
         // Stderr forwarding and child.on('error') must be wired BEFORE the
         // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
@@ -12852,6 +12856,121 @@ export async function startServer({
             resolve({ code, signal });
           });
         });
+        const loopIterations = new Map<number, {
+          child: typeof child;
+          childExitPromise: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+          stdout: AsyncIterable<string>;
+        }>();
+        loopIterations.set(1, { child, childExitPromise, stdout: stdoutIterable });
+        const spawnLoopIteration = async (
+          iteration: number,
+          feedback: import('./critique/loop-feedback.js').CritiqueFeedback | null,
+          iterationRunId: string,
+        ) => {
+          if (!registeredCritiqueRunIds.has(iterationRunId)) {
+            critiqueRunRegistry.register({
+              runId: iterationRunId,
+              projectId: critiqueProjectKey,
+              abort: critiqueAbort,
+              startedAt: Date.now(),
+            });
+            registeredCritiqueRunIds.add(iterationRunId);
+          }
+          const existing = loopIterations.get(iteration);
+          if (existing) return existing;
+
+          const iterationPrompt = feedback
+            ? `${composed}\n\n${formatFeedbackAsPrompt(feedback)}`
+            : composed;
+          const iterationPromptFile = await preparePromptFileForAgent(
+            def,
+            iterationPrompt,
+            `${run.id}-loop-${iteration}`,
+          );
+          let iterationChild;
+          try {
+            const iterationArgs = def.buildArgs(
+              iterationPrompt,
+              safeImages,
+              extraAllowedDirs,
+              agentOptions,
+              {
+                cwd: effectiveCwd,
+                hasPriorAssistantTurn,
+                agentLogFilePath,
+                promptFilePath: iterationPromptFile?.path,
+                resumeSessionId: agentResumeCtx.resumeSessionId,
+                newSessionId: agentResumeCtx.newSessionId,
+              },
+            );
+            const iterationInvocation = createCommandInvocation({
+              command: agentLaunch.launchPath,
+              args: iterationArgs,
+              env: spawnedAgentEnv,
+            });
+            const iterationStdinMode =
+              def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
+                ? 'pipe'
+                : 'ignore';
+            iterationChild = spawn(iterationInvocation.command, iterationInvocation.args, {
+              env: spawnedAgentEnv,
+              stdio: [iterationStdinMode, 'pipe', 'pipe'],
+              cwd: effectiveCwd,
+              shell: false,
+              windowsVerbatimArguments: iterationInvocation.windowsVerbatimArguments,
+            });
+          } catch (err) {
+            await iterationPromptFile?.cleanup().catch(() => {});
+            throw err;
+          }
+          run.child = iterationChild;
+          iterationChild.stdout.setEncoding('utf8');
+          iterationChild.stderr.setEncoding('utf8');
+          iterationChild.stdout.on('data', (chunk) => {
+            childStdoutSeen = true;
+            noteAgentActivity();
+            agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
+          });
+          iterationChild.stderr.on('data', (chunk) => {
+            noteAgentActivity();
+            emitVisibleAgentStderr(chunk);
+          });
+          iterationChild.on('error', (err) => {
+            flushVisibleAgentStderr();
+            send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
+          });
+          if (iterationChild.stdin && def.promptViaStdin) {
+            iterationChild.stdin.on('error', (err) => {
+              if (err.code !== 'EPIPE' && err.code !== 'EOF' && err.message !== 'write EOF') {
+                send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `stdin: ${err.message}`));
+              }
+            });
+            if (def.promptInputFormat === 'stream-json') {
+              iterationChild.stdin.write(`${JSON.stringify({
+                type: 'user',
+                message: { role: 'user', content: [{ type: 'text', text: iterationPrompt }] },
+              })}\n`, 'utf8');
+            } else {
+              iterationChild.stdin.end(iterationPrompt, 'utf8');
+            }
+          }
+          const iterationExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+            iterationChild.once('close', (code, signal) => {
+              flushVisibleAgentStderr();
+              void iterationPromptFile?.cleanup().catch(() => {});
+              resolve({ code, signal });
+            });
+          });
+          const spawned = {
+            child: iterationChild,
+            childExitPromise: iterationExitPromise,
+            stdout: (async function* () {
+              for await (const chunk of iterationChild.stdout) yield String(chunk);
+            })(),
+          };
+          loopIterations.set(iteration, spawned);
+          return spawned;
+        };
         try {
           const loopCfg = critiqueCfg.loop ?? defaultCritiqueLoopConfig();
           const orchestratorResult = await runOrchestratorWithLoop({
@@ -12877,10 +12996,8 @@ export async function startServer({
             signal: critiqueAbort.signal,
             loopCfg,
             projectDir: effectiveCwd,
-            fixFn: async () => ({ artifactContent: '', artifactMime: 'text/html' }),
-            createStdout: () => stdoutIterable,
-            createChild: () => child,
-            createChildExitPromise: () => childExitPromise,
+            createIteration: (iteration, feedback, iterationRunId) =>
+              spawnLoopIteration(iteration, feedback, iterationRunId),
           });
           // Map the critique terminal status to the chat run lifecycle.
           // 'shipped' and 'below_threshold' both ran to a ship decision and
@@ -12901,7 +13018,9 @@ export async function startServer({
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
         } finally {
-          critiqueRunRegistry.unregister(critiqueProjectKey, critiqueRunId);
+          for (const registeredRunId of registeredCritiqueRunIds) {
+            critiqueRunRegistry.unregister(critiqueProjectKey, registeredRunId);
+          }
         }
         return;
       }

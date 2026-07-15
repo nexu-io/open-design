@@ -14,7 +14,7 @@ import type Database from 'better-sqlite3';
 export interface CritiqueLoopRow {
   id: string;
   project_id: string;
-  status: 'running' | 'converged' | 'exhausted' | 'interrupted' | 'failed';
+  status: 'running' | 'converged' | 'exhausted' | 'interrupted' | 'timed_out' | 'degraded' | 'failed';
   max_iterations: number;
   total_iterations: number;
   best_composite: number | null;
@@ -135,7 +135,7 @@ export function updateCritiqueLoop(
   // 如果标记为终态，添加完成时间
   if (
     updates.status &&
-    ['converged', 'exhausted', 'interrupted', 'failed'].includes(updates.status)
+    ['converged', 'exhausted', 'interrupted', 'timed_out', 'degraded', 'failed'].includes(updates.status)
   ) {
     sets.push("finished_at = datetime('now')");
   }

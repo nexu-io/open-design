@@ -109,6 +109,7 @@ export interface OrchestratorResult {
   status: CritiqueRunStatus;
   composite: number | null;
   rounds: CritiqueRunRow['rounds'];
+  events: PanelEvent[];
   transcriptPath: string | null;
   artifactPath: string | null;
 }
@@ -802,6 +803,7 @@ export async function runOrchestrator(
     status: finalStatus,
     composite: finalComposite,
     rounds: roundsSummary,
+    events: collectedEvents,
     transcriptPath,
     artifactPath,
   };

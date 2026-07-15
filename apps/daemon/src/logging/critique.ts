@@ -131,6 +131,11 @@ export type CritiqueLogEvent =
       adapter: string;
     }
   | {
+      event: 'loop_lessons_persist_error';
+      projectId: string;
+      error: string;
+    }
+  | {
       event: 'loop_skills_distilled';
       projectId: string;
       lessonCount: number;
