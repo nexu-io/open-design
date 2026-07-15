@@ -13,8 +13,17 @@ export const WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER =
   'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
 export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 
+// Runtime externals the prebundled daemon loads from node_modules at boot
+// (see the `externals` in WIN_PREBUNDLE_POLICIES below). Their pinned versions
+// MUST stay in lockstep with apps/daemon/package.json / the pnpm lockfile: the
+// app is assembled with these as its declared deps (win/app.ts), and
+// electron-builder 26's pnpm node_modules collector DROPS a dependency whose
+// pin doesn't semver-satisfy the version resolvable on disk — silently
+// shipping an app whose daemon dies at boot with `ERR_MODULE_NOT_FOUND`
+// (issue #4638). A stale `12.9.0` pin here vs `12.10.0` on disk did exactly
+// that. Keep this equal to the daemon's better-sqlite3 pin whenever it moves.
 export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
-  "better-sqlite3": "12.9.0",
+  "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
 } as const;
 
