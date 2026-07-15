@@ -1,0 +1,19 @@
+{
+  "candidateId": "96f0043a-51f8-4ff2-b947-3797114b46ab",
+  "projectId": "a8dbfa23-fb5f-4d13-b967-4adc09a2fae8",
+  "runId": "de67af24-e558-4921-b164-18bc605a2a13",
+  "conversationId": "0d561e15-da10-45ef-a919-819c13169b12",
+  "provenance": {
+    "summary": "Detected from .od-skills/gsap-performance-d70c6b886a/SKILL.md after a successful run.",
+    "detectedAt": 1784107179147
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": ".od-skills/gsap-performance-d70c6b886a/SKILL.md",
+      "label": ".od-skills/gsap-performance-d70c6b886a/SKILL.md",
+      "size": 4457,
+      "copied": true
+    }
+  ]
+}
