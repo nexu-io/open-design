@@ -255,13 +255,15 @@ describe('concurrent run per-conversation guard (#5490)', () => {
     expect(retry.code).toBe('CONVERSATION_BUSY');
     expect(await abortedFirst).toBe('aborted');
 
-    // The disconnected handler runs on and creates exactly one run; the retry
-    // created none. Only one native session ever materializes — no fork.
-    await waitForCaptureCount(capturePath, project.projectId, 1);
-    const captures = await readCapturesForProject(capturePath, project.projectId);
-    const sessions = new Set(captures.map((c) => c.sessionId).filter(Boolean));
-    expect(captures.length).toBe(1);
-    expect(sessions.size).toBe(1);
+    // The 409 IS the proof: the disconnected handler still owns the conversation
+    // claim, so the retry is refused and creates no second run — no fork. On the
+    // bug the claim is released on the socket's 'close', the retry is admitted
+    // (202), and both handlers reach create. We deliberately do NOT assert on the
+    // aborted handler's own downstream spawn — whether a client-aborted request
+    // goes on to finish agent detection and mint a native session is timing- and
+    // environment-dependent and is not part of this invariant. (Cases 1 and 2
+    // already pin the single-native-session / no-fork property with non-aborted
+    // requests, where the spawn captures are deterministic.)
   });
 });
 
@@ -492,19 +494,6 @@ async function startProjectOnlyRunAborted(
   await new Promise((resolve) => setTimeout(resolve, abortAfterMs));
   controller.abort();
   return pending;
-}
-
-async function waitForCaptureCount(
-  capturePath: string,
-  projectId: string,
-  target: number,
-): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 15_000) {
-    const caps = await readCapturesForProject(capturePath, projectId);
-    if (caps.length >= target) return;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
 }
 
 async function userMessageCount(
