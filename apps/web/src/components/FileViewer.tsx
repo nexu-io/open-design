@@ -6178,7 +6178,7 @@ function HtmlViewer({
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
-  const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('preview');
+  const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -6630,7 +6630,13 @@ function HtmlViewer({
     setCloudflareAccountId(matchingConfig?.accountId || '');
     setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
     setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
-    setDeployTarget(matchingConfig?.target || 'preview');
+    // The daemon's GET /api/deploy/config response currently hardcodes `target: 'preview'`
+    // as a placeholder (apps/daemon/src/deploy.ts publicDeployConfig /
+    // publicCloudflarePagesConfig) rather than persisting a real user preference, so it must
+    // not be used to seed the deploy-target selector's default. Default to 'production' to
+    // match the daemon's documented default for an omitted target on POST deploy, and to match
+    // pre-regression behavior.
+    setDeployTarget('production');
   }
 
   function cloudflareConfigHintsFromForm() {

@@ -115,14 +115,14 @@ function clickDeploySubmitButton() {
 }
 
 describe('FileViewer deploy target selector', () => {
-  it('shows a deploy target selector defaulted to Preview and forwards that default on deploy', async () => {
+  it('shows a deploy target selector defaulted to Production and forwards that default on deploy', async () => {
     let deployBody: Record<string, unknown> | null = null;
     vi.stubGlobal('fetch', mockDeployFetch((body) => { deployBody = body; }));
 
     await openCloudflareDeployModal(deployableHtmlFile());
 
     const targetSelect = await screen.findByRole('combobox', { name: /target/i });
-    expect((targetSelect as HTMLSelectElement).value).toBe('preview');
+    expect((targetSelect as HTMLSelectElement).value).toBe('production');
 
     clickDeploySubmitButton();
 
@@ -130,9 +130,32 @@ describe('FileViewer deploy target selector', () => {
       expect(deployBody).not.toBeNull();
     });
     // Default semantics: the daemon already treats an absent target as
-    // preview, so either omitting the field or sending it explicitly is a
-    // correct default — only an explicit 'production' would be wrong here.
-    expect(deployBody!.target === undefined || deployBody!.target === 'preview').toBe(true);
+    // production (apps/daemon/src/routes/deploy.ts), so the UI's default
+    // must match that and explicitly send 'production' — leaving it
+    // undefined or sending 'preview' would silently deploy to preview
+    // instead of updating the live site, which is the regression this test
+    // guards against.
+    expect(deployBody!.target).toBe('production');
+  });
+
+  it('sends target: "preview" in the deploy request when the user selects the Preview target', async () => {
+    let deployBody: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', mockDeployFetch((body) => { deployBody = body; }));
+
+    await openCloudflareDeployModal(deployableHtmlFile());
+
+    const targetSelect = await screen.findByRole('combobox', { name: /target/i });
+    fireEvent.change(targetSelect, { target: { value: 'preview' } });
+    await waitFor(() => {
+      expect((targetSelect as HTMLSelectElement).value).toBe('preview');
+    });
+
+    clickDeploySubmitButton();
+
+    await waitFor(() => {
+      expect(deployBody).not.toBeNull();
+    });
+    expect(deployBody!.target).toBe('preview');
   });
 
   it('sends target: "production" in the deploy request when the user selects the Production target', async () => {
