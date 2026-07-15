@@ -39,6 +39,9 @@ import type {
   CreatorReleasePackageData,
   CreatorReleasePlatform,
   CreatorReleaseStatus,
+  CreatorPerformanceMetrics,
+  CreatorPerformanceProjectData,
+  CreatorPerformanceSnapshot,
   Project,
 } from '@open-design/contracts';
 
@@ -112,6 +115,23 @@ function currentReleaseAsset(assetId: string | undefined, media: CreatorMediaPro
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
 const CREATOR_STATUSES: CreatorTaskStatus[] = ['todo', 'ready', 'blocked', 'done'];
 const CREATOR_PRIORITIES: CreatorTaskPriority[] = ['low', 'medium', 'high'];
+
+// Performance 指标字段顺序（与 contracts 一致）；仅这些键可用于录入与展示。
+const PERFORMANCE_METRIC_KEYS = [
+  'views',
+  'likes',
+  'comments',
+  'shares',
+  'favorites',
+  'followers',
+  'watchSeconds',
+] as const;
+
+type CreatorPerformanceProjectState = {
+  projectId: string;
+  data: CreatorPerformanceProjectData;
+  failed: boolean;
+};
 
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
@@ -511,6 +531,11 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const [creatorReleaseEdit, setCreatorReleaseEdit] = useState<CreatorReleasePackage | null>(null);
   const [creatorReleaseTagsInput, setCreatorReleaseTagsInput] = useState('');
   const [creatorReleaseSaving, setCreatorReleaseSaving] = useState(false);
+  const [creatorPerformanceProjectData, setCreatorPerformanceProjectData] = useState<CreatorPerformanceProjectState[]>([]);
+  const [performanceMetrics, setPerformanceMetrics] = useState<Record<string, string>>({});
+  const [performanceCapturedAt, setPerformanceCapturedAt] = useState('');
+  const [performanceNote, setPerformanceNote] = useState('');
+  const [performanceSaving, setPerformanceSaving] = useState(false);
   const [creatorContentTaskId, setCreatorContentTaskId] = useState('');
   const [creatorStoryboardMediaAssetId, setCreatorStoryboardMediaAssetId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -604,6 +629,20 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     () => creatorMediaProjectData.find((value) => value.projectId === creatorReleaseProjectId),
     [creatorMediaProjectData, creatorReleaseProjectId],
   );
+  const selectedPerformance = useMemo(
+    () => creatorPerformanceProjectData.find((value) => value.projectId === creatorReleaseProjectId),
+    [creatorPerformanceProjectData, creatorReleaseProjectId],
+  );
+  // 当前 release 的快照，按 capturedAt 倒序；API 失败时返回空（不展示 Performance 区域）。
+  const selectedReleaseSnapshots = useMemo(() => {
+    if (!creatorReleaseEdit || !selectedPerformance || selectedPerformance.failed) return [];
+    return [...selectedPerformance.data.snapshots]
+      .filter((snapshot) => snapshot.releaseId === creatorReleaseEdit.id)
+      .sort((left, right) => {
+        if (left.capturedAt !== right.capturedAt) return left.capturedAt < right.capturedAt ? 1 : -1;
+        return left.id < right.id ? 1 : -1;
+      });
+  }, [creatorReleaseEdit, selectedPerformance]);
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -712,6 +751,23 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         }
       }));
       setCreatorReleaseProjectData(creatorReleaseData);
+      // 按项目独立加载 performance 快照；单项目失败仅降级该项目的 Performance 区域，
+      // 不影响 Tasks、Media、Content 或 Release 面板。
+      const creatorPerformanceData = await Promise.all(entryProjects.map(async (project): Promise<CreatorPerformanceProjectState> => {
+        try {
+          const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-performance-snapshots`);
+          if (!response.ok) return { projectId: project.id, data: { snapshots: [] }, failed: true };
+          const data = await response.json() as Partial<CreatorPerformanceProjectData>;
+          return {
+            projectId: project.id,
+            data: { snapshots: Array.isArray(data.snapshots) ? data.snapshots : [] },
+            failed: false,
+          };
+        } catch {
+          return { projectId: project.id, data: { snapshots: [] }, failed: true };
+        }
+      }));
+      setCreatorPerformanceProjectData(creatorPerformanceData);
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
       }
@@ -997,6 +1053,68 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setError(errorMessage(err));
     } finally {
       setCreatorReleaseSaving(false);
+    }
+  }, [creatorReleaseEdit]);
+
+  // 仅 published release 可创建 performance 快照；仅发送填写的指标字段、可选 ISO capturedAt 与 trim 后非空 note。
+  const createPerformanceSnapshot = useCallback(async () => {
+    if (!creatorReleaseEdit || creatorReleaseEdit.status !== 'published') return;
+    const release = creatorReleaseEdit;
+    const filledMetrics: Record<string, number> = {};
+    for (const key of PERFORMANCE_METRIC_KEYS) {
+      const raw = performanceMetrics[key];
+      if (raw !== undefined && raw.trim() !== '') {
+        filledMetrics[key] = Number(raw);
+      }
+    }
+    if (Object.keys(filledMetrics).length === 0) {
+      setError('At least one metric is required');
+      return;
+    }
+    const body: Record<string, unknown> = { releaseId: release.id, metrics: filledMetrics };
+    if (performanceCapturedAt.trim()) {
+      try { body.capturedAt = localInputToIso(performanceCapturedAt); } catch { /* 保留输入 */ }
+    }
+    const note = performanceNote.trim();
+    if (note) body.note = note;
+    setPerformanceSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(release.projectId)}/creator-performance-snapshots`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(`creator performance create: ${response.status}`);
+      const result = await response.json() as { snapshot: CreatorPerformanceSnapshot };
+      // 局部刷新：把新快照加入当前项目性能数据，失败保留输入并显示 alert。
+      setCreatorPerformanceProjectData((current) => current.map((entry) => entry.projectId !== release.projectId ? entry : {
+        ...entry, data: { snapshots: [...entry.data.snapshots, result.snapshot] },
+      }));
+      setPerformanceMetrics({});
+      setPerformanceCapturedAt('');
+      setPerformanceNote('');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setPerformanceSaving(false);
+    }
+  }, [creatorReleaseEdit, performanceMetrics, performanceCapturedAt, performanceNote]);
+
+  // 删除确认文案固定；取消不发请求，成功后仅移除本地目标快照。
+  const deletePerformanceSnapshot = useCallback(async (snapshot: CreatorPerformanceSnapshot) => {
+    if (!creatorReleaseEdit) return;
+    if (!window.confirm('Delete this performance snapshot?')) return;
+    setPerformanceSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(creatorReleaseEdit.projectId)}/creator-performance-snapshots/${encodeURIComponent(snapshot.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`creator performance delete: ${response.status}`);
+      setCreatorPerformanceProjectData((current) => current.map((entry) => entry.projectId !== creatorReleaseEdit.projectId ? entry : {
+        ...entry, data: { snapshots: entry.data.snapshots.filter((candidate) => candidate.id !== snapshot.id) },
+      }));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setPerformanceSaving(false);
     }
   }, [creatorReleaseEdit]);
 
@@ -1996,6 +2114,66 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           {key}
                         </label>
                       ))}
+                    </fieldset>
+                    <fieldset className="creator-performance">
+                      <legend>Performance</legend>
+                      {creatorReleaseEdit.status !== 'published' ? (
+                        <p className="creator-list__desc">Performance snapshots require a published release.</p>
+                      ) : selectedPerformance?.failed ? (
+                        <p className="creator-list__desc">Performance unavailable for this project.</p>
+                      ) : (
+                        <>
+                          <div className="creator-performance-fields">
+                            {PERFORMANCE_METRIC_KEYS.map((key) => (
+                              <label key={key}>{key}
+                                <input aria-label={`Performance ${key}`} type="number" min="0" step="1" inputMode="numeric"
+                                  value={performanceMetrics[key] ?? ''}
+                                  onChange={(event) => setPerformanceMetrics((current) => ({ ...current, [key]: event.target.value }))} />
+                              </label>
+                            ))}
+                            <label>Captured at
+                              <input aria-label="Performance captured at" type="datetime-local" value={performanceCapturedAt}
+                                onChange={(event) => setPerformanceCapturedAt(event.target.value)} />
+                            </label>
+                            <label>Note
+                              <textarea aria-label="Performance note" value={performanceNote}
+                                onChange={(event) => setPerformanceNote(event.target.value)} />
+                            </label>
+                          </div>
+                          <div className="creator-list__actions">
+                            <Button variant="primary" className="creator-list__action" disabled={performanceSaving || Object.keys(performanceMetrics).every((key) => !performanceMetrics[key]?.trim())} onClick={() => void createPerformanceSnapshot()}>Save snapshot</Button>
+                          </div>
+                          <ul className="creator-list">
+                            {selectedReleaseSnapshots.map((snapshot, index) => {
+                              const older = selectedReleaseSnapshots[index + 1];
+                              return (
+                                <li key={snapshot.id} className="creator-list__item">
+                                  <div className="creator-list__main">
+                                    <strong className="creator-list__title">{snapshot.capturedAt}</strong>
+                                    <div className="creator-list__chips">
+                                      {PERFORMANCE_METRIC_KEYS.filter((key) => snapshot.metrics[key] !== undefined).map((key) => {
+                                        const value = snapshot.metrics[key]!;
+                                        const olderValue = older && older.metrics[key] !== undefined ? older.metrics[key]! : undefined;
+                                        const delta = olderValue !== undefined ? value - olderValue : undefined;
+                                        return (
+                                          <span key={key} className="creator-chip">
+                                            {key}: {value}
+                                            {delta !== undefined ? ` (${delta >= 0 ? '+' : ''}${delta})` : ''}
+                                          </span>
+                                        );
+                                      })}
+                                      {snapshot.note ? <span className="creator-chip">{snapshot.note}</span> : null}
+                                    </div>
+                                  </div>
+                                  <div className="creator-list__actions">
+                                    <Button variant="ghost" className="creator-list__action" aria-label={`Delete performance snapshot ${snapshot.capturedAt}`} disabled={performanceSaving} onClick={() => void deletePerformanceSnapshot(snapshot)}>Delete</Button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </>
+                      )}
                     </fieldset>
                     <div className="creator-list__actions">
                       <Button variant="primary" className="creator-list__action" disabled={creatorReleaseSaving || !creatorReleaseEdit.title.trim()} onClick={() => void saveCreatorRelease()}>Save release</Button>
