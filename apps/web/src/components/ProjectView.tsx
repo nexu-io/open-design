@@ -9611,49 +9611,14 @@ export function computeTraceObjectFiles(
   }
   return [...byName.values()];
 }
+function stripInternalStorageProjectPrefix(value: string): string {
+  return value.replace(/^\.od\/projects\/[^/]+\//, '');
+}
 
-function findTouchedProjectFile(
-  rawPath: string,
-  files: readonly ProjectFile[],
-  projectId?: string,
-  projectRoot?: string | null,
-): ProjectFile | null {
-  const slashed = rawPath.replace(/\\/g, '/');
-  // Lexically resolve `.`/`..` first: a path whose `..` climbs above its own
-  // anchor can never be proven to stay anywhere, so it is rejected outright —
-  // before any suffix matching could pair it with an in-project file.
-  const segments = lexicallyNormalizePathSegments(slashed);
-  if (!segments || segments.length === 0) return null;
-  let normalized = segments.join('/');
-  // A managed-project alias (`…/projects/<projectId>/…`) identifies the file's
-  // project-relative form regardless of where the alias mount lives, so it is
-  // trusted as-is; containment below only anchors paths without that marker.
-  const managedProjectRelativePath = relativePathFromManagedProjectAlias(normalized, projectId);
-  if (!managedProjectRelativePath && isAbsoluteToolPath(slashed)) {
-    const rootSegments = projectRoot
-      ? lexicallyNormalizePathSegments(projectRoot.replace(/\\/g, '/'))
-      : null;
-    if (rootSegments && rootSegments.length > 0) {
-      // An absolute tool path is only trusted when it provably lives under
-      // the project root: require the root's segments as a prefix and match
-      // on the remaining project-relative form (/workspace/index.html →
-      // index.html). Out-of-root paths (including `..` escapes that resolve
-      // outside the root) are rejected here rather than falling through to
-      // suffix matching, where /tmp/site/index.html could otherwise pick the
-      // project's own index.html.
-      if (segments.length <= rootSegments.length) return null;
-      for (let i = 0; i < rootSegments.length; i += 1) {
-        if (segments[i] !== rootSegments[i]) return null;
-      }
-      normalized = segments.slice(rootSegments.length).join('/');
-    }
-    // Without a usable root there is no anchor to judge containment against;
-    // keep the legacy suffix behavior below.
-  }
-  const comparablePaths = managedProjectRelativePath
-    ? [normalized, managedProjectRelativePath]
-    : [normalized];
-  const hasPathSeparator = comparablePaths.every((candidate) => candidate.includes('/'));
+function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]): ProjectFile | null {
+  const normalized = normalizeComparableFilePath(stripInternalStorageProjectPrefix(rawPath));
+  if (!normalized) return null;
+  const hasPathSeparator = normalized.includes('/');
   const basename = normalized.split('/').pop() ?? normalized;
   const normalizedFiles = files.map((file) => ({
     file,
