@@ -238,6 +238,30 @@ describe('computeTraceObjectFiles', () => {
 
     expect(files).toEqual([]);
   });
+  it('resolves internal .od/projects/<id>/ touched paths to the existing project file', () => {
+  const before = ['existing.html'];
+
+  const next = [
+    {
+      name: 'existing.html',
+      path: 'existing.html',
+      size: 10,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    },
+  ];
+
+  const files = computeTraceObjectFiles(
+    before,
+    next as never,
+    ['.od/projects/46041b54/existing.html'],
+  );
+
+  expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+    ['existing.html', 'modified'],
+  ]);
+});
 
   it('ignores managed-project aliases that belong to a different project', () => {
     const before = ['existing.html'];
