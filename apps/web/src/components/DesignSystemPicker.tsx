@@ -35,6 +35,14 @@ function isTeamSystem(system: DesignSystemSummary): boolean {
   return system.teamShared === true || system.teamSynced === true;
 }
 
+const BUNDLED_SUMMARY_PATTERN =
+  /^Bundled Open Design package for .+, derived from curated DESIGN\.md, tokens\.css, and components\.html fixtures\.$/i;
+
+function searchableSummary(summary: string): string {
+  const normalized = summary.trim();
+  return BUNDLED_SUMMARY_PATTERN.test(normalized) ? '' : normalized;
+}
+
 interface PopoverAnchor {
   left: number;
   width: number;
@@ -200,7 +208,15 @@ export function DesignSystemPicker({
     return designSystems.filter((d) => {
       const localizedSummary = localizeDesignSystemSummary(locale, d);
       const localizedCategory = localizeDesignSystemCategory(locale, d.category);
-      const haystack = `${d.title} ${d.category} ${d.summary} ${localizedCategory} ${localizedSummary}`.toLowerCase();
+      const haystack = [
+        d.title,
+        d.category,
+        localizedCategory,
+        searchableSummary(d.summary),
+        searchableSummary(localizedSummary),
+      ]
+        .join(' ')
+        .toLowerCase();
       return haystack.includes(q);
     });
   }, [query, designSystems, locale]);
