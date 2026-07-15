@@ -152,7 +152,7 @@ export function registerCreatorReleaseRoutes(app: Express, deps: RegisterCreator
   app.patch('/api/projects/:id/creator-release-packages/:releaseId', async (req, res) => {
     try {
       requireProject(deps, req.params.id);
-      const releaseId = req.params.releaseId;
+      const releaseId = requireReleaseId(req.params.releaseId);
       const current = (await getCreatorReleaseProjectData(RUNTIME_DATA_DIR, req.params.id))
         .releasePackages.find((entry) => entry.id === releaseId);
       if (!current) return res.status(404).json({ error: 'creator release package not found' });

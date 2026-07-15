@@ -389,4 +389,35 @@ describe('creator release routes', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it('rejects invalid PATCH release ids with 400 and keeps unknown-but-well-formed ids as 404', async () => {
+    const { server, baseUrl } = await listen(buildApp());
+    try {
+      await makeContent('project-1');
+
+      // 空白 id（%20 解码为单空格）→ 400 JSON。
+      const spacePatch = await fetch(`${baseUrl}/api/projects/project-1/creator-release-packages/%20`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '空白 id' }),
+      });
+      expect(spacePatch.status).toBe(400);
+      await expect(spacePatch.json()).resolves.toMatchObject({ error: expect.any(String) });
+
+      // 路径穿越语义的编码参数（%5c 解码为反斜杠，被 requireReleaseId 的 [/\\] 检查拒绝）→ 400 JSON。
+      // 注：%2e%2e（编码 ..）会被 URL 解析器的双点段规范化移除，到达不了路由处理函数，故改用反斜杠。
+      const traversalPatch = await fetch(`${baseUrl}/api/projects/project-1/creator-release-packages/%5c`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '穿越 id' }),
+      });
+      expect(traversalPatch.status).toBe(400);
+      await expect(traversalPatch.json()).resolves.toMatchObject({ error: expect.any(String) });
+
+      // 合法格式但不存在 → 仍为 404 JSON，不受 requireReleaseId 影响。
+      const ghostPatch = await fetch(`${baseUrl}/api/projects/project-1/creator-release-packages/creator-release:ghost`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '幽灵 id' }),
+      });
+      expect(ghostPatch.status).toBe(404);
+      await expect(ghostPatch.json()).resolves.toMatchObject({ error: expect.any(String) });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });
