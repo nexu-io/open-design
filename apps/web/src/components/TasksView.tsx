@@ -1567,18 +1567,30 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                   </div>
                   {selectedCreatorContent?.failed ? <p className="creator-list__desc">Content unavailable for this project.</p> : (
                     <ul className="creator-list">
-                      {selectedCreatorContent?.data.contentProjects.map((content) => (
+                      {selectedCreatorContent?.data.contentProjects.map((content) => {
+                        const contentMediaEntry = creatorMediaProjectData.find((entry) => entry.projectId === content.projectId);
+                        const missingMediaCount = contentMediaEntry && !contentMediaEntry.failed
+                          ? content.storyboardItems.reduce(
+                            (count, item) => count + item.mediaAssetIds.filter((id) => {
+                              const asset = contentMediaEntry.data.assets.find((candidate) => candidate.id === id);
+                              return asset !== undefined && asset.availability === 'missing';
+                            }).length,
+                            0,
+                          )
+                          : 0;
+                        return (
                         <li key={content.id} className="creator-list__item">
                           <div className="creator-list__main">
                             <strong className="creator-list__title">{content.title}</strong>
-                            <div className="creator-list__chips"><span className="creator-chip">{content.status}</span><span className="creator-chip">{content.storyboardItems.length} shots</span><span className="creator-chip">{content.taskIds.length} tasks</span></div>
+                            <div className="creator-list__chips"><span className="creator-chip">{content.status}</span><span className="creator-chip">{content.storyboardItems.length} shots</span><span className="creator-chip">{content.taskIds.length} tasks</span>{missingMediaCount > 0 ? <span className="creator-chip">{missingMediaCount} missing asset{missingMediaCount === 1 ? '' : 's'}</span> : null}</div>
                           </div>
                           <div className="creator-list__actions">
                             <Button variant="ghost" className="creator-list__action" aria-label={`Edit content ${content.title}`} onClick={() => setCreatorContentEdit(content)}>Edit</Button>
                             <Button variant="ghost" className="creator-list__action" aria-label={`Delete content ${content.title}`} disabled={creatorContentSaving} onClick={() => void deleteCreatorContent(content)}>Delete</Button>
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

@@ -1674,7 +1674,46 @@ describe('TasksView page shell', () => {
     expect(screen.getAllByText('Missing').length).toBeGreaterThan(0);
     const candidates = screen.getByLabelText('Storyboard media candidate');
     expect(within(candidates).queryByRole('option', { name: 'missing.jpg' })).toBeNull();
-    expect(within(candidates).getByRole('option', { name: 'available.jpg' })).toBeTruthy();
+      expect(within(candidates).getByRole('option', { name: 'available.jpg' })).toBeTruthy();
+  });
+
+  it('shows a missing asset hint in the content list before opening the editor', async () => {
+    const creatorProject: Project = { id: 'project-content-missing-hint-1', name: '缺失素材提示项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-content-missing-hint-1': { contentProjects: [
+        {
+          id: 'creator-content:missing', projectId: creatorProject.id, title: '有缺失素材的内容', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [],
+          storyboardItems: [{ id: 'creator-storyboard:missing', position: 1, purpose: '开场', mediaAssetIds: ['creator-media:missing'], createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }],
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        },
+        {
+          id: 'creator-content:ok', projectId: creatorProject.id, title: '资料齐全的内容', status: 'idea', brief: {}, outline: {}, retrospective: {}, taskIds: [],
+          storyboardItems: [{ id: 'creator-storyboard:ok', position: 1, purpose: '开场', mediaAssetIds: ['creator-media:available'], createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z' }],
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        },
+        {
+          id: 'creator-content:empty', projectId: creatorProject.id, title: '无素材的内容', status: 'idea', brief: {}, outline: {}, retrospective: {}, taskIds: [],
+          storyboardItems: [],
+          createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ] } },
+      creatorMediaData: { 'project-content-missing-hint-1': { assets: [
+        { id: 'creator-media:missing', fileName: 'missing.jpg', kind: 'image', relativePath: 'missing.jpg', availability: 'missing' },
+        { id: 'creator-media:available', fileName: 'available.jpg', kind: 'image', relativePath: 'available.jpg', availability: 'available' },
+      ], taskLinks: [] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    // The missing-asset content surfaces the hint before the editor opens.
+    expect(await screen.findByText('1 missing asset')).toBeTruthy();
+    // Available-only and asset-less content are listed but carry no hint.
+    expect(screen.getByText('资料齐全的内容')).toBeTruthy();
+    expect(screen.getByText('无素材的内容')).toBeTruthy();
+    // Exactly one missing-asset chip exists: only the missing-media content shows it.
+    expect(screen.getAllByText(/missing asset/i).length).toBe(1);
   });
 
   it('asks for confirmation before deleting a content project', async () => {
