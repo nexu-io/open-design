@@ -46,6 +46,7 @@ function mockTasksViewFetch({
   creatorMediaData = {},
   creatorContentData = {},
   creatorMediaFailures = [],
+  creatorContentFailures = [],
 }: {
   routines?: Routine[];
   creatorProjects?: Project[];
@@ -54,6 +55,7 @@ function mockTasksViewFetch({
   creatorMediaData?: Record<string, { assets: Array<{ id: string; fileName: string; kind: string; relativePath: string; availability: string }>; taskLinks: Array<{ taskId: string; assetId: string }> }>;
   creatorContentData?: Record<string, CreatorContentProjectData>;
   creatorMediaFailures?: string[];
+  creatorContentFailures?: string[];
 } = {}) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
@@ -92,6 +94,7 @@ function mockTasksViewFetch({
     const creatorContentRead = /^\/api\/projects\/([^/]+)\/creator-content$/.exec(url);
     if (creatorContentRead && (!init || init.method === undefined)) {
       const projectId = decodeURIComponent(creatorContentRead[1]!);
+      if (creatorContentFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'content unavailable' }), { status: 503 });
       return new Response(JSON.stringify(creatorContentData[projectId] ?? { contentProjects: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -1698,5 +1701,29 @@ describe('TasksView page shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete content 校园黄昏短片' }));
     await waitFor(() => expect(deleteCalls).toEqual(['/api/projects/project-content-delete-1/creator-content/creator-content%3A1']));
     expect(confirmSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('degrades creator content when the content API fails but keeps tasks and media usable', async () => {
+    const creatorProject: Project = {
+      id: 'project-content-fail-1', name: '内容失败项目', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentFailures: ['project-content-fail-1'],
+      creatorProjectData: { 'project-content-fail-1': { tasks: [{
+        id: 'creator-task:1', projectId: creatorProject.id, title: 'surviving task', stage: 'topic', status: 'todo',
+        priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }], activities: [] } },
+      creatorMediaData: { 'project-content-fail-1': { assets: [
+        { id: 'creator-media:1', fileName: 'clip.mp4', kind: 'video', relativePath: 'media/clip.mp4', availability: 'available' },
+      ], taskLinks: [] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Content unavailable for this project.')).toBeTruthy();
+    expect(screen.getAllByText('surviving task').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('clip.mp4').length).toBeGreaterThan(0);
   });
 });
