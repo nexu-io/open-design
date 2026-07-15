@@ -62,10 +62,20 @@ describe('patchMemoryExtractionConfig', () => {
     expect(await patchMemoryExtractionConfig(null)).toBeUndefined();
   });
 
-  it('normalizes a missing extraction echo to null', async () => {
+  it('throws when a successful response omits the extraction field', async () => {
     stubFetch({
       ok: true,
       json: async () => ({ enabled: true }),
+    } as Partial<Response> & { ok: boolean });
+    await expect(patchMemoryExtractionConfig({} as never)).rejects.toThrow(
+      'Memory config PATCH succeeded without an extraction field',
+    );
+  });
+
+  it('returns null when the daemon explicitly echoes a cleared extraction', async () => {
+    stubFetch({
+      ok: true,
+      json: async () => ({ enabled: true, extraction: null }),
     } as Partial<Response> & { ok: boolean });
     expect(await patchMemoryExtractionConfig(null)).toBeNull();
   });

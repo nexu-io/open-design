@@ -140,14 +140,39 @@ export function useMemoryConnectors(
   );
   const [connectorConnectErrors, setConnectorConnectErrors] = useState<Record<string, string>>({});
   const connectorsRef = useRef(connectors);
-  // The OAuth poll and popup callback can overlap. They both write the same
-  // status domain, so only the newest refresh may commit its snapshot.
-  const connectorStatusCommitGuardRef = useRef(createAsyncCommitGuard());
+  const connectorStatusesRef = useRef(connectorStatuses);
+  // Two independent ordering domains, not one. The status snapshot
+  // (`connectorStatuses`) is written by both `reloadConnectors` and
+  // `refreshConnectorStatuses` (the OAuth poll and popup callback can
+  // overlap too) — only the newest of those may commit. The full-details
+  // catalogue (`connectors`, via `fetchMemoryConnectors`) is written ONLY by
+  // `reloadConnectors` — a status-only refresh must NOT invalidate an
+  // in-flight catalogue fetch, or the freshly-fetched discovery response
+  // gets silently discarded while `connectorsLoading` still clears (the
+  // catalogue guard is independent of the reload-loading guard below too).
+  const connectorStatusGuardRef = useRef(createAsyncCommitGuard());
+  const connectorCatalogueGuardRef = useRef(createAsyncCommitGuard());
   const connectorReloadGuardRef = useRef(createAsyncCommitGuard());
 
   useEffect(() => {
     connectorsRef.current = connectors;
   }, [connectors]);
+
+  useEffect(() => {
+    connectorStatusesRef.current = connectorStatuses;
+  }, [connectorStatuses]);
+
+  // Commits a new status map. `connectorStatusesRef` is updated SYNCHRONOUSLY
+  // here rather than relying solely on the effect above: a catalogue fetch
+  // that resolves in the microtask gap between this state commit and the
+  // effect's flush would otherwise read a one-cycle-stale ref, silently
+  // defeating the "merge against the latest status" guarantee below. The
+  // effect stays as a backup sync for any status write that doesn't route
+  // through here.
+  const commitConnectorStatuses = useCallback((statuses: ConnectorStatusMap) => {
+    connectorStatusesRef.current = statuses;
+    setConnectorStatuses(statuses);
+  }, []);
 
   // Persist which connectors are mid-authorization so a reload resumes polling
   // instead of stranding a half-finished OAuth handshake.
@@ -156,23 +181,30 @@ export function useMemoryConnectors(
   }, [pendingConnectorAuthIds, port]);
 
   const reloadConnectors = useCallback(async () => {
-    const revision = connectorStatusCommitGuardRef.current.begin();
+    const statusRevision = connectorStatusGuardRef.current.begin();
+    const catalogueRevision = connectorCatalogueGuardRef.current.begin();
     const reloadRevision = connectorReloadGuardRef.current.begin();
     setConnectorsLoading(true);
     try {
       const statuses = await port.fetchConnectorStatuses();
-      if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
-      setConnectorStatuses(statuses);
-      setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
+      if (connectorStatusGuardRef.current.isCurrent(statusRevision)) {
+        commitConnectorStatuses(statuses);
+        setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
+      }
       const next = await port.fetchMemoryConnectors();
-      if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
-      setConnectors(applyMemoryConnectorStatuses(next, statuses));
+      if (!connectorCatalogueGuardRef.current.isCurrent(catalogueRevision)) return;
+      // Merge against the LATEST known status map, not the `statuses` value
+      // captured above — a newer status commit (poll, callback, or this same
+      // reload's own status step racing a concurrent refresh) may have landed
+      // while this discovery fetch was still in flight, and stamping the
+      // captured snapshot back over it would silently revert it.
+      setConnectors(applyMemoryConnectorStatuses(next, connectorStatusesRef.current));
       setConnectorLoadError(null);
     } catch {
       // Discovery is required for the real catalogue. Keep prior details rather
       // than replacing them with synthetic empty rows, and make the outage
       // visible to the user.
-      if (connectorStatusCommitGuardRef.current.isCurrent(revision)) {
+      if (connectorCatalogueGuardRef.current.isCurrent(catalogueRevision)) {
         setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
       }
     } finally {
@@ -180,7 +212,7 @@ export function useMemoryConnectors(
         setConnectorsLoading(false);
       }
     }
-  }, [port]);
+  }, [port, commitConnectorStatuses]);
 
   const memoryConnectors = useMemo(() => {
     const byId = new Map(connectors.map((connector) => [connector.id, connector]));
@@ -252,11 +284,11 @@ export function useMemoryConnectors(
   }, []);
 
   const refreshConnectorStatuses = useCallback(async () => {
-    const revision = connectorStatusCommitGuardRef.current.begin();
+    const revision = connectorStatusGuardRef.current.begin();
     const statuses = await port.fetchConnectorStatuses();
-    if (!connectorStatusCommitGuardRef.current.isCurrent(revision)) return;
+    if (!connectorStatusGuardRef.current.isCurrent(revision)) return;
     const statusChanged = connectorStatusesChanged(connectorsRef.current, statuses);
-    setConnectorStatuses(statuses);
+    commitConnectorStatuses(statuses);
     setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
     setPendingConnectorAuthIds((prev) => {
       const next = new Set(prev);
@@ -277,7 +309,7 @@ export function useMemoryConnectors(
       return changed ? next : prev;
     });
     if (statusChanged) port.notifyConnectorsChanged();
-  }, [port]);
+  }, [port, commitConnectorStatuses]);
 
   // NOTE: the OAuth mid-auth status poll and popup-callback message listener are
   // deliberately NOT effects here — they open accumulating browser
@@ -306,6 +338,11 @@ export function useMemoryConnectors(
             : result.connector,
         ),
       );
+      // This upsert just committed newer-than-any-in-flight-discovery truth
+      // for this connector. Invalidate any older `reloadConnectors` catalogue
+      // fetch so its (now stale) wholesale replace can't land after this and
+      // silently overwrite what was just connected.
+      connectorCatalogueGuardRef.current.invalidate();
       if (result.error) {
         setConnectorConnectErrors((prev) => ({ ...prev, [connectorId]: result.error! }));
         setPendingConnectorAuthIds((prev) => {

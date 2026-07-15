@@ -262,6 +262,129 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
   });
 });
 
+describe('useMemoryConnectors — catalogue/status ordering races', () => {
+  it('reload discovery commits merged with a newer status that landed mid-flight (nettee scenario)', async () => {
+    const reloadStatus = deferred<ConnectorStatusMap>();
+    const refreshStatus = deferred<ConnectorStatusMap>();
+    const discovery = deferred<ConnectorDetail[]>();
+    const port = makePort({
+      fetchConnectorStatuses: vi
+        .fn<MemoryConnectorsPort['fetchConnectorStatuses']>()
+        .mockReturnValueOnce(reloadStatus.promise)
+        .mockReturnValueOnce(refreshStatus.promise),
+      fetchMemoryConnectors: vi.fn(() => discovery.promise),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    // reload starts -> refresh starts -> refresh resolves -> reload discovery resolves
+    let reloadPromise!: Promise<void>;
+    act(() => {
+      reloadPromise = result.current.reloadConnectors();
+    });
+    let refreshPromise!: Promise<void>;
+    act(() => {
+      refreshPromise = result.current.refreshConnectorStatuses();
+    });
+
+    await act(async () => {
+      reloadStatus.resolve({});
+      // Let reload's own (older) status commit land before refresh's.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      refreshStatus.resolve({ notion: { status: 'connected' } });
+      await refreshPromise;
+    });
+    expect(result.current.connectorStatuses.notion?.status).toBe('connected');
+
+    await act(async () => {
+      discovery.resolve([connector('notion')]);
+      await reloadPromise;
+    });
+
+    // The discovery response must still commit (not be silently discarded by
+    // the newer status-only refresh), and it must merge against the LATEST
+    // status ('connected'), not the stale snapshot reload captured at start.
+    expect(result.current.connectorsLoading).toBe(false);
+    expect(result.current.connectorLoadError).toBeNull();
+    expect(result.current.memoryConnectors.find((c) => c.id === 'notion')?.status).toBe('connected');
+  });
+
+  it('a newer reload wins over an older one still fetching discovery', async () => {
+    const discoveryA = deferred<ConnectorDetail[]>();
+    const discoveryB = deferred<ConnectorDetail[]>();
+    const port = makePort({
+      fetchConnectorStatuses: vi.fn(async () => ({}) as ConnectorStatusMap),
+      fetchMemoryConnectors: vi
+        .fn<MemoryConnectorsPort['fetchMemoryConnectors']>()
+        .mockReturnValueOnce(discoveryA.promise)
+        .mockReturnValueOnce(discoveryB.promise),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let reloadA!: Promise<void>;
+    let reloadB!: Promise<void>;
+    await act(async () => {
+      reloadA = result.current.reloadConnectors();
+      await Promise.resolve();
+      reloadB = result.current.reloadConnectors();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      discoveryB.resolve([connector('notion', { name: 'from-B' })]);
+      await reloadB;
+    });
+    expect(result.current.connectorsLoading).toBe(false);
+
+    // A's (older, slower) discovery resolving last must not overwrite B's
+    // (newer, already-committed) catalogue, and must not re-flip loading.
+    await act(async () => {
+      discoveryA.resolve([connector('notion', { name: 'from-A' })]);
+      await reloadA;
+    });
+
+    expect(result.current.memoryConnectors.find((c) => c.id === 'notion')?.name).toBe('from-B');
+    expect(result.current.connectorsLoading).toBe(false);
+  });
+
+  it("a connect upsert survives an in-flight reload's stale discovery response", async () => {
+    const discovery = deferred<ConnectorDetail[]>();
+    const port = makePort({
+      fetchConnectorStatuses: vi.fn(async () => ({}) as ConnectorStatusMap),
+      fetchMemoryConnectors: vi.fn(() => discovery.promise),
+      connectConnector: vi.fn(async () => ({
+        connector: connector('notion', { status: 'connected' }),
+      })),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    act(() => {
+      void result.current.reloadConnectors();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.onConnectMemoryConnector('notion');
+    });
+    expect(result.current.memoryConnectors.find((c) => c.id === 'notion')?.status).toBe('connected');
+
+    // The reload's discovery response is stale relative to the connect that
+    // already landed — it must not overwrite the just-connected state.
+    await act(async () => {
+      discovery.resolve([connector('notion', { status: 'available' })]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.memoryConnectors.find((c) => c.id === 'notion')?.status).toBe('connected');
+  });
+});
+
 describe('useMemoryConnectors — scan / suggest / save', () => {
   async function connectAndSelect(port: MemoryConnectorsPort, coord: MemoryConnectorsCoordination) {
     const hook = renderHook(() => useMemoryConnectors(port, coord));
