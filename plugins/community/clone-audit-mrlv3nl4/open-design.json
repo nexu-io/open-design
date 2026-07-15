@@ -4,7 +4,7 @@
   "name": "clone-audit-mrlv3nl4",
   "title": "Clone Audit",
   "version": "0.1.0",
-  "description": "- Project: /Users/godbest/Library/Application Support/Open Design/namespaces/release-stable/data/projects/688fba5a-2ead-4de3-9390-de6bca2160f1 - Scanned files: 15 - Findings: 42",
+  "description": "Audit Skill Cloning the Website",
   "od": {
     "kind": "skill",
     "taskKind": "new-generation",
