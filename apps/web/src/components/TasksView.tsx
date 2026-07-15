@@ -29,6 +29,9 @@ import type {
   CreatorTaskPriority,
   CreatorTaskStage,
   CreatorTaskStatus,
+  CreatorContentProject,
+  CreatorContentProjectData,
+  CreatorContentStatus,
   CreatorMediaProjectData,
   CreatorWorkbenchProjectData,
   Project,
@@ -62,6 +65,11 @@ type CreatorTaskFilter = 'active' | 'completed' | 'all';
 type CreatorMediaProjectState = {
   projectId: string;
   data: CreatorMediaProjectData;
+  failed: boolean;
+};
+type CreatorContentProjectState = {
+  projectId: string;
+  data: CreatorContentProjectData;
   failed: boolean;
 };
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
@@ -442,6 +450,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     data: CreatorWorkbenchProjectData;
   }>>([]);
   const [creatorMediaProjectData, setCreatorMediaProjectData] = useState<CreatorMediaProjectState[]>([]);
+  const [creatorContentProjectData, setCreatorContentProjectData] = useState<CreatorContentProjectState[]>([]);
   const [creatorTaskProjectId, setCreatorTaskProjectId] = useState('');
   const [creatorTaskTitle, setCreatorTaskTitle] = useState('');
   const [creatorTaskStage, setCreatorTaskStage] = useState<CreatorTaskStage>('topic');
@@ -453,6 +462,12 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   } | null>(null);
   const [creatorTaskMediaAssetId, setCreatorTaskMediaAssetId] = useState('');
   const [creatorTaskMediaSaving, setCreatorTaskMediaSaving] = useState(false);
+  const [creatorContentProjectId, setCreatorContentProjectId] = useState('');
+  const [creatorContentTitle, setCreatorContentTitle] = useState('');
+  const [creatorContentEdit, setCreatorContentEdit] = useState<CreatorContentProject | null>(null);
+  const [creatorContentSaving, setCreatorContentSaving] = useState(false);
+  const [creatorContentTaskId, setCreatorContentTaskId] = useState('');
+  const [creatorStoryboardMediaAssetId, setCreatorStoryboardMediaAssetId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -515,6 +530,22 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       (asset) => asset.availability === 'available' && !linkedAssetIds.has(asset.id),
     );
   }, [editingCreatorMedia, linkedCreatorMediaAssets]);
+  const selectedCreatorContent = useMemo(
+    () => creatorContentProjectData.find((value) => value.projectId === creatorContentProjectId),
+    [creatorContentProjectData, creatorContentProjectId],
+  );
+  const editingCreatorContentMedia = useMemo(
+    () => creatorContentEdit
+      ? creatorMediaProjectData.find((value) => value.projectId === creatorContentEdit.projectId)
+      : undefined,
+    [creatorContentEdit, creatorMediaProjectData],
+  );
+  const editingCreatorContentTasks = useMemo(
+    () => creatorContentEdit
+      ? creatorProjectData.find((value) => value.projectId === creatorContentEdit.projectId)?.data.tasks ?? []
+      : [],
+    [creatorContentEdit, creatorProjectData],
+  );
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -593,6 +624,21 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         }
       }));
       setCreatorMediaProjectData(creatorMediaData);
+      const creatorContentData = await Promise.all(entryProjects.map(async (project): Promise<CreatorContentProjectState> => {
+        try {
+          const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-content`);
+          if (!response.ok) return { projectId: project.id, data: { contentProjects: [] }, failed: true };
+          const data = await response.json() as Partial<CreatorContentProjectData>;
+          return {
+            projectId: project.id,
+            data: { contentProjects: Array.isArray(data.contentProjects) ? data.contentProjects : [] },
+            failed: false,
+          };
+        } catch {
+          return { projectId: project.id, data: { contentProjects: [] }, failed: true };
+        }
+      }));
+      setCreatorContentProjectData(creatorContentData);
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
       }
@@ -643,6 +689,197 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setCreatorTaskProjectId(entryProjects[0].id);
     }
   }, [creatorTaskProjectId, entryProjects]);
+
+  useEffect(() => {
+    if (!creatorContentProjectId && entryProjects[0]?.id) {
+      setCreatorContentProjectId(entryProjects[0].id);
+    }
+  }, [creatorContentProjectId, entryProjects]);
+
+  const replaceCreatorContent = useCallback((content: CreatorContentProject) => {
+    setCreatorContentProjectData((current) => current.map((entry) => entry.projectId !== content.projectId
+      ? entry
+      : {
+        ...entry,
+        data: {
+          contentProjects: entry.data.contentProjects.some((candidate) => candidate.id === content.id)
+            ? entry.data.contentProjects.map((candidate) => candidate.id === content.id ? content : candidate)
+            : [...entry.data.contentProjects, content],
+        },
+      }));
+  }, []);
+
+  const createCreatorContent = useCallback(async () => {
+    const title = creatorContentTitle.trim();
+    if (!creatorContentProjectId || !title) return;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(creatorContentProjectId)}/creator-content`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, status: 'idea' }),
+      });
+      if (!response.ok) throw new Error(`creator content: ${response.status}`);
+      const result = await response.json() as { content: CreatorContentProject };
+      replaceCreatorContent(result.content);
+      setCreatorContentEdit(result.content);
+      setCreatorContentTitle('');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentProjectId, creatorContentTitle, replaceCreatorContent]);
+
+  const saveCreatorContent = useCallback(async () => {
+    if (!creatorContentEdit) return;
+    const content = creatorContentEdit;
+    const storyboardItems = content.storyboardItems
+      .slice()
+      .sort((left, right) => left.position - right.position)
+      .map((item) => ({
+        position: item.position,
+        purpose: item.purpose.trim(),
+        ...(item.visualDescription ? { visualDescription: item.visualDescription } : {}),
+        ...(item.audioNotes ? { audioNotes: item.audioNotes } : {}),
+        mediaAssetIds: item.mediaAssetIds,
+      }));
+    if (storyboardItems.some((item) => !item.purpose)) {
+      setError('Storyboard purpose is required');
+      return;
+    }
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+          title: content.title.trim(), status: content.status, brief: content.brief, outline: content.outline, storyboardItems, retrospective: content.retrospective,
+        }),
+      });
+      if (!response.ok) throw new Error(`creator content update: ${response.status}`);
+      const result = await response.json().catch(() => null) as { content?: CreatorContentProject } | null;
+      const saved = result?.content ?? content;
+      replaceCreatorContent(saved);
+      setCreatorContentEdit(saved);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit, replaceCreatorContent]);
+
+  const deleteCreatorContent = useCallback(async (content: CreatorContentProject) => {
+    if (!window.confirm('Delete this content project?')) return;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`creator content delete: ${response.status}`);
+      setCreatorContentProjectData((current) => current.map((entry) => entry.projectId !== content.projectId ? entry : {
+        ...entry, data: { contentProjects: entry.data.contentProjects.filter((candidate) => candidate.id !== content.id) },
+      }));
+      if (creatorContentEdit?.id === content.id) setCreatorContentEdit(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit]);
+
+  const updateCreatorContentEdit = useCallback((update: (content: CreatorContentProject) => CreatorContentProject) => {
+    setCreatorContentEdit((current) => current ? update(current) : current);
+  }, []);
+
+  const updateStoryboardItem = useCallback((itemId: string, update: (item: CreatorContentProject['storyboardItems'][number]) => CreatorContentProject['storyboardItems'][number]) => {
+    updateCreatorContentEdit((content) => ({
+      ...content,
+      storyboardItems: content.storyboardItems.map((item) => item.id === itemId ? update(item) : item),
+    }));
+  }, [updateCreatorContentEdit]);
+
+  const linkCreatorContentTask = useCallback(async () => {
+    if (!creatorContentEdit || !creatorContentTaskId) return;
+    const content = creatorContentEdit;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}/tasks`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: creatorContentTaskId }),
+      });
+      if (!response.ok) throw new Error(`creator content task: ${response.status}`);
+      const result = await response.json() as { content: CreatorContentProject };
+      replaceCreatorContent(result.content);
+      setCreatorContentEdit(result.content);
+      setCreatorContentTaskId('');
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit, creatorContentTaskId, refresh, replaceCreatorContent]);
+
+  const unlinkCreatorContentTask = useCallback(async (taskId: string) => {
+    if (!creatorContentEdit) return;
+    const content = creatorContentEdit;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`creator content task: ${response.status}`);
+      const updated = { ...content, taskIds: content.taskIds.filter((id) => id !== taskId) };
+      replaceCreatorContent(updated);
+      setCreatorContentEdit(updated);
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit, refresh, replaceCreatorContent]);
+
+  const linkCreatorStoryboardMedia = useCallback(async (itemId: string) => {
+    if (!creatorContentEdit || !creatorStoryboardMediaAssetId || itemId.startsWith('temporary-storyboard:')) return;
+    const content = creatorContentEdit;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}/storyboard/${encodeURIComponent(itemId)}/media-assets`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId: creatorStoryboardMediaAssetId }),
+      });
+      if (!response.ok) throw new Error(`creator storyboard media: ${response.status}`);
+      const result = await response.json() as { content: CreatorContentProject };
+      replaceCreatorContent(result.content);
+      setCreatorContentEdit(result.content);
+      setCreatorStoryboardMediaAssetId('');
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit, creatorStoryboardMediaAssetId, refresh, replaceCreatorContent]);
+
+  const unlinkCreatorStoryboardMedia = useCallback(async (itemId: string, assetId: string) => {
+    if (!creatorContentEdit || itemId.startsWith('temporary-storyboard:')) return;
+    const content = creatorContentEdit;
+    setCreatorContentSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(content.projectId)}/creator-content/${encodeURIComponent(content.id)}/storyboard/${encodeURIComponent(itemId)}/media-assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`creator storyboard media: ${response.status}`);
+      const updated = {
+        ...content,
+        storyboardItems: content.storyboardItems.map((item) => item.id === itemId ? { ...item, mediaAssetIds: item.mediaAssetIds.filter((id) => id !== assetId) } : item),
+      };
+      replaceCreatorContent(updated);
+      setCreatorContentEdit(updated);
+      await refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorContentSaving(false);
+    }
+  }, [creatorContentEdit, refresh, replaceCreatorContent]);
 
   const createCreatorTask = useCallback(async () => {
     const title = creatorTaskTitle.trim();
@@ -1126,6 +1363,10 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                 {visibleCreatorTasks.map((task) => {
                   const isEditable = task.id.startsWith('creator-task:');
                   const isEditing = creatorTaskEdit?.id === task.id;
+                  const linkedContentCount = creatorContentProjectData.reduce(
+                    (count, entry) => count + entry.data.contentProjects.filter((content) => content.taskIds.includes(task.id)).length,
+                    0,
+                  );
                   return (
                     <li key={task.id} className="creator-list__item">
                       <div className="creator-list__main">
@@ -1137,7 +1378,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           <span className="creator-chip">{task.stageLabel}</span>
                           <span className="creator-chip">{task.statusLabel}</span>
                           <span className="creator-chip">{task.priorityLabel}</span>
-                        {task.sourceLabel ? <span className="creator-chip">{task.sourceLabel}</span> : null}
+                          {task.sourceLabel ? <span className="creator-chip">{task.sourceLabel}</span> : null}
+                          {linkedContentCount > 0 ? <span className="creator-chip">{linkedContentCount} content</span> : null}
                       </div>
                       {task.status === 'blocked' && task.blockerNote ? (
                         <p className="creator-list__blocker">阻塞：{task.blockerNote}</p>
@@ -1305,6 +1547,72 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
               )}
             </section>
           </div>
+
+          <section className="creator-panel creator-content-panel" aria-labelledby="creator-content-title">
+            <div className="creator-panel__head">
+              <div>
+                <h3 id="creator-content-title" className="creator-panel__title">Content</h3>
+                <span className="creator-panel__meta">Brief, outline, storyboard, and retrospective</span>
+              </div>
+            </div>
+            {entryProjects.length === 0 ? <p className="creator-list__desc">Create a project before adding content.</p> : (
+              <div className="creator-content-layout">
+                <div className="creator-content-sidebar">
+                  <div className="creator-content-create">
+                    <select aria-label="Content project" value={creatorContentProjectId} onChange={(event) => setCreatorContentProjectId(event.target.value)}>
+                      {entryProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    </select>
+                    <input aria-label="Content title" value={creatorContentTitle} onChange={(event) => setCreatorContentTitle(event.target.value)} placeholder="New content title" />
+                    <Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving || !creatorContentTitle.trim()} onClick={() => void createCreatorContent()}>Create content</Button>
+                  </div>
+                  {selectedCreatorContent?.failed ? <p className="creator-list__desc">Content unavailable for this project.</p> : (
+                    <ul className="creator-list">
+                      {selectedCreatorContent?.data.contentProjects.map((content) => {
+                        const contentMediaEntry = creatorMediaProjectData.find((entry) => entry.projectId === content.projectId);
+                        const missingMediaCount = contentMediaEntry && !contentMediaEntry.failed
+                          ? content.storyboardItems.reduce(
+                            (count, item) => count + item.mediaAssetIds.filter((id) => {
+                              const asset = contentMediaEntry.data.assets.find((candidate) => candidate.id === id);
+                              return asset !== undefined && asset.availability === 'missing';
+                            }).length,
+                            0,
+                          )
+                          : 0;
+                        return (
+                        <li key={content.id} className="creator-list__item">
+                          <div className="creator-list__main">
+                            <strong className="creator-list__title">{content.title}</strong>
+                            <div className="creator-list__chips"><span className="creator-chip">{content.status}</span><span className="creator-chip">{content.storyboardItems.length} shots</span><span className="creator-chip">{content.taskIds.length} tasks</span>{missingMediaCount > 0 ? <span className="creator-chip">{missingMediaCount} missing asset{missingMediaCount === 1 ? '' : 's'}</span> : null}</div>
+                          </div>
+                          <div className="creator-list__actions">
+                            <Button variant="ghost" className="creator-list__action" aria-label={`Edit content ${content.title}`} onClick={() => setCreatorContentEdit(content)}>Edit</Button>
+                            <Button variant="ghost" className="creator-list__action" aria-label={`Delete content ${content.title}`} disabled={creatorContentSaving} onClick={() => void deleteCreatorContent(content)}>Delete</Button>
+                          </div>
+                        </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                {creatorContentEdit ? (
+                  <div className="creator-content-editor">
+                    <div className="creator-content-fields creator-content-fields--top">
+                      <label>Title<input aria-label="Edit content title" value={creatorContentEdit.title} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, title: event.target.value }))} /></label>
+                      <label>Status<select aria-label="Content status" value={creatorContentEdit.status} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, status: event.target.value as CreatorContentStatus }))}>{(['idea', 'drafting', 'production', 'published', 'archived'] as CreatorContentStatus[]).map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+                    </div>
+                    <div className="creator-content-fields">
+                      <fieldset><legend>Brief</legend><label>Topic<input aria-label="Brief topic" value={creatorContentEdit.brief.topic ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, brief: { ...content.brief, topic: event.target.value } }))} /></label><label>Audience<input aria-label="Brief audience" value={creatorContentEdit.brief.audience ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, brief: { ...content.brief, audience: event.target.value } }))} /></label><label>Core message<textarea aria-label="Brief core message" value={creatorContentEdit.brief.coreMessage ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, brief: { ...content.brief, coreMessage: event.target.value } }))} /></label><label>Platform<input aria-label="Brief target platform" value={creatorContentEdit.brief.targetPlatform ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, brief: { ...content.brief, targetPlatform: event.target.value } }))} /></label></fieldset>
+                      <fieldset><legend>Outline</legend><label>Opening<textarea aria-label="Outline opening" value={creatorContentEdit.outline.opening ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, outline: { ...content.outline, opening: event.target.value } }))} /></label><label>Sections<textarea aria-label="Outline sections" value={creatorContentEdit.outline.sections ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, outline: { ...content.outline, sections: event.target.value } }))} /></label><label>Ending<textarea aria-label="Outline ending" value={creatorContentEdit.outline.ending ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, outline: { ...content.outline, ending: event.target.value } }))} /></label><label>Editing intent<textarea aria-label="Outline editing intent" value={creatorContentEdit.outline.editingIntent ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, outline: { ...content.outline, editingIntent: event.target.value } }))} /></label></fieldset>
+                    </div>
+                    <fieldset className="creator-content-storyboard"><legend>Storyboard</legend><Button variant="ghost" className="creator-list__action" onClick={() => updateCreatorContentEdit((content) => ({ ...content, storyboardItems: [...content.storyboardItems, { id: `temporary-storyboard:${Date.now()}-${content.storyboardItems.length}`, position: Math.max(0, ...content.storyboardItems.map((item) => item.position)) + 1, purpose: '', mediaAssetIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] }))}>Add storyboard item</Button><ul className="creator-list">{creatorContentEdit.storyboardItems.slice().sort((left, right) => left.position - right.position).map((item) => { const linkedAssets = editingCreatorContentMedia?.data.assets.filter((asset) => item.mediaAssetIds.includes(asset.id)) ?? []; const candidates = editingCreatorContentMedia?.data.assets.filter((asset) => asset.availability === 'available' && !item.mediaAssetIds.includes(asset.id)) ?? []; return <li key={item.id} className="creator-list__item"><div className="creator-list__main"><label>Purpose<input aria-label="Storyboard purpose" value={item.purpose} onChange={(event) => updateStoryboardItem(item.id, (current) => ({ ...current, purpose: event.target.value }))} /></label><label>Visual<textarea aria-label="Storyboard visual description" value={item.visualDescription ?? ''} onChange={(event) => updateStoryboardItem(item.id, (current) => ({ ...current, visualDescription: event.target.value }))} /></label><label>Audio<textarea aria-label="Storyboard audio notes" value={item.audioNotes ?? ''} onChange={(event) => updateStoryboardItem(item.id, (current) => ({ ...current, audioNotes: event.target.value }))} /></label>{linkedAssets.map((asset) => <div key={asset.id} className="creator-list__chips"><span className="creator-chip">{asset.fileName}</span><span className="creator-chip">{asset.relativePath}</span><span className="creator-chip">{asset.availability === 'missing' ? 'Missing' : 'Available'}</span><Button variant="ghost" className="creator-list__action" aria-label={`Remove storyboard media ${asset.fileName}`} disabled={creatorContentSaving || item.id.startsWith('temporary-storyboard:')} onClick={() => void unlinkCreatorStoryboardMedia(item.id, asset.id)}>Remove</Button></div>)}</div>{editingCreatorContentMedia?.failed ? <p className="creator-list__desc">Media unavailable for this project.</p> : candidates.length > 0 ? <div className="creator-list__actions"><select aria-label="Storyboard media candidate" value={creatorStoryboardMediaAssetId} onChange={(event) => setCreatorStoryboardMediaAssetId(event.target.value)}><option value="">Select media</option>{candidates.map((asset) => <option key={asset.id} value={asset.id}>{asset.fileName}</option>)}</select><Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving || !creatorStoryboardMediaAssetId || item.id.startsWith('temporary-storyboard:')} onClick={() => void linkCreatorStoryboardMedia(item.id)}>Add media</Button></div> : null}</li>; })}</ul></fieldset>
+                    <div className="creator-content-fields"><fieldset><legend>Retrospective</legend><label>Published at<input aria-label="Retrospective published at" value={creatorContentEdit.retrospective.publishedAt ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, retrospective: { ...content.retrospective, publishedAt: event.target.value } }))} /></label><label>Performance<textarea aria-label="Retrospective performance summary" value={creatorContentEdit.retrospective.performanceSummary ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, retrospective: { ...content.retrospective, performanceSummary: event.target.value } }))} /></label><label>Learnings<textarea aria-label="Retrospective learnings" value={creatorContentEdit.retrospective.learnings ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, retrospective: { ...content.retrospective, learnings: event.target.value } }))} /></label><label>Next action<textarea aria-label="Retrospective next action" value={creatorContentEdit.retrospective.nextAction ?? ''} onChange={(event) => updateCreatorContentEdit((content) => ({ ...content, retrospective: { ...content.retrospective, nextAction: event.target.value } }))} /></label></fieldset><fieldset><legend>Tasks</legend>{creatorContentEdit.taskIds.map((taskId) => { const task = editingCreatorContentTasks.find((candidate) => candidate.id === taskId); return <div key={taskId} className="creator-list__chips"><span className="creator-chip">{task?.title ?? taskId}</span><Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving} onClick={() => void unlinkCreatorContentTask(taskId)}>Remove</Button></div>; })}{editingCreatorContentTasks.filter((task) => !creatorContentEdit.taskIds.includes(task.id)).length > 0 ? <div className="creator-list__actions"><select aria-label="Content task candidate" value={creatorContentTaskId} onChange={(event) => setCreatorContentTaskId(event.target.value)}><option value="">Select task</option>{editingCreatorContentTasks.filter((task) => !creatorContentEdit.taskIds.includes(task.id)).map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select><Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving || !creatorContentTaskId} onClick={() => void linkCreatorContentTask()}>Add task</Button></div> : <p className="creator-list__desc">No tasks available to link.</p>}</fieldset></div>
+                    <div className="creator-list__actions"><Button variant="primary" className="creator-list__action" disabled={creatorContentSaving || !creatorContentEdit.title.trim()} onClick={() => void saveCreatorContent()}>Save content</Button><Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving} onClick={() => { setCreatorContentTaskId(''); setCreatorStoryboardMediaAssetId(''); setCreatorContentEdit(null); }}>Cancel content edit</Button></div>
+                  </div>
+                ) : <p className="creator-list__desc">Select content to edit its chain.</p>}
+              </div>
+            )}
+          </section>
         </section>
       ) : null}
       {surface === 'automations' ? (
