@@ -12,8 +12,8 @@
 import type Database from 'better-sqlite3';
 import type { CritiqueConfig } from '@open-design/contracts/critique';
 import type { CritiqueLoopConfig } from './loop-types.js';
-import type { CritiqueSseBus, OrchestratorParams, OrchestratorResult } from './orchestrator.js';
-import { runOrchestrator } from './orchestrator.js';
+import type { CritiqueSseBus, OrchestratorParams } from './orchestrator.js';
+import { runOrchestrator, type OrchestratorResult } from './orchestrator.js';
 import { startCritiqueLoop, type IterationResources, type LoopEngineResult } from './loop-engine.js';
 import { extractFeedbackFromEvents, formatFeedbackAsPrompt, type CritiqueFeedback } from './loop-feedback.js';
 import { logCritique } from '../logging/critique.js';

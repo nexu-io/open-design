@@ -45,7 +45,7 @@ export interface LoopEngineParams {
   adapter: string;
   skill: string | undefined;
   conversationId?: string | null;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /** 为每次迭代创建一个新的 agent 进程及其输出资源 */
   createIteration: (
     iteration: number,
