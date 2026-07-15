@@ -76,25 +76,29 @@ function parseStatus(value: unknown, fallback: CreatorReleaseStatus): CreatorRel
 
 // 校验并返回 ISO 字符串；缺少或非法一律抛错。调用方用 `=== undefined` 守卫存在性，
 // 以便与 exactOptionalPropertyTypes 兼容（存在时必为 string，而非 string | undefined）。
+function isValidIsoDate(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(value)
+    && !Number.isNaN(Date.parse(value));
+}
+
 function parseIsoDate(value: unknown): string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(value)
-    || Number.isNaN(Date.parse(value))) {
-    throw new Error('date must be a valid ISO string');
-  }
+  if (!isValidIsoDate(value)) throw new Error('date must be a valid ISO string');
   return value;
 }
 
-function parseHttpUrl(value: unknown): string {
-  if (typeof value !== 'string') throw new Error('published url must be a string');
-  let parsed: URL;
+function isValidHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
   try {
-    parsed = new URL(value);
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
-    throw new Error('published url must be a valid url');
+    return false;
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('published url must be http or https');
-  }
+}
+
+function parseHttpUrl(value: unknown): string {
+  if (!isValidHttpUrl(value)) throw new Error('published url must be http or https');
   return value;
 }
 
@@ -146,6 +150,33 @@ function checklistComplete(checklist: CreatorReleaseChecklist): boolean {
   return CHECKLIST_FIELDS.every((field) => checklist[field]);
 }
 
+// 对 update 中的可空关联/时间字段应用显式清空语义：
+// undefined → 不修改；null → 从持久化对象删除；非空字符串 → 校验后写入；空字符串/非字符串 → 拒绝。
+// 参数为 unknown：update 的 patch 经 isRecord 守卫后已被收窄为 Record<string, unknown>，
+// 且字段来自不可信任的 DTO，故在此做运行时校验而非依赖调用端类型。
+type NullableReleaseField = 'coverAssetId' | 'exportAssetId' | 'scheduledAt' | 'publishedAt' | 'publishedUrl';
+
+function applyNullableReleaseField(
+  target: CreatorReleasePackage,
+  value: unknown,
+  field: NullableReleaseField,
+): void {
+  if (value === undefined) return;
+  if (value === null) {
+    delete target[field];
+    return;
+  }
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+  if (value.trim().length === 0) throw new Error(`${field} must be a non-empty string`);
+  if (field === 'scheduledAt' || field === 'publishedAt') {
+    target[field] = parseIsoDate(value);
+  } else if (field === 'publishedUrl') {
+    target[field] = parseHttpUrl(value);
+  } else {
+    target[field] = value.trim();
+  }
+}
+
 // 状态门禁在存储层生效：ready 要求五项全 true；published 额外要求合法 publishedAt + publishedUrl。
 // 调用方必须先合并当前 release 再传最终值，避免局部 PATCH 绕过门禁。
 // publishedAt/publishedUrl 若存在已由 parseIsoDate/parseHttpUrl 校验，故此处仅判存在性。
@@ -165,20 +196,32 @@ function assertStatusGate(
   }
 }
 
-function validReleasePackage(value: unknown): value is CreatorReleasePackage {
+function validReleasePackage(value: unknown, projectId: string): value is CreatorReleasePackage {
   if (!isRecord(value)) return false;
-  if (!nonEmptyString(value.id) || !nonEmptyString(value.projectId) || !nonEmptyString(value.contentId)) return false;
+  if (!nonEmptyString(value.id) || !nonEmptyString(value.contentId)) return false;
+  // 项目归属：持久化自本地文件不得被信任，record.projectId 必须匹配当前读取的项目。
+  if (!nonEmptyString(value.projectId) || value.projectId !== projectId) return false;
   if (!PLATFORMS.has(value.platform as CreatorReleasePlatform)) return false;
   if (!STATUSES.has(value.status as CreatorReleaseStatus)) return false;
   if (!nonEmptyString(value.title) || typeof value.description !== 'string') return false;
-  if (!Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === 'string')) return false;
-  if (!validChecklist(value.checklist)) return false;
+  if (!Array.isArray(value.tags)
+    || !value.tags.every((tag) => typeof tag === 'string' && tag.trim().length > 0)
+    || value.tags.length > 20) return false;
+  const checklist = value.checklist;
+  if (!validChecklist(checklist)) return false;
   if (value.coverAssetId !== undefined && !nonEmptyString(value.coverAssetId)) return false;
   if (value.exportAssetId !== undefined && !nonEmptyString(value.exportAssetId)) return false;
-  if (value.scheduledAt !== undefined && !nonEmptyString(value.scheduledAt)) return false;
-  if (value.publishedAt !== undefined && !nonEmptyString(value.publishedAt)) return false;
-  if (value.publishedUrl !== undefined && !nonEmptyString(value.publishedUrl)) return false;
+  if (value.scheduledAt !== undefined && !isValidIsoDate(value.scheduledAt)) return false;
+  if (value.publishedAt !== undefined && !isValidIsoDate(value.publishedAt)) return false;
+  if (value.publishedUrl !== undefined && !isValidHttpUrl(value.publishedUrl)) return false;
   if (!nonEmptyString(value.createdAt) || !nonEmptyString(value.updatedAt)) return false;
+  // 已持久化数据也必须满足状态门禁；不满足的记录视为损坏，过滤而非返回。
+  if (value.status === 'ready' && !checklistComplete(checklist)) return false;
+  if (value.status === 'published') {
+    if (!checklistComplete(checklist)) return false;
+    if (!isValidIsoDate(value.publishedAt)) return false;
+    if (!isValidHttpUrl(value.publishedUrl)) return false;
+  }
   return true;
 }
 
@@ -193,7 +236,7 @@ async function readProjectData(dataDir: string, projectId: string): Promise<Crea
   try {
     const raw: unknown = JSON.parse(source);
     if (!isRecord(raw) || !Array.isArray(raw.releasePackages)) return { releasePackages: [] };
-    return { releasePackages: raw.releasePackages.filter(validReleasePackage) };
+    return { releasePackages: raw.releasePackages.filter((release) => validReleasePackage(release, projectId)) };
   } catch (error: unknown) {
     if (error instanceof SyntaxError) return { releasePackages: [] };
     throw error;
@@ -287,14 +330,15 @@ export async function updateCreatorReleasePackage(
     ...(patch.platform === undefined ? {} : { platform: requirePlatform(patch.platform) }),
     ...(patch.description === undefined ? {} : { description: requireText(patch.description, 'description') }),
     ...(patch.tags === undefined ? {} : { tags: parseTags(patch.tags) }),
-    ...(patch.coverAssetId === undefined ? {} : { coverAssetId: requireNonEmptyString(patch.coverAssetId, 'cover asset id') }),
-    ...(patch.exportAssetId === undefined ? {} : { exportAssetId: requireNonEmptyString(patch.exportAssetId, 'export asset id') }),
-    ...(patch.scheduledAt === undefined ? {} : { scheduledAt: parseIsoDate(patch.scheduledAt) }),
-    ...(patch.publishedAt === undefined ? {} : { publishedAt: parseIsoDate(patch.publishedAt) }),
-    ...(patch.publishedUrl === undefined ? {} : { publishedUrl: parseHttpUrl(patch.publishedUrl) }),
     ...(patch.checklist === undefined ? {} : { checklist: parseChecklist(patch.checklist, current.checklist) }),
     updatedAt: new Date().toISOString(),
   };
+  // 可空关联/时间字段的显式清空语义（undefined 保留 / null 删除 / 字符串校验写入）。
+  applyNullableReleaseField(next, patch.coverAssetId, 'coverAssetId');
+  applyNullableReleaseField(next, patch.exportAssetId, 'exportAssetId');
+  applyNullableReleaseField(next, patch.scheduledAt, 'scheduledAt');
+  applyNullableReleaseField(next, patch.publishedAt, 'publishedAt');
+  applyNullableReleaseField(next, patch.publishedUrl, 'publishedUrl');
   assertStatusGate(next.status, next.checklist, next.publishedAt, next.publishedUrl);
   data.releasePackages[index] = next;
   await writeProjectData(dataDir, projectId, data);

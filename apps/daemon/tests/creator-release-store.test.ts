@@ -2,6 +2,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CreatorReleaseChecklist } from '@open-design/contracts';
 
 import {
   createCreatorReleasePackage,
@@ -11,6 +12,43 @@ import {
 } from '../src/creator-release/store.js';
 
 let dataDir = '';
+
+const FULL_CHECKLIST: CreatorReleaseChecklist = {
+  contentComplete: true,
+  exportConfirmed: true,
+  coverConfirmed: true,
+  metadataConfirmed: true,
+  platformConfirmed: true,
+};
+
+// 构造一条完整且合法的持久化记录，便于手工写入文件后验证读取校验。
+function baseRelease(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'creator-release:seed',
+    projectId: 'project-1',
+    contentId: 'creator-content:1',
+    platform: 'bilibili',
+    status: 'draft',
+    title: 'B站首发',
+    description: '',
+    tags: [],
+    checklist: {
+      contentComplete: false, exportConfirmed: false, coverConfirmed: false,
+      metadataConfirmed: false, platformConfirmed: false,
+    },
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+async function writeReleaseFile(dataDir: string, projectId: string, records: unknown[]): Promise<string> {
+  const file = path.join(dataDir, 'creator-release', `${projectId}.json`);
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.writeFile(file, `${JSON.stringify({ releasePackages: records }, null, 2)}\n`, 'utf8');
+  return file;
+}
+
 
 beforeEach(async () => {
   dataDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-creator-release-store-'));
@@ -291,5 +329,150 @@ describe('creator release store', () => {
     await expect(deleteCreatorReleasePackage(dataDir, 'project-1', first.id)).resolves.toBe(false);
     const remaining = await getCreatorReleaseProjectData(dataDir, 'project-1');
     expect(remaining.releasePackages.map((release) => release.id)).toEqual([second.id]);
+  });
+
+  describe('persisted record validation', () => {
+    it('filters persisted releases whose projectId does not match the requested project', async () => {
+      await writeReleaseFile(dataDir, 'project-1', [
+        baseRelease(),
+        baseRelease({ id: 'creator-release:other', projectId: 'project-2' }),
+      ]);
+      const data = await getCreatorReleaseProjectData(dataDir, 'project-1');
+      expect(data.releasePackages).toHaveLength(1);
+      expect(data.releasePackages[0]!.projectId).toBe('project-1');
+    });
+
+    it('filters releases with invalid dates or urls while keeping valid neighbors', async () => {
+      await writeReleaseFile(dataDir, 'project-1', [
+        baseRelease({ id: 'creator-release:ok', publishedUrl: 'https://www.bilibili.com/video/BV1' }),
+        baseRelease({ id: 'creator-release:bad-date', scheduledAt: 'next-tuesday' }),
+        baseRelease({ id: 'creator-release:bad-pubat', publishedAt: '2026/08/01' }),
+        baseRelease({ id: 'creator-release:bad-url', publishedUrl: 'ftp://example.com' }),
+      ]);
+      const data = await getCreatorReleaseProjectData(dataDir, 'project-1');
+      expect(data.releasePackages.map((release) => release.id)).toEqual(['creator-release:ok']);
+    });
+
+    it('filters ready releases whose checklist is incomplete', async () => {
+      await writeReleaseFile(dataDir, 'project-1', [
+        baseRelease({ id: 'creator-release:ok' }),
+        baseRelease({
+          id: 'creator-release:bad-ready',
+          status: 'ready',
+          checklist: {
+            contentComplete: false, exportConfirmed: false, coverConfirmed: false,
+            metadataConfirmed: false, platformConfirmed: false,
+          },
+        }),
+      ]);
+      const data = await getCreatorReleaseProjectData(dataDir, 'project-1');
+      expect(data.releasePackages.map((release) => release.id)).toEqual(['creator-release:ok']);
+    });
+
+    it('filters published releases missing or with invalid publishedAt/publishedUrl', async () => {
+      await writeReleaseFile(dataDir, 'project-1', [
+        baseRelease({ id: 'creator-release:ok' }),
+        baseRelease({
+          id: 'creator-release:no-pubat',
+          status: 'published',
+          checklist: FULL_CHECKLIST,
+          publishedUrl: 'https://www.bilibili.com/video/BV1',
+        }),
+        baseRelease({
+          id: 'creator-release:bad-url',
+          status: 'published',
+          checklist: FULL_CHECKLIST,
+          publishedAt: '2026-08-02T09:00:00.000Z',
+          publishedUrl: 'ftp://example.com',
+        }),
+      ]);
+      const data = await getCreatorReleaseProjectData(dataDir, 'project-1');
+      expect(data.releasePackages.map((release) => release.id)).toEqual(['creator-release:ok']);
+    });
+  });
+
+  describe('nullable field clearing on update', () => {
+    it('removes optional fields when the update patch sets them to null', async () => {
+      const release = await createCreatorReleasePackage(dataDir, 'project-1', {
+        contentId: 'creator-content:1',
+        platform: 'bilibili',
+        title: 'B站首发',
+        coverAssetId: 'creator-media:cover',
+        exportAssetId: 'creator-media:export',
+        scheduledAt: '2026-08-01T10:00:00.000Z',
+        publishedUrl: 'https://www.bilibili.com/video/BV1',
+      });
+      const cleared = await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        coverAssetId: null,
+        exportAssetId: null,
+        scheduledAt: null,
+        publishedAt: null,
+        publishedUrl: null,
+      });
+      expect(cleared!.coverAssetId).toBeUndefined();
+      expect(cleared!.exportAssetId).toBeUndefined();
+      expect(cleared!.scheduledAt).toBeUndefined();
+      expect(cleared!.publishedAt).toBeUndefined();
+      expect(cleared!.publishedUrl).toBeUndefined();
+      const reloaded = await getCreatorReleaseProjectData(dataDir, 'project-1');
+      const stored = reloaded.releasePackages[0]!;
+      expect(stored.coverAssetId).toBeUndefined();
+      expect(stored.exportAssetId).toBeUndefined();
+      expect(stored.scheduledAt).toBeUndefined();
+      expect(stored.publishedAt).toBeUndefined();
+      expect(stored.publishedUrl).toBeUndefined();
+    });
+
+    it('rejects clearing publishedAt or publishedUrl while the status remains published', async () => {
+      const release = await createCreatorReleasePackage(dataDir, 'project-1', {
+        contentId: 'creator-content:1', platform: 'bilibili', title: 'B站首发',
+      });
+      await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        checklist: FULL_CHECKLIST, status: 'ready',
+      });
+      await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        status: 'published',
+        publishedAt: '2026-08-02T09:00:00.000Z',
+        publishedUrl: 'https://www.bilibili.com/video/BV1xx',
+      });
+      await expect(updateCreatorReleasePackage(dataDir, 'project-1', release.id, { publishedUrl: null }))
+        .rejects.toThrow();
+      await expect(updateCreatorReleasePackage(dataDir, 'project-1', release.id, { publishedAt: null }))
+        .rejects.toThrow();
+    });
+
+    it('allows clearing published fields when the same patch downgrades the status', async () => {
+      const release = await createCreatorReleasePackage(dataDir, 'project-1', {
+        contentId: 'creator-content:1', platform: 'bilibili', title: 'B站首发',
+      });
+      await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        checklist: FULL_CHECKLIST, status: 'ready',
+      });
+      const published = await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        status: 'published',
+        publishedAt: '2026-08-02T09:00:00.000Z',
+        publishedUrl: 'https://www.bilibili.com/video/BV1xx',
+      });
+      const archived = await updateCreatorReleasePackage(dataDir, 'project-1', release.id, {
+        status: 'archived',
+        publishedAt: null,
+        publishedUrl: null,
+      });
+      expect(archived!.status).toBe('archived');
+      expect(archived!.publishedAt).toBeUndefined();
+      expect(archived!.publishedUrl).toBeUndefined();
+      expect(archived!.id).toBe(published!.id);
+    });
+
+    it('rejects empty strings for nullable fields instead of treating them as clear', async () => {
+      const release = await createCreatorReleasePackage(dataDir, 'project-1', {
+        contentId: 'creator-content:1', platform: 'bilibili', title: 'B站首发',
+        coverAssetId: 'creator-media:cover',
+      });
+      await expect(updateCreatorReleasePackage(dataDir, 'project-1', release.id, { coverAssetId: '' }))
+        .rejects.toThrow();
+      await expect(updateCreatorReleasePackage(dataDir, 'project-1', release.id, { publishedUrl: '' }))
+        .rejects.toThrow();
+    });
   });
 });

@@ -55,10 +55,11 @@ export interface UpdateCreatorReleasePackageRequest {
   title?: string;
   description?: string;
   tags?: string[];
-  coverAssetId?: string;
-  exportAssetId?: string;
-  scheduledAt?: string;
-  publishedAt?: string;
-  publishedUrl?: string;
+  // 可选关联/时间字段支持显式清空：undefined 不修改，null 删除字段，非空字符串按规则写入。
+  coverAssetId?: string | null;
+  exportAssetId?: string | null;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+  publishedUrl?: string | null;
   checklist?: CreatorReleaseChecklist;
 }
