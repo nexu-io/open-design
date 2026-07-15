@@ -77,6 +77,22 @@ function file(name: string, kind: ProjectFile['kind'], mtime: number): ProjectFi
   };
 }
 
+describe('ChatPane starter prompts', () => {
+  it('shows four default starter prompts and fills the composer from a card', () => {
+    renderPane({});
+
+    const starterCards = screen.getAllByRole('listitem');
+    expect(starterCards).toHaveLength(4);
+    expect(screen.getByText('chat.example1Title')).toBeTruthy();
+    expect(screen.getByText('chat.example2Title')).toBeTruthy();
+    expect(screen.getByText('chat.example3Title')).toBeTruthy();
+    expect(screen.getByText('chat.example4Title')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('chat.example4Title').closest('button')!);
+    expect(composerMocks.setDraft).toHaveBeenCalledWith('chat.example4Prompt');
+  });
+});
+
 describe('ChatPane imported folder artifacts', () => {
   it('replaces empty starter prompts with design artifact previews', () => {
     const onRequestOpenFile = vi.fn();

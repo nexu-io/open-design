@@ -97,7 +97,7 @@ describe('TasksView automation templates', () => {
     fireEvent.click(templateCard);
 
     await waitFor(() => {
-      expect((screen.getByLabelText('Automation title') as HTMLInputElement).value).toBe(
+      expect((screen.getByTestId('automation-modal-title') as HTMLInputElement).value).toBe(
         'Extract design system',
       );
     });

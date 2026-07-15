@@ -9,7 +9,7 @@ permissions:
   actions: read
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: report-${{ github.event.workflow_run.id }}
@@ -324,11 +324,29 @@ jobs:
               | tail -n 1 || true
           )"
           if [ -n "$comment_id" ]; then
-            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --input "$payload_file" >/dev/null
-            echo "Updated visual report comment on PR $PR_NUMBER."
+            if gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --input "$payload_file" >/dev/null; then
+              echo "Updated visual report comment on PR $PR_NUMBER."
+            else
+              echo "::warning title=Visual report comment update failed::Generated the visual report, but GitHub rejected updating the PR comment."
+              {
+                echo "### Visual report comment update failed"
+                echo
+                echo "The visual report was generated, but GitHub rejected updating the PR comment."
+                echo "Use the uploaded visual report artifact from this run."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
-            gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" --input "$payload_file" >/dev/null
-            echo "Created visual report comment on PR $PR_NUMBER."
+            if gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" --input "$payload_file" >/dev/null; then
+              echo "Created visual report comment on PR $PR_NUMBER."
+            else
+              echo "::warning title=Visual report comment creation failed::Generated the visual report, but GitHub rejected creating the PR comment."
+              {
+                echo "### Visual report comment creation failed"
+                echo
+                echo "The visual report was generated, but GitHub rejected creating the PR comment."
+                echo "Use the uploaded visual report artifact from this run."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Upload visual report artifact

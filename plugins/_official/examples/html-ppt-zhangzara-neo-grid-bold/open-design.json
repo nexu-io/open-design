@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-neo-grid-bold",
-  "title": "Html Ppt Zhangzara Neo Grid Bold",
+  "title": "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Neo Grid Bold",
-    "zh-TW": "Html Ppt Zhangzara Neo Grid Bold",
-    "ja": "Html Ppt Zhangzara Neo Grid Bold",
-    "ko": "Html Ppt Zhangzara Neo Grid Bold",
-    "de": "Html Ppt Zhangzara Neo Grid Bold",
-    "fr": "Html Ppt Zhangzara Neo Grid Bold",
-    "ru": "Html Ppt Zhangzara Neo Grid Bold",
-    "es": "Html Ppt Zhangzara Neo Grid Bold",
-    "pt-BR": "Html Ppt Zhangzara Neo Grid Bold",
-    "it": "Html Ppt Zhangzara Neo Grid Bold",
-    "vi": "Html Ppt Zhangzara Neo Grid Bold",
-    "pl": "Html Ppt Zhangzara Neo Grid Bold",
-    "id": "Html Ppt Zhangzara Neo Grid Bold",
-    "nl": "Html Ppt Zhangzara Neo Grid Bold",
-    "ar": "Html Ppt Zhangzara Neo Grid Bold",
-    "tr": "Html Ppt Zhangzara Neo Grid Bold",
-    "uk": "Html Ppt Zhangzara Neo Grid Bold",
-    "en": "Html Ppt Zhangzara Neo Grid Bold"
+    "en": "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser",
+    "zh-CN": "像招聘 Bar Raiser 一样搭设计作品集叙事",
+    "zh-TW": "像招聘 Bar Raiser 一样搭设计作品集叙事"
   },
   "version": "0.1.0",
-  "description": "Neo-Grid Bold — Editorial neo-brutalism with a single neon yellow accent on off-white paper. Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Built as a decision-grade career deck for hiring panel.",
   "description_i18n": {
-    "zh-CN": "Neo-Grid Bold — 编辑风格的新野兽主义设计，在米白纸上使用单一霓虹黄色点缀。适合展现自信与编辑图形感的场景：设计主导的提案、品牌工作、创始人演讲、会议主题演讲。",
-    "zh-TW": "Neo-Grid Bold — 編輯風格的新野獸主義設計，在米白紙上使用單一霓虹黃色點綴。適合展現自信與編輯圖形感的場景：設計主導的提案、品牌工作、創辦人演講、會議主題演講。",
-    "ja": "Neo-Grid Bold — オフホワイトの紙に単一のネオンイエローのアクセントを使った、エディトリアルなネオブルータリズムデザイン。自信に満ちたエディトリアルグラフィックに最適：デザイン主導のピッチ、ブランドワーク、創業者トーク、カンファレンス基調講演。",
-    "ko": "Neo-Grid Bold — 오프화이트 배경에 단일 네온 옐로우 액센트를 사용한 편집 스타일의 네오 브루탈리즘 디자인. 자신감 있고 편집적인 그래픽이 필요한 경우에 적합: 디자인 중심 피칭, 브랜드 작업, 창업자 강연, 컨퍼런스 기조연설.",
-    "de": "Neo-Grid Bold — Editorial Neo-Brutalismus mit einem einzelnen neongelben Akzent auf cremefarbenem Papier. Für alles, das selbstbewusst und editorial-grafisch wirken soll: designorientierte Pitches, Markenarbeit, Gründervorträge, Konferenz-Keynotes.",
-    "fr": "Neo-Grid Bold — Néo-brutalisme éditorial avec un accent jaune néon unique sur papier blanc cassé. Pour tout ce qui doit être confiant et éditorial-graphique : pitchs axés design, travail de marque, présentations de fondateurs, conférences plénières.",
-    "ru": "Neo-Grid Bold — Редакционный необрутализм с одним неоново-жёлтым акцентом на бледно-белой бумаге. Для всего, что должно выглядеть уверенно и редакционно-графично: дизайн-презентации, брендинг, выступления основателей, ключевые доклады на конференциях.",
-    "es": "Neo-Grid Bold — Neo-brutalismo editorial con un único acento amarillo neón sobre papel blanco roto. Para todo lo que deba sentirse confiado y editorial-gráfico: pitches orientados al diseño, trabajo de marca, charlas de fundadores, conferencias magistrales.",
-    "pt-BR": "Neo-Grid Bold — Neo-brutalismo editorial com um único acento amarelo neon em papel branco-gelo. Para tudo que precisa transmitir confiança e estética editorial-gráfica: pitches focados em design, trabalhos de marca, palestras de fundadores, keynotes de conferências.",
-    "it": "Neo-Grid Bold — Neo-brutalismo editoriale con un singolo accento giallo neon su carta bianco sporco. Per tutto ciò che deve risultare sicuro ed editoriale-grafico: pitch orientati al design, lavori di brand, talk dei fondatori, keynote di conferenze.",
-    "vi": "Neo-Grid Bold — Chủ nghĩa tân dã thú biên tập với điểm nhấn vàng neon đơn lẻ trên nền giấy trắng ngà. Dành cho mọi thứ cần cảm giác tự tin và đồ họa biên tập: bài thuyết trình thiết kế, công việc thương hiệu, bài nói của người sáng lập, diễn thuyết chính hội nghị.",
-    "pl": "Neo-Grid Bold — Edytorski neo-brutalizm z pojedynczym neonowo-żółtym akcentem na kremowym papierze. Do wszystkiego, co powinno być pewne siebie i edytorsko-graficzne: prezentacje projektowe, praca nad marką, wystąpienia założycieli, konferencje.",
-    "id": "Neo-Grid Bold — Neo-brutalisme editorial dengan aksen kuning neon tunggal di atas kertas putih pudar. Untuk segala yang harus terasa percaya diri dan editorial-grafis: pitch berbasis desain, kerja brand, presentasi pendiri, keynote konferensi.",
-    "nl": "Neo-Grid Bold — Redactioneel neo-brutalisme met één neon geel accent op gebroken wit papier. Voor alles wat zelfverzekerd en redactioneel-grafisch moet aanvoelen: design-gedreven pitches, merkwerk, oprichters-talks, conferentie keynotes.",
-    "ar": "Neo-Grid Bold — وحشية جديدة تحريرية مع لمسة صفراء نيون واحدة على ورق أبيض مائل للصفرة. لكل ما يجب أن يبدو واثقاً وتحريرياً-رسومياً: العروض التقديمية الموجهة للتصميم، أعمال العلامات التجارية، محادثات المؤسسين، الكلمات الرئيسية في المؤتمرات.",
-    "tr": "Neo-Grid Bold — Kırık beyaz kağıt üzerinde tek bir neon sarısı vurguyla editoryal neo-brütalizm. Kendinden emin ve editoryal-grafik hissi vermesi gereken her şey için: tasarım odaklı sunumlar, marka çalışmaları, kurucu konuşmaları, konferans açılış konuşmaları.",
-    "uk": "Neo-Grid Bold — Редакційний необруталізм з одним неоново-жовтим акцентом на білому папері. Для всього, що має виглядати впевнено та редакційно-графічно: дизайн-презентації, брендинг, виступи засновників, ключові доповіді на конференціях.",
-    "en": "Neo-Grid Bold — Editorial neo-brutalism with a single neon yellow accent on off-white paper. Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes."
+    "en": "A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Built as a decision-grade career deck for hiring panel.",
+    "zh-CN": "像招聘 Bar Raiser 一样搭设计作品集叙事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像招聘 Bar Raiser 一样搭设计作品集叙事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,19 @@
     "design-review",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-neo-grid-bold",
+    "career",
+    "year-end-self-review-deck",
+    "personal",
+    "portfolio",
+    "promotion",
+    "self-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +63,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "personal",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +71,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Neo-Grid Bold — Editorial neo-brutalism with a single neon yellow accent on off-white paper. Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes.",
-        "zh-CN": "使用这个插件完成以下任务：Neo-Grid Bold — Editorial neo-brutalism with a single neon yellow accent on off-white paper. Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes."
+        "en": "Create \"Build a Designer Portfolio Narrative like a Hiring Bar-Raiser\" as a decision-grade Career deck in this template's own visual system. Subject: A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. Audience: hiring panel. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned.",
+        "zh-CN": "像招聘 Bar Raiser 一样搭设计作品集叙事。像招聘 Bar Raiser 一样搭设计作品集叙事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。 主题：A designer's portfolio narrative for a senior interview — three case studies, the craft, and the judgment behind each. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Neo Grid Bold"
+          "title": "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser",
+          "title_i18n": {
+            "en": "Build a Designer Portfolio Narrative like a Hiring Bar-Raiser",
+            "zh-CN": "像招聘 Bar Raiser 一样搭设计作品集叙事",
+            "zh-TW": "像招聘 Bar Raiser 一样搭设计作品集叙事"
+          }
         }
       ]
     },
@@ -123,6 +111,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "career"
   }
 }

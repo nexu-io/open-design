@@ -1,0 +1,4256 @@
+// Media-generation dispatcher. The unifying contract is:
+//
+//   skills + metadata + system-prompt
+//        ↓ (the code agent decides what to make)
+//   `od media generate --surface … --model … --output … --prompt …`
+//        ↓ (this module routes to a provider)
+//   bytes written to <projectsRoot>/<projectId>/<output>
+//        ↓
+//   FileViewer renders it.
+//
+// Every surface (image / video / audio) flows through this single
+// entrypoint. Providers live behind the `provider` field on each model
+// entry in media-models.js — when a real integration ships we route to
+// it; otherwise we emit a deterministic, lightweight placeholder
+// (labelled SVG-PNG, silent WAV/MP3, blank MP4) so the framework works
+// without API keys.
+//
+// Today we ship real integrations for:
+//   * provider 'openai'     → OpenAI Images API (gpt-image-* / dall-e-*),
+//                              plus text-to-speech via /v1/audio/speech,
+//                              with auto-detection for Azure OpenAI
+//                              deployments based on the configured base URL
+//   * provider 'codex'      → local Codex CLI subscription imagegen
+//   * provider 'volcengine' → Volcengine Ark async tasks API for
+//                              Doubao Seedance 2.0 (video) and Seedream
+//                              (image)
+//   * provider 'grok'       → xAI Imagine API: synchronous
+//                              /v1/images/generations for grok-imagine-image
+//                              and async /v1/videos/generations + GET poll
+//                              for grok-imagine-video (t2v + i2v + audio)
+//   * provider 'imagerouter'→ ImageRouter OpenAI-compatible image/video
+//                              generation endpoints
+//   * provider 'openrouter' → OpenRouter unified gateway: synchronous
+//                              /chat/completions for image generation
+//                              (Gemini Flash, Flux, Recraft) and async
+//                              /videos submit + poll for video
+//                              (Seedance 2.0, Veo 3.1, Wan 2.7)
+//   * provider 'minimax'    → MiniMax: synchronous /v1/image_generation
+//                              for image-01 (T2I + I2I via subject_reference)
+//                              on api.minimax.io, plus TTS via the legacy
+//                              api.minimaxi.chat host
+//   * provider 'custom-image'→ user-supplied OpenAI-compatible
+//                              /v1/images/generations + /v1/images/edits
+//                              endpoints
+//
+// The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
+// release builds they throw StubProviderDisabledError (mapped to HTTP
+// 503) instead of writing placeholder bytes that look like a successful
+// generation. Real-provider failures still produce a stub byte payload
+// when stubs are allowed, but they tag the response with providerError
+// so the CLI can exit non-zero and the agent can't silently narrate the
+// placeholder as the final result.
+
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { execFile as execFileCb, spawn } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { Agent as UndiciAgent } from 'undici';
+import {
+  AUDIO_DURATIONS_SEC,
+  type AudioKind,
+  type MediaModel,
+  type MediaProvider,
+  type MediaSurface,
+  VIDEO_LENGTHS_SEC,
+  findMediaModel,
+  findProvider,
+  modelsForSurface,
+} from './models.js';
+import { assertAndFetchExternalAsset } from '../connectionTest.js';
+import { normalizeCodexConfigFile } from '../codex-config-normalize.js';
+import {
+  resolveCodexImagegenEnv,
+  resolveCodexSubscriptionStatus,
+  resolveModelAlias,
+  resolveProviderConfig,
+} from './config.js';
+import { codexNeedsDangerFullAccessSandbox } from '../runtimes/defs/codex.js';
+import {
+  ensureProject,
+  kindFor,
+  mimeFor,
+  sanitizeName,
+} from '../projects.js';
+import {
+  AIHUBMIX_DEFAULT_BASE_URL,
+  aihubmixHeaders,
+  aihubmixWireModel,
+  aihubmixVideoSeconds,
+  aihubmixGeminiImageBytes,
+  classifyAIHubMixModel,
+} from '../integrations/aihubmix.js';
+
+const execFile = promisify(execFileCb);
+type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
+type ProgressFn = (message: string) => void;
+type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
+type MediaRequestInit = Pick<RequestInit, 'dispatcher'>;
+type MediaContext = {
+  surface: MediaSurface;
+  /**
+   * Registered catalog id (e.g. `dall-e-3`, `gpt-4o-mini-tts`,
+   * `doubao-seedream-3-0-t2i-250415`). Every model-family branch in
+   * the renderers below keys off this field so DALL·E sizing,
+   * gpt-image quality, gpt-4o-mini-tts instructions, and the
+   * MINIMAX/FISHAUDIO TTS lookup tables continue to fire even when
+   * the user has aliased the catalog id to a custom wire-name via
+   * issue #1277's alias layer. lefarcen + codex P2 review on PR
+   * #1309 caught the regression where a single `ctx.model` doubled
+   * for both purposes and accidentally disabled the capability
+   * branches under aliasing.
+   */
+  model: string;
+  /**
+   * What the provider's request body should carry as `model` (or
+   * what gets templated into the URL for Azure-style deployment
+   * routing). Equal to `model` when no alias is configured; equal
+   * to the user-supplied alias from `OD_MEDIA_MODEL_ALIASES` /
+   * `media-config.json` otherwise. Renderers must use this field
+   * for `body.model = ...` and for `providerNote` so users see
+   * what was actually sent.
+   */
+  wireModel: string;
+  modelDef: MediaModel;
+  provider: MediaProvider | null;
+  prompt: string;
+  aspect: string | undefined;
+  length: number | undefined;
+  duration: number | undefined;
+  voice: string;
+  audioKind: AudioKind | undefined;
+  language: string;
+  loop: boolean;
+  promptInfluence: number | undefined;
+  compositionDir: string | null;
+  imageRef: ImageRef | null;
+  requestInit: MediaRequestInit;
+  /** Additional reference images for multi-image i2v / style reference flows. */
+  imageRefs: ImageRef[];
+  projectRoot: string;
+};
+type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === 'object';
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorStringProp(err: unknown, key: string): string {
+  return isRecord(err) && typeof err[key] === 'string' ? err[key] : '';
+}
+const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+// Verify the current Nano Banana / Gemini image model name against:
+// https://ai.google.dev/gemini-api/docs/models
+const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
+const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
+const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
+const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+const CODEX_IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.5';
+
+const DEFAULT_OUTPUT_BY_SURFACE = {
+  image: 'image.png',
+  video: 'video.mp4',
+  audio: 'audio.mp3',
+};
+
+const SURFACES = new Set(['image', 'video', 'audio']);
+const AUDIO_KINDS = new Set(['music', 'speech', 'sfx']);
+
+// Stubs ship a 1×1 PNG / ~24-byte mp4 / silent WAV / single-frame mp3 so
+// the dispatch path is exercisable before real provider integrations
+// land. On a release build that lands as "successful" but functionally
+// empty bytes — confusing to users. We therefore gate the stub renderers
+// behind OD_MEDIA_ALLOW_STUBS=1 and otherwise return a 503 (mapped from
+// the StubProviderDisabledError thrown below) with a clear message.
+class StubProviderDisabledError extends Error {
+  code = 'STUB_PROVIDER_DISABLED';
+  status = 503;
+  constructor(model: string) {
+    super(
+      `provider not configured: ${model}. Add your API key in Settings -> Media Providers to enable real generation.`,
+    );
+    this.name = 'StubProviderDisabledError';
+  }
+}
+
+function stubsAllowed() {
+  const v = process.env.OD_MEDIA_ALLOW_STUBS;
+  return v === '1' || v === 'true';
+}
+
+/**
+ * Resolve a project-relative `--image` path into a base64 data URL the
+ * upstream model APIs (Volcengine i2v, OpenAI image-edit, etc.) accept
+ * directly. Returns null when no path was supplied.
+ *
+ * Security: refuses anything that escapes the project directory.
+ * Without this guard, an agent (or a hallucinated arg) could ask the
+ * daemon to upload `/etc/passwd` to a paid model.
+ */
+async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
+  if (typeof rel !== 'string' || !rel.trim()) return null;
+  const projectRootResolved = path.resolve(projectDir);
+  const abs = path.resolve(projectRootResolved, rel.trim());
+  if (
+    abs !== projectRootResolved &&
+    !abs.startsWith(projectRootResolved + path.sep)
+  ) {
+    throw new Error(
+      `--image path "${rel}" resolves outside the project directory.`,
+    );
+  }
+  let info;
+  try {
+    info = await stat(abs);
+  } catch {
+    throw new Error(`--image not found: ${rel}`);
+  }
+  if (!info.isFile()) {
+    throw new Error(`--image is not a regular file: ${rel}`);
+  }
+  // Cap at 16 MB. Beyond this, base64 inflation alone (≈4/3) starts
+  // hitting body-size limits at the upstream APIs and our own express
+  // 4mb body cap on inbound requests; bigger payloads should travel
+  // via the dedicated upload endpoint, not the dispatcher.
+  const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+  if (info.size > MAX_IMAGE_BYTES) {
+    throw new Error(
+      `--image too large (${info.size} bytes; max ${MAX_IMAGE_BYTES}).`,
+    );
+  }
+  const bytes = await readFile(abs);
+  const ext = path.extname(abs).toLowerCase();
+  // Tight allowlist: only what i2v / image-edit endpoints actually
+  // consume. Avoids smuggling arbitrary content through as data URLs.
+  const mime = ({
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+  })[ext];
+  if (!mime) {
+    throw new Error(
+      `--image has unsupported extension "${ext}". Use png, jpg, jpeg, webp, or gif.`,
+    );
+  }
+  return {
+    path: rel.trim(),
+    abs,
+    mime,
+    size: bytes.length,
+    dataUrl: `data:${mime};base64,${bytes.toString('base64')}`,
+  };
+}
+
+function clampNumber(value: unknown, allowed: number[]): number | undefined {
+  // Accept exact registry values; otherwise snap to the nearest allowed
+  // bucket so a hallucinated `Number.MAX_SAFE_INTEGER` can't bill an
+  // entire month of credits when real providers plug in.
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  if (allowed.length === 0) return undefined;
+  if (allowed.includes(value)) return value;
+  let best = allowed[0]!;
+  let bestDiff = Math.abs(value - best);
+  for (const a of allowed) {
+    const d = Math.abs(value - a);
+    if (d < bestDiff) {
+      best = a;
+      bestDiff = d;
+    }
+  }
+  return best;
+}
+
+function clampWithWarning(value: unknown, allowed: number[], flagName: string): { value: number | undefined; warning: string | null } {
+  const clamped = clampNumber(value, allowed);
+  if (
+    typeof value === 'number'
+    && Number.isFinite(value)
+    && typeof clamped === 'number'
+    && clamped !== value
+  ) {
+    return {
+      value: clamped,
+      warning: `--${flagName} ${value} clamped to ${clamped} (allowed: ${allowed.join(', ')})`,
+    };
+  }
+  return { value: clamped, warning: null };
+}
+
+/**
+ * Generate a media artifact and write it into the project's files dir.
+ *
+ * @param {Object} args
+ * @param {string} args.projectRoot   - Repo root (.od/ lives directly under).
+ * @param {string} args.projectsRoot  - Absolute path to <repo>/.od/projects.
+ * @param {string} args.projectId
+ * @param {'image'|'video'|'audio'} args.surface
+ * @param {string} args.model
+ * @param {string} [args.prompt]
+ * @param {string} [args.output]
+ * @param {string} [args.aspect]
+ * @param {number} [args.length]
+ * @param {number} [args.duration]
+ * @param {string} [args.voice]
+ * @param {string} [args.audioKind]
+ * @param {string} [args.language]
+ * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
+ */
+export async function generateMedia(args: {
+  projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
+  audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
+  compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
+}) {
+  const {
+    projectRoot,
+    projectsRoot,
+    projectId,
+    surface,
+    model,
+    prompt,
+    output,
+    aspect,
+    length,
+    duration,
+    voice,
+    audioKind,
+    language,
+    loop,
+    promptInfluence,
+    compositionDir,
+    image,
+    requestInit,
+  } = args;
+
+  if (!projectRoot) throw new Error('projectRoot required');
+  if (!projectsRoot) throw new Error('projectsRoot required');
+  if (typeof projectId !== 'string' || !projectId) {
+    throw new Error('projectId required');
+  }
+  if (!SURFACES.has(surface)) {
+    throw new Error(`unsupported surface: ${surface}`);
+  }
+  if (typeof model !== 'string' || !model) {
+    throw new Error('model required');
+  }
+  if (surface === 'audio' && audioKind && !AUDIO_KINDS.has(audioKind)) {
+    throw new Error(
+      `unsupported audioKind: ${audioKind}. Allowed: music | speech | sfx.`,
+    );
+  }
+  // Arbitrary fal.ai model paths (e.g. "fal-ai/flux/dev") bypass the
+  // catalog so users can reach any model on fal without waiting for a
+  // catalog entry. Surface comes from the caller; no cross-surface guard
+  // is needed because the fal renderer reads ctx.surface directly.
+  let def = findMediaModel(model);
+  let isFalCustomPath = false;
+  let isCatalogBypass = false;
+  if (!def) {
+    if (/^fal-ai\//.test(model)) {
+      isFalCustomPath = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'Fal.ai',
+        provider: 'fal',
+        caps: surface === 'image' ? ['t2i'] : surface === 'video' ? ['t2v'] : [],
+      };
+    } else if (/^aihubmix-/.test(model)) {
+      // AIHubMix image/audio models are discovered live from its catalogue
+      // (GET /api/v1/models?type=image_generation), so most ids are NOT in the
+      // static registry. They all render through the same OpenAI-compatible
+      // endpoint, so synthesize a def on the fly — aihubmixWireModel() strips
+      // the `aihubmix-` prefix to the real wire name inside the renderer.
+      isCatalogBypass = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'AIHubMix',
+        provider: 'aihubmix',
+        caps:
+          surface === 'image'
+            ? ['t2i', 'i2i']
+            : surface === 'video'
+              ? ['t2v', 'i2v']
+              : surface === 'audio'
+                ? ['tts']
+                : [],
+      };
+    } else {
+      throw new Error(
+        `unknown model: ${model}. Pass --model from the registered list (see /api/media/models), ` +
+        `or pass a full fal-ai/* path (e.g. fal-ai/flux/dev) for any Fal model.`,
+      );
+    }
+  }
+  // Reject cross-surface combinations for catalogued models.
+  const resolvedAudioKind =
+    surface === 'audio' ? audioKind || 'music' : undefined;
+  if (!isFalCustomPath && !isCatalogBypass) {
+    const allowed = modelsForSurface(surface, resolvedAudioKind);
+    if (!allowed.some((m) => m.id === model)) {
+      const ids = allowed.map((m) => m.id).join(', ');
+      const where =
+        surface === 'audio' ? `audio · ${resolvedAudioKind}` : surface;
+      throw new Error(
+        `model "${model}" is not registered for surface "${where}". Allowed: ${ids}.`,
+      );
+    }
+  }
+
+  // Clamp registry-bound numeric inputs to their allowed buckets so a
+  // hallucinated --length 9999999 doesn't reach a real provider as-is
+  // when stubs are swapped for paid integrations.
+  const lengthClamp =
+    surface === 'video'
+      ? clampWithWarning(length, VIDEO_LENGTHS_SEC, 'length')
+      : { value: undefined, warning: null };
+  const usesProviderSpecificAudioDuration =
+    def.provider === 'elevenlabs'
+    && surface === 'audio'
+    && resolvedAudioKind === 'sfx';
+  const durationClamp =
+    surface === 'audio' && !usesProviderSpecificAudioDuration
+      ? clampWithWarning(duration, AUDIO_DURATIONS_SEC, 'duration')
+      : { value: undefined, warning: null };
+  const clampedLength = lengthClamp.value;
+  const clampedDuration = usesProviderSpecificAudioDuration
+    ? duration
+    : durationClamp.value;
+  const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
+
+  const dir = await ensureProject(projectsRoot, projectId);
+  const safeOut = sanitizeName(
+    output || autoOutputName(surface, model, resolvedAudioKind),
+  );
+  const target = path.join(dir, safeOut);
+  await mkdir(path.dirname(target), { recursive: true });
+
+  // Reference image for image-to-video / image-edit flows. The agent
+  // passes a project-relative path; we read it once here, validate it
+  // stays inside the project, and turn it into a base64 data URL the
+  // upstream APIs accept directly. Renderers consume `ctx.imageRef`
+  // and decide how to splice the data URL into their request.
+  const imageRef = await resolveProjectImage(image, dir);
+
+  // Multi-image support: resolve additional images from the `images`
+  // array param. The first resolved image (imageRef) is the primary
+  // reference; additional images flow as style/content references.
+  const extraImages = Array.isArray(args.images) ? args.images : [];
+  const imageRefs: ImageRef[] = [];
+  if (imageRef) imageRefs.push(imageRef);
+  for (const imgPath of extraImages) {
+    const ref = await resolveProjectImage(imgPath, dir);
+    if (ref && !imageRefs.some((r) => r.abs === ref.abs)) {
+      imageRefs.push(ref);
+    }
+  }
+
+  // Resolve any user-configured model alias BEFORE we hand the id to a
+  // dispatcher (issue #1277). Catalog lookup + surface validation above
+  // ran against the original id so we still enforce the registered
+  // catalog; the alias only changes what the provider receives on the
+  // wire. lefarcen + codex P2 on PR #1309: keep BOTH values on ctx so
+  // capability branches (DALL-E sizing, gpt-image quality, gpt-4o-mini-tts
+  // instructions, MINIMAX/FISHAUDIO TTS map) continue to key off the
+  // catalog id while the provider's request body carries the alias.
+  const wireModel = await resolveModelAlias(projectRoot, model);
+  const ctx = {
+    surface,
+    model,
+    wireModel,
+    modelDef: def,
+    provider: findProvider(def.provider),
+    prompt: prompt || '',
+    aspect: aspect || defaultAspectFor(surface),
+    length: clampedLength,
+    duration: clampedDuration,
+    voice: voice || '',
+    audioKind: resolvedAudioKind,
+    language: language || '',
+    loop: loop === true,
+    promptInfluence: typeof promptInfluence === 'number' && Number.isFinite(promptInfluence)
+      ? promptInfluence
+      : undefined,
+    // Project-relative path to the directory the agent scaffolded with
+    // hyperframes.json / meta.json / index.html. Only consumed by the
+    // hyperframes renderer; null/empty for every other provider.
+    compositionDir: typeof compositionDir === 'string' ? compositionDir : null,
+    // Resolved reference image for i2v / image-edit flows. `null` when
+    // the agent didn't pass --image. See resolveProjectImage below.
+    imageRef,
+    requestInit: requestInit || {},
+    imageRefs,
+    projectRoot,
+  };
+
+  const credentials = await resolveProviderConfig(projectRoot, def.provider);
+  const customImageCredentials =
+    surface === 'image' && def.provider === 'openai'
+      ? await resolveProviderConfig(projectRoot, 'custom-image')
+      : null;
+
+  let bytes: Buffer;
+  let providerNote: string;
+  let suggestedExt: string | undefined;
+  let providerId = def.provider;
+  // Tracks whether the bytes came from a real provider call or from the
+  // stub fallback. Surfaces in the response so the CLI/agent can tell a
+  // legitimate placeholder ("provider not integrated yet") apart from a
+  // silent failure ("API call blew up, here's a 67-byte PNG"). Without
+  // this flag the chat agent narrates the stub as if it's the expected
+  // output, and the user sees a blank file.
+  let providerError: string | null = null;
+  let usedStubFallback = false;
+  // True only when the dispatcher intentionally returned a stub because
+  // no real renderer is wired up for this (provider, surface) pair.
+  let intentionalStub = false;
+  const customImageOverride = customImageOverridesOpenAIModel(
+    ctx,
+    customImageCredentials,
+  );
+  const codexSubscriptionModel =
+    !customImageOverride
+    && surface === 'image'
+    && def.provider === 'openai'
+    && ctx.wireModel === ctx.model
+      ? codexSubscriptionEquivalent(ctx.model)
+      : null;
+  const useCodexSubscription =
+    codexSubscriptionModel
+      ? (await resolveCodexSubscriptionStatus(projectRoot)).available
+      : false;
+  try {
+    if (
+      def.provider === 'openai'
+      && surface === 'image'
+      && customImageOverride
+    ) {
+      providerId = 'custom-image';
+      const result = await renderCustomOpenAIImage(ctx, customImageCredentials!);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (codexSubscriptionModel && useCodexSubscription) {
+      providerId = 'codex';
+      const result = await renderCodexImage({
+        ...ctx,
+        model: codexSubscriptionModel.id,
+        wireModel: codexSubscriptionModel.id,
+        modelDef: codexSubscriptionModel,
+        provider: findProvider('codex'),
+      });
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openai' && surface === 'image') {
+      const result = await renderOpenAIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'codex' && surface === 'image') {
+      const result = await renderCodexImage(ctx);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'openai'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderOpenAISpeech(ctx, credentials, safeOut);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'aihubmix' && surface === 'image') {
+      const result = await renderAIHubMixImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'aihubmix'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderAIHubMixTTS(ctx, credentials, safeOut);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'aihubmix' && surface === 'video') {
+      const result = await renderAIHubMixVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'volcengine' && surface === 'video') {
+      const result = await renderVolcengineVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'volcengine' && surface === 'image') {
+      const result = await renderVolcengineImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'grok' && surface === 'image') {
+      const result = await renderGrokImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'grok' && surface === 'video') {
+      const result = await renderGrokVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'grok'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderXAITTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'nanobanana' && surface === 'image') {
+      const result = await renderNanoBananaImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'imagerouter' && surface === 'image') {
+      const result = await renderImageRouterImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'imagerouter' && surface === 'video') {
+      const result = await renderImageRouterVideo(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'custom-image' && surface === 'image') {
+      const result = await renderCustomOpenAIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openrouter' && surface === 'image') {
+      const result = await renderOpenRouterImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openrouter' && surface === 'video') {
+      const result = await renderOpenRouterVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'leonardo' && surface === 'image') {
+      const result = await renderLeonardoImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'elevenlabs'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderElevenLabsTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'elevenlabs'
+      && surface === 'audio'
+      && ctx.audioKind === 'sfx'
+    ) {
+      const result = await renderElevenLabsSfx(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'hyperframes' && surface === 'video') {
+      // HyperFrames is templated by the agent (it reads the vendored
+      // skill at skills/hyperframes/SKILL.md and writes a composition
+      // HTML based on the user's prompt). But the actual `npx
+      // hyperframes render` step runs HERE in the daemon process, not
+      // in the agent's shell. Reason: the agent's shell on macOS
+      // (Claude Code in particular) is wrapped in `sandbox-exec`, and
+      // puppeteer's Chrome subprocess hangs partway through frame
+      // capture under that sandbox. The daemon process is unsandboxed,
+      // so puppeteer behaves correctly. Agent-side npx is reserved for
+      // the lighter HF subcommands (lint, transcribe, tts) that don't
+      // need to spawn Chrome.
+      const result = await renderHyperFramesViaCli(ctx, dir, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'audio') {
+      const result = await renderMinimaxTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'audio') {
+      const result = await renderSenseAudioTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'image') {
+      const result = await renderSenseAudioImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'fishaudio' && surface === 'audio') {
+      const result = await renderFishAudioTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'fal' && surface === 'image') {
+      const result = await renderFalImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'fal' && surface === 'video') {
+      const result = await renderFalVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else {
+      // No real renderer wired up for this (provider, surface). Gate the
+      // stub fallback behind OD_MEDIA_ALLOW_STUBS so release builds don't
+      // silently write placeholder bytes to disk and confuse the user.
+      if (!stubsAllowed()) {
+        throw new StubProviderDisabledError(model);
+      }
+      const result = await renderStub(ctx, safeOut);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      intentionalStub = true;
+    }
+  } catch (err) {
+    // Stub-disabled errors are intentional — propagate so the daemon
+    // maps them to 503 and the CLI surfaces a clear "configure a real
+    // provider" message rather than writing fake bytes.
+    if (err instanceof StubProviderDisabledError) {
+      throw err;
+    }
+    // HyperFrames is a local render, not a remote provider. Falling back
+    // to a stub here hides actionable composition/preflight failures and
+    // can make the agent retry or narrate a fake MP4 as success.
+    if (def.provider === 'hyperframes') {
+      throw err;
+    }
+    // A real provider failed (network blip, 4xx, missing key, …). We
+    // still want to fall back to a stub so the agent's chat loop
+    // doesn't dead-end — but only when stubs are allowed for this
+    // build. Otherwise re-throw so the CLI exits non-zero with the
+    // real upstream message.
+    if (!stubsAllowed()) {
+      throw err;
+    }
+    const stub = await renderStub(ctx, safeOut);
+    bytes = stub.bytes;
+    const msg = errorMessage(err);
+    providerNote = `[${providerId} error → stub] ${msg}`;
+    providerError = msg;
+    usedStubFallback = true;
+    // Also log to daemon stderr so the failure is visible in the daemon
+    // terminal — easiest place for the developer/operator to spot it.
+    try {
+      console.error(
+        `[media] ${providerId}/${surface}/${model} failed: ${msg}`,
+      );
+    } catch {
+      // best-effort logging only
+    }
+  }
+  // Tag the providerNote with `[stub]` only when the bytes actually came
+  // from the stub renderer — either as the intentional fallback for an
+  // unintegrated (provider, surface) pair, or because a real-provider
+  // call failed and we wrote a placeholder. Real-provider successes keep
+  // the renderer's own note (e.g. "openai/gpt-image-2 · 1:1 · 1.2 MB")
+  // untouched so the FileViewer toolbar shows the truth.
+  if (intentionalStub || usedStubFallback) {
+    providerNote = `[stub] ${providerNote}`;
+  }
+
+  // If the real provider returned a different extension than the
+  // requested filename, swap it. Saves the agent from having to guess
+  // (.png vs .jpg vs .webp) before it knows what the model emits.
+  let finalOut = safeOut;
+  if (suggestedExt) {
+    const dot = safeOut.lastIndexOf('.');
+    const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
+    finalOut = `${stem}${suggestedExt}`;
+  }
+  const finalTarget = path.join(dir, finalOut);
+  await writeFile(finalTarget, bytes);
+  const st = await stat(finalTarget);
+  return {
+    name: finalOut,
+    size: st.size,
+    mtime: st.mtimeMs,
+    kind: kindFor(finalOut),
+    mime: mimeFor(finalOut),
+    model,
+    surface,
+    providerNote,
+    providerId,
+    providerError,
+    usedStubFallback,
+    intentionalStub,
+    warnings,
+  };
+}
+
+function autoOutputName(surface: MediaSurface, model: string, audioKind?: AudioKind): string {
+  const base = DEFAULT_OUTPUT_BY_SURFACE[surface] || 'artifact.bin';
+  const stamp = Date.now().toString(36);
+  // Slug the model id so the filename stays short and shell-safe.
+  const slug = String(model).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 32);
+  const tag = surface === 'audio' && audioKind ? `${audioKind}-${slug}` : slug;
+  const dot = base.lastIndexOf('.');
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : '';
+  return `${stem}-${tag}-${stamp}${ext}`;
+}
+
+function defaultAspectFor(surface: MediaSurface): string | undefined {
+  if (surface === 'image') return '1:1';
+  if (surface === 'video') return '16:9';
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Provider: OpenAI Images API (gpt-image-2, gpt-image-1.5, dall-e-3 …)
+//
+// We support both the canonical OpenAI endpoint AND Azure-hosted
+// OpenAI deployments behind the same provider slot — Azure is detected
+// from the base URL (`*.azure.com` host or a `/deployments/<name>`
+// segment in the path). For Azure we additionally:
+//   * append `?api-version=…` (default 2024-02-01, unless the user has
+//     already encoded one into the base URL),
+//   * send the api-key header in addition to Authorization (Azure
+//     accepts either; some setups only honor api-key),
+//   * drop the `model` field from the body since the deployment in the
+//     path already names the model.
+// ---------------------------------------------------------------------------
+
+const AZURE_DEFAULT_API_VERSION = '2024-02-01';
+const OPENAI_IMAGE_HEADERS_TIMEOUT_MS = 10 * 60 * 1000;
+const OPENAI_IMAGE_BODY_TIMEOUT_MS = 10 * 60 * 1000;
+const openAIImageDispatcher = new UndiciAgent({
+  headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
+  bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
+});
+
+function withMediaRequestInit(
+  ctx: Pick<MediaContext, 'requestInit'>,
+  init: RequestInit = {},
+): RequestInit {
+  return {
+    ...ctx.requestInit,
+    ...init,
+  };
+}
+
+const OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE =
+  'no OpenAI credential - configure an API key in Settings or set OPENAI_API_KEY. ' +
+  "If you're signed into Codex with a ChatGPT subscription, use the codex-gpt-image-2 model instead; " +
+  'it renders through your local Codex login and needs no OpenAI API key.';
+
+async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE);
+  }
+  const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
+  const azure = detectAzureEndpoint(rawBase);
+  const url = buildOpenAIImageUrl(rawBase, azure);
+
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    n: 1,
+    size: openaiSizeFor(ctx.model, ctx.aspect),
+  };
+  // For non-Azure calls, include `model` in the body. Azure infers it
+  // from the deployment in the path so omitting it keeps payloads
+  // compatible across both flavors. The wire-name (post-alias) goes
+  // on the body so the user's alias from issue #1277 reaches the API.
+  if (!azure) {
+    body.model = ctx.wireModel;
+  }
+  // Capability branches key off the CATALOG id (not the alias) so a
+  // user who aliased `dall-e-3` to a custom Azure / proxy deployment
+  // still gets the DALL-E-specific quality + response_format flags
+  // (lefarcen + codex P2 on PR #1309).
+  if (ctx.model.startsWith('dall-e-')) {
+    body.response_format = 'b64_json';
+    body.quality = ctx.model === 'dall-e-3' ? 'hd' : 'standard';
+  } else {
+    // gpt-image-* accepts quality 'high' | 'medium' | 'low'.
+    body.quality = 'high';
+  }
+
+  const headers: Record<string, string> = {
+    'authorization': `Bearer ${credentials.apiKey}`,
+    'content-type': 'application/json',
+  };
+  if (azure) {
+    // Azure's canonical auth header. Some deployments accept Bearer
+    // (the curl example we tested against does) but api-key is what
+    // their docs document, so send both. OpenAI ignores unknown
+    // headers, so this is harmless on the standard endpoint too.
+    headers['api-key'] = credentials.apiKey;
+  }
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    dispatcher: ctx.requestInit.dispatcher
+      ?? openAIImageDispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
+    signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    const tag = azure ? 'azure-openai' : 'openai';
+    throw new Error(`${tag} ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`openai non-JSON response: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('openai response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await fetch(entry.url, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`openai image fetch ${imgResp.status}`);
+    const arr = await imgResp.arrayBuffer();
+    bytes = Buffer.from(arr);
+  } else {
+    throw new Error('openai response had neither b64_json nor url');
+  }
+
+  const tag = azure ? 'azure-openai' : 'openai';
+  return {
+    bytes,
+    providerNote: `${tag}/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+function codexGeneratedImagesRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+  const resolvedHome = home.startsWith('~/') ? path.join(os.homedir(), home.slice(2)) : home;
+  return path.resolve(resolvedHome, 'generated_images');
+}
+
+function codexImageModelLabel(model: string): string {
+  return model.startsWith('codex-') ? model.slice('codex-'.length) : model;
+}
+
+function codexImagePrompt(ctx: MediaContext): string {
+  const prompt = ctx.prompt || 'A high-quality reference image.';
+  const aspect = ctx.aspect ? `\nAspect ratio: ${ctx.aspect}.` : '';
+  const prefix = ctx.imageRefs.length > 0
+    ? '$imagegen Edit the attached reference image:'
+    : '$imagegen';
+  return `${prefix} ${prompt}${aspect}`;
+}
+
+function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS.ProcessEnv): string[] {
+  const sandbox = codexNeedsDangerFullAccessSandbox()
+    ? ['--sandbox', 'danger-full-access']
+    : ['--sandbox', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=true'];
+  const model = env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL;
+  const args = [
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    ...sandbox,
+    '-C',
+    ctx.projectRoot,
+    '--add-dir',
+    generatedRoot,
+    '--model',
+    model,
+  ];
+  if (env.OD_CODEX_DISABLE_PLUGINS === '1') args.push('--disable', 'plugins');
+  for (const ref of ctx.imageRefs) args.push('-i', ref.abs);
+  return args;
+}
+
+function parseCodexThreadId(stdout: string): string {
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const obj = JSON.parse(line) as { thread_id?: unknown; type?: unknown };
+      if (obj.type === 'thread.started' && typeof obj.thread_id === 'string') {
+        return obj.thread_id;
+      }
+    } catch {
+      // Non-JSON progress belongs in stdout on some CLI builds; ignore it.
+    }
+  }
+  throw new Error('codex imagegen did not emit a thread.started thread_id');
+}
+
+function summarizeCodexImagegenStdout(stdout: string): string {
+  const messages: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const obj = JSON.parse(trimmed) as { item?: { text?: unknown }; text?: unknown };
+      const text = typeof obj.item?.text === 'string'
+        ? obj.item.text
+        : typeof obj.text === 'string'
+          ? obj.text
+          : '';
+      if (text.trim()) messages.push(text.trim());
+    } catch {
+      messages.push(trimmed);
+    }
+  }
+  return truncate(messages.join('\n'), 500);
+}
+
+function codexImagegenMissingOutputError(threadDir: string, stdout: string): Error {
+  const summary = summarizeCodexImagegenStdout(stdout);
+  const suffix = summary ? ` Codex stdout summary: ${summary}` : '';
+  if (/\bpreview[- ]only\b|without saving|without writing|does not write|no file|bez przenoszenia/i.test(summary)) {
+    return new Error(
+      `Codex imagegen completed in preview-only mode and did not write an image file under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    );
+  }
+  return new Error(
+    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+  );
+}
+
+async function readCodexGeneratedImage(
+  generatedRoot: string,
+  threadId: string,
+  stdout: string,
+): Promise<Buffer> {
+  const threadDir = path.join(generatedRoot, threadId);
+  let entries: string[];
+  try {
+    entries = await readdir(threadDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      throw codexImagegenMissingOutputError(threadDir, stdout);
+    }
+    throw err;
+  }
+  const match = entries
+    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
+    .sort()[0];
+  if (!match) {
+    throw codexImagegenMissingOutputError(threadDir, stdout);
+  }
+  const imagePath = path.join(threadDir, match);
+  const bytes = await readFile(imagePath);
+  if (process.env.OD_CODEX_KEEP_GENERATED_IMAGES !== '1') {
+    await rm(threadDir, { recursive: true, force: true });
+  }
+  return bytes;
+}
+
+async function runCodexImagegen(
+  ctx: MediaContext,
+  generatedRoot: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ stderr: string; stdout: string }> {
+  const codexBin = env.CODEX_BIN?.trim() || 'codex';
+  const child = spawn(codexBin, codexImagegenArgs(ctx, generatedRoot, env), {
+    cwd: ctx.projectRoot,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  const timeoutMs = Number(process.env.OD_CODEX_IMAGEGEN_TIMEOUT_MS || 300_000);
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`codex imagegen timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const out = Buffer.concat(stdout).toString('utf8');
+      const err = Buffer.concat(stderr).toString('utf8');
+      if (code !== 0) reject(new Error(`codex imagegen exited ${code}: ${truncate(err || out, 1000)}`));
+      else resolve({ stdout: out, stderr: err });
+    });
+    child.stdin.end(codexImagePrompt(ctx));
+  });
+}
+
+async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
+  const env = await resolveCodexImagegenEnv(ctx.projectRoot);
+  await normalizeCodexConfigFile(env);
+  const generatedRoot = codexGeneratedImagesRoot(env);
+  await mkdir(generatedRoot, { recursive: true });
+  const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
+  const threadId = parseCodexThreadId(stdout);
+  const bytes = await readCodexGeneratedImage(generatedRoot, threadId, stdout);
+  const imageModel = codexImageModelLabel(ctx.model);
+  return {
+    bytes,
+    providerNote: `codex/${imageModel} via ${env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
+  const wireModel = (credentials.model || ctx.wireModel).trim();
+  const url = buildOpenAIImageUrl(baseUrl, false);
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    model: wireModel,
+    quality: 'auto',
+    size: imageRouterSizeFor(ctx.aspect, 'image'),
+    response_format: 'b64_json',
+    output_format: 'png',
+  };
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const data = await parseOpenAICompatibleJson(resp, 'imagerouter image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'imagerouter image', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'image')} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
+  const wireModel = (credentials.model || ctx.wireModel).trim();
+  const url = buildOpenAIVideoUrl(baseUrl);
+  const seconds = typeof ctx.length === 'number' ? ctx.length : 'auto';
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    model: wireModel,
+    size: imageRouterSizeFor(ctx.aspect, 'video'),
+    seconds,
+    response_format: 'b64_json',
+  };
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const data = await parseOpenAICompatibleJson(resp, 'imagerouter video');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'imagerouter video', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'video')} · ${seconds === 'auto' ? 'auto' : `${seconds}s`} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const baseUrl = (credentials.baseUrl || '').trim();
+  if (!baseUrl) {
+    throw new Error(
+      'Custom Image API base URL required — configure an OpenAI-compatible /v1/images/generations or /v1/images/edits endpoint in Settings',
+    );
+  }
+  const wireModel = (
+    credentials.model
+    || (ctx.wireModel !== CUSTOM_IMAGE_MODEL_ID ? ctx.wireModel : '')
+  ).trim();
+  if (!wireModel) {
+    throw new Error(
+      'Custom Image API model required — configure the provider model in Settings',
+    );
+  }
+
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (credentials.apiKey) {
+    headers.authorization = `Bearer ${credentials.apiKey}`;
+  }
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    model: wireModel,
+    n: 1,
+    size: openaiSizeFor('gpt-image-1', ctx.aspect),
+  };
+  let url = buildOpenAIImageUrl(baseUrl, false);
+  if (ctx.imageRef?.dataUrl) {
+    body.response_format = 'b64_json';
+    body.images = [{ image_url: ctx.imageRef.dataUrl }];
+    url = buildOpenAIImageEditUrl(baseUrl);
+  }
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  }));
+  const data = await parseOpenAICompatibleJson(resp, 'custom image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'custom image', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function customImageOverridesOpenAIModel(
+  ctx: MediaContext,
+  credentials: ProviderConfig | null,
+): credentials is ProviderConfig {
+  const baseUrl = credentials?.baseUrl?.trim();
+  const model = credentials?.model?.trim();
+  if (!baseUrl || !model) return false;
+  return model === ctx.model || model === ctx.wireModel;
+}
+
+function codexSubscriptionEquivalent(modelId: string): MediaModel | null {
+  const candidate = findMediaModel(`codex-${modelId}`);
+  return candidate?.provider === 'codex' ? candidate : null;
+}
+
+async function parseOpenAICompatibleJson(resp: Response, providerTag: string): Promise<any> {
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`${providerTag} ${resp.status}: ${truncate(text, 240)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${providerTag} non-JSON response: ${truncate(text, 200)}`);
+  }
+}
+
+async function bytesFromOpenAICompatibleData(data: any, providerTag: string, requestInit: MediaRequestInit = {}): Promise<Buffer> {
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error(`${providerTag} response had no data[0]`);
+  if (typeof entry.b64_json === 'string' && entry.b64_json) {
+    const raw = entry.b64_json.includes(',')
+      ? entry.b64_json.slice(entry.b64_json.indexOf(',') + 1)
+      : entry.b64_json;
+    return Buffer.from(raw, 'base64');
+  }
+  if (typeof entry.url === 'string' && entry.url) {
+    const mediaResp = await fetch(entry.url, requestInit);
+    if (!mediaResp.ok) {
+      throw new Error(`${providerTag} media fetch ${mediaResp.status}`);
+    }
+    const arr = await mediaResp.arrayBuffer();
+    return Buffer.from(arr);
+  }
+  throw new Error(`${providerTag} response had neither b64_json nor url`);
+}
+
+function imageRouterSizeFor(aspect: string | undefined, surface: 'image' | 'video'): string {
+  if (surface === 'video') {
+    if (aspect === '1:1') return '1024x1024';
+    if (aspect === '9:16') return '576x1024';
+    if (aspect === '4:3') return '1024x768';
+    if (aspect === '3:4') return '768x1024';
+    return '1024x576';
+  }
+  if (aspect === '16:9') return '1024x576';
+  if (aspect === '9:16') return '576x1024';
+  if (aspect === '4:3') return '1024x768';
+  if (aspect === '3:4') return '768x1024';
+  return '1024x1024';
+}
+
+/**
+ * Heuristic: do we think this base URL points at an Azure OpenAI
+ * deployment rather than the public OpenAI API?
+ *
+ *   true examples
+ *     https://x.cognitiveservices.azure.com/openai/deployments/gpt-image-2
+ *     https://x.openai.azure.com/openai/deployments/foo
+ *     /openai/deployments/foo?api-version=2024-02-01
+ *   false examples
+ *     https://api.openai.com/v1
+ *     http://localhost:8080/v1
+ */
+function detectAzureEndpoint(baseUrl: string): boolean {
+  if (typeof baseUrl !== 'string' || !baseUrl) return false;
+  if (/\.azure\.com\b/i.test(baseUrl)) return true;
+  if (/\/openai\/deployments\//i.test(baseUrl)) return true;
+  return false;
+}
+
+/**
+ * Build the full /images/generations URL, preserving any user-supplied
+ * query string (e.g. an explicit `?api-version=2024-12-01`) and
+ * appending the default api-version for Azure when the user didn't
+ * specify one. Returns a string ready for `fetch`.
+ */
+function normalizeOpenAICompatiblePath(pathname: string, endpoint: 'images' | 'videos', mode: 'generations' | 'edits'): string {
+  const strippedPath = pathname.replace(/\/+$/, '');
+  const generationsSuffix = `/${endpoint}/generations`;
+  const editsSuffix = endpoint === 'images' ? '/images/edits' : null;
+  if (strippedPath.endsWith(generationsSuffix)) {
+    if (mode === 'generations') return strippedPath;
+    return endpoint === 'images'
+      ? `${strippedPath.slice(0, -generationsSuffix.length)}${editsSuffix}`
+      : strippedPath;
+  }
+  if (editsSuffix && strippedPath.endsWith(editsSuffix)) {
+    if (mode === 'edits') return strippedPath;
+    return `${strippedPath.slice(0, -editsSuffix.length)}${generationsSuffix}`;
+  }
+  return mode === 'edits' && editsSuffix
+    ? `${strippedPath}${editsSuffix}`
+    : `${strippedPath}${generationsSuffix}`;
+}
+
+function buildOpenAICompatibleGenerationUrl(baseUrl: string, endpoint: 'images' | 'videos'): string {
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    const stripped = baseUrl.replace(/\/$/, '');
+    return normalizeOpenAICompatiblePath(stripped, endpoint, 'generations');
+  }
+  parsed.pathname = normalizeOpenAICompatiblePath(parsed.pathname, endpoint, 'generations');
+  return parsed.toString();
+}
+
+function buildOpenAIImageUrl(baseUrl: string, isAzure: boolean): string {
+  let parsed;
+  try {
+    parsed = new URL(buildOpenAICompatibleGenerationUrl(baseUrl, 'images'));
+  } catch {
+    // Bad URL — fall back to naive concat so the upstream error is
+    // surfaced through the normal HTTP path rather than a parse crash.
+    return buildOpenAICompatibleGenerationUrl(baseUrl, 'images');
+  }
+  if (isAzure && !parsed.searchParams.has('api-version')) {
+    parsed.searchParams.set('api-version', AZURE_DEFAULT_API_VERSION);
+  }
+  return parsed.toString();
+}
+
+function buildOpenAIImageEditUrl(baseUrl: string): string {
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    const stripped = baseUrl.replace(/\/$/, '');
+    return normalizeOpenAICompatiblePath(stripped, 'images', 'edits');
+  }
+  parsed.pathname = normalizeOpenAICompatiblePath(parsed.pathname, 'images', 'edits');
+  return parsed.toString();
+}
+
+function buildOpenAIVideoUrl(baseUrl: string): string {
+  return buildOpenAICompatibleGenerationUrl(baseUrl, 'videos');
+}
+
+function openaiSizeFor(model: string, aspect?: string): string {
+  // gpt-image-1.5 / gpt-image-2 accept arbitrary sizes up to 4096; we
+  // pick concrete ones tuned to common aspects so the API never
+  // negotiates them down silently.
+  if (model.startsWith('gpt-image-')) {
+    if (aspect === '16:9') return '1792x1024';
+    if (aspect === '9:16') return '1024x1792';
+    if (aspect === '4:3') return '1408x1056';
+    if (aspect === '3:4') return '1056x1408';
+    return '1024x1024';
+  }
+  if (model === 'dall-e-3') {
+    if (aspect === '16:9') return '1792x1024';
+    if (aspect === '9:16') return '1024x1792';
+    return '1024x1024';
+  }
+  // dall-e-2 only supports 256/512/1024 squares.
+  return '1024x1024';
+}
+
+const OPENAI_TTS_VOICES = new Set([
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer',
+  'verse',
+]);
+
+function buildOpenAISpeechUrl(baseUrl: string, isAzure: boolean): string {
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    const stripped = baseUrl.replace(/\/$/, '');
+    return `${stripped}/audio/speech`;
+  }
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '') + '/audio/speech';
+  if (isAzure && !parsed.searchParams.has('api-version')) {
+    parsed.searchParams.set('api-version', AZURE_DEFAULT_API_VERSION);
+  }
+  return parsed.toString();
+}
+
+function openaiSpeechFormatFor(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === '.wav') return 'wav';
+  if (ext === '.flac') return 'flac';
+  if (ext === '.aac') return 'aac';
+  if (ext === '.opus' || ext === '.ogg' || ext === '.oga') return 'opus';
+  return 'mp3';
+}
+
+async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
+  }
+  const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
+  const azure = detectAzureEndpoint(rawBase);
+  const url = buildOpenAISpeechUrl(rawBase, azure);
+  const format = openaiSpeechFormatFor(fileName);
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+
+  let voiceId = 'alloy';
+  let instructions = '';
+  const requestedVoice = (ctx.voice && ctx.voice.trim()) || '';
+  if (requestedVoice) {
+    if (OPENAI_TTS_VOICES.has(requestedVoice)) {
+      voiceId = requestedVoice;
+    } else {
+      // gpt-4o-mini-tts accepts free-form speaking style instructions.
+      // If the UI metadata carries prose rather than a concrete voice id,
+      // preserve it here instead of surfacing a provider error.
+      instructions = requestedVoice;
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    input: text,
+    voice: voiceId,
+    response_format: format,
+  };
+  if (!azure) {
+    body.model = ctx.wireModel;
+  }
+  if (instructions && ctx.model === 'gpt-4o-mini-tts') {
+    body.instructions = instructions;
+  }
+
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${credentials.apiKey}`,
+    'content-type': 'application/json',
+  };
+  if (azure) {
+    headers['api-key'] = credentials.apiKey;
+  }
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  }));
+  if (!resp.ok) {
+    const text = await resp.text();
+    const tag = azure ? 'azure-openai' : 'openai';
+    throw new Error(`${tag} speech ${resp.status}: ${truncate(text, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('openai speech returned zero bytes');
+  }
+  const tag = azure ? 'azure-openai' : 'openai';
+  const noteBits = [`${tag}/${ctx.wireModel}`, voiceId, `${format}`, `${bytes.length} bytes`];
+  if (instructions) noteBits.splice(2, 0, 'styled');
+  return {
+    bytes,
+    providerNote: noteBits.join(' · '),
+    suggestedExt: format === 'opus' ? '.ogg' : `.${format}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Volcengine Ark — Doubao Seedance 2.0 video.
+//
+// Docs:
+//   POST /api/v3/contents/generations/tasks   → { id }
+//   GET  /api/v3/contents/generations/tasks/{id} → { status, content: { video_url } }
+// We submit, poll until succeeded/failed, then fetch the produced
+// video_url and return the raw bytes. The temporary URL Volcengine
+// returns is only valid for ~24h, so streaming the bytes into the
+// project folder is required to keep them addressable.
+// ---------------------------------------------------------------------------
+
+async function renderVolcengineVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
+
+  // Seedance accepts inline `--resolution`, `--duration`, `--ratio` and
+  // `--camerafixed` flags inside the prompt text. We append a flags
+  // suffix so user prompts that already contain them still win.
+  const ratio = volcengineRatioFor(ctx.aspect);
+  const durationSec = ctx.length || 5;
+  const resolution = '720p';
+  const promptText = (ctx.prompt && ctx.prompt.trim()) || 'A short cinematic clip.';
+  const suffixFlags: string[] = [];
+  if (!/--resolution\b/.test(promptText)) suffixFlags.push(`--resolution ${resolution}`);
+  if (!/--duration\b/.test(promptText)) suffixFlags.push(`--duration ${durationSec}`);
+  if (!/--ratio\b/.test(promptText)) suffixFlags.push(`--ratio ${ratio}`);
+  const fullText = suffixFlags.length
+    ? `${promptText} ${suffixFlags.join(' ')}`
+    : promptText;
+
+  // Seedance i2v (and seedance-2.0/-fast which support both modes)
+  // accept an additional `image_url` content entry — Volcengine treats
+  // it as the first frame and animates from there. We pass the data
+  // URL directly; the API does not require a public URL. When no
+  // image is provided, this is a regular t2v call.
+  const content: Array<Record<string, unknown>> = [{ type: 'text', text: fullText }];
+  if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: ctx.imageRef.dataUrl },
+    });
+  }
+
+  const taskBody = {
+    model: ctx.wireModel,
+    content,
+  };
+
+  const taskResp = await fetch(`${baseUrl}/contents/generations/tasks`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(taskBody),
+  }));
+  const taskText = await taskResp.text();
+  if (!taskResp.ok) {
+    throw new Error(`volcengine task create ${taskResp.status}: ${truncate(taskText, 240)}`);
+  }
+  let taskData: any;
+  try {
+    taskData = JSON.parse(taskText);
+  } catch {
+    throw new Error(`volcengine non-JSON: ${truncate(taskText, 200)}`);
+  }
+  const taskId = taskData && taskData.id;
+  if (!taskId) throw new Error('volcengine task response missing id');
+
+  // Poll until succeeded/failed. Keep a hard cap, but make it long
+  // enough for real Seedance queues: fast t2v often returns in 30-120s,
+  // while i2v and busy-region t2v can exceed the old 6-minute ceiling.
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_VOLCENGINE_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 12 * 60 * 1000;
+  let videoUrl: string | null = null;
+  let lastStatus = '';
+  // Emit a "task accepted" line right away so the agent's chat shows
+  // something within the first second instead of going silent for the
+  // full poll loop. cc's Bash tool considers a long-quiet pipe stuck
+  // and times out at ~2 minutes — Volcengine i2v routinely takes
+  // 3-5 minutes, so without this stream, every i2v dispatch dies
+  // mid-flight.
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(`volcengine ${mode} task ${taskId} accepted; polling status…`);
+  }
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(4000);
+    const pollResp = await fetch(`${baseUrl}/contents/generations/tasks/${encodeURIComponent(taskId)}`, withMediaRequestInit(ctx, {
+      headers: { 'authorization': `Bearer ${credentials.apiKey}` },
+    }));
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`volcengine poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`volcengine poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastStatus = pollData.status || '';
+    // Forward each poll tick. Heartbeat doubles as a "command is alive"
+    // signal for the agent's bash tool — the daemon's SSE stream emits
+    // an event for every line, which cc renders into the chat as live
+    // output so its watchdog never marks the call as hung.
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`volcengine task ${taskId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'succeeded') {
+      videoUrl = pollData?.content?.video_url || null;
+      break;
+    }
+    if (lastStatus === 'failed' || lastStatus === 'cancelled') {
+      const reason = pollData?.error?.message || lastStatus;
+      throw new Error(`volcengine task ${lastStatus}: ${reason}`);
+    }
+  }
+  if (!videoUrl) {
+    throw new Error(`volcengine task did not finish in time (last status: ${lastStatus || 'unknown'})`);
+  }
+
+  const dlResp = await fetch(videoUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) throw new Error(`volcengine video fetch ${dlResp.status}`);
+  const arr = await dlResp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+
+  return {
+    bytes,
+    providerNote: `volcengine/${ctx.wireModel} · ${ratio} · ${durationSec}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+function volcengineRatioFor(aspect?: string): string {
+  // Seedance accepts a fixed list of ratios; map the OD vocabulary to
+  // its canonical strings.
+  if (!aspect) return '16:9';
+  if (aspect === '1:1' || aspect === '16:9' || aspect === '9:16' || aspect === '4:3' || aspect === '3:4') {
+    return aspect;
+  }
+  return '16:9';
+}
+
+// Volcengine Seedream / Seededit images. Same auth, different endpoint:
+// POST /api/v3/images/generations (OpenAI-compatible payload).
+async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY');
+  }
+  const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
+
+  const body = {
+    model: ctx.wireModel,
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    response_format: 'b64_json',
+    // openaiSizeFor branches on the catalog id (gpt-image-* vs dall-e-*
+    // accept different size enums), so it must NOT see the post-alias
+    // wire name. lefarcen + codex P2 on PR #1309.
+    size: openaiSizeFor(ctx.model, ctx.aspect),
+  };
+  const resp = await fetch(`${baseUrl}/images/generations`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`volcengine image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`volcengine image non-JSON: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('volcengine image response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await fetch(entry.url, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`volcengine image fetch ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    throw new Error('volcengine image response missing b64_json/url');
+  }
+  return {
+    bytes,
+    providerNote: `volcengine/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: xAI Grok Imagine.
+//
+// Docs: https://docs.x.ai/developers/model-capabilities/{images,video}/generation
+//   * Image: POST /v1/images/generations — synchronous, returns
+//            {data:[{b64_json|url}]}; we ask for b64_json so the bytes
+//            arrive in one round-trip.
+//   * Video: POST /v1/videos/generations — may return the finished video
+//            inline ({status:'done', video:{url}}) or an async stub
+//            ({id, status:'pending'}); in the async case we poll
+//            GET /v1/videos/{id} until status flips to done/failed.
+//
+// xAI's video model produces native audio (background music + SFX +
+// ambient) synchronised with the visual; that's the headline
+// differentiator vs Seedance and Sora and is why grok-imagine-video
+// declares the `audio` capability.
+// ---------------------------------------------------------------------------
+
+async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
+
+  const aspectRatio = grokAspectFor(ctx.aspect);
+  const body = {
+    model: ctx.wireModel,
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    n: 1,
+    aspect_ratio: aspectRatio,
+    response_format: 'b64_json',
+  };
+  const resp = await fetch(`${baseUrl}/images/generations`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`grok image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`grok image non-JSON: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('grok image response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await fetch(entry.url, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`grok image fetch ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    throw new Error('grok image response missing b64_json/url');
+  }
+  // xAI's Imagine returns JPEG by default (no format option in the API
+  // surface), but PNG/WebP are technically possible. Sniff the magic
+  // bytes so the on-disk extension matches reality — saving JPEG bytes
+  // as `.png` confuses Finder previews and any downstream consumer that
+  // trusts the extension.
+  return {
+    bytes,
+    providerNote: `grok/${ctx.wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || NANOBANANA_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireModel = (credentials.model || ctx.wireModel || NANOBANANA_DEFAULT_MODEL).trim();
+  const body = {
+    contents: [{
+      parts: [{
+        text: ctx.prompt || 'A high-quality reference image.',
+      }],
+    }],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: {
+        aspectRatio: nanoBananaAspectFor(ctx.aspect),
+        imageSize: NANOBANANA_DEFAULT_IMAGE_SIZE,
+      },
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: nanoBananaHeaders(baseUrl, credentials.apiKey),
+    body: JSON.stringify(body),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`nano-banana image ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`nano-banana image non-JSON: ${truncate(text, 200)}`);
+  }
+  const bytes = inlineImageBytesFromGenerateContent(data);
+  return {
+    bytes,
+    providerNote: `nano-banana/${wireModel} · ${nanoBananaAspectFor(ctx.aspect)} · ${NANOBANANA_DEFAULT_IMAGE_SIZE} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function nanoBananaHeaders(baseUrl: string, apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (usesOfficialGoogleApiKeyHeader(baseUrl)) {
+    headers['x-goog-api-key'] = apiKey;
+    return headers;
+  }
+  headers.authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
+function usesOfficialGoogleApiKeyHeader(baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    return url.hostname === 'generativelanguage.googleapis.com';
+  } catch {
+    return false;
+  }
+}
+
+function nanoBananaAspectFor(aspect?: string): string {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function inlineImageBytesFromGenerateContent(data: any): Buffer {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      const inline = part?.inlineData;
+      if (typeof inline?.data === 'string' && inline.data) {
+        return Buffer.from(inline.data, 'base64');
+      }
+    }
+  }
+  throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
+}
+
+function sniffImageExt(bytes: Buffer): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return '.jpg';
+  }
+  if (
+    bytes.length >= 8
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+  ) {
+    return '.png';
+  }
+  if (
+    bytes.length >= 12
+    && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return '.webp';
+  }
+  return '.png';
+}
+
+
+// ---------------------------------------------------------------------------
+// Provider: OpenRouter — Unified video generation gateway (asynchronous).
+//
+// Docs: https://openrouter.ai/docs/guides/overview/multimodal/video-generation
+//
+// ---------------------------------------------------------------------------
+// OpenRouter image generation via Chat Completions API
+// ---------------------------------------------------------------------------
+// Unlike the dedicated /videos endpoint (async polling), image generation
+// goes through /chat/completions with `modalities: ["image"]` (or
+// `["image", "text"]` for multi-modal models like Gemini).  The response
+// embeds generated images as base64 data URLs in
+// `choices[0].message.images[].image_url.url`.
+//
+// Model IDs follow the same `openrouter/`-prefix convention as video.
+// ---------------------------------------------------------------------------
+
+async function renderOpenRouterImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
+  // matches OpenRouter's canonical slug.
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const wireModel = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
+
+  // Multi-modal models (Gemini variants) accept both image and text
+  // output; image-only models (Flux, Recraft, Sourceful) only accept
+  // ["image"]. We use a simple heuristic on the slug.
+  const modalities: string[] = wireModel.includes('gemini')
+    ? ['image', 'text']
+    : ['image'];
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    messages: [
+      {
+        role: 'user',
+        content: ctx.prompt || 'A high-quality reference image.',
+      },
+    ],
+    modalities,
+    stream: false,
+  };
+
+  // Pass aspect ratio + image size through image_config when specified.
+  const aspectRatio = openRouterAspectFor(ctx.aspect);
+  const imageConfig: Record<string, unknown> = {
+    aspect_ratio: aspectRatio,
+    image_size: '1K',
+  };
+  body.image_config = imageConfig;
+
+  const resp = await fetch(`${baseUrl}/chat/completions`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+      'HTTP-Referer': 'https://opendesign.dev',
+      'X-Title': 'Open Design',
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`openrouter image ${resp.status}: ${truncate(text, 240)}`);
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`openrouter image non-JSON response: ${truncate(text, 200)}`);
+  }
+
+  // Extract the first generated image from the response.
+  const images: any[] | undefined =
+    data?.choices?.[0]?.message?.images;
+  if (!images || images.length === 0) {
+    throw new Error(
+      `openrouter image response contained no images for model ${wireModel}: `
+      + truncate(text, 200),
+    );
+  }
+
+  const dataUrl: string | undefined = images[0]?.image_url?.url;
+  if (!dataUrl) {
+    throw new Error(
+      `openrouter image response missing image_url.url: ${truncate(text, 200)}`,
+    );
+  }
+
+  // Strip the data URL prefix (e.g. "data:image/png;base64,") and
+  // decode the remaining base64 payload.
+  const b64Match = dataUrl.match(/^data:image\/[^;]+;base64,(.+)$/s);
+  let bytes: Buffer;
+  if (b64Match) {
+    bytes = Buffer.from(b64Match[1]!, 'base64');
+  } else if (dataUrl.startsWith('http')) {
+    // Some models may return a plain URL instead of inline base64.
+    const imgResp = await fetch(dataUrl, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    // Assume raw base64 without prefix.
+    bytes = Buffer.from(dataUrl, 'base64');
+  }
+
+  return {
+    bytes,
+    providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// OpenRouter's video API is a normalised, asynchronous interface sitting
+// in front of multiple upstream providers (ByteDance Seedance 2.0,
+// Google Veo 3.1, Alibaba Wan 2.7, etc.). The workflow mirrors the
+// Grok / Volcengine pattern used elsewhere in this file:
+//
+//   1. POST /api/v1/videos  → {id, polling_url, status:"pending"}
+//   2. Poll GET  polling_url until status flips to completed/failed
+//   3. Fetch the binary from unsigned_urls[0]
+//
+// Model IDs in our registry are prefixed with `openrouter/` (e.g.
+// `openrouter/bytedance/seedance-2.0`); we strip the prefix before
+// sending the wire request so OpenRouter receives the canonical slug
+// (e.g. `bytedance/seedance-2.0`).
+//
+// Image-to-video (i2v) is supported via `frame_images` with
+// `frame_type: "first_frame"` — the dispatcher already resolved the
+// project image into a base64 data URL in `ctx.imageRef`.
+// ---------------------------------------------------------------------------
+
+async function renderOpenRouterVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
+  // matches OpenRouter's canonical slug (e.g. `bytedance/seedance-2.0`).
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const afterPrefix = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
+
+  // Parse optional resolution suffix encoded in the model ID
+  // (e.g. `bytedance/seedance-2.0:1080p` → model `bytedance/seedance-2.0`,
+  // resolution `1080p`). When no suffix is present, default to 720p.
+  const RESOLUTION_SUFFIX_RE = /:(\d+p)$/;
+  const resSuffixMatch = afterPrefix.match(RESOLUTION_SUFFIX_RE);
+  const wireModel = resSuffixMatch
+    ? afterPrefix.slice(0, -resSuffixMatch[0].length)
+    : afterPrefix;
+  const resolution = resSuffixMatch?.[1] ?? '720p';
+
+  const aspectRatio = openRouterAspectFor(ctx.aspect);
+
+  // Build the request body.
+  const durationSec = ctx.length || 5;
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    aspect_ratio: aspectRatio,
+    resolution,
+    duration: durationSec,
+  };
+
+  // Image-to-video: pass reference images via OpenRouter's
+  // `frame_images` + `input_references` arrays. Seedance 2.0 supports
+  // up to 9 images, 3 video clips, and 3 audio clips as inputs.
+  // The first image is treated as the first_frame for i2v; additional
+  // images go into input_references for style/content guidance.
+  if (ctx.imageRefs.length > 0) {
+    const [primary, ...extras] = ctx.imageRefs;
+    body.frame_images = [
+      {
+        type: 'image_url',
+        image_url: { url: primary!.dataUrl },
+        frame_type: 'first_frame',
+      },
+    ];
+    if (extras.length > 0) {
+      body.input_references = extras.map((ref) => ({
+        type: 'image_url',
+        image_url: { url: ref.dataUrl },
+      }));
+    }
+  } else if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    // Backward compat: single --image param without --images.
+    body.frame_images = [
+      {
+        type: 'image_url',
+        image_url: { url: ctx.imageRef.dataUrl },
+        frame_type: 'first_frame',
+      },
+    ];
+  }
+
+  // ── Step 1: Submit the generation request ──────────────────────────
+  const submitResp = await fetch(`${baseUrl}/videos`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+      // OpenRouter attribution headers per
+      // https://openrouter.ai/docs/app-attribution
+      'HTTP-Referer': 'https://opendesign.dev',
+      'X-Title': 'Open Design',
+    },
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(
+      `openrouter video submit ${submitResp.status}: ${truncate(submitText, 240)}`,
+    );
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`openrouter video non-JSON: ${truncate(submitText, 200)}`);
+  }
+
+  const jobId = submitData?.id;
+  const pollingUrl = submitData?.polling_url;
+  if (!jobId || !pollingUrl) {
+    throw new Error(
+      `openrouter video submit returned no job id or polling_url: ${truncate(submitText, 200)}`,
+    );
+  }
+
+  // ── Step 2: Poll until completion ──────────────────────────────────
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 30 * 60 * 1000; // 30 minutes default
+
+  let lastStatus = submitData?.status || 'pending';
+  let videoUrls: string[] | null = null;
+
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(
+      `openrouter ${mode} job ${jobId} (${wireModel}) accepted; polling status…`,
+    );
+  }
+
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(8000);
+    const pollResp = await fetch(pollingUrl, withMediaRequestInit(ctx, {
+      headers: {
+        'authorization': `Bearer ${credentials.apiKey}`,
+        'HTTP-Referer': 'https://opendesign.dev',
+        'X-Title': 'Open Design',
+      },
+    }));
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(
+        `openrouter poll ${pollResp.status}: ${truncate(pollText, 240)}`,
+      );
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`openrouter poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+
+    lastStatus = pollData?.status || '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(
+        `openrouter job ${jobId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`,
+      );
+    }
+
+    if (lastStatus === 'completed') {
+      videoUrls = pollData?.unsigned_urls || null;
+      break;
+    }
+    if (
+      lastStatus === 'failed'
+      || lastStatus === 'expired'
+      || lastStatus === 'cancelled'
+    ) {
+      const reasonRaw =
+        pollData?.error?.message || pollData?.error || lastStatus;
+      const reason =
+        typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw);
+      throw new Error(`openrouter job ${lastStatus}: ${reason}`);
+    }
+  }
+
+  if (!videoUrls || videoUrls.length === 0) {
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    const ceilingSec = Math.round(maxMs / 1000);
+    throw new Error(
+      `openrouter video timed out after ${elapsedSec}s waiting for status=completed `
+      + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
+      + `If your jobs legitimately need longer, raise OD_OPENROUTER_VIDEO_MAX_POLL_MS.`,
+    );
+  }
+
+  // ── Step 3: Download the video binary ──────────────────────────────
+  // unsigned_urls are often third-party CDNs where sending our API key
+  // would leak credentials. However, sometimes OpenRouter returns a proxied
+  // openrouter.ai URL that still requires authorization. We only attach the
+  // auth header if the host is explicitly allowlisted as openrouter.ai.
+  const contentUrl = videoUrls[0]!;
+  const parsedContentUrl = new URL(contentUrl);
+
+  const dlHeaders: Record<string, string> = {};
+  if (parsedContentUrl.hostname === 'openrouter.ai') {
+    dlHeaders['authorization'] = `Bearer ${credentials.apiKey}`;
+  }
+
+  const dlResp = await fetch(contentUrl, withMediaRequestInit(ctx, { headers: dlHeaders }));
+  if (!dlResp.ok) {
+    throw new Error(`openrouter video download ${dlResp.status}`);
+  }
+  const arr = await dlResp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+
+  return {
+    bytes,
+    providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+function openRouterAspectFor(aspect?: string): string {
+  // OpenRouter normalises aspect ratios across providers. Our
+  // MEDIA_ASPECTS vocabulary is a strict subset — pass known values
+  // through, default to 16:9 for video.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '16:9';
+}
+
+async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Leonardo.ai API key — configure it in Settings or set LEONARDO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://cloud.leonardo.ai/api/rest/v1').replace(/\/$/, '');
+  
+  // Map model IDs to Leonardo.ai platform model IDs
+  const modelMap: Record<string, string> = {
+    'leonardo-phoenix': '6b645e3a-d64f-4341-a6d8-7a3690fbf042',  // Phoenix
+    'leonardo-kino-xl': 'aa77f04e-3eec-4034-9c07-d0f619684628',  // Kino XL
+    'leonardo-flux-dev': 'b2614463-296c-462a-9586-aafdb8f00e36', // FLUX.1 [dev]
+    'leonardo-flux-schnell': '1dd50843-d653-4516-a8e3-f0238ee453ff', // FLUX.1 [schnell]
+    'leonardo-anime-pastel': '1e60896f-3c26-4296-8ecc-53e2afecc132', // Anime Pastel Dream
+  };
+  
+  const platformModelId = modelMap[ctx.model];
+  if (!platformModelId) {
+    throw new Error(`unsupported leonardo.ai model: ${ctx.model}`);
+  }
+  
+  // Map aspect ratios to Leonardo.ai dimensions
+  const aspectMap: Record<string, { width: number; height: number }> = {
+    '1:1': { width: 1024, height: 1024 },
+    '16:9': { width: 1344, height: 768 },
+    '9:16': { width: 768, height: 1344 },
+    '4:3': { width: 1152, height: 896 },
+    '3:4': { width: 896, height: 1152 },
+  };
+  
+  const size = (ctx.aspect ? aspectMap[ctx.aspect] : undefined) || { width: 1024, height: 1024 };
+  
+  // Submit generation request. Phoenix and the FLUX family require the
+  // `contrast` field per Leonardo's API reference; valid values are
+  // 3 (Low) / 3.5 (Medium) / 4 (High). Default to 3.5 so prompts that
+  // omit a contrast hint fall in the middle of the supported range.
+  const requiresContrast =
+    ctx.model === 'leonardo-phoenix'
+    || ctx.model === 'leonardo-flux-dev'
+    || ctx.model === 'leonardo-flux-schnell';
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    modelId: platformModelId,
+    width: size.width,
+    height: size.height,
+    num_images: 1,
+    ...(requiresContrast ? { contrast: 3.5 } : {}),
+  };
+  
+  const submitResp = await fetch(`${baseUrl}/generations`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`leonardo.ai submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`leonardo.ai non-JSON: ${truncate(submitText, 200)}`);
+  }
+  
+  const generationId = submitData?.sdGenerationJob?.generationId;
+  if (!generationId) {
+    throw new Error('leonardo.ai response missing generationId');
+  }
+  
+  // Poll for completion
+  const maxPollMs = 120000; // 2 minutes
+  const pollIntervalMs = 2000; // 2 seconds
+  const startedAt = Date.now();
+  let imageUrl: string | null = null;
+  
+  while (Date.now() - startedAt < maxPollMs) {
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    
+    const pollResp = await fetch(`${baseUrl}/generations/${generationId}`, withMediaRequestInit(ctx, {
+      headers: {
+        'authorization': `Bearer ${credentials.apiKey}`,
+      },
+    }));
+    
+    if (!pollResp.ok) {
+      throw new Error(`leonardo.ai poll ${pollResp.status}`);
+    }
+    
+    const pollData = (await pollResp.json()) as Record<string, any>;
+    const generation = pollData?.generations_by_pk;
+    
+    if (generation?.status === 'COMPLETE') {
+      const images = generation?.generated_images;
+      if (Array.isArray(images) && images.length > 0) {
+        imageUrl = images[0]?.url;
+        break;
+      }
+    } else if (generation?.status === 'FAILED') {
+      throw new Error('leonardo.ai generation failed');
+    }
+  }
+  
+  if (!imageUrl) {
+    throw new Error('leonardo.ai generation timed out after 2 minutes');
+  }
+  
+  // Fetch the generated image
+  const imgResp = await fetch(imageUrl, withMediaRequestInit(ctx));
+  if (!imgResp.ok) {
+    throw new Error(`leonardo.ai image fetch ${imgResp.status}`);
+  }
+  
+  const bytes = Buffer.from(await imgResp.arrayBuffer());
+  
+  return {
+    bytes,
+    providerNote: `leonardo.ai/${ctx.model} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+
+async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
+
+  // Grok caps duration at 15s. The dispatcher already clamps to
+  // VIDEO_LENGTHS_SEC (which goes up to 30) — re-clamp here so a user
+  // who picked 30 doesn't bounce off the upstream API with a 4xx.
+  const requested = ctx.length || 5;
+  const durationSec = Math.min(Math.max(requested, 1), 15);
+  const aspectRatio = grokAspectFor(ctx.aspect);
+
+  const body: Record<string, unknown> = {
+    model: ctx.wireModel,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    duration: durationSec,
+    aspect_ratio: aspectRatio,
+    resolution: '720p',
+  };
+  if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    // grok-imagine-video accepts a base64 data URI in `image` for i2v.
+    // Same surface as Seedance — the dispatcher already produced the
+    // data URL via resolveProjectImage, so we just hand it through.
+    body.image = ctx.imageRef.dataUrl;
+  }
+
+  const submitResp = await fetch(`${baseUrl}/videos/generations`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`grok video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`grok video non-JSON: ${truncate(submitText, 200)}`);
+  }
+
+  // Two paths: (a) the API returned the finished video synchronously
+  // (cached/short jobs), in which case we skip polling; (b) we got an
+  // {id, status:'pending'} stub and need to poll GET /videos/{id}
+  // until status flips to done/failed/expired.
+  let videoUrl = submitData?.video?.url || null;
+  let lastStatus = submitData?.status || '';
+  const requestId = submitData?.id || submitData?.request_id || null;
+
+  if (!videoUrl && requestId) {
+    const startedAt = Date.now();
+    const configuredMaxMs = Number(process.env.OD_GROK_VIDEO_MAX_POLL_MS);
+    const maxMs =
+      Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+        ? configuredMaxMs
+        : 8 * 60 * 1000;
+    if (typeof onProgress === 'function') {
+      const mode = ctx.imageRef ? 'i2v' : 't2v';
+      onProgress(`grok ${mode} task ${requestId} accepted; polling status…`);
+    }
+    while (Date.now() - startedAt < maxMs) {
+      await sleep(4000);
+      const pollResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(requestId)}`, withMediaRequestInit(ctx, {
+        headers: { 'authorization': `Bearer ${credentials.apiKey}` },
+      }));
+      const pollText = await pollResp.text();
+      if (!pollResp.ok) {
+        throw new Error(`grok poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+      }
+      let pollData: any;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch {
+        throw new Error(`grok poll non-JSON: ${truncate(pollText, 200)}`);
+      }
+      lastStatus = pollData.status || '';
+      if (typeof onProgress === 'function') {
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+        onProgress(`grok task ${requestId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+      }
+      if (lastStatus === 'done' || lastStatus === 'succeeded') {
+        videoUrl = pollData?.video?.url || null;
+        break;
+      }
+      if (lastStatus === 'failed' || lastStatus === 'expired') {
+        const reasonRaw = pollData?.error?.message || pollData?.error || lastStatus;
+        const reason = typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw);
+        throw new Error(`grok task ${lastStatus}: ${reason}`);
+      }
+    }
+    // Loop exited without a videoUrl. Distinguish the two reachable
+    // cases so operators know which lever to pull: bumping the poll
+    // ceiling (timeout) vs filing a bug against the upstream contract
+    // (status=done but no video.url).
+    if (!videoUrl) {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      const ceilingSec = Math.round(maxMs / 1000);
+      throw new Error(
+        `grok video timed out after ${elapsedSec}s waiting for status=done `
+        + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
+        + `If your jobs legitimately need longer, raise OD_GROK_VIDEO_MAX_POLL_MS.`,
+      );
+    }
+  }
+
+  if (!videoUrl) {
+    // Submit returned neither an inline video.url nor a request_id —
+    // upstream broke its own contract. Surfacing the last status helps
+    // pinpoint whether it was a transient API blip or a malformed
+    // response we should add a parser branch for.
+    throw new Error(
+      `grok video submit returned no inline video and no request_id to poll `
+      + `(status=${lastStatus || 'unknown'})`,
+    );
+  }
+
+  const dlResp = await fetch(videoUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) throw new Error(`grok video fetch ${dlResp.status}`);
+  const arr = await dlResp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+
+  return {
+    bytes,
+    providerNote: `grok/${ctx.wireModel} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+function grokAspectFor(aspect?: string): string {
+  // xAI accepts a wide list (1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1,
+  // 1:2, 19.5:9, 9:19.5, 20:9, 9:20, auto). Our MEDIA_ASPECTS subset
+  // is a strict subset — pass through known values, otherwise 16:9.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '16:9';
+}
+
+// ---------------------------------------------------------------------------
+// Provider: xAI Grok TTS — POST /v1/tts.
+//
+// xAI exposes a dedicated /tts endpoint that returns audio bytes directly,
+// not the OpenAI /audio/speech shape. Docs:
+//   https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+// Credentials come through the same OAuth-aware path as Grok image / video,
+// so a SuperGrok subscriber gets TTS for free once they have authorized.
+// ---------------------------------------------------------------------------
+
+const XAI_TTS_DEFAULT_BASE_URL = 'https://api.x.ai/v1';
+const XAI_TTS_DEFAULT_VOICE_ID = 'eve';
+const XAI_TTS_DEFAULT_LANGUAGE = 'en';
+
+async function renderXAITTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || XAI_TTS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || XAI_TTS_DEFAULT_VOICE_ID;
+  const language =
+    typeof ctx.language === 'string' && ctx.language.trim()
+      ? ctx.language.trim()
+      : XAI_TTS_DEFAULT_LANGUAGE;
+
+  // Stick to the documented minimal POST /v1/tts shape; the server
+  // defaults output_format to mp3 / 24kHz / 128kbps which matches what
+  // we want. Future work: surface sample_rate / bit_rate / codec via
+  // ctx so the agent can request wav for high-fidelity workflows.
+  const body = {
+    text,
+    voice_id: voiceId,
+    language,
+  };
+
+  const resp = await fetch(`${baseUrl}/tts`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`xai tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const bytes = Buffer.from(arrayBuffer);
+  if (bytes.length === 0) {
+    throw new Error('xai tts response had zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `xai/${ctx.wireModel} · voice=${voiceId} · ${language} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: ElevenLabs — v3 text-to-speech (synchronous).
+//
+// Docs: https://elevenlabs.io/docs/api-reference/text-to-speech/convert
+// The API returns MP3 bytes directly. The catalogue id `elevenlabs-v3`
+// maps to the wire model `eleven_v3`, while `--voice` selects the
+// voice id in the path.
+// ---------------------------------------------------------------------------
+
+const ELEVENLABS_DEFAULT_BASE_URL = 'https://api.elevenlabs.io';
+const ELEVENLABS_DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
+
+const ELEVENLABS_TTS_MODEL_MAP = {
+  'elevenlabs-v3': 'eleven_v3',
+} as Record<string, string>;
+
+const ELEVENLABS_SFX_MODEL_MAP = {
+  'elevenlabs-sfx': 'eleven_text_to_sound_v2',
+} as Record<string, string>;
+const ELEVENLABS_SFX_MAX_PROMPT_CHARS = 450;
+const ELEVENLABS_SFX_DEFAULT_PROMPT_INFLUENCE = 0.3;
+
+function clampElevenLabsSfxDuration(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 5;
+  return Math.min(30, Math.max(0.5, value));
+}
+
+function clampElevenLabsSfxPromptInfluence(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ELEVENLABS_SFX_DEFAULT_PROMPT_INFLUENCE;
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+function requireElevenLabsPrompt(text: string, kind: 'TTS' | 'SFX'): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error(`ElevenLabs ${kind} prompt must not be empty. Pass --prompt before retrying.`);
+  }
+  return trimmed;
+}
+
+function assertElevenLabsSfxPromptLength(text: string) {
+  const promptChars = Array.from(text).length;
+  if (promptChars > ELEVENLABS_SFX_MAX_PROMPT_CHARS) {
+    throw new Error(
+      `ElevenLabs SFX prompt exceeds ${ELEVENLABS_SFX_MAX_PROMPT_CHARS} characters (${promptChars}). Shorten --prompt before retrying.`,
+    );
+  }
+}
+
+async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || ELEVENLABS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = ELEVENLABS_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  const text = requireElevenLabsPrompt(ctx.prompt ?? '', 'TTS');
+  const voiceId = (ctx.voice && ctx.voice.trim()) || ELEVENLABS_DEFAULT_VOICE_ID;
+  const body = {
+    text,
+    model_id: wireModel,
+    voice_settings: {
+      stability: 1,
+      similarity_boost: 1,
+      style: 0,
+      speed: 1,
+      use_speaker_boost: true,
+    },
+  };
+
+  const resp = await fetch(
+    `${baseUrl}/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+    withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': credentials.apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`elevenlabs tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('elevenlabs tts returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `elevenlabs/${wireModel} · ${voiceId} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+async function renderElevenLabsSfx(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+    );
+  }
+
+  const baseUrl = (credentials.baseUrl || ELEVENLABS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = ELEVENLABS_SFX_MODEL_MAP[ctx.model] || ctx.model;
+  const text = requireElevenLabsPrompt(ctx.prompt ?? '', 'SFX');
+  assertElevenLabsSfxPromptLength(text);
+  const durationSeconds = clampElevenLabsSfxDuration(ctx.duration);
+  const promptInfluence = clampElevenLabsSfxPromptInfluence(ctx.promptInfluence);
+  const body = {
+    text,
+    duration_seconds: durationSeconds,
+    prompt_influence: promptInfluence,
+    ...(ctx.loop ? { loop: true } : {}),
+    model_id: wireModel,
+  };
+
+  const resp = await fetch(
+    `${baseUrl}/v1/sound-generation?output_format=mp3_44100_128`,
+    withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': credentials.apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`elevenlabs sfx ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('elevenlabs sfx returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `elevenlabs/${wireModel} · ${durationSeconds}s${ctx.loop ? ' · loop' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: MiniMax — Speech-02 family text-to-speech (synchronous).
+//
+// Docs: https://platform.minimaxi.com — POST /t2a_v2 with a JSON body
+// describing the voice + audio settings. Response is JSON with the
+// audio bytes hex-encoded under `data.audio`. The MiniMax catalogue we
+// surface as the generic id `minimax-tts` resolves to `speech-02-turbo`
+// (their fast tier). Voice id defaults to a neutral Mandarin voice but
+// the agent can override via the model registry's `voice` slot.
+// ---------------------------------------------------------------------------
+
+const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimaxi.chat/v1';
+
+// Map our generic catalogue ids onto MiniMax's actual model ids. The
+// `minimax-tts` slot in src/media/models.ts is shorthand for "their
+// fast TTS tier"; we substitute the real model name on the wire so
+// MiniMax accepts the request without exposing the user to their
+// internal naming.
+const MINIMAX_TTS_MODEL_MAP = {
+  'minimax-tts': 'speech-02-turbo',
+} as Record<string, string>;
+
+// Image generation lives on a different host than the legacy TTS endpoint
+// (api.minimax.io vs api.minimaxi.chat). Keeping the two constants
+// separate lets existing TTS users keep their api.minimaxi.chat/v1
+// default while new image users get api.minimax.io without manual
+// configuration. The image renderer resolves baseUrl from
+// OD_MINIMAX_IMAGE_BASE_URL env -> this constant; credentials.baseUrl
+// is intentionally ignored for image (see renderMinimaxImage).
+const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
+
+// Map our generic catalogue id onto MiniMax's actual wire model name. Mirrors
+// the TTS pattern above: the catalog id `minimax-image-01` is shorthand for
+// "their flagship image model"; we substitute the real model name on the wire
+// so MiniMax accepts the request without exposing the user to internal naming.
+const MINIMAX_IMAGE_MODEL_MAP = {
+  'minimax-image-01': 'image-01',
+} as Record<string, string>;
+
+async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  // Precedence: user alias from #1277 (when set) -> project's known
+  // MINIMAX legacy rename map -> catalog id. The user knows their
+  // deployment name better than our hardcoded table, so an explicit
+  // alias trumps the legacy mapping.
+  const wireModel = ctx.wireModel !== ctx.model
+    ? ctx.wireModel
+    : (MINIMAX_TTS_MODEL_MAP[ctx.model] || ctx.model);
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  // Voice id picks: the agent can pass --voice to choose, otherwise we
+  // default to a neutral Mandarin male voice that handles both Chinese
+  // and English text reasonably. MiniMax's voice catalogue is large
+  // (`male-qn-qingse`, `female-shaonv`, etc.) — listed at
+  // platform.minimaxi.com under voice management.
+  const voiceId = (ctx.voice && ctx.voice.trim()) || 'male-qn-qingse';
+
+  const languageBoost = typeof ctx.language === 'string' ? ctx.language.trim() : '';
+
+  const body = {
+    model: wireModel,
+    text,
+    stream: false,
+    ...(languageBoost ? { language_boost: languageBoost } : {}),
+    voice_setting: {
+      voice_id: voiceId,
+      speed: 1.0,
+      vol: 1.0,
+      pitch: 0,
+    },
+    audio_setting: {
+      sample_rate: 32000,
+      format: 'mp3',
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/t2a_v2`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax tts ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax tts non-JSON: ${truncate(respText, 200)}`);
+  }
+  // MiniMax wraps every response in `base_resp`; even an HTTP 200 can
+  // be a logical failure (`status_code !== 0`). Surface that distinct
+  // class of error so the user knows it's an auth / params issue, not
+  // a network blip.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax tts api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const hex = data?.data?.audio;
+  if (typeof hex !== 'string' || !hex) {
+    throw new Error('minimax tts response missing data.audio');
+  }
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length === 0) {
+    throw new Error('minimax tts decoded zero bytes');
+  }
+  // Pull a few useful descriptors from extra_info for the providerNote
+  // so the FileViewer toolbar tells the truth about what was generated.
+  const xi = data?.extra_info || {};
+  const seconds = xi.audio_length ? Math.round(xi.audio_length / 100) / 10 : '?';
+
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: MiniMax — image-01 text-to-image (synchronous, with optional
+// I2I via subject_reference).
+//
+// Docs: https://platform.minimax.io/docs/api-reference/image-generation-t2i
+// POST /v1/image_generation with a JSON body describing the prompt +
+// optional subject reference for image-to-image. Response is JSON with the
+// image base64-encoded under `data.image_base64[0]` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, mirroring
+// MiniMax's TTS API.
+//
+// We always request `response_format: 'base64'` because MiniMax's default
+// URL responses expire after 24 hours — base64 persists at write time and
+// never goes stale. The wire model `image-01` is mapped from our catalog id
+// `minimax-image-01` via MINIMAX_IMAGE_MODEL_MAP.
+// ---------------------------------------------------------------------------
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  // Base URL precedence:
+  //   OD_MINIMAX_IMAGE_BASE_URL env var (operator override for proxies)
+  //   -> MINIMAX_IMAGE_DEFAULT_BASE_URL (api.minimax.io)
+  //
+  // We deliberately ignore credentials.baseUrl here. The 'minimax' provider
+  // slot is shared with TTS, whose stored baseUrl is the legacy
+  // api.minimaxi.chat/v1 host. Naively appending '/v1/image_generation'
+  // would produce https://api.minimaxi.chat/v1/v1/image_generation — a
+  // 404 against the wrong host. Adding a per-surface baseUrl to the
+  // provider schema would be a cleaner long-term fix; until then, image
+  // stays pinned to its own host and operators route via the env var.
+  const baseUrl = (
+    process.env.OD_MINIMAX_IMAGE_BASE_URL?.trim() || MINIMAX_IMAGE_DEFAULT_BASE_URL
+  ).replace(/\/+$/, '');
+  // Resolve the wire model. credentials.model wins if the user pinned a
+  // specific deployment name in Settings; otherwise we look up the
+  // ctx.wireModel in MINIMAX_IMAGE_MODEL_MAP (which translates our
+  // catalog id `minimax-image-01` to MiniMax's wire name `image-01`),
+  // falling back to ctx.wireModel itself. The map is keyed off
+  // ctx.wireModel so user aliases (OD_MEDIA_MODEL_ALIASES) pass through
+  // unchanged when they aren't in the map.
+  const wireModel = (
+    credentials.model
+    || MINIMAX_IMAGE_MODEL_MAP[ctx.wireModel]
+    || ctx.wireModel
+  ).trim();
+  const aspectRatio = minimaxImageAspectFor(ctx.aspect);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.',
+    response_format: 'base64',
+    n: 1,
+  };
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
+  }
+  // I2I: when --image is supplied, pass it as subject_reference[0]. The
+  // existing resolveProjectImage() helper already returns a base64 dataUrl
+  // with a strict mime allowlist (png/jpg/jpeg/webp/gif, < 16MB).
+  if (ctx.imageRef?.dataUrl) {
+    body.subject_reference = [{
+      type: 'character',
+      image_file: ctx.imageRef.dataUrl,
+    }];
+  }
+  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // MiniMax wraps every response in `base_resp`; even an HTTP 200 can
+  // be a logical failure (`status_code !== 0`).
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const base64 = data?.data?.image_base64?.[0];
+  if (typeof base64 !== 'string' || !base64) {
+    throw new Error('minimax image response missing data.image_base64[0]');
+  }
+  const bytes = Buffer.from(base64, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('minimax image decoded zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${aspectRatio || '1:1'} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function minimaxImageAspectFor(aspect?: string): string | undefined {
+  // MiniMax's full allowlist: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9.
+  // We accept any of these so the agent (or a future picker option) can
+  // request a wider aspect without silently falling back to 1:1.
+  // Anything outside this set is omitted from the body, letting MiniMax
+  // pick its own default rather than us round-tripping an unknown value.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+    || aspect === '3:2'
+    || aspect === '2:3'
+    || aspect === '21:9'
+  ) {
+    return aspect;
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio — senseaudio-tts-1.5 text-to-speech (synchronous).
+//
+// Docs: https://docs.senseaudio.cn — POST /v1/t2a_v2 with a JSON body
+// shaped like MiniMax's (voice_setting / audio_setting). The response is
+// JSON with hex-encoded audio under `data.audio` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, again
+// mirroring MiniMax. The catalogue id we surface as `senseaudio-tts`
+// resolves to `senseaudio-tts-1.5-260319` on the wire — SenseAudio's
+// recommended flagship model (supports emotion control, polyphonic
+// characters, LaTeX formula reading, voice cloning, and text-generated
+// voices). Default voice is `female_0033_b` per the official example; the agent
+// can override via the model registry's `voice` slot with any system,
+// cloned, or text-generated voice id from the customer's catalogue.
+// Audio shape is hard-coded to mp3 / 32kHz / 128kbps / stereo for parity
+// with the other TTS providers; SenseAudio supports wav/pcm/flac and
+// other sample rates but we don't expose them through MediaContext yet.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
+const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
+
+const SENSEAUDIO_TTS_MODEL_MAP = {
+  'senseaudio-tts': 'senseaudio-tts-1.5-260319',
+} as Record<string, string>;
+
+async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const wireModel = SENSEAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model;
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || SENSEAUDIO_DEFAULT_VOICE_ID;
+
+  const body = {
+    model: wireModel,
+    text,
+    stream: false,
+    voice_setting: {
+      voice_id: voiceId,
+      speed: 1,
+      vol: 1,
+      pitch: 0,
+    },
+    audio_setting: {
+      format: 'mp3',
+      sample_rate: 32000,
+      bitrate: 128000,
+      channel: 2,
+    },
+  };
+
+  const resp = await fetch(`${baseUrl}/v1/t2a_v2`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio tts ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio tts non-JSON: ${truncate(respText, 200)}`);
+  }
+  // SenseAudio mirrors MiniMax's base_resp envelope: HTTP 200 can still
+  // be a logical failure (auth, quota, voice not on this account, …).
+  // Surface the upstream status_code/status_msg so users see the real
+  // cause instead of a downstream "missing data.audio" red herring.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio tts api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const hex = data?.data?.audio;
+  if (typeof hex !== 'string' || !hex) {
+    throw new Error('senseaudio tts response missing data.audio');
+  }
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length === 0) {
+    throw new Error('senseaudio tts decoded zero bytes');
+  }
+  const xi = data?.extra_info || {};
+  const seconds = xi.audio_length ? Math.round(xi.audio_length / 100) / 10 : '?';
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio image — POST /v1/image/sync (synchronous text-to-image).
+//
+// Docs: https://docs.senseaudio.cn/guides/image/overview
+//   * Models: senseaudio-image-2.0-260319 (multi-aspect), senseaudio-image-1.0-260319
+//     (standard), doubao-seedream-5-0-260128 (hi-res). The wire `model` field
+//     accepts the catalog id directly so no alias map is needed.
+//   * Body: { model, prompt (≤2000 chars), size (WxH, required when no
+//     reference), reference (URL or data URI, optional), seed (optional int) }.
+//   * Response: { url: string } pointing at the rendered PNG; we fetch it
+//     once to materialise bytes the dispatcher can write to disk.
+//   * Auth: Authorization: Bearer <API_KEY>; shares the senseaudio provider
+//     slot with the TTS path (OD_SENSEAUDIO_API_KEY / SENSEAUDIO_API_KEY).
+// We default to the /sync endpoint because the chat runtime already streams
+// progress and a single round-trip keeps the dispatcher contract identical
+// to OpenAI / Volcengine image. Switching to /v1/image/async + GET
+// /v1/image/pending is a future option if the upstream model latency
+// outgrows the daemon's request timeout.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
+
+// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
+// `参数错误：size`. Keep this table in sync with byok-tools.ts's
+// ASPECT_TO_SIZE — both paths hit the same /v1/image/sync endpoint.
+function senseAudioImageSize(aspect?: string): string {
+  if (aspect === '16:9') return '1280x720';
+  if (aspect === '9:16') return '720x1280';
+  if (aspect === '4:3') return '1024x768';
+  if (aspect === '3:4') return '768x1024';
+  return '1024x1024';
+}
+
+async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  // SenseAudio rejects >2000-char prompts with a 4xx; trim defensively so a
+  // verbose agent plan doesn't dead-end the generation. The truncated tail
+  // surfaces in providerNote so the user sees what was actually sent.
+  const prompt =
+    promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
+      ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
+      : promptRaw;
+  const size = senseAudioImageSize(ctx.aspect);
+  const reference = ctx.imageRef?.dataUrl;
+
+  const body: Record<string, unknown> = {
+    model: ctx.wireModel,
+    prompt,
+    size,
+  };
+  if (reference) {
+    // When a reference image is supplied the API documents `size` as
+    // optional; we still send it so the output dimensions stay
+    // deterministic across t2i / i2i runs of the same project.
+    body.reference = reference;
+  }
+
+  const resp = await fetch(`${baseUrl}/v1/image/sync`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // Mirror the TTS base_resp envelope check: HTTP 200 can still encode an
+  // upstream logical failure. The image API uses the same shape on the
+  // failure path documented for /v1/image/pending (status=failed +
+  // error_message), so surface either source verbatim.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  if (typeof data?.error_message === 'string' && data.error_message) {
+    throw new Error(`senseaudio image api error: ${data.error_message}`);
+  }
+  const url = typeof data?.url === 'string' ? data.url : '';
+  if (!url) {
+    throw new Error('senseaudio image response missing url');
+  }
+  // The gateway-returned `url` is attacker-controllable inside a successful
+  // response. assertAndFetchExternalAsset DNS-resolves it and refuses loopback /
+  // RFC1918 / metadata-service hosts, and pins `redirect: 'error'` so a 3xx hop
+  // from a validated public URL into private space is blocked too.
+  const imgResp = await assertAndFetchExternalAsset(url, withMediaRequestInit(ctx));
+  if (!imgResp.ok) {
+    throw new Error(`senseaudio image fetch ${imgResp.status}`);
+  }
+  const bytes = Buffer.from(await imgResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('senseaudio image fetch returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: AIHubMix — OpenAI-wire-compatible aggregator.
+//
+// Image:  POST /v1/images/generations  (OpenAI shape, b64_json or url)
+// Speech: POST /v1/audio/speech        (OpenAI shape, raw audio bytes)
+// Every request carries the fixed APP-Code attribution header. Catalogue ids
+// are `aihubmix-<wire>`; aihubmixWireModel() strips the prefix to the real
+// upstream model name before it hits the gateway.
+// ---------------------------------------------------------------------------
+
+async function renderAIHubMixImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+
+  // The live catalogue exposes Gemini/Imagen-family image models, which reject
+  // the OpenAI `/images/generations` shape ("Unknown name prompt/n/size") and
+  // must use the Gemini-native generateContent wire instead. Mirror the chat
+  // tool's per-model branch (executeAIHubMixGenerateImage) so the Home / New
+  // Project / CLI media path handles the same catalogue it now exposes.
+  if (classifyAIHubMixModel(wireModel) === 'gemini') {
+    return renderAIHubMixGeminiImage(ctx, credentials, baseUrl, wireModel);
+  }
+
+  const url = buildOpenAIImageUrl(baseUrl, false);
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    n: 1,
+    size: openaiSizeFor(wireModel, ctx.aspect),
+  };
+  if (wireModel.startsWith('dall-e-')) {
+    body.response_format = 'b64_json';
+    body.quality = wireModel === 'dall-e-3' ? 'hd' : 'standard';
+  } else {
+    body.quality = 'high';
+  }
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify(body),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`aihubmix ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`aihubmix non-JSON response: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('aihubmix response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await assertAndFetchExternalAsset(entry.url, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`aihubmix image fetch ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    throw new Error('aihubmix response had neither b64_json nor url');
+  }
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+// Gemini/Imagen-family image models on AIHubMix: the OpenAI image shape 400s
+// for these, so route them through the shared Gemini-native helper the chat
+// tool also uses (aihubmixGeminiImageBytes), passing the media request-init
+// wrapper so proxy/abort settings still apply.
+async function renderAIHubMixGeminiImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  baseUrl: string,
+  wireModel: string,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const aspect = ctx.aspect || '1:1';
+  const bytes = await aihubmixGeminiImageBytes(
+    {
+      baseUrl,
+      apiKey: credentials.apiKey,
+      wireModel,
+      prompt: ctx.prompt || 'A high-quality reference image.',
+      aspect,
+    },
+    (url, init) => fetch(url, withMediaRequestInit(ctx, init)),
+  );
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${aspect} · ${bytes.length} bytes (gemini-native)`,
+    suggestedExt: '.png',
+  };
+}
+
+async function renderAIHubMixTTS(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+  const url = buildOpenAISpeechUrl(baseUrl, false);
+  const format = openaiSpeechFormatFor(fileName);
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const requestedVoice = (ctx.voice && ctx.voice.trim()) || '';
+  const voice = requestedVoice && OPENAI_TTS_VOICES.has(requestedVoice) ? requestedVoice : 'alloy';
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify({ model: wireModel, input: text, voice, response_format: format }),
+  }));
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`aihubmix speech ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const bytes = Buffer.from(await resp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('aihubmix speech returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${voice} · ${format} · ${bytes.length} bytes`,
+    suggestedExt: format === 'opus' ? '.ogg' : `.${format}`,
+  };
+}
+
+// AIHubMix video uses the OpenAI Sora-style async `/v1/videos` API (NOT the
+// `/videos/generations` synchronous shape some gateways expose): POST to submit
+// a job, GET `/v1/videos/{id}` to poll status, then GET `/v1/videos/{id}/content`
+// to download the finished MP4. `aspect` maps to a concrete `size` string.
+function aihubmixVideoSizeFor(aspect: string | undefined): string {
+  switch (aspect) {
+    case '9:16':
+      return '720x1280';
+    case '1:1':
+      return '1024x1024';
+    case '4:3':
+      return '960x720';
+    case '3:4':
+      return '720x960';
+    case '16:9':
+    default:
+      return '1280x720';
+  }
+}
+
+async function renderAIHubMixVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = (credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+  const size = aihubmixVideoSizeFor(ctx.aspect);
+  // Snap to the model family's allowed duration set (Veo: 4/6/8, Sora: 4/8/12,
+  // wan: 5/10) so an out-of-set value isn't rejected upstream.
+  const seconds = aihubmixVideoSeconds(wireModel, ctx.length || 5);
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    size,
+    seconds,
+  };
+  // First-frame reference for i2v flows; AIHubMix accepts a data URL.
+  if (ctx.imageRef?.dataUrl) {
+    body.input_reference = ctx.imageRef.dataUrl;
+  }
+
+  const submitResp = await fetch(`${baseUrl}/videos`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`aihubmix video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`aihubmix video non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const taskId = submitData?.id || submitData?.data?.id;
+  if (!taskId) throw new Error('aihubmix video response missing id');
+
+  // Poll until completed/failed. Sora-class generations routinely take a few
+  // minutes; match the Volcengine ceiling (12 min, env-overridable). Emit a
+  // heartbeat each tick so the agent's bash watchdog never marks the call hung.
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_AIHUBMIX_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 12 * 60 * 1000;
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(`aihubmix ${mode} video task ${taskId} accepted; polling status…`);
+  }
+  let lastStatus = '';
+  let directUrl: string | null = null;
+  let done = false;
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(4000);
+    const pollResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(taskId)}`, withMediaRequestInit(ctx, {
+      headers: { ...aihubmixHeaders(credentials.apiKey) },
+    }));
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`aihubmix video poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`aihubmix video poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastStatus = pollData?.status || pollData?.data?.status || '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`aihubmix video task ${taskId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'completed' || lastStatus === 'succeeded' || lastStatus === 'done') {
+      // Some gateways surface the asset URL inline; otherwise fall back to the
+      // /content download endpoint below.
+      directUrl =
+        pollData?.video_url
+        || pollData?.url
+        || pollData?.output_url
+        || pollData?.data?.video_url
+        || pollData?.data?.url
+        || (Array.isArray(pollData?.data) ? pollData.data[0]?.url : null)
+        || null;
+      done = true;
+      break;
+    }
+    if (lastStatus === 'failed' || lastStatus === 'cancelled' || lastStatus === 'error') {
+      const reason = pollData?.error?.message || pollData?.error || lastStatus;
+      throw new Error(`aihubmix video task ${lastStatus}: ${truncate(reason, 200)}`);
+    }
+  }
+  if (!done) {
+    throw new Error(`aihubmix video did not finish in time (last status: ${lastStatus || 'unknown'})`);
+  }
+
+  let bytes: Buffer;
+  if (directUrl) {
+    // AIHubMix's completed-video URL is often an authenticated endpoint on the
+    // AIHubMix origin (a bare GET returns 401). Re-send the Bearer + APP-Code
+    // headers when the asset is same-origin; a signed third-party CDN URL is
+    // fetched without our key. assertAndFetchExternalAsset re-validates the URL
+    // and pins `redirect: 'error'`, so a validated public URL can't 302 the
+    // daemon into private/metadata space or leak our headers to the hop target.
+    let sameOriginAsBase = false;
+    try {
+      sameOriginAsBase = new URL(directUrl).origin === new URL(baseUrl).origin;
+    } catch {
+      sameOriginAsBase = false;
+    }
+    const dl = await assertAndFetchExternalAsset(
+      directUrl,
+      withMediaRequestInit(
+        ctx,
+        sameOriginAsBase ? { headers: { ...aihubmixHeaders(credentials.apiKey) } } : {},
+      ),
+    );
+    if (!dl.ok) throw new Error(`aihubmix video fetch ${dl.status}`);
+    bytes = Buffer.from(await dl.arrayBuffer());
+  } else {
+    const contentResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(taskId)}/content`, withMediaRequestInit(ctx, {
+      headers: { ...aihubmixHeaders(credentials.apiKey) },
+    }));
+    if (!contentResp.ok) {
+      throw new Error(`aihubmix video content ${contentResp.status}`);
+    }
+    bytes = Buffer.from(await contentResp.arrayBuffer());
+  }
+  if (bytes.length === 0) {
+    throw new Error('aihubmix video returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${size} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: FishAudio — Speech-1.x family text-to-speech (synchronous).
+//
+// Docs: https://docs.fish.audio — POST /v1/tts with a JSON body.
+// FishAudio returns the audio bytes directly (Content-Type: audio/mpeg
+// for mp3, audio/wav for wav) rather than wrapping them in JSON, so we
+// stream the body straight into a Buffer. The catalogue id we expose
+// as `fish-speech-2` resolves to `speech-1.6` (their newer model) on
+// the wire; older builds can paste `speech-1.5` via the model picker
+// once arbitrary model ids are accepted.
+// ---------------------------------------------------------------------------
+
+const FISHAUDIO_DEFAULT_BASE_URL = 'https://api.fish.audio';
+
+const FISHAUDIO_TTS_MODEL_MAP = {
+  'fish-speech-2': 'speech-1.6',
+} as Record<string, string>;
+
+async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no FishAudio API key — configure it in Settings or set OD_FISHAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || FISHAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  // Same precedence as the MINIMAX TTS path: user alias wins, then
+  // the project's hardcoded fishaudio map, then catalog id.
+  const wireModel = ctx.wireModel !== ctx.model
+    ? ctx.wireModel
+    : (FISHAUDIO_TTS_MODEL_MAP[ctx.model] || ctx.model);
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+
+  // FishAudio's `reference_id` slot pins which voice the synth uses.
+  // The agent passes it via --voice (carried in ctx.voice). Empty means
+  // FishAudio falls back to its default voice for the chosen model.
+  const body: Record<string, unknown> = {
+    text,
+    format: 'mp3',
+    mp3_bitrate: 128,
+    model: wireModel,
+    normalize: true,
+    latency: 'normal',
+  };
+  if (ctx.voice && ctx.voice.trim()) {
+    body.reference_id = ctx.voice.trim();
+  }
+
+  const resp = await fetch(`${baseUrl}/v1/tts`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`fishaudio tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('fishaudio tts returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `fishaudio/${wireModel} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Fal.ai — generic queue-based renderer for image + video.
+//
+// Queue protocol (raw HTTP, no SDK):
+//   POST https://queue.fal.run/{endpoint}          body: flat model input (no wrapper)
+//   GET  {status_url}?logs=0                       → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
+//   GET  {response_url}                            → result payload
+//
+// Image result shape: { images: [{ url, content_type }] }
+// Video result shape: { video: { url } } or { videos: [{ url }] }
+//
+// Endpoint resolution: FAL_ENDPOINTS maps catalogue IDs to their fal-ai/*
+// path. Any model ID not in the map is used verbatim — this is what
+// enables arbitrary "fal-ai/..." custom paths without catalog entries.
+// ---------------------------------------------------------------------------
+
+const FAL_ENDPOINTS: Record<string, string> = {
+  'sd-3.5':              'fal-ai/stable-diffusion-v35-large',
+  'flux-pro-ultra':      'fal-ai/flux-pro/v1.1-ultra',
+  'flux-dev-fal':        'fal-ai/flux/dev',
+  'flux-schnell-fal':    'fal-ai/flux/schnell',
+  'ideogram-v3-fal':     'fal-ai/ideogram/v3',
+  'recraft-v3-fal':      'fal-ai/recraft-v3',
+  'sora-2':              'fal-ai/sora',
+  'sora-2-pro':          'fal-ai/sora',
+  'veo-3-fal':           'fal-ai/veo3',
+  'veo-2-fal':           'fal-ai/veo2',
+  'wan-2.1-t2v':         'fal-ai/wan-t2v',
+  'wan-2.1-i2v':         'fal-ai/wan-i2v',
+  'seedance-1-pro-fal':  'fal-ai/bytedance/seedance-1-pro',
+  'kling-2.1-t2v-fal':   'fal-ai/kling-video/v2.1/master/text-to-video',
+};
+
+// Image models that expect `aspect_ratio` (e.g. "16:9") instead of the
+// named `image_size` enum ("landscape_16_9") used by FLUX Dev/Schnell/SD.
+const FAL_IMAGE_USES_ASPECT_RATIO = new Set([
+  'fal-ai/flux-pro/v1.1-ultra',
+  'fal-ai/flux-pro/v1.1',
+]);
+
+const FAL_IMAGE_SIZES: Record<string, string> = {
+  '1:1':  'square_hd',
+  '16:9': 'landscape_16_9',
+  '9:16': 'portrait_16_9',
+  '4:3':  'landscape_4_3',
+  '3:4':  'portrait_4_3',
+};
+
+// Video models that do not accept a duration field at all.
+const FAL_VIDEO_NO_DURATION = new Set([
+  'fal-ai/wan-t2v',
+  'fal-ai/wan-i2v',
+]);
+
+// Video models that expect duration as a suffixed string ("4s"/"6s"/"8s") and
+// only accept those specific buckets.
+const FAL_VIDEO_STRING_DURATION = new Set([
+  'fal-ai/veo3',
+  'fal-ai/veo2',
+]);
+
+// Valid Veo duration buckets (seconds). Nearest-bucket clamp applied below.
+const FAL_VEO_DURATION_BUCKETS = [4, 6, 8];
+
+async function falQueueRun(
+  endpoint: string,
+  queueBase: string,
+  apiKey: string,
+  input: Record<string, unknown>,
+  maxMs: number,
+  onProgress?: ProgressFn,
+  modelLabel?: string,
+): Promise<any> {
+  const authHeader = { 'authorization': `Key ${apiKey}` };
+
+  const submitResp = await fetch(`${queueBase}/${endpoint}`, {
+    method: 'POST',
+    headers: { ...authHeader, 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`fal submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try { submitData = JSON.parse(submitText); } catch {
+    throw new Error(`fal submit non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const requestId: string = submitData?.request_id;
+  if (!requestId) {
+    throw new Error(`fal submit missing request_id: ${truncate(submitText, 200)}`);
+  }
+
+  // Prefer the URLs returned by the submit response; fall back to the
+  // well-known model-agnostic queue paths as a safety net.
+  const statusUrl = submitData.status_url
+    ?? `${queueBase}/requests/${encodeURIComponent(requestId)}/status?logs=0`;
+  const resultUrl = submitData.response_url
+    ?? `${queueBase}/requests/${encodeURIComponent(requestId)}`;
+  const startedAt = Date.now();
+  let lastStatus = '';
+
+  if (onProgress) {
+    onProgress(`fal ${modelLabel || endpoint} task ${requestId.slice(0, 8)} accepted; polling…`);
+  }
+
+  let firstPoll = true;
+  while (Date.now() - startedAt < maxMs) {
+    if (!firstPoll) await sleep(3000);
+    firstPoll = false;
+    const statusResp = await fetch(statusUrl, { headers: authHeader });
+    const statusText = await statusResp.text();
+    if (!statusResp.ok) {
+      throw new Error(`fal poll ${statusResp.status}: ${truncate(statusText, 240)}`);
+    }
+    let statusData: any;
+    try { statusData = JSON.parse(statusText); } catch {
+      throw new Error(`fal poll non-JSON: ${truncate(statusText, 200)}`);
+    }
+    lastStatus = statusData?.status || '';
+    if (onProgress) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`fal task ${requestId.slice(0, 8)} status=${lastStatus} (${elapsed}s)`);
+    }
+    if (lastStatus === 'COMPLETED') {
+      const resultResp = await fetch(resultUrl, { headers: authHeader });
+      const resultText = await resultResp.text();
+      if (!resultResp.ok) {
+        throw new Error(`fal result ${resultResp.status}: ${truncate(resultText, 240)}`);
+      }
+      try { return JSON.parse(resultText); } catch {
+        throw new Error(`fal result non-JSON: ${truncate(resultText, 200)}`);
+      }
+    }
+    if (lastStatus === 'FAILED') {
+      const errRaw = statusData?.error?.message
+        ?? (typeof statusData?.error === 'string' ? statusData.error : null)
+        ?? 'unknown error';
+      throw new Error(`fal task failed: ${errRaw}`);
+    }
+  }
+  const elapsed = Math.round((Date.now() - startedAt) / 1000);
+  const ceil = Math.round(maxMs / 1000);
+  throw new Error(
+    `fal timed out after ${elapsed}s waiting for COMPLETED ` +
+    `(last status: ${lastStatus || 'unknown'}, ceiling ${ceil}s). ` +
+    `Raise OD_FAL_MAX_POLL_MS to extend the ceiling.`,
+  );
+}
+
+function falMaxPollMs(defaultMs: number): number {
+  const v = Number(process.env.OD_FAL_MAX_POLL_MS);
+  return Number.isFinite(v) && v >= 30_000 ? v : defaultMs;
+}
+
+function falQueueBase(baseUrl: string): string {
+  if (baseUrl.includes('queue.fal.run')) return baseUrl;
+  // Replace only the exact host to avoid mangling custom base URLs that
+  // happen to contain "fal.run" as a substring.
+  return baseUrl.replace(/^https:\/\/fal\.run/, 'https://queue.fal.run');
+}
+
+async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+  }
+  const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
+  const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
+  const aspectRatio = ctx.aspect ?? '1:1';
+
+  const input: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality image.',
+    num_images: 1,
+  };
+  // flux-pro-ultra and similar pro variants expect `aspect_ratio` as a
+  // ratio string; most other fal image models use a named `image_size`.
+  if (FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint)) {
+    input.aspect_ratio = aspectRatio;
+  } else {
+    input.image_size = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
+  }
+  if (ctx.imageRef?.dataUrl) {
+    input.image_url = ctx.imageRef.dataUrl;
+  }
+
+  const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, input, falMaxPollMs(5 * 60 * 1000));
+
+  const imageEntry = Array.isArray(result?.images) ? result.images[0] : null;
+  if (!imageEntry?.url) {
+    throw new Error(`fal image missing images[0].url: ${truncate(JSON.stringify(result), 200)}`);
+  }
+  const dlResp = await fetch(imageEntry.url);
+  if (!dlResp.ok) throw new Error(`fal image download ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  const sizeLabel = FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint) ? aspectRatio : (FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd');
+
+  return {
+    bytes,
+    providerNote: `fal/${endpoint} · ${sizeLabel} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+  }
+  const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
+  const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
+  const aspectRatio = ctx.aspect ?? '16:9';
+  const durationSec = ctx.length ?? 5;
+
+  const input: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    aspect_ratio: aspectRatio,
+  };
+  // Track the effective duration label (what we actually send upstream).
+  let effectiveDurationLabel: string | undefined;
+  let durationSnappedNote = '';
+  // Some models (Wan) have no duration parameter; others (Veo) require a
+  // suffixed string from a fixed bucket set ("4s"/"6s"/"8s").
+  if (!FAL_VIDEO_NO_DURATION.has(endpoint)) {
+    if (FAL_VIDEO_STRING_DURATION.has(endpoint)) {
+      const closest = FAL_VEO_DURATION_BUCKETS.reduce((a, b) =>
+        Math.abs(b - durationSec) < Math.abs(a - durationSec) ? b : a,
+      );
+      input.duration = `${closest}s`;
+      effectiveDurationLabel = `${closest}s`;
+      if (closest !== durationSec) {
+        durationSnappedNote = ` (requested ${durationSec}s → snapped to ${closest}s)`;
+      }
+    } else {
+      input.duration = durationSec;
+      effectiveDurationLabel = `${durationSec}s`;
+    }
+  }
+  if (ctx.imageRef?.dataUrl) {
+    input.image_url = ctx.imageRef.dataUrl;
+  }
+
+  const result = await falQueueRun(
+    endpoint, queueBase, credentials.apiKey, input,
+    falMaxPollMs(10 * 60 * 1000), onProgress, ctx.model,
+  );
+
+  const videoUrl: string | null =
+    result?.video?.url
+    ?? (Array.isArray(result?.videos) ? result.videos[0]?.url : null)
+    ?? null;
+  if (!videoUrl) {
+    throw new Error(`fal video missing video.url: ${truncate(JSON.stringify(result), 200)}`);
+  }
+  const dlResp = await fetch(videoUrl);
+  if (!dlResp.ok) throw new Error(`fal video download ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  const durationPart = effectiveDurationLabel ? ` · ${effectiveDurationLabel}${durationSnappedNote}` : '';
+
+  return {
+    bytes,
+    providerNote: `fal/${endpoint} · ${aspectRatio}${durationPart} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: HyperFrames — local HTML→MP4 renderer (heygen-com/hyperframes).
+//
+// The agent does the creative work: it reads skills/hyperframes/SKILL.md,
+// writes a composition (`hyperframes.json` + `meta.json` + `index.html`,
+// with a GSAP timeline) into a hidden cache dir under the project, then
+// dispatches here with `--composition-dir <relative-path>`.
+//
+// We run `npx hyperframes render <absolutePath> --output <tmp>/render.mp4`
+// from the daemon process (NOT the agent's shell) for two reasons:
+//   1. HyperFrames spawns a puppeteer-controlled Chrome to capture frames.
+//      Claude Code's Bash tool wraps subprocesses in macOS sandbox-exec,
+//      under which Chrome hangs partway through frame capture.
+//   2. Pointing --output at a temp dir keeps HF's auto-created
+//      `work-<uuid>/` (per-frame jpegs + intermediate compiled HTML)
+//      OUT of the project folder. We delete the temp tree in the
+//      `finally` block; only the final mp4 bytes are returned to the
+//      generic dispatcher flow, which writes them into the project dir
+//      under the user-supplied filename.
+// ---------------------------------------------------------------------------
+
+const HYPERFRAMES_RENDER_TIMEOUT_MS = 5 * 60 * 1000;
+
+async function renderHyperFramesViaCli(ctx: MediaContext, projectDir: string, onProgress?: ProgressFn): Promise<RenderResult> {
+  const compRel = ctx.compositionDir;
+  if (typeof compRel !== 'string' || !compRel.trim()) {
+    throw new Error(
+      'hyperframes-html requires --composition-dir <project-relative-path> ' +
+        'pointing at the directory the agent scaffolded with hyperframes.json / ' +
+        'meta.json / index.html. The agent should write the composition into ' +
+        '$OD_PROJECT_DIR/.hyperframes-cache/<id>/ and pass that path here.',
+    );
+  }
+  // Resolve compositionDir against projectDir and refuse anything that
+  // escapes — the agent has free file access to the project but the
+  // dispatcher must not let a bad relative path render an arbitrary
+  // directory on the host.
+  const projectRootResolved = path.resolve(projectDir);
+  const compAbs = path.resolve(projectRootResolved, compRel);
+  if (
+    compAbs !== projectRootResolved &&
+    !compAbs.startsWith(projectRootResolved + path.sep)
+  ) {
+    throw new Error(
+      `compositionDir "${compRel}" resolves outside the project directory. ` +
+        'Pass a path relative to the project (e.g. ".hyperframes-cache/abc").',
+    );
+  }
+  // Existence check — render against a missing directory hangs HF for
+  // a while before failing, so short-circuit with a clear error.
+  let compStat;
+  try {
+    compStat = await stat(compAbs);
+  } catch {
+    throw new Error(
+      `compositionDir not found: ${compRel} (resolved to ${compAbs})`,
+    );
+  }
+  if (!compStat.isDirectory()) {
+    throw new Error(`compositionDir is not a directory: ${compRel}`);
+  }
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'hyperframes.json',
+    'Run `npx hyperframes init "$OD_PROJECT_DIR/$COMP_REL" --example blank --skip-skills --non-interactive` before editing the composition.',
+  );
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'meta.json',
+    'Run `npx hyperframes init` so the renderer has duration/scene metadata before dispatch.',
+  );
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'index.html',
+    'The agent must write index.html (with window.__timelines registration) before dispatch.',
+  );
+
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'open-design-hf-'));
+  const tmpOutput = path.join(tmpRoot, 'render.mp4');
+  try {
+    // Pin --workers 1 to keep memory bounded (each worker is a Chrome
+    // process at ~256 MB). standard quality matches HF's default. We
+    // do NOT pass --quiet so progress lines stream out and the agent
+    // (and the user reading the chat in real time) can see frame-by-
+    // frame capture status instead of staring at a hung pipe.
+    await runHyperFramesRender(compAbs, tmpOutput, onProgress);
+    const bytes = await readFile(tmpOutput);
+    return {
+      bytes,
+      providerNote: `hyperframes/local-html · ${ctx.aspect} · ${bytes.length} bytes`,
+      suggestedExt: '.mp4',
+    };
+  } catch (err) {
+    const stderr =
+      errorStringProp(err, 'stderr').trim();
+    const message = stderr || errorMessage(err);
+    throw new Error(`hyperframes render failed: ${truncate(message, 480)}`);
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+}
+
+async function assertHyperFramesCompositionFile(
+  compAbs: string,
+  compRel: string,
+  fileName: string,
+  guidance: string,
+): Promise<void> {
+  const fileStat = await stat(path.join(compAbs, fileName)).catch(() => null);
+  if (!fileStat || !fileStat.isFile()) {
+    throw new Error(
+      `compositionDir is missing ${fileName}: ${compRel}. ${guidance}`,
+    );
+  }
+}
+
+/**
+ * Run `npx hyperframes render` and stream every line of stdout/stderr
+ * through `onProgress`. Resolves on a clean exit, rejects on non-zero
+ * exit (with the stderr tail attached so the dispatcher can surface it).
+ *
+ * Streaming matters for UX: the render typically takes 60–120s and
+ * HF prints "Capturing frame N/M" as it goes. Without piping these
+ * lines back to the caller, the HTTP request looks hung and the
+ * agent's chat tool shows a long quiet spinner — users can't tell
+ * whether anything is happening.
+ */
+function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: ProgressFn): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      'npx',
+      [
+        '-y',
+        'hyperframes',
+        'render',
+        compAbs,
+        '--output',
+        tmpOutput,
+        '--workers',
+        '1',
+      ],
+      {
+        // Inherit env so npx can find the cached hyperframes install
+        // and any user-level node config. stdin closed (HF doesn't
+        // read from it), stdout/stderr piped so we can stream.
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    // HF uses ANSI escape sequences (cursor moves, color codes, line
+    // erases) for its pretty progress bar. Strip those before
+    // forwarding so the agent's chat doesn't render a wall of `[2K`.
+    // The regex covers CSI sequences (most of what HF emits).
+    const stripAnsi = (s: string): string =>
+      s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\[\?[0-9]+[hl]/g, '');
+
+    const emit = (chunk: Buffer): void => {
+      if (typeof onProgress !== 'function') return;
+      const text = stripAnsi(chunk.toString('utf8'));
+      // HF refreshes a single progress line many times per second; split
+      // on \r and \n so each "Capturing frame X/Y" update reaches the
+      // caller as its own line. Drop empty/duplicate lines so the
+      // SSE stream stays compact.
+      const lines = text.split(/[\r\n]+/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          onProgress(trimmed);
+        } catch {
+          // best-effort: never let an emitter throw kill the render
+        }
+      }
+    };
+
+    let stderrTail = '';
+    child.stdout.on('data', emit);
+    child.stderr.on('data', (chunk) => {
+      stderrTail += chunk.toString('utf8');
+      if (stderrTail.length > 8000) stderrTail = stderrTail.slice(-8000);
+      emit(chunk);
+    });
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // ignore
+      }
+      reject(
+        new Error(
+          `hyperframes render timed out after ${Math.round(HYPERFRAMES_RENDER_TIMEOUT_MS / 1000)}s`,
+        ),
+      );
+    }, HYPERFRAMES_RENDER_TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) return resolve();
+      const reason = signal ? `signal ${signal}` : `exit ${code}`;
+      const tail = stderrTail.trim().split('\n').slice(-12).join('\n');
+      const err = new Error(
+        `hyperframes render exited ${reason}` + (tail ? `\n${tail}` : ''),
+      ) as Error & { stderr: string };
+      err.stderr = tail;
+      reject(err);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Stub renderer.
+//
+// Used when no real provider integration ships for (provider, surface)
+// or when the real one fails. Produces small but valid bytes so the
+// downstream FileViewer round-trip works while the backend matures.
+// ---------------------------------------------------------------------------
+
+async function renderStub(ctx: MediaContext, fileName: string): Promise<RenderResult> {
+  const note = ctx.provider && !ctx.provider.integrated
+    ? `stub-${ctx.surface} · provider '${ctx.provider.id}' integration pending`
+    : `stub-${ctx.surface} · model=${ctx.model}`;
+  if (ctx.surface === 'image') {
+    const ext = path.extname(fileName).toLowerCase();
+    if (ext === '.svg') {
+      return { bytes: Buffer.from(svgPlaceholder(ctx), 'utf8'), providerNote: note };
+    }
+    const png = Buffer.from(
+      [
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+        0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+      ],
+    );
+    return {
+      bytes: png,
+      providerNote: `${note} · aspect=${ctx.aspect} · prompt=${truncate(ctx.prompt, 60)}`,
+    };
+  }
+  if (ctx.surface === 'video') {
+    const ftyp = Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+      0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32,
+    ]);
+    const mdat = Buffer.from([0x00, 0x00, 0x00, 0x08, 0x6d, 0x64, 0x61, 0x74]);
+    return {
+      bytes: Buffer.concat([ftyp, mdat]),
+      providerNote: `${note} · aspect=${ctx.aspect} · length=${ctx.length ?? '?'}s · prompt=${truncate(ctx.prompt, 60)}`,
+    };
+  }
+  // Audio
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === '.wav') {
+    return {
+      bytes: silentWav(0.5),
+      providerNote: `${note} · kind=${ctx.audioKind} · duration=${ctx.duration ?? '?'}s`,
+    };
+  }
+  const mp3 = Buffer.from([
+    0xff, 0xfb, 0x90, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ]);
+  return {
+    bytes: mp3,
+    providerNote: `${note} · kind=${ctx.audioKind} · voice=${ctx.voice || '-'} · duration=${ctx.duration ?? '?'}s`,
+  };
+}
+
+function svgPlaceholder(ctx: MediaContext): string {
+  const [w, h] = aspectToBox(ctx.aspect, 800);
+  const safe = (s: unknown): string =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`,
+    `<rect width="${w}" height="${h}" fill="#0f1424"/>`,
+    `<text x="50%" y="50%" fill="#7da4ff" font-family="ui-sans-serif" font-size="20" text-anchor="middle">${safe(ctx.model)} — ${safe(ctx.prompt).slice(0, 60)}</text>`,
+    '</svg>',
+  ].join('');
+}
+
+function aspectToBox(aspect: string | undefined, base: number): [number, number] {
+  const [a, b] = String(aspect || '1:1').split(':').map(Number);
+  if (!a || !b) return [base, base];
+  if (a >= b) return [base, Math.round((base * b) / a)];
+  return [Math.round((base * a) / b), base];
+}
+
+function silentWav(seconds: number): Buffer {
+  const sampleRate = 8000;
+  const numSamples = Math.max(1, Math.round(sampleRate * seconds));
+  const dataSize = numSamples * 2;
+  const buf = Buffer.alloc(44 + dataSize);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36 + dataSize, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(dataSize, 40);
+  return buf;
+}
+
+function truncate(s: unknown, n: number): string {
+  const v = String(s || '');
+  if (v.length <= n) return v;
+  return v.slice(0, n - 1) + '…';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

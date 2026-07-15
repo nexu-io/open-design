@@ -125,6 +125,25 @@ test('checkPromptArgvBudget does not false-positive on POSIX where argv ceilings
   assert.ok(win, 'Windows must still flag a 50 KB argv prompt');
   assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
 
+  // The default design-router prompt can exceed 100 KB on first turn. POSIX
+  // should allow that size while still leaving headroom below Linux's 128 KiB
+  // per-argument ceiling.
+  const designRouterFirstTurn = 'x'.repeat(116_534);
+  assert.equal(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'linux'),
+    null,
+    'Linux must allow a 116 KB first-turn design-router prompt',
+  );
+  assert.equal(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'darwin'),
+    null,
+    'macOS must allow a 116 KB first-turn design-router prompt',
+  );
+  assert.ok(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'win32'),
+    'Windows must still flag a 116 KB argv prompt',
+  );
+
   // POSIX still guards a genuinely enormous prompt near the per-arg ceiling,
   // so a runaway prompt fails fast with the actionable message instead of a
   // generic spawn E2BIG.
@@ -146,20 +165,9 @@ test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts'
   assert.match(flagged.message, /stdin-capable adapter/);
 });
 
-test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
-  assert.equal(kimi.maxPromptArgBytes, 30_000);
-
-  const oversized = 'x'.repeat(kimi.maxPromptArgBytes + 1);
-  const flagged = checkPromptArgvBudget(kimi, oversized, 'win32');
-  assert.ok(flagged, 'oversized Kimi prompts must trip the argv-byte guard');
-  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
-  assert.equal(flagged.limit, kimi.maxPromptArgBytes);
-  assert.equal(flagged.bytes, kimi.maxPromptArgBytes + 1);
-  assert.match(flagged.message, /Kimi CLI/);
-  assert.match(flagged.message, /command-line argument/);
-  assert.match(flagged.message, /stdin support/);
-
-  assert.equal(checkPromptArgvBudget(kimi, 'hello'), null);
+test('Kimi ACP mode does not declare an argv-byte prompt budget', () => {
+  assert.equal(kimi.maxPromptArgBytes, undefined);
+  assert.equal(checkPromptArgvBudget(kimi, 'x'.repeat(100_000), 'win32'), null);
 });
 
 test('checkPromptArgvBudget is a no-op for Grok Build because it uses prompt files', () => {

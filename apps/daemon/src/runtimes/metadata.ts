@@ -23,10 +23,6 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://cli.devin.ai/docs',
     docsUrl: 'https://docs.devin.ai',
   },
-  gemini: {
-    installUrl: 'https://github.com/google-gemini/gemini-cli',
-    docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
-  },
   opencode: {
     installUrl: 'https://opencode.ai/docs',
     docsUrl: 'https://github.com/sst/opencode',
@@ -70,6 +66,10 @@ const AGENT_INSTALL_LINKS: Record<
   kilo: {
     installUrl: 'https://kilo.ai',
     docsUrl: 'https://kilo.ai/docs/cli',
+  },
+  mimo: {
+    installUrl: 'https://mimo.ai',
+    docsUrl: 'https://mimo.ai/docs',
   },
   vibe: {
     installUrl: 'https://docs.mistral.ai',

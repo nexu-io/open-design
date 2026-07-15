@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
-import { AIHUBMIX_APP_CODE } from '../src/aihubmix.js';
+import { AIHUBMIX_APP_CODE } from '../src/integrations/aihubmix.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -387,8 +387,8 @@ describe('API proxy routes', () => {
       'https://api.deepseek.com/anthropic/v1/messages',
     ],
     [
-      'https://api.minimaxi.com/anthropic',
-      'https://api.minimaxi.com/anthropic/v1/messages',
+      'https://api.minimax.io/anthropic',
+      'https://api.minimax.io/anthropic/v1/messages',
     ],
     [
       'https://token-plan-cn.xiaomimimo.com/anthropic',
@@ -1921,6 +1921,62 @@ describe('API proxy routes', () => {
         expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
       });
     }
+  });
+
+  // A client that disconnects (Stop / closed tab) must not keep the upstream
+  // request billing. Every upstream proxy fetch has to carry an AbortSignal
+  // tied to the client connection so the in-flight completion — and any
+  // BYOK tool loop that would otherwise fire further paid rounds — unwinds
+  // when the client goes away.
+  it('passes a client-cancellation signal to the upstream on a simple proxy stream', async () => {
+    let upstreamInit: FetchInit | undefined;
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      upstreamInit = init;
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    await res.text();
+
+    expect(upstreamInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('passes a client-cancellation signal to the upstream on a BYOK tool-loop stream', async () => {
+    let upstreamInit: FetchInit | undefined;
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      upstreamInit = init;
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sa-key',
+        model: 'senseaudio-s2',
+        projectId: 'test-project',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    await res.text();
+
+    expect(upstreamInit?.signal).toBeInstanceOf(AbortSignal);
   });
 });
 

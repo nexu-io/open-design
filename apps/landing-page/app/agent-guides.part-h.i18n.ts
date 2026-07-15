@@ -26,8 +26,8 @@ export function localizedAgentGuidesPartH(en: Guides): Partial<Record<LandingLoc
       },
       'codex': {
         ...en['codex']!,
-        title: "Codex per il design — Open Design",
-        description: "Come le persone usano OpenAI Codex per il design di UI e web — il plugin Product Design, l'integrazione con Figma, le skill frontend — e come Open Design trasforma Codex in un agente di design open-source e local-first.",
+        title: "Codex per il design: crea UI con OpenAI Codex — Open Design",
+        description: "La guida pratica per progettare UI e frontend con OpenAI Codex — setup, l’integrazione con Figma, skill e come evitare il look generico da «IA in serie». Open Design trasforma Codex in un agente di design gratuito, local-first e open-source.",
         breadcrumb: "Codex",
         label: "Agente · Codex",
         heading: "Codex per il design.",
@@ -46,8 +46,8 @@ export function localizedAgentGuidesPartH(en: Guides): Partial<Record<LandingLoc
       },
       'opencode': {
         ...en['opencode']!,
-        title: "OpenCode per il design — Open Design",
-        description: "Come le persone usano OpenCode per il design di UI e web — file design.md, skill UI/UX, Figma MCP — e come Open Design trasforma OpenCode in un agente di design open-source e local-first.",
+        title: "OpenCode per il design — crea UI con l’agente open-source",
+        description: "Come progettare UI e frontend con OpenCode — file design.md, skill UI/UX, il Figma MCP — e come Open Design trasforma OpenCode in un agente di design gratuito, local-first e open-source.",
         breadcrumb: "OpenCode",
         label: "Agente · OpenCode",
         heading: "OpenCode per il design.",

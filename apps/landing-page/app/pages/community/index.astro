@@ -1,0 +1,80 @@
+---
+/*
+ * /community/ — community hub.
+ *
+ * Was a hand-written static page under `public/community/index.html`; now a
+ * localized Astro route rendered through `sub-page-layout.astro` (real site
+ * header/footer, language switcher, canonical + hreflang). Body styles live
+ * in `../../community.css`, scoped under `.od-community`. Per-locale routes
+ * come from `[locale]/community/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import '../../community.css';
+import { localeFromPath, localizedHref } from '../../i18n';
+import { getCommunityCopy, COMMUNITY_LINKS, GLYPH } from '../../community-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const t = getCommunityCopy(locale).hub;
+const href = (p: string) => localizedHref(p, locale);
+
+const cardHrefs = [
+  href('/community/contributors/'),
+  href('/community/ambassadors/'),
+  href('/community/moderators/'),
+  href('/community/events/'),
+];
+const hubCards = [
+  ...t.cards,
+  {
+    ord: 'IV',
+    title: 'Events',
+    sub: 'Local rooms where <em>Open Design</em> becomes practical.',
+    body: 'Browse community events: read the Osaka recap, then see upcoming hands-on sessions like the Shanghai AI workshop.',
+  },
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: t.title,
+  description: t.desc,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
+---
+
+<Layout title={t.title} description={t.desc} active="community" jsonLd={jsonLd} mainClassName="sub-main">
+  <div class="od-community">
+    <section class="hero">
+      <div class="hero-decor"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1 class="h-display" set:html={t.heroTitle} />
+          <p class="lead">{t.heroLead}</p>
+        </div>
+        <div class="hero-card">
+          <div class="card-frame">
+            <img src={COMMUNITY_LINKS.heroCardImage} alt={t.cardHeroAlt} loading="eager" />
+          </div>
+          <div class="card-meta">
+            <span class="h">{t.cardMetaH}</span>
+            <span class="s">{t.cardMetaS}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div class="hub-cards">
+          {hubCards.map((card, i) => (
+            <a class="hub-card" href={cardHrefs[i]}>
+              <span class="ord">{card.ord}</span>
+              <h3>{card.title}</h3>
+              <p class="hub-sub" set:html={card.sub} />
+              <p>{card.body}</p>
+              <span class="hub-arrow ri" aria-hidden="true">{GLYPH.arrow}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

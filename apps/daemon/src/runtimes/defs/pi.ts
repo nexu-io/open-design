@@ -7,13 +7,18 @@ export const piAgentDef = {
     name: 'Pi',
     bin: 'pi',
     versionArgs: ['--version'],
+    // On Windows, pi cold-starts in ~5s solo and 11–15s+ under parallel agent
+    // detection load (Windows Defender scans its 593-file node_modules tree on
+    // every spawn). The default 3s version-probe timeout is too tight; raise it
+    // so detection doesn't silently abort before reaching fetchModels.
+    versionProbeTimeoutMs: 15_000,
     // `pi --list-models` prints a TSV table to stderr (not stdout),
     // so we use a custom fetchModels that reads stderr.
     fetchModels: async (resolvedBin, env) => {
       try {
         const { stderr } = await execAgentFile(resolvedBin, ['--list-models'], {
           env,
-          timeout: 20_000,
+          timeout: 60_000, // Windows: 20s exceeded under parallel detection load
           maxBuffer: 8 * 1024 * 1024,
         });
         const parsed = parsePiModels(stderr);

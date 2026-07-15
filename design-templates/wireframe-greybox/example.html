@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Acme Analytics — Greybox Wireframe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --page: #f7f7f8;
+      --panel: #ffffff;
+      --box: #e3e3e6;
+      --box-dark: #d4d4d9;
+      --bar: #cfcfd5;
+      --bar-soft: #dddde1;
+      --rule: #c9c9cf;
+      --ink: #1c1b1a;
+      --ink-soft: #6c6c72;
+      --accent: #2f6df0;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 14px/1.5 var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    .frame { max-width: 1280px; margin: 0 auto; padding: 24px; position: relative; }
+
+    /* generic placeholders */
+    .lorem { height: 9px; border-radius: 3px; background: var(--bar); display: block; }
+    .lorem.soft { background: var(--bar-soft); }
+    .lorem.dark { background: var(--box-dark); }
+    .greybox { background: var(--box); border: 1.5px solid var(--rule); border-radius: 6px; }
+
+    /* image placeholder: box with diagonal X */
+    .imgph {
+      position: relative; background: var(--box);
+      border: 1.5px solid var(--rule); border-radius: 5px; overflow: hidden;
+    }
+    .imgph::before, .imgph::after {
+      content: ''; position: absolute; inset: 0; margin: auto;
+      width: 141%; height: 1.5px; background: var(--rule);
+      top: 0; bottom: 0; left: -20%; transform-origin: center;
+    }
+    .imgph::before { transform: rotate(45deg); }
+    .imgph::after  { transform: rotate(-45deg); }
+
+    /* redline annotation accent */
+    .redline {
+      font: 500 11px/1.2 var(--mono); color: var(--accent);
+      letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .redline .tick { width: 7px; height: 7px; border: 1.5px solid var(--accent); display: inline-block; }
+
+    /* ---- app bar ---- */
+    .appbar {
+      display: flex; align-items: center; gap: 24px;
+      background: var(--panel); border: 1.5px solid var(--rule);
+      border-radius: 8px; padding: 12px 18px; margin-bottom: 16px;
+    }
+    .appbar .logo { width: 110px; height: 24px; background: var(--box-dark); border: 1.5px solid var(--rule); border-radius: 5px; flex-shrink: 0; }
+    .appbar nav { display: flex; gap: 22px; flex: 1; }
+    .appbar nav .lorem { width: 56px; }
+    .appbar nav .lorem.w2 { width: 72px; }
+    .appbar nav .lorem.w3 { width: 44px; }
+    .appbar .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--box-dark); border: 1.5px solid var(--rule); flex-shrink: 0; }
+
+    /* ---- shell: sidebar + main ---- */
+    .shell { display: grid; grid-template-columns: 208px 1fr; gap: 16px; }
+
+    /* ---- sidebar ---- */
+    .sidebar { background: var(--panel); border: 1.5px solid var(--rule); border-radius: 8px; padding: 14px 12px; align-self: start; }
+    .sidebar .navitem { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 6px; margin-bottom: 4px; }
+    .sidebar .navitem .icn { width: 18px; height: 18px; border: 1.5px solid var(--rule); border-radius: 4px; background: var(--box); flex-shrink: 0; }
+    .sidebar .navitem .lorem { width: 78px; }
+    .sidebar .navitem.active { background: var(--ink); }
+    .sidebar .navitem.active .icn { background: #3a3a3c; border-color: #3a3a3c; }
+    .sidebar .navitem.active .lorem { background: #b9b9bf; }
+    .sidebar .sep { height: 1.5px; background: var(--rule); margin: 12px 4px; border: 0; }
+
+    .main { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ---- KPI row ---- */
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .kpi { background: var(--panel); border: 1.5px solid var(--rule); border-radius: 8px; padding: 16px; }
+    .kpi .label { width: 60%; height: 8px; }
+    .kpi .num { margin-top: 14px; height: 30px; width: 72%; background: var(--box-dark); border-radius: 5px; }
+    .kpi .sub { margin-top: 12px; width: 45%; height: 7px; }
+
+    /* ---- chart panel ---- */
+    .panel { background: var(--panel); border: 1.5px solid var(--rule); border-radius: 8px; padding: 16px 18px; }
+    .panel .phead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .panel .phead .title { width: 140px; height: 11px; }
+    .panel .phead .toolbar { display: flex; gap: 8px; }
+    .panel .phead .toolbar .chip { width: 46px; height: 20px; background: var(--box); border: 1.5px solid var(--rule); border-radius: 5px; }
+    .chartwrap svg { width: 100%; height: 200px; display: block; }
+
+    /* ---- table panel ---- */
+    .tpanel .thead, .tpanel .trow {
+      display: grid; grid-template-columns: 64px 1.6fr 1fr 0.8fr 70px;
+      gap: 14px; align-items: center;
+    }
+    .tpanel .thead { padding: 0 0 12px; border-bottom: 1.5px solid var(--rule); margin-bottom: 10px; }
+    .tpanel .thead .lorem { height: 8px; background: var(--box-dark); }
+    .tpanel .trow { padding: 11px 0; border-bottom: 1.5px solid #ededf0; }
+    .tpanel .trow:last-child { border-bottom: 0; }
+    .tpanel .thumb { width: 48px; height: 36px; }
+    .tpanel .trow .l-100 { width: 100%; }
+    .tpanel .trow .l-80 { width: 80%; }
+    .tpanel .trow .l-65 { width: 65%; }
+    .tpanel .trow .l-50 { width: 50%; }
+    .tpanel .trow .l-40 { width: 40%; }
+    .tpanel .pill { height: 18px; width: 58px; background: var(--box); border: 1.5px solid var(--rule); border-radius: 999px; }
+
+    /* ---- annotations ---- */
+    .annotations {
+      display: flex; gap: 22px; flex-wrap: wrap;
+      margin-top: 18px; padding-top: 14px; border-top: 1.5px dashed var(--accent);
+    }
+    .ann-float {
+      position: absolute; top: 96px; right: 30px;
+      border: 1.5px dashed var(--accent); border-radius: 6px;
+      padding: 6px 9px; background: rgba(247,247,248,0.9);
+    }
+
+    @media (max-width: 1000px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { display: flex; flex-wrap: wrap; gap: 6px; }
+      .sidebar .sep { display: none; }
+      .sidebar .navitem { margin-bottom: 0; }
+      .sidebar .navitem .lorem { width: 56px; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .ann-float { display: none; }
+      .tpanel .thead, .tpanel .trow { grid-template-columns: 56px 1.4fr 1fr 64px; }
+      .tpanel .col-hide { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+
+    <!-- TOP APP BAR -->
+    <header class="appbar" data-od-id="app-bar">
+      <div class="logo"></div>
+      <nav>
+        <span class="lorem"></span>
+        <span class="lorem w2"></span>
+        <span class="lorem w3"></span>
+        <span class="lorem"></span>
+      </nav>
+      <div class="avatar"></div>
+    </header>
+
+    <div class="ann-float redline" data-od-id="annotation-float"><span class="tick"></span>max-width 1280</div>
+
+    <div class="shell">
+
+      <!-- LEFT SIDEBAR NAV -->
+      <aside class="sidebar" data-od-id="sidebar">
+        <div class="navitem active"><span class="icn"></span><span class="lorem"></span></div>
+        <div class="navitem"><span class="icn"></span><span class="lorem"></span></div>
+        <div class="navitem"><span class="icn"></span><span class="lorem"></span></div>
+        <div class="navitem"><span class="icn"></span><span class="lorem"></span></div>
+        <hr class="sep" />
+        <div class="navitem"><span class="icn"></span><span class="lorem"></span></div>
+        <div class="navitem"><span class="icn"></span><span class="lorem"></span></div>
+      </aside>
+
+      <main class="main">
+
+        <!-- KPI ROW -->
+        <section class="kpis" data-od-id="kpis">
+          <div class="kpi"><span class="lorem label"></span><div class="num"></div><span class="lorem sub soft"></span></div>
+          <div class="kpi"><span class="lorem label"></span><div class="num"></div><span class="lorem sub soft"></span></div>
+          <div class="kpi"><span class="lorem label"></span><div class="num"></div><span class="lorem sub soft"></span></div>
+          <div class="kpi"><span class="lorem label"></span><div class="num"></div><span class="lorem sub soft"></span></div>
+        </section>
+
+        <!-- MAIN CHART PANEL -->
+        <section class="panel chartwrap" data-od-id="chart">
+          <div class="phead">
+            <span class="lorem title"></span>
+            <div class="toolbar"><span class="chip"></span><span class="chip"></span></div>
+          </div>
+          <svg viewBox="0 0 720 200" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="7" stroke="#c9c9cf" stroke-width="2"/>
+              </pattern>
+            </defs>
+            <!-- gridlines -->
+            <line x1="48" y1="40"  x2="704" y2="40"  stroke="#ededf0" stroke-width="1.5"/>
+            <line x1="48" y1="90"  x2="704" y2="90"  stroke="#ededf0" stroke-width="1.5"/>
+            <line x1="48" y1="140" x2="704" y2="140" stroke="#ededf0" stroke-width="1.5"/>
+            <!-- axes -->
+            <line x1="48" y1="20" x2="48" y2="172" stroke="#1c1b1a" stroke-width="2"/>
+            <line x1="48" y1="172" x2="704" y2="172" stroke="#1c1b1a" stroke-width="2"/>
+            <!-- schematic bars (alternating solid grey / hatched) -->
+            <rect x="84"  y="118" width="56" height="54"  fill="#e3e3e6" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="172" y="86"  width="56" height="86"  fill="url(#hatch)" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="260" y="100" width="56" height="72"  fill="#e3e3e6" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="348" y="58"  width="56" height="114" fill="url(#hatch)" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="436" y="78"  width="56" height="94"  fill="#e3e3e6" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="524" y="44"  width="56" height="128" fill="url(#hatch)" stroke="#c9c9cf" stroke-width="1.5"/>
+            <rect x="612" y="96"  width="56" height="76"  fill="#e3e3e6" stroke="#c9c9cf" stroke-width="1.5"/>
+            <!-- schematic trend line over the bars -->
+            <polyline points="112,128 200,98 288,112 376,70 464,90 552,56 640,108"
+              fill="none" stroke="#1c1b1a" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>
+          </svg>
+        </section>
+
+        <!-- SECONDARY LIST / TABLE PANEL -->
+        <section class="panel tpanel" data-od-id="table">
+          <div class="phead">
+            <span class="lorem title"></span>
+            <div class="toolbar"><span class="chip"></span></div>
+          </div>
+          <div class="thead">
+            <span class="lorem"></span>
+            <span class="lorem"></span>
+            <span class="lorem"></span>
+            <span class="lorem col-hide"></span>
+            <span class="lorem"></span>
+          </div>
+
+          <div class="trow">
+            <span class="imgph thumb"></span>
+            <span class="lorem l-80"></span>
+            <span class="lorem l-65 soft"></span>
+            <span class="lorem l-50 soft col-hide"></span>
+            <span class="pill"></span>
+          </div>
+          <div class="trow">
+            <span class="imgph thumb"></span>
+            <span class="lorem l-100"></span>
+            <span class="lorem l-50 soft"></span>
+            <span class="lorem l-65 soft col-hide"></span>
+            <span class="pill"></span>
+          </div>
+          <div class="trow">
+            <span class="imgph thumb"></span>
+            <span class="lorem l-65"></span>
+            <span class="lorem l-80 soft"></span>
+            <span class="lorem l-40 soft col-hide"></span>
+            <span class="pill"></span>
+          </div>
+          <div class="trow">
+            <span class="imgph thumb"></span>
+            <span class="lorem l-100"></span>
+            <span class="lorem l-65 soft"></span>
+            <span class="lorem l-50 soft col-hide"></span>
+            <span class="pill"></span>
+          </div>
+          <div class="trow">
+            <span class="imgph thumb"></span>
+            <span class="lorem l-80"></span>
+            <span class="lorem l-40 soft"></span>
+            <span class="lorem l-65 soft col-hide"></span>
+            <span class="pill"></span>
+          </div>
+        </section>
+
+        <!-- MONOSPACE REDLINE ANNOTATIONS -->
+        <footer class="annotations" data-od-id="annotations">
+          <span class="redline"><span class="tick"></span>01 · 12-col grid</span>
+          <span class="redline"><span class="tick"></span>02 · gutter 16px</span>
+          <span class="redline"><span class="tick"></span>03 · greybox / lo-fi · no color</span>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+</body>
+</html>

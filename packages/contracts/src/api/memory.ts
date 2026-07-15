@@ -11,14 +11,34 @@
 
 import type { MemoryTreeNode } from './automations.js';
 
-export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+// `profile` — the singleton structured "who I am / how I work" entry (one
+//   well-known id `user_profile`) the intent gateway reads to rewrite a short
+//   query into a full brief; seeded at onboarding, edited in the Profile tab.
+// `rule`    — a verified rule (assertion + check) distilled from past
+//   corrections; the post-turn self-verify pass enforces these as rubric items.
+// Both flow through the same `MEMORY.md` active-set gate as the original four,
+// so the master `enabled` switch turns the whole feature off for free.
+export type MemoryType =
+  | 'user'
+  | 'feedback'
+  | 'project'
+  | 'reference'
+  | 'profile'
+  | 'rule';
 
+// Order is the canonical prompt-section / tree order: profile first (most
+// foundational), then the original four, then rule last (enforced checks).
 export const MEMORY_TYPES: readonly MemoryType[] = [
+  'profile',
   'user',
   'feedback',
   'project',
   'reference',
+  'rule',
 ] as const;
+
+/** The well-known singleton id for the structured user profile. */
+export const PROFILE_MEMORY_ID = 'user_profile';
 
 // Listing payload — frontmatter only, no body. The settings panel pulls
 // the full body lazily through `GET /api/memory/:id` when the user
@@ -58,12 +78,32 @@ export interface MemorySuggestion {
   };
 }
 
+// The four pluggable memory hooks, surfaced as default-on booleans across the
+// config DTOs. The master `enabled` switch gates ALL of them (when off,
+// `composeMemoryBody` returns '' and both loops die); these toggle individual
+// hooks while memory stays on:
+//   - chatExtractionEnabled — sediment new facts from chat turns (existing).
+//   - profileEnabled        — inject the structured profile into the prompt.
+//   - rewriteEnabled        — PRE: expand a short query into a task-brief card.
+//   - verifyEnabled         — POST: self-verify against rules + emit scorecard.
+export interface MemoryHookFlags {
+  profileEnabled: boolean;
+  rewriteEnabled: boolean;
+  verifyEnabled: boolean;
+}
+
 // GET /api/memory
 export interface MemoryListResponse {
   /** True when the daemon will inject memory into the next system prompt. */
   enabled: boolean;
   /** True when new chat turns may create memory suggestions/extractions. */
   chatExtractionEnabled: boolean;
+  /** Inject the structured `user_profile` into the prompt (PRE foundation). */
+  profileEnabled: boolean;
+  /** PRE: expand short queries into a task brief + emit the brief card. */
+  rewriteEnabled: boolean;
+  /** POST: self-verify the output against `rule` memories + emit a scorecard. */
+  verifyEnabled: boolean;
   /** Absolute path to the memory directory (informational, for the settings UI). */
   rootDir: string;
   /** The MEMORY.md index body — usually a list of `- [Name](file.md) — hook` lines. */
@@ -168,6 +208,10 @@ export interface UpdateMemoryIndexRequest {
 export interface UpdateMemoryConfigRequest {
   enabled?: boolean;
   chatExtractionEnabled?: boolean;
+  /** Per-hook toggles. Omit to leave unchanged; default-on when never set. */
+  profileEnabled?: boolean;
+  rewriteEnabled?: boolean;
+  verifyEnabled?: boolean;
   /** Pass `null` to clear the override and fall back to auto-pick. Pass an
    *  object to commit a custom provider. Omit to leave unchanged. */
   extraction?: MemoryExtractionConfig | null;
@@ -176,6 +220,9 @@ export interface UpdateMemoryConfigRequest {
 export interface MemoryConfigResponse {
   enabled: boolean;
   chatExtractionEnabled: boolean;
+  profileEnabled: boolean;
+  rewriteEnabled: boolean;
+  verifyEnabled: boolean;
   extraction: MemoryExtractionConfig | null;
 }
 
@@ -293,8 +340,10 @@ export interface MemoryChangeEvent {
   /** Number of entries written in this pass — only on `kind: 'extract'`. */
   count?: number;
   /** Where the change came from. Useful for UX (e.g., suppress toasts on
-   *  manual edits since the user just clicked Save themselves). */
-  source?: 'heuristic' | 'llm' | 'manual' | 'connector';
+   *  manual edits since the user just clicked Save themselves).
+   *  `'annotation'` is the auto-distiller that turns preview comments /
+   *  highlights / drawn marks into durable feedback + rule memory. */
+  source?: 'heuristic' | 'llm' | 'manual' | 'connector' | 'brand' | 'annotation';
   /** Only on `kind: 'config'` — the new enabled flag. */
   enabled?: boolean;
   /** Unix milliseconds. */
@@ -455,3 +504,135 @@ export interface DeleteMemoryExtractionResponse {
 // ones. The frontend deduplicates by id so a buffered burst of phase
 // updates collapses into a single visible row.
 export interface MemoryExtractionEvent extends MemoryExtractionRecord {}
+
+// ----- Annotation → rule-proposal distillation ----------------------------
+//
+// THREAD 1. The in-canvas/in-deck annotation surfaces (comments, highlights,
+// inspect-selection marks, visual marks) feed a distillation pipeline that
+// turns a batch of annotations + their target context into candidate
+// `rule` memories. The output is a list of `RuleProposalDraft`s — the SAME
+// payload shape as the `<od-card type="rule-proposal">` the agent already
+// emits — surfaced through the existing Keep gate before anything is written.
+// Distillation NEVER writes a rule on its own; the user must Keep a proposal,
+// which routes through the existing `POST /api/memory` (`type: 'rule'`) path.
+
+/** A proposed verified rule. Mirrors the `OdCardRuleProposal` payload so the
+ *  same RuleProposalCard can render distilled proposals and agent-emitted ones. */
+export interface RuleProposalDraft {
+  /** Short display name for the rule. */
+  name: string;
+  /** One-line description / hook. */
+  description?: string;
+  /** The thing that must hold (human-readable). */
+  assertion: string;
+  /** How to check it — the rubric line a verify pass evaluates. */
+  check: string;
+  /** Why this was inferred (e.g. "you highlighted the CTA copy twice"). */
+  rationale?: string;
+}
+
+/** One annotation/comment/highlight captured from a delivered artifact. */
+export interface AnnotationDistillInput {
+  /** The user's note / comment / highlight text. Required and load-bearing. */
+  note: string;
+  /** Human label of the annotated element/region, if any. */
+  targetLabel?: string;
+  /** File the annotation targets. */
+  filePath?: string;
+  /** The current text/content under the annotation. */
+  currentText?: string;
+  /** element | pod | visual | highlight | text — the interaction kind. */
+  selectionKind?: string;
+  /** Compact HTML hint for the annotated element. */
+  htmlHint?: string;
+}
+
+// POST /api/memory/rules/suggest — distil a batch of annotations into rule
+// proposals. The daemon runs a heuristic pass first (always available) and,
+// when an extraction provider is configured, augments it with an LLM pass
+// through the existing `suggestWithLLM` path. The response is display-only;
+// the user confirms each proposal through the Keep gate.
+export interface SuggestRulesFromAnnotationsRequest {
+  annotations: AnnotationDistillInput[];
+  projectId?: string | null;
+  conversationId?: string | null;
+  /** BYOK chat-config snapshot, forwarded so "Same as chat" distillation can
+   *  run against the user's live provider in API mode (same semantics as the
+   *  `chatProvider` field on `ExtractMemoryRequest`). */
+  chatProvider?: {
+    provider: MemoryExtractionProvider;
+    apiKey?: string;
+    baseUrl?: string;
+    apiVersion?: string;
+    model?: string;
+  };
+}
+
+export interface SuggestRulesFromAnnotationsResponse {
+  proposals: RuleProposalDraft[];
+  /** True when the daemon also ran the LLM distiller (provider configured). */
+  attemptedLLM: boolean;
+  /** Where the surfaced proposals came from. */
+  source: 'heuristic' | 'llm' | 'mixed';
+}
+
+// ----- POST self-verify enforcement ---------------------------------------
+//
+// THREAD 2. When `verifyEnabled` is on, the daemon programmatically enforces
+// the self-verify contract instead of trusting the model's self-discipline.
+// After every turn that produced an artifact AND has active `rule` memories,
+// the daemon evaluates whether the model actually emitted a passing
+// `<od-card type="verify-scorecard">` covering every active rule, and records
+// the verdict. `missing` (model skipped the scorecard) and `fail` (a row
+// failed or a rule was left uncovered) are enforcement failures surfaced to
+// the user; they are not silently tolerated.
+
+export type MemoryVerifyStatus = 'pass' | 'fail' | 'missing' | 'skipped';
+
+/** The deterministic verdict the daemon computes for one turn. */
+export interface MemoryVerifyResult {
+  status: MemoryVerifyStatus;
+  /** Number of active rule memories at enforcement time. */
+  rulesActive: number;
+  /** How many active rules the emitted scorecard addressed. */
+  rulesCovered: number;
+  /** Active rule names the scorecard did not address. */
+  uncoveredRules: string[];
+  /** Rolled-up scorecard status, when the model emitted one. */
+  scorecardStatus?: 'pass' | 'partial' | 'fail';
+  /** Total rubric rows in the emitted scorecard. */
+  rowsTotal: number;
+  /** How many rubric rows were marked `fail`. */
+  rowsFailed: number;
+  /** Whether the turn produced an artifact — enforcement only scopes to those. */
+  hadArtifact: boolean;
+  /** Why enforcement was skipped (no rules / no artifact / disabled). */
+  skipReason?: 'verify-disabled' | 'no-rules' | 'no-artifact';
+}
+
+export interface MemoryVerifyRecord extends MemoryVerifyResult {
+  /** Stable id for the attempt. UUID-ish; safe to use as a React key. */
+  id: string;
+  /** Unix milliseconds. */
+  at: number;
+  /** The run that produced the turn, when known. */
+  runId?: string;
+  projectId?: string | null;
+}
+
+// GET /api/memory/verifications — most-recent-first. Capped server-side.
+export interface MemoryVerificationsResponse {
+  verifications: MemoryVerifyRecord[];
+}
+
+// DELETE /api/memory/verifications/:id — remove one record.
+// DELETE /api/memory/verifications      — clear the whole buffer.
+export interface DeleteMemoryVerificationResponse {
+  removed: number;
+}
+
+// SSE event name `verify` on /api/memory/events. Emitted once per enforced
+// turn (and with `status: 'deleted' | 'cleared'`-style synthetic records on
+// removal, mirroring the `extraction` channel). The settings panel renders a
+// "recent verifications" list so the user can see enforcement outcomes.
+export interface MemoryVerifyEvent extends MemoryVerifyRecord {}

@@ -24,6 +24,7 @@
     "en": "Mobile App"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T05:25:44Z",
   "description": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame on the page. Built by copying the seed `assets/template.html` and pasting one screen archetype from `references/layouts.md`. Use when the brief asks for \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\".",
   "description_i18n": {
     "zh-CN": "在页面中渲染于像素级精确的 iPhone 15 Pro 框架内的移动应用屏幕。通过复制种子文件 assets/template.html 并粘贴 references/layouts.md 中的一个屏幕原型来构建。当需求提到《移动应用》、《iOS 应用》、《Android 应用》、《手机屏幕》或《应用 UI》时使用。",

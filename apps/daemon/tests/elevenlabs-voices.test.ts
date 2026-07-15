@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listElevenLabsVoiceOptions } from '../src/elevenlabs-voices.js';
+import { listElevenLabsVoiceOptions } from '../src/integrations/elevenlabs-voices.js';
 
 const TEST_BASE_URL = 'https://elevenlabs-gateway.example.test';
 

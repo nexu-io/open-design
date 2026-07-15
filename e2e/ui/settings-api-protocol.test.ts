@@ -2,16 +2,17 @@ import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.xlong });
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
 }
 
 async function gotoEntryHome(page: Page) {
@@ -28,16 +29,47 @@ async function openSettingsDialogFromEntry(page: Page) {
   return openSettingsDialog(page);
 }
 
+async function closeSettingsDialogIfOpen(page: Page) {
+  const dialog = page.getByRole('dialog');
+  if ((await dialog.count()) === 0) return;
+  await page.keyboard.press('Escape');
+  try {
+    await expect(dialog).toHaveCount(0, { timeout: T.short });
+    return;
+  } catch {
+    // Fall back to the chrome button if focus is inside a nested popover or
+    // another transient surface swallowed Escape.
+  }
+  const closeButton = dialog.getByRole('button', { name: 'Close', exact: true });
+  if ((await closeButton.count()) > 0) {
+    await closeButton.click({ force: true, timeout: T.short });
+  }
+  await expect(dialog).toHaveCount(0);
+}
+
 async function openExecutionSettings(
   page: Page,
   config: Record<string, unknown>,
 ) {
+  let appConfig = { ...config };
   await page.addInitScript(
     ({ key, value }) => {
       window.localStorage.setItem(key, JSON.stringify(value));
     },
     { key: STORAGE_KEY, value: config },
   );
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      appConfig = {
+        ...appConfig,
+        ...(route.request().postDataJSON() as Record<string, unknown>),
+      };
+      await route.fulfill({ json: { config: appConfig } });
+      return;
+    }
+    await route.fulfill({ json: { config: appConfig } });
+  });
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 503, body: 'offline' });
@@ -109,12 +141,15 @@ async function openExecutionSettingsWithAgents(
   await openSettingsDialogFromEntry(page);
 }
 
-test('[P1] legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
+test('[P1] known OpenAI provider is selected and can switch to Anthropic defaults', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: 'sk-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
+    apiProviderBaseUrl: 'https://api.deepseek.com',
     agentId: null,
     skillId: null,
     designSystemId: null,
@@ -125,14 +160,14 @@ test('[P1] legacy known OpenAI provider switches to the matching Anthropic prese
 
   const dialog = page.getByRole('dialog');
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
-  const openAiTab = protocolTabs.getByRole('tab', { name: 'OpenAI', exact: true });
+  const deepSeekTab = protocolTabs.getByRole('tab', { name: 'DeepSeek', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
   const baseUrlInput = dialog.getByLabel('Base URL');
   // Use getByRole + exact so we only match the chat "Model" picker and
   // not the inline "Memory model" picker that sits next to it.
   const modelSelect = modelCombobox(dialog);
 
-  await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
+  await expect(deepSeekTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com');
   await expect(modelSelect).toContainText(/deepseek-chat/i);
@@ -141,16 +176,19 @@ test('[P1] legacy known OpenAI provider switches to the matching Anthropic prese
 
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
-  await expect(baseUrlInput).toHaveValue('https://api.deepseek.com/anthropic');
-  await expect(modelSelect).toContainText(/deepseek-chat/i);
+  await expect(baseUrlInput).toHaveValue('https://api.anthropic.com');
+  await expect(modelSelect).toContainText(/claude-sonnet-4-5/i);
 });
 
-test('[P1] legacy custom provider preserves custom baseUrl and model when switching protocols', async ({ page }) => {
+test('[P1] custom OpenAI provider is selected and can switch to Anthropic defaults', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: 'sk-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
     baseUrl: 'https://my-proxy.example.com/v1',
     model: 'my-custom-model',
+    apiProviderBaseUrl: null,
     agentId: null,
     skillId: null,
     designSystemId: null,
@@ -161,12 +199,12 @@ test('[P1] legacy custom provider preserves custom baseUrl and model when switch
 
   const dialog = page.getByRole('dialog');
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
-  const openAiTab = protocolTabs.getByRole('tab', { name: 'OpenAI', exact: true });
+  const customTab = protocolTabs.getByRole('tab', { name: 'Custom provider', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
   const baseUrlInput = dialog.getByLabel('Base URL');
   const customModelInput = dialog.getByLabel(/Custom model id/i);
 
-  await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
+  await expect(customTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://my-proxy.example.com/v1');
   await expect(customModelInput).toHaveValue('my-custom-model');
@@ -175,8 +213,8 @@ test('[P1] legacy custom provider preserves custom baseUrl and model when switch
 
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
-  await expect(baseUrlInput).toHaveValue('https://my-proxy.example.com/v1');
-  await expect(customModelInput).toHaveValue('my-custom-model');
+  await expect(baseUrlInput).toHaveValue('https://api.anthropic.com');
+  await expect(modelCombobox(dialog)).toContainText(/claude-sonnet-4-5/i);
 });
 
 test('[P0] @critical BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
@@ -236,11 +274,180 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
 
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
-  await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(reopenedDialog.getByRole('tab', { name: 'DeepSeek', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
   await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
+});
+
+test('[P1] BYOK Anthropic gateway preset updates fields and persists after reopening', async ({ page }) => {
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: 'sk-test',
+    apiProtocol: 'anthropic',
+    apiVersion: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    apiProviderBaseUrl: 'https://api.anthropic.com',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
+  const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
+
+  await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
+  await selectComboboxOption(
+    page,
+    providerPresetCombobox(dialog),
+    /DeepSeek — Anthropic/i,
+    '[data-testid="settings-byok-provider-preset-popover"]',
+  );
+  await expect(providerPresetCombobox(dialog)).toContainText(/DeepSeek — Anthropic/i);
+  await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
+  await expectModelComboboxText(dialog, /deepseek-chat/i);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiProtocol: 'anthropic',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    model: 'deepseek-chat',
+    apiProviderBaseUrl: 'https://api.deepseek.com/anthropic',
+  });
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await openSettingsDialogFromEntry(page);
+  const reopenedDialog = page.getByRole('dialog');
+  await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — Anthropic/i);
+  await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
+  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
+});
+
+test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists selection', async ({ page }) => {
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: 'ollama-key',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
+  await protocolTabs.getByRole('tab', { name: 'Ollama Cloud', exact: true }).click();
+
+  await expect(protocolTabs.getByRole('tab', { name: 'Ollama Cloud', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(providerPresetCombobox(dialog)).toContainText(/Ollama Cloud \(managed\)/i);
+  await expectModelComboboxText(dialog, /gpt-oss:120b/i);
+  await expect(dialog.getByLabel('Base URL')).toHaveValue('https://ollama.com');
+
+  await modelCombobox(dialog).click();
+  const popover = page.getByTestId('settings-byok-model-popover');
+  await expect(popover).toBeVisible();
+  await page.getByTestId('settings-byok-model-search').fill('kimi-k2.7');
+  await popover.getByRole('option', { name: /^kimi-k2\.7-code$/i }).click();
+  await expectModelComboboxText(dialog, /kimi-k2\.7-code/i);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiProtocol: 'ollama',
+    baseUrl: 'https://ollama.com',
+    model: 'kimi-k2.7-code',
+    apiProviderBaseUrl: 'https://ollama.com',
+  });
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await openSettingsDialogFromEntry(page);
+  const reopenedDialog = page.getByRole('dialog');
+  const reopenedTabs = reopenedDialog.getByRole('tablist', { name: 'API protocol' });
+  await expect(reopenedTabs.getByRole('tab', { name: 'Ollama Cloud', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(providerPresetCombobox(reopenedDialog)).toContainText(/Ollama Cloud \(managed\)/i);
+  await expectModelComboboxText(reopenedDialog, /kimi-k2\.7-code/i);
+});
+
+test('[P1] BYOK connection test surfaces NVIDIA degraded provider detail', async ({ page }) => {
+  await page.route('**/api/provider/models', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 15,
+        models: [
+          {
+            id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+            label: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+          },
+        ],
+      }),
+    });
+  });
+  await page.route('**/api/test/connection', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      protocol: 'openai',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: false,
+        kind: 'upstream_unavailable',
+        latencyMs: 42,
+        status: 400,
+        detail:
+          'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: 'nvapi-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    apiProviderBaseUrl: 'https://integrate.api.nvidia.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Test', exact: true }).click();
+  await expect(dialog.getByRole('alert').filter({ hasText: /Provider returned 400/i })).toContainText(
+    /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+  );
 });
 
 test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
@@ -269,7 +476,10 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
 
   const baseUrlInput = dialog.getByLabel('Base URL');
-  await baseUrlInput.fill('http://10.0.0.5:11434/v1');
+  // A non-http scheme is still rejected client-side. (An internal-IP URL is no
+  // longer rejected here — it is syntactically valid and the daemon owns the
+  // OD_ALLOWED_INTERNAL_HOSTS decision; see #3225.)
+  await baseUrlInput.fill('ftp://api.example.com');
   await expect(dialog.locator('#settings-base-url-error')).toContainText(/public http:\/\/ or https:\/\//i);
 
   await baseUrlInput.fill('http://localhost:11434/v1');
@@ -277,6 +487,58 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
     apiKey: 'sk-openai-test',
     baseUrl: 'http://localhost:11434/v1',
   });
+});
+
+test('[P1] BYOK file-tools limitation notice is reachable from Settings', async ({ page }) => {
+  await openExecutionSettingsWithAgents(
+    page,
+    {
+      mode: 'api',
+      apiKey: 'sk-test',
+      apiProtocol: 'openai',
+      apiVersion: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      agentId: 'mock-agent',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      agentCliEnv: {},
+    },
+    [
+      {
+        id: 'mock-agent',
+        name: 'Mock Agent',
+        bin: 'mock-agent',
+        available: true,
+        version: 'test',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+    ],
+  );
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+
+  const trigger = dialog.getByTestId('settings-byok-no-file-tools-trigger');
+  const notice = dialog.getByTestId('settings-byok-no-file-tools-notice');
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toHaveAccessibleName(/BYOK can't read, write, or edit project files/i);
+
+  await trigger.hover();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("BYOK can't read, write, or edit project files");
+  await expect(notice).toContainText('Local CLI');
+
+  await dialog.getByRole('tab', { name: /Google Gemini/i }).click();
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-trigger')).toBeVisible();
+
+  await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-trigger')).toHaveCount(0);
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-notice')).toHaveCount(0);
 });
 
 test('[P0] BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {
@@ -292,9 +554,9 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
         kind: 'success',
         latencyMs: 15,
         models: [
-          { id: 'aa-nightly-model', label: 'AA Nightly Model' },
-          { id: 'mm-nightly-model', label: 'MM Nightly Model' },
-          { id: 'zz-nightly-model', label: 'ZZ Nightly Model' },
+          { id: 'aa-prerelease-model', label: 'AA Prerelease Model' },
+          { id: 'mm-prerelease-model', label: 'MM Prerelease Model' },
+          { id: 'zz-prerelease-model', label: 'ZZ Prerelease Model' },
         ],
       }),
     });
@@ -322,7 +584,7 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
   const apiKeyInput = dialog.getByLabel('API key');
 
   await expect(dialog.getByRole('button', { name: 'Fetch models' })).toHaveCount(0);
-  await expect(page.locator(MODEL_POPOVER_SELECTOR).getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+  await expect(page.locator(MODEL_POPOVER_SELECTOR).getByRole('option', { name: 'AA Prerelease Model (aa-prerelease-model)' })).toHaveCount(0);
 
   await apiKeyInput.fill('sk-openai-test');
   await apiKeyInput.blur();
@@ -336,24 +598,18 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
 
   await modelSelect.click();
   const modelPopover = page.locator(MODEL_POPOVER_SELECTOR).last();
-  await expect(modelPopover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
-  await expect(modelPopover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toHaveCount(1);
-  await expect(modelPopover.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toHaveCount(1);
+  await expect(modelPopover.getByRole('option', { name: 'AA Prerelease Model (aa-prerelease-model)' })).toHaveCount(1);
+  await expect(modelPopover.getByRole('option', { name: 'MM Prerelease Model (mm-prerelease-model)' })).toHaveCount(1);
+  await expect(modelPopover.getByRole('option', { name: 'ZZ Prerelease Model (zz-prerelease-model)' })).toHaveCount(1);
   await page.keyboard.press('Escape');
 
-  if ((await page.getByRole('dialog').count()) > 0) {
-    const closeButton = page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true });
-    if ((await closeButton.count()) > 0) {
-      await closeButton.click({ force: true });
-    }
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-  }
+  await closeSettingsDialogIfOpen(page);
 
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await modelCombobox(reopenedDialog).click();
-  await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
+  await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'AA Prerelease Model (aa-prerelease-model)' })).toHaveCount(1);
   await page.keyboard.press('Escape');
   await expect.poll(() => providerModelRequests.length).toBe(1);
 });
@@ -438,16 +694,16 @@ test('[P0] @critical BYOK fetched models are searchable inside the Settings mode
         kind: 'success',
         latencyMs: 15,
         models: [
-          { id: 'aa-nightly-model', label: 'AA Nightly Model' },
-          { id: 'bb-nightly-model', label: 'BB Nightly Model' },
-          { id: 'cc-nightly-model', label: 'CC Nightly Model' },
-          { id: 'dd-nightly-model', label: 'DD Nightly Model' },
-          { id: 'ee-nightly-model', label: 'EE Nightly Model' },
-          { id: 'ff-nightly-model', label: 'FF Nightly Model' },
-          { id: 'gg-nightly-model', label: 'GG Nightly Model' },
-          { id: 'hh-nightly-model', label: 'HH Nightly Model' },
-          { id: 'mm-nightly-model', label: 'MM Nightly Model' },
-          { id: 'zz-nightly-model', label: 'ZZ Nightly Model' },
+          { id: 'aa-prerelease-model', label: 'AA Prerelease Model' },
+          { id: 'bb-prerelease-model', label: 'BB Prerelease Model' },
+          { id: 'cc-prerelease-model', label: 'CC Prerelease Model' },
+          { id: 'dd-prerelease-model', label: 'DD Prerelease Model' },
+          { id: 'ee-prerelease-model', label: 'EE Prerelease Model' },
+          { id: 'ff-prerelease-model', label: 'FF Prerelease Model' },
+          { id: 'gg-prerelease-model', label: 'GG Prerelease Model' },
+          { id: 'hh-prerelease-model', label: 'HH Prerelease Model' },
+          { id: 'mm-prerelease-model', label: 'MM Prerelease Model' },
+          { id: 'zz-prerelease-model', label: 'ZZ Prerelease Model' },
         ],
       }),
     });
@@ -481,9 +737,9 @@ test('[P0] @critical BYOK fetched models are searchable inside the Settings mode
   const search = page.getByTestId('settings-byok-model-search');
   await expect(popover).toBeVisible();
   await expect(search).toBeVisible();
-  await search.fill('mm-nightly');
-  await expect(popover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
-  await expect(popover.getByRole('option', { name: 'BB Nightly Model (bb-nightly-model)' })).toHaveCount(0);
+  await search.fill('mm-prerelease');
+  await expect(popover.getByRole('option', { name: 'MM Prerelease Model (mm-prerelease-model)' })).toBeVisible();
+  await expect(popover.getByRole('option', { name: 'BB Prerelease Model (bb-prerelease-model)' })).toHaveCount(0);
 });
 
 test('[P1] BYOK model fetch failure keeps the current model and recovers after key update', async ({ page }) => {

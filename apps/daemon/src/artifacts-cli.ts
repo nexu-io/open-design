@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { postCreateArtifactRequest } from './artifact-create.js';
+import { postCreateArtifactRequest } from './artifacts/create.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { resolveProjectArg, withActiveEcho } from './mcp.js';
 

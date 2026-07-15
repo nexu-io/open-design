@@ -24,6 +24,7 @@
     "en": "Contribute Plugin to Open Design"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T23:01:12Z",
   "description": "Opens a pull request that adds a local Open Design plugin to the Open Design community catalog using the GitHub CLI.",
   "description_i18n": {
     "zh-CN": "使用 GitHub CLI 打开拉取请求，将本地 Open Design 插件添加到 Open Design 社区目录。",

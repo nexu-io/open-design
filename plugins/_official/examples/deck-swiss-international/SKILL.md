@@ -1,17 +1,38 @@
 ---
 name: deck-swiss-international
-zh_name: "瑞士国际主义 Deck"
-en_name: "Swiss International Deck"
+en_name: "Write a Board Pre-Read like a Fortune-500 Board Chair"
+zh_name: "像财富 500 强董事长一样写董事会预读"
+description: |
+  Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
+en_description: |
+  Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
+zh_description: |
+  像财富 500 强董事长一样写董事会预读——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "corporate-strategy"
+  - "board-pre-read-deck"
+  - "strategy"
+  - "board"
+  - "business-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "deck-swiss-international"
+triggers:
+  - "board-pre-read-deck"
+  - "corporate-strategy"
+  - "Write a Board Pre-Read like a Fortune-500 Board Chair"
+  - "像财富 500 强董事长一样写董事会预读"
+  - "board"
+  - "strategy"
+  - "business-review"
+  - "html deck"
+  - "html slides"
 emoji: "🟦"
-description: "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange)."
-zh_description: "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)"
-en_description: "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange)."
 category: slides
 scenario: marketing
 aspect_hint: "16:9 横向翻页"
 featured: 1
 recommended: 1
-tags: ["swiss", "grid", "international", "ikb", "editorial", "facts"]
 example_id: sample-swiss-international
 example_name: "Swiss International · 产品路线"
 example_format: markdown
@@ -22,7 +43,6 @@ example_source_label: "op7418/guizang-ppt-skill"
 od:
   mode: deck
   surface: web
-  scenario: marketing
   featured: 0.001
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
@@ -31,9 +51,11 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "Use the Swiss International Deck template to turn my content into a 16-column-grid deck with one saturated accent and 22 locked layouts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
   example_prompt_i18n:
     zh-CN: "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  category: "corporate-strategy"
+  scenario: "strategy"
+  example_prompt: "Create \"Write a Board Pre-Read like a Fortune-500 Board Chair\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Audience: board, CEO, CFO. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 【模板: 瑞士国际主义 Deck (Swiss International)】

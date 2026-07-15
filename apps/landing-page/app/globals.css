@@ -452,6 +452,188 @@ body::before {
   .locale-menu { animation: none; }
   .locale-trigger-caret { transition: none; }
 }
+/* ---------- Open Design Cloud header account ---------- */
+/*
+ * Two mutually-exclusive states share this slot: the signed-out "Sign in"
+ * link and the signed-in avatar menu. Both render in the markup; the avatar
+ * `<details>` carries `hidden` until `header-enhancer.astro` confirms a live
+ * cloud session, then toggles `hidden` on each. `[hidden]` on either element
+ * fully removes it from layout, so only one is ever visible.
+ */
+.nav-account {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+/* Sign in — an outlined pill so it sits beside the filled Download CTA
+   without competing with it as a second solid button. */
+.nav-signin {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.nav-signin:hover,
+.nav-signin:focus-visible {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.nav-account [hidden] { display: none !important; }
+/* Sign-in focus scrim — dims the page (but not the header chrome at z-index
+   50/60) while the vela login popup is open, so the popup reads as a modal
+   step. Mounted/removed by the account block in `header-enhancer.astro`;
+   `.is-active` drives the fade. */
+.nav-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 10, 14, 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.nav-login-overlay.is-active { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-login-overlay { transition: none; }
+}
+/* Avatar menu — a borderless <details> whose summary is the avatar disc. */
+.nav-account-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 999px;
+}
+.nav-account-trigger::-webkit-details-marker { display: none; }
+.nav-account-trigger:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+}
+/* Circular avatar — a disc reads unmistakably as a user avatar. Dark tile +
+   single initial mirrors Open Design Cloud's identity styling. */
+.nav-avatar,
+.nav-avatar-fallback {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: block;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.nav-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1f1f1f;
+  color: #fafafa;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+/* Dropdown panel — mirrors `.locale-menu` so both header menus read as one
+   panel style (same border, radius, shadow, and entrance). */
+.nav-account-dropdown {
+  position: absolute;
+  top: calc(100% + var(--nav-flyout-gap, 12px));
+  right: 0;
+  z-index: 60;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(26, 26, 26, 0.08);
+  font-family: var(--sans);
+  letter-spacing: normal;
+  text-transform: none;
+  animation: locale-menu-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover bridge across the gap, like `.locale-menu::before`. */
+.nav-account-dropdown::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--nav-flyout-gap, 12px));
+  left: 0;
+  right: 0;
+  height: var(--nav-flyout-gap, 12px);
+}
+.nav-account-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.nav-account-name {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-account-name:empty { display: none; }
+.nav-account-email {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-account-email:empty { display: none; }
+.nav-account-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.2;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.nav-account-item:hover,
+.nav-account-item:focus-visible {
+  background: var(--coral-tint);
+  color: var(--ink);
+}
+.nav-account-signout {
+  color: var(--ink-mute);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-account-dropdown { animation: none; }
+}
 .topbar .pulse {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -680,20 +862,29 @@ body::before {
   letter-spacing: 0.04em;
 }
 
-/* AMR partner logo at the tail of the nav links (700×272 lockup scaled to
-   the bar). */
-.nav-links .nav-amr {
-  display: flex;
+/* Product / Resources are category labels, not pages — they render as
+   disclosure buttons that toggle their own dropdown instead of navigating
+   (Product used to bounce to the homepage, Resources to /blog/). Style the
+   button to read identically to the sibling <a> nav links, then reset the
+   native button chrome. */
+.nav-links .nav-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.18s ease;
+  position: relative;
+  display: inline-flex;
   align-items: center;
 }
-.nav-amr-logo {
-  display: block;
-  height: 22px;
-  width: auto;
-  opacity: 0.85;
-  transition: opacity 0.18s ease;
-}
-.nav-amr a:hover .nav-amr-logo { opacity: 1; }
+.nav-links .nav-trigger:hover { color: var(--coral); }
 
 /*
  * Product dropdown — CSS-only, no JS. The submenu is hidden by default and
@@ -1213,13 +1404,19 @@ body::before {
    (18px / 125%), weight 400 body, neutral 正文文字 #434343 (= --ink-soft),
    centered short emphasis text, --spacing-32 gap to the CTAs below. */
 .hero-lead {
+  /* Eyebrow / kicker carrying the SEO entry word ("Open Source Claude Design
+     Alternative", localized). Sits above the brand as a small emphasized label
+     rather than a body paragraph, so the H1 brand + positioning stays the
+     visual focus while the entry term remains crawlable HTML text. */
   max-width: 760px;
-  margin: 0 0 32px;
+  margin: 0 0 18px;
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.25;
-  font-weight: 400;
-  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--coral, var(--ink-soft));
   text-align: center;
 }
 /* Hero sub-line beneath the CTAs. Skill spec: Albert Sans, --font-size-16
@@ -1349,6 +1546,19 @@ body::before {
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--ink);
+}
+.hero-title-main {
+  /* Category positioning line ("The Vibe Design Workspace") — the product's
+     own umbrella term and the primary on-page positioning. Sits between the
+     brand slab above and the SEO entry-word sub-line below in the visual
+     hierarchy: sans display face, prominent but a step down from the brand. */
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(22px, 4.8vw, 40px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-top: 0.14em;
 }
 .hero-title-sub {
   font-family: var(--sans);
@@ -2022,6 +2232,29 @@ section.tight { padding: 90px 0; }
 }
 /* Live caption laid over the the painting card baked into these about images. Uses
    container query units so the text scales in lockstep with the image width. */
+.cta-pair {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.faq-download {
+  margin-top: 30px;
+}
+.faq-download-note {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft, #595959);
+}
+.about-ctas {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+.about-panel:has(.about-panel-img) {
+  text-align: center;
+}
 .about-panel-img-captioned {
   position: relative;
   container-type: inline-size;
@@ -2054,6 +2287,14 @@ section.tight { padding: 90px 0; }
   display: block;
   width: 100%;
   height: auto;
+  /* Reserve the painting's real 1768×1144 box up front. Without an explicit
+     ratio the lazy-swap first renders the 1×1 placeholder as a full-width 1:1
+     SQUARE (~320px too tall, showing the browser's broken-image/alt glyph)
+     until the webp decodes, then snaps to the real ratio — a visible collapse
+     the tighter homepage lazy-load margin now exposes on slower connections.
+     A faint skeleton fill keeps the reserved box clean until the art paints. */
+  aspect-ratio: 1768 / 1144;
+  background: rgba(0, 0, 0, 0.04);
 }
 .about .footer-row {
   display: flex;
@@ -2248,6 +2489,18 @@ section.tight { padding: 90px 0; }
   gap: clamp(28px, 4vw, 72px);
   /* Top-align both columns so the art's top edge lines up with the first step. */
   align-items: start;
+}
+.cap-steps-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(20px, 3vh, 36px);
+}
+.cap-steps-link {
+  margin-top: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
 }
 .cap-steps {
   display: flex;
@@ -2617,6 +2870,17 @@ section.tight { padding: 90px 0; }
   margin-bottom: 24px;
 }
 .labs-head h2 { font-size: 48px; text-align: center; }
+/* Keyword-rich lead under the "What can you make" heading — centered section
+   subtitle, one step down from the display H2. */
+.labs-head .labs-lead {
+  max-width: 720px;
+  margin: 14px auto 0;
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ink-soft, var(--ink));
+  text-align: center;
+}
 /* Unify the title color: the trailing ？ stays ink like the rest of the line
    instead of the global coral dot. */
 .labs-head .display .dot { color: inherit; }
@@ -2857,10 +3121,16 @@ section.tight { padding: 90px 0; }
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/lab-stage-art.webp') center / cover no-repeat;
+  /* Image (453KB) is withheld until `.lab-stage` nears the viewport — see
+     `precise-lazyload.astro` (`data-precise-bg`) — so this below-fold backdrop
+     stops competing with the hero LCP for bandwidth. */
+  background: center / cover no-repeat;
   opacity: 0.8;
   z-index: 0;
   pointer-events: none;
+}
+.lab-stage.precise-bg-in::before {
+  background-image: url('/lab-stage-art.webp?v=2');
 }
 @media (max-width: 880px) {
   /* Two mobile bugs fixed here:
@@ -4346,8 +4616,14 @@ section.tight { padding: 90px 0; }
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/cta-bg.webp?v=2') center / cover no-repeat;
+  /* Image (335KB) is withheld until `.cta-dance` nears the viewport — see
+     `precise-lazyload.astro` (`data-precise-bg`) — so this far-below-fold CTA
+     mural stops competing with the hero LCP for bandwidth. */
+  background: center / cover no-repeat;
   z-index: 0;
+}
+.cta-dance.precise-bg-in::before {
+  background-image: url('/cta-bg.webp?v=3');
 }
 /* Open Design Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
@@ -4698,6 +4974,17 @@ section.tight { padding: 90px 0; }
   color: var(--paper);
   border-color: var(--ink);
 }
+.faq-more {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.faq-more a {
+  color: var(--coral, var(--accent, inherit));
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+}
+.faq-more a:hover { border-bottom-color: currentColor; }
 .faq-a {
   grid-column: 2 / 3;
   margin: 0 0 16px;
@@ -4885,6 +5172,7 @@ footer .container {
 }
 
 /* Shared compact footer used by sub-pages and mirrored on the homepage. */
+
 .sub-footer {
   border-top: 1px solid var(--line);
   background: var(--paper);
@@ -4903,6 +5191,15 @@ footer .container {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 28px;
   margin-bottom: 36px;
+  align-items: start;
+}
+/* A grid cell that stacks two short nav sections vertically so the sub-page
+   footer's eight sections fit the 7-track grid without a section orphaning
+   onto a second row (used for Community + Company in site-footer.astro). */
+.sub-footer-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 .sub-footer-col h5 {
   font-family: var(--mono);
@@ -5219,8 +5516,11 @@ footer .container {
     border-bottom: 1px solid rgba(26, 26, 26, 0.06);
   }
   .nav-links li:last-child { border-bottom: none; }
-  .nav-links a {
+  .nav-links a,
+  .nav-links .nav-trigger {
     display: block;
+    width: 100%;
+    text-align: left;
     padding: 14px 0;
     font-size: 16px;
   }

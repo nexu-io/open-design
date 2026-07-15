@@ -14,20 +14,27 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { hasOdCard } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
+import { startersForProduct, type ProductType } from '../onboarding/recommendation';
+import { starterCopyFor } from '../onboarding/starter-copy';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
   findDesignToolboxSkill,
   getDesignToolboxAction,
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
+import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
+import { takeComposerSeedFor } from '../state/libraryHandoff';
+import { splitOnQuestionForms } from '../artifacts/question-form';
+import { stripArtifact } from '../artifacts/strip';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
@@ -38,16 +45,25 @@ import {
 } from '../design-system-auto-prompt';
 import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
-import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
+import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
+import type { BrandBrowserAssistConfirm } from './OdCard';
+import {
+  DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
+  type NextStepActionsVariant,
+} from './NextStepActions';
 import { AmrGuidance } from './AmrGuidance';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
-import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import {
+  amrPlansUrlForProfile,
+  amrRechargeUrlForProfile,
+  resolveRunFailureUi,
+} from '../runtime/amr-guidance';
 import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
@@ -56,8 +72,10 @@ import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   ChatComposer,
   type ChatComposerHandle,
+  type ChatSendOutcome,
   type ChatSendMeta,
 } from './ChatComposer';
+import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
@@ -76,7 +94,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 // Starter sets are picked per project kind (and per video model) so a
 // fresh seedance video, a hyperframes html-in-canvas video, an image
 // project and an audio project each see relevant prompts instead of the
-// generic prototype trio. The default (prototype/deck/template/other/
+// generic starter set. The default (prototype/deck/template/other/
 // live-artifact) set stays i18n-translated via existing chat.example*
 // keys so the user-facing copy keeps its localizations. The new media
 // sets are inline English literals — they are technical agent prompts
@@ -85,6 +103,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type StarterPrompt = {
   icon: string;
   title: string;
+  // Empty for path-scoped onboarding starters, which have no category tag.
   tag: string;
   prompt: string;
 };
@@ -112,6 +131,12 @@ const DEFAULT_STARTER_KEYS: Array<{
     titleKey: 'chat.example3Title',
     tagKey: 'chat.example3Tag',
     promptKey: 'chat.example3Prompt',
+  },
+  {
+    icon: '▶',
+    titleKey: 'chat.example4Title',
+    tagKey: 'chat.example4Tag',
+    promptKey: 'chat.example4Prompt',
   },
 ];
 
@@ -464,7 +489,7 @@ interface Props {
     attachments: ChatAttachment[],
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
-  ) => void;
+  ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onRetry?: (assistantMessage: ChatMessage) => void;
   onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
@@ -494,10 +519,18 @@ interface Props {
   // time before the full `tool_use` arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
+  // Product path of the Home recommendation that started this project. When
+  // set (and concrete), the empty-conversation starter cards show that path's
+  // starters — one-click composer replacements — instead of the generic set.
+  onboardingStarterPath?: ProductType | null;
+  composerPlaceholder?: string;
   // Focus the right-hand Questions tab from the chat banner.
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
+  // Client-side action for a brand-browser-assist od-card: open/focus the
+  // Browser tab. Routed through the stable callbacks ref.
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   // "Next step" affordance handlers forwarded to the last assistant message.
   // The featured design-toolbox rows are driven directly off the composer ref
   // owned here, so they need no handler from ProjectView (unlike onArtifactShare).
@@ -554,6 +587,33 @@ interface Props {
   // it does based on connector status (open Connectors, or prefill the composer
   // with the import instruction).
   onConnectRepo?: () => void;
+  // True once the deterministic brand extraction actually reached ready. Until
+  // then the next-step card must stay on continue/recover actions even if the
+  // latest assistant row is terminal.
+  brandExtractionComplete?: boolean;
+  // True for a programmatically-extracted brand project whose AI enrichment
+  // never ran. The next-step card uses this to offer AI Optimize after the
+  // extraction completion message.
+  brandEnrichmentEligible?: boolean;
+  // Runs the optional brand-enrichment turn. The parent sends the project's
+  // seeded enrichment prompt with the default per-turn skill bundle.
+  onContinueBrandEnrichment?: () => void;
+  brandEnrichmentBusy?: boolean;
+  // Runs or resumes the selected agent for an incomplete brand extraction
+  // scaffold. Distinct from AI Optimize, which assumes a ready system exists.
+  onContinueBrandAgentExtraction?: () => void;
+  continueBrandAgentExtractionBusy?: boolean;
+  // Restarts the deterministic programmatic pass for an incomplete brand
+  // extraction without creating a duplicate design-system item.
+  onContinueBrandExtraction?: () => void;
+  continueBrandExtractionBusy?: boolean;
+  // Creates a fresh design project using the current extracted design system.
+  onCreateDesignFromActiveDesignSystem?: () => void;
+  createDesignFromActiveDesignSystemBusy?: boolean;
+  // Duplicates a regular project into a new design-system workspace and starts
+  // the design-system generation pass from that copied evidence.
+  onCreateDesignSystemFromProject?: () => void;
+  createDesignSystemFromProjectBusy?: boolean;
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
@@ -566,6 +626,7 @@ interface Props {
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
+  initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
@@ -597,6 +658,10 @@ interface Props {
   currentDesignSystemId?: string | null;
   onActiveDesignSystemChange?: (project: Project) => void;
   onShowToast?: (message: string) => void;
+  // Optional transient UI owned by the project shell. Rendering it inside the
+  // scroll-area wrapper keeps it structurally above the variable-height
+  // composer instead of guessing a bottom offset from outside ChatPane.
+  chatLogTray?: ReactNode;
   // Project header slot. The former standalone chrome header row was removed;
   // its back button, project title (editable) and design-system picker moved
   // into the top of the chat pane. ProjectView owns the project record so it
@@ -651,6 +716,62 @@ interface QueuedSendUpdate {
 // Gap left above the anchored user message when it is pinned to the top.
 const ANCHOR_TOP_PADDING = 12;
 
+function shouldHideEmptyBrandAssistantMessage(message: ChatMessage, metadata?: ProjectMetadata): boolean {
+  if (metadata?.importedFrom !== 'brand-extraction' && metadata?.kind !== 'brand') return false;
+  if (message.role !== 'assistant') return false;
+  if (brandAssistantTextHasVisibleContent(message.content)) return false;
+  if ((message.events ?? []).some(hasVisibleBrandAssistantEvent)) return false;
+  if ((message.producedFiles?.length ?? 0) > 0) return false;
+  return Boolean(message.runStatus || message.endedAt);
+}
+
+function brandAssistantTextHasVisibleContent(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  if (hasOdCard(trimmed)) return true;
+  const withoutArtifacts = stripArtifact(trimmed).trim();
+  if (!withoutArtifacts) return false;
+  return splitOnQuestionForms(withoutArtifacts).some((segment) => {
+    if (segment.kind === 'form') return true;
+    return segment.text.trim().length > 0;
+  });
+}
+
+const HIDDEN_BRAND_ASSISTANT_STATUS_LABELS = new Set([
+  'streaming',
+  'starting',
+  'running',
+  'requesting',
+  'thinking',
+  'empty_response',
+  'done',
+  'completed',
+]);
+
+function hasVisibleBrandAssistantEvent(event: NonNullable<ChatMessage['events']>[number]): boolean {
+  switch (event.kind) {
+    case 'text':
+      return brandAssistantTextHasVisibleContent(event.text);
+    case 'thinking':
+      return event.text.trim().length > 0;
+    case 'tool_use':
+    case 'live_artifact':
+    case 'live_artifact_refresh':
+    case 'plugin_candidate':
+      return true;
+    case 'tool_result':
+      return false;
+    case 'raw':
+      return false;
+    case 'status':
+      return !HIDDEN_BRAND_ASSISTANT_STATUS_LABELS.has(event.label);
+    case 'usage':
+    case 'diagnostic':
+    case 'conversation_title':
+      return false;
+  }
+}
+
 export function ChatPane({
   messages,
   streaming,
@@ -692,9 +813,12 @@ export function ChatPane({
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
+  onboardingStarterPath = null,
+  composerPlaceholder,
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onArtifactDownload,
   onForkFromMessage,
@@ -718,6 +842,18 @@ export function ChatPane({
   connectRepoNeeded,
   githubConnected,
   onConnectRepo,
+  brandExtractionComplete = false,
+  brandEnrichmentEligible,
+  onContinueBrandEnrichment,
+  brandEnrichmentBusy,
+  onContinueBrandAgentExtraction,
+  continueBrandAgentExtractionBusy,
+  onContinueBrandExtraction,
+  continueBrandExtractionBusy,
+  onCreateDesignFromActiveDesignSystem,
+  createDesignFromActiveDesignSystemBusy,
+  onCreateDesignSystemFromProject,
+  createDesignSystemFromProjectBusy,
   composerDraftSignal,
   petConfig,
   onAdoptPet,
@@ -726,6 +862,7 @@ export function ChatPane({
   projectMetadata,
   onProjectMetadataChange,
   activeWorkspaceContext,
+  initialWorkspaceContexts = [],
   workspaceContexts = [],
   currentSkillId = null,
   onProjectSkillChange,
@@ -746,6 +883,7 @@ export function ChatPane({
   currentDesignSystemId,
   onActiveDesignSystemChange,
   onShowToast,
+  chatLogTray,
   onBack,
   backLabel,
   projectHeader,
@@ -754,6 +892,10 @@ export function ChatPane({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const displayMessages = useMemo(
+    () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    [messages, projectMetadata],
+  );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -784,8 +926,8 @@ export function ChatPane({
   // shouldn't be yanked back the moment the next chunk streams in.
   const pinnedToBottomRef = useRef(true);
   const scrolledToFormRef = useRef<Set<string>>(new Set());
-  const refreshInlineAmrLoginStatus = useCallback(async () => {
-    const next = await fetchVelaLoginStatus().catch(() => null);
+  const refreshInlineAmrLoginStatus = useCallback(async (options: { refresh?: boolean } = {}) => {
+    const next = await fetchVelaLoginStatus(options).catch(() => null);
     if (next) setInlineAmrLoginStatus(next);
     return next;
   }, []);
@@ -800,6 +942,19 @@ export function ChatPane({
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onAmrLoginStatusChange);
     return () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onAmrLoginStatusChange);
+    };
+  }, [refreshInlineAmrLoginStatus]);
+
+  useEffect(() => {
+    const refreshAfterExternalAmrReturn = () => {
+      if (document.visibilityState === 'hidden') return;
+      void refreshInlineAmrLoginStatus({ refresh: true });
+    };
+    window.addEventListener('focus', refreshAfterExternalAmrReturn);
+    document.addEventListener('visibilitychange', refreshAfterExternalAmrReturn);
+    return () => {
+      window.removeEventListener('focus', refreshAfterExternalAmrReturn);
+      document.removeEventListener('visibilitychange', refreshAfterExternalAmrReturn);
     };
   }, [refreshInlineAmrLoginStatus]);
 
@@ -821,19 +976,31 @@ export function ChatPane({
   // excluded from its memo comparison (so streaming doesn't re-render every
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
-  const assistantCallbacksRef = useRef({
+  const assistantCallbacksRef = useRef<AssistantCallbacks>({
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
+    onNextStepAiOptimize: onContinueBrandEnrichment,
+    onNextStepContinueExtraction: onContinueBrandExtraction,
+    onNextStepContinueAiExtraction: onContinueBrandAgentExtraction,
+    onNextStepCreateDesign: onCreateDesignFromActiveDesignSystem,
+    onNextStepCreateDesignSystem: onCreateDesignSystemFromProject,
   });
   assistantCallbacksRef.current = {
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
+    onNextStepAiOptimize: onContinueBrandEnrichment,
+    onNextStepContinueExtraction: onContinueBrandExtraction,
+    onNextStepContinueAiExtraction: onContinueBrandAgentExtraction,
+    onNextStepCreateDesign: onCreateDesignFromActiveDesignSystem,
+    onNextStepCreateDesignSystem: onCreateDesignSystemFromProject,
   };
   // Featured design-toolbox follow-up rows on the assistant "next step" card.
   // The toolbox left the "+" menu, so these route straight into the composer
@@ -842,9 +1009,39 @@ export function ChatPane({
   const handleToolboxAction = useCallback((id: DesignToolboxActionId) => {
     composerRef.current?.applyDesignToolboxAction(id);
   }, []);
+  const handleNextStepPromptAction = useCallback((
+    prompt: string,
+    options?: { sessionMode?: ChatSessionMode },
+  ) => {
+    if (options?.sessionMode && options.sessionMode !== sessionMode) {
+      onSessionModeChange?.(options.sessionMode);
+    }
+    composerRef.current?.setDraft(prompt, {
+      entryFrom: 'next_step',
+      sessionMode: options?.sessionMode,
+    });
+  }, [onSessionModeChange, sessionMode]);
   const handlePickSkill = useCallback((skillId: string) => {
     composerRef.current?.applyDesignToolboxSkill(skillId);
   }, []);
+  const latestAssistantForBrandState = useMemo(() => {
+    for (let i = displayMessages.length - 1; i >= 0; i -= 1) {
+      const message = displayMessages[i]!;
+      if (message.role === 'assistant') return message;
+    }
+    return null;
+  }, [displayMessages]);
+  const nextStepVariant: NextStepActionsVariant = sessionMode === 'plan'
+    ? 'plan'
+    : isDesignSystemNextStepProject(projectMetadata)
+      ? isBrandExtractionNextStepProject(projectMetadata)
+        ? brandExtractionComplete
+          ? 'brand-extraction'
+          : !latestAssistantForBrandState || isProgrammaticBrandAssistantMessage(latestAssistantForBrandState)
+            ? 'brand-programmatic-incomplete'
+            : 'brand-ai-incomplete'
+        : 'design-system'
+      : 'default';
   // The `@skill` shown in each featured row's hover detail — matched the same
   // way the composer matches it, using the raw skill name (what gets inlined
   // into the draft). Recomputed only when the skill list changes.
@@ -856,6 +1053,79 @@ export function ChatPane({
     }
     return map;
   }, [skills]);
+  const blankProjectComposerScenarios = useMemo<PlaceholderScenario[]>(
+    () => pickStarters(projectMetadata, t).map((starter, index) => ({
+      id: `blank-${projectMetadata?.kind ?? 'prototype'}-${index}`,
+      text: starter.prompt,
+      chipId: 'project',
+    })),
+    [projectMetadata, t],
+  );
+  // Empty-conversation starter cards. A recommendation-started project shows
+  // its OWN product path's starters — clicking replaces the composer draft, so
+  // the pre-filled first request and the cards complement rather than compete.
+  // The general fallback path and every other project keep the generic set.
+  const starterTemplateCards = useMemo<StarterPrompt[]>(() => {
+    if (onboardingStarterPath && onboardingStarterPath !== 'general') {
+      return startersForProduct(onboardingStarterPath).map((starter) => {
+        const copy = starterCopyFor(starter.id);
+        return { icon: '✦', title: t(copy.title), tag: '', prompt: t(copy.firstPrompt) };
+      });
+    }
+    return pickStarters(projectMetadata, t);
+  }, [onboardingStarterPath, projectMetadata, t]);
+  const followUpComposerScenarios = useMemo<PlaceholderScenario[]>(() => {
+    if (nextStepVariant === 'design-system') {
+      return DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => ({
+        id: action.id,
+        text: action.prompt,
+        chipId: 'design-system',
+      }));
+    }
+    if (nextStepVariant === 'plan') {
+      return [
+        {
+          id: 'plan-generate-from-doc',
+          text: t('nextStep.planGeneratePrompt'),
+          chipId: 'plan',
+          sessionMode: 'design',
+        },
+        {
+          id: 'plan-improve-doc',
+          text: t('nextStep.planImprovePrompt'),
+          chipId: 'plan',
+          sessionMode: 'plan',
+        },
+      ];
+    }
+    const promptPairs: Array<[string, string]> = [
+      ['auto-match', t('chat.designToolbox.prompt.autoMatchIntro')],
+      ['visual-polish', t('chat.designToolbox.prompt.visualPolish')],
+      ['asset-search', t('chat.designToolbox.prompt.assetSearch')],
+      ['icon-workflow', t('chat.designToolbox.prompt.iconWorkflow')],
+      ['anti-ai-polish', t('chat.designToolbox.prompt.antiAiPolish')],
+      ['motion-polish', t('chat.designToolbox.prompt.motionPolish')],
+      ['chart-gen', t('chat.designToolbox.prompt.chartGen')],
+    ];
+    return promptPairs.map(([id, text]) => ({
+      id: `follow-up-${id}`,
+      text,
+      chipId: 'design-toolbox',
+    }));
+  }, [nextStepVariant, t]);
+  const composerPlaceholderScenarios = useMemo<PlaceholderScenario[]>(() => {
+    if (loading || initialDraft?.trim()) return [];
+    if (displayMessages.length === 0 && queuedItems.length === 0) return blankProjectComposerScenarios;
+    if (displayMessages.length > 0) return followUpComposerScenarios;
+    return [];
+  }, [
+    blankProjectComposerScenarios,
+    displayMessages.length,
+    followUpComposerScenarios,
+    initialDraft,
+    loading,
+    queuedItems.length,
+  ]);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
@@ -874,15 +1144,15 @@ export function ChatPane({
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]!.role === 'assistant') return messages[i]!.id;
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      if (displayMessages[i]!.role === 'assistant') return displayMessages[i]!.id;
     }
     return undefined;
-  }, [messages]);
-  const hasActiveRunMessage = messages.some(
+  }, [displayMessages]);
+  const hasActiveRunMessage = displayMessages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
-  const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const retryAssistant = retryableAssistantMessage(displayMessages, lastAssistantId, streaming);
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
   // `error` state. Drive both off this event.
@@ -897,7 +1167,11 @@ export function ChatPane({
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
   const runFailureUi = retryAssistant
-    ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
+    ? resolveRunFailureUi(
+        failedRunErrorEvent?.code,
+        failedRunErrorEvent?.failureDetail,
+        retryAssistant.agentId,
+      )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
     retryAssistant && onRetry && runFailureUi?.primaryAction === 'authorize',
@@ -957,7 +1231,14 @@ export function ChatPane({
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
-  const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
+  // Friendly agent name for {agent} interpolation in failure copy (e.g. the
+  // sign-in messages). Falls back to a neutral word when unreadable, never null.
+  const failedAgentLabel =
+    agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
+    t('chat.runError.agentFallback');
+  const displayError = runFailureUi?.messageKey
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
         message: displayError,
@@ -970,7 +1251,24 @@ export function ChatPane({
         agentId: retryAssistant?.agentId,
       })
     : null;
+  // First non-empty line of the diagnostics — shown as the one-line peek when
+  // the error-source area is collapsed.
+  const errorSourcePeek =
+    errorDiagnosticText?.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
+  // Status-dot tone for the unified card. Brand (accent) for AMR sign-in/top-up
+  // — the commercial recovery path; warn (amber) for the self-healing
+  // connection drop; error (red) for everything else. Purely visual.
+  const runErrorTone: 'error' | 'warn' | 'brand' =
+    runFailureUi?.primaryAction === 'authorize' ||
+    runFailureUi?.primaryAction === 'recharge' ||
+    runFailureUi?.primaryAction === 'upgrade'
+      ? 'brand'
+      : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
+        ? 'warn'
+        : 'error';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
+  // Collapsed by default: the error source area shows one line until expanded.
+  const [errorSourceOpen, setErrorSourceOpen] = useState(false);
   const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
   const copyErrorDiagnostic = useCallback(async () => {
     if (!errorDiagnosticText) return;
@@ -1013,8 +1311,19 @@ export function ChatPane({
         }
       : null;
   const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
-  const showErrorActions =
-    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
+  // A `primaryAction: 'none'` failure (e.g. a hard quota where retrying is
+  // futile) contributes no button of its own — it relies on the AMR switch card
+  // below. Only claim the actions row when a real control will render, so a
+  // no-action card doesn't leave an empty flex row (and a dangling column gap).
+  const runFailureHasAction = Boolean(
+    retryAssistant &&
+      onRetry &&
+      runFailureUi &&
+      (runFailureUi.primaryAction !== 'none' ||
+        runFailureUi.secondaryRetry ||
+        canResumeFailedRun),
+  );
+  const showErrorActions = showByokRecoveryCta || runFailureHasAction;
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
@@ -1071,29 +1380,29 @@ export function ChatPane({
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
   const firstUserMessageId = useMemo(
-    () => messages.find((m) => m.role === 'user')?.id,
-    [messages],
+    () => displayMessages.find((m) => m.role === 'user')?.id,
+    [displayMessages],
   );
   const shouldBalanceFinishedTranscript =
     !loading &&
     !streaming &&
     !displayError &&
     !hasActiveRunMessage &&
-    messages.length > 0;
+    displayMessages.length > 0;
   // Map each assistant message id to the user message that follows it (if any)
   // so the chat-side Questions banner can reopen that exact answered form in
   // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
-    for (let i = 0; i < messages.length - 1; i++) {
-      const m = messages[i]!;
-      const next = messages[i + 1]!;
+    for (let i = 0; i < displayMessages.length - 1; i++) {
+      const m = displayMessages[i]!;
+      const next = displayMessages[i + 1]!;
       if (m.role === 'assistant' && next.role === 'user') {
         map.set(m.id, next.content);
       }
     }
     return map;
-  }, [messages]);
+  }, [displayMessages]);
 
   useEffect(() => {
     didInitialScrollRef.current = false;
@@ -1140,6 +1449,22 @@ export function ChatPane({
     composerRef.current?.setDraft(composerDraftSignal.text);
   }, [composerDraftSignal]);
 
+  // Library "optimize design system" hand-off: when the user pushed selected
+  // assets into this project's design system from the Library, pre-fill the
+  // composer with the query + those assets (as attachment chips) so they only
+  // need to review and Send. Fires once, after the composer mounts for the
+  // routed conversation; re-checks on conversation change so an async-loaded
+  // composer still gets seeded. The seed is consumed (cleared) on apply.
+  const seededComposerSeedRef = useRef(false);
+  useEffect(() => {
+    if (seededComposerSeedRef.current) return;
+    if (!projectId || !composerRef.current) return;
+    const seed = takeComposerSeedFor(projectId);
+    if (!seed) return;
+    seededComposerSeedRef.current = true;
+    composerRef.current.restoreDraft({ text: seed.text, attachments: seed.attachments });
+  }, [projectId, activeConversationId]);
+
   useEffect(() => {
     if (!editingQueuedSendId) return;
     if (queuedItems.some((item) => item.id === editingQueuedSendId)) return;
@@ -1158,12 +1483,12 @@ export function ChatPane({
 
   useEffect(() => {
     const el = logRef.current;
-    if (!el || didInitialScrollRef.current || messages.length === 0) return;
+    if (!el || didInitialScrollRef.current || displayMessages.length === 0) return;
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user sees the form first.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1190,7 +1515,7 @@ export function ChatPane({
     // didInitialScrollRef while the chat-log is unmounted; this effect
     // then re-runs when the user returns to Chat and the element is
     // available, scrolling the new conversation to its initial bottom.
-  }, [activeConversationId, messages.length, tab]);
+  }, [activeConversationId, displayMessages, tab]);
 
   // When a turn finishes streaming, release the anchor-to-top reserve. The
   // tail spacer only exists to give a streaming reply room to grow while the
@@ -1229,7 +1554,7 @@ export function ChatPane({
 
     // A brand-new user turn from a local send: switch to "anchor to top"
     // mode and smooth-scroll their message to the top of the viewport.
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const lastUser = [...displayMessages].reverse().find((m) => m.role === 'user');
     const prevUserId = prevLastUserIdRef.current;
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
@@ -1255,7 +1580,7 @@ export function ChatPane({
     if (pinnedToBottomRef.current) {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user lands on the form.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1277,7 +1602,7 @@ export function ChatPane({
       // breaking auto-follow for subsequent chunks.
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, error, streaming]);
+  }, [displayMessages, error, streaming]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
@@ -1691,6 +2016,8 @@ export function ChatPane({
       streaming={streaming}
       sendDisabled={sendDisabled}
       initialDraft={initialDraft}
+      composerPlaceholder={composerPlaceholder}
+      placeholderScenarios={composerPlaceholderScenarios}
       draftStorageKey={composerDraftStorageKey}
       onEnsureProject={onEnsureProject}
       commentAttachments={commentsToAttachments(attachedComments)}
@@ -1718,7 +2045,15 @@ export function ChatPane({
         anchorActiveRef.current = false;
         resetTailSpacer();
         anchorPendingRef.current = true;
-        onSend(prompt, attachments, commentAttachments, meta);
+        const outcome = onSend(prompt, attachments, commentAttachments, meta);
+        if (outcome instanceof Promise) {
+          return outcome.then((result) => {
+            if (result === 'restore-draft') anchorPendingRef.current = false;
+            return result;
+          });
+        }
+        if (outcome === 'restore-draft') anchorPendingRef.current = false;
+        return outcome;
       }}
       onStop={onStop}
       onOpenSettings={onOpenSettings}
@@ -1733,6 +2068,7 @@ export function ChatPane({
       projectMetadata={projectMetadata}
       onProjectMetadataChange={onProjectMetadataChange}
       activeWorkspaceContext={activeWorkspaceContext}
+      initialWorkspaceContexts={initialWorkspaceContexts}
       workspaceContexts={workspaceContexts}
       byokApiProtocol={byokApiProtocol}
       byokImageModel={byokImageModel}
@@ -1816,12 +2152,12 @@ export function ChatPane({
               <div className="chat-history-menu-head">
                 <span className="chat-history-menu-title">
                   {t('chat.conversationsHeading')}
-                </span>
-                <span className="chat-history-menu-count">
-                  <span data-testid="conversation-history-count">
-                  {filteredConversations.length === conversations.length
-                    ? compactCount(conversations.length)
-                    : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                  <span className="chat-history-menu-count">
+                    <span data-testid="conversation-history-count">
+                    {filteredConversations.length === conversations.length
+                      ? compactCount(conversations.length)
+                      : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                    </span>
                   </span>
                 </span>
                 {onNewConversation ? (
@@ -1898,7 +2234,7 @@ export function ChatPane({
       </div>
       {tab === 'chat' ? (
         <>
-          <div className="chat-log-wrap">
+          <div className={`chat-log-wrap${chatLogTray ? ' has-chat-log-tray' : ''}`}>
             <div
               className={[
                 'chat-log',
@@ -1926,7 +2262,7 @@ export function ChatPane({
               }}
             >
               {loading ? <ChatConversationLoading t={t} /> : null}
-              {messages.length === 0 && !loading ? (
+              {displayMessages.length === 0 && !loading ? (
                 <div className="chat-empty-wrap">
                   {showImportedFolderArtifacts ? (
                     <ImportedFolderArtifacts
@@ -1943,7 +2279,7 @@ export function ChatPane({
                         </span>
                       </div>
                       <div className="chat-examples" role="list">
-                        {pickStarters(projectMetadata, t).map((ex, i) => (
+                        {starterTemplateCards.map((ex, i) => (
                           <button
                             key={`${ex.title}-${i}`}
                             type="button"
@@ -1966,7 +2302,9 @@ export function ChatPane({
                             <span className="chat-example-body">
                               <span className="chat-example-head">
                                 <span className="chat-example-title">{ex.title}</span>
-                                <span className="chat-example-tag">{ex.tag}</span>
+                                {ex.tag ? (
+                                  <span className="chat-example-tag">{ex.tag}</span>
+                                ) : null}
                               </span>
                               <span className="chat-example-prompt">{ex.prompt}</span>
                             </span>
@@ -1983,10 +2321,10 @@ export function ChatPane({
                           </span>
                           <span className="chat-connect-repo-body">
                             <span className="chat-connect-repo-title">
-                              {repoConnectCopy(githubConnected).cardTitle}
+                              {repoConnectCopy(t, githubConnected).cardTitle}
                             </span>
                             <span className="chat-connect-repo-text">
-                              {repoConnectCopy(githubConnected).cardBody}
+                              {repoConnectCopy(t, githubConnected).cardBody}
                             </span>
                           </span>
                           <button
@@ -1996,7 +2334,7 @@ export function ChatPane({
                             onClick={() => onConnectRepo?.()}
                           >
                             <Icon name="github" size={13} />
-                            {repoConnectCopy(githubConnected).buttonLabel}
+                            {repoConnectCopy(t, githubConnected).buttonLabel}
                           </button>
                         </div>
                       ) : null}
@@ -2005,7 +2343,7 @@ export function ChatPane({
                 </div>
               ) : null}
               <ChatRows
-                messages={messages}
+                messages={displayMessages}
                 streaming={streaming}
                 liveToolInput={liveToolInput}
                 projectId={projectId}
@@ -2013,6 +2351,7 @@ export function ChatPane({
                 activeConversationId={activeConversationId}
                 activeConversationKey={activeConversationId ?? 'no-conversation'}
                 projectFiles={projectFiles}
+                projectMetadata={projectMetadata}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
                 onRequestPluginDetails={onRequestPluginDetails}
@@ -2032,12 +2371,25 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
+                onNextStepPromptAction={handleNextStepPromptAction}
+                onNextStepAiOptimize={onContinueBrandEnrichment}
+                nextStepAiOptimizeBusy={brandEnrichmentBusy}
+                onNextStepContinueExtraction={onContinueBrandExtraction}
+                nextStepContinueExtractionBusy={continueBrandExtractionBusy}
+                onNextStepContinueAiExtraction={onContinueBrandAgentExtraction}
+                nextStepContinueAiExtractionBusy={continueBrandAgentExtractionBusy}
+                onNextStepCreateDesign={onCreateDesignFromActiveDesignSystem}
+                nextStepCreateDesignBusy={createDesignFromActiveDesignSystemBusy}
+                onNextStepCreateDesignSystem={onCreateDesignSystemFromProject}
+                nextStepCreateDesignSystemBusy={createDesignSystemFromProjectBusy}
                 onPickSkill={handlePickSkill}
                 onArtifactDownload={onArtifactDownload}
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
+                nextStepVariant={nextStepVariant}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -2046,10 +2398,63 @@ export function ChatPane({
                 scrollContainerRef={logRef}
               />
               {displayError ? (
-                <div className="msg error">
-                  <span className="chat-error-text">{displayError}</span>
-                  {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
-                    <div className="chat-error-actions">
+                <div className="run-error" data-tone={runErrorTone}>
+                  {/* ① type title + ② detail */}
+                  <div className="run-error__main">
+                    <span className="run-error__icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
+                        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <div className="run-error__copy">
+                      {runFailureUi ? (
+                        <p className="run-error__title">{t(runFailureUi.titleKey)}</p>
+                      ) : null}
+                      <p className="run-error__desc">{displayError}</p>
+                    </div>
+                  </div>
+                  {/* ④ collapsible error source */}
+                  {errorDiagnosticText ? (
+                    <div className={`run-error__source${errorSourceOpen ? ' is-open' : ''}`}>
+                      <div className="run-error__source-head">
+                        <button
+                          type="button"
+                          className="run-error__source-bar"
+                          aria-expanded={errorSourceOpen}
+                          aria-label={
+                            errorSourceOpen
+                              ? t('chat.runError.sourceCollapseAria')
+                              : t('chat.runError.sourceExpandAria')
+                          }
+                          onClick={() => setErrorSourceOpen((open) => !open)}
+                        >
+                          <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
+                            <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <span className="run-error__source-label">{t('chat.runError.sourceLabel')}</span>
+                          {errorSourcePeek ? (
+                            <span className="run-error__source-peek">{errorSourcePeek}</span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="run-error__source-copy"
+                          onClick={() => void copyErrorDiagnostic()}
+                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                        >
+                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
+                        </button>
+                      </div>
+                      <div className="run-error__source-full">
+                        <pre>{errorDiagnosticText}</pre>
+                      </div>
+                    </div>
+                  ) : null}
+                  {/* ③ fix actions */}
+                  {showErrorActions ? (
+                    <div className="run-error__actions">
                       {showByokRecoveryCta ? (
                         <button
                           type="button"
@@ -2057,17 +2462,6 @@ export function ChatPane({
                           onClick={onSwitchToLocalCli}
                         >
                           {t('avatar.useLocal')}
-                        </button>
-                      ) : null}
-                      {errorDiagnosticText ? (
-                        <button
-                          type="button"
-                          className="ghost chat-error-copy"
-                          onClick={() => void copyErrorDiagnostic()}
-                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                        >
-                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
                         </button>
                       ) : null}
                       {retryAssistant && onRetry && runFailureUi ? (
@@ -2082,11 +2476,15 @@ export function ChatPane({
                               signInLabel={t('chat.amrError.authorizeCta')}
                               amrEntrySourceDetail="chat_error_authorize_retry"
                               initialStatus={inlineAmrLoginStatus}
+                              skipInitialRefresh
                               metricsConsent={config?.telemetry?.metrics === true}
                               installationId={config?.installationId}
                               showActivationDetails
                               hideSignedOutStatus
                               revealPendingCancelAction
+                              onSignInStarted={() => {
+                                amrAuthPrevLoggedInRef.current = false;
+                              }}
                               onStatusChange={(loginStatus) => {
                                 // Retry only on a real signed-out -> signed-in
                                 // transition (see amrAuthPrevLoggedInRef).
@@ -2169,6 +2567,39 @@ export function ChatPane({
                             >
                               {t('chat.amrError.rechargeCta')}
                             </button>
+                          ) : runFailureUi.primaryAction === 'upgrade' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_upgrade',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
+                                );
+                                const deviceId = amrHandoffDeviceId({
+                                  metricsConsent:
+                                    config?.telemetry?.metrics === true,
+                                  resolvedDeviceId: getResolvedDeviceId(),
+                                  installationId: config?.installationId,
+                                });
+                                window.open(
+                                  attributedAmrUrl(
+                                    amrPlansUrlForProfile(amrProfile),
+                                    attribution,
+                                    deviceId,
+                                  ),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }}
+                            >
+                              {t('chat.amrBalanceGate.plansCta')}
+                            </button>
                           ) : null}
                           {canResumeFailedRun ? (
                             // Resumable failure: continue the agent's existing
@@ -2223,6 +2654,7 @@ export function ChatPane({
                   the viewport, then shrinks as the reply streams in below. */}
               <div className="chat-log-tail-spacer" ref={tailSpacerRef} aria-hidden />
             </div>
+            {chatLogTray}
             {/* Always mounted so the CSS transition can play in both
                 directions; the `chat-jump-btn-active` class flips the
                 slide + opacity, and `aria-hidden` + `tabIndex={-1}`
@@ -2319,9 +2751,15 @@ interface AssistantCallbacks {
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
+  onBrandBrowserAssistConfirm: BrandBrowserAssistConfirm | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
+  onNextStepAiOptimize: (() => void) | undefined;
+  onNextStepContinueExtraction: (() => void) | undefined;
+  onNextStepContinueAiExtraction: (() => void) | undefined;
+  onNextStepCreateDesign: (() => void) | undefined;
+  onNextStepCreateDesignSystem: (() => void) | undefined;
 }
 
 type ChatRenderItem = {
@@ -2357,6 +2795,7 @@ function ChatRows({
   activeConversationId,
   activeConversationKey,
   projectFiles,
+  projectMetadata,
   projectFileNames,
   onRequestOpenFile,
   onRequestPluginDetails,
@@ -2376,12 +2815,25 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
+  onNextStepPromptAction,
+  onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
+  onNextStepContinueExtraction,
+  nextStepContinueExtractionBusy,
+  onNextStepContinueAiExtraction,
+  nextStepContinueAiExtractionBusy,
+  onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
+  onNextStepCreateDesignSystem,
+  nextStepCreateDesignSystemBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  nextStepVariant,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -2397,6 +2849,7 @@ function ChatRows({
   activeConversationId: string | null;
   activeConversationKey: string;
   projectFiles: ProjectFile[];
+  projectMetadata?: ProjectMetadata;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginDetails?: (pluginId: string) => void;
@@ -2416,12 +2869,28 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onNextStepPromptAction?: (
+    prompt: string,
+    options?: { sessionMode?: ChatSessionMode },
+  ) => void;
+  onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
+  onNextStepContinueExtraction?: () => void;
+  nextStepContinueExtractionBusy?: boolean;
+  onNextStepContinueAiExtraction?: () => void;
+  nextStepContinueAiExtractionBusy?: boolean;
+  onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
+  onNextStepCreateDesignSystem?: () => void;
+  nextStepCreateDesignSystemBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  nextStepVariant?: NextStepActionsVariant;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -2500,6 +2969,7 @@ function ChatRows({
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}
         projectFiles={projectFiles}
+        projectMetadata={projectMetadata}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
@@ -2517,6 +2987,11 @@ function ChatRows({
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
         onOpenQuestions={onOpenQuestions}
+        onBrandBrowserAssistConfirm={
+          onBrandBrowserAssistConfirm
+            ? (card) => assistantCallbacksRef.current.onBrandBrowserAssistConfirm?.(card)
+            : undefined
+        }
         onContinueRemainingTasks={
           m.id === lastAssistantId && onContinueRemainingTasks
             ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)
@@ -2539,10 +3014,42 @@ function ChatRows({
             : undefined
         }
         onToolboxAction={onToolboxAction}
+        onNextStepPromptAction={onNextStepPromptAction}
+        onNextStepAiOptimize={
+          onNextStepAiOptimize
+            ? () => assistantCallbacksRef.current.onNextStepAiOptimize?.()
+            : undefined
+        }
+        nextStepAiOptimizeBusy={nextStepAiOptimizeBusy}
+        onNextStepContinueExtraction={
+          onNextStepContinueExtraction
+            ? () => assistantCallbacksRef.current.onNextStepContinueExtraction?.()
+            : undefined
+        }
+        nextStepContinueExtractionBusy={nextStepContinueExtractionBusy}
+        onNextStepContinueAiExtraction={
+          onNextStepContinueAiExtraction
+            ? () => assistantCallbacksRef.current.onNextStepContinueAiExtraction?.()
+            : undefined
+        }
+        nextStepContinueAiExtractionBusy={nextStepContinueAiExtractionBusy}
+        onNextStepCreateDesign={
+          onNextStepCreateDesign
+            ? () => assistantCallbacksRef.current.onNextStepCreateDesign?.()
+            : undefined
+        }
+        nextStepCreateDesignBusy={nextStepCreateDesignBusy}
+        onNextStepCreateDesignSystem={
+          onNextStepCreateDesignSystem
+            ? () => assistantCallbacksRef.current.onNextStepCreateDesignSystem?.()
+            : undefined
+        }
+        nextStepCreateDesignSystemBusy={nextStepCreateDesignSystemBusy}
         onPickSkill={onPickSkill}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
         toolboxSkillNames={toolboxSkillNames}
+        nextStepVariant={nextStepVariant}
       />
     );
   };
@@ -3211,7 +3718,7 @@ export function retryableAssistantMessage(
   const last = messages[messages.length - 1];
   if (!last || last.role !== 'assistant') return null;
   if (last.id !== lastAssistantId) return null;
-  return last.runStatus === 'failed' ? last : null;
+  return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
 export function isAssistantMessageStreaming(
@@ -3231,7 +3738,13 @@ export function isAssistantMessageStreaming(
 }
 
 export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
-  const lines = [
+  const lines: string[] = [];
+  const sourceText = input.rawMessage?.trim() || input.message.trim();
+  if (sourceText) {
+    lines.push(sourceText, '');
+  }
+
+  lines.push(
     'Open Design run error diagnostics',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
@@ -3240,15 +3753,7 @@ export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): str
     `conversation_id: ${input.conversationId ?? 'n/a'}`,
     `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
     `agent_id: ${input.agentId ?? 'n/a'}`,
-    '',
-    'error:',
-    input.message.trim(),
-  ];
-
-  const raw = input.rawMessage?.trim();
-  if (raw && raw !== input.message.trim()) {
-    lines.push('', 'raw_error:', raw);
-  }
+  );
 
   return lines.join('\n');
 }
@@ -3411,13 +3916,10 @@ function UserMessageImpl({
   }
 
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
-  const ts = messageTime(message);
 
   return (
     <div className="msg user">
-      <div className="role">
-        <span>{t('chat.you')}</span>
-      </div>
+      <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
           {message.sessionMode ? (
@@ -3506,15 +4008,6 @@ function UserMessageImpl({
         <div className="user-text-wrap">
           <div className="user-text user-bubble">{message.content}</div>
           <div className="user-actions">
-            {ts ? (
-              <time
-                className="user-actions-time"
-                dateTime={new Date(ts).toISOString()}
-                title={exactDateTime(ts)}
-              >
-                {shortTime(ts)}
-              </time>
-            ) : null}
             <button
               type="button"
               className="ghost user-copy-btn"
@@ -3596,14 +4089,17 @@ function MessageSessionModeChip({
 }) {
   const label = mode === 'chat'
     ? t('chat.mode.chat.label')
-    : t('chat.mode.design.label');
+    : mode === 'plan'
+      ? t('chat.mode.plan.label')
+      : t('chat.mode.design.label');
+  const icon = mode === 'chat' ? 'comment' : mode === 'plan' ? 'file' : 'sparkles';
   return (
     <div
       className={`msg-mode-chip msg-mode-chip--${mode}`}
       data-testid="msg-session-mode-chip"
       title={label}
     >
-      <Icon name={mode === 'chat' ? 'comment' : 'sparkles'} size={12} />
+      <Icon name={icon} size={12} />
       <span>{label}</span>
     </div>
   );
@@ -3707,6 +4203,8 @@ function workspaceContextOpenTarget(item: WorkspaceContextItem): string | null {
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {
   if (item.kind === 'browser') return 'globe';
   if (item.kind === 'folder' || item.kind === 'design-files') return 'folder';
+  if (item.kind === 'project') return 'folder';
+  if (item.kind === 'local-code') return 'terminal';
   if (item.kind === 'terminal') return 'terminal';
   if (item.kind === 'side-chat') return 'comment';
   if (item.kind === 'design-system') return 'blocks';
@@ -3733,6 +4231,10 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Design system';
     case 'folder':
       return 'Folder';
+    case 'project':
+      return 'Project';
+    case 'local-code':
+      return 'Local code';
     case 'terminal':
       return 'Terminal';
     case 'side-chat':
@@ -3759,6 +4261,36 @@ function sortChatAttachmentsForDisplay(attachments: ChatAttachment[]): ChatAttac
       return a.index - b.index;
     })
     .map((entry) => entry.attachment);
+}
+
+function isDesignSystemNextStepProject(metadata: ProjectMetadata | undefined): boolean {
+  if (!metadata) return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'design-system' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandDesignSystemId)
+  );
+}
+
+function isBrandExtractionNextStepProject(metadata: ProjectMetadata | undefined): boolean {
+  if (!metadata) return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandId) ||
+    Boolean(metadata.brandDesignSystemId)
+  );
+}
+
+function isProgrammaticBrandAssistantMessage(message: ChatMessage | null | undefined): boolean {
+  if (!message || message.role !== 'assistant') return false;
+  const content = message.content || '';
+  return (
+    content.includes('<od-card type="brand-browser-assist"') ||
+    /programmatic (design-system )?extraction|automatic pass needs a hand|extraction stopped/i.test(content) ||
+    /程序化.*抽取|程式化.*抽取|抽取已停止/.test(content)
+  );
 }
 
 function relTime(ts: number, t: TranslateFn): string {

@@ -28,7 +28,10 @@ export interface PetTaskSummary {
 export interface PetRecentTaskSummary {
   projectId: string;
   projectName: string;
-  status: 'succeeded' | 'failed' | 'canceled';
+  // `incomplete`: a terminal `succeeded` run that ended with unfinished declared
+  // work (#1247 / #1060). Kept distinct from `succeeded` so its dot never renders
+  // as the success color in the "recently completed" group.
+  status: 'succeeded' | 'incomplete' | 'failed' | 'canceled';
   updatedAt: number;
 }
 

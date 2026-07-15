@@ -12,7 +12,9 @@
 // for a mode==='api' session resolves to 'byok'.
 
 import {
+  byokProtocolToTracking,
   modelIdForTracking,
+  sessionModeToTracking,
   type RunCreatedProps,
   type RunFinishedProps,
   type TrackingByokProviderId,
@@ -21,30 +23,14 @@ import {
   type TrackingRunResult,
   type TrackingSessionMode,
 } from '@open-design/contracts/analytics';
+import type { ChatSessionMode } from '@open-design/contracts';
 import type { ApiProtocol } from '../types';
 
-// Map the BYOK transport protocol to the tracking provider id. `aihubmix` is
-// an aggregator with no dedicated provider bucket, so it folds into the CLI
-// catch-all `'other'`; everything else has a 1:1 BYOK provider.
+// Map the BYOK transport protocol to the tracking provider id.
 export function byokAgentProviderId(
   protocol: ApiProtocol | undefined,
 ): TrackingByokProviderId | TrackingCliProviderId {
-  switch (protocol) {
-    case 'anthropic':
-      return 'anthropic';
-    case 'openai':
-      return 'openai';
-    case 'azure':
-      return 'azure_openai';
-    case 'google':
-      return 'google_gemini';
-    case 'ollama':
-      return 'ollama_cloud';
-    case 'senseaudio':
-      return 'senseaudio';
-    default:
-      return 'other';
-  }
+  return byokProtocolToTracking(protocol) ?? 'other';
 }
 
 export interface ByokRunBaseInput {
@@ -58,6 +44,12 @@ export interface ByokRunBaseInput {
   apiProtocol: ApiProtocol | undefined;
   skillId: string | null;
   sessionMode?: TrackingSessionMode;
+}
+
+export function byokSessionModeForTracking(
+  mode: ChatSessionMode | null | undefined,
+): TrackingSessionMode {
+  return sessionModeToTracking(mode);
 }
 
 function baseRunProps(input: ByokRunBaseInput) {

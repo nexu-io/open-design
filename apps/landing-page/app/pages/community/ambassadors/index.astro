@@ -1,0 +1,110 @@
+---
+/*
+ * /community/ambassadors/ — program overview + ambassador roster.
+ * Localized Astro route; see `../index.astro` for the migration note.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import '../../../community.css';
+import { localeFromPath } from '../../../i18n';
+import {
+  getCommunityCopy,
+  COMMUNITY_LINKS,
+  AMBASSADORS,
+  GLYPH,
+} from '../../../community-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const copy = getCommunityCopy(locale).ambassadors;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: copy.title,
+  description: copy.desc,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
+---
+
+<Layout title={copy.title} description={copy.desc} active="community" jsonLd={jsonLd} mainClassName="sub-main">
+  <div class="od-community">
+    <section class="hero">
+      <div class="hero-decor"></div>
+      <div class="wrap">
+        <div class="hero-copy">
+          <h1 class="h-display" set:html={copy.heroTitle} />
+          <p class="lead">{copy.heroLead}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section ambassadors" id="ambassadors">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.program.kicker}</span>
+            <h2 class="h-display" set:html={copy.program.h2} />
+          </div>
+          <div class="right amb-side">
+            <a class="btn btn-coral amb-apply" href={COMMUNITY_LINKS.ambassadorForm} target="_blank" rel="noopener">
+              <span class="ri" aria-hidden="true">{GLYPH.discord}</span>
+              {copy.program.applyCta}
+              <span class="ri" aria-hidden="true">{GLYPH.arrow}</span>
+            </a>
+            <p>{copy.program.applyNote}</p>
+          </div>
+        </div>
+
+        <div class="amb-grid">
+          {copy.program.cols.map((col) => (
+            <div class="amb-col">
+              <div class="n">{col.n}</div>
+              <h3 set:html={col.h3} />
+              <p class="lede">{col.lede}</p>
+              <ul>
+                {col.items.map((item) => (
+                  <li>
+                    <span class="ic ri" aria-hidden="true">{GLYPH.check}</span>
+                    <span set:html={item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="section ambassador-roster" id="roster">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.roster.kicker}</span>
+            <h2 class="h-display" set:html={copy.roster.h2} />
+          </div>
+          <p class="right">{copy.roster.intro}</p>
+        </div>
+
+        <div class="ambassador-cards">
+          {AMBASSADORS.map((amb, i) => (
+            <article class="ambassador-card">
+              <div class="ambassador-avatar">
+                <img src={amb.avatar} alt={amb.name} loading="lazy" />
+              </div>
+              <div class="ambassador-identity">
+                <h3>{amb.name}</h3>
+                <p class="ambassador-place">{copy.roster.places[i]}</p>
+              </div>
+              <div class={amb.socials.length ? 'ambassador-links' : 'ambassador-links ambassador-links-empty'}>
+                {amb.socials.map((s) => (
+                  <a href={s.href} target="_blank" rel="noopener" aria-label={s.label} title={s.type}>
+                    <span class="ri" aria-hidden="true">{s.glyph}</span>
+                  </a>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

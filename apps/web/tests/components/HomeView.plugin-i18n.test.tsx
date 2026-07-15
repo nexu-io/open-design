@@ -110,7 +110,7 @@ describe('HomeView plugin i18n', () => {
 
     // Home Community renders gallery tiles with no inline Use button — the
     // plugin is used from its detail modal. For query-bearing plugins the
-    // primary CTA is now "Replicate this content"; plain structure-only Use
+    // primary CTA now loads the prompt; plain structure-only Use without prompt
     // lives behind the caret menu.
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-details-localized-plugin')));
     fireEvent.click(await screen.findByTestId('plugin-details-use-localized-plugin-menu'));

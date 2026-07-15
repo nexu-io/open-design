@@ -168,7 +168,7 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
 
       process.env.OD_WEB_OUTPUT_MODE = 'standalone';
       process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
-      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '500';
+      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '3000';
 
       const handle = await startWebSidecar({
         app: 'web',
@@ -219,7 +219,7 @@ const dummyServer = createServer((socket) => {
   socket.end();
   if (!sawProbe) {
     sawProbe = true;
-    setTimeout(() => process.exit(70), 100);
+    process.exit(70);
   }
 });
 

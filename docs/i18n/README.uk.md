@@ -1,10 +1,10 @@
 <h1 align="center">Open Design: відкрита альтернатива Claude Design</h1>
 
-> 🔥 **Open Design 0.10.0 вже тут: універсальний Agentic-робочий простір для дизайну.** Усе ремесло тепер живе в одному вікні — від розмитої ідеї до пошуку референсів, збирання матеріалу, інтерактивного редагування, черги коментарів, шліфування анімацій і передачі результату редактору чи Code Agent — не виходячи із застосунку. З паралельними сесіями це вже не один асистент, а ціла локальна команда дизайнерів, що працює на вас. [Завантажити 0.10.0](https://github.com/nexu-io/open-design/releases) · [Долучитися до обговорення](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ вже тут.** Раніше довгі сесії дизайну зривалися на кожній перерві — запуск втрачав своє місце, вибір моделі змушував гадати, а експорт вимагав ще одного обхідного шляху. 0.13.0 зберігає сесію живою: відновлюйте запуски Codex / OpenCode / Pi / Open Design Cloud між ходами, швидше обирайте потрібну модель і передавайте підкріплені скриншотами PPTX / PDF, не залишаючи застосунок. [Завантажити 0.13.0](https://github.com/nexu-io/open-design/releases) · [Примітки до випуску](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати Open Design Cloud](https://open-design.ai/cloud/)
 >
-> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/9ptkbbqRu).
+> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -13,31 +13,30 @@
 <p align="center">
   <a href="https://open-design.ai/">Вебсайт</a> ·
   <a href="https://open-design.ai/">Завантажити</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">Стежити за @nexudotio</a>
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
+  <a href="https://x.com/OpenDesignHQ">Стежити за @OpenDesignHQ</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <b>Українська</b> · <a href="README.tr.md">Türkçe</a></p>
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <b>Українська</b> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a></p>
 
 ---
 
 ## Що таке Open Design
 
-🎨 **Локально-орієнтована альтернатива [Claude Design][cd] з відкритим кодом.** &nbsp;🖥️ **Нативний десктопний застосунок для macOS і Windows.** &nbsp;⚡ **100+ навичок** · ✨ **150 систем `DESIGN.md` брендового рівня** · 📦 **261 готовий до використання плагін.** &nbsp;🖼️ Генерує **вебпрототипи · десктопні · мобільні прототипи**, **живі дашборди / артефакти**, **презентації**, **зображення**, **відео**, а також моушн-графіку **HyperFrames**. 🔒 Попередній перегляд у пісочниці iframe · експорт у HTML / PDF / PPTX / MP4. &nbsp;🤖 **Працює на Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity і 21 локальному CLI**, або на будь-якій OpenAI-сумісній кінцевій точці через BYOK.
+🎨 **Локально-орієнтована альтернатива Claude Design з відкритим кодом.** &nbsp;🖥️ **Нативний десктопний застосунок для macOS і Windows.** &nbsp;⚡ **100+ навичок** · ✨ **150 систем `DESIGN.md` брендового рівня** · 📦 **261 готовий до використання плагін.** &nbsp;🖼️ Генерує **вебпрототипи · десктопні · мобільні прототипи**, **живі дашборди / артефакти**, **презентації**, **зображення**, **відео**, а також моушн-графіку **HyperFrames**. 🔒 Попередній перегляд у пісочниці iframe · експорт у HTML / PDF / PPTX / MP4. &nbsp;🤖 **Працює на Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity і 21 локальному CLI**, або на будь-якій OpenAI-сумісній кінцевій точці через BYOK.
 
 Open Design — це те, що ви отримуєте, коли **agent-native** цикл, який Anthropic випустила разом із Claude Design — з'ясуй бриф, зафіксуй напрям, передавай артефакт потоком, критикуй, доставляй — перестає бути закритим і стає **файловою системою навичок, дизайн-систем і плагінів**, яку кодувальні агенти, що вже є на вашому ноутбуці, можуть читати, записувати та реміксувати. Ваш CLI стає рушієм дизайну, ваш ноутбук стає студією, а `DESIGN.md` вашої команди стає контрактом бренду.
 
 Це також **альтернатива Figma для епохи агентів** — замість того, щоб пересувати пікселі на полотні, вона доставляє односторінкові артефакти на справжньому CSS, справжніх шрифтах, справжніх компонентах, експортовані одразу в HTML / PDF / PPTX / MP4 — уже сформовані вашою дизайн-системою, уже готові до запуску всередині агента, яким ви користуєтеся щодня.
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -116,6 +115,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Підтримується | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Підтримується | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Підтримується | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Підтримується | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Підтримується | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Підтримується | `od mcp install copilot` |
@@ -126,6 +126,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 | [Cline](https://github.com/cline/cline) | ✅ Підтримується | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Підтримується | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Підтримується | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Підтримується | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Підтримується | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Підтримується | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Підтримується | `od mcp install hermes` |
@@ -258,7 +259,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 
 ## Чому Open Design
 
-> **У квітні 2026 року Anthropic випустила [Claude Design][cd] — уперше LLM перестала писати прозу й почала доставляти дизайн-артефакти безпосередньо.** Це стало вірусним. Але вона залишилася закритою, лише платною, лише хмарною, прив'язаною до моделі Anthropic, навичок Anthropic, поверхні Anthropic. Без виходу, без самохостингу, без розгортання на Vercel, без можливості підставити власного агента.
+> **У квітні 2026 року Anthropic випустила Claude Design — уперше LLM перестала писати прозу й почала доставляти дизайн-артефакти безпосередньо.** Це стало вірусним. Але вона залишилася закритою, лише платною, лише хмарною, прив'язаною до моделі Anthropic, навичок Anthropic, поверхні Anthropic. Без виходу, без самохостингу, без розгортання на Vercel, без можливості підставити власного агента.
 
 Open Design (OD) — це альтернатива з відкритим кодом. Той самий цикл, та сама ментальна модель «спершу артефакт», без жодної прив'язки:
 
@@ -271,7 +272,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### Порівняння
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | Відкритий код | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Самохостинг / десктоп | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -302,7 +303,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ```bash
 # One-line install into the agent you're using:
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
@@ -361,7 +362,7 @@ Open Design постачає **сервер MCP через stdio** та **скр
 
 ```bash
 # One-line install (16+ CLIs supported):
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 
 # Then the agent can:
 od search-files "primary button"      # search files across projects
@@ -577,7 +578,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Протокол sidecar + десктоп Electron + автоматизація IPC
 - [x] API лінтингу артефактів + 5-вимірний шлюз самокритики перед видачею
 - [x] **0.8.0** — інфраструктура маркетплейсу плагінів (261 офіційний плагін, специфікація маніфесту, скрипти встановлення для кожного агента)
-- [x] **0.9.0** — Open Design AMR (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
+- [x] **0.9.0** — Open Design Cloud (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
 - [x] Упаковані збірки Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (опціональна лінія)
 - [ ] Хірургічні правки в режимі коментарів — частково випущено; надійне цільове патчування в розробці
 - [ ] UX панелі налаштувань, виданої ШІ — ще не реалізовано
@@ -594,8 +595,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 За кожним каналом — реальні люди.
 
-- 💬 **Discord** — щоденний чат, обмін плагінами, запитання → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — нотатки до релізів, віхи, закулісся → [**@nexudotio**](https://x.com/nexudotio)
+- 💬 **Discord** — щоденний чат, обмін плагінами, запитання → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
+- 🐦 **X / Twitter** — нотатки до релізів, віхи, закулісся → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — глибокі Q&A, RFC, «покажи свою роботу» → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — звіти про баги, запити на функції → [**Issues**](https://github.com/nexu-io/open-design/issues)
 
@@ -644,7 +645,7 @@ gh pr create --fill
 
 ### 🏅 Програма Open Design Fellow
 
-Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/9ptkbbqRu).
+Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 
@@ -678,7 +679,7 @@ gh pr create --fill
 Дякуємо всім, хто долучився — кодом, документацією, відгуками, влучним issue, новою навичкою, новою дизайн-системою.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-29" alt="Open Design contributors" />
 </a>
 
 ---
@@ -703,9 +704,9 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-29" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-29" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-29" />
   </picture>
 </a>
 
@@ -715,7 +716,7 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 
 | Проєкт | Роль |
 |---|---|
-| [Claude Design][cd] | Закритий продукт, відкритою альтернативою якому є цей репозиторій. |
+| Claude Design | Закритий продукт, відкритою альтернативою якому є цей репозиторій. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | Компас дизайн-філософії — робочий процес джуніор-дизайнера, протокол брендових ресурсів, чекліст проти AI-slop, п'ятивимірна критика. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Навичка веб-PPT у журнальному стилі, включена дослівно під [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). Типова для режиму презентацій. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | Сімейство HTML PPT Studio — 15 шаблонів презентацій, 36 тем, 31 макет сторінки, рантайм анімації, режим презентера з магнітними картками. |

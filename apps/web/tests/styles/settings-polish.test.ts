@@ -6,6 +6,7 @@ import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
 const expandedIndexCss = readExpandedIndexCss();
 const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
+const artifactsCss = readFileSync(new URL('../../src/styles/workspace/artifacts.css', import.meta.url), 'utf8');
 
 function cssBlock(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -52,5 +53,18 @@ describe('settings polish CSS', () => {
     expect(ruleValue(head, 'background')).toBe('var(--bg-elevated)');
     expect(ruleValue(content, 'position')).toBe('relative');
     expect(ruleValue(content, 'z-index')).toBe('1');
+  });
+
+  it('keeps the silent-update checkbox native-sized and aligned horizontally', () => {
+    const row = cssBlock(artifactsCss, '.settings-about-diagnostics > .settings-about-toggle');
+    const checkbox = cssBlock(artifactsCss, '.settings-about-toggle input');
+
+    expect(ruleValue(row, 'flex-direction')).toBe('row');
+    expect(ruleValue(row, 'gap')).toBe('10px');
+    expect(ruleValue(checkbox, 'appearance')).toBe('auto');
+    expect(ruleValue(checkbox, 'width')).toBe('14px');
+    expect(ruleValue(checkbox, 'height')).toBe('14px');
+    expect(ruleValue(checkbox, 'padding')).toBe('0');
+    expect(ruleValue(checkbox, 'margin')).toBe('2px 0 0');
   });
 });

@@ -18,6 +18,7 @@ describe('AMR relogin-required run failures', () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
         const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-missing-login'), {
           endpoints: suite.amr,
+          requireSetModel: false,
         });
 
         await putAmrAppConfig(webUrl, {
@@ -62,6 +63,7 @@ describe('AMR relogin-required run failures', () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
         const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-configured-profile'), {
           endpoints: suite.amr,
+          requireSetModel: false,
         });
 
         await putAmrAppConfig(webUrl, {
@@ -108,6 +110,7 @@ describe('AMR relogin-required run failures', () => {
           const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-daemon-env-credentials'), {
             endpoints: suite.amr,
             requireLoginConfig: false,
+            requireSetModel: false,
           });
 
           await putAmrAppConfig(webUrl, {

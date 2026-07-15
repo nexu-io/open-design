@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-playful",
-  "title": "Html Ppt Zhangzara Playful",
+  "title": "Run a Sales-Floor Training like a Top Retail Coach",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Playful",
-    "zh-TW": "Html Ppt Zhangzara Playful",
-    "ja": "Html Ppt Zhangzara Playful",
-    "ko": "Html Ppt Zhangzara Playful",
-    "de": "Html Ppt Zhangzara Playful",
-    "fr": "Html Ppt Zhangzara Playful",
-    "ru": "Html Ppt Zhangzara Playful",
-    "es": "Html Ppt Zhangzara Playful",
-    "pt-BR": "Html Ppt Zhangzara Playful",
-    "it": "Html Ppt Zhangzara Playful",
-    "vi": "Html Ppt Zhangzara Playful",
-    "pl": "Html Ppt Zhangzara Playful",
-    "id": "Html Ppt Zhangzara Playful",
-    "nl": "Html Ppt Zhangzara Playful",
-    "ar": "Html Ppt Zhangzara Playful",
-    "tr": "Html Ppt Zhangzara Playful",
-    "uk": "Html Ppt Zhangzara Playful",
-    "en": "Html Ppt Zhangzara Playful"
+    "en": "Run a Sales-Floor Training like a Top Retail Coach",
+    "zh-CN": "像顶级零售教练一样做门店销售培训",
+    "zh-TW": "像顶级零售教练一样做门店销售培训"
   },
   "version": "0.1.0",
-  "description": "Playful — Sun-warm peach background with Syne display: a friendly indie launch deck. Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Built as a decision-grade professional training deck for store associates, floor managers.",
   "description_i18n": {
-    "zh-CN": "Playful — 温暖的阳光蜜桃背景配合 Syne 字体：友好的独立项目发布演示文稿。适用于需要温暖、独立和亲切感的场景：创作者作品集、独立产品发布、生活方式品牌、小型企业宣讲、社区简报等。",
-    "zh-TW": "Playful — 溫暖的陽光蜜桃背景搭配 Syne 字體：友善的獨立專案發表簡報。適用於需要溫暖、獨立和親切感的場景：創作者作品集、獨立產品發表、生活風格品牌、小型企業提案、社群簡報等。",
-    "ja": "Playful — 太陽のような温かみのあるピーチ背景にSyneフォントを組み合わせた、フレンドリーなインディープロダクト向けプレゼンテーション。クリエイターポートフォリオ、インディープロダクトローンチ、ライフスタイルブランド、スモールビジネスピッチ、コミュニティデッキなど、温かく親しみやすい雰囲気が必要なシーンに最適。",
-    "ko": "Playful — 따뜻한 햇살 같은 피치 배경에 Syne 폰트를 사용한 친근한 인디 프로젝트 발표 덱. 크리에이터 포트폴리오, 인디 제품 론칭, 라이프스타일 브랜드, 소규모 비즈니스 피칭, 커뮤니티 덱 등 따뜻하고 친근한 느낌이 필요한 모든 경우에 적합합니다.",
-    "de": "Playful — Sonnig-warmer Pfirsichhintergrund mit Syne-Schrift: ein freundliches Indie-Launch-Deck. Für alles, was warm, indie und zugänglich wirken soll: Creator-Portfolios, Indie-Produktlaunches, Lifestyle-Marken, Small-Business-Pitches, Newsletter- und Community-Decks.",
-    "fr": "Playful — Fond pêche chaleureux avec typographie Syne : un deck de lancement indie convivial. Pour tout ce qui doit paraître chaleureux, indie et accessible : portfolios de créateurs, lancements de produits indépendants, marques lifestyle, pitchs de petites entreprises, présentations newsletter et communauté.",
-    "ru": "Playful — Теплый персиковый фон со шрифтом Syne: дружелюбная презентация для инди-проектов. Для всего, что должно выглядеть тепло, независимо и доступно: портфолио авторов, запуски инди-продуктов, лайфстайл-бренды, презентации малого бизнеса, рассылки и сообщества.",
-    "es": "Playful — Fondo melocotón cálido con tipografía Syne: una presentación indie amigable. Para todo lo que debe sentirse cálido, indie y accesible: portafolios de creadores, lanzamientos de productos independientes, marcas lifestyle, presentaciones de pequeños negocios, decks de newsletter y comunidad.",
-    "pt-BR": "Playful — Fundo pêssego caloroso com fonte Syne: um deck indie amigável para lançamentos. Para tudo que precisa parecer acolhedor, indie e acessível: portfólios de criadores, lançamentos de produtos independentes, marcas de lifestyle, apresentações de pequenos negócios, decks de newsletter e comunidade.",
-    "it": "Playful — Sfondo pesca solare con carattere Syne: un deck di lancio indie accogliente. Per tutto ciò che deve risultare caldo, indie e accessibile: portfolio di creator, lanci di prodotti indipendenti, brand lifestyle, pitch per piccole imprese, deck per newsletter e community.",
-    "vi": "Playful — Nền màu đào ấm áp với phông chữ Syne: bộ slides ra mắt indie thân thiện. Dành cho mọi thứ cần cảm giác ấm áp, độc lập và dễ gần: portfolio người sáng tạo, ra mắt sản phẩm indie, thương hiệu lifestyle, thuyết trình doanh nghiệp nhỏ, bản trình bày cộng đồng.",
-    "pl": "Playful — Ciepłe brzoskwiniowe tło z czcionką Syne: przyjazna prezentacja indie. Dla wszystkiego, co powinno być ciepłe, niezależne i przystępne: portfolia twórców, premiery produktów indie, marki lifestyle, prezentacje małych firm, newslettery i prezentacje społecznościowe.",
-    "id": "Playful — Latar belakang peach hangat dengan font Syne: deck peluncuran indie yang ramah. Untuk semua yang harus terasa hangat, indie, dan mudah didekati: portofolio kreator, peluncuran produk indie, brand lifestyle, pitch bisnis kecil, deck newsletter dan komunitas.",
-    "nl": "Playful — Zonwarm perzik achtergrond met Syne lettertype: een vriendelijk indie launch deck. Voor alles dat warm, indie en toegankelijk moet voelen: portfolios van makers, indie productlanceringen, lifestyle merken, small-business pitches, nieuwsbrief- en community decks.",
-    "ar": "Playful — خلفية خوخية دافئة مع خط Syne: عرض تقديمي مستقل ودود. لكل ما يجب أن يبدو دافئاً ومستقلاً وودوداً: معارض أعمال المبدعين، إطلاق المنتجات المستقلة، علامات نمط الحياة، عروض الأعمال الصغيرة، عروض النشرات البريدية والمجتمعات.",
-    "tr": "Playful — Güneşli sıcak şeftali arka plan ve Syne yazı tipi: samimi bir indie lansman sunumu. Sıcak, bağımsız ve yaklaşılabilir hissettirmesi gereken her şey için: içerik üretici portföyleri, indie ürün lansmanları, yaşam tarzı markaları, küçük işletme sunumları, haber bülteni ve topluluk sunumları.",
-    "uk": "Playful — Теплий персиковий фон зі шрифтом Syne: дружня презентація для інді-проєктів. Для всього, що має виглядати тепло, незалежно та доступно: портфоліо авторів, запуски інді-продуктів, лайфстайл-бренди, презентації малого бізнесу, розсилки та спільноти.",
-    "en": "Playful — Sun-warm peach background with Syne display: a friendly indie launch deck. Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks."
+    "en": "A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Built as a decision-grade professional training deck for store associates, floor managers.",
+    "zh-CN": "像顶级零售教练一样做门店销售培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级零售教练一样做门店销售培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,16 @@
     "indie-product-launch",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "training-deck",
+    "workshop",
+    "course-module",
+    "education",
+    "html-ppt-zhangzara-playful",
+    "professional-training",
+    "employee-onboarding-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +60,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "education",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +68,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Playful — Sun-warm peach background with Syne display: a friendly indie launch deck. Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks.",
-        "zh-CN": "使用这个插件完成以下任务：Playful — Sun-warm peach background with Syne display: a friendly indie launch deck. Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks."
+        "en": "Create \"Run a Sales-Floor Training like a Top Retail Coach\" as a decision-grade Professional training deck in this template's own visual system. Subject: A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Audience: store associates, floor managers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day.",
+        "zh-CN": "像顶级零售教练一样做门店销售培训。像顶级零售教练一样做门店销售培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Playful"
+          "title": "Run a Sales-Floor Training like a Top Retail Coach",
+          "title_i18n": {
+            "en": "Run a Sales-Floor Training like a Top Retail Coach",
+            "zh-CN": "像顶级零售教练一样做门店销售培训",
+            "zh-TW": "像顶级零售教练一样做门店销售培训"
+          }
         }
       ]
     },
@@ -122,6 +107,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "professional-training"
   }
 }

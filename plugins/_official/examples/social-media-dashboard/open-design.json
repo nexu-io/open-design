@@ -24,6 +24,7 @@
     "en": "Social Media Dashboard"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Creator-facing social media analytics dashboard in a single HTML file. A platform switcher (X / LinkedIn / YouTube / Instagram), a row of KPI cards (followers, engagement rate, likes, reposts), a follower-growth chart, a \"top post this week\" preview, and a trending topics / top comments side panel. Use when the brief mentions a \"social media dashboard\", \"creator analytics\", \"social analytics\", or names specific platforms (X, Twitter, LinkedIn, YouTube, Instagram, TikTok) together with metrics like followers, engagement, likes, reposts.",
   "description_i18n": {
     "zh-CN": "创作者社交媒体分析仪表板，单个 HTML 文件。包含平台切换器（X / LinkedIn / YouTube / Instagram）、KPI 卡片（粉丝数、互动率、点赞数、转发数）、粉丝增长图表、本周热门帖子预览和热门话题/评论侧边栏。",

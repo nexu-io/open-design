@@ -191,7 +191,7 @@ The planning document names the anti-regression ladder:
 | O7 | P1 | Tool/finalize latency optimization | Tool aggregate/finalize may dominate artifact-heavy tasks. | Optimize tool sequencing, artifact reconciliation, and manifest/finalization work only for measured slow cohorts. | Lower tool/finalize P90 without artifact-count regressions. | Artifact-producing fixed tasks and run_finished timing. |
 | O8 | P1 | Input context reduction | Average successful runs spend about 350k input tokens. | Identify oversized context sources and reduce redundant context while preserving output quality. | Lower `estimated_context_tokens` and `input_tokens_effective`. | Fixed-task quality review plus token dashboard. |
 | O9 | P1 | Cache reuse improvement | Token cost reduction may come from better cache read/write behavior. | Improve prompt stability and cacheable prefix reuse where provider data shows low cache hit ratio. | Higher cache hit ratio and lower uncached input tokens. | Provider usage fields and Langfuse trace inspection. |
-| O10 | P1 | Fixed-task QA gate | PostHog traffic mix is noisy and consent-biased. | Create a representative task set that records success rate, P90, tokens, artifact output, and quality guardrails. | Release candidates fail when success/quality regresses or metrics exceed thresholds. | Nightly/release job with baseline comparison. |
+| O10 | P1 | Fixed-task QA gate | PostHog traffic mix is noisy and consent-biased. | Create a representative task set that records success rate, P90, tokens, artifact output, and quality guardrails. | Release candidates fail when success/quality regresses or metrics exceed thresholds. | Prerelease/release job with baseline comparison. |
 | O11 | P2 | Online alerting | Improvements can regress after release. | Configure alerts for failure rate, P90, average tokens, unknown share, and retry failure rate. | Alerts fire on threshold breaches with category/stage context. | Alert dry run and documented thresholds. |
 | O12 | P2 | Langfuse coverage follow-up | PR1 makes eligibility visible but does not require final ingestion proof on `run_finished`. | Optional separate delivery-result event or relay-side telemetry if coverage gaps block investigation. | Expected traces without matching Langfuse records become explainable. | Delivery-state dashboard, not blocking retry. |
 
@@ -240,7 +240,7 @@ The planning document names the anti-regression ladder:
 ### PR5: Regression Gates
 
 - Add or document PostHog alerts.
-- Introduce the fixed representative task set as a nightly/release guard.
+- Introduce the fixed representative task set as a prerelease/release guard.
 - Include success rate, P90, token usage, unknown share, retry outcome, and
   quality/artifact guardrails.
 

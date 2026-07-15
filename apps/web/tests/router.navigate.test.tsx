@@ -4,7 +4,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { navigate, useRoute } from '../src/router';
+import { goBack, navigate, useRoute } from '../src/router';
 
 function RouteLabel() {
   const route = useRoute();
@@ -75,5 +75,45 @@ describe('navigate / useRoute timing', () => {
       String(call[0]).includes('Cannot update a component'),
     );
     expect(warningCalls).toEqual([]);
+  });
+});
+
+describe('goBack', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('pops the history stack to the previous layer instead of a hardcoded route', async () => {
+    // The user reaches a project from the Projects list — two in-app pushes.
+    navigate({ kind: 'home', view: 'projects' });
+    await flushMicrotasks();
+    navigate({ kind: 'project', projectId: 'abc', conversationId: null, fileName: null });
+    await flushMicrotasks();
+    expect(window.location.pathname).toBe('/projects/abc');
+
+    // Back must defer to the browser history stack (which lands on /projects),
+    // not navigate somewhere fixed like the home view.
+    const backSpy = vi.spyOn(window.history, 'back');
+    goBack({ kind: 'home', view: 'home' });
+    expect(backSpy).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/projects/abc');
+    backSpy.mockRestore();
+  });
+
+  it('falls back to the provided route on a fresh deep-link load (no in-app history)', async () => {
+    // Simulate landing directly on the project URL — history.state has no depth.
+    window.history.replaceState(null, '', '/projects/abc');
+
+    const backSpy = vi.spyOn(window.history, 'back');
+    goBack({ kind: 'home', view: 'projects' });
+    // Never call history.back() here — it would escape the app to a foreign page.
+    expect(backSpy).not.toHaveBeenCalled();
+    await flushMicrotasks();
+    expect(window.location.pathname).toBe('/projects');
+    backSpy.mockRestore();
   });
 });

@@ -56,6 +56,11 @@ interface BufferedSafetyEvent {
 // memory footprint trivial.
 const MAX_BUFFER_SIZE = 50;
 
+// PostHog's exception ingestion requires a `platform` on each stack frame.
+// Mirrors the value posthog-js stamps so our hand-built events pass the
+// same server-side processing. See `buildExceptionList`.
+const FRAME_PLATFORM = 'web:javascript';
+
 let context: ExceptionTrackingContext | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
@@ -122,12 +127,62 @@ interface CaptureMetadata {
   handled?: boolean;
 }
 
+// Generic "the fetch could not complete" wordings across engines. As an
+// uncaught exception these carry no URL and no status, so they're
+// uninformative on their own — but we only suppress them in the packaged
+// runtime (see `isIgnorableNoise`), never the web app.
+const FETCH_FAILURE_MESSAGES = new Set([
+  'Failed to fetch', // Chromium (Electron, Chrome)
+  'Load failed', // WebKit (Safari)
+  'NetworkError when attempting to fetch resource.', // Firefox
+]);
+
+// A frame originates in packaged desktop app code when its (pre-scrub) path
+// is either:
+//   - served from the `od://` scheme — the packaged renderer, all platforms;
+//   - a `file://` path inside the macOS app bundle, i.e. it contains
+//     `.app/Contents/Resources` (source-mapped frames; scrub.ts rewrites
+//     these for privacy — see `scrubFilePath`). We match the bundle marker
+//     rather than a channel-specific app name so `Open Design Beta.app` /
+//     `Open Design Preview.app` builds are covered too.
+function isPackagedFramePath(path: string): boolean {
+  return path.startsWith('od://') || path.includes('.app/Contents/Resources');
+}
+
+// True when the exception originated in packaged desktop app code. We key off
+// the stack origin rather than `window.location` so the decision is tied to
+// where the failing call actually ran, and so it's deterministic to test.
+function originatesInPackagedApp(list: Array<Record<string, unknown>>): boolean {
+  const stacktrace = list[0]?.stacktrace as
+    | { frames?: Array<Record<string, unknown>> }
+    | undefined;
+  const frames = stacktrace?.frames ?? [];
+  return frames.some((frame) => {
+    const path = typeof frame.abs_path === 'string' ? frame.abs_path : frame.filename;
+    return typeof path === 'string' && isPackagedFramePath(path);
+  });
+}
+
+// Fetch failures are environmental noise ONLY in the packaged app, where the
+// renderer constantly polls the local daemon and a momentary gap (daemon
+// restart, boot race, navigation/unmount abort, offline blip) makes
+// `Failed to fetch` ~90% of all captured exceptions — pure churn that buries
+// real bugs. We scope the drop to that runtime deliberately: in a normal
+// web context the very same TypeError can be the only signal of a broken
+// `/api/*` deployment or a CORS/TLS regression, so it must stay captured.
+function isIgnorableNoise(list: Array<Record<string, unknown>>): boolean {
+  const value = list[0]?.value;
+  if (typeof value !== 'string' || !FETCH_FAILURE_MESSAGES.has(value)) return false;
+  return originatesInPackagedApp(list);
+}
+
 function captureException(
   error: unknown,
   fallbackMessage: string,
   metadata: CaptureMetadata = {},
 ): void {
   const list = buildExceptionList(error, fallbackMessage, metadata);
+  if (isIgnorableNoise(list)) return;
   const scrubbed = scrubExceptionList(list);
   const properties: Record<string, unknown> = {
     $exception_list: scrubbed,
@@ -206,6 +261,14 @@ function dispatch(item: BufferedSafetyEvent): void {
       // auth surface; cookies are irrelevant and sending them would just
       // add CORS preflight friction.
       credentials: 'omit',
+    }).catch(() => {
+      // Swallow the async rejection too. The synchronous try/catch below
+      // only guards against fetch throwing on a malformed argument; the
+      // returned promise rejects separately when the beacon can't reach
+      // PostHog (offline, ingest down). Left unhandled, that rejection is
+      // itself scooped up by the `unhandledrejection` listener above and
+      // re-reported as a `Failed to fetch` $exception — a self-amplifying
+      // loop where our own telemetry transport manufactures telemetry.
     });
   } catch {
     // best-effort: safety telemetry must never propagate
@@ -225,7 +288,18 @@ function buildExceptionList(
       ? error
       : fallbackMessage;
   const stack = isError && typeof error.stack === 'string' ? error.stack : '';
-  const frames = parseStack(stack, metadata);
+  // Stamp `platform` on every frame. PostHog's exception ingestion treats
+  // it as a required field (it selects the symbolication / issue-grouping
+  // strategy per frame); a frame without it fails the exceptions pipeline
+  // with "missing field platform" and the whole event is dropped
+  // server-side — which is why 100% of our hand-built `$exception` events
+  // were failing to ingest. posthog-js stamps the same value on each frame;
+  // we replicate it because client.ts sets `capture_exceptions: false` and
+  // this module is the sole browser-exception transport.
+  const frames = parseStack(stack, metadata).map((frame) => ({
+    ...frame,
+    platform: FRAME_PLATFORM,
+  }));
   return [
     {
       type,

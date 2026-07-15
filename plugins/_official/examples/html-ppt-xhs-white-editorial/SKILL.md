@@ -1,16 +1,35 @@
 ---
 name: html-ppt-xhs-white-editorial
-description: 白底杂志风 deck — 纯白背景 + 顶部 10 色彩虹 bar、80-110px display 标题、紫→蓝→绿→橙→粉渐变文字、马卡龙软卡片组（粉/紫/蓝/绿/橙）、黑底白字 .focus pill、引用大块。同时适合发小红书图文 + 横版 PPT 双用。
+en_name: "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider"
+zh_name: "像晋升评审内部人一样写 Staff 工程师晋升材料"
+description: |
+  A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.
+en_description: |
+  A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.
+zh_description: |
+  像晋升评审内部人一样写 Staff 工程师晋升材料——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "career"
+  - "year-end-self-review-deck"
+  - "personal"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-xhs-white-editorial"
 triggers:
-  - "白底杂志"
-  - "杂志风"
-  - "xhs editorial"
-  - "white editorial"
-  - "小红书白底"
-  - "editorial deck"
+  - "year-end-self-review-deck"
+  - "career"
+  - "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider"
+  - "像晋升评审内部人一样写 Staff 工程师晋升材料"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   featured: 27
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -20,7 +39,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-xhs-white-editorial 模板做一份白底杂志风 PPT，中文优先。要点：80-110px display 大标题、彩虹顶部 bar、马卡龙软卡片、黑底白字 .focus pill。先告诉我主题和受众，再写 8-12 页。"
+  category: "career"
+  scenario: "personal"
+  example_prompt: "Create \"Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider\" as a decision-grade Career deck in this template's own visual system. Subject: A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Audience: manager, calibration committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned."
 ---
 # HTML PPT · 白底杂志风
 

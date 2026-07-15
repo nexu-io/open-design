@@ -24,6 +24,7 @@
     "en": "Email Marketing"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A brand product-launch email — masthead with wordmark, hero image block, headline lockup with skewed-italic accent, body copy, primary CTA, and a specifications grid. Pure HTML email layout (centered single column, table fallback). Use when the brief asks for an \"email\", \"newsletter blast\", \"MJML\", \"product launch email\", or \"email template\".",
   "description_i18n": {
     "zh-CN": "品牌产品发布电子邮件模板，包含报头、主图、斜体强调标题、正文、主要行动号召按钮和规格表格，采用HTML居中单栏布局。",

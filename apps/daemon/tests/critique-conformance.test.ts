@@ -53,7 +53,7 @@ describe('adapter conformance harness (Phase 10)', () => {
     expect(outcome.events.length).toBeGreaterThan(0);
     expect(outcome.events.find((e) => e.type === 'ship')).toBeTruthy();
     // The shipped outcome must surface the artifact bytes the parser
-    // handed back via onArtifact, so a nightly cycle can pin MIME /
+    // handed back via onArtifact, so a prerelease cycle can pin MIME /
     // byte-length / hash without re-parsing the transcript (lefarcen
     // P2 on PR #1317).
     expect(outcome.artifact).not.toBeNull();

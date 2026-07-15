@@ -135,12 +135,19 @@ export interface AnalyticsService {
     properties: Record<string, unknown>;
     insertId?: string;
   }): Promise<void>;
+  mergeAnonymousPerson(args: {
+    anonymousDistinctId: string;
+    distinctId: string;
+    properties?: Record<string, unknown>;
+    insertId?: string;
+  }): Promise<void>;
   shutdown(): Promise<void>;
 }
 
 const NOOP_SERVICE: AnalyticsService = {
   capture: () => undefined,
   captureSafety: async () => undefined,
+  mergeAnonymousPerson: async () => undefined,
   shutdown: async () => undefined,
 };
 
@@ -270,6 +277,28 @@ export function createAnalyticsService(args: {
         // path is best-effort observability into a degraded state.
       }
     },
+    mergeAnonymousPerson: async ({ anonymousDistinctId, distinctId, properties, insertId }) => {
+      try {
+        const appCfg = await readAppConfig(args.dataDir);
+        if (appCfg.telemetry?.metrics !== true) return;
+        if (!anonymousDistinctId || !distinctId || anonymousDistinctId === distinctId) return;
+        const setProperties = cleanPosthogPersonProperties(properties ?? {});
+        client.capture({
+          distinctId,
+          event: '$identify',
+          properties: {
+            distinct_id: distinctId,
+            $anon_distinct_id: anonymousDistinctId,
+            ...(Object.keys(setProperties).length > 0 ? { $set: setProperties } : {}),
+            event_schema_version: EVENT_SCHEMA_VERSION,
+            env: cfg.env,
+            $insert_id: insertId ?? `identify-${crypto.randomUUID()}`,
+          },
+        });
+      } catch {
+        // Attribution merge failures must not block app startup or consent.
+      }
+    },
     shutdown: async () => {
       try {
         await client.shutdown();
@@ -278,6 +307,30 @@ export function createAnalyticsService(args: {
       }
     },
   };
+}
+
+function cleanPosthogPersonProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (!key || key === '__proto__' || key === 'constructor') continue;
+    if (value == null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.toLowerCase() === 'unknown') continue;
+      out[key] = trimmed;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const cleaned = value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0 && item.toLowerCase() !== 'unknown');
+      if (cleaned.length > 0) out[key] = cleaned;
+      continue;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') out[key] = value;
+  }
+  return out;
 }
 
 const SYNTHETIC_DISTINCT_ID = `daemon-anon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;

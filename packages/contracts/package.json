@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.11.0",
+  "version": "0.14.2",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
@@ -17,6 +17,10 @@
     "./api/connectionTest": {
       "types": "./dist/api/connectionTest.d.ts",
       "default": "./dist/api/connectionTest.mjs"
+    },
+    "./api/amrWallet": {
+      "types": "./dist/api/amrWallet.d.ts",
+      "default": "./dist/api/amrWallet.mjs"
     },
     "./api/orbit": {
       "types": "./dist/api/orbit.d.ts",
@@ -41,6 +45,10 @@
     "./api/research": {
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"
+    },
+    "./runtime/deck-stage-fallback": {
+      "types": "./dist/runtime/deck-stage-fallback.d.ts",
+      "default": "./dist/runtime/deck-stage-fallback.mjs"
     },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",
@@ -69,6 +77,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/release": "workspace:*",
     "zod": "3.25.76"
   },
   "devDependencies": {

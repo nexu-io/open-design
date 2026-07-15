@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-holographic-foil",
+  "title": "Holographic Foil",
+  "title_i18n": {
+    "zh-CN": "全息箔片",
+    "zh-TW": "全息箔片",
+    "ja": "ホログラフィック・フォイル",
+    "ko": "홀로그래픽 포일",
+    "de": "Holografische Folie",
+    "fr": "Feuille holographique",
+    "ru": "Голографическая фольга",
+    "es": "Lámina holográfica",
+    "pt-BR": "Folha holográfica",
+    "en": "Holographic Foil"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
+  "description": "A self-contained WebGL2 hero: thin-film interference over a crushed-foil surface whose palette shifts with the viewing angle; move the cursor to tilt the film.",
+  "description_i18n": {
+    "zh-CN": "自包含 WebGL2 主视觉：褶皱箔片表面的薄膜干涉，调色随视角变化；移动光标倾斜箔片。",
+    "zh-TW": "自包含 WebGL2 主視覺：褶皺箔片表面的薄膜干涉，調色隨視角變化；移動游標傾斜箔片。",
+    "en": "A self-contained WebGL2 hero: thin-film interference over a crushed-foil surface whose palette shifts with the viewing angle; move the cursor to tilt the film."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-holographic-foil",
+  "tags": [
+    "example",
+    "first-party",
+    "hero",
+    "webgl",
+    "webgl2",
+    "shader",
+    "iridescent",
+    "foil",
+    "generative",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a self-contained WebGL2 hero of thin-film interference over a crushed foil, palette shifting with viewing angle, cursor-tilted.",
+        "zh-CN": "构建自包含 WebGL2 主视觉：褶皱箔片薄膜干涉，调色随视角变化，光标可倾斜。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -9,7 +9,7 @@ dans une PR.
 Ce guide indique où intervenir pour chaque type de contribution et quel niveau
 une PR doit atteindre avant d’être mergée.
 
-<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>Français</b> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <b>Français</b> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <a href="CONTRIBUTING.ko.md">한국어</a> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
 
 ---
 
@@ -255,7 +255,7 @@ une entrée dans [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) 
 C'est tout : le daemon la détecte dans le `PATH`, le picker l'affiche et le
 chemin chat fonctionne. Si la CLI émet des **typed events** (comme
 `--output-format stream-json` de Claude Code), ajoutez un parser dans
-[`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) et mettez
+[`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) et mettez
 `streamFormat: 'claude-stream-json'`.
 
 Critères de merge :
@@ -454,7 +454,7 @@ dans les [Discussions][discussions] / sur [Discord][discord], et le reste
 se fait tout seul.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/9ptkbbqRu
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

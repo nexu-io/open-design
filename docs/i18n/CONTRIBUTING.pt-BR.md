@@ -4,7 +4,7 @@ Obrigado por considerar contribuir. O OD é pequeno de propósito — a maior pa
 
 Este guia diz exatamente onde olhar para cada tipo de contribuição e qual a barra que um PR precisa atingir antes do merge.
 
-<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <b>Português (Brasil)</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <b>Português (Brasil)</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <a href="CONTRIBUTING.ko.md">한국어</a> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
 
 ---
 
@@ -183,7 +183,7 @@ Plugar um novo agente (por exemplo, o CLI `foo-coder` de alguma loja nova) é um
 }
 ```
 
-É só isso — o daemon detecta no `PATH`, o picker mostra, o caminho de chat funciona. Se o CLI emite **eventos tipados** (como o `--output-format stream-json` do Claude Code), conecte um parser em [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) e defina `streamFormat: 'claude-stream-json'`.
+É só isso — o daemon detecta no `PATH`, o picker mostra, o caminho de chat funciona. Se o CLI emite **eventos tipados** (como o `--output-format stream-json` do Claude Code), conecte um parser em [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) e defina `streamFormat: 'claude-stream-json'`.
 
 Barra para mergear:
 
@@ -301,7 +301,7 @@ Se você vem contribuindo de forma consistente e quer saber como é o caminho pa
 O tl;dr: mande bons PRs, revise com cuidado, apareça nas [Discussions][discussions] / no [Discord][discord], e o resto se resolve sozinho.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/9ptkbbqRu
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

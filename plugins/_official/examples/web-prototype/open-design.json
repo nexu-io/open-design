@@ -24,6 +24,7 @@
     "en": "Web Prototype"
   },
   "version": "0.1.1",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "General-purpose desktop web prototype. Single self-contained HTML file built by copying the seed `assets/template.html` and pasting section layouts from `references/layouts.md`. Default for any landing / marketing / docs / SaaS page when no more specific skill matches.",
   "description_i18n": {
     "zh-CN": "通用桌面网页原型。通过复制种子文件 `assets/template.html` 并粘贴 `references/layouts.md` 中的布局生成单个独立 HTML 文件。适用于落地页、营销页、文档或 SaaS 页面的默认选项。",

@@ -22,4 +22,4 @@ ls skills/
 
 ## License
 
-Skills in this directory are Apache-2.0 unless their own `LICENSE` says otherwise. The most notable exception is [`skills/guizang-ppt/`](guizang-ppt/), bundled verbatim from [op7418/guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) under MIT.
+Skills in this directory are Apache-2.0 unless their own `LICENSE` says otherwise. Notable MIT-licensed exceptions include [`skills/guizang-ppt/`](guizang-ppt/), bundled verbatim from [op7418/guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill), and [`skills/web-clone/`](web-clone/), adapted from [Jane-xiaoer/claude-skill-web-clone](https://github.com/Jane-xiaoer/claude-skill-web-clone).

@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-cartesian",
-  "title": "Html Ppt Zhangzara Cartesian",
+  "title": "Present a Senior Thesis Defense like a Distinction-Grade Economics Student",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Cartesian",
-    "zh-TW": "Html Ppt Zhangzara Cartesian",
-    "ja": "Html Ppt Zhangzara Cartesian",
-    "ko": "Html Ppt Zhangzara Cartesian",
-    "de": "Html Ppt Zhangzara Cartesian",
-    "fr": "Html Ppt Zhangzara Cartesian",
-    "ru": "Html Ppt Zhangzara Cartesian",
-    "es": "Html Ppt Zhangzara Cartesian",
-    "pt-BR": "Html Ppt Zhangzara Cartesian",
-    "it": "Html Ppt Zhangzara Cartesian",
-    "vi": "Html Ppt Zhangzara Cartesian",
-    "pl": "Html Ppt Zhangzara Cartesian",
-    "id": "Html Ppt Zhangzara Cartesian",
-    "nl": "Html Ppt Zhangzara Cartesian",
-    "ar": "Html Ppt Zhangzara Cartesian",
-    "tr": "Html Ppt Zhangzara Cartesian",
-    "uk": "Html Ppt Zhangzara Cartesian",
-    "en": "Html Ppt Zhangzara Cartesian"
+    "en": "Present a Senior Thesis Defense like a Distinction-Grade Economics Student",
+    "zh-CN": "像拿优等的经济学生一样做毕业论文答辩",
+    "zh-TW": "像拿优等的经济学生一样做毕业论文答辩"
   },
   "version": "0.1.0",
-  "description": "Cartesian — Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried. Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Built as a decision-grade coursework defense deck for thesis committee.",
   "description_i18n": {
-    "zh-CN": "Cartesian — 静谧的暖中性色调配以经典的 Playfair 衬线字体；雅致而从容。适用于需要安静、深思熟虑和成熟感的内容：投资论文、白皮书、咨询报告、长篇研究、画廊与文化演示文稿。",
-    "zh-TW": "Cartesian — 寧靜的暖中性色調配以經典的 Playfair 襯線字體；雅緻而從容。適用於需要安靜、深思熟慮和成熟感的內容：投資論文、白皮書、諮詢報告、長篇研究、畫廊與文化簡報。",
-    "ja": "Cartesian — 落ち着いた暖色系ニュートラルパレットとクラシカルな Playfair セリフ体。上品でゆったりとした印象。投資報告書、ホワイトペーパー、コンサルティング資料、長編リサーチ、ギャラリー・文化プレゼンテーションなど、静かで思慮深く大人な雰囲気が必要なコンテンツに最適。",
-    "ko": "Cartesian — 클래식한 Playfair 세리프체와 조용한 웜 뉴트럴 팔레트. 세련되고 여유로운 느낌. 투자 보고서, 백서, 자문 업무, 장문 리서치, 갤러리 및 문화 프레젠테이션 등 차분하고 신중하며 성숙한 분위기가 필요한 모든 콘텐츠에 적합합니다.",
-    "de": "Cartesian — Ruhige, warm-neutrale Farbpalette mit klassischen Playfair-Serifen; geschmackvoll und unaufgeregt. Ideal für alles, was ruhig, durchdacht und erwachsen wirken soll: Investitionsthesen, Whitepapers, Beratungsarbeiten, Langform-Recherchen, Galerie- und Kulturpräsentationen.",
-    "fr": "Cartesian — Palette sobre aux tons chauds neutres avec des polices à empattement Playfair classiques ; élégant et posé. Pour tout contenu nécessitant calme, réflexion et maturité : thèses d'investissement, livres blancs, conseils, recherches longues, présentations culturelles et galeries.",
-    "ru": "Cartesian — Спокойная тёплая нейтральная палитра с классическими засечками Playfair; изящно и неторопливо. Для всего, что должно выглядеть сдержанно, продуманно и взрослым: инвестиционные тезисы, белые книги, консалтинг, длинные исследования, культурные и галерейные презентации.",
-    "es": "Cartesian — Paleta cálida y neutra con serifas clásicas Playfair; elegante y pausada. Para todo lo que deba sentirse tranquilo, reflexivo y maduro: tesis de inversión, documentos técnicos, trabajos de asesoría, investigaciones extensas, presentaciones culturales y galerías.",
-    "pt-BR": "Cartesian — Paleta neutra quente e tranquila com serifas clássicas Playfair; elegante e sem pressa. Para tudo que deve parecer calmo, ponderado e maduro: teses de investimento, white papers, consultoria, pesquisas longas, apresentações culturais e de galerias.",
-    "it": "Cartesian — Palette neutra calda e tranquilla con serif classici Playfair; raffinata e pacata. Per tutto ciò che deve risultare quieto, ponderato e maturo: tesi di investimento, white paper, lavori di consulenza, ricerche approfondite, presentazioni culturali e gallerie.",
-    "vi": "Cartesian — Bảng màu trung tính ấm, tĩnh lặng với phông chữ serif cổ điển Playfair; tinh tế và chậm rãi. Dành cho mọi nội dung cần sự yên tĩnh, suy nghĩ kỹ lưỡng và trưởng thành: luận án đầu tư, sách trắng, công việc tư vấn, nghiên cứu dài, bài thuyết trình văn hóa và triển lãm.",
-    "pl": "Cartesian — Spokojna, ciepła neutralna paleta z klasycznymi szeryfami Playfair; gustowna i nieśpieszona. Do wszystkiego, co powinno być ciche, przemyślane i dojrzałe: tezy inwestycyjne, white papers, doradztwo, długie raporty badawcze, prezentacje kulturalne i galerie.",
-    "id": "Cartesian — Palet netral hangat yang tenang dengan serif klasik Playfair; berkelas dan tidak terburu-buru. Untuk apa pun yang harus terasa tenang, penuh pertimbangan, dan dewasa: tesis investasi, white paper, pekerjaan konsultasi, riset panjang, presentasi galeri dan budaya.",
-    "nl": "Cartesian — Rustig warm-neutraal palet met klassieke Playfair schreefletters; smaakvol en ongehaast. Voor alles dat rustig, doordacht en volwassen moet aanvoelen: investeringstheses, whitepapers, advieswerk, lange onderzoeken, galerie- en culturele presentaties.",
-    "ar": "Cartesian — لوحة محايدة دافئة وهادئة مع خطوط Playfair التقليدية؛ أنيقة وغير متسرعة. لكل ما يجب أن يبدو هادئاً ومدروساً وناضجاً: أطروحات الاستثمار، الأوراق البيضاء، الأعمال الاستشارية، الأبحاث الطويلة، العروض الثقافية والمعارض.",
-    "tr": "Cartesian — Klasik Playfair serif yazı tipleriyle sessiz, sıcak-nötr palet; zarif ve acele etmeyen. Sessiz, düşünceli ve olgun hissetmesi gereken her şey için: yatırım tezleri, teknik raporlar, danışmanlık çalışmaları, uzun araştırmalar, galeri ve kültürel sunumlar.",
-    "uk": "Cartesian — Спокійна тепла нейтральна палітра з класичними засічками Playfair; витончена і неквапна. Для всього, що має виглядати тихо, зважено і дорослим: інвестиційні тези, білі книги, консалтинг, довгі дослідження, культурні та галерейні презентації.",
-    "en": "Cartesian — Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried. Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks."
+    "en": "An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Built as a decision-grade coursework defense deck for thesis committee.",
+    "zh-CN": "像拿优等的经济学生一样做毕业论文答辩——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像拿优等的经济学生一样做毕业论文答辩——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,20 @@
     "white-paper",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "product",
+    "roadmap",
+    "architecture",
+    "html-ppt-zhangzara-cartesian",
+    "product-and-technical-management",
+    "student-coursework",
+    "senior-capstone-defense-deck",
+    "education",
+    "coursework",
+    "defense",
+    "academic",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +64,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "education",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +72,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Cartesian — Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried. Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks.",
-        "zh-CN": "使用这个插件完成以下任务：Cartesian — Quiet warm-neutral palette with classical Playfair serifs; tasteful and unhurried. Anything that should feel quiet, considered, and grown-up: investment theses, white papers, advisory work, longform research, gallery / cultural decks."
+        "en": "Create \"Present a Senior Thesis Defense like a Distinction-Grade Economics Student\" as a decision-grade Student coursework deck in this template's own visual system. Subject: An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. Audience: thesis committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds.",
+        "zh-CN": "像拿优等的经济学生一样做毕业论文答辩。像拿优等的经济学生一样做毕业论文答辩——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。 主题：An economics senior thesis on the employment effects of local minimum-wage increases — identification strategy, evidence, and limitations. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Cartesian"
+          "title": "Present a Senior Thesis Defense like a Distinction-Grade Economics Student",
+          "title_i18n": {
+            "en": "Present a Senior Thesis Defense like a Distinction-Grade Economics Student",
+            "zh-CN": "像拿优等的经济学生一样做毕业论文答辩",
+            "zh-TW": "像拿优等的经济学生一样做毕业论文答辩"
+          }
         }
       ]
     },
@@ -122,6 +111,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "student-coursework"
   }
 }

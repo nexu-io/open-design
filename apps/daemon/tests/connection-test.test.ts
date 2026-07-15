@@ -20,11 +20,21 @@ import {
   testAgentConnection,
   testProviderConnection,
   validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
-import { listProviderModels } from '../src/providerModels.js';
+import {
+  applyAgentLaunchEnv,
+  getAgentDef,
+  resolveAgentLaunch,
+  spawnEnvForAgent,
+} from '../src/agents.js';
+import { listProviderModels } from '../src/integrations/provider-models.js';
+import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
 import { rememberLiveModels } from '../src/runtimes/models.js';
+import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
+import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -153,6 +163,10 @@ async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T
   return withFakeAgent('kimi', script, run);
 }
 
+async function withFakeAntigravity<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('agy', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -188,6 +202,7 @@ beforeAll(async () => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  amrModelLoadingCache.resetForTests();
 });
 
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -201,9 +216,22 @@ describe('POST /api/provider/models', () => {
       );
       return jsonResponse({
         data: [
-          { id: 'gpt-4o-mini', object: 'model' },
+          {
+            id: 'gpt-4o-mini',
+            object: 'model',
+            metadata: { cost: 'low', capability: 'standard' },
+            enabled: false,
+          },
+          {
+            id: 'gpt-4o',
+            object: 'model',
+            metadata: { cost: 'medium', capability: 'advanced' },
+            default: true,
+          },
           { id: 'gpt-4o', object: 'model' },
-          { id: 'gpt-4o', object: 'model' },
+          { id: 'wan2-1-14b-t2v-250225', object: 'model' },
+          { id: 'text-embedding-3-large', object: 'model' },
+          { id: 'dall-e-3', object: 'model' },
         ],
       });
     });
@@ -220,13 +248,65 @@ describe('POST /api/provider/models', () => {
     });
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({
+    const body = (await res.json()) as {
+      ok: boolean;
+      kind: string;
+      models?: Array<Record<string, unknown>>;
+    };
+    expect(body).toMatchObject({
       ok: true,
       kind: 'success',
       models: [
-        { id: 'gpt-4o', label: 'gpt-4o' },
-        { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+        {
+          id: 'gpt-4o',
+          label: 'gpt-4o',
+          metadata: { cost: 'medium', capability: 'advanced' },
+        },
+        {
+          id: 'gpt-4o-mini',
+          label: 'gpt-4o-mini',
+          metadata: { cost: 'low', capability: 'standard' },
+        },
       ],
+    });
+    expect(body.models?.[0]?.enabled).toBeUndefined();
+    expect(body.models?.[0]?.default).toBeUndefined();
+    expect(body.models?.[1]?.enabled).toBeUndefined();
+    expect(body.models?.[1]?.default).toBeUndefined();
+  });
+
+  // Regression for #5367: a gateway's /models catalogue can list embedding
+  // models alongside real chat models. `BAAI/bge-large-en-v1.5` (reported via
+  // SiliconFlow) doesn't contain any of the existing exclusion substrings
+  // (`embedding`, `rerank`, ...), so it was surfacing as a "loaded" chat model
+  // in the picker and then 404ing the moment a user actually tested it.
+  it('excludes the BGE embedding family from an OpenAI-compatible /models catalogue', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        data: [
+          { id: 'deepseek-ai/DeepSeek-V3', object: 'model' },
+          { id: 'BAAI/bge-large-en-v1.5', object: 'model' },
+          { id: 'BAAI/bge-reranker-v2-m3', object: 'model' },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        apiKey: 'sk-siliconflow',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      models: [{ id: 'deepseek-ai/DeepSeek-V3', label: 'deepseek-ai/DeepSeek-V3' }],
     });
   });
 
@@ -524,6 +604,37 @@ describe('POST /api/provider/models', () => {
     }
   });
 
+  it('lets an operator-allowlisted internal endpoint reach the upstream model fetch (#3225)', async () => {
+    // The exact symptom in #3225 — "Could not fetch models: Internal IPs
+    // blocked". With the host opted in via OD_ALLOWED_INTERNAL_HOSTS, model
+    // discovery must reach the internal gateway instead of returning forbidden.
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({ data: [{ id: 'gpt-4o-internal' }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'http://10.0.0.5:11434/v1',
+          apiKey: 'sk-good',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).not.toMatchObject({ kind: 'forbidden' });
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes('10.0.0.5'),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('reports timeout when model listing is aborted by the probe timer', async () => {
     // The DNS-aware validator runs before the probe timer is installed; stub
     // the resolver so the test doesn't race against real DNS while fake
@@ -645,6 +756,38 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(401);
   });
 
+  it('maps NVIDIA DEGRADED errors to actionable upstream detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+        return jsonResponse(
+          { error: { message: 'DEGRADED function id=abc123' } },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        apiKey: 'nvapi-test',
+        model: 'minimaxai/minimax-m3',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    expect(body.status).toBe(400);
+    expect(body.detail).toContain('selected NVIDIA model instance');
+    expect(body.detail).toContain('Try a different model');
+    expect(body.detail).not.toContain('function id');
+  });
+
   it('does not add a duplicate version segment for versioned OpenAI-compatible subpaths', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
@@ -677,6 +820,91 @@ describe('POST /api/test/connection provider mode', () => {
       'https://api.deepinfra.com/v1/openai/chat/completions',
       expect.anything(),
     );
+  });
+
+  it('returns static AWS Bedrock model seeds without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      kind: 'success',
+    });
+    expect(body.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        }),
+      ]),
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects malformed AWS Bedrock model-list URLs before static seeds', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'not-a-url',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'invalid_base_url',
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects forbidden AWS Bedrock model-list URLs before static seeds', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'http://10.0.0.8:8080',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'forbidden',
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
   });
 
   it('checks SenseAudio non-chat model availability without probing chat completions', async () => {
@@ -774,6 +1002,36 @@ describe('POST /api/test/connection provider mode', () => {
       'https://api.senseaudio.cn/v1/chat/completions',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('reports AWS Bedrock connection tests as unsupported without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: '',
+        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'unknown',
+      model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    });
+    expect(String(body.detail)).toContain('AWS Bedrock BYOK requires AWS credential signing');
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
   });
 
   it('maps a 404 to not_found_model', async () => {
@@ -2067,6 +2325,215 @@ describe('POST /api/test/connection agent mode', () => {
     );
   });
 
+  it('concretizes explicit AMR default before the strict fake Vela connection smoke prompt', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-amr-default-'));
+    const logPath = path.join(markerDir, 'invocations.jsonl');
+    const previousLog = process.env.FAKE_VELA_INVOCATION_LOG;
+    const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
+    const previousRequireSetModel = process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+    try {
+      process.env.FAKE_VELA_INVOCATION_LOG = logPath;
+      process.env.FAKE_VELA_LOG_SET_MODEL = '1';
+      delete process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+
+      await withFakeAgent(
+        'vela',
+        `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'amr',
+            model: 'default',
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'AMR',
+            sample: 'Hello from fake vela.',
+          });
+        },
+      );
+
+      const raw = await fsp.readFile(logPath, 'utf8');
+      const methods = raw
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { method: string })
+        .map((entry) => entry.method);
+      expect(methods).toEqual(['new', 'set_model:deepseek-v4-flash']);
+    } finally {
+      if (previousLog === undefined) delete process.env.FAKE_VELA_INVOCATION_LOG;
+      else process.env.FAKE_VELA_INVOCATION_LOG = previousLog;
+      if (previousLogSetModel === undefined) delete process.env.FAKE_VELA_LOG_SET_MODEL;
+      else process.env.FAKE_VELA_LOG_SET_MODEL = previousLogSetModel;
+      if (previousRequireSetModel === undefined) delete process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+      else process.env.FAKE_VELA_REQUIRE_SET_MODEL = previousRequireSetModel;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refreshes AMR connection-test default resolution when file credentials change', async () => {
+    const tempHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-amr-home-'));
+    const logPath = path.join(tempHome, 'invocations.jsonl');
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousLog = process.env.FAKE_VELA_INVOCATION_LOG;
+    const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
+    const previousRequireSetModel = process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+    const previousPreset = process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    const previousList = process.env.FAKE_VELA_MODEL_LIST_JSON;
+    const writeAmrConfig = async (runtimeKey: string, userId: string) => {
+      const configPath = path.join(tempHome, '.amr', 'config.json');
+      await fsp.mkdir(path.dirname(configPath), { recursive: true });
+      await fsp.writeFile(
+        configPath,
+        JSON.stringify({
+          profiles: {
+            local: {
+              runtimeKey,
+              linkUrl: 'https://openrouter.example/v1',
+              user: { id: userId, email: `${userId}@example.test` },
+            },
+          },
+        }),
+        'utf8',
+      );
+    };
+    const setCatalog = (modelId: string) => {
+      const preset = JSON.stringify({
+        source: 'preset',
+        data: [{ id: modelId, default: true }],
+      });
+      const remote = JSON.stringify({
+        source: 'remote',
+        data: [{ id: modelId, default: true }],
+      });
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = preset;
+      process.env.FAKE_VELA_MODEL_LIST_JSON = remote;
+    };
+    try {
+      process.env.HOME = tempHome;
+      process.env.USERPROFILE = tempHome;
+      process.env.FAKE_VELA_INVOCATION_LOG = logPath;
+      process.env.FAKE_VELA_LOG_SET_MODEL = '1';
+      delete process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+
+      await withFakeAgent(
+        'vela',
+        `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+        async () => {
+          await writeAmrConfig('rt-before', 'user-before');
+          setCatalog('before-upgrade-model');
+          expect(await testAgentConnection({ agentId: 'amr', model: 'default' }))
+            .toMatchObject({ ok: true, kind: 'success', model: 'before-upgrade-model' });
+
+          await writeAmrConfig('rt-after', 'user-after');
+          setCatalog('after-upgrade-model');
+          expect(await testAgentConnection({ agentId: 'amr', model: 'default' }))
+            .toMatchObject({ ok: true, kind: 'success', model: 'after-upgrade-model' });
+        },
+      );
+
+      const methods = (await fsp.readFile(logPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { method: string })
+        .map((entry) => entry.method);
+      expect(methods).toEqual([
+        'new',
+        'set_model:before-upgrade-model',
+        'new',
+        'set_model:after-upgrade-model',
+      ]);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousLog === undefined) delete process.env.FAKE_VELA_INVOCATION_LOG;
+      else process.env.FAKE_VELA_INVOCATION_LOG = previousLog;
+      if (previousLogSetModel === undefined) delete process.env.FAKE_VELA_LOG_SET_MODEL;
+      else process.env.FAKE_VELA_LOG_SET_MODEL = previousLogSetModel;
+      if (previousRequireSetModel === undefined) delete process.env.FAKE_VELA_REQUIRE_SET_MODEL;
+      else process.env.FAKE_VELA_REQUIRE_SET_MODEL = previousRequireSetModel;
+      if (previousPreset === undefined) delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+      else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
+      if (previousList === undefined) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+      else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+      await fsp.rm(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  it('shares AMR model cache invalidation with connection-test default resolution', async () => {
+    const previousPreset = process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    const previousList = process.env.FAKE_VELA_MODEL_LIST_JSON;
+    const setCatalog = (presetModelId: string, remoteModelId: string) => {
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{ id: presetModelId, default: true }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [{ id: remoteModelId, default: true }],
+      });
+    };
+    try {
+      await withFakeAgent(
+        'vela',
+        `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+        async () => {
+          const def = getAgentDef('amr');
+          expect(def).toBeDefined();
+          const launch = resolveAgentLaunch(def!, {});
+          expect(launch.launchPath).toBeTruthy();
+          const env = applyAgentLaunchEnv(
+            spawnEnvForAgent(
+              def!.id,
+              {
+                ...process.env,
+                ...(def!.env || {}),
+              },
+              {},
+              undefined,
+              { resolvedBin: launch.selectedPath },
+            ),
+            launch,
+          );
+          const normalProbeCacheKey = buildAmrModelCacheKey({
+            launchPath: launch.launchPath!,
+            env,
+            credentialRevision: readVelaCredentialRevision(env),
+          });
+
+          setCatalog('preset-before-upgrade', 'remote-before-upgrade');
+          expect(await testAgentConnection({ agentId: 'amr', model: 'default' }))
+            .toMatchObject({ ok: true, kind: 'success', model: 'preset-before-upgrade' });
+
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            const warmed = await testAgentConnection({ agentId: 'amr', model: 'default' });
+            if (warmed.model === 'remote-before-upgrade') break;
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          expect(await testAgentConnection({ agentId: 'amr', model: 'default' }))
+            .toMatchObject({ ok: true, kind: 'success', model: 'remote-before-upgrade' });
+
+          setCatalog('preset-after-upgrade', 'remote-after-upgrade');
+          amrModelLoadingCache.invalidate(normalProbeCacheKey);
+
+          expect(await testAgentConnection({ agentId: 'amr', model: 'default' }))
+            .toMatchObject({ ok: true, kind: 'success', model: 'preset-after-upgrade' });
+        },
+      );
+    } finally {
+      if (previousPreset === undefined) delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+      else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
+      if (previousList === undefined) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+      else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+    }
+  });
+
   it('resolves the AMR connection-test scope from the merged launch env', async () => {
     rememberLiveModels('amr', [{ id: 'local-env-model', label: 'local-env-model' }], 'local');
     const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
@@ -3221,6 +3688,89 @@ console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
     }
   });
 
+  // Regression for #4281: agy print mode is silent on stdout/stderr for
+  // BOTH missing-auth and quota-exhausted failures — it exits 0 without
+  // echoing the upstream error, so the only place the failure shape
+  // surfaces is agy's `--log-file`. Before the fix the connection test
+  // never handed agy a `--log-file` and never inspected it, so every
+  // silent failure collapsed into `kind: 'unknown'` / "Test failed: exit
+  // 0". These three cases pin the actionable auth / quota / fallback
+  // results that let Settings tell the user how to recover.
+  //
+  // The fake agy writes the caller-supplied log body to whatever
+  // `--log-file` path the daemon passes, then exits 0 with no stdout —
+  // exactly the not-logged-in / quota shape captured from the real CLI.
+  const fakeAgyScript = (logBody: string) => `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.0.3-test');
+  process.exit(0);
+}
+const logIdx = args.indexOf('--log-file');
+const logPath = logIdx !== -1 ? args[logIdx + 1] : null;
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  const body = ${JSON.stringify(logBody)};
+  if (logPath && body) {
+    try { fs.writeFileSync(logPath, body); } catch {}
+  }
+  // Silent clean exit — no assistant text on stdout, matching agy's
+  // real print-mode behavior when it cannot establish a connection.
+  process.exit(0);
+});
+`;
+
+  it('surfaces antigravity missing-auth as agent_auth_required instead of "exit 0" (#4281)', async () => {
+    await withFakeAntigravity(
+      fakeAgyScript(
+        [
+          'Propagating selected model override to backend: label="Gemini 3.1 Pro (High)"',
+          'error getting token source: You are not logged into Antigravity',
+        ].join('\n'),
+      ),
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('agent_auth_required');
+        expect(result.agentName).toBe('Antigravity');
+        // The old bug surfaced the bare process-exit line as the detail.
+        expect(result.detail).not.toBe('exit 0');
+        expect(result.detail).toContain('sign in');
+      },
+    );
+  });
+
+  it('surfaces antigravity quota exhaustion as rate_limited (#4281)', async () => {
+    await withFakeAntigravity(
+      fakeAgyScript(
+        [
+          'Propagating selected model override to backend: label="Gemini 3.1 Pro (High)"',
+          'upstream error: code = 429 RESOURCE_EXHAUSTED: Individual quota reached',
+        ].join('\n'),
+      ),
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('rate_limited');
+        expect(result.detail).toContain('quota');
+      },
+    );
+  });
+
+  it('falls back to agent_auth_required when antigravity exits silently with no log signal (#4281)', async () => {
+    await withFakeAntigravity(fakeAgyScript(''), async () => {
+      const result = await testAgentConnection({ agentId: 'antigravity' });
+      expect(result.ok).toBe(false);
+      // A silent clean exit almost always means missing OAuth; it must
+      // never regress back to the opaque `unknown` / "exit 0" result.
+      expect(result.kind).toBe('agent_auth_required');
+      expect(result.kind).not.toBe('unknown');
+    });
+  });
+
   it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
     const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
     const oldPath = process.env.PATH;
@@ -4005,5 +4555,72 @@ describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
     const result = await validateBaseUrlResolved('https://offline.example.com/v1', failingLookup);
     expect(result.error).toBeUndefined();
     expect(failingLookup).toHaveBeenCalledOnce();
+  });
+
+  it('exempts a literal internal IP passed via allowedInternalHosts without resolving DNS (#3225)', async () => {
+    const lookup = lookupReturning([]);
+    const result = await validateBaseUrlResolved('http://10.0.0.5:4000/v1', lookup, {
+      allowedInternalHosts: ['10.0.0.5'],
+    });
+    expect(result.error).toBeUndefined();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('exempts an allowlisted hostname even though it resolves into private space (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://litellm.internal:4000/v1',
+      lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+      { allowedInternalHosts: ['litellm.internal'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('exempts a non-allowlisted hostname whose resolved address is itself allowlisted (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://gateway.example.com/v1',
+      lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('still blocks a resolved private address that is NOT on the allowlist (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://other.example.com/v1',
+      lookupReturning([{ address: '192.168.1.5', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+  });
+});
+
+describe('validateUserProviderBaseUrl: OD_ALLOWED_INTERNAL_HOSTS opt-in (issue #3225)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('exempts an operator-allowlisted literal internal IP for user-configured endpoints', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateUserProviderBaseUrl('http://10.0.0.5:4000/v1');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('exempts a hostname that resolves into private space when that hostname is allowlisted', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', 'litellm.internal');
+    const lookup = vi.fn(async () => [{ address: '10.0.0.5', family: 4 }]);
+    const result = await validateUserProviderBaseUrl('http://litellm.internal:4000/v1', lookup);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('still blocks a private endpoint that is not on the allowlist', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateUserProviderBaseUrl('http://192.168.1.5:4000/v1');
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+  });
+
+  it('keeps the attacker-controllable asset guard strict — the plain resolver never consults the allowlist', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateBaseUrlResolved('http://10.0.0.5:4000/v1');
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
   });
 });

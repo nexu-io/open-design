@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Marketplace App — Mobile Flow Wireframe v0.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Caveat:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --board: #f4f4f2;
+      --board-grid: #e7e7e3;
+      --frame: #1c1b1a;
+      --screen: #ffffff;
+      --box: #e3e3e6;
+      --box-dark: #cfcfd4;
+      --box-line: #d7d7db;
+      --text-bar: #b9b9c0;
+      --ink: #1c1b1a;
+      --muted: #6f6f72;
+      --accent: #ff5a2a;
+      --accent-soft: #ffe2d8;
+      --note: #fff3a8;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --hand: 'Caveat', cursive;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        repeating-linear-gradient(0deg, var(--board-grid) 0 1px, transparent 1px 28px),
+        repeating-linear-gradient(90deg, var(--board-grid) 0 1px, transparent 1px 28px),
+        var(--board);
+      font: 15px/1.5 var(--sans);
+    }
+    .board { padding: 30px 40px 60px; max-width: 1320px; margin: 0 auto; }
+
+    /* ---- header ---- */
+    .head { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: end; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+    .head h1 { font: 800 38px/1.05 var(--sans); margin: 0; letter-spacing: -0.02em; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .pin { display: inline-flex; align-items: center; gap: 8px; font: 600 11px/1 var(--mono); padding: 7px 11px; border: 1.5px dashed var(--accent); color: var(--accent); transform: rotate(-1.6deg); letter-spacing: 0.16em; background: #fff; white-space: nowrap; }
+    .pin .x { width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); }
+    .head .sub { font: 500 15px/1.4 var(--sans); color: var(--muted); margin-top: 8px; max-width: 64ch; }
+    .head .meta { font: 500 11px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.1em; text-align: right; text-transform: uppercase; white-space: nowrap; }
+    .head .meta b { color: var(--ink); }
+
+    /* ---- flow row ---- */
+    .flow { display: flex; align-items: stretch; gap: 0; padding: 40px 4px 20px; overflow-x: auto; }
+    .step { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: 0 0 auto; }
+    .step .caption { font: 600 11px/1.3 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; }
+    .step .caption b { color: var(--ink); display: block; font-size: 12px; }
+
+    /* ---- phone frame ---- */
+    .phone {
+      width: 258px; height: 524px;
+      background: var(--frame);
+      border-radius: 34px;
+      padding: 11px;
+      box-shadow: 7px 10px 0 -3px rgba(28,27,26,0.16);
+      position: relative;
+    }
+    .phone .scr {
+      width: 100%; height: 100%;
+      background: var(--screen);
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      display: flex; flex-direction: column;
+    }
+    .notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 92px; height: 17px; background: var(--frame); border-radius: 0 0 12px 12px; z-index: 5; }
+    .status { display: flex; justify-content: space-between; align-items: center; padding: 7px 16px 4px; font: 600 9px/1 var(--mono); color: var(--muted); }
+    .status .dots { display: flex; gap: 3px; }
+    .status .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--box-dark); display: block; }
+    .body { flex: 1; padding: 4px 14px 14px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+    /* generic greybox primitives */
+    .ph { background: var(--box); border-radius: 8px; position: relative; }
+    .ph.media { display: flex; align-items: center; justify-content: center; }
+    .ph.media::before, .ph.media::after { content: ''; position: absolute; left: 12%; right: 12%; top: 50%; height: 2px; background: var(--box-dark); }
+    .ph.media::before { transform: rotate(20deg); }
+    .ph.media::after { transform: rotate(-20deg); }
+    .bar { height: 11px; border-radius: 6px; background: var(--text-bar); }
+    .bar.title { height: 16px; background: var(--box-dark); }
+    .bar.w90 { width: 90%; } .bar.w80 { width: 80%; } .bar.w70 { width: 70%; }
+    .bar.w60 { width: 60%; } .bar.w50 { width: 50%; } .bar.w40 { width: 40%; } .bar.w30 { width: 30%; }
+    .btn { height: 38px; border-radius: 10px; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; font: 600 11px/1 var(--mono); letter-spacing: 0.08em; }
+    .btn.ghost { background: transparent; border: 1.5px solid var(--box-dark); color: var(--muted); }
+    .gap { flex: 1; }
+    .stack { display: flex; flex-direction: column; gap: 9px; }
+
+    /* screen 2: search + chips + feed + tabs */
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 8px; }
+    .topbar .logo { width: 34px; height: 14px; background: var(--box-dark); border-radius: 4px; }
+    .topbar .av { width: 22px; height: 22px; border-radius: 50%; background: var(--box-dark); }
+    .search { height: 30px; border-radius: 999px; background: var(--box); display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+    .search .mag { width: 11px; height: 11px; border: 2px solid var(--text-bar); border-radius: 50%; position: relative; }
+    .search .mag::after { content: ''; position: absolute; right: -4px; bottom: -4px; width: 6px; height: 2px; background: var(--text-bar); transform: rotate(45deg); }
+    .search .ph-bar { height: 7px; width: 55%; border-radius: 5px; background: var(--text-bar); }
+    .chips { display: flex; gap: 7px; margin: 12px 0; }
+    .chip { height: 22px; border-radius: 999px; background: var(--box); flex: 0 0 auto; }
+    .chip.a { width: 46px; background: var(--ink); } .chip.b { width: 40px; } .chip.c { width: 52px; } .chip.d { width: 36px; }
+    .feed { display: flex; flex-direction: column; gap: 11px; flex: 1; min-height: 0; }
+    .card { display: flex; gap: 10px; align-items: center; }
+    .card .thumb { width: 52px; height: 52px; border-radius: 9px; flex: 0 0 auto; }
+    .card .lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+    .tabbar { display: flex; justify-content: space-between; padding: 11px 6px 2px; margin-top: 8px; border-top: 1px solid var(--box-line); }
+    .tabbar i { width: 26px; height: 26px; border-radius: 7px; background: var(--box); display: block; }
+    .tabbar i.on { background: var(--ink); }
+
+    /* screen 3: detail */
+    .spec { display: flex; justify-content: space-between; align-items: center; }
+    .spec .k { height: 8px; width: 32%; border-radius: 5px; background: var(--text-bar); }
+    .spec .v { height: 8px; width: 24%; border-radius: 5px; background: var(--box-dark); }
+    .sticky-cta { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--box-line); display: flex; align-items: center; gap: 10px; }
+    .sticky-cta .price { height: 16px; width: 40px; border-radius: 5px; background: var(--ink); }
+    .sticky-cta .btn { flex: 1; }
+
+    /* screen 4: confirm */
+    .confirm { align-items: center; text-align: center; gap: 14px; padding-top: 24px; }
+    .check { width: 74px; height: 74px; border-radius: 50%; background: var(--accent-soft); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; }
+    .check svg { width: 38px; height: 38px; }
+    .summary { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 6px 4px; }
+    .summary .row { display: flex; justify-content: space-between; align-items: center; }
+    .summary .row .l { height: 8px; width: 40%; border-radius: 5px; background: var(--text-bar); }
+    .summary .row .r { height: 8px; width: 22%; border-radius: 5px; background: var(--box-dark); }
+
+    /* ---- connectors ---- */
+    .conn { flex: 0 0 auto; align-self: center; width: 88px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 2px; position: relative; }
+    .conn .label { font: 600 10px/1.2 var(--mono); color: var(--accent); letter-spacing: 0.04em; text-align: center; background: #fff; border: 1px solid var(--accent-soft); border-radius: 6px; padding: 4px 6px; white-space: nowrap; }
+    .conn svg { width: 88px; height: 26px; display: block; }
+
+    /* ---- annotations ---- */
+    .note {
+      position: absolute;
+      padding: 10px 13px;
+      font: 600 17px/1.25 var(--hand);
+      color: var(--ink);
+      background: var(--note);
+      box-shadow: 4px 6px 0 -2px rgba(28,27,26,0.18);
+      max-width: 168px;
+      z-index: 8;
+    }
+    .note .tape { position: absolute; top: -9px; left: 24px; width: 56px; height: 16px; background: rgba(28,27,26,0.16); transform: rotate(-4deg); }
+    .note.a { top: -8px; left: 70px; transform: rotate(-3deg); }
+    .note.b { bottom: -6px; right: 60px; transform: rotate(2.6deg); background: var(--accent-soft); }
+    .note .ptr { font: 600 12px/1 var(--mono); color: var(--accent); display: block; letter-spacing: 0.08em; margin-bottom: 2px; }
+
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend .sw { width: 14px; height: 14px; border-radius: 3px; }
+    .legend .sw.box { background: var(--box); border: 1px solid var(--box-dark); }
+    .legend .sw.ink { background: var(--ink); }
+    .legend .sw.acc { background: var(--accent); }
+
+    @media (max-width: 1100px) {
+      .board { padding: 24px 20px 48px; }
+      .head { grid-template-columns: 1fr; }
+      .head .meta { text-align: left; }
+      .flow { padding: 28px 0 16px; }
+      .note.a, .note.b { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="board">
+
+    <div class="head" data-od-id="header">
+      <div>
+        <h1>Marketplace App · Buy Flow
+          <span class="pin"><span class="x"></span>WIREFRAME v0.1 · MOBILE</span>
+        </h1>
+        <div class="sub">Lo-fi screen flow — first-launch onboarding through to a confirmed order. Greybox content only; copy and imagery come later.</div>
+      </div>
+      <div class="meta"><b>DATE</b> 2026-06-23<br/><b>DEVICE</b> IPHONE 390×844<br/><b>FIDELITY</b> LOW · GREYBOX</div>
+    </div>
+
+    <div class="flow" data-od-id="flow">
+
+      <!-- ===== Screen 1: Onboarding ===== -->
+      <div class="step">
+        <div class="phone" data-od-id="screen-onboarding">
+          <div class="scr">
+            <div class="notch"></div>
+            <div class="status"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+            <div class="body">
+              <div class="ph media" style="height:178px;margin:8px 0 18px;border-radius:14px;"></div>
+              <div class="bar title w70" style="margin-bottom:14px;"></div>
+              <div class="stack" style="margin-bottom:18px;">
+                <div class="bar w90"></div>
+                <div class="bar w80"></div>
+                <div class="bar w60"></div>
+              </div>
+              <div class="gap"></div>
+              <div class="btn">GET STARTED</div>
+              <div class="btn ghost" style="margin-top:9px;border:none;">Skip for now</div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><b>1 · Onboarding</b>first launch</div>
+      </div>
+
+      <!-- connector 1 -->
+      <div class="conn" data-od-id="connector-1">
+        <div class="label">① tap Start</div>
+        <svg viewBox="0 0 88 26" aria-hidden="true">
+          <path d="M 4 13 H 74" stroke="#ff5a2a" stroke-width="2" stroke-dasharray="5 4" fill="none" stroke-linecap="round"/>
+          <path d="M 72 6 L 84 13 L 72 20" stroke="#ff5a2a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <!-- ===== Screen 2: Home feed ===== -->
+      <div class="step">
+        <div class="phone" data-od-id="screen-home">
+          <div class="scr">
+            <div class="notch"></div>
+            <div class="status"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+            <div class="body">
+              <div class="topbar"><span class="logo"></span><span class="av"></span></div>
+              <div class="search"><span class="mag"></span><span class="ph-bar"></span></div>
+              <div class="chips"><span class="chip a"></span><span class="chip b"></span><span class="chip c"></span><span class="chip d"></span></div>
+              <div class="feed">
+                <div class="card"><span class="thumb ph media"></span><span class="lines"><span class="bar w80"></span><span class="bar w50"></span></span></div>
+                <div class="card"><span class="thumb ph media"></span><span class="lines"><span class="bar w70"></span><span class="bar w40"></span></span></div>
+                <div class="card"><span class="thumb ph media"></span><span class="lines"><span class="bar w90"></span><span class="bar w60"></span></span></div>
+                <div class="card"><span class="thumb ph media"></span><span class="lines"><span class="bar w60"></span><span class="bar w40"></span></span></div>
+              </div>
+              <div class="tabbar"><i class="on"></i><i></i><i></i><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><b>2 · Home feed</b>browse + search</div>
+      </div>
+
+      <!-- connector 2 -->
+      <div class="conn" data-od-id="connector-2">
+        <div class="label">② open item</div>
+        <svg viewBox="0 0 88 26" aria-hidden="true">
+          <path d="M 4 13 H 74" stroke="#ff5a2a" stroke-width="2" stroke-dasharray="5 4" fill="none" stroke-linecap="round"/>
+          <path d="M 72 6 L 84 13 L 72 20" stroke="#ff5a2a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <!-- ===== Screen 3: Detail ===== -->
+      <div class="step">
+        <div class="phone" data-od-id="screen-detail">
+          <div class="scr">
+            <div class="notch"></div>
+            <div class="status"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+            <div class="body">
+              <div class="ph media" style="height:196px;margin:8px 0 16px;border-radius:14px;"></div>
+              <div class="bar title w80" style="margin-bottom:10px;"></div>
+              <div class="bar w40" style="height:14px;background:var(--ink);margin-bottom:16px;"></div>
+              <div class="stack" style="gap:11px;margin-bottom:8px;">
+                <div class="spec"><span class="k"></span><span class="v"></span></div>
+                <div class="spec"><span class="k"></span><span class="v"></span></div>
+                <div class="spec"><span class="k"></span><span class="v"></span></div>
+              </div>
+              <div class="sticky-cta"><span class="price"></span><span class="btn">ADD TO CART</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><b>3 · Item detail</b>specs + CTA</div>
+      </div>
+
+      <!-- connector 3 -->
+      <div class="conn" data-od-id="connector-3">
+        <div class="label">③ add to cart</div>
+        <svg viewBox="0 0 88 26" aria-hidden="true">
+          <path d="M 4 13 H 74" stroke="#ff5a2a" stroke-width="2" stroke-dasharray="5 4" fill="none" stroke-linecap="round"/>
+          <path d="M 72 6 L 84 13 L 72 20" stroke="#ff5a2a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <!-- ===== Screen 4: Confirm ===== -->
+      <div class="step">
+        <div class="phone" data-od-id="screen-confirm">
+          <div class="scr">
+            <div class="notch"></div>
+            <div class="status"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+            <div class="body confirm">
+              <div class="check">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13 l4 4 L19 6" stroke="#ff5a2a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="bar title w60" style="margin:2px auto 6px;"></div>
+              <div class="bar w70" style="margin:0 auto;"></div>
+              <div class="summary">
+                <div class="row"><span class="l"></span><span class="r"></span></div>
+                <div class="row"><span class="l"></span><span class="r"></span></div>
+                <div class="row"><span class="l"></span><span class="r"></span></div>
+              </div>
+              <div class="gap"></div>
+              <div class="btn" style="width:100%;">DONE</div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><b>4 · Confirm</b>order placed</div>
+      </div>
+
+    </div>
+
+    <div class="legend">
+      <span><span class="sw box"></span>greybox content</span>
+      <span><span class="sw ink"></span>primary action</span>
+      <span><span class="sw acc"></span>flow step / annotation</span>
+    </div>
+
+    <!-- annotations live on the board, anchored near their screens -->
+    <div class="note a" data-od-id="annotation-1">
+      <span class="tape"></span>
+      <span class="ptr">↑ screen 1</span>
+      Hero must sell the value prop in 3s — image + one line.
+    </div>
+    <div class="note b" data-od-id="annotation-2">
+      <span class="ptr">screen 4 →</span>
+      Keep checkout to ONE screen. No account wall before confirm.
+    </div>
+
+  </div>
+</body>
+</html>

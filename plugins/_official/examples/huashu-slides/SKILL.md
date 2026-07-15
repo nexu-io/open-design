@@ -1,22 +1,33 @@
 ---
 name: huashu-slides
+en_name: "Tell a Career-Pivot Story like an Executive-Presence Coach"
+zh_name: "像高管形象教练一样讲职业转型故事"
 description: |
-  Huashu Slides — publication-grade single-file HTML decks, distilled from the
-  slides workflow of 花叔 (alchaincyf)'s huashu-design skill. Editorial grammar
-  (masthead / kicker / giant serif H1 / footer), a fixed 1920×1080 canvas with
-  auto-fit scaling, keyboard navigation and hash routing, strict anti-AI-slop
-  rules, and an optional editable-PPTX export path. Use when the user wants a
-  presentation, slides, PPT, deck, 演示文稿, or 幻灯片.
+  A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Built as a decision-grade career deck for hiring manager, mentors.
+en_description: |
+  A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Built as a decision-grade career deck for hiring manager, mentors.
+zh_description: |
+  像高管形象教练一样讲职业转型故事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "career"
+  - "year-end-self-review-deck"
+  - "personal"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-slides"
 triggers:
-  - "slides"
-  - "deck"
-  - "ppt"
-  - "pptx"
-  - "presentation"
-  - "幻灯片"
-  - "演示文稿"
-  - "做个 PPT"
-  - "花叔"
+  - "year-end-self-review-deck"
+  - "career"
+  - "Tell a Career-Pivot Story like an Executive-Presence Coach"
+  - "像高管形象教练一样讲职业转型故事"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -25,9 +36,11 @@ od:
     entry: example.html
   design_system:
     requires: false
-  example_prompt: "Use the Huashu Slides template to turn my content into a publication-grade HTML deck: 1920×1080 fixed canvas, editorial masthead/kicker/serif-display grammar, one terracotta accent, light/dark rhythm, keyboard ←/→/Space navigation with #/N hash routing. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「花叔幻灯片」模板把我的内容做成一套出版物级 HTML 幻灯片：1920×1080 固定画布、报刊式 masthead/kicker/衬线大字版式、单一赤陶橙 accent、亮暗节奏交替、键盘 ←/→/空格翻页 + #/N hash 跳页。从 example.html 出发只换内容，不要重写设计。"
+  category: "career"
+  scenario: "personal"
+  example_prompt: "Create \"Tell a Career-Pivot Story like an Executive-Presence Coach\" as a decision-grade Career deck in this template's own visual system. Subject: A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Audience: hiring manager, mentors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned."
 ---
 
 # Huashu Slides · 花叔幻灯片

@@ -30,6 +30,7 @@ describe('extractOpenCodeServiceFailure', () => {
     const failure = extractOpenCodeServiceFailure(USAGE_LIMIT_LINE);
     expect(failure).not.toBeNull();
     expect(failure!.code).toBe('RATE_LIMITED');
+    expect(failure!.retryable).toBe(false);
     expect(failure!.statusCode).toBe(429);
     expect(failure!.message).toContain('Monthly usage limit reached');
     expect(failure!.message).toContain('Resets in 6 days');

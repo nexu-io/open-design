@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-ve-terminal-mono",
-  "title": "Terminal Mono",
+  "title": "Teach an AI CLI Workflow like a Developer-Tools Educator",
   "title_i18n": {
-    "en": "Terminal Mono",
-    "zh-CN": "等宽终端"
+    "en": "Teach an AI CLI Workflow like a Developer-Tools Educator",
+    "zh-CN": "像开发者工具讲师一样教 AI CLI 工作流",
+    "zh-TW": "像开发者工具讲师一样教 AI CLI 工作流"
   },
   "version": "1.0.0",
-  "description": "Developer-native dark deck theme: near-black #0a0e14 ground, Geist Mono everywhere with large weight-400 titles (never bold display), Dracula-green #50fa7b accent, faint dot-grid texture, and low-opacity green hairlines. Zero skeuomorphism, zero effects - pure typographic discipline. Scroll-snap single-file HTML with SlideEngine navigation, hash routing, and automatic light mode (#f4f6f8 / #0d7a3e) via prefers-color-scheme. Based on nicobailon/visual-explainer terminal-mono.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.",
   "description_i18n": {
-    "en": "Developer-native dark deck theme: near-black #0a0e14 ground, Geist Mono everywhere with large weight-400 titles (never bold display), Dracula-green #50fa7b accent, faint dot-grid texture, and low-opacity green hairlines. Zero skeuomorphism, zero effects - pure typographic discipline. Scroll-snap single-file HTML with SlideEngine navigation, hash routing, and automatic light mode (#f4f6f8 / #0d7a3e) via prefers-color-scheme. Based on nicobailon/visual-explainer terminal-mono.",
-    "zh-CN": "开发者原生暗调幻灯片主题「等宽终端」：近黑 #0a0e14 底色，全 Geist Mono 等宽排印（标题用大号 weight-400 而非粗体 display），Dracula 绿 #50fa7b 点缀，微点阵背景质感，低透明度绿色描边。零拟物零特效，靠字体纪律成立。scroll-snap 单文件 HTML，SlideEngine 键盘导航 + hash 路由，prefers-color-scheme 自动亮色模式（#f4f6f8 / #0d7a3e）。移植自 nicobailon/visual-explainer 的 terminal-mono 风格。"
+    "en": "Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Built as a decision-grade AI literacy deck for developers, power users.",
+    "zh-CN": "像开发者工具讲师一样教 AI CLI 工作流——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像开发者工具讲师一样教 AI CLI 工作流——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -32,7 +35,18 @@
     "monospace",
     "developer",
     "dual-theme",
-    "web"
+    "web",
+    "design",
+    "brand",
+    "visual-system",
+    "ve-terminal-mono",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "ai",
+    "copilot",
+    "workflow",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -45,7 +59,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "ai",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -54,16 +68,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a Terminal Mono deck about {{topic}} for {{audience}} ({{slideCount}}, {{density}}): a developer-native dark presentation in the locked Terminal Mono theme from visual-explainer. Output one self-contained single-file HTML deck with zero dependencies - all CSS/JS inline, no build step, no external JS libraries, no CDN scripts, no mermaid, no Chart.js; only the Google Fonts stylesheet may be linked. THEME IS LOCKED - reproduce exactly: (a) Dark-first tokens: --font-body/--font-mono 'Geist Mono','SF Mono',Consolas,monospace; --bg:#0a0e14; --surface:#12161e; --surface2:#1a1f2a; --surface-elevated:#222836; --border:rgba(80,250,123,0.06); --border-bright:rgba(80,250,123,0.12); --text:#c8d6e5; --text-dim:#7d8c9b; --accent:#50fa7b; --accent-dim:rgba(80,250,123,0.08); --code-bg:#060a10; --code-text:#c8d6e5; --dot:rgba(80,250,123,0.05). (b) Light theme via @media (prefers-color-scheme: light), MANDATORY (dual theme is the family signature): --bg:#f4f6f8; --surface:#ffffff; --surface2:#eaecf0; --surface-elevated:#f8f9fa; --border:rgba(0,80,40,0.08); --border-bright:rgba(0,80,40,0.16); --text:#1a2332; --text-dim:#5a6a7a; --accent:#0d7a3e; --accent-dim:rgba(13,122,62,0.08); --code-bg:#1a2332; --code-text:#c8d6e5; --dot:rgba(13,122,62,0.07). (c) Mono typographic discipline: ONE typeface - Geist Mono 400/500/600/700; titles are large weight-400 mono with negative letter-spacing (display clamp(36px,7vw,88px), headings clamp(24px,4vw,42px)) - NEVER bold display type; labels are small uppercase weight-600 letterspaced accent; numbers use tabular-nums. (d) Signature texture: every slide carries a faint dot grid background-image: radial-gradient(var(--dot) 1px, transparent 1px) at background-size 24px 24px - no radial glows, no gradients, no shadows. Zero skeuomorphism: no $-prompts, no terminal window chrome, no traffic-light dots, no CRT scanlines or vignettes. Square geometry: border-radius 0-2px, 7px square bullet ticks in accent, square nav dots, 1px green hairline borders only. Restrained corner-bracket SVG decor (two 1.5px accent lines, ~0.25 opacity) on title/closing slides only. (e) Deck engine: .deck is a 100dvh scroll-snap container; each page is one <section class=\"slide\"> at 100dvh; the SlideEngine script (keep verbatim from the seed) builds a 2px accent progress bar, a square dot rail, an n/N counter, and fading hints; keyboard arrows/Space/PageUp/PageDown/Home/End, touch swipe (50px), IntersectionObserver toggles .visible; hash routing mirrors the current slide to #/<n> with deep-link restore on load and hashchange; .reveal children stagger 0.1s per step animating only opacity/transform; prefers-reduced-motion disables all motion. (f) Layout masters to compose from (all present in example.html): centered title with corner brackets and accent display line; section divider with a giant ghost numeral at 0.05 opacity; 3fr/2fr content slide with square-tick bullets and a 1px line-art SVG aside; split before/after panels (surface vs surface2, 1px divider, before-label in text-dim, after-label in accent); pure CSS/SVG pipeline diagram built from hairline .pipe-node boxes joined by 1px connector lines with CSS-triangle arrowheads and uppercase edge labels (never mermaid); KPI dashboard grid with big tabular-nums values; hairline data table with uppercase mono headers, zebra rows, and accent-tint hover; dark code block with accent filename tab and .hl/.cm highlight spans (code stays dark in both themes); centered quote with an oversized accent > glyph at 0.08 opacity as the quote mark (no curly serif quotes); closing slide with one accent <em> word in the display heading. (g) Color discipline: ONLY the spec palette - no red/blue/yellow semantic colors; express before/risk/off with --text-dim and after/win/on with --accent. Match the requested slide count ({{slideCount}}); split content into more slides instead of shrinking type; no scrolling inside slides; icons and diagram art are inline SVG or pure CSS, no remote images. Start from the example.html seed shipped in this plugin: keep its :root token blocks (both themes), deck/slide CSS, dot-grid treatment, and the entire SlideEngine script verbatim; replace only the slide content. Do not introduce any color or font outside this specification and do not redesign the theme.",
-        "zh-CN": "用「等宽终端 Terminal Mono」主题为 {{audience}} 创作一套关于 {{topic}} 的演示（{{slideCount}}，{{density}}）：开发者原生暗调风格——近黑 #0a0e14 底色、全 Geist Mono 等宽排印（标题大号 weight-400 而非粗体）、Dracula 绿 #50fa7b 唯一点缀、每页微点阵背景、低透明度绿色描边、直角方点零圆角。零拟物零特效：没有 $ 提示符、没有窗口红绿灯、没有扫描线暗角。零依赖单文件 HTML：scroll-snap 全屏 section.slide、SlideEngine 键盘/触摸导航 + 进度条 + 方点导航 + #/<n> hash 路由、.reveal 错峰入场；必须保留 prefers-color-scheme 亮色主题（#f4f6f8 / #0d7a3e，家族签名）；架构图用纯 CSS/SVG 管线节点图，禁用 mermaid 和一切外部 JS。从插件内 example.html 种子出发：保留两套主题 token、全部版式 CSS 和 SlideEngine 脚本，只替换内容；禁止引入规格之外的颜色和字体。完整硬性规格以英文 prompt 为准。"
+        "en": "Create \"Teach an AI CLI Workflow like a Developer-Tools Educator\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. Audience: developers, power users. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像开发者工具讲师一样教 AI CLI 工作流。像开发者工具讲师一样教 AI CLI 工作流——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design from the CLI: driving the full design workflow with the `od` command — scripted, composable, agent-ready. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "relay-ci 2.0 release review - Terminal Mono deck",
+          "title": "Teach an AI CLI Workflow like a Developer-Tools Educator",
           "title_i18n": {
-            "en": "relay-ci 2.0 release review - Terminal Mono deck",
-            "zh-CN": "relay-ci 2.0 发布回顾 · 等宽终端风格"
+            "en": "Teach an AI CLI Workflow like a Developer-Tools Educator",
+            "zh-CN": "像开发者工具讲师一样教 AI CLI 工作流",
+            "zh-TW": "像开发者工具讲师一样教 AI CLI 工作流"
           }
         }
       ]
@@ -139,6 +154,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "ai-literacy"
   }
 }

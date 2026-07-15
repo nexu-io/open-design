@@ -11,6 +11,7 @@ import {
   compareCase,
   diffBoxesFromMask,
   drawBox,
+  isChangedVisualDiff,
   mergeDiffBoxes,
   padBox,
   type DiffBox,
@@ -50,7 +51,7 @@ describe('visual report PNG sizing', () => {
         writeDiffPng: async (_mainPath: string, prPath: string, diffPath: string) => {
           await mkdir(path.dirname(diffPath), { recursive: true });
           await writeFile(diffPath, await readFile(prPath));
-          return 0;
+          return { diffPixels: 0, totalPixels: 4 };
         },
       };
 
@@ -121,7 +122,7 @@ describe('visual report PNG sizing', () => {
           downloadObject: async () => {
             throw new Error('download failed');
           },
-          writeDiffPng: async () => 0,
+          writeDiffPng: async () => ({ diffPixels: 0, totalPixels: 4 }),
         },
       )).rejects.toThrow('download failed');
     } finally {
@@ -213,6 +214,62 @@ describe('visual report PNG sizing', () => {
     } finally {
       await rm(workDir, { recursive: true, force: true });
     }
+  });
+
+  test('treats tiny pixel diffs as unchanged visual noise', async () => {
+    const workDir = await mkdtemp(path.join(tmpdir(), 'visual-report-'));
+    try {
+      const outputDir = path.join(workDir, 'output');
+      const goodPath = path.join(workDir, 'visual-good.png');
+      const pngBuffer = PNG.sync.write(createFilledPng(2, 2));
+      await writeFile(goodPath, pngBuffer);
+
+      const r2 = {
+        bucket: 'visual-bucket',
+        publicOrigin: 'https://example.invalid',
+        client: {} as never,
+      };
+
+      const result = await compareCase(
+        {
+          r2,
+          prNumber: '12',
+          runId: '34',
+          headSha: 'b'.repeat(40),
+          visualCase: { name: 'visual-good', path: goodPath },
+          candidateShas: ['c'.repeat(40)],
+          outputDir,
+        },
+        {
+          putFile: async () => {},
+          findBaseline: async () => ({ sha: 'a'.repeat(40), key: 'baseline/visual-good.png', behindBy: 0 }),
+          downloadObject: async (_r2: unknown, _key: string, outputPath: string) => {
+            await mkdir(path.dirname(outputPath), { recursive: true });
+            await writeFile(outputPath, pngBuffer);
+          },
+          writeDiffPng: async (_mainPath: string, prPath: string, diffPath: string) => {
+            await mkdir(path.dirname(diffPath), { recursive: true });
+            await writeFile(diffPath, await readFile(prPath));
+            return { diffPixels: 32, totalPixels: 1_600 };
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        name: 'visual-good',
+        status: 'unchanged',
+        diffPixels: 32,
+        diffPixelRatio: 0.02,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test('uses the absolute visual diff floor as the changed-case classifier', async () => {
+    expect(isChangedVisualDiff(499, 0.5)).toBe(false);
+    expect(isChangedVisualDiff(500, 0.0001)).toBe(true);
+    expect(isChangedVisualDiff(25_000, 0.0267)).toBe(true);
   });
 
   test('huge-dimension PNG headers fail before decode and upload', async () => {

@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-biennale-yellow",
-  "title": "Html Ppt Zhangzara Biennale Yellow",
+  "title": "Curate an Art Biennale Deck like a Museum Exhibition Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Biennale Yellow",
-    "zh-TW": "Html Ppt Zhangzara Biennale Yellow",
-    "ja": "Html Ppt Zhangzara Biennale Yellow",
-    "ko": "Html Ppt Zhangzara Biennale Yellow",
-    "de": "Html Ppt Zhangzara Biennale Yellow",
-    "fr": "Html Ppt Zhangzara Biennale Yellow",
-    "ru": "Html Ppt Zhangzara Biennale Yellow",
-    "es": "Html Ppt Zhangzara Biennale Yellow",
-    "pt-BR": "Html Ppt Zhangzara Biennale Yellow",
-    "it": "Html Ppt Zhangzara Biennale Yellow",
-    "vi": "Html Ppt Zhangzara Biennale Yellow",
-    "pl": "Html Ppt Zhangzara Biennale Yellow",
-    "id": "Html Ppt Zhangzara Biennale Yellow",
-    "nl": "Html Ppt Zhangzara Biennale Yellow",
-    "ar": "Html Ppt Zhangzara Biennale Yellow",
-    "tr": "Html Ppt Zhangzara Biennale Yellow",
-    "uk": "Html Ppt Zhangzara Biennale Yellow",
-    "en": "Html Ppt Zhangzara Biennale Yellow"
+    "en": "Curate an Art Biennale Deck like a Museum Exhibition Director",
+    "zh-CN": "像美术馆策展总监一样做双年展策展稿",
+    "zh-TW": "像美术馆策展总监一样做双年展策展稿"
   },
   "version": "0.1.0",
-  "description": "Biennale Yellow — Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients. Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, studio retrospectives.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Built as a decision-grade design craft deck for museum board, curators.",
   "description_i18n": {
-    "zh-CN": "双年展黄色主题 — 温暖羊皮纸底色配太阳黄，搭配深靛蓝衬线字体和大气阳光渐变效果。适用于艺术双年展海报、博物馆年度计划、展览演示文稿、艺术机构公告、设计会议手册、策展方案、文学出版物、工作室回顾展等场景。",
-    "zh-TW": "雙年展黃色主題 — 溫暖羊皮紙底色配太陽黃，搭配深靛藍襯線字體和大氣陽光漸層效果。適用於藝術雙年展海報、博物館年度計畫、展覽簡報、藝術機構公告、設計會議手冊、策展提案、文學出版品、工作室回顧展等場景。",
-    "ja": "ビエンナーレイエロー — 温かみのある羊皮紙に太陽の黄色、深いインディゴのセリフ体と雰囲気のある陽光グラデーション。アートビエンナーレのポスター、美術館の年間プログラム、展覧会プレゼン、デザインカンファレンス資料、キュレーター提案書、文芸出版物、スタジオ回顧展などに最適。",
-    "ko": "비엔날레 옐로우 — 따뜻한 양피지에 태양 노랑색, 깊은 인디고 세리프체와 분위기 있는 햇빛 그라데이션. 아트 비엔날레 포스터, 미술관 연간 프로그램, 전시 프레젠테이션, 예술 기관 공고, 디자인 컨퍼런스 브로슈어, 큐레이터 제안서, 문학 출판물, 스튜디오 회고전 등에 적합.",
-    "de": "Biennale Yellow — Sonnengelb auf warmem Pergament mit tiefem Indigo-Serifen und atmosphärischen Sonnenschein-Verläufen. Ideal für Kunstbiennale-Plakate, Museumsjahresprogramme, Ausstellungspräsentationen, Ankündigungen von Kunstinstitutionen, Design-Konferenzbroschüren, kuratorische Pitches, Literaturpublikationen und Studio-Retrospektiven.",
-    "fr": "Biennale Yellow — Jaune solaire sur parchemin chaleureux avec serif indigo profond et dégradés lumineux atmosphériques. Parfait pour les affiches de biennales d'art, programmes annuels de musées, présentations d'expositions, annonces d'institutions artistiques, brochures de conférences design, dossiers de commissariat, publications littéraires et rétrospectives de studios.",
-    "ru": "Biennale Yellow — Солнечный жёлтый на тёплом пергаменте с глубоким индиго и атмосферными градиентами солнечного сияния. Подходит для афиш арт-биеннале, музейных годовых программ, выставочных презентаций, объявлений художественных институций, брошюр дизайн-конференций, кураторских предложений, литературных изданий и студийных ретроспектив.",
-    "es": "Biennale Yellow — Amarillo solar sobre pergamino cálido con serif índigo profundo y gradientes atmosféricos de resplandor solar. Ideal para carteles de bienales de arte, programas anuales de museos, presentaciones de exposiciones, anuncios de instituciones artísticas, folletos de conferencias de diseño, propuestas curatoriales, publicaciones literarias y retrospectivas de estudios.",
-    "pt-BR": "Biennale Yellow — Amarelo solar sobre pergaminho quente com serif índigo profundo e gradientes atmosféricos de brilho solar. Ideal para cartazes de bienais de arte, programas anuais de museus, apresentações de exposições, anúncios de instituições artísticas, brochuras de conferências de design, propostas curatoriais, publicações literárias e retrospectivas de estúdios.",
-    "it": "Biennale Yellow — Giallo solare su pergamena calda con serif indaco profondo e gradienti atmosferici di bagliore solare. Ideale per manifesti di biennali d'arte, programmi annuali di musei, presentazioni di mostre, annunci di istituzioni artistiche, brochure di conferenze di design, proposte curatoriali, pubblicazioni letterarie e retrospettive di studi.",
-    "vi": "Biennale Yellow — Vàng mặt trời trên nền giấy da ấm áp với chữ serif xanh chàm đậm và hiệu ứng chuyển màu ánh nắng. Phù hợp cho poster triển lãm nghệ thuật hai năm, chương trình thường niên của bảo tàng, bài thuyết trình triển lãm, thông báo tổ chức nghệ thuật, brochure hội nghị thiết kế, đề xuất tổ chức triển lãm, ấn phẩm văn học và triển lãm hồi cố studio.",
-    "pl": "Biennale Yellow — Słoneczna żółć na ciepłym pergaminie z głębokim indygo serif i atmosferycznymi gradientami słonecznej poświaty. Idealne do plakatów biennale sztuki, rocznych programów muzeów, prezentacji wystaw, ogłoszeń instytucji artystycznych, broszur konferencji designu, propozycji kuratorskich, publikacji literackich i retrospektyw studiów.",
-    "id": "Biennale Yellow — Kuning matahari pada perkamen hangat dengan serif indigo dalam dan gradien cahaya matahari atmosferik. Cocok untuk poster biennale seni, program tahunan museum, presentasi pameran, pengumuman institusi seni, brosur konferensi desain, proposal kuratorial, publikasi sastra, dan retrospektif studio.",
-    "nl": "Biennale Yellow — Zonnegeel op warm perkament met diepe indigo schreef en atmosferische zonnegloed gradiënten. Ideaal voor kunstbiënnale posters, museale jaarprogramma's, tentoonstellingspresentaties, aankondigingen van kunstinstellingen, designconferentiebrochures, curatoriale pitches, literaire publicaties en studioretrospectives.",
-    "ar": "Biennale Yellow — أصفر شمسي على رق دافئ مع خط سيريف نيلي عميق وتدرجات لونية جوية لتوهج الشمس. مثالي لملصقات بينالي الفن، البرامج السنوية للمتاحف، عروض المعارض، إعلانات المؤسسات الفنية، كتيبات مؤتمرات التصميم، العروض التنظيمية، المنشورات الأدبية، والمعارض الاستعادية للاستوديوهات.",
-    "tr": "Biennale Yellow — Sıcak parşömen üzerine güneş sarısı, derin çivit mavisi serif ve atmosferik güneş parıltısı degradeleri. Sanat bienali posterleri, müze yıllık programları, sergi sunumları, sanat kurumu duyuruları, tasarım konferansı broşürleri, küratörlük önerileri, edebi yayınlar ve stüdyo retrospektifleri için ideal.",
-    "uk": "Biennale Yellow — Сонячний жовтий на теплому пергаменті з глибоким індиго serif та атмосферними градієнтами сонячного сяйва. Підходить для афіш арт-бієнале, музейних річних програм, виставкових презентацій, оголошень мистецьких інституцій, брошур дизайн-конференцій, кураторських пропозицій, літературних видань та студійних ретроспектив.",
-    "en": "Biennale Yellow — Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients. Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, studio retrospectives."
+    "en": "A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Built as a decision-grade design craft deck for museum board, curators.",
+    "zh-CN": "像美术馆策展总监一样做双年展策展稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像美术馆策展总监一样做双年展策展稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,19 @@
     "arts-institution-programme",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-biennale-yellow",
+    "marketing-and-gtm",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +63,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +71,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Biennale Yellow — Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients. Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, stud",
-        "zh-CN": "使用这个插件完成以下任务：Biennale Yellow — Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients. Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, stud"
+        "en": "Create \"Curate an Art Biennale Deck like a Museum Exhibition Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. Audience: museum board, curators. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像美术馆策展总监一样做双年展策展稿。像美术馆策展总监一样做双年展策展稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：A curatorial deck for a contemporary art biennale — the thesis, the rooms, the works, and the visitor journey. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Biennale Yellow"
+          "title": "Curate an Art Biennale Deck like a Museum Exhibition Director",
+          "title_i18n": {
+            "en": "Curate an Art Biennale Deck like a Museum Exhibition Director",
+            "zh-CN": "像美术馆策展总监一样做双年展策展稿",
+            "zh-TW": "像美术馆策展总监一样做双年展策展稿"
+          }
         }
       ]
     },
@@ -122,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

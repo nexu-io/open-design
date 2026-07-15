@@ -1,0 +1,56 @@
+name: release-gate
+# Pre-release gate: confirm the target release branch has no un-landed backports.
+# Fails if any -> do not tag. Run it before tagging (or wire it as a required pre-release job).
+#
+# The check = open PRs whose base is the release branch. That single check covers every
+# "not landed yet" case:
+#   - Conflict -> backport-action opens a draft PR (state open, caught here)
+#   - Clean but not merged / CI still running -> also an open PR, caught here
+# Once everything is merged, open PRs targeting the branch hit zero -> the gate passes.
+# (korthout has no "label on failure" feature, so this does not rely on any *-failed label.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: 'Release branch, e.g. release/v0.12.0'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for un-landed backports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BR: ${{ inputs.release_branch }}
+        run: |
+          set -euo pipefail
+          # Constrain the input to the release/vX.Y.Z grammar first. Any other branch (e.g. main)
+          # must never pass the gate, even if it exists and happens to have no open PRs targeting it.
+          if ! printf '%s' "$BR" | grep -Eq '^release/v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid release branch '$BR' (expected release/vX.Y.Z)"
+            exit 1
+          fi
+          # Fail closed: the branch must actually exist. A mistyped or not-yet-cut branch makes
+          # `gh pr list` return an empty list, which would otherwise look like "clean / safe".
+          if ! gh api "repos/$REPO/git/ref/heads/$BR" >/dev/null 2>&1; then
+            echo "::error::Release branch '$BR' does not exist — failing closed (refusing to pass the gate)."
+            exit 1
+          fi
+          echo "Checking $BR for un-landed backports (open PRs)…"
+          open=$(gh pr list --repo "$REPO" --base "$BR" --state open \
+                  --json number,title,isDraft \
+                  --jq '.[] | "  #\(.number) \(.title)\(if .isDraft then "  [draft/conflict]" else "" end)"')
+          if [ -n "$open" ]; then
+            echo "::error::$BR has un-landed backports, do not release:"
+            echo "$open"
+            exit 1
+          fi
+          echo "✅ $BR has no pending backports, safe to tag and release."

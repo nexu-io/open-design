@@ -72,9 +72,12 @@ describe("inspectExistingDesktopForLauncher", () => {
 
       const result = await inspectExistingDesktopForLauncher("release-beta-win", {
         paths,
-        requestIpc: (async (_ipcPath: string, message: unknown, options?: { timeoutMs?: number }) => {
+        requestIpc: (async (ipcPath: string, message: unknown, options?: { timeoutMs?: number }) => {
           requests.push({ message, timeoutMs: options?.timeoutMs });
           if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
+              return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
+            }
             return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
           }
           return { accepted: true };
@@ -83,6 +86,8 @@ describe("inspectExistingDesktopForLauncher", () => {
 
       expect(result).toEqual({ action: "exit", reason: "existing-focused" });
       expect(requests.map((request) => request.message)).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
         { type: SIDECAR_MESSAGES.STATUS },
         { type: SIDECAR_MESSAGES.SHOW },
       ]);
@@ -122,8 +127,11 @@ describe("inspectExistingDesktopForLauncher", () => {
       const result = await inspectExistingDesktopForLauncher("release-beta-win", {
         logger,
         paths,
-        requestIpc: (async (_ipcPath: string, message: unknown) => {
+        requestIpc: (async (ipcPath: string, message: unknown) => {
           if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
+              return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
+            }
             return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
           }
           throw new Error("show rejected");
@@ -132,6 +140,45 @@ describe("inspectExistingDesktopForLauncher", () => {
 
       expect(result).toEqual({ action: "exit", reason: "existing-focus-failed" });
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("focus=failed"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("restarts instead of focusing when an existing desktop has a stale web sidecar", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-stale-web-"));
+    const requests: unknown[] = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        paths,
+        requestIpc: (async (ipcPath: string, message: unknown) => {
+          requests.push(message);
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon")) {
+              return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
+            }
+            if (ipcPath.includes("web")) {
+              throw new Error("web pipe missing");
+            }
+            return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        waitForExit: (async (pid: number) => pid === 1234) as typeof import("@open-design/platform").waitForProcessExit,
+      });
+
+      expect(result).toEqual({ action: "continue", reason: "stale-sidecar" });
+      expect(requests).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+      ]);
+      const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
+      expect(log).toContain("action=restart reason=stale-sidecar apps=web pid=1234");
+      expect(log).toContain("shutdown=exited reason=stale-sidecar pid=1234");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

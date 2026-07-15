@@ -4,6 +4,7 @@
   "name": "diff-review",
   "title": "Diff review",
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T14:22:18Z",
   "description": "Surface the accumulated patch as a reviewable diff and persist the accept / reject decision.",
   "license": "MIT",
   "author": {

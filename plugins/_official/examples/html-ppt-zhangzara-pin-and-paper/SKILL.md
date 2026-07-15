@@ -1,23 +1,35 @@
 ---
 name: html-ppt-zhangzara-pin-and-paper
+en_name: "Turn a Field-Study Capstone into a Defense Deck like a Star Biology Major"
+zh_name: "像明星生物学生一样做田野调查答辩"
 description: |
-  Pin & Paper — Yellow paper with safety-pin illustrations, ink-blue handwritten Caveat, paper-grain texture. Anything that should feel hand-crafted, warm, and literary: qualitative research findings, founder reflections, longform brand stories, workshop debriefs.
+  A field-biology capstone on urban pollinator decline — the survey design, the data, the contribution, and the caveats. Built as a decision-grade coursework defense deck for faculty reviewers.
+en_description: |
+  A field-biology capstone on urban pollinator decline — the survey design, the data, the contribution, and the caveats. Built as a decision-grade coursework defense deck for faculty reviewers.
+zh_description: |
+  像明星生物学生一样做田野调查答辩——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "student-coursework"
+  - "senior-capstone-defense-deck"
+  - "education"
+  - "coursework"
+  - "defense"
+  - "academic"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-pin-and-paper"
 triggers:
-  - "pin-and-paper"
-  - "zhangzara-pin-and-paper"
-  - "Pin & Paper"
-  - "crafted"
-  - "handmade"
-  - "literary"
-  - "intimate"
-  - "research findings with personality"
-  - "qualitative report"
+  - "senior-capstone-defense-deck"
+  - "student-coursework"
+  - "Turn a Field-Study Capstone into a Defense Deck like a Star Biology Major"
+  - "像明星生物学生一样做田野调查答辩"
+  - "coursework"
+  - "defense"
+  - "academic"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/pin-and-paper"
   upstream_license: MIT
   preview:
@@ -27,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "student-coursework"
+  scenario: "education"
+  example_prompt: "Create \"Turn a Field-Study Capstone into a Defense Deck like a Star Biology Major\" as a decision-grade Student coursework deck in this template's own visual system. Subject: A field-biology capstone on urban pollinator decline — the survey design, the data, the contribution, and the caveats. Audience: faculty reviewers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds."
 ---
 
 # Pin & Paper

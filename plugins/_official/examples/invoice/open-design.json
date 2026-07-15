@@ -24,6 +24,7 @@
     "en": "Invoice"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A printable invoice page — sender + recipient block, line items table, tax breakdown, totals, and payment instructions. Use when the brief mentions \"invoice\", \"bill\", \"billing statement\", or \"发票\".",
   "description_i18n": {
     "zh-CN": "可打印的发票页面——包含发件人和收件人信息块、明细表、税费明细、总计和付款说明。当需求提到'invoice'、'bill'、'billing statement'或'发票'时使用。",

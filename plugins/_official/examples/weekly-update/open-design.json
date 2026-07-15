@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-weekly-update",
-  "title": "Weekly Update",
+  "title": "Run a Metrics Standup like a Data-Driven Ops Lead",
   "title_i18n": {
-    "zh-CN": "周报更新",
-    "zh-TW": "週報更新",
-    "ja": "週次アップデート",
-    "ko": "주간 업데이트",
-    "de": "Wöchentliches Update",
-    "fr": "Mise à jour hebdomadaire",
-    "ru": "Еженедельный отчёт",
-    "es": "Actualización semanal",
-    "pt-BR": "Atualização semanal",
-    "it": "Aggiornamento settimanale",
-    "vi": "Cập nhật hàng tuần",
-    "pl": "Cotygodniowa aktualizacja",
-    "id": "Pembaruan Mingguan",
-    "nl": "Wekelijkse update",
-    "ar": "التحديث الأسبوعي",
-    "tr": "Haftalık Güncelleme",
-    "uk": "Тижневе оновлення",
-    "en": "Weekly Update"
+    "en": "Run a Metrics Standup like a Data-Driven Ops Lead",
+    "zh-CN": "像数据驱动的运营负责人一样开指标站会",
+    "zh-TW": "像数据驱动的运营负责人一样开指标站会"
   },
   "version": "0.1.0",
-  "description": "Single-file horizontal-swipe slide deck for a weekly team update — shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the brief mentions \"weekly update\", \"team update slides\", \"weekly status\", \"周报演示\".",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Built as a decision-grade data & finance deck for ops & growth team.",
   "description_i18n": {
-    "zh-CN": "单文件横向滑动幻灯片，用于团队周报展示——已完成、进行中、受阻、数据指标、需求。6-8 页幻灯片。适用于需要「周报」「团队汇报」「周报演示」等场景。",
-    "zh-TW": "單檔案橫向滑動簡報，用於團隊週報呈現——已完成、進行中、受阻、數據指標、需求。6-8 頁投影片。適用於需要「週報」「團隊匯報」「週報演示」等場景。",
-    "ja": "チーム週報用の単一ファイル横スワイプスライドデッキ。完了・進行中・ブロック・指標・依頼事項を含む6〜8枚のスライド。「週報」「チームアップデート」「週次ステータス」などの要件に対応。",
-    "ko": "팀 주간 보고를 위한 단일 파일 가로 스와이프 슬라이드 덱. 완료, 진행 중, 차단됨, 지표, 요청 사항 포함. 6~8장의 슬라이드. '주간 보고', '팀 업데이트', '주간 현황' 등의 요구사항에 사용.",
-    "de": "Einzeldatei-Folien mit horizontalem Wischen für wöchentliche Team-Updates – versandt, in Bearbeitung, blockiert, Metriken, Anfragen. 6–8 Folien. Für wöchentliche Status- und Team-Updates.",
-    "fr": "Présentation à défilement horizontal en un seul fichier pour la mise à jour hebdomadaire d'équipe – livré, en cours, bloqué, métriques, demandes. 6 à 8 diapositives. Pour les rapports hebdomadaires et mises à jour d'équipe.",
-    "ru": "Презентация с горизонтальной прокруткой в одном файле для еженедельного отчёта команды – отгружено, в работе, заблокировано, метрики, запросы. 6–8 слайдов. Для еженедельных статусов и обновлений.",
-    "es": "Presentación de archivo único con deslizamiento horizontal para actualizaciones semanales del equipo: enviado, en progreso, bloqueado, métricas, solicitudes. 6–8 diapositivas. Para informes y actualizaciones semanales.",
-    "pt-BR": "Apresentação de arquivo único com deslize horizontal para atualização semanal da equipe – concluído, em andamento, bloqueado, métricas, solicitações. 6–8 slides. Para relatórios e atualizações semanais.",
-    "it": "Presentazione a scorrimento orizzontale in file singolo per aggiornamenti settimanali del team – consegnato, in corso, bloccato, metriche, richieste. 6–8 slide. Per report e aggiornamenti settimanali.",
-    "vi": "Bộ slide vuốt ngang trong một file duy nhất cho báo cáo tuần của nhóm – đã giao, đang thực hiện, bị chặn, chỉ số, yêu cầu. 6–8 slide. Dùng cho báo cáo và cập nhật hàng tuần.",
-    "pl": "Prezentacja w jednym pliku z przewijaniem poziomym do cotygodniowych aktualizacji zespołu – dostarczone, w toku, zablokowane, metryki, prośby. 6–8 slajdów. Do raportów i aktualizacji tygodniowych.",
-    "id": "Slide deck geser horizontal dalam satu file untuk pembaruan tim mingguan – dikirim, dalam proses, terhambat, metrik, permintaan. 6–8 slide. Untuk laporan dan pembaruan status mingguan.",
-    "nl": "Enkele-bestand horizontaal-swipe presentatie voor wekelijkse teamupdate – verzonden, in uitvoering, geblokkeerd, metrics, verzoeken. 6–8 dia's. Voor wekelijkse status- en teamupdates.",
-    "ar": "عرض تقديمي أفقي بملف واحد للتحديث الأسبوعي للفريق – تم الشحن، قيد التنفيذ، محظور، المقاييس، الطلبات. 6-8 شرائح. للتقارير والتحديثات الأسبوعية.",
-    "tr": "Takım haftalık güncellemesi için tek dosyalı yatay kaydırmalı slayt destesi – teslim edilen, devam eden, engellenen, metrikler, talepler. 6–8 slayt. Haftalık durum ve güncelleme raporları için.",
-    "uk": "Презентація з горизонтальним гортанням в одному файлі для тижневого звіту команди – відвантажено, в роботі, заблоковано, метрики, запити. 6–8 слайдів. Для тижневих статусів та оновлень.",
-    "en": "Single-file horizontal-swipe slide deck for a weekly team update — shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the brief mentions \"weekly update\", \"team update slides\", \"weekly status\", \"周报演示\"."
+    "en": "Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Built as a decision-grade data & finance deck for ops & growth team.",
+    "zh-CN": "像数据驱动的运营负责人一样开指标站会——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像数据驱动的运营负责人一样开指标站会——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -61,7 +32,17 @@
     "team-update-slides",
     "weekly-status",
     "weekly-review",
-    "untitled"
+    "untitled",
+    "board",
+    "strategy",
+    "business-review",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -74,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "operations",
+    "scenario": "finance",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -82,13 +63,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Make a weekly update deck for the Growth squad — what shipped, in flight, blocked, metrics, asks for next week.",
-        "zh-CN": "使用这个插件完成以下任务：Make a weekly update deck for the Growth squad — what shipped, in flight, blocked, metrics, asks for next week."
+        "en": "Create \"Run a Metrics Standup like a Data-Driven Ops Lead\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Audience: ops & growth team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像数据驱动的运营负责人一样开指标站会。像数据驱动的运营负责人一样开指标站会——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Weekly Update"
+          "title": "Run a Metrics Standup like a Data-Driven Ops Lead",
+          "title_i18n": {
+            "en": "Run a Metrics Standup like a Data-Driven Ops Lead",
+            "zh-CN": "像数据驱动的运营负责人一样开指标站会",
+            "zh-TW": "像数据驱动的运营负责人一样开指标站会"
+          }
         }
       ]
     },
@@ -119,6 +105,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "data-finance"
   }
 }

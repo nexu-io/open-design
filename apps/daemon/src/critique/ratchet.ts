@@ -12,7 +12,7 @@
  * to read a Grafana panel to know what to do.
  *
  * The function is pure: it takes data in and returns a decision out,
- * with no I/O. That lets the same evaluator drive both the nightly
+ * with no I/O. That lets the same evaluator drive both the prerelease
  * recommendation log line and the `GET /api/critique/conformance`
  * endpoint, and lets vitest pin every cell of the decision matrix
  * without standing up a daemon.
@@ -26,7 +26,7 @@
 import type { RolloutPhase } from './rollout.js';
 
 /**
- * One day of conformance numbers for one adapter. The nightly cron
+ * One day of conformance numbers for one adapter. The prerelease cron
  * collapses every (adapter, brief-template) run into one of these
  * rows; the evaluator aggregates across adapters per day.
  */

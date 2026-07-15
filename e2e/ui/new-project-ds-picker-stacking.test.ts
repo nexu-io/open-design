@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { ensureRailOpen } from '@/playwright/rail';
+import { openNewProjectModal } from '@/playwright/rail';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 // Regression: the New Project → Prototype "Design system" dropdown opened but
@@ -146,9 +146,5 @@ test('[P1] open design system dropdown paints above the form sections below it',
 });
 
 async function openNewProjectPanel(page: Page) {
-  if (await page.getByTestId('new-project-panel').isVisible()) return;
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
 }

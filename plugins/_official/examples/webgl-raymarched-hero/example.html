@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Raymarched Hero — 3D in a fragment shader</title>
+<!--
+  Self-contained WebGL2 raymarcher. A single fullscreen triangle runs a
+  sphere-tracing loop per pixel: five smooth-unioned SDF blobs orbiting the
+  origin, with soft shadows, a fresnel rim, and a slow camera orbit — no
+  meshes, no textures, no build step. Open Design renders this in "powered
+  preview" mode because it calls getContext('webgl2'); the opaque preview
+  sandbox cannot run the GPU stack.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #060608; overflow: hidden; font-family: 'Albert Sans', system-ui, -apple-system, sans-serif; color: #f4f2ff; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; padding: 6vw; pointer-events: none; z-index: 2; }
+  .kicker { font-size: clamp(12px, 1.2vw, 15px); letter-spacing: 0.42em; text-transform: uppercase; color: #63fe13; margin: 0 0 18px; font-weight: 600; }
+  h1 { margin: 0; font-size: clamp(38px, 8vw, 112px); line-height: 0.92; font-weight: 800; letter-spacing: -0.03em; max-width: 13ch; text-shadow: 0 2px 40px rgba(0,0,0,0.5); }
+  p.sub { margin: 22px 0 0; font-size: clamp(15px, 1.6vw, 20px); max-width: 44ch; color: rgba(244,242,255,0.72); }
+  .badge { position: fixed; top: 6vw; right: 6vw; z-index: 2; pointer-events: none; font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(244,242,255,0.55); border: 1px solid rgba(244,242,255,0.18); padding: 8px 14px; border-radius: 999px; backdrop-filter: blur(6px); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="badge" id="fps">GPU · Raymarch</div>
+<div class="overlay">
+  <p class="kicker">Raymarched Hero</p>
+  <h1>3D that lives in a fragment shader.</h1>
+  <p class="sub">No meshes — just a signed-distance field sphere-traced per pixel, with soft shadows and a fresnel rim, orbiting live at 60fps.</p>
+</div>
+<script type="text/javascript">
+(() => {
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+  const fpsEl = document.getElementById('fps');
+  if (!gl) { fpsEl.textContent = 'WebGL2 unavailable'; return; }
+
+  const vert = `#version 300 es
+  in vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+
+  const frag = `#version 300 es
+  precision highp float;
+  out vec4 o;
+  uniform vec2 res;
+  uniform float t;
+
+  // Smooth minimum — blends two SDFs into a gooey union.
+  float smin(float a, float b, float k){
+    float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
+    return mix(b, a, h) - k*h*(1.0-h);
+  }
+  // Scene: five orbiting blobs smoothly unioned into one surface.
+  float map(vec3 p){
+    float d = 1e9;
+    for(int i=0;i<5;i++){
+      float fi = float(i);
+      vec3 c = 0.62 * vec3(sin(t*0.5 + fi*1.7), cos(t*0.42 + fi*2.3), sin(t*0.33 + fi*1.1));
+      d = smin(d, length(p - c) - 0.42, 0.55);
+    }
+    return d;
+  }
+  vec3 normal(vec3 p){
+    vec2 e = vec2(0.0015, 0.0);
+    return normalize(vec3(
+      map(p+e.xyy) - map(p-e.xyy),
+      map(p+e.yxy) - map(p-e.yxy),
+      map(p+e.yyx) - map(p-e.yyx)));
+  }
+  // Soft shadow via penumbra accumulation along the light ray.
+  float softShadow(vec3 ro, vec3 rd){
+    float res = 1.0, tt = 0.05;
+    for(int i=0;i<24;i++){
+      float h = map(ro + rd*tt);
+      if(h < 0.001) return 0.0;
+      res = min(res, 10.0*h/tt);
+      tt += clamp(h, 0.02, 0.2);
+      if(tt > 5.0) break;
+    }
+    return clamp(res, 0.0, 1.0);
+  }
+
+  void main(){
+    vec2 uv = (gl_FragCoord.xy - 0.5*res) / res.y;
+    // Slow camera orbit around the blobs.
+    float a = t*0.18;
+    vec3 ro = vec3(sin(a)*3.0, 0.9, cos(a)*3.0);
+    vec3 ta = vec3(0.0);
+    vec3 f = normalize(ta - ro), r = normalize(cross(vec3(0,1,0), f)), u = cross(f, r);
+    vec3 rd = normalize(uv.x*r + uv.y*u + 1.5*f);
+
+    float tt = 0.0; float hit = 0.0;
+    for(int i=0;i<90;i++){
+      vec3 pos = ro + rd*tt;
+      float d = map(pos);
+      if(d < 0.001){ hit = 1.0; break; }
+      tt += d;
+      if(tt > 8.0) break;
+    }
+
+    vec3 col = vec3(0.02, 0.03, 0.06);                    // background
+    col += vec3(0.05, 0.10, 0.22) * pow(clamp(1.0 - length(uv), 0.0, 1.0), 2.0);  // faint vignette glow
+    if(hit > 0.5){
+      vec3 pos = ro + rd*tt;
+      vec3 n = normal(pos);
+      vec3 lp = vec3(2.2, 3.0, 1.4);
+      vec3 ld = normalize(lp - pos);
+      float diff = clamp(dot(n, ld), 0.0, 1.0);
+      float sh = softShadow(pos + n*0.02, ld);
+      float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);
+      vec3 h = normalize(ld - rd);
+      float spec = pow(clamp(dot(n, h), 0.0, 1.0), 48.0);
+      vec3 base = mix(vec3(0.05, 0.12, 0.28), vec3(0.39, 0.996, 0.075), 0.5 + 0.5*n.y);
+      vec3 lit = base * (0.18 + 0.9*diff*sh) + vec3(1.0)*spec*sh*0.9;
+      lit += vec3(0.35, 0.75, 0.55) * fres * 0.8;         // rim light
+      col = lit;
+    }
+    col = pow(col, vec3(0.85));                           // gentle gamma
+    o = vec4(col, 1.0);
+  }`;
+
+  function compile(type, src){
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const uRes = gl.getUniformLocation(prog, 'res');
+  const uT = gl.getUniformLocation(prog, 't');
+
+  function resize(){
+    // Raymarching is per-pixel heavy; clamp DPR to 1.5 to hold 60fps.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (w === canvas.width && h === canvas.height) return;
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  let frames = 0, acc = 0, last = 0;
+  const start = (typeof performance !== 'undefined' ? performance.now() : 0);
+  function tick(now){
+    resize();
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uT, (now - start) / 1000);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    frames++; acc += now - last; last = now;
+    if (acc > 500){ fpsEl.textContent = 'GPU · Raymarch · ' + Math.round(frames * 1000 / acc) + 'fps'; frames = 0; acc = 0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

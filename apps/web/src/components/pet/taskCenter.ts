@@ -28,10 +28,18 @@ export function buildPetTaskCenter(
     if (TERMINAL_STATUSES.has(run.status)) {
       const prev = recentByProject.get(run.projectId);
       if (prev && prev.updatedAt >= run.updatedAt) continue;
+      // A `succeeded` run that ended with unfinished declared work must not read
+      // as plain "recently completed" — that is the exact lie the reporter hit.
+      // File it as `incomplete` so its dot renders as needs-attention, never the
+      // success color (#1247 / #1060).
+      const status: PetRecentTaskSummary['status'] =
+        run.status === 'succeeded' && run.endedWithUnfinishedWork
+          ? 'incomplete'
+          : (run.status as PetRecentTaskSummary['status']);
       recentByProject.set(run.projectId, {
         projectId: run.projectId,
         projectName: project.name,
-        status: run.status as PetRecentTaskSummary['status'],
+        status,
         updatedAt: run.updatedAt,
       });
     }

@@ -24,6 +24,7 @@
     "en": "Dating Web"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A consumer-feeling dating / matchmaking dashboard — left rail navigation, ticker bar of community signals, headline KPIs, a 30-day mutual-matches bar chart, and a match-rate trend block. Editorial typography, restrained accent. Use when the brief asks for a \"dating site\", \"matchmaking\", \"community dashboard\", \"social network dashboard\", or any consumer product where the data is the story.",
   "description_i18n": {
     "zh-CN": "消费级约会/配对仪表板，包含左侧导航栏、社区动态滚动条、核心KPI指标、30天互相匹配柱状图和匹配率趋势模块。编辑风格排版，克制的强调色。适用于约会网站、配对服务、社区仪表板或社交网络等消费类产品界面。",

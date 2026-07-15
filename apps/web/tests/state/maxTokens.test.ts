@@ -34,6 +34,11 @@ describe('modelMaxTokensDefault', () => {
     expect(modelMaxTokensDefault('deepseek-v4-flash')).toBe(384000);
   });
 
+  it('keeps recent Ollama Cloud models out of the unknown-model fallback', () => {
+    expect(modelMaxTokensDefault('glm-5.2')).toBe(131072);
+    expect(modelMaxTokensDefault('kimi-k2.7-code')).toBe(131072);
+  });
+
   it('returns FALLBACK_MAX_TOKENS for unknown ids', () => {
     expect(modelMaxTokensDefault('definitely-not-a-real-model-x9z')).toBe(FALLBACK_MAX_TOKENS);
     expect(FALLBACK_MAX_TOKENS).toBe(8192);

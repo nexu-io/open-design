@@ -24,6 +24,7 @@
     "en": "Publish Plugin to GitHub"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T23:01:12Z",
   "description": "Creates a public GitHub repository for a local Open Design plugin using the GitHub CLI.",
   "description_i18n": {
     "zh-CN": "使用 GitHub CLI 为本地 Open Design 插件创建公共 GitHub 仓库。",

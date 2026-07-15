@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-ib-pitch-book",
-  "title": "Ib Pitch Book",
+  "title": "Write an Investor Pitch Book like a Growth-Equity Analyst",
   "title_i18n": {
-    "zh-CN": "投行路演材料",
-    "zh-TW": "投行簡報手冊",
-    "ja": "投資銀行ピッチブック",
-    "ko": "투자은행 피치북",
-    "de": "IB-Pitch-Book",
-    "fr": "Pitch Book Banque d'Affaires",
-    "ru": "Инвестиционный питчбук",
-    "es": "Pitch Book de Banca de Inversión",
-    "pt-BR": "Pitch Book de Investment Banking",
-    "it": "Pitch Book Investment Banking",
-    "vi": "Pitch Book Ngân Hàng Đầu Tư",
-    "pl": "Pitch Book Bankowości Inwestycyjnej",
-    "id": "Pitch Book Investment Banking",
-    "nl": "Investment Banking Pitch Book",
-    "ar": "كتيب عرض الخدمات المصرفية الاستثمارية",
-    "tr": "Yatırım Bankacılığı Sunum Kitabı",
-    "uk": "Інвестиційний пітчбук",
-    "en": "Ib Pitch Book"
+    "en": "Write an Investor Pitch Book like a Growth-Equity Analyst",
+    "zh-CN": "像成长股权分析师一样写投资 Pitch Book",
+    "zh-TW": "像成长股权分析师一样写投资 Pitch Book"
   },
   "version": "0.1.0",
-  "description": "Investment-banking pitch book for strategic alternatives — trading comps, precedent transactions, valuation football field, DCF sensitivity, strategic-options matrix, process recommendation. Built by adapting `assets/template.html` so IB-specific chrome, disclosure bands, and source labels are preserved. Use for Board / sell-side discussion materials. Not a VC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from Anthropic financial-services Pitch Agent (Apache-2.0).",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
   "description_i18n": {
-    "zh-CN": "投资银行战略方案路演材料，包含可比公司分析、先例交易、估值区间、DCF敏感性分析、战略选项矩阵和流程建议。基于 assets/template.html 构建，保留投行专用格式、披露条带和数据来源标签。适用于董事会和卖方讨论材料。",
-    "zh-TW": "投資銀行策略方案簡報手冊，包含可比公司分析、先例交易、估值區間、DCF敏感性分析、策略選項矩陣和流程建議。基於 assets/template.html 構建，保留投行專用格式、披露條帶和資料來源標籤。適用於董事會和賣方討論材料。",
-    "ja": "戦略的選択肢のための投資銀行ピッチブック。類似企業分析、先例取引、バリュエーションフットボールフィールド、DCF感応度分析、戦略オプションマトリックス、プロセス提案を含む。投資銀行固有のフォーマット、開示バンド、出典ラベルを保持。取締役会およびセルサイド向け資料に使用。",
-    "ko": "전략적 대안을 위한 투자은행 피치북. 비교기업 분석, 선례 거래, 밸류에이션 풋볼 필드, DCF 민감도 분석, 전략 옵션 매트릭스, 프로세스 권고사항 포함. 투자은행 전용 형식, 공시 밴드, 출처 레이블 유지. 이사회 및 매도측 논의 자료용.",
-    "de": "Investment-Banking-Pitch-Book für strategische Alternativen mit Trading-Comps, Präzedenztransaktionen, Bewertungs-Football-Field, DCF-Sensitivitätsanalyse, strategischer Optionsmatrix und Prozessempfehlung. Basiert auf assets/template.html mit IB-spezifischem Format, Offenlegungsbändern und Quellenangaben. Für Board- und Sell-Side-Materialien.",
-    "fr": "Pitch book de banque d'affaires pour alternatives stratégiques avec comparables de trading, transactions précédentes, football field de valorisation, sensibilité DCF, matrice d'options stratégiques et recommandation de processus. Basé sur assets/template.html avec format IB, bandes de divulgation et labels de source. Pour matériaux Board et sell-side.",
-    "ru": "Питчбук инвестиционного банка для стратегических альтернатив с торговыми компами, прецедентными сделками, football field оценки, чувствительностью DCF, матрицей стратегических опций и рекомендациями по процессу. На основе assets/template.html с форматом IB, полосами раскрытия и метками источников. Для материалов совета директоров и sell-side.",
-    "es": "Pitch book de banca de inversión para alternativas estratégicas con comparables de trading, transacciones precedentes, football field de valoración, sensibilidad DCF, matriz de opciones estratégicas y recomendación de proceso. Basado en assets/template.html con formato IB, bandas de divulgación y etiquetas de fuente. Para materiales de junta directiva y sell-side.",
-    "pt-BR": "Pitch book de banco de investimento para alternativas estratégicas com comparáveis de trading, transações precedentes, football field de valuation, sensibilidade DCF, matriz de opções estratégicas e recomendação de processo. Baseado em assets/template.html com formato IB, faixas de divulgação e rótulos de fonte. Para materiais de conselho e sell-side.",
-    "it": "Pitch book di investment banking per alternative strategiche con trading comps, transazioni precedenti, football field di valutazione, sensibilità DCF, matrice opzioni strategiche e raccomandazioni di processo. Basato su assets/template.html con formato IB, bande di disclosure e label sorgenti. Per materiali board e sell-side.",
-    "vi": "Pitch book ngân hàng đầu tư cho các phương án chiến lược với phân tích công ty tương đương, giao dịch tiền lệ, football field định giá, phân tích độ nhạy DCF, ma trận lựa chọn chiến lược và khuyến nghị quy trình. Dựa trên assets/template.html với định dạng IB, dải công bố và nhãn nguồn. Dùng cho tài liệu hội đồng quản trị và bên bán.",
-    "pl": "Pitch book bankowości inwestycyjnej dla alternatyw strategicznych z porównaniami trading, precedensowymi transakcjami, football field wyceny, wrażliwością DCF, macierzą opcji strategicznych i rekomendacją procesu. Oparty na assets/template.html z formatem IB, paskami ujawnienia i etykietami źródeł. Do materiałów zarządu i sell-side.",
-    "id": "Pitch book investment banking untuk alternatif strategis dengan trading comps, transaksi preseden, football field valuasi, sensitivitas DCF, matriks opsi strategis, dan rekomendasi proses. Dibangun dari assets/template.html dengan format IB, pita pengungkapan, dan label sumber. Untuk materi dewan direksi dan sell-side.",
-    "nl": "Investment banking pitch book voor strategische alternatieven met trading comps, precedenttransacties, waardering football field, DCF-gevoeligheid, strategische optiematrix en procesaanbeveling. Gebaseerd op assets/template.html met IB-specifiek formaat, openbaarmakingsbanden en bronlabels. Voor board- en sell-side materialen.",
-    "ar": "كتيب عرض للخدمات المصرفية الاستثمارية للبدائل الاستراتيجية مع مقارنات التداول والمعاملات السابقة وملعب التقييم وحساسية DCF ومصفوفة الخيارات الاستراتيجية وتوصيات العملية. مبني على assets/template.html بتنسيق IB وأشرطة الإفصاح وتسميات المصدر. لمواد مجلس الإدارة وجانب البيع.",
-    "tr": "Stratejik alternatifler için yatırım bankacılığı sunum kitabı. Trading karşılaştırmaları, emsal işlemler, değerleme football field, DCF duyarlılık analizi, stratejik seçenekler matrisi ve süreç önerisi içerir. assets/template.html tabanlı IB formatı, açıklama bantları ve kaynak etiketleriyle. Yönetim kurulu ve satış tarafı materyalleri için.",
-    "uk": "Пітчбук інвестиційного банку для стратегічних альтернатив з торговими порівняннями, прецедентними угодами, football field оцінки, чутливістю DCF, матрицею стратегічних опцій та рекомендаціями щодо процесу. На основі assets/template.html з форматом IB, смугами розкриття та мітками джерел. Для матеріалів ради директорів та sell-side.",
-    "en": "Investment-banking pitch book for strategic alternatives — trading comps, precedent transactions, valuation football field, DCF sensitivity, strategic-options matrix, process recommendation. Built by adapting `assets/template.html` so IB-specific chrome, disclosure bands, and source labels are preserved. Use for Board / sell-side discussion materials. Not a VC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from Anthropic financial-services Pitch Agent (Apache-2.0)."
+    "en": "Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
+    "zh-CN": "像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,14 @@
     "trading-comps",
     "precedent-transactions",
     "pitch",
-    "untitled"
+    "untitled",
+    "pitch-deck",
+    "fundraising",
+    "investor-deck",
+    "fundraising-pitch",
+    "series-a-pitch-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -87,13 +65,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Build a 10-page strategic alternatives review pitch book for the Board of\nNorthPeak Industries (NYSE: NPK). Include trading comps, precedent\ntransactions, valuation football field, DCF sensitivity, and a\nrecommended process timeline.",
-        "zh-CN": "使用这个插件完成以下任务：Build a 10-page strategic alternatives review pitch book for the Board of\nNorthPeak Industries (NYSE: NPK). Include trading comps, precedent\ntransactions, valuation football field, DCF sensitivity, and a\nrecommended process timeline."
+        "en": "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
+        "zh-CN": "像成长股权分析师一样写投资 Pitch Book。像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Ib Pitch Book"
+          "title": "Write an Investor Pitch Book like a Growth-Equity Analyst",
+          "title_i18n": {
+            "en": "Write an Investor Pitch Book like a Growth-Equity Analyst",
+            "zh-CN": "像成长股权分析师一样写投资 Pitch Book",
+            "zh-TW": "像成长股权分析师一样写投资 Pitch Book"
+          }
         }
       ]
     },
@@ -129,6 +112,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "fundraising-pitch"
   }
 }

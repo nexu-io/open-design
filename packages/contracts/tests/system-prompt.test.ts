@@ -32,15 +32,32 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     expect(prompt).not.toMatch(/5[–\-]10\s+short\s+imperative/);
   });
 
-  it('uses a top-level Chat mode override for conversational sessions', () => {
+  it('uses a bare, self-contained Ask mode override that drops the discovery layer and charter', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'chat' });
 
-    expect(prompt).toContain('# Chat mode — standard conversation');
+    expect(prompt).toContain('# Ask mode — bare conversation');
     expect(prompt).toContain('https://github.com/nexu-io/open-design');
     expect(prompt).toContain('https://open-design.ai/');
-    expect(prompt).toContain('https://discord.gg/9ptkbbqRu');
-    expect(prompt).toContain('do not emit a default discovery `<question-form>`');
-    expect(prompt.indexOf('# Chat mode — standard conversation')).toBeLessThan(
+    expect(prompt).toContain('https://discord.gg/mHAjSMV6gz');
+    expect(prompt).toContain('Do not emit a default discovery `<question-form>`');
+    // Ask mode is deliberately light: neither the ~3k-token discovery layer nor
+    // the full designer charter is composed in. That omission IS the feature —
+    // it is what makes Ask cheaper than Design/Plan.
+    expect(prompt).not.toContain(DISCOVERY_AND_PHILOSOPHY);
+    expect(prompt).not.toContain('# Identity and workflow charter (background)');
+  });
+
+  it('uses a top-level Plan mode override that suppresses artifact discovery forms', () => {
+    const prompt = composeSystemPrompt({ sessionMode: 'plan', metadata: { kind: 'prototype' } as any });
+
+    expect(prompt).toContain('# Plan mode — editable document first');
+    expect(prompt).toContain('do NOT emit `<question-form id="discovery">`');
+    expect(prompt).toContain('`<question-form id="task-type">`');
+    expect(prompt).toContain('Quick brief — 30 seconds');
+    expect(prompt).toContain('<question-form id="plan-brief">');
+    expect(prompt).toContain('substantial plan-document work still starts with a real TodoWrite/task-list tool call');
+    expect(prompt).toContain('show progress through the Todo card');
+    expect(prompt.indexOf('# Plan mode — editable document first')).toBeLessThan(
       prompt.indexOf(DISCOVERY_AND_PHILOSOPHY),
     );
   });
@@ -77,6 +94,45 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
       'If this turn only edited an existing HTML file',
     );
+  });
+
+  it('defaults generated deliverables to semantic filenames after active skills', () => {
+    const prompt = composeSystemPrompt({
+      skillName: 'simple-deck',
+      skillBody: 'Copy assets/template.html to index.html, then fill the deck.',
+    });
+
+    expect(prompt).toContain('## Semantic output file names');
+    expect(prompt).toContain('Do not call every new artifact `index.html`');
+    expect(prompt).toContain('adapt the destination to a semantic filename');
+    expect(prompt.indexOf('## Semantic output file names')).toBeGreaterThan(
+      prompt.indexOf('## Active skill — simple-deck'),
+    );
+  });
+
+  it('does not make index.html the fixed deck-framework destination', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).not.toContain('Copy the canonical skeleton below as index.html');
+    expect(prompt).toContain('semantically named deck HTML file');
+  });
+
+  it('pins the data chart discipline inside the deck framework (#907)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Data chart discipline');
+    expect(prompt).toContain('calc(var(--v) / var(--max)');
+    expect(prompt).toContain('visible category label AND value label');
+    expect(prompt).toContain('Mentally spot-check two bars');
+  });
+
+  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Mermaid diagram theme discipline');
+    expect(prompt).toContain("theme: 'dark'");
+    expect(prompt).toContain('themeVariables');
+    expect(prompt).toContain('no dark-on-dark labels');
   });
 });
 
