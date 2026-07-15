@@ -638,7 +638,7 @@ process.stdin.on('end', () => {
   const outDir = path.join(generatedRoot, 'call-prefix-thread');
   mkdirSync(outDir, { recursive: true });
   writeFileSync(path.join(outDir, 'call_Er2KDML8Fof5QcOXdSovI85V.png'), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'call-prefix-thread' }) + '\\\\n');
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'call-prefix-thread' }) + '\\n');
 });
 `, 'utf8');
     await chmod(codexBin, 0o755);
