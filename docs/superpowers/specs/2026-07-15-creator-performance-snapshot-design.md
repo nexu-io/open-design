@@ -80,6 +80,8 @@ DELETE /api/projects/:id/creator-performance-snapshots/:snapshotId
 
 所有路由先确认项目存在。POST 的 `releaseId` 必须属于当前项目，且 release 状态必须为 `published`。路由不接受跨项目 ID。DELETE 只删除目标快照，不级联删除 release、Content、Media 或原始文件。
 
+GET 不带 `releaseId` 时返回当前项目的全部快照；带该可选查询参数时只返回对应 release 的快照。Web 初次按项目加载全部快照，并在 Release 编辑器内按当前 release 过滤。
+
 创建输入：
 
 ```ts
