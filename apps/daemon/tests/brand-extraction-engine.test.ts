@@ -1344,6 +1344,64 @@ describe('agent-driven brand extraction engine', () => {
     expect(detail?.meta.designSystemId).toBe(first.designSystemId);
   });
 
+  it('finalizeBrand preserves authored seed overrides into system/seed.json (#5612)', async () => {
+    // Regression guard: validateBrand previously reconstructed the Brand
+    // without copying o.seed, so a sanctioned controlHeight:44 override
+    // in the authored brand.json was dropped and rebuildSystem fell back
+    // to the default 32. The fix retains sanitized seed overrides through
+    // validateBrand; this test pins the end-to-end behavior.
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        ...VALID_BRAND,
+        sourceUrl: started.sourceUrl,
+        // The authored brand.json carries engine-level overrides that
+        // must survive validateBrand → rebuildSystem.
+        seed: { controlHeight: 44, borderRadius: 8 },
+      }),
+      'utf8',
+    );
+    writeFileSync(path.join(projectDir, 'BRAND.md'), '# Acme Brand Guide\n', 'utf8');
+
+    const finalized = await finalizeBrand({
+      id: started.id,
+      brandsRoot,
+      userDesignSystemsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    // The Brand object returned by finalize carries the overrides.
+    expect(finalized.brand.seed?.controlHeight).toBe(44);
+    expect(finalized.brand.seed?.borderRadius).toBe(8);
+
+    // The persisted system/seed.json is the engine's full SeedToken
+    // with the overrides baked in (not just the override keys).
+    const systemSeed = JSON.parse(
+      readFileSync(path.join(projectDir, 'system', 'seed.json'), 'utf8'),
+    );
+    expect(systemSeed.controlHeight).toBe(44);
+    expect(systemSeed.borderRadius).toBe(8);
+
+    // A non-overridden field still uses the engine's derived default.
+    expect(systemSeed.fontSize).toBe(14);
+  });
+
   it('finalizeBrand fails clearly when the agent has not written brand.json yet', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const started = await startOfflineBrandExtraction({
