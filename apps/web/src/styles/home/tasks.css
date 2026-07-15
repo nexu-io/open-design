@@ -790,6 +790,204 @@
   }
 }
 
+/* ---------- CW-05 Performance overview ---------- */
+
+.creator-performance-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+
+.creator-performance-overview__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.creator-performance-overview__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.creator-performance-overview__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.creator-performance-overview__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.creator-performance-overview__filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.creator-performance-overview__filter-button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+}
+
+.creator-performance-overview__filter-button[aria-pressed="true"] {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.creator-performance-overview__filter-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.creator-performance-overview__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.creator-performance-overview__sort select {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.creator-performance-overview__empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.creator-performance-overview__scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.creator-performance-overview__table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.creator-performance-overview__table th,
+.creator-performance-overview__table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.creator-performance-overview__table thead th {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.creator-performance-overview__release {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.creator-performance-overview__release-title {
+  color: var(--text-strong);
+}
+
+.creator-performance-overview__release-project {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.creator-performance-overview__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.creator-performance-overview__value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.creator-performance-overview__delta {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.creator-performance-overview__delta--up {
+  color: var(--green);
+}
+
+.creator-performance-overview__delta--down {
+  color: var(--red);
+}
+
+.creator-performance-overview__delta--flat {
+  color: var(--text-muted);
+}
+
+.creator-performance-overview__muted {
+  color: var(--text-muted);
+}
+
+@media (max-width: 960px) {
+  .creator-performance-overview__scroll {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .creator-performance-overview__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .creator-performance-overview__controls {
+    align-items: flex-start;
+  }
+  .creator-performance-overview__table {
+    min-width: 640px;
+  }
+}
+
 /* ---------- Saved automations ---------- */
 
 .automations-saved {
