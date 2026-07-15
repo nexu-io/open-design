@@ -291,6 +291,38 @@ describe("tools-release local channel prepare validation", () => {
     }
   });
 
+  it("allows beta force to bypass stable and beta base version ordering checks", async () => {
+    const packagedVersion = await readPackagedVersion();
+    const objects: Record<string, unknown> = {
+      "beta/latest/metadata.json": countedMetadata("beta", "99.0.0-beta.7", 7, "99.0.0"),
+      "stable/latest/metadata.json": {
+        baseVersion: "99.0.0",
+        channel: "stable",
+        releaseVersion: "99.0.0",
+        stableVersion: "99.0.0",
+      },
+    };
+    const server = await startMetadataServer(objects);
+
+    try {
+      const beta = await runPrepare("beta", {
+        GITHUB_REF_NAME: "main",
+        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+        OPEN_DESIGN_BETA_METADATA_URL: `${server.origin}/beta/latest/metadata.json`,
+        OPEN_DESIGN_RELEASE_FORCE: "1",
+        OPEN_DESIGN_STABLE_METADATA_URL: `${server.origin}/stable/latest/metadata.json`,
+      });
+
+      expect(beta.stdout).toContain("[release-beta] force: true");
+      expect(beta.outputs.force).toBe("true");
+      expect(beta.outputs.release_version).toBe(`${packagedVersion}-beta.1`);
+      expect(beta.outputs.release_number).toBe("1");
+    } finally {
+      await server.close();
+    }
+  });
+
   it("prepares preview from the packaged version when branch and explicit version are absent", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {

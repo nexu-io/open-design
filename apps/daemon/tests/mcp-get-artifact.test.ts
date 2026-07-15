@@ -229,3 +229,68 @@ describe('public MCP get_artifact active context defaults', () => {
     });
   });
 });
+
+describe('public MCP get_artifact active context fallbacks', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) =>
+      res.json({
+        active: true,
+        projectId: 'active-project',
+        projectName: 'Active Project',
+        ageMs: 50,
+      }),
+    );
+    app.get('/api/projects/:id', (req, res) =>
+      res.json({
+        project: {
+          id: req.params.id,
+          name: req.params.id === 'active-project' ? 'Active Project' : 'Explicit Project',
+          metadata: { entryFile: 'index.html' },
+        },
+      }),
+    );
+    app.get('/api/projects/:id/raw/*splat', (req, res) => {
+      res.set({ 'content-type': 'text/html' }).send(`<!doctype html><h1>${req.params.splat.join('/')}</h1>`);
+    });
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('falls back to metadata.entryFile when the active project has no active file', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_artifact', { include: 'shallow' });
+    const body = parseArtifactBody(firstText(result.content)) as ArtifactBody & {
+      entryFile?: string;
+      usedActiveContext?: { projectId?: string; fileName?: string | null };
+      files?: Array<{ content?: string | null }>;
+    };
+    expect(body.entryFile).toBe('index.html');
+    expect(body.usedActiveContext).toMatchObject({
+      projectId: 'active-project',
+      fileName: null,
+    });
+    expect(body.files?.[0]?.content).toContain('<h1>index.html</h1>');
+  });
+
+  it('does not stamp active context when project and entry are explicit', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_artifact', {
+      project: PROJECT_ID,
+      entry: 'explicit.html',
+      include: 'shallow',
+    });
+    const body = parseArtifactBody(firstText(result.content)) as ArtifactBody & {
+      entryFile?: string;
+      usedActiveContext?: unknown;
+      files?: Array<{ content?: string | null }>;
+    };
+    expect(body.entryFile).toBe('explicit.html');
+    expect(body.usedActiveContext).toBeUndefined();
+    expect(body.files?.[0]?.content).toContain('<h1>explicit.html</h1>');
+  });
+});

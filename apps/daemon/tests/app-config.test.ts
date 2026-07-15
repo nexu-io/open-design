@@ -118,6 +118,17 @@ describe('app-config', () => {
       });
     });
 
+    it('preserves and validates the silent update preference', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({ allowSilentUpdates: true }),
+      );
+
+      expect((await readAppConfig(dataDir)).allowSilentUpdates).toBe(true);
+      expect((await writeAppConfig(dataDir, { allowSilentUpdates: false })).allowSilentUpdates).toBe(false);
+      expect((await writeAppConfig(dataDir, { allowSilentUpdates: 'yes' })).allowSilentUpdates).toBeUndefined();
+    });
+
     it('preserves a partial explicit telemetry (metrics on, content off)', async () => {
       // The user picked a non-default combo (e.g. metrics on for funnel,
       // content off for privacy). We hand back exactly what they saved

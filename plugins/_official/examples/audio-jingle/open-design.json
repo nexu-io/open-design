@@ -24,6 +24,7 @@
     "en": "Audio Jingle"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Audio generation skill — jingles, beds, voiceover, and sound effects. Routes music requests to Suno V5 / Udio / Lyria, speech to MiniMax TTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or AudioCraft. Output is one MP3/WAV file saved to the project folder.",
   "description_i18n": {
     "zh-CN": "音频生成技能——铃声、背景音、旁白和音效。将音乐请求路由到 Suno V5 / Udio / Lyria，语音转 MiniMax TTS / FishAudio / ElevenLabs V3，音效转 ElevenLabs SFX 或 AudioCraft。输出为保存到项目文件夹的单个 MP3/WAV 文件。",

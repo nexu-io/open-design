@@ -123,6 +123,29 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'web-clone',
+    label: 'Website clone',
+    icon: 'globe',
+    group: 'create',
+    description: 'Recreate an existing website',
+    hint: 'Paste a site URL and recreate its structure, visuals, and interactions from real source evidence.',
+    // Website reproduction is its own creation workflow (start from a target
+    // URL, source-first recon, preserve real structure/assets), so it binds
+    // the bundled `example-web-clone` skill instead of the blank prototype
+    // seed. The project still stores `kind: 'prototype'` for preview
+    // behavior; `intent: 'web-clone'` routes the scenario plugin and splits
+    // the analytics `project_kind` (see contracts scenario-defaults/events).
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-web-clone',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'web-clone',
+      },
+    },
+  },
+  {
     id: 'wireframe',
     label: 'Wireframe',
     icon: 'layout',
@@ -358,13 +381,15 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 }
 
 // Display order for the inline `create` scenario rail. The composer leads with
-// the slide deck ("Slides") followed by the core build scenarios in
-// decreasing generality (Prototype → Wireframe → Mobile → Document →
-// Animation), then the media scenarios. Brand Kit is intentionally omitted
-// here so it trails the scenario set — it dispatches into the Brand Kit tab
-// rather than seeding a scenario plugin. Any create chip not listed keeps its
-// catalog order after the explicit entries (see `orderedCreateChips`).
+// Website clone (the fastest "paste a URL, get a site" on-ramp), then the slide
+// deck ("Slides") and the core build scenarios in decreasing generality
+// (Prototype → Wireframe → Mobile → Document → Animation), then the media
+// scenarios. Brand Kit is intentionally omitted here so it trails the scenario
+// set — it dispatches into the Brand Kit tab rather than seeding a scenario
+// plugin. Any create chip not listed keeps its catalog order after the explicit
+// entries (see `orderedCreateChips`).
 export const CREATE_RAIL_ORDER = [
+  'web-clone',
   'deck',
   'prototype',
   'wireframe',
@@ -381,8 +406,10 @@ export const CREATE_RAIL_ORDER = [
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are the trailing pure-media outputs in CREATE_RAIL_ORDER and
 // the least central to the design-system story, so they are the first to drop
-// when keeping the teaser chips to a single tidy row.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['video', 'audio']);
+// when keeping the teaser chips to a single tidy row. Website clone starts
+// from someone else's site rather than the user's design system, so it stays
+// off the design-system teaser too.
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'video', 'audio']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER

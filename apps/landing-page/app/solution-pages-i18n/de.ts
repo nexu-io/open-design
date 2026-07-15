@@ -847,6 +847,134 @@ export const DE: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design für Engineering' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — HTML mit Open Design in ein bearbeitbares PowerPoint verwandeln',
+    description:
+      'Ein kostenloser, quelloffener HTML-to-PPT-Workflow: dein Coding-Agent baut ein poliertes HTML-Deck und exportiert ein echtes, bearbeitbares .pptx — direkt in dem Agent, den du bereits nutzt. Kein Cloud-Konverter, keine flachen Slide-Bilder, kein gesperrter Export. Das HTML und das PowerPoint sind Dateien, die dir gehören.',
+    breadcrumb: 'HTML to PPT',
+    label: 'Tool · HTML to PPT',
+    heading: 'HTML to PPT, in deinem Agent',
+    lead: 'Du hast eine HTML-Seite, ein markdown-Dokument oder nur einen Prompt? Lass deinen Coding-Agent daraus ein sauberes HTML-Deck bauen und ein echtes, bearbeitbares PowerPoint exportieren — native Formen und Text, die du weiter bearbeiten kannst, kein Screenshot pro Slide. Das HTML ist die Quelle; das .pptx gehört dir zum Präsentieren, Übergeben und Besitzen.',
+    heroImageAlt:
+      'Redaktionelle Illustration eines HTML-Decks, das sich in einem Coding-Agent in eine bearbeitbare PowerPoint-Datei verwandelt, umrahmt von einem grünen Auswahlrahmen',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten HTML-to-PPT-Konverter flachen deine Seite in statische Slide-Bilder ab, die du nicht bearbeiten kannst. Open Design baut das Deck als HTML in deinem Coding-Agent und exportiert ein echtes, bearbeitbares .pptx — nativer Text und Formen, dein Designsystem, keine Pro-Sitz-Gebühr, kein Vendor-Lock.',
+    stepsTitle: 'So funktioniert HTML to PPT',
+    steps: [
+      {
+        title: 'Starte von HTML, einem Dokument oder einem Prompt',
+        body: 'Richte deinen Agent auf eine HTML-Seite, ein markdown-Dokument oder beschreibe einfach das Deck. Open Design lädt die passende Skill, sodass der Agent Struktur und Absicht liest — Überschriften, Abschnitte, Daten — nicht nur rohes Markup.',
+        imageAlt: 'Illustration von HTML und einem markdown-Dokument, die an einen Coding-Agent übergeben werden',
+      },
+      {
+        title: 'Baue ein sauberes HTML-Deck',
+        body: 'Der Agent legt die Inhalte als HTML-Deck auf einem echten Designsystem an — konsistente Typografie, Raster und Farbe — mit fertigen Themes (Pitch-Deck, Produkt-Launch, redaktionell, technisch) statt einer Wand aus unbenannten Kästen.',
+        imageAlt: 'Illustration von HTML-Inhalten, die zu einer Abfolge gestalteter Slides werden',
+      },
+      {
+        title: 'Exportiere ein bearbeitbares .pptx',
+        body: 'Der pptx-generator von Open Design verwandelt das HTML-Deck in ein echtes PowerPoint — native Formen, bearbeitbarer Text und Diagramme, die du weiterhin ändern kannst — mit einer HTML-to-PPTX-Treueprüfung, kein flaches Bild pro Slide.',
+        imageAlt: 'Illustration eines HTML-Decks, das in eine bearbeitbare PowerPoint-Datei exportiert wird',
+      },
+      {
+        title: 'Besitze und übergib die Slides',
+        body: 'Das HTML und das .pptx landen in deinem Repo und gehören ganz dir. Öffne das .pptx in PowerPoint oder Keynote, präsentiere aus dem Browser oder iteriere weiter im Agent — kein Cloud-Lock-in, kein Neuzeichnen zwischen dem HTML und dem Deck.',
+        imageAlt: 'Illustration fertiger Slides in einem grünen Auswahlrahmen, bereit zur Übergabe',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische HTML-to-PPT-Konverter',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Typische HTML-to-PPT-Konverter',
+    tableRows: [
+      {
+        capability: 'Startpunkt',
+        withOd: 'HTML, ein Dokument oder ein Prompt — in dem Agent, den du bereits nutzt',
+        without: 'HTML in einen separaten Cloud-Konverter einfügen',
+      },
+      {
+        capability: 'Slide-Qualität',
+        withOd: 'Sauberes HTML-Deck aus einem echten Designsystem + fertige Themes',
+        without: 'Eine wörtliche Wiedergabe deiner Seite, Kasten für Kasten',
+      },
+      {
+        capability: 'Bearbeitbare Ausgabe',
+        withOd: 'Echtes .pptx — nativer, bearbeitbarer Text & Formen',
+        without: 'Flache Slide-Bilder, die du nicht ändern kannst',
+      },
+      {
+        capability: 'Nach dem Export iterieren',
+        withOd: 'Im Gespräch verfeinern; jederzeit neu generieren und neu exportieren',
+        without: 'Eine eingefrorene, einmalige Datei',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'HTML- + .pptx-Dateien in deinem Repo, ganz deine',
+        without: 'An ihren Editor oder Export-Credits gebunden',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, bring deine eigenen Schlüssel mit, läuft lokal',
+        without: 'Pro-Datei- oder Pro-Credit-Abo, vom Anbieter gehostet',
+      },
+    ],
+    featuresTitle: 'Was du in ein Deck verwandeln kannst',
+    features: [
+      { title: 'HTML-Seite zu PPT', body: 'Verwandle eine HTML-Seite oder einen Export in ein bearbeitbares PowerPoint-Deck.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown zu PPT', body: 'Gib deinem Agent ein markdown-Dokument und erhalte ein sauberes Deck plus ein .pptx.', thumb: 'example-html-ppt-course-module' },
+      { title: 'Prompt zu Deck', body: 'Beschreibe den Vortrag; der Agent entwirft die Slides und exportiert .pptx.', thumb: 'example-html-ppt-product-launch' },
+      { title: 'Pitch-Decks', body: 'Investor- und Sales-Decks mit einer starken Erzählung und sauberen Daten-Slides.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Präsentationsmodus', body: 'Reveal-artige HTML-Decks, die auch nach bearbeitbarem PowerPoint exportieren.', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: 'Jeder visuelle Geschmack', body: 'Redaktionell, kräftig oder minimal — das Theme trägt bis ins .pptx.', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: 'Slide-Vorlagen, mit denen du starten kannst',
+    galleryLead:
+      'Echte Decks, gerendert von Open Design, bereit zum Export in ein bearbeitbares .pptx. Wähle ein Theme, das deinem Inhalt nahekommt, beschreibe deine Variante, und der Agent baut das Deck — dann übergibt er dir das PowerPoint, das dir gehört.',
+    gallery: [
+      { thumb: 'deck-pitch', caption: 'Pitch-Deck' },
+      { thumb: 'deck-product-launch', caption: 'Produkt-Launch-Deck' },
+      { thumb: 'deck-data-graph', caption: 'Dunkles Daten-Graph-Deck' },
+      { thumb: 'deck-gradient', caption: 'Gradient-Keynote' },
+      { thumb: 'deck-blueprint', caption: 'Technisches Blueprint-Deck' },
+      { thumb: 'deck-course', caption: 'Kursmodul-Deck' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Deck-Vorlagen durchsuchen',
+    faqTitle: 'HTML-to-PPT-FAQ',
+    faq: [
+      {
+        q: 'Wie verwandelt Open Design HTML in ein PPT?',
+        a: 'Dein Coding-Agent baut die Inhalte in ein sauberes HTML-Deck, dann exportiert die pptx-generator-Skill von Open Design es in ein echtes, bearbeitbares .pptx — native Formen und Text, auf HTML-to-PPTX-Treue geprüft, kein flaches Bild pro Slide.',
+      },
+      {
+        q: 'Kann ich HTML in ein bearbeitbares PowerPoint konvertieren?',
+        a: 'Ja. Das .pptx hat nativen, bearbeitbaren Text und Formen, die du in PowerPoint oder Keynote weiter ändern kannst — keine Screenshots. Du kannst außerdem das Quell-Deck in deinem Agent weiter iterieren und jederzeit neu exportieren.',
+      },
+      {
+        q: 'Funktioniert es mit Claude Code?',
+        a: 'Ja — „claude html to ppt“ ist genau dieser Workflow. Steuere ihn mit Claude Code, oder Codex, Cursor Agent, Gemini CLI und mehr. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+      {
+        q: 'Ist es kostenlos?',
+        a: 'Ja. Open Design ist Open Source und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Schlüsseln — es gibt keine Pro-Datei- oder Pro-Credit-Gebühr für den HTML-to-PPT-Workflow.',
+      },
+      {
+        q: 'Was ist der Unterschied zum Generieren von Slides?',
+        a: 'Ein Deck zu generieren startet meist von einem Prompt oder einer Gliederung; HTML to PPT startet von HTML oder markdown, das du bereits hast, und konzentriert sich auf den bearbeitbaren .pptx-Export. Beide nutzen dieselbe Deck-Engine von Open Design — siehe den Slides-Anwendungsfall für den gliederungsorientierten Ablauf.',
+      },
+    ],
+    ctaTitle: 'Verwandle dein nächstes HTML-Deck in ein bearbeitbares PPT',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle HTML — oder einen Prompt — in ein sauberes Deck und ein echtes, bearbeitbares .pptx, im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/slides/', label: 'Präsentations-Decks generieren' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+      { href: '/plugins/templates/', label: 'Deck-Vorlagen durchsuchen' },
+      { href: '/solutions/marketing/', label: 'Open Design für Marketing' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'KI-Prototyp-Generator — vom Prompt zum klickbaren Prototyp, dann Code',
     description:
@@ -1349,8 +1477,8 @@ export const DE: SolutionLocaleCopy = {
         a: 'Nein. Der Agent wendet eine echte Deck-Vorlage mit Raster, Typskala und visueller Hierarchie an, sodass Slides gestaltet aussehen statt automatisch befüllt.',
       },
       {
-        q: 'Kann ich für einen Kunden nach PowerPoint exportieren?',
-        a: 'Ja. Decks exportieren zusätzlich zum HTML, aus dem du präsentierst, nach PPTX und PDF, sodass sie zu jedem Format passen, das das Publikum erwartet.',
+        q: 'Kann ich in ein bearbeitbares PowerPoint exportieren?',
+        a: 'Ja. Der pptx-generator von Open Design exportiert das Deck in ein echtes .pptx mit nativem, bearbeitbarem Text und Formen — auf HTML-to-PPTX-Treue geprüft, keine flachen Slide-Bilder — plus PDF und das HTML, aus dem du präsentierst. Sieh dir das HTML to PPT tool für den konvertierungsorientierten Ablauf an.',
       },
       {
         q: 'Welche Agents kann ich nutzen?',
@@ -1360,6 +1488,13 @@ export const DE: SolutionLocaleCopy = {
     ctaTitle: 'Bau dein nächstes Deck noch heute Abend',
     ctaBody:
       'Gib dem Repo einen Stern, installiere Open Design und verwandle deine Gliederung in ein gestaltetes Deck — im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'HTML zu PPT mit Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+      { href: '/plugins/templates/', label: 'Deck-Vorlagen durchsuchen' },
+      { href: '/solutions/marketing/', label: 'Open Design für Marketing' },
+    ],
   },
   image: {
     title: 'Markengerechte Grafiken mit Open Design + Claude Code erstellen',

@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -187,9 +188,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await openDesignFile(page, 'toolbar-preview.html');
 
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }),
-  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Share$/ }).click();
   const shareMenu = page.locator('.share-menu-popover[role="menu"]');
@@ -625,7 +624,7 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
@@ -645,7 +644,7 @@ test('[P0] deck host navigation advances one slide when the deck also handles sl
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
   await expect(frame.getByText('Slide Three')).toBeHidden();
 });
@@ -689,7 +688,7 @@ test('[P0] deck host navigation works when deck content only mentions slide mess
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
   await expect(frame.getByText('Protocol token: od:slide')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
   await expect(frame.getByText('Slide One')).toBeHidden();
 });
@@ -709,24 +708,24 @@ test('[P0] deck host counter stays synced when a self-handling deck stops slide 
   await openDesignFile(page, 'stopped-message-deck.html');
 
   const frame = artifactPreviewFrame(page);
-  const hostCounter = page.locator('.deck-nav-counter');
+  const hostCounter = page.locator('.deck-floating-count');
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText('1 / 3');
+  await expect(hostCounter).toHaveText(/1\s*\/\s*3/);
   await expect(frame.locator('#deck-cur')).toHaveText('01');
 
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(hostCounter).toHaveText('2 / 3');
+  await expect(hostCounter).toHaveText(/2\s*\/\s*3/);
   await expect(frame.locator('#deck-cur')).toHaveText('02');
 
-  await page.getByLabel('Previous slide').click();
+  await clickDeckPreviousSlide(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText('1 / 3');
+  await expect(hostCounter).toHaveText(/1\s*\/\s*3/);
   await expect(frame.locator('#deck-cur')).toHaveText('01');
 });
 
 
-test('[P0] simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
+test('[P0] simple deck keeps the active slide stable in preview-only mode', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Simple deck navigation state');
   await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
@@ -734,22 +733,18 @@ test('[P0] simple deck keeps the active slide stable across preview mode switche
   await openDesignFile(page, 'simple-deck.html');
 
   const frame = artifactPreviewFrame(page);
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
 
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('Slide Three');
-  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
-
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Three')).toBeVisible();
 });
 
-test('[P0] @critical HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+test('[P0] @critical HTML viewer stays rendered without a code toggle', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
   await seedHtmlArtifact(
@@ -767,11 +762,8 @@ test('[P0] @critical HTML preview stays rendered after switching from Preview to
     artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
   ).toBeVisible();
 
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('Toggle Preview Stable');
-
-  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(previewFrame).toBeVisible();
   await expect(
     artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
@@ -781,7 +773,7 @@ test('[P0] @critical HTML preview stays rendered after switching from Preview to
   ).toBeVisible();
 });
 
-test('[P0] @critical edited HTML file restores selected tab, source, and preview after reload', async ({ page }) => {
+test('[P0] @critical edited HTML file restores selected tab and preview after reload', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'File edit restore smoke');
   await seedHtmlArtifact(page, projectId, 'restore-edit.html', manualEditHtml());
@@ -795,10 +787,7 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   await openDesignFile(page, 'secondary-preview.html');
   await expect(tabBySuffix(page, 'secondary-preview.html')).toHaveAttribute('aria-selected', 'true');
 
-  await page
-    .getByRole('tablist', { name: 'Design Files' })
-    .getByRole('tab', { name: /^Design Files$/ })
-    .click();
+  await openAllProjectFiles(page);
   await openDesignFile(page, 'restore-edit.html');
 
   const restoreTab = tabBySuffix(page, 'restore-edit.html');
@@ -820,9 +809,8 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
 
   await page.getByTestId('manual-edit-mode-toggle').click();
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
   await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
 
@@ -832,10 +820,8 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   const restoredTab = tabBySuffix(page, 'restore-edit.html');
   await expect(restoredTab).toBeVisible();
   await expect(restoredTab).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
-
-  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(artifactPreview(page)).toBeVisible();
   const restoredFrame = artifactPreviewFrame(page);
   const restoredTitle = restoredFrame.getByRole('heading', { name: 'Original Hero' });

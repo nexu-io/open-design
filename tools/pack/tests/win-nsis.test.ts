@@ -58,6 +58,26 @@ describe("writeNsisInclude", () => {
 
       expect(written).toContain('C:\\Open $\\"Design$\\"$\\r$\\nbeta');
       expect(written).not.toContain('C:\\Open "Design"\n');
+      expect(written).toContain('$EXEPATH:Zone.Identifier');
+      expect(written).toContain('HostUrl=');
+      expect(written).toContain('data\\observations\\installer');
+      expect(written).toContain('download-attribution.json');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("writes portable installer observations under the Electron namespace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-nsis-"));
+    try {
+      const includePath = join(root, "include", "open-design.nsh");
+      const paths = { nsisIncludePath: includePath } as WinPaths;
+      const config = { ...makeConfig("C:\\ignored"), portable: true };
+
+      await writeNsisInclude(config, paths);
+      const written = await readFile(includePath, "utf8");
+
+      expect(written).toContain('$APPDATA\\Open Design\\namespaces\\test-namespace\\data\\observations\\installer');
     } finally {
       await rm(root, { force: true, recursive: true });
     }

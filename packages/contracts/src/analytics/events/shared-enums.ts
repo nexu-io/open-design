@@ -6,16 +6,18 @@
 
 export type TrackingProjectKind =
   | 'prototype'
-  // `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
-  // Home task rail (task_chip) offers as their own cards. They all reuse the
-  // web-prototype seed (so the product `metadata.kind` stays `prototype`), but
-  // the analytics dimension splits them out so a created project's
-  // `project_kind` lines up 1:1 with the card the user picked:
+  // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind
+  // projects the Home task rail (task_chip) offers as their own cards. They all
+  // reuse the web-prototype seed (so the product `metadata.kind` stays
+  // `prototype`), but the analytics dimension splits them out so a created
+  // project's `project_kind` lines up 1:1 with the card the user picked:
+  //   - `web_clone`     ← metadata.intent === 'web-clone'
   //   - `wireframe`     ← metadata.fidelity === 'wireframe'
   //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
   //   - `live_artifact` ← metadata.intent === 'live-artifact'
-  // Derivation precedence (a prototype that matches several): live_artifact >
-  // wireframe > mobile. See `projectKindToTracking`.
+  // Derivation precedence (a prototype that matches several): web_clone >
+  // live_artifact > wireframe > mobile. See `projectKindToTracking`.
+  | 'web_clone'
   | 'wireframe'
   | 'mobile'
   | 'live_artifact'
@@ -78,7 +80,9 @@ export type TrackingAmrEntrySource =
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
   | 'avatar_amr_upgrade'
-  | 'avatar_amr_agent_card';
+  | 'avatar_amr_agent_card'
+  | 'artifact_success_upgrade'
+  | 'home_artifact_upgrade';
 
 export interface AmrEntryAttribution {
   entryId: string;
@@ -125,7 +129,8 @@ export type TrackingByokProviderId =
   | 'azure_openai'
   | 'google_gemini'
   | 'ollama_cloud'
-  | 'senseaudio';
+  | 'senseaudio'
+  | 'aihubmix';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer

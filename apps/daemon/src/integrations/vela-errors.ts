@@ -99,6 +99,14 @@ export function classifyAmrAccountFailureDetails(details: unknown): AmrAccountFa
     };
   }
 
+  if (code === 'auth_required' || accountAction === 'relogin') {
+    return {
+      code: 'AMR_AUTH_REQUIRED',
+      message: AMR_AUTH_REQUIRED_MESSAGE,
+      action: 'relogin',
+    };
+  }
+
   return null;
 }
 

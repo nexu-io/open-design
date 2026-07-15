@@ -102,7 +102,7 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
     // Second connection (reconnect with ?after=2): send one more delta + end.
     const secondReader = makeFiniteReader([
       enc(sseEvent(3, 'stdout', { chunk: 'world' })),
-      enc(sseEvent(4, 'end', { status: 'succeeded', code: 0 })),
+      enc(sseEvent(4, 'end', { status: 'succeeded', code: 0, artifactCount: 2 })),
     ]);
 
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -155,6 +155,64 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
     expect(eventCalls.length).toBe(2);
     // The second call should include ?after=2 (resuming from last event id).
     expect(eventCalls[1]![0]).toContain('after=2');
+  });
+
+  it('carries daemon failure classification off the error-frame status probe (no end frame)', async () => {
+    // #5329 regression: an `error` frame arrives, then the connection drops
+    // before any terminal `end` frame. The recovery path fetches run status and
+    // observes a terminal failed run, breaking out early. That status carries
+    // the daemon's failure classification, and it must reach onError so the
+    // long-tail failureDetail card renders instead of the generic error UI.
+    const firstReader = makeRejectingReader([
+      enc(sseEvent(1, 'error', {
+        error: { code: 'AGENT_EXECUTION_FAILED', message: 'agent went quiet and timed out' },
+      })),
+    ]);
+
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url.toString();
+      if (u.includes('/events')) {
+        return streamResponse(firstReader);
+      }
+      if (u.includes('/runs/') && !u.includes('/events') && !u.includes('/cancel')) {
+        // Terminal failed status with the daemon's fine-grained classification,
+        // but NO SSE end frame ever arrives.
+        return jsonResponse({
+          status: 'failed',
+          exitCode: 1,
+          signal: null,
+          failureCategory: 'model_unavailable',
+          failureDetail: 'timeout',
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    let doneCalled = false;
+    let error: (Error & { code?: string; failureCategory?: string; failureDetail?: string }) | null =
+      null;
+    const controller = new AbortController();
+
+    await reattachDaemonRun({
+      runId: 'test-run-classification',
+      signal: controller.signal,
+      handlers: {
+        onDelta: () => {},
+        onDone: () => { doneCalled = true; },
+        onError: (err) => { error = err as typeof error; },
+        onAgentEvent: () => {},
+      },
+      onRunStatus: () => {},
+    });
+
+    expect(doneCalled).toBe(false);
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe('AGENT_EXECUTION_FAILED');
+    // Without the probe carrying these through, they would be undefined here.
+    expect(error!.failureCategory).toBe('model_unavailable');
+    expect(error!.failureDetail).toBe('timeout');
   });
 
   it('does not swallow handler exceptions as reconnection', async () => {

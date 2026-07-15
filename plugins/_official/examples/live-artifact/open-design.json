@@ -24,6 +24,7 @@
     "en": "Live Artifact"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Create refreshable, auditable Open Design artifacts backed by connector or local data. Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
   "description_i18n": {
     "zh-CN": "创建可刷新、可审计的 Open Design 工件，支持连接器或本地数据。适用于实时仪表板、可刷新报表、同步视图或可复用的数据驱动工件。",

@@ -219,6 +219,21 @@ jobs:
       # project. Gated to same-repo branches: fork PRs run without the
       # Cloudflare secrets and with a read-only token, so they skip the
       # deploy/comment and keep just the validation above.
+      - name: Prepare staging Pages configuration
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml
+
+      - name: Apply attribution ledger migrations (staging)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          wranglerVersion: "4.110.0"
+          command: d1 migrations apply open-design-landing-staging-attribution --remote
+
       - name: Deploy PR preview to Cloudflare Pages
         id: preview
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

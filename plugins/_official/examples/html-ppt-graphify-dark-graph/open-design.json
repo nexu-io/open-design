@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-graphify-dark-graph",
-  "title": "Html Ppt Graphify Dark Graph",
+  "title": "Write a Feature Business Case like a Principal PM",
   "title_i18n": {
-    "zh-CN": "Html Ppt Graphify Dark Graph",
-    "zh-TW": "Html Ppt Graphify Dark Graph",
-    "ja": "Html Ppt Graphify Dark Graph",
-    "ko": "Html Ppt Graphify Dark Graph",
-    "de": "Html Ppt Graphify Dark Graph",
-    "fr": "Html Ppt Graphify Dark Graph",
-    "ru": "Html Ppt Graphify Dark Graph",
-    "es": "Html Ppt Graphify Dark Graph",
-    "pt-BR": "Html Ppt Graphify Dark Graph",
-    "it": "Html Ppt Graphify Dark Graph",
-    "vi": "Html Ppt Graphify Dark Graph",
-    "pl": "Html Ppt Graphify Dark Graph",
-    "id": "Html Ppt Graphify Dark Graph",
-    "nl": "Html Ppt Graphify Dark Graph",
-    "ar": "Html Ppt Graphify Dark Graph",
-    "tr": "Html Ppt Graphify Dark Graph",
-    "uk": "Html Ppt Graphify Dark Graph",
-    "en": "Html Ppt Graphify Dark Graph"
+    "en": "Write a Feature Business Case like a Principal PM",
+    "zh-CN": "像 Principal PM 一样写功能商业论证",
+    "zh-TW": "像 Principal PM 一样写功能商业论证"
   },
   "version": "0.1.0",
-  "description": "暗底知识图谱 deck — #06060c→#0e1020 深夜渐变 + 漂浮 blur orbs、封面 SVG 力导向图谱、彩虹渐变标题、JetBrains Mono 命令行高亮、glass-morphism 卡片。适合 dev-tool / CLI / 知识图谱 / 数据可视化的发布会，\"AI-native + 科幻 + 暖色\" 调子。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.",
   "description_i18n": {
-    "zh-CN": "暗底知识图谱 deck — #06060c→#0e1020 深夜渐变 + 漂浮 blur orbs、封面 SVG 力导向图谱、彩虹渐变标题、JetBrains Mono 命令行高亮、glass-morphism 卡片。适合 dev-tool / CLI / 知识图谱 / 数据可视化的发布会，'AI-native + 科幻 + 暖色' 调子。",
-    "zh-TW": "暗底知識圖譜 deck — #06060c→#0e1020 深夜漸層 + 漂浮 blur orbs、封面 SVG 力導向圖譜、彩虹漸層標題、JetBrains Mono 命令列高亮、glass-morphism 卡片。適合 dev-tool / CLI / 知識圖譜 / 資料視覺化的發表會，'AI-native + 科幻 + 暖色' 調性。",
-    "ja": "ダークテーマのナレッジグラフ deck。深夜のグラデーション (#06060c→#0e1020)、浮遊する blur orbs、SVG 力学グラフ、レインボーグラデーションタイトル、JetBrains Mono CLI ハイライト、glass-morphism カードを搭載。dev-tool / CLI / ナレッジグラフ / データビジュアライゼーション向けで、'AI-native + SF + 暖色系' の雰囲気。",
-    "ko": "다크 테마 지식 그래프 deck. #06060c→#0e1020 심야 그라데이션 + 떠다니는 blur orbs, 커버 SVG 포스 다이렉트 그래프, 레인보우 그라데이션 제목, JetBrains Mono CLI 하이라이트, glass-morphism 카드 포함. dev-tool / CLI / 지식 그래프 / 데이터 시각화 발표에 적합하며, 'AI-native + SF + 따뜻한 색감' 분위기.",
-    "de": "Dunkles Wissensgraph-Deck mit Mitternachtsverlauf (#06060c→#0e1020), schwebenden Blur-Orbs, SVG-Force-Graph, Regenbogenverlauf-Titeln, JetBrains Mono CLI-Highlighting und Glass-Morphism-Karten. Ideal für dev-tool-, CLI-, Wissensgraph- und Datenvisualisierungs-Präsentationen im 'AI-native + Sci-Fi + warmen' Stil.",
-    "fr": "Deck de graphe de connaissances sombre avec dégradé nocturne (#06060c→#0e1020), orbes flottantes en blur, graphe de force SVG, titres en dégradé arc-en-ciel, surlignage CLI JetBrains Mono et cartes glass-morphism. Idéal pour les présentations dev-tool / CLI / graphes de connaissances / visualisation de données dans un style 'AI-native + sci-fi + tons chauds'.",
-    "ru": "Темный граф знаний с полуночным градиентом (#06060c→#0e1020), парящими blur-сферами, SVG-графом сил, радужными заголовками, подсветкой CLI в JetBrains Mono и glass-morphism картами. Подходит для презентаций dev-tool / CLI / графов знаний / визуализации данных в стиле 'AI-native + научная фантастика + теплые тона'.",
-    "es": "Deck de grafo de conocimiento oscuro con degradado nocturno (#06060c→#0e1020), orbes flotantes con blur, grafo de fuerzas SVG, títulos con degradado arcoíris, resaltado CLI en JetBrains Mono y tarjetas glass-morphism. Ideal para presentaciones de dev-tool / CLI / grafos de conocimiento / visualización de datos con estilo 'AI-native + sci-fi + tonos cálidos'.",
-    "pt-BR": "Deck de grafo de conhecimento escuro com gradiente noturno (#06060c→#0e1020), orbes flutuantes com blur, grafo de força SVG, títulos com gradiente arco-íris, destaque CLI em JetBrains Mono e cartões glass-morphism. Ideal para apresentações de dev-tool / CLI / grafos de conhecimento / visualização de dados no estilo 'AI-native + sci-fi + tons quentes'.",
-    "it": "Deck di knowledge graph scuro con gradiente notturno (#06060c→#0e1020), sfere fluttuanti con blur, grafo di forza SVG, titoli con gradiente arcobaleno, evidenziazione CLI in JetBrains Mono e card glass-morphism. Ideale per presentazioni dev-tool / CLI / knowledge graph / data visualization in stile 'AI-native + sci-fi + toni caldi'.",
-    "vi": "Deck đồ thị tri thức nền tối với gradient đêm khuya (#06060c→#0e1020), quả cầu blur lơ lửng, biểu đồ lực SVG, tiêu đề gradient cầu vồng, làm nổi CLI JetBrains Mono và thẻ glass-morphism. Phù hợp cho các buổi thuyết trình dev-tool / CLI / đồ thị tri thức / trực quan hóa dữ liệu với phong cách 'AI-native + khoa học viễn tưởng + tông màu ấm'.",
-    "pl": "Ciemny deck grafu wiedzy z nocnym gradientem (#06060c→#0e1020), unoszącymi się rozmytymi kulami, grafem siłowym SVG, tytułami z tęczowym gradientem, podświetleniem CLI w JetBrains Mono i kartami glass-morphism. Idealny do prezentacji dev-tool / CLI / grafów wiedzy / wizualizacji danych w stylu 'AI-native + sci-fi + ciepłe tony'.",
-    "id": "Deck graf pengetahuan gelap dengan gradien tengah malam (#06060c→#0e1020), bola blur melayang, graf gaya SVG, judul gradien pelangi, highlight CLI JetBrains Mono, dan kartu glass-morphism. Cocok untuk presentasi dev-tool / CLI / graf pengetahuan / visualisasi data dengan gaya 'AI-native + sci-fi + nada hangat'.",
-    "nl": "Donker kennisgraaf-deck met middernachtverloop (#06060c→#0e1020), zwevende blur-bollen, SVG force-graaf, regenboogverloop-titels, JetBrains Mono CLI-highlighting en glass-morphism-kaarten. Ideaal voor dev-tool / CLI / kennisgraaf / datavisualisatiepresentaties in 'AI-native + sci-fi + warme tinten'-stijl.",
-    "ar": "مجموعة رسم بياني للمعرفة بخلفية داكنة مع تدرج منتصف الليل (#06060c→#0e1020)، كرات ضبابية عائمة، رسم بياني قوة SVG، عناوين بتدرج قوس قزح، إبراز CLI بـ JetBrains Mono، وبطاقات glass-morphism. مثالي لعروض dev-tool / CLI / الرسوم البيانية للمعرفة / تصور البيانات بأسلوب 'AI-native + خيال علمي + ألوان دافئة'.",
-    "tr": "Gece yarısı degradesi (#06060c→#0e1020), yüzen blur küreler, SVG kuvvet grafiği, gökkuşağı degrade başlıklar, JetBrains Mono CLI vurgulama ve glass-morphism kartlarla koyu bilgi grafiği deck'i. dev-tool / CLI / bilgi grafiği / veri görselleştirme sunumları için 'AI-native + bilim kurgu + sıcak tonlar' stilinde idealdir.",
-    "uk": "Темний граф знань із нічним градієнтом (#06060c→#0e1020), плаваючими blur-сферами, SVG-графом сил, веселковими заголовками, підсвічуванням CLI в JetBrains Mono та glass-morphism картками. Підходить для презентацій dev-tool / CLI / графів знань / візуалізації даних у стилі 'AI-native + наукова фантастика + теплі тони'.",
-    "en": "暗底知识图谱 deck — #06060c→#0e1020 深夜渐变 + 漂浮 blur orbs、封面 SVG 力导向图谱、彩虹渐变标题、JetBrains Mono 命令行高亮、glass-morphism 卡片。适合 dev-tool / CLI / 知识图谱 / 数据可视化的发布会，\"AI-native + 科幻 + 暖色\" 调子。"
+    "en": "Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.",
+    "zh-CN": "像 Principal PM 一样写功能商业论证——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像 Principal PM 一样写功能商业论证——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,19 @@
     "dark-graph",
     "dev-tool-launch",
     "cli-launch",
-    "data-viz-launch"
+    "data-viz-launch",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-graphify-dark-graph",
+    "enterprise-ai-literacy",
+    "product-management",
+    "pm-feature-business-case-deck",
+    "product",
+    "roadmap",
+    "architecture",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +58,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "product",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +66,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-graphify-dark-graph template to create a dev-tool launch deck. Use a late-night gradient background, force-directed graph cover, rainbow headline, and JetBrains Mono command-line styling. First confirm the tool name, core capabilities, demo steps, and whether the CLI should be typed live.",
-        "zh-CN": "用 html-ppt-graphify-dark-graph 模板做一份 dev-tool 发布会 PPT。深夜渐变背景 + 力导向图谱封面 + 彩虹标题 + JetBrains Mono 命令行。先确认：工具名、核心能力、demo 步骤；要不要现场敲 CLI。"
+        "en": "Create \"Write a Feature Business Case like a Principal PM\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Audience: PM, eng, design, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step.",
+        "zh-CN": "像 Principal PM 一样写功能商业论证。像 Principal PM 一样写功能商业论证——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Graphify Dark Graph"
+          "title": "Write a Feature Business Case like a Principal PM",
+          "title_i18n": {
+            "en": "Write a Feature Business Case like a Principal PM",
+            "zh-CN": "像 Principal PM 一样写功能商业论证",
+            "zh-TW": "像 Principal PM 一样写功能商业论证"
+          }
         }
       ]
     },
@@ -117,6 +105,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "product-management"
   }
 }

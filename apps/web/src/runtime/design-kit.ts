@@ -88,6 +88,7 @@ export interface KitSystem {
   kitDarkUrl?: string;
   tokensUrl?: string;
   indexUrl?: string;
+  kitLabel?: string;
 }
 
 export interface KitAsset {
@@ -133,6 +134,72 @@ const ASSET_TILES: { kind: string; label: string; file: string }[] = [
   { kind: 'newsletter', label: 'Newsletter', file: 'system/artifacts/newsletter.html' },
   { kind: 'form', label: 'Form page', file: 'system/artifacts/form.html' },
 ];
+
+function hasAvailablePackageFile(
+  packageInfo: DesignSystemPackageInfo | undefined,
+  filePath: string | undefined,
+): filePath is string {
+  if (!filePath) return false;
+  const availableFiles = packageInfo?.availableFiles;
+  return Array.isArray(availableFiles) ? availableFiles.includes(filePath) : true;
+}
+
+function firstAvailablePackageFile(
+  packageInfo: DesignSystemPackageInfo | undefined,
+  files: Array<string | undefined>,
+): string | null {
+  return files.find((filePath) => hasAvailablePackageFile(packageInfo, filePath)) ?? null;
+}
+
+function previewPageLabel(pathName: string, title: string | undefined, role: string | undefined): string {
+  const explicit = title?.trim() || role?.trim();
+  if (explicit) return explicit;
+  const base = pathName.split('/').pop()?.replace(/\.[^.]+$/, '') ?? pathName;
+  return base
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || 'Preview';
+}
+
+type PackagePreviewPageInput = {
+  path?: string;
+  role?: string;
+  title?: string;
+};
+type PackagePreviewPage = PackagePreviewPageInput & { path: string };
+
+function isAvailablePreviewPage(
+  packageInfo: DesignSystemPackageInfo,
+  page: PackagePreviewPageInput,
+): page is PackagePreviewPage {
+  return typeof page.path === 'string' && hasAvailablePackageFile(packageInfo, page.path);
+}
+
+function packageAssetTiles(
+  packageInfo: DesignSystemPackageInfo | undefined,
+  staticUrl: (rel: string) => string,
+): KitAsset[] | undefined {
+  if (!packageInfo) return undefined;
+  const artifactTiles = ASSET_TILES
+    .filter((a) => hasAvailablePackageFile(packageInfo, a.file))
+    .map((a) => ({
+      kind: a.kind,
+      label: a.label,
+      url: staticUrl(a.file),
+    }));
+  if (artifactTiles.length > 0) return artifactTiles;
+
+  const previewPages = packageInfo.manifest?.preview?.pages ?? [];
+  const previewTiles = previewPages
+    .filter((page): page is PackagePreviewPage => isAvailablePreviewPage(packageInfo, page))
+    .map((page) => ({
+      kind: page.role?.trim() || page.path,
+      label: previewPageLabel(page.path, page.title, page.role),
+      url: staticUrl(page.path),
+    }));
+  return previewTiles.length > 0 ? previewTiles : undefined;
+}
 
 function fontList(typography: DesignKit['typography']): KitFont[] {
   return [typography.display, typography.body, typography.mono].filter(
@@ -453,6 +520,25 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
   const staticUrl = !opts.editable && opts.designSystemId && opts.packageInfo?.manifest
     ? (rel: string): string => designSystemStaticUrl(opts.designSystemId!, rel)
     : null;
+  const manifestFiles = opts.packageInfo?.manifest?.files;
+  const kitPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, [
+        'system/kit.html',
+        manifestFiles?.components ?? 'components.html',
+      ])
+    : null;
+  const kitDarkPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, ['system/kit.dark.html'])
+    : null;
+  const tokensPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, [
+        'system/tokens.default.json',
+        manifestFiles?.designTokens,
+      ])
+    : null;
+  const indexPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, ['system/index.html'])
+    : null;
 
   return {
     designSystemId: opts.designSystemId,
@@ -471,17 +557,16 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     voice: hasVoice(parsed.voice) ? parsed.voice : undefined,
     imagery: hasImagery(imagery) ? imagery : undefined,
     layout: hasLayout(layout) ? layout : undefined,
-    system: staticUrl
+    system: staticUrl && kitPath
       ? {
-          kitUrl: staticUrl('system/kit.html'),
-          kitDarkUrl: staticUrl('system/kit.dark.html'),
-          tokensUrl: staticUrl('system/tokens.default.json'),
-          indexUrl: staticUrl('system/index.html'),
+          kitUrl: staticUrl(kitPath),
+          ...(kitDarkPath ? { kitDarkUrl: staticUrl(kitDarkPath) } : {}),
+          ...(tokensPath ? { tokensUrl: staticUrl(tokensPath) } : {}),
+          ...(indexPath ? { indexUrl: staticUrl(indexPath) } : {}),
+          kitLabel: kitPath,
         }
       : undefined,
-    assets: staticUrl
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: staticUrl(a.file) }))
-      : undefined,
+    assets: staticUrl ? packageAssetTiles(opts.packageInfo, staticUrl) : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
 }

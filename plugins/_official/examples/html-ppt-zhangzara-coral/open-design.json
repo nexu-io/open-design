@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-coral",
-  "title": "Html Ppt Zhangzara Coral",
+  "title": "Plan a Community-Growth Campaign like a Head of Growth",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Coral",
-    "zh-TW": "Html Ppt Zhangzara Coral",
-    "ja": "Html Ppt Zhangzara Coral",
-    "ko": "Html Ppt Zhangzara Coral",
-    "de": "Html Ppt Zhangzara Coral",
-    "fr": "Html Ppt Zhangzara Coral",
-    "ru": "Html Ppt Zhangzara Coral",
-    "es": "Html Ppt Zhangzara Coral",
-    "pt-BR": "Html Ppt Zhangzara Coral",
-    "it": "Html Ppt Zhangzara Coral",
-    "vi": "Html Ppt Zhangzara Coral",
-    "pl": "Html Ppt Zhangzara Coral",
-    "id": "Html Ppt Zhangzara Coral",
-    "nl": "Html Ppt Zhangzara Coral",
-    "ar": "Html Ppt Zhangzara Coral",
-    "tr": "Html Ppt Zhangzara Coral",
-    "uk": "Html Ppt Zhangzara Coral",
-    "en": "Html Ppt Zhangzara Coral"
+    "en": "Plan a Community-Growth Campaign like a Head of Growth",
+    "zh-CN": "像增长负责人一样规划社区增长战役",
+    "zh-TW": "像增长负责人一样规划社区增长战役"
   },
   "version": "0.1.0",
-  "description": "Coral — Cream and coral on near-black, set in oversized Bebas Neue. Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Built as a decision-grade marketing & GTM deck for growth team, community lead.",
   "description_i18n": {
-    "zh-CN": "Coral — 近黑色背景上的奶油色和珊瑚色，采用超大 Bebas Neue 字体。适合需要温暖图形化和编辑风格的内容：时尚、美容、健身、餐饮、生活方式品牌、代理商宣传。",
-    "zh-TW": "Coral — 近黑色背景上的奶油色和珊瑚色，採用超大 Bebas Neue 字體。適合需要溫暖圖形化和編輯風格的內容：時尚、美容、健身、餐飲、生活方式品牌、代理商宣傳。",
-    "ja": "Coral — ほぼ黒の背景にクリームとコーラルカラー、特大の Bebas Neue フォントを使用。温かみのあるグラフィカルでエディトリアルな雰囲気に：ファッション、ビューティー、フィットネス、飲食、ライフスタイルブランド、エージェンシー資料。",
-    "ko": "Coral — 거의 검은색 배경에 크림과 코랄 색상, 초대형 Bebas Neue 폰트 사용. 따뜻하고 그래픽적이며 편집적인 느낌이 필요한 콘텐츠에 적합: 패션, 뷰티, 피트니스, 식음료, 라이프스타일 브랜드, 에이전시 크리덴셜.",
-    "de": "Coral — Creme und Koralle auf fast Schwarz, in übergroßer Bebas Neue. Für alles, das warm-grafisch und redaktionell wirken soll: Mode, Beauty, Fitness, Gastronomie, Lifestyle-Marken, Agentur-Präsentationen.",
-    "fr": "Coral — Crème et corail sur fond presque noir, en Bebas Neue surdimensionné. Pour tout ce qui doit paraître graphique-chaleureux et éditorial : mode, beauté, fitness, restauration, marques lifestyle, références d'agence.",
-    "ru": "Coral — Кремовый и коралловый на почти чёрном фоне, набранные крупным шрифтом Bebas Neue. Для всего, что должно выглядеть тепло-графичным и редакционным: мода, красота, фитнес, рестораны, лайфстайл-бренды, презентации агентств.",
-    "es": "Coral — Crema y coral sobre casi negro, en Bebas Neue de gran tamaño. Para todo lo que deba sentirse cálido-gráfico y editorial: moda, belleza, fitness, gastronomía, marcas de estilo de vida, credenciales de agencia.",
-    "pt-BR": "Coral — Creme e coral sobre quase preto, em Bebas Neue superdimensionada. Para tudo que precisa ter uma sensação gráfico-calorosa e editorial: moda, beleza, fitness, gastronomia, marcas de estilo de vida, apresentações de agência.",
-    "it": "Coral — Crema e corallo su quasi nero, in Bebas Neue oversize. Per tutto ciò che deve apparire grafico-caldo ed editoriale: moda, bellezza, fitness, ristorazione, brand lifestyle, presentazioni agenzia.",
-    "vi": "Coral — Màu kem và san hô trên nền gần đen, dùng font Bebas Neue cỡ lớn. Dành cho nội dung cần cảm giác ấm áp-đồ họa và biên tập: thời trang, làm đẹp, thể hình, ẩm thực, thương hiệu phong cách sống, hồ sơ agency.",
-    "pl": "Coral — Kremowy i koralowy na niemal czarnym tle, w powiększonym Bebas Neue. Do wszystkiego, co powinno wyglądać ciepło-graficznie i redakcyjnie: moda, uroda, fitness, gastronomia, marki lifestylowe, prezentacje agencji.",
-    "id": "Coral — Krem dan coral di atas hampir hitam, dengan Bebas Neue berukuran besar. Untuk konten yang perlu terasa hangat-grafis dan editorial: fashion, kecantikan, fitness, kuliner, brand gaya hidup, kredensial agensi.",
-    "nl": "Coral — Crème en koraal op bijna zwart, gezet in oversize Bebas Neue. Voor alles dat warm-grafisch en redactioneel moet aanvoelen: mode, beauty, fitness, horeca, lifestylemerken, bureaureferenties.",
-    "ar": "Coral — كريمي ومرجاني على خلفية شبه سوداء، بخط Bebas Neue كبير الحجم. لكل ما يجب أن يبدو دافئاً-جرافيكياً وتحريرياً: الموضة، التجميل، اللياقة، المطاعم، علامات نمط الحياة، بيانات الوكالات.",
-    "tr": "Coral — Neredeyse siyah üzerine krem ve mercan, büyük boyutta Bebas Neue ile. Sıcak-grafik ve editoryal hissettirmesi gereken her şey için: moda, güzellik, fitness, yeme-içme, yaşam tarzı markaları, ajans sunumları.",
-    "uk": "Coral — Кремовий і кораловий на майже чорному, великим шрифтом Bebas Neue. Для всього, що має виглядати тепло-графічним і редакційним: мода, краса, фітнес, харчування, лайфстайл-бренди, презентації агентств.",
-    "en": "Coral — Cream and coral on near-black, set in oversized Bebas Neue. Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials."
+    "en": "Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Built as a decision-grade marketing & GTM deck for growth team, community lead.",
+    "zh-CN": "像增长负责人一样规划社区增长战役——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像增长负责人一样规划社区增长战役——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "fitness-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "sales",
+    "renewal",
+    "customer",
+    "html-ppt-zhangzara-coral",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "launch",
+    "campaign",
+    "pipeline",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Coral — Cream and coral on near-black, set in oversized Bebas Neue. Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials.",
-        "zh-CN": "使用这个插件完成以下任务：Coral — Cream and coral on near-black, set in oversized Bebas Neue. Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials."
+        "en": "Create \"Plan a Community-Growth Campaign like a Head of Growth\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Audience: growth team, community lead. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像增长负责人一样规划社区增长战役。像增长负责人一样规划社区增长战役——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Coral"
+          "title": "Plan a Community-Growth Campaign like a Head of Growth",
+          "title_i18n": {
+            "en": "Plan a Community-Growth Campaign like a Head of Growth",
+            "zh-CN": "像增长负责人一样规划社区增长战役",
+            "zh-TW": "像增长负责人一样规划社区增长战役"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "marketing-gtm"
   }
 }

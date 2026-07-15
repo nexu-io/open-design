@@ -57,7 +57,6 @@ try {
 
   const requests = [];
   const responses = [];
-  const responseTasks = new Set();
 
   page.on("request", (request) => {
     requests.push({
@@ -69,54 +68,43 @@ try {
     });
   });
 
-  page.on("response", (response) => {
-    const task = (async () => {
-      const request = response.request();
-      const headers = response.headers();
-      const contentType = headers["content-type"] || "";
-      const entry = {
-        url: response.url(),
-        status: response.status(),
-        ok: response.ok(),
-        method: request.method(),
-        resourceType: request.resourceType(),
-        contentType,
-        fixture: "",
-        error: "",
-      };
+  page.on("response", async (response) => {
+    const request = response.request();
+    const headers = response.headers();
+    const contentType = headers["content-type"] || "";
+    const entry = {
+      url: response.url(),
+      status: response.status(),
+      ok: response.ok(),
+      method: request.method(),
+      resourceType: request.resourceType(),
+      contentType,
+      fixture: "",
+      error: "",
+    };
 
-      if (shouldSave(request.resourceType(), contentType)) {
-        try {
-          const body = await response.body();
-          if (body.length <= args.maxBytes) {
-            const file = path.join(fixturesDir, safeFixtureName(response.url(), contentType));
-            fs.writeFileSync(file, body);
-            entry.fixture = path.relative(outDir, file);
-            entry.bytes = body.length;
-          } else {
-            entry.error = `body too large: ${body.length}`;
-          }
-        } catch (error) {
-          entry.error = error.message;
+    if (shouldSave(request.resourceType(), contentType)) {
+      try {
+        const body = await response.body();
+        if (body.length <= args.maxBytes) {
+          const file = path.join(fixturesDir, safeFixtureName(response.url(), contentType));
+          fs.writeFileSync(file, body);
+          entry.fixture = path.relative(outDir, file);
+          entry.bytes = body.length;
+        } else {
+          entry.error = `body too large: ${body.length}`;
         }
+      } catch (error) {
+        entry.error = error.message;
       }
+    }
 
-      responses.push(entry);
-    })();
-
-    responseTasks.add(task);
-    task.then(
-      () => responseTasks.delete(task),
-      () => responseTasks.delete(task),
-    );
+    responses.push(entry);
   });
 
   await page.goto(args.url, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.waitForLoadState("networkidle", { timeout: args.waitMs }).catch(() => {});
   if (args.waitMs > 0) await page.waitForTimeout(args.waitMs);
-  while (responseTasks.size > 0) {
-    await Promise.allSettled(Array.from(responseTasks));
-  }
   await browser.close();
 
   const manifest = {

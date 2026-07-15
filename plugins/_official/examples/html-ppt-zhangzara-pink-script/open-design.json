@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-pink-script",
-  "title": "Html Ppt Zhangzara Pink Script",
+  "title": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Pink Script",
-    "zh-TW": "Html Ppt Zhangzara Pink Script",
-    "ja": "Html Ppt Zhangzara Pink Script",
-    "ko": "Html Ppt Zhangzara Pink Script",
-    "de": "Html Ppt Zhangzara Pink Script",
-    "fr": "Html Ppt Zhangzara Pink Script",
-    "ru": "Html Ppt Zhangzara Pink Script",
-    "es": "Html Ppt Zhangzara Pink Script",
-    "pt-BR": "Html Ppt Zhangzara Pink Script",
-    "it": "Html Ppt Zhangzara Pink Script",
-    "vi": "Html Ppt Zhangzara Pink Script",
-    "pl": "Html Ppt Zhangzara Pink Script",
-    "id": "Html Ppt Zhangzara Pink Script",
-    "nl": "Html Ppt Zhangzara Pink Script",
-    "ar": "Html Ppt Zhangzara Pink Script",
-    "tr": "Html Ppt Zhangzara Pink Script",
-    "uk": "Html Ppt Zhangzara Pink Script",
-    "en": "Html Ppt Zhangzara Pink Script"
+    "en": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+    "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文",
+    "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文"
   },
   "version": "0.1.0",
-  "description": "Pink Script — After Hours — Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury. Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, editorial features.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.",
   "description_i18n": {
-    "zh-CN": "Pink Script — After Hours — 黑色画布、亮粉色点缀、珍珠奶油纸张、Instrument Serif 标题字体：深夜编辑奢华风格。适用于时尚品牌演示、个人品牌、夜生活/酒类发布、奢侈品展示、编辑专题等需要营造夜间、精致、轻奢氛围的场景。",
-    "zh-TW": "Pink Script — After Hours — 黑色畫布、亮粉色點綴、珍珠奶油紙張、Instrument Serif 標題字型：深夜編輯奢華風格。適用於時尚品牌簡報、個人品牌、夜生活/酒類發佈、奢侈品展示、編輯專題等需要營造夜間、精緻、輕奢氛圍的場景。",
-    "ja": "Pink Script — After Hours — ブラックキャンバス、ホットピンクのアクセント、パールクリームの紙、Instrument Serif見出し：深夜のエディトリアルラグジュアリー。ファッションブランドデッキ、クリエイターのパーソナルブランド、ナイトライフ/スピリッツローンチ、ラグジュアリー商品発表、エディトリアル特集など、夜間の洗練されたラグジュアリーな雰囲気に最適。",
-    "ko": "Pink Script — After Hours — 블랙 캔버스, 핫 핑크 액센트, 펄 크림 페이퍼, Instrument Serif 헤드라인: 심야 에디토리얼 럭셔리 스타일. 패션 브랜드 덱, 크리에이터 퍼스널 브랜드, 나이트라이프/주류 런칭, 럭셔리 제품 공개, 에디토리얼 피처 등 야간의 의도적이고 고급스러운 분위기에 적합.",
-    "de": "Pink Script — After Hours — Schwarze Leinwand, knallpinker Akzent, perlcremeweißes Papier, Instrument Serif Überschriften: nächtlicher Editorial-Luxus. Ideal für Fashion-Brand-Decks, Creator-Brands, Nightlife-/Spirits-Launches, Luxusprodukt-Reveals und Editorial-Features mit nächtlicher, bewusster und luxuriöser Atmosphäre.",
-    "fr": "Pink Script — After Hours — Toile noire, accent rose vif, papier crème nacré, titres Instrument Serif : luxe éditorial nocturne. Parfait pour les présentations de marques de mode, marques personnelles de créateurs, lancements nightlife/spiritueux, révélations de produits de luxe et contenus éditoriaux avec une atmosphère nocturne et luxueuse.",
-    "ru": "Pink Script — After Hours — Чёрный холст, ярко-розовый акцент, жемчужно-кремовая бумага, заголовки Instrument Serif: ночная редакционная роскошь. Идеально для презентаций модных брендов, личных брендов криейторов, запусков ночной жизни/алкоголя, премьер люксовых продуктов и редакционных материалов с ночной изысканной атмосферой.",
-    "es": "Pink Script — After Hours — Lienzo negro, acento rosa intenso, papel crema perlado, titulares Instrument Serif: lujo editorial nocturno. Ideal para presentaciones de marcas de moda, marcas personales de creadores, lanzamientos de vida nocturna/bebidas espirituosas, revelaciones de productos de lujo y contenidos editoriales con atmósfera nocturna e intencional.",
-    "pt-BR": "Pink Script — After Hours — Tela preta, destaque rosa vibrante, papel creme perolado, títulos Instrument Serif: luxo editorial noturno. Ideal para apresentações de marcas de moda, marcas pessoais de criadores, lançamentos de vida noturna/bebidas destiladas, revelações de produtos de luxo e recursos editoriais com atmosfera noturna e sofisticada.",
-    "it": "Pink Script — After Hours — Tela nera, accento rosa acceso, carta crema perlato, titoli Instrument Serif: lusso editoriale notturno. Ideale per presentazioni di brand fashion, brand personali di creator, lanci nightlife/spirits, reveal di prodotti luxury e contenuti editoriali con atmosfera notturna e intenzionale.",
-    "vi": "Pink Script — After Hours — Canvas đen, điểm nhấn hồng nóng, giấy kem ngọc trai, tiêu đề Instrument Serif: sang trọng biên tập đêm khuya. Lý tưởng cho bản trình bày thương hiệu thời trang, thương hiệu cá nhân creator, ra mắt nightlife/rượu mạnh, công bố sản phẩm xa xỉ và nội dung biên tập với không khí đêm và sang trọng.",
-    "pl": "Pink Script — After Hours — Czarne płótno, jaskraworóżowy akcent, perłowokremowy papier, nagłówki Instrument Serif: nocny luksus redakcyjny. Idealne do prezentacji marek modowych, osobistych marek twórców, premier nightlife/alkoholi, prezentacji produktów luksusowych i materiałów redakcyjnych z nocną, przemyślaną atmosferą.",
-    "id": "Pink Script — After Hours — Kanvas hitam, aksen pink terang, kertas krem mutiara, judul Instrument Serif: kemewahan editorial malam. Ideal untuk presentasi brand fashion, brand pribadi creator, peluncuran nightlife/spirits, peluncuran produk mewah, dan konten editorial dengan atmosfer malam yang disengaja dan mewah.",
-    "nl": "Pink Script — After Hours — Zwart canvas, felroze accent, parelcrème papier, Instrument Serif koppen: nachtelijke redactionele luxe. Ideaal voor fashion brand decks, persoonlijke creator brands, nightlife/spirits launches, luxe productlanceringen en redactionele features met een nachtelijke, intentionele en luxueuze sfeer.",
-    "ar": "Pink Script — After Hours — لوحة سوداء، لمسة وردية ساخنة، ورق كريمي لؤلؤي، عناوين Instrument Serif: فخامة تحريرية ليلية. مثالي لعروض علامات الأزياء التجارية، العلامات الشخصية للمبدعين، إطلاقات الحياة الليلية/المشروبات الروحية، كشف المنتجات الفاخرة، والمحتوى التحريري بأجواء ليلية مقصودة وفاخرة.",
-    "tr": "Pink Script — After Hours — Siyah kanvas, sıcak pembe vurgu, inci-krem kağıt, Instrument Serif başlıklar: gece yarısı editoryal lüks. Moda markası sunumları, yaratıcı kişisel markalar, gece hayatı/içki lansmanları, lüks ürün tanıtımları ve gece vaktine özgü, kasıtlı ve lüks atmosferli editoryal içerikler için ideal.",
-    "uk": "Pink Script — After Hours — Чорне полотно, яскраво-рожевий акцент, перламутрово-кремовий папір, заголовки Instrument Serif: нічна редакційна розкіш. Ідеально для презентацій модних брендів, особистих брендів криейторів, запусків нічного життя/алкоголю, прем'єр люксових продуктів та редакційних матеріалів з нічною витонченою атмосферою.",
-    "en": "Pink Script — After Hours — Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury. Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, editorial features."
+    "en": "A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.",
+    "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -68,7 +39,19 @@
     "creator-personal-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-pink-script",
+    "marketing-and-gtm",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -81,7 +64,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "personal",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -89,13 +72,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Pink Script — After Hours — Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury. Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, ed",
-        "zh-CN": "使用这个插件完成以下任务：Pink Script — After Hours — Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury. Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, ed"
+        "en": "Create \"Turn an Anniversary into a Photo Essay like a Wedding Storyteller\" as a decision-grade Life & story deck in this template's own visual system. Subject: A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Audience: couple, family, friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文。像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Pink Script"
+          "title": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+          "title_i18n": {
+            "en": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+            "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文",
+            "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文"
+          }
         }
       ]
     },
@@ -124,6 +112,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "life"
   }
 }

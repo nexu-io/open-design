@@ -63,6 +63,7 @@ export type IconName =
   | 'plus'
   | 'plus-filled'
   | 'puzzle'
+  | 'slides'
   | 'star'
   | 'swatchbook'
   | 'play'
@@ -408,6 +409,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <line x1="9" y1="3" x2="9" y2="21" />
+        </svg>
+      );
+    case 'slides':
+      return (
+        <svg {...common}>
+          <rect x="3" y="7" width="14" height="14" rx="2.5" />
+          <path d="M8 3.5h10A2.5 2.5 0 0 1 20.5 6v10" />
         </svg>
       );
     case 'import':

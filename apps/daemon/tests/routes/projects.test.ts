@@ -551,6 +551,74 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(cleared.project?.metadata?.linkedDirs).toEqual([]);
   });
 
+  it('keeps unrelated metadata keys while validating metadata.linkedDirs on PATCH /api/projects/:id', async () => {
+    const firstDir = makeFolder();
+    const secondDir = makeFolder();
+    const projectId = `proj-patch-linked-meta-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Patch linked metadata',
+        metadata: {
+          kind: 'prototype',
+          entryFile: 'index.html',
+          customFlag: 'keep-me',
+          linkedDirs: [firstDir],
+        },
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const replaceResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          kind: 'prototype',
+          entryFile: 'app.html',
+          customFlag: 'still-here',
+          linkedDirs: [secondDir],
+        },
+      }),
+    });
+    expect(replaceResp.status).toBe(200);
+    const replaced = (await replaceResp.json()) as {
+      project?: { metadata?: { entryFile?: string; customFlag?: string; linkedDirs?: string[] } };
+    };
+    expect(replaced.project?.metadata).toMatchObject({
+      entryFile: 'app.html',
+      customFlag: 'still-here',
+    });
+    expect(replaced.project?.metadata?.linkedDirs).toEqual([await realpath(secondDir)]);
+
+    const invalidResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          kind: 'prototype',
+          entryFile: 'bad.html',
+          customFlag: 'bad',
+          linkedDirs: ['/no/such/folder/here'],
+        },
+      }),
+    });
+    expect(invalidResp.status).toBe(400);
+
+    const detailResp = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detailResp.status).toBe(200);
+    const detail = (await detailResp.json()) as {
+      project?: { metadata?: { entryFile?: string; customFlag?: string; linkedDirs?: string[] } };
+    };
+    expect(detail.project?.metadata).toMatchObject({
+      entryFile: 'app.html',
+      customFlag: 'still-here',
+    });
+    expect(detail.project?.metadata?.linkedDirs).toEqual([await realpath(secondDir)]);
+  });
+
   it('persists project and conversation session modes through create and patch routes', async () => {
     const projectId = `proj-session-mode-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {

@@ -89,6 +89,22 @@ export interface RunFailedToastSurfaceViewProps {
   run_id: string | null;
 }
 
+// Preview-workspace status feedback for Design-mode runs. This exposure is
+// intentionally separate from `run_finished`: that event records the daemon
+// outcome, while this one measures whether the user actually saw the delivery
+// confirmation or recovery path.
+export interface PreviewRunStatusSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'preview_run_status';
+  element: 'run_status_bar';
+  status: 'generating' | 'verifying' | 'succeeded' | 'failed';
+  delivery_state?: 'delivered' | 'no_result' | 'delivery_failed';
+  project_id: string;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id?: string;
+}
+
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -138,6 +154,16 @@ export interface UpdatePromptSurfaceViewProps {
   app_version_after?: string;
 }
 
+// Post-update "what's new" card on the home surface; fires once per version
+// when the card becomes visible after an update.
+export interface WhatsNewPopupSurfaceViewProps {
+  page_name: 'home';
+  area: 'whats_new_popup';
+  app_version: string;
+  /** True when release-configured highlights were shown, false for the generic fallback copy. */
+  has_release_notes: boolean;
+}
+
 // Impression of the HTML file version history modal. Fires once per open so
 // the versions funnel has a denominator (toolbar clicks → exposures →
 // version_item browsing → restore result). `entry_from` mirrors the opening
@@ -148,6 +174,20 @@ export interface FileVersionModalSurfaceViewProps {
   entry_from: 'toolbar' | 'more_menu';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+}
+
+// Fires once when an HTML artifact is recognized as a slide deck and the
+// slide-specific viewing chrome (thumbnail rail, slide navigation, speaker
+// notes panel) mounts in the file viewer. This is the entry/denominator for
+// the deck experience funnel: how many opened artifacts actually reach the
+// slides surface vs. plain HTML preview. `slide_count` is the deck's detected
+// slide total at mount (0 when not yet resolved).
+export interface DeckViewerSurfaceViewProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  slide_count?: number;
 }
 
 // Impression of the personalized first-run recommendation card on Home. Fires
@@ -173,6 +213,7 @@ export interface StudioOnboardingHintSurfaceViewProps {
 
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
+  | PreviewRunStatusSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps
@@ -190,5 +231,6 @@ export type SurfaceViewProps =
   | UpdateIndicatorSurfaceViewProps
   | ReferenceBoardSurfaceViewProps
   | UpdatePromptSurfaceViewProps
-  | FileVersionModalSurfaceViewProps;
-
+  | WhatsNewPopupSurfaceViewProps
+  | FileVersionModalSurfaceViewProps
+  | DeckViewerSurfaceViewProps;

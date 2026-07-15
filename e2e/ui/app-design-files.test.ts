@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { expectAllProjectFilesActive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -352,7 +353,7 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: fileName,
   });
@@ -371,15 +372,34 @@ function escapeRegExp(value: string): string {
 
 async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
-  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
-  await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name: 'brand.png',
+    mimeType: 'image/png',
+    buffer: pngBytes,
+  });
+  await expect(page.getByRole('tab', { name: /brand\.png/i })).toBeVisible();
+
+  const uploadedImage = await page.request.get(
+    `/api/projects/${encodeURIComponent(projectId)}/raw/brand.png`,
+  );
+  expect(uploadedImage.ok(), `uploaded image: ${await uploadedImage.text()}`).toBeTruthy();
+  expect(uploadedImage.headers()['content-type']).toContain('image/png');
+
   await seedHtmlArtifact(
     page,
     projectId,
     'image-preview.html',
-    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="brand.png"></main></body></html>',
+    // Generated pages commonly use site-root paths. Before the preview asset
+    // normalization fix, this resolved against the Open Design app origin and
+    // left the uploaded image broken even though its project raw URL was valid.
+    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="/brand.png"></main></body></html>',
   );
   await page.reload();
+  await expectWorkspaceReady(page);
   await openDesignFile(page, 'image-preview.html');
 
   const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });
@@ -413,7 +433,7 @@ async function runDesignFilesUploadFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'moodboard.png',
   });
@@ -457,7 +477,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'trash-me.png',
@@ -470,7 +490,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
 
   await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expectAllProjectFilesActive(page);
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
   await expect
     .poll(async () => {
@@ -497,7 +517,7 @@ test('[P1] design files page keeps the current single-file actions and context h
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
   await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
@@ -730,7 +750,7 @@ test('[P1] design files batch delete removes selected files and keeps cancel ret
   await seedProjectFile(page, projectId, 'batch-keep.txt', 'keep');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-batch-alpha.txt');
   const beta = page.getByTestId('design-file-row-batch-beta.txt');
@@ -802,7 +822,7 @@ test('[P1] design files batch download posts selected names to the archive endpo
   await seedProjectFile(page, projectId, 'download-skip.txt', 'skip');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-download-alpha.txt');
   const beta = page.getByTestId('design-file-row-download-beta.txt');
@@ -845,7 +865,7 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
     name: 'Risk Dashboard',
   })).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const sourceRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'logic.ts',
   });
@@ -907,7 +927,7 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   } else {
     // Depending on restoration timing, inactive files can either be restored as
     // tabs already or remain available from the Design Files list.
-    await page.getByTestId('design-files-tab').click();
+    await openAllProjectFiles(page);
     const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
       hasText: 'second-tab.png',
     });

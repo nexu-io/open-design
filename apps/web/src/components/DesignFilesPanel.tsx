@@ -206,9 +206,11 @@ function prefersReducedMotion(): boolean {
 }
 
 // Footer "tip" line that types out one tip at a time (typewriter), holds, then
-// advances to the next — mirroring Claude Design's empty-state hint. Under
-// prefers-reduced-motion the full tip is shown immediately and just cycles.
-function RotatingTip() {
+// advances to the next — mirroring Claude Design's empty-state hint. It is
+// intentionally auxiliary while a run is active; the preview status bar owns
+// progress and recovery feedback. Under prefers-reduced-motion the full tip is
+// shown immediately and just cycles.
+function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
   const t = useT();
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState('');
@@ -257,7 +259,7 @@ function RotatingTip() {
   }, [index]);
 
   return (
-    <div className="df-useful-info">
+    <div className={`df-useful-info${auxiliary ? ' df-useful-info-auxiliary' : ''}`}>
       <div className="df-useful-info-head">
         <Icon name="sparkles" size={12} />
         <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
@@ -1282,7 +1284,7 @@ export function DesignFilesPanel({
           )}
           <div className="df-footer-info">
             {running ? (
-              <RotatingTip />
+              <RotatingTip auxiliary />
             ) : (
               <div className="df-drop-hint">
                 <span className="df-drop-hint-label">

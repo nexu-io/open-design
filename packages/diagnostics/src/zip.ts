@@ -2,7 +2,7 @@ import JSZip from "jszip";
 
 import { redactJsonValue, type RedactionOptions } from "./redaction.js";
 import { buildManifest, buildMachineInfo, type DiagnosticsContext, type DiagnosticsManifest, type MachineInfo } from "./manifest.js";
-import { collectLogSources, findMacOSCrashReports, type CollectedFile, type CrashReportLookup, type LogSource } from "./sources.js";
+import { collectLogSources, findCrashDumps, findMacOSCrashReports, type CollectedFile, type CrashDumpLookup, type CrashReportLookup, type LogSource } from "./sources.js";
 
 const PLACEHOLDER_PREFIX = "; file unavailable: ";
 
@@ -12,6 +12,8 @@ export interface DiagnosticsExportInput {
   redaction?: RedactionOptions;
   /** When provided, scan macOS crash reports matching these substrings. */
   crashReports?: CrashReportLookup;
+  /** When provided, collect Chromium/Electron crash minidumps from this dir. */
+  crashDumps?: CrashDumpLookup;
 }
 
 export interface DiagnosticsExportResult {
@@ -31,6 +33,11 @@ export async function buildDiagnosticsZip(input: DiagnosticsExportInput): Promis
   if (input.crashReports != null) {
     const crashes = await findMacOSCrashReports(input.crashReports);
     sources.push(...crashes);
+  }
+
+  if (input.crashDumps != null) {
+    const dumps = await findCrashDumps(input.crashDumps);
+    sources.push(...dumps);
   }
 
   const collected = await collectLogSources(sources, redaction);

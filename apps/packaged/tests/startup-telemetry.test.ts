@@ -87,6 +87,20 @@ describe('classifyStartupFailure', () => {
   it('falls back to unknown for an unrecognized error', () => {
     expect(classifyStartupFailure(new Error('boom'), false).failureKind).toBe('unknown');
   });
+
+  it('classifies a status-wait timeout as status-timeout, not unknown', () => {
+    // waitForStatus throws this when the budget expires with the child still
+    // ALIVE (the win32 first-launch AV-scan case) — the pipe never bound in
+    // time, so there is no exit code, signal, or daemon log to read. Splitting
+    // it out of `unknown` is what makes the win32 budget-raise measurable.
+    const winPipe =
+      'timed out waiting for sidecar status at \\\\.\\pipe\\open-design-release-stable-win-daemon (connect ENOENT \\\\.\\pipe\\open-design-release-stable-win-daemon)';
+    const c = classifyStartupFailure(new Error(winPipe), false);
+    expect(c.failureKind).toBe('status-timeout');
+    expect(c.exitCode).toBeNull();
+    expect(c.signal).toBeNull();
+    expect(c.logPath).toBeNull();
+  });
 });
 
 describe('scrubUserPaths', () => {
@@ -232,6 +246,72 @@ describe('captureStartupFailure', () => {
     expect(p.event_id).toBe('ins-fixed');
     expect(p.$insert_id).toBe('ins-fixed');
     expect(typeof p.env).toBe('string');
+  });
+
+  it('labels main-process events production (unset NODE_ENV) so they match daemon events', async () => {
+    // The packaged main process has no NODE_ENV of its own, while the daemon it
+    // spawns runs with NODE_ENV=production. Without this the event reported
+    // `development` — 100% of packaged_runtime_failed were mislabeled dev in
+    // prod and filtered out of the env=production dashboards.
+    const saved = {
+      OD_TELEMETRY_ENV: process.env.OD_TELEMETRY_ENV,
+      OPEN_DESIGN_ENV: process.env.OPEN_DESIGN_ENV,
+      POSTHOG_ENV: process.env.POSTHOG_ENV,
+      LANGFUSE_ENVIRONMENT: process.env.LANGFUSE_ENVIRONMENT,
+      NODE_ENV: process.env.NODE_ENV,
+    };
+    delete process.env.OD_TELEMETRY_ENV;
+    delete process.env.OPEN_DESIGN_ENV;
+    delete process.env.POSTHOG_ENV;
+    delete process.env.LANGFUSE_ENVIRONMENT;
+    delete process.env.NODE_ENV;
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('production');
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('honors an explicit OD_TELEMETRY_ENV override (local smoke test can force dev)', async () => {
+    const savedOd = process.env.OD_TELEMETRY_ENV;
+    process.env.OD_TELEMETRY_ENV = 'development';
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('development');
+    } finally {
+      if (savedOd === undefined) delete process.env.OD_TELEMETRY_ENV;
+      else process.env.OD_TELEMETRY_ENV = savedOd;
+    }
   });
 
   it('never blocks past the timeout even if fetch hangs forever', async () => {

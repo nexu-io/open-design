@@ -44,6 +44,25 @@ export interface PluginReplacementResultProps {
   error_code?: string;
 }
 
+// Outcome of persisting a slide's speaker notes back into the deck HTML.
+// Fires when a save settles (success/failure), so we can measure how many
+// users actually author speaker notes and how reliable the save is. Editing
+// closes on blur/auto-save, so this is the completion event for the
+// deck_viewer speaker_notes_edit click. `edit_surface` distinguishes the
+// in-preview notes panel from the presenter popup; `has_content` is whether
+// the saved note for that slide is non-empty (authoring vs. clearing).
+export interface SpeakerNotesSaveResultProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  edit_surface: 'preview' | 'presenter';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  slide_count?: number;
+  has_content?: boolean;
+  result: TrackingResult;
+  error_code?: string;
+}
+
 // Outcome of an actual import attempt from the plugin import modal. Fires
 // once per executed import (after the install/upload promise settles), not
 // for clicks that no-op. `error_code` carries the backend failure message —
@@ -676,6 +695,11 @@ export type PackagedStartupFailureKind =
   | 'daemon-start'
   | 'web-start'
   | 'path-access'
+  // A sidecar that never reported ready within the status-wait budget — the
+  // pipe/socket never bound in time (e.g. win32 first-launch AV scanning slowing
+  // the daemon cold start), as opposed to a sidecar that exited (`daemon-start` /
+  // `web-start`). Split out so this bucket stops hiding inside `unknown`.
+  | 'status-timeout'
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged

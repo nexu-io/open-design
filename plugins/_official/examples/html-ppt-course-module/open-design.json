@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-course-module",
-  "title": "Html Ppt Course Module",
+  "title": "Build a New-Hire Onboarding Module like a Top Enablement Lead",
   "title_i18n": {
-    "zh-CN": "Html Ppt 课程模块",
-    "zh-TW": "Html Ppt 課程模組",
-    "ja": "Html Ppt コースモジュール",
-    "ko": "Html Ppt 코스 모듈",
-    "de": "Html Ppt Kursmodul",
-    "fr": "Module de cours Html Ppt",
-    "ru": "Html Ppt модуль курса",
-    "es": "Módulo de curso Html Ppt",
-    "pt-BR": "Módulo de curso Html Ppt",
-    "it": "Modulo corso Html Ppt",
-    "vi": "Mô-đun khóa học Html Ppt",
-    "pl": "Moduł kursu Html Ppt",
-    "id": "Modul kursus Html Ppt",
-    "nl": "Html Ppt cursusmodule",
-    "ar": "وحدة دورة Html Ppt",
-    "tr": "Html Ppt kurs modülü",
-    "uk": "Модуль курсу Html Ppt",
-    "en": "Html Ppt Course Module"
+    "en": "Build a New-Hire Onboarding Module like a Top Enablement Lead",
+    "zh-CN": "像顶级赋能负责人一样做新人培训模块",
+    "zh-TW": "像顶级赋能负责人一样做新人培训模块"
   },
   "version": "0.1.0",
-  "description": "Online-course / workshop module deck — warm paper background + Playfair serif, persistent left sidebar of learning objectives, MCQ self-check page. Use for teaching modules, training materials, workshop slides.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.",
   "description_i18n": {
-    "zh-CN": "在线课程/工作坊模块幻灯片——温暖纸质背景 + Playfair 衬线字体，左侧边栏持久显示学习目标，带多项选择题自测页面。适用于教学模块、培训材料、工作坊幻灯片。",
-    "zh-TW": "線上課程/工作坊模組簡報——溫暖紙質背景 + Playfair 襯線字型，左側邊欄持續顯示學習目標，附多選題自我檢測頁面。適用於教學模組、培訓教材、工作坊簡報。",
-    "ja": "オンラインコース/ワークショップモジュールデッキ——温かみのある紙の背景 + Playfair セリフ体、学習目標を常時表示する左サイドバー、多肢選択式自己チェックページ。教育モジュール、研修資料、ワークショップスライドに最適。",
-    "ko": "온라인 강좌/워크숍 모듈 덱 — 따뜻한 종이 배경 + Playfair 세리프 폰트, 학습 목표를 표시하는 고정 좌측 사이드바, 객관식 자가 점검 페이지. 교육 모듈, 교육 자료, 워크숍 슬라이드에 사용하세요.",
-    "de": "Online-Kurs-/Workshop-Modul-Deck – warmer Papierhintergrund + Playfair-Serifenschrift, persistente linke Seitenleiste mit Lernzielen, Multiple-Choice-Selbsttest-Seite. Für Lernmodule, Schulungsmaterialien und Workshop-Folien.",
-    "fr": "Deck de modules de cours en ligne/atelier — fond papier chaleureux + police serif Playfair, barre latérale gauche persistante avec objectifs pédagogiques, page d'auto-évaluation QCM. Pour modules d'enseignement, supports de formation, diapositives d'atelier.",
-    "ru": "Колода модулей онлайн-курса/воркшопа — теплый бумажный фон + шрифт Playfair с засечками, постоянная левая боковая панель с учебными целями, страница самопроверки с вопросами. Для учебных модулей, тренинговых материалов, слайдов воркшопов.",
-    "es": "Conjunto de módulos de curso en línea/taller — fondo de papel cálido + tipografía serif Playfair, barra lateral izquierda persistente con objetivos de aprendizaje, página de autoevaluación de opción múltiple. Para módulos educativos, materiales de capacitación, diapositivas de taller.",
-    "pt-BR": "Deck de módulos de curso online/workshop — fundo de papel quente + fonte serifada Playfair, barra lateral esquerda persistente com objetivos de aprendizagem, página de autoavaliação de múltipla escolha. Para módulos de ensino, materiais de treinamento, slides de workshop.",
-    "it": "Deck di moduli per corsi online/workshop — sfondo carta calda + font serif Playfair, barra laterale sinistra persistente con obiettivi di apprendimento, pagina di autovalutazione a scelta multipla. Per moduli didattici, materiali formativi, slide per workshop.",
-    "vi": "Bộ mô-đun khóa học trực tuyến/workshop — nền giấy ấm áp + phông chữ serif Playfair, thanh bên trái cố định hiển thị mục tiêu học tập, trang tự kiểm tra trắc nghiệm. Dùng cho mô-đun giảng dạy, tài liệu đào tạo, slide workshop.",
-    "pl": "Zestaw modułów kursu online/warsztatu — ciepłe papierowe tło + czcionka szeryfowa Playfair, trwały lewy pasek boczny z celami nauczania, strona samosprawdzenia z pytaniami wielokrotnego wyboru. Do modułów edukacyjnych, materiałów szkoleniowych, slajdów warsztatowych.",
-    "id": "Deck modul kursus online/workshop — latar belakang kertas hangat + font serif Playfair, sidebar kiri persisten dengan tujuan pembelajaran, halaman self-check pilihan ganda. Untuk modul pengajaran, materi pelatihan, slide workshop.",
-    "nl": "Online cursus-/workshopmodule deck — warm papieren achtergrond + Playfair schreefloos, persistente linkerzijbalk met leerdoelen, meerkeuzevraag zelfcontrolepagina. Voor onderwijsmodules, trainingsmateriaal, workshopdia's.",
-    "ar": "مجموعة وحدات الدورة التدريبية/ورشة العمل عبر الإنترنت — خلفية ورقية دافئة + خط Playfair الرقيق، شريط جانبي أيسر ثابت لأهداف التعلم، صفحة اختبار ذاتي متعدد الخيارات. للوحدات التعليمية ومواد التدريب وشرائح ورش العمل.",
-    "tr": "Çevrimiçi kurs/atölye modülü paketi — sıcak kağıt arka plan + Playfair serif yazı tipi, öğrenme hedeflerini gösteren kalıcı sol kenar çubuğu, çoktan seçmeli öz kontrol sayfası. Eğitim modülleri, eğitim materyalleri, atölye slaytları için.",
-    "uk": "Набір модулів онлайн-курсу/воркшопу — теплий паперовий фон + шрифт Playfair з засічками, постійна ліва бічна панель з навчальними цілями, сторінка самоперевірки з питаннями. Для навчальних модулів, тренінгових матеріалів, слайдів воркшопів.",
-    "en": "Online-course / workshop module deck — warm paper background + Playfair serif, persistent left sidebar of learning objectives, MCQ self-check page. Use for teaching modules, training materials, workshop slides."
+    "en": "A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.",
+    "zh-CN": "像顶级赋能负责人一样做新人培训模块——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级赋能负责人一样做新人培训模块——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,12 @@
     "workshop",
     "training-deck",
     "lesson",
-    "untitled"
+    "untitled",
+    "html-ppt-course-module",
+    "professional-training",
+    "employee-onboarding-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -83,13 +59,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-course-module template to build a 7-slide module deck. Confirm: module title, 3-5 learning objectives (these stick on the left rail), and the MCQ self-check question. Then assemble the deck with serif headings on warm paper.",
-        "zh-CN": "使用这个插件完成以下任务：Use the html-ppt-course-module template to build a 7-slide module deck. Confirm: module title, 3-5 learning objectives (these stick on the left rail), and the MCQ self-check question. Then assemble the deck with serif headings on warm paper."
+        "en": "Create \"Build a New-Hire Onboarding Module like a Top Enablement Lead\" as a decision-grade Professional training deck in this template's own visual system. Subject: A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Audience: new hires, managers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day.",
+        "zh-CN": "像顶级赋能负责人一样做新人培训模块。像顶级赋能负责人一样做新人培训模块——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Course Module"
+          "title": "Build a New-Hire Onboarding Module like a Top Enablement Lead",
+          "title_i18n": {
+            "en": "Build a New-Hire Onboarding Module like a Top Enablement Lead",
+            "zh-CN": "像顶级赋能负责人一样做新人培训模块",
+            "zh-TW": "像顶级赋能负责人一样做新人培训模块"
+          }
         }
       ]
     },
@@ -117,6 +98,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "professional-training"
   }
 }

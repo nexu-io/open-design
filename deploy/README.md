@@ -34,6 +34,13 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
 `ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
+The published `ghcr.io/nexu-io/od` package must be public for anonymous
+`docker pull`, Docker Compose, and Dokploy installs to work. If GHCR returns an
+authentication or access-denied error for this image, an organization maintainer
+must open GitHub -> Packages -> `od` -> Package settings and change visibility
+to Public. GitHub treats that as a one-way visibility change for container
+packages, so confirm the package is intended to stay public before switching it.
+
 Defaults:
 
 - Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)

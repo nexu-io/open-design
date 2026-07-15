@@ -64,6 +64,10 @@ function onboardingPersonProperties(
   const orgSize = cleanValue(profile.orgSize);
   const useCases = cleanList(profile.useCase);
   const source = cleanValue(profile.source);
+  // The raw "Other" free-text is deliberately NOT surfaced as a person
+  // property: analytics profile state must stay free-text/PII-free, and the
+  // scrubber does not sanitize person-property payloads. Only the enumerated
+  // bucket is bound; the typed detail lives solely in the app-owned Memory note.
   if (!role && !orgSize && useCases.length === 0 && !source) return null;
   return {
     ...(role ? { od_role: role } : {}),

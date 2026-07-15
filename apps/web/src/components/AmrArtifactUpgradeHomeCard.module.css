@@ -1,0 +1,185 @@
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(180px, 1fr) max-content;
+  grid-template-areas: "icon copy actions";
+  align-items: center;
+  column-gap: 12px;
+  width: min(720px, 100%);
+  min-height: 72px;
+  margin: 0 auto;
+  padding-block: 10px;
+  padding-inline: 14px 48px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--accent-tint) 38%, var(--bg-panel)), var(--bg-panel) 34%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent);
+  animation: home-offer-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-tint) 68%, var(--bg-panel));
+  align-self: center;
+}
+
+.copy {
+  grid-area: copy;
+  min-width: 0;
+  align-self: center;
+}
+
+.title {
+  margin: 0 0 3px;
+  color: var(--text-strong);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.message {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: max-content;
+}
+
+.card .secondaryCta,
+.card .cta {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.card .secondaryCta {
+  height: 30px;
+  min-height: 30px;
+  padding-inline: 8px;
+  color: var(--text);
+  border-color: transparent;
+  background: transparent;
+}
+
+.card .secondaryCta:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+
+.card .cta {
+  padding-inline: 12px;
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: var(--shadow-xs);
+}
+
+.card .cta:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.card .close {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.card .close:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 640px) {
+  .card {
+    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-areas:
+      "icon copy"
+      "actions actions";
+    gap: 8px 10px;
+    padding-block: 10px;
+    padding-inline: 12px 48px;
+  }
+
+  .icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .actions {
+    display: flex;
+    min-width: 0;
+  }
+
+  .card .secondaryCta,
+  .card .cta {
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .card .close {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 420px) {
+  .actions {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .card .cta {
+    width: 100%;
+  }
+}
+
+@keyframes home-offer-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

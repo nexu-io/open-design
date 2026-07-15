@@ -186,7 +186,10 @@
   contain: layout style;
   transition-property: background, border-color, color, opacity, transform, box-shadow;
   transition-duration: 100ms, 100ms, 100ms, 120ms, 150ms, 150ms;
-  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.2, 0.8, 0.2, 1), ease;
+  /* One easing for every property: entrance.css also declares a .workspace-tab
+     transition shorthand with var(--ease-out), so a diverging list here made
+     the tab's feel depend on stylesheet import order. */
+  transition-timing-function: var(--ease-out);
   -webkit-app-region: no-drag;
   cursor: default;
   z-index: 1;
@@ -1503,8 +1506,11 @@ a.avatar-item:visited {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -2px;
-  right: -10px;
+  /* Invariant: the extended hitbox must never cross the inline-start edge —
+     the chat panel's scrollbar gutter sits flush against it (LTR and RTL).
+     Extra grab room is allowed on the workspace (inline-end) side only. */
+  inset-inline-start: 0;
+  inset-inline-end: -8px;
   cursor: col-resize;
 }
 .split-resize-handle::after {

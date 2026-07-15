@@ -1,24 +1,32 @@
 ---
 name: huashu-takram-soft-tech
+en_name: "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead"
+zh_name: "像企业销售负责人一样写买方委员会转发稿"
 description: |
-  Takram Soft Tech (东方柔光科技) — soft, Eastern-philosophy tech decks
-  adapted from the ppt-takram showcase of 花叔 (alchaincyf)'s huashu-design.
-  Warm rice-paper canvas (#F5F0EB), sage green + warm gray + one gold,
-  Noto Serif SC display headings mixed with Inter labels, rounded translucent
-  data cards, and the signature device: SVG data visualization treated as an
-  art piece — multi-series overlaid radar charts on hand-drawn dashed grids
-  with "Fig. NN" plate annotations. Use when the user wants a gentle,
-  nature-toned tech deck, product briefing, benchmark report, 柔和科技感,
-  自然色系 PPT, or "数据可视化当艺术品" presentations.
+  Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
+en_description: |
+  Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
+zh_description: |
+  像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "b2b-sales"
+  - "b2b-saas-sales-proposal"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-takram-soft-tech"
 triggers:
-  - "takram"
-  - "soft tech deck"
-  - "radar chart deck"
-  - "柔和科技"
-  - "东方柔光"
-  - "自然色 PPT"
-  - "雷达图幻灯片"
-  - "莫兰迪科技感"
+  - "b2b-saas-sales-proposal"
+  - "b2b-sales"
+  - "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead"
+  - "像企业销售负责人一样写买方委员会转发稿"
+  - "sales"
+  - "renewal"
+  - "customer"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -27,9 +35,11 @@ od:
     entry: example.html
   design_system:
     requires: false
-  example_prompt: "Use the Takram Soft Tech template to turn my content into a soft nature-toned HTML deck: 1920×1080 fixed canvas on warm rice paper #F5F0EB, sage green #6B8F71 + one gold #D4A574 + warm grays, Noto Serif SC display headings with Inter labels, rounded translucent data cards, and SVG radar/diagram visualizations treated as art pieces with Fig. NN annotations. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「东方柔光科技」模板把我的内容做成柔和自然色系的 HTML 幻灯片：1920×1080 固定画布、米色和纸底 #F5F0EB、鼠尾草绿 #6B8F71 + 唯一金 #D4A574 + 暖灰系、Noto Serif SC 衬线大标题 + Inter 标签混排、圆角半透明数据卡片、SVG 雷达图三色叠加当艺术品并配 Fig. NN 图版注记。从 example.html 出发只换内容，不要重写设计。"
+  category: "b2b-sales"
+  scenario: "sales"
+  example_prompt: "Create \"Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Audience: buying committee, security, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Takram Soft Tech · 东方柔光科技

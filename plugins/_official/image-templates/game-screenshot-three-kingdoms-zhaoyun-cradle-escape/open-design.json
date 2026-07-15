@@ -24,6 +24,7 @@
     "en": "Game Screenshot - Three Kingdoms ARPG: Zhao Yun's Cradle Escape at Changbanpo"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An in-game action-RPG screenshot of the legendary Three Kingdoms scene where Zhao Yun cradles the infant Liu Chan in one arm and fights his way through enemy lines with a spear in the other at Changbanpo. Rendered in the cinematic photoreal style of Black Myth: Wukong combined with Elden Ring, Unreal Engine 5 with full Nanite, Lumen ray-tracing, and volumetric god-rays. The emotional core — one arm protecting the swaddled baby, one arm fighting for life — is reinforced by a full HUD overlay including a dedicated ESCORT protection bar for the baby, a combo counter, and mid-air damage-number popups on flung enemies. Tuned for gpt-image-2 at 16:9.",
   "description_i18n": {
     "zh-CN": "三国题材动作 RPG 游戏截图，展现赵云一手怀抱婴儿刘禅、一手持枪杀敌的长坂坡突围场景。采用《黑神话：悟空》与《艾尔登法环》风格的影视级写实渲染，包含护送保护条、连击计数器等完整 HUD 界面元素。",

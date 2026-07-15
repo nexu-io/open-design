@@ -24,6 +24,7 @@
     "en": "ClickHouse"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Fast analytics database. Yellow-accented, technical documentation style.",
   "description_i18n": {
     "zh-CN": "快速分析数据库。黄色强调，技术文档风格。",

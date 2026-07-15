@@ -226,6 +226,13 @@ jobs:
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
         run: pnpm exec tools-release prepare stable
 
+      - name: Validate stable release note policy
+        env:
+          RELEASE_CHANNEL: stable
+          RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-note-preflight/plan.json
+          RELEASE_VERSION: ${{ steps.stable.outputs.release_version }}
+        run: pnpm exec tools-release prepare-release-note
+
       - name: Validate R2 release access
         if: ${{ steps.stable.outputs.publish_side_effects_enabled == 'true' }}
         env:
@@ -1284,6 +1291,24 @@ jobs:
           set -euo pipefail
           gh release upload "$VERSION_TAG" "$RUNNER_TEMP/github-release-assets"/*
 
+      - name: Prepare and publish stable release notes
+        env:
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+          RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-metadata/release-note-plan.json
+          RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: |
+          pnpm exec tools-release prepare-release-note
+          pnpm exec tools-release publish-release-note
+          pnpm exec tools-release verify-release-note
+
       - name: Prepare release metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
@@ -1302,6 +1327,7 @@ jobs:
           RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPOSITORY: ${{ github.repository }}
@@ -1343,6 +1369,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_METADATA_PATH: ${{ needs.metadata.outputs.publish_side_effects_enabled == 'true' && '' || format('{0}/release-metadata/metadata.json', runner.temp) }}
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           WIN_X64_RESULT: ${{ needs.build_win.result }}
         run: pnpm exec tools-release verify-metadata

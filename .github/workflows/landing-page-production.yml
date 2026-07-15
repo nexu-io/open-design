@@ -183,6 +183,16 @@ jobs:
 
       # `--branch=main` IS the Cloudflare Pages production branch, so this
       # publishes to the production domain (open-design.ai).
+      - name: Apply attribution ledger migrations (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          wranglerVersion: "4.110.0"
+          command: d1 migrations apply open-design-landing-attribution --remote
+
       - name: Deploy to Cloudflare Pages (production)
         uses: cloudflare/wrangler-action@v3
         with:

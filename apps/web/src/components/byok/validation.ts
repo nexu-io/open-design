@@ -232,10 +232,13 @@ export function resolveByokModelPreference({
 }): ByokModelPreference {
   const explicit = currentModel.trim();
   if (explicit) return { model: explicit, source: 'explicit' };
-  const account = accountModels.find((model) => model.id.trim());
+  const account = accountModels.find((model) => model.enabled !== false && model.id.trim());
   if (account) return { model: account.id, source: 'account' };
   const providerDefault = providerDefaultModel?.trim() ?? '';
-  if (providerDefault) {
+  const disabledProviderDefault = accountModels.some(
+    (model) => model.id.trim() === providerDefault && model.enabled === false,
+  );
+  if (providerDefault && !disabledProviderDefault) {
     return { model: providerDefault, source: 'provider_default' };
   }
   return { model: '', source: 'empty' };

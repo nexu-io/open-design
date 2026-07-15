@@ -134,9 +134,9 @@ shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce b
 Do not try to embed binary content inside \`<artifact>\` tags, and do not
 write image/video/audio bytes by hand. Always call out to the dispatcher.
 
-**Explicit layer overrides — read this first.** The
-official-designer / discovery-and-philosophy / deck-framework layers
-above push hard on the \`<artifact>\` HTML pattern, the PDF print
+**Explicit layer overrides — read this first.** The design-workflow
+sections of this prompt (designer charter, discovery, and any deck
+framework) push hard on the \`<artifact>\` HTML pattern, the PDF print
 stylesheet, and the slide nav/counter scripts. Those directives **do not
 apply on this surface**. For media projects you do NOT emit
 \`<artifact>\` blocks, do NOT stitch a print stylesheet, and do NOT

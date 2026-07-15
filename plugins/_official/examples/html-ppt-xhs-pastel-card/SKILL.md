@@ -1,17 +1,34 @@
 ---
 name: html-ppt-xhs-pastel-card
-description: 柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，"杂志、手作、不太科技"的感觉。
+en_name: "Write a Personal Manifesto Talk like a Narrative Podcast Producer"
+zh_name: "像叙事播客制作人一样写个人宣言演讲"
+description: |
+  A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.
+en_description: |
+  A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.
+zh_description: |
+  像叙事播客制作人一样写个人宣言演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-xhs-pastel-card"
 triggers:
-  - "pastel"
-  - "macaron"
-  - "lifestyle"
-  - "slow living"
-  - "慢生活"
-  - "生活方式"
-  - "个人成长"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Write a Personal Manifesto Talk like a Narrative Podcast Producer"
+  - "像叙事播客制作人一样写个人宣言演讲"
+  - "story"
+  - "personal"
+  - "photo-essay"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: personal
   featured: 33
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -21,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-xhs-pastel-card 模板做一份慢生活主题图文。奶油底 + 马卡龙圆角卡片 + Playfair 斜体序号 + donut 图。先告诉我主题（休息 / 暂停 / 自我照顾…）和 5-7 个想说的点。"
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Write a Personal Manifesto Talk like a Narrative Podcast Producer\" as a decision-grade Life & story deck in this template's own visual system. Subject: A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Audience: community, talk audience. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 # HTML PPT · 柔和马卡龙慢生活
 

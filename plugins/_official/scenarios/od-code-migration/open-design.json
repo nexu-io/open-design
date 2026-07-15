@@ -24,6 +24,7 @@
     "uk": "Міграція коду (типовий сценарій)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T14:52:59Z",
   "description": "Default reference pipeline for the code-migration taskKind, with patch-edit ↔ build-test devloop and diff-review handoff.",
   "description_i18n": {
     "en": "Default reference pipeline for the code-migration taskKind, with patch-edit ↔ build-test devloop and diff-review handoff.",

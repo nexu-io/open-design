@@ -112,7 +112,10 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     const downloadItem = await screen.findByRole('menuitem', { name: 'Download Page' });
     expect(downloadItem.classList.contains('is-attention')).toBe(true);
-    expect(screen.getByText(/click Download Page here/)).toBeTruthy();
+    const assistGuide = view.container.querySelector('.db-download-assist');
+    expect(assistGuide).toBeTruthy();
+    expect(assistGuide?.textContent).toContain('When the page is ready, click Download Page');
+    expect(view.container.querySelector('.db-status')).toBeNull();
 
     view.rerender(
       <DesignBrowserPanel
@@ -517,6 +520,34 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(webview.getAttribute('src')).toBe('https://unsplash.com');
   });
 
+  it('swallows benign Electron webview ERR_ABORTED loadURL rejections', async () => {
+    const { container } = render(
+      <DesignBrowserPanel
+        projectId="proj-webview-aborted-load"
+        initialUrl="https://example.com"
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+
+    const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+      loadURL?: (url: string) => Promise<void>;
+    };
+    const loadURL = vi.fn().mockRejectedValue(
+      new Error("ERR_ABORTED (-3) loading 'https://mobbin.com/'"),
+    );
+    webview.loadURL = loadURL;
+
+    const input = screen.getByLabelText('Browser address') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'mobbin.com' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://mobbin.com'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(webview.getAttribute('src')).toBe('https://example.com');
+    expect(getAddressDisplay(container).url).toBe('https://mobbin.com');
+  });
+
   it('derives back and forward availability from the committed navigation stack', () => {
     const { container } = render(
       <DesignBrowserPanel projectId="proj-webview-3" onOpenFile={() => {}} onRefreshFiles={() => {}} />,
@@ -762,9 +793,9 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(webview.executeJavaScript).not.toHaveBeenCalled();
   });
 
-  it('does not show the bottom Download Page hint when the workspace owns snapshot toasts', async () => {
+  it('keeps Download Page guidance inside the Browser panel when the workspace owns snapshot toasts', async () => {
     const attentionRequest = { action: 'download-page' as const, nonce: 1 };
-    render(
+    const { container } = render(
       <DesignBrowserPanel
         projectId="proj-webview-download-attention-parent-toast"
         initialTitle="Example"
@@ -778,7 +809,8 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     const downloadItem = await screen.findByRole('menuitem', { name: 'Download Page' });
     expect(downloadItem.classList.contains('is-attention')).toBe(true);
-    expect(screen.queryByText(/click Download Page here/)).toBeNull();
+    expect(container.querySelector('.db-download-assist')).toBeTruthy();
+    expect(container.querySelector('.db-status')).toBeNull();
   });
 
   it('does not render saved browser comment markers in the external browser', async () => {

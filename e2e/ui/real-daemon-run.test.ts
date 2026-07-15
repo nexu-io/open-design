@@ -178,7 +178,7 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
 
 test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
   await page.goto('/');
-  await createProject(page, 'Daemon artifact edit smoke');
+  await createProject(page, 'Daemon artifact edit smoke', 'claude');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
@@ -186,7 +186,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 
-  await sendPrompt(page, 'Edit the existing deterministic smoke artifact');
+  await sendPrompt(page, 'Edit the existing deterministic smoke artifact through the managed project alias');
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, EDITED_GENERATED_HEADING);
   const files = await listProjectFiles(page, projectId);
@@ -200,12 +200,39 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
       return assistantMessages.map((message) => ({
         runStatus: message.runStatus ?? null,
         producedFiles: message.producedFiles?.map((file) => file.name) ?? [],
+        traceObjectFiles: message.traceObjectFiles?.map((file) => file.name) ?? [],
+        resultDeliveryState: message.resultDeliveryState ?? null,
       }));
     }, { timeout: 15_000 })
     .toContainEqual({
       runStatus: 'succeeded',
-      producedFiles: [GENERATED_FILE],
+      producedFiles: [],
+      traceObjectFiles: [GENERATED_FILE],
+      resultDeliveryState: 'delivered',
     });
+  await expect(runErrorCard(page)).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const editedHeading = artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]');
+  await expect(editedHeading).toBeVisible();
+  await editedHeading.click();
+  await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
+  const fontSizeInput = page
+    .locator('.manual-edit-modal .cc-section')
+    .filter({ hasText: 'TYPOGRAPHY' })
+    .locator('.cc-row')
+    .filter({ hasText: 'Size' })
+    .locator('input');
+  await fontSizeInput.fill('52');
+  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await page.getByRole('button', { name: 'Versions' }).click();
+  const versionsDialog = page.getByRole('dialog', { name: 'Versions' });
+  await expect(versionsDialog).toBeVisible();
+  await expect(versionsDialog).toContainText('3 versions');
+  await expect(versionsDialog.getByRole('option')).toHaveCount(3);
 });
 
 test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
@@ -234,6 +261,82 @@ test('[P1] Plan mode daemon run creates, opens, and restores an editable markdow
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
   await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+});
+
+// Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user
+// reviews the plan and asks for the final deliverable, the generation turn
+// writes the HTML as a project file (Write tool, no inline artifact echo) and
+// then touches the plan document again. The viewer must auto-open the
+// generated HTML instead of staying on the markdown plan.
+test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await createProject(page, 'Plan mode html auto-open smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const planTab = page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i });
+  await expect(planTab).toHaveAttribute('aria-selected', 'true');
+
+  // Mirror the real Plan-mode interaction: the user reviews and edits the
+  // markdown plan in the split editor (autosave on) before asking for the
+  // final deliverable.
+  const planEditor = page.getByRole('textbox', { name: /markdown editor/i });
+  await expect(planEditor).toHaveValue(/Deterministic Plan/);
+  await planEditor.click();
+  await planEditor.press('End');
+  await planEditor.pressSequentially('\n- Reviewed by the user before generation.\n', { delay: 10 });
+  await expectProjectFileToContain(page, projectId, 'plan.md', 'Reviewed by the user before generation.');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = page.getByTestId('file-workspace').getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+});
+
+// Red spec, regeneration loop: Plan mode's core iteration is
+// plan → generate → edit the plan → generate AGAIN. On the second generation
+// the HTML file already exists, so a pre/post file-name diff sees no "new"
+// file — the viewer must still re-focus the regenerated HTML. Uses the codex
+// fake runtime (no tool_use events, like most CLI protocols) so the per-write
+// auto-open path cannot mask the turn-end selection.
+test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await createProject(page, 'Plan mode html regen smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = workspace.getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+
+  // The user goes back to the plan document to revise it...
+  await workspace.getByRole('tab', { name: /plan\.md/i }).click();
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  // ...and asks for another generation. index.html is rewritten in place —
+  // no new file name appears, but the fresh deliverable must take focus.
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      return messages.filter((m) => m.role === 'assistant' && m.runStatus === 'succeeded').length;
+    }, { timeout: 30_000 })
+    .toBeGreaterThanOrEqual(3);
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
 });
 
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
@@ -1037,6 +1140,8 @@ async function listConversationMessages(
       runStatus?: string;
       events?: Array<{ kind: string }>;
       producedFiles?: Array<{ name: string }>;
+      traceObjectFiles?: Array<{ name: string }>;
+      resultDeliveryState?: string;
     }>;
   };
   return body.messages;

@@ -1,16 +1,34 @@
 ---
 name: html-ppt-weekly-report
-description: Team weekly / status-update deck — corporate clarity, 8-cell KPI grid, shipped list, 8-week bar chart, next-week table. Use for 周报, business reviews, team status updates, and exec dashboards.
+en_name: "Write a Weekly Growth Review like a Head of Analytics"
+zh_name: "像分析负责人一样写每周增长复盘"
+description: |
+  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+en_description: |
+  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+zh_description: |
+  像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "data-finance"
+  - "product-analytics-deck"
+  - "finance"
+  - "kpi"
+  - "metrics"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-weekly-report"
 triggers:
-  - "weekly report"
-  - "周报"
-  - "status update"
-  - "team report"
-  - "business review"
-  - "wbr"
+  - "product-analytics-deck"
+  - "data-finance"
+  - "Write a Weekly Growth Review like a Head of Analytics"
+  - "像分析负责人一样写每周增长复盘"
+  - "kpi"
+  - "finance"
+  - "metrics"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: operations
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-weekly-report 模板生成一份周报（7 页）。先问我四件事：本周时间范围、3-5 个核心 KPI 数字、本周已发布 / 已完成的事项、下周计划与风险。然后用模板填好 8 周柱状图和下周表格。"
+  category: "data-finance"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Weekly Growth Review like a Head of Analytics\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Audience: growth & product team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 # HTML PPT · Weekly Report
 

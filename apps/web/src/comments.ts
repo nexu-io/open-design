@@ -48,7 +48,10 @@ export interface VisualAnnotationTarget {
 export interface VisualAnnotationAttachmentInput {
   order: number;
   idSeed?: string;
-  screenshotPath: string;
+  /** Absent when the preview screenshot could not be captured (#4080); the
+   *  attachment then carries only the structured location (file/position/
+   *  markKind) so the agent can still find the marked region (#4084). */
+  screenshotPath?: string;
   markKind: PreviewVisualMarkKind;
   note: string;
   bounds: { x: number; y: number; width: number; height: number };
@@ -325,15 +328,17 @@ export function buildBoardCommentAttachments(input: {
 
 export function buildVisualAnnotationAttachment(input: VisualAnnotationAttachmentInput): ChatCommentAttachment {
   const target = input.target ?? null;
-  const intent = visualAnnotationIntent(input.markKind);
+  const intent = input.screenshotPath
+    ? visualAnnotationIntent(input.markKind)
+    : visualAnnotationIntentWithoutScreenshot();
   const visualId = sanitizeVisualAttachmentId(input.idSeed || input.screenshotPath || String(input.order));
   const elementId = target?.elementId?.trim() || `visual-mark-${visualId}`;
-  const label = target?.label?.trim() || 'Marked screenshot region';
+  const label = target?.label?.trim() || (input.screenshotPath ? 'Marked screenshot region' : 'Marked preview region');
   const comment = input.note.trim() || intent;
   return {
     id: `${elementId}-visual-${visualId}`,
     order: input.order,
-    filePath: target?.filePath?.trim() || input.screenshotPath,
+    filePath: target?.filePath?.trim() || input.screenshotPath || '',
     elementId,
     selector: target?.selector?.trim() || '',
     label,
@@ -441,7 +446,7 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
     '',
     '',
     '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
+    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot when one is provided (otherwise locate the region from the structured fields) and modify the marked region first.",
   ];
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);
@@ -462,11 +467,18 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
       lines.push(`comment: ${item.comment}`);
     }
     if (selectionKind === 'visual') {
-      lines.push(
-        `screenshot: ${item.screenshotPath || '(missing)'}`,
-        `markKind: ${item.markKind || 'stroke'}`,
-        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
-      );
+      if (item.screenshotPath) {
+        lines.push(
+          `screenshot: ${item.screenshotPath}`,
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
+        );
+      } else {
+        lines.push(
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntentWithoutScreenshot()}`,
+        );
+      }
       if (item.selector) lines.push(`selector: ${item.selector}`);
     } else {
       lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
@@ -508,6 +520,13 @@ function visualAnnotationIntent(markKind: PreviewVisualMarkKind): string {
     return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
   }
   return 'The screenshot has red strokes that identify the visual region the user wants changed.';
+}
+
+// Screenshot-less variant (#4084): the capture failed (#4080), so pointing the
+// agent at a screenshot would point at nothing. The structured fields are the
+// only anchor.
+function visualAnnotationIntentWithoutScreenshot(): string {
+  return 'The user marked a region of the live preview; no screenshot was captured, so locate the region using file, position, and currentText.';
 }
 
 function normalizePosition(input: PreviewComment['position']): PreviewComment['position'] {

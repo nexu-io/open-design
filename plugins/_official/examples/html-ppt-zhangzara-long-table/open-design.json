@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-long-table",
-  "title": "Html Ppt Zhangzara Long Table",
+  "title": "Present a Unit-Economics Model like an FP&A Partner",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Long Table",
-    "zh-TW": "Html Ppt Zhangzara Long Table",
-    "ja": "Html Ppt Zhangzara Long Table",
-    "ko": "Html Ppt Zhangzara Long Table",
-    "de": "Html Ppt Zhangzara Long Table",
-    "fr": "Html Ppt Zhangzara Long Table",
-    "ru": "Html Ppt Zhangzara Long Table",
-    "es": "Html Ppt Zhangzara Long Table",
-    "pt-BR": "Html Ppt Zhangzara Long Table",
-    "it": "Html Ppt Zhangzara Long Table",
-    "vi": "Html Ppt Zhangzara Long Table",
-    "pl": "Html Ppt Zhangzara Long Table",
-    "id": "Html Ppt Zhangzara Long Table",
-    "nl": "Html Ppt Zhangzara Long Table",
-    "ar": "Html Ppt Zhangzara Long Table",
-    "tr": "Html Ppt Zhangzara Long Table",
-    "uk": "Html Ppt Zhangzara Long Table",
-    "en": "Html Ppt Zhangzara Long Table"
+    "en": "Present a Unit-Economics Model like an FP&A Partner",
+    "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型",
+    "zh-TW": "像 FP&A 伙伴一样讲清单位经济模型"
   },
   "version": "0.1.0",
-  "description": "Long Table — Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons. Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership pitches, lifestyle and wine brands.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
   "description_i18n": {
-    "zh-CN": "Long Table — 温暖奶油色和铁锈红晚餐俱乐部美学，配合粗体无衬线大写标题、斜体 Fraunces 字体和药丸形轮廓按钮。适合温馨亲密的现代餐饮和社区品牌：晚餐俱乐部、餐厅系列、小型餐馆、创意工作室活动、会员推广、生活方式和葡萄酒品牌。",
-    "zh-TW": "Long Table — 溫暖奶油色與鐵鏽紅晚餐俱樂部美學，搭配粗體無襯線大寫標題、斜體 Fraunces 字型和藥丸形輪廓按鈕。適合溫馨親密的現代餐飲與社群品牌：晚餐俱樂部、餐廳系列、小型餐館、創意工作室活動、會員推廣、生活風格與葡萄酒品牌。",
-    "ja": "Long Table — 温かみのあるクリーム色とラストレッドのサパークラブ美学。太字のグロテスク大文字見出し、イタリック体のFraunces、ピル型のアウトラインボタンが特徴。温かく親密でモダンなホスピタリティ・コミュニティブランドに最適：サパークラブ、ディナーシリーズ、小規模レストラン、クリエイティブスタジオイベント、メンバーシップ提案、ライフスタイル・ワインブランド。",
-    "ko": "Long Table — 따뜻한 크림색과 러스트 레드의 서퍼 클럽 미학. 굵은 대문자 그로테스크 헤드라인, 이탤릭 Fraunces, 알약 모양 아웃라인 버튼이 특징. 따뜻하고 친밀한 모던 호스피탈리티 및 커뮤니티 브랜드에 적합: 서퍼 클럽, 디너 시리즈, 소규모 레스토랑, 크리에이티브 스튜디오 이벤트, 멤버십 제안, 라이프스타일 및 와인 브랜드.",
-    "de": "Long Table — Warme Creme- und Rostrot-Supperclub-Ästhetik mit fetten Grotesk-Headlines in Großbuchstaben, kursiver Fraunces und pillenförmigen Outline-Buttons. Ideal für warme, intime, moderne Hospitality- und Community-Marken: Supperclubs, Dinner-Serien, kleine Restaurants, Kreativstudio-Events, Mitgliedschaftspräsentationen, Lifestyle- und Weinmarken.",
-    "fr": "Long Table — Esthétique supper-club en crème chaud et rouge rouille avec titres grotesk gras en majuscules, Fraunces italique et boutons en forme de pilule. Idéal pour les marques d'hospitalité et de communauté chaleureuses et intimes : supper clubs, séries de dîners, petits restaurants, événements de studios créatifs, présentations d'adhésion, marques lifestyle et vin.",
-    "ru": "Long Table — Эстетика ужин-клуба в тёплых кремовых и ржаво-красных тонах с жирными гротескными заголовками прописными буквами, курсивом Fraunces и кнопками в форме таблетки. Для тёплых, камерных, современных брендов гостеприимства и сообществ: ужин-клубов, ресторанных серий, небольших ресторанов, мероприятий креативных студий, членских предложений, lifestyle и винных брендов.",
-    "es": "Long Table — Estética de club de cena en crema cálido y rojo óxido con titulares grotesk en mayúsculas y negrita, Fraunces en cursiva y botones de contorno en forma de píldora. Ideal para marcas cálidas, íntimas y modernas de hospitalidad y comunidad: clubes de cena, series de cenas, restaurantes pequeños, eventos de estudios creativos, propuestas de membresía, marcas de lifestyle y vino.",
-    "pt-BR": "Long Table — Estética de clube de jantar em creme quente e vermelho ferrugem com títulos grotesk em caixa alta e negrito, Fraunces em itálico e botões contornados em formato de pílula. Ideal para marcas calorosas, íntimas e modernas de hospitalidade e comunidade: clubes de jantar, séries de jantares, pequenos restaurantes, eventos de estúdios criativos, propostas de associação, marcas de lifestyle e vinho.",
-    "it": "Long Table — Estetica supper club con crema caldo e rosso ruggine, titoli grotesk maiuscoli in grassetto, Fraunces corsivo e pulsanti contornati a forma di pillola. Ideale per brand di ospitalità e community caldi, intimi e moderni: supper club, serie di cene, piccoli ristoranti, eventi di studi creativi, proposte di membership, brand lifestyle e vino.",
-    "vi": "Long Table — Phong cách câu lạc bộ ăn tối với tông kem ấm áp và đỏ gỉ sắt, tiêu đề grotesk in hoa đậm, Fraunces nghiêng và nút viền hình viên thuốc. Phù hợp với thương hiệu khách sạn và cộng đồng ấm áp, thân mật, hiện đại: câu lạc bộ ăn tối, chuỗi bữa tối, nhà hàng nhỏ, sự kiện studio sáng tạo, đề xuất thành viên, thương hiệu phong cách sống và rượu.",
-    "pl": "Long Table — Estetyka kolacyjnego klubu w ciepłym kremie i rdzawoczerwieni z pogrubionymi groteskowymi nagłówkami wielkimi literami, kursywą Fraunces i przyciskami w kształcie pigułki. Idealne dla ciepłych, kameralnych, nowoczesnych marek hospitality i społecznościowych: klubów kolacyjnych, serii kolacji, małych restauracji, wydarzeń studio kreatywnego, propozycji członkowskich, marek lifestyle i winiarskich.",
-    "id": "Long Table — Estetika supper club krem hangat dan merah karat dengan headline grotesk huruf besar tebal, Fraunces miring, dan tombol outline berbentuk pil. Cocok untuk brand hospitalitas dan komunitas yang hangat, intim, dan modern: supper club, seri makan malam, restoran kecil, acara studio kreatif, penawaran keanggotaan, brand lifestyle dan wine.",
-    "nl": "Long Table — Warme crème en roestroze supperclub-esthetiek met vette groteske koppen in hoofdletters, cursieve Fraunces en pilgevormde outline-knoppen. Ideaal voor warme, intieme, moderne hospitality- en communitymerken: supperclubs, dinerseries, kleine restaurants, creatieve studio-evenementen, lidmaatschapspresentaties, lifestyle- en wijnmerken.",
-    "ar": "Long Table — جمالية نادي العشاء بألوان الكريم الدافئ والأحمر الصدئ مع عناوين grotesk غامقة بأحرف كبيرة، Fraunces مائل، وأزرار محددة بشكل حبة دواء. مثالي لعلامات الضيافة والمجتمع الدافئة والحميمة والحديثة: نوادي العشاء، سلاسل العشاء، المطاعم الصغيرة، فعاليات الاستوديوهات الإبداعية، عروض العضوية، علامات نمط الحياة والنبيذ.",
-    "tr": "Long Table — Sıcak krem ve pas kırmızısı akşam yemeği kulübü estetiği, kalın büyük harf grotesk başlıklar, italik Fraunces ve hap şeklinde çerçeveli düğmeler. Sıcak, samimi, modern misafirperverlik ve topluluk markaları için ideal: akşam yemeği kulüpleri, yemek serileri, küçük restoranlar, yaratıcı stüdyo etkinlikleri, üyelik sunumları, yaşam tarzı ve şarap markaları.",
-    "uk": "Long Table — Естетика вечірнього клубу в теплих кремових і ржаво-червоних тонах із жирними гротесковими заголовками великими літерами, курсивом Fraunces та кнопками у формі таблетки. Для теплих, камерних, сучасних брендів гостинності та спільнот: вечірніх клубів, серій вечерь, невеликих ресторанів, подій креативних студій, членських пропозицій, lifestyle та винних брендів.",
-    "en": "Long Table — Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons. Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership pitches, lifestyle and wine brands."
+    "en": "Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
+    "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,18 @@
     "event-or-community-gathering",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "board",
+    "strategy",
+    "business-review",
+    "html-ppt-zhangzara-long-table",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +61,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "finance",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +69,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Long Table — Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons. Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership p",
-        "zh-CN": "使用这个插件完成以下任务：Long Table — Warm cream and rust-red supper-club aesthetic with bold uppercase grotesk headlines, italic Fraunces, and pill-shaped outlined buttons. Anything that should feel like a warm, intimate, modern hospitality / community brand: supper clubs, dinner series, small restaurants, creative-studio events, membership p"
+        "en": "Create \"Present a Unit-Economics Model like an FP&A Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Audience: CFO, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型。像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Long Table"
+          "title": "Present a Unit-Economics Model like an FP&A Partner",
+          "title_i18n": {
+            "en": "Present a Unit-Economics Model like an FP&A Partner",
+            "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型",
+            "zh-TW": "像 FP&A 伙伴一样讲清单位经济模型"
+          }
         }
       ]
     },
@@ -121,6 +108,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "data-finance"
   }
 }

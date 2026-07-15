@@ -314,6 +314,26 @@ describe('ChatPane streaming state', () => {
       .toBeNull();
   });
 
+  it.each(['no_result', 'delivery_failed'] as const)(
+    'exposes retry for a %s delivery failure',
+    (resultDeliveryState) => {
+      const deliveryFailure: ChatMessage = {
+        id: `assistant-${resultDeliveryState}`,
+        role: 'assistant',
+        content: 'The design result was not delivered.',
+        createdAt: 1,
+        runStatus: 'succeeded',
+        resultDeliveryState,
+      };
+      const messages: ChatMessage[] = [
+        { id: 'user-1', role: 'user', content: 'Create a login page', createdAt: 0 },
+        deliveryFailure,
+      ];
+
+      expect(retryableAssistantMessage(messages, deliveryFailure.id, false)).toBe(deliveryFailure);
+    },
+  );
+
   it('copies failed-run diagnostics with the trace id from the error card', async () => {
     const messages: ChatMessage[] = [
       { id: 'user-1', role: 'user', content: 'Create a login page', createdAt: 0 },

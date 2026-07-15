@@ -18,7 +18,9 @@ concurrency:
 jobs:
   comment:
     name: Publish handoff comments
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' }}
+    # merge_group is consumed alongside pull_request so the needs-validation gate can leave an
+    # ejection notice on the queued PR (the gate failure itself is invisible from the PR head).
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -74,6 +76,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -88,7 +92,16 @@ jobs:
             marker="$(jq -r '.marker' <<< "$entry_json")"
             body_path="$(jq -r '.body_path' <<< "$entry_json")"
 
-            if [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
+            if [ "$RUN_EVENT" = "merge_group" ]; then
+              # A merge_group run's head_sha is the queue's synthetic merge commit, never the PR
+              # head, so bind the artifact to its producing run by run_id instead; the live-PR
+              # head check below still carries the staleness guarantee.
+              artifact_run_id="$(jq -r '.run_id' <<< "$entry_json")"
+              if [ "$artifact_run_id" != "$RUN_ID" ]; then
+                echo "Skipping comment handoff $id because artifact run $artifact_run_id does not match workflow_run $RUN_ID."
+                continue
+              fi
+            elif [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
               echo "Skipping comment handoff $id because artifact head $head_sha does not match workflow_run head $RUN_HEAD_SHA."
               continue
             fi
@@ -110,7 +123,10 @@ jobs:
               echo "Skipping stale comment handoff $id for $head_sha; current PR head is $current_head."
               continue
             fi
-            if [ "$current_base" != "$base_sha" ]; then
+            # Base freshness is meaningless for a merge-queue ejection notice: PRs ahead in the
+            # queue merge into the base branch while this run completes, so the base is EXPECTED
+            # to move; the notice stays valid as long as the PR head is unchanged (checked above).
+            if [ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]; then
               echo "Skipping stale comment handoff $id for base $base_sha; current PR base is $current_base."
               continue
             fi

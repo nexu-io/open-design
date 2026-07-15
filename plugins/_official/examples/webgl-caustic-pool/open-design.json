@@ -16,6 +16,7 @@
     "en": "Caustic Pool"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A self-contained WebGL2 hero: animated water caustics woven from domain-warped ripples; click the water to drop a ripple. No meshes, no textures.",
   "description_i18n": {
     "zh-CN": "自包含 WebGL2 主视觉：由域扭曲涟漪织成的动态水面焦散；点击水面掉涟漪。无网格、无贴图。",

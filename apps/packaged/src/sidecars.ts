@@ -149,25 +149,49 @@ async function openLog(path: string): Promise<FileHandle> {
 }
 
 const DAEMON_STATUS_TIMEOUT_MS = 35_000;
+// Windows first launches routinely blow past the 35s POSIX budget: Defender
+// real-time scanning of the freshly-written packaged binaries inflates the
+// daemon cold start (native better-sqlite3 load + first SQLite open/migrate +
+// status-pipe bind) well past 35s. PostHog on the packaged_runtime_failed
+// status-timeout bucket showed ~90% of affected devices DID open the app on a
+// later launch — the daemon was merely slow, not dead — so a wider win32 budget
+// lets that first launch succeed instead of failing to a recovery screen and
+// forcing a manual relaunch.
+const WIN32_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
+// Poll cadence for waitForStatus: start tight so a fast daemon is detected
+// promptly, then back off geometrically (capped) so a not-yet-bound pipe is not
+// hammered with connect attempts that add CPU/AV contention to an already-slow
+// cold start.
+const STATUS_POLL_INITIAL_MS = 150;
+const STATUS_POLL_MAX_MS = 1500;
+
+// Baseline status wait budget by platform, before the daemon-only legacy
+// migration override. win32 gets the wider AV-scan headroom; every other OS
+// keeps the 35s baseline.
+function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
+  return platform === "win32" ? WIN32_STATUS_TIMEOUT_MS : DAEMON_STATUS_TIMEOUT_MS;
+}
+
 /**
- * Daemon status wait budget. The default 35s is fine for normal cold
- * boots, but the OD_LEGACY_DATA_DIR one-shot recovery flow can synch-
- * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
- * killing the child mid-migration can leave dataDir half-promoted.
- * When the env var is set, use a 30-minute budget so the parent will
- * not tear the daemon down before the migration can complete.
+ * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
+ * AV-scan headroom) is fine for normal cold boots, but the OD_LEGACY_DATA_DIR
+ * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
+ * SQLite even opens, and killing the child mid-migration can leave dataDir
+ * half-promoted. When the env var is set, use a 30-minute budget so the parent
+ * will not tear the daemon down before the migration can complete.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): number {
   const raw = env.OD_LEGACY_DATA_DIR;
   if (raw != null && raw.length > 0) return DAEMON_MIGRATION_STATUS_TIMEOUT_MS;
-  return DAEMON_STATUS_TIMEOUT_MS;
+  return baseStatusTimeoutMs(platform);
 }
 
 /**
@@ -190,6 +214,7 @@ export async function waitForStatus<T>(
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
+  let pollDelayMs = STATUS_POLL_INITIAL_MS;
   let childExited: { code: number | null; signal: NodeJS.Signals | null } | null = null;
 
   // Cover the race between spawn-resolved and now: if the child has
@@ -223,12 +248,12 @@ export async function waitForStatus<T>(
         if (watch?.child.pid != null) {
           if (statusPid == null) {
             lastError = new Error(`sidecar status did not include pid for spawned pid ${watch.child.pid}`);
-            await sleep(150);
+            await sleep(STATUS_POLL_INITIAL_MS);
             continue;
           }
           if (statusPid !== watch.child.pid) {
             lastError = new Error(`sidecar status pid ${statusPid} did not match spawned pid ${watch.child.pid}`);
-            await sleep(150);
+            await sleep(STATUS_POLL_INITIAL_MS);
             continue;
           }
         }
@@ -236,7 +261,14 @@ export async function waitForStatus<T>(
       } catch (error) {
         lastError = error;
       }
-      await sleep(150);
+      // Keep timeoutMs a hard-ish upper bound: never sleep past the deadline, so
+      // the widened win32 budget can't be overshot by a full backoff interval on
+      // a slow/dead sidecar. The in-flight requestJsonIpc timeout is the only
+      // residual overshoot; the while-condition re-checks the deadline next tick.
+      const remaining = timeoutMs - (Date.now() - startedAt);
+      if (remaining <= 0) break;
+      await sleep(Math.min(pollDelayMs, remaining));
+      pollDelayMs = Math.min(pollDelayMs * 2, STATUS_POLL_MAX_MS);
     }
 
     throw new Error(
@@ -595,7 +627,10 @@ export async function startPackagedSidecars(
     const webStatus = await waitForStatus<WebStatusSnapshot>(
       web.ipcPath,
       (status) => status.url != null,
-      DAEMON_STATUS_TIMEOUT_MS,
+      // Web has no legacy-migration path, so it uses the plain platform
+      // baseline (still widened on win32, where AV scanning can also slow the
+      // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
+      baseStatusTimeoutMs(),
       { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");

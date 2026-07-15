@@ -32,6 +32,8 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+/* The brand glyph is a self-shaped superellipse tile (rendered through
+   .od-brand-glyph), so it needs no panel disc behind it. */
 .home-hero__brand-mark {
   position: absolute;
   top: 50%;
@@ -39,21 +41,6 @@
   transform: translateY(-50%);
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 2px;
-}
-.home-hero__brand-mark img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 .home-hero__brand-name {
   font-family: var(--serif);
@@ -184,14 +171,99 @@
 .home-hero__subtype-row {
   width: 100%;
   max-width: 720px;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  /* Single line: overflow chips collapse into the "More" dropdown instead of
+     wrapping onto extra rows (measured by the hidden ghost row below). */
+  flex-wrap: nowrap;
   gap: 5px;
   min-width: 0;
   margin: 6px 0 0;
   padding: 0 12px;
+}
+/* Off-screen full-set copy used only to measure natural chip widths so the
+   visible row can decide how many fit before the "More" cutover. Clipped to a
+   0-height, row-width box so it never adds page scroll, and its chips never
+   shrink (flex:0 0 auto) so offsetWidth reports each chip's true width. */
+.home-hero__subtype-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.home-hero__subtype-measure > * {
+  flex: 0 0 auto;
+}
+/* Visible-row items keep their natural width (the measurement already made
+   them fit) so a nowrap row doesn't shrink chips into ellipsis. */
+.home-hero__subtype-row > .home-hero__subtype-chip,
+.home-hero__subtype-row > .home-hero__subtype-more {
+  flex: 0 0 auto;
+}
+.home-hero__subtype-more {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.home-hero__subtype-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  min-width: 180px;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.home-hero__subtype-more-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 540;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.home-hero__subtype-more-item .home-hero__subtype-chip-label {
+  flex: 1 1 auto;
+}
+.home-hero__subtype-more-item:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.home-hero__subtype-more-item.is-active {
+  color: var(--accent);
+}
+.home-hero__subtype-more-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .home-hero__subtype-chip {
   appearance: none;
@@ -345,11 +417,21 @@
   margin-top: 0;
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
+/* While one of the composer's popovers is open, the whole card (a stacking
+   context) is lifted so the popover escapes above the static home content
+   below it (recent projects, plugin tiles — their contexts top out at 8).
+   The lift must stay BELOW `.entry-main__topbar` (z-index 10): the sticky
+   topbar is opaque chrome and the card scrolling under it must never cover
+   the chip cluster. It must also stay below the fixed modal family
+   (`.home-hero-confirm__backdrop` 80, `.plus-menu__popup` 90,
+   `.plugins-import-modal__backdrop` 100, `.use-everywhere-modal-backdrop`
+   920). Popover z-indexes inside the card (1503/1701/…) are local to the
+   card's stacking context and only order its own children. */
 .home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker),
 .home-hero__input-card:has(.home-hero__template-menu) {
-  z-index: 1700;
+  z-index: 9;
   overflow: visible;
 }
 .home-hero__input-card--compact-authoring {
@@ -2170,6 +2252,57 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Website-clone examples: a logo tile + bare domain reads as a real "pick a
+   site" gallery instead of seven near-identical lines of prompt text. */
+.home-hero__prompt-examples-grid--sites {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.home-hero__prompt-example--site {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 108px;
+  padding: 16px 12px;
+  text-align: center;
+}
+.home-hero__site-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  /* Favicons are drawn for a light browser tab, so keep the tile light in both
+     themes; the border keeps it defined on a light page. */
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.home-hero__site-badge img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.home-hero__site-monogram {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1;
+}
+.home-hero__site-domain {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.home-hero__prompt-example--site:hover .home-hero__site-badge,
+.home-hero__prompt-example--site:focus-visible .home-hero__site-badge {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
 .home-hero__plugin-presets-wrap {
   max-width: min(880px, 100%);
 }
@@ -2383,19 +2516,28 @@
    height + title-row height to prototype/HyperFrames/image tiles. */
 .home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview {
   aspect-ratio: auto;
+  --deck-preview-scale: 0.166;
 }
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-frame {
   display: flex;
   align-items: center;
   justify-content: center;
 }
+/* Render the deck's first slide at a fixed 1280×720 logical viewport, scaled to
+   the cell width (--deck-preview-scale, measured in HomeHero) and centered in
+   the fixed-height cell. Filling the cell with a native 16:9 iframe
+   (transform:none) delegated all scaling to the template, so a fixed-pixel-canvas
+   deck overflowed into an overlapping mess; scaling a fixed viewport instead
+   previews every template proportionally. Cell ratio is taller than 16:9, so a
+   width-fit scale letterboxes top/bottom with the card bg and never clips. */
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-iframe {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   inset: auto;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  transform: none;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%) scale(var(--deck-preview-scale));
 }
 
 /* The baked deck preview (od.bakedPreview) is captured at the 1.31 tile aspect,
@@ -2432,12 +2574,35 @@
   object-position: top center;
 }
 
+/* Row 2 of the preset grid: a small commercial-category kicker pill over the
+   title (matches the Create-page card + the reference template galleries). */
+.home-hero__plugin-preset-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 12px 12px;
+}
+.home-hero__plugin-preset-category {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .home-hero__plugin-preset-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 12px 12px;
   font-size: 12.5px;
   font-weight: 650;
   line-height: 1.2;
@@ -2884,19 +3049,20 @@
 .home-hero__template-reset {
   appearance: none;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: -2px;
+  margin-left: -5px;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  background: transparent;
+  color: var(--text-faint);
   cursor: pointer;
+  opacity: 0.72;
   transition:
-    background-color 120ms var(--ease-out),
+    opacity 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
 .home-hero__template-reset svg {
@@ -2907,8 +3073,13 @@
 .home-hero__template-reset:hover,
 .home-hero__template-reset:focus-visible {
   outline: none;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 1;
+}
+.home-hero__template-reset:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 .home-hero__template-menu {
   position: absolute;

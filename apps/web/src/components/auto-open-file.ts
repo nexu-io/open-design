@@ -21,6 +21,7 @@ interface CandidateFile {
   readonly path?: string;
   readonly kind?: string;
   readonly mtime?: number;
+  readonly type?: string;
 }
 
 interface AutoOpenOptions {
@@ -123,13 +124,130 @@ function autoOpenPreviewRank(file: CandidateFile): number {
   return 0;
 }
 
+// `zh/index.html` → depth 2, root `index.html` → depth 1; null for non-entry
+// files. Depth orders competing entries so the site root wins over a locale
+// or section subtree's own index.
+function siteEntryDepth(file: CandidateFile): number | null {
+  const path = file.path ?? file.name;
+  if (!/(^|\/)index\.html?$/i.test(path)) return null;
+  return path.split('/').length;
+}
+
+export interface SelectAutoOpenOptions {
+  // Prefer the site entry (`index.html`) among the turn's produced HTML
+  // files. Website-clone turns reproduce a whole multi-page site in one run —
+  // subpages, assets, and reports keep landing after the entry page, so the
+  // newest-mtime tie-break below would open whatever page happened to be
+  // written last. With this flag the shallowest produced `index.html` wins
+  // (ties to newest mtime); turns that produce no index.html keep the
+  // standard rank/mtime behavior.
+  readonly preferSiteEntry?: boolean;
+}
+
+export interface SelectAutoOpenTurnOptions extends SelectAutoOpenOptions {
+  // Epoch ms when the turn started. When set, files whose mtime lands at or
+  // after this instant (minus a filesystem-precision grace) count as touched
+  // by the turn even though their NAME already existed before it. A
+  // regeneration that rewrites index.html in place produces no new file name,
+  // so a pure pre/post name diff misses it — the Plan-mode
+  // plan → generate → edit plan → regenerate loop hits this on every second
+  // generation. Window bounds match AssistantMessage's
+  // inferProducedFilesFromTurn: [startedAt - 1s, endedAt + 60s].
+  readonly turnStartedAt?: number | null;
+  // Epoch ms when the turn ended. Bounds the attribution window on the right
+  // (plus a grace for writes that settle just after the terminal status), so
+  // a file the USER edits after the turn — reviewing the plan before the next
+  // reload/reattach recovery pass — is not attributed to the agent. Without
+  // it the window stays open-ended, preserving prior behavior for callers
+  // that cannot know the end time.
+  readonly turnEndedAt?: number | null;
+  // Project file NAMES the agent's Write/Edit tool events actually touched
+  // this turn. When non-empty, mtime-window candidates are restricted to this
+  // set: in Plan mode the user edits plan.md in the split editor with
+  // autosave on, so its mtime lands inside the turn window from the user's
+  // own keystrokes — without this restriction a text-only turn would yank
+  // focus back to it. Protocols that emit no write events (codex, gemini,
+  // opencode, ACP agents) supply an empty set and keep the pure time window;
+  // that window exists precisely because they have no per-write signal.
+  readonly agentTouchedFileNames?: ReadonlySet<string> | null;
+}
+
+const TURN_MTIME_GRACE_MS = 1_000;
+// Mirrors inferProducedFilesFromTurn's trailing margin: daemon terminal
+// status and the last file write are stamped by different clocks.
+const TURN_END_MTIME_GRACE_MS = 60_000;
+
+// Mirrors isImplicitProducedFileCandidate in src/produced-files.ts: sketches
+// change during a run because the USER draws, not because the agent wrote.
+function isUserSketchFile(file: CandidateFile): boolean {
+  return (file.path ?? file.name).toLowerCase().endsWith('.sketch.json');
+}
+
+// Turn-end auto-open selection: the produced (newly created) files plus any
+// pre-existing project file the turn rewrote in place, ranked by the same
+// preview priority as selectAutoOpenProducedArtifact. Without turnStartedAt
+// (legacy messages with no start stamp) this degrades to the produced-only
+// behavior rather than guessing from unrelated mtimes.
+export function selectAutoOpenTurnArtifact(
+  producedFiles: ReadonlyArray<CandidateFile>,
+  allFiles: ReadonlyArray<CandidateFile>,
+  options: SelectAutoOpenTurnOptions = {},
+): string | null {
+  const startedAt = options.turnStartedAt;
+  if (typeof startedAt !== 'number' || !Number.isFinite(startedAt) || startedAt <= 0) {
+    return selectAutoOpenProducedArtifact(producedFiles, options);
+  }
+  const endedAt = options.turnEndedAt;
+  const windowEnd =
+    typeof endedAt === 'number' && Number.isFinite(endedAt) && endedAt > 0
+      ? endedAt + TURN_END_MTIME_GRACE_MS
+      : null;
+  const touched = options.agentTouchedFileNames;
+  const restrictToTouched = touched != null && touched.size > 0;
+  const seen = new Set(producedFiles.map((f) => f.name));
+  const candidates = [...producedFiles];
+  for (const file of allFiles) {
+    if (!file.name || seen.has(file.name)) continue;
+    if (file.type === 'dir') continue;
+    if (file.name.startsWith('.') || file.name.includes('/.')) continue;
+    if (isUserSketchFile(file)) continue;
+    if (restrictToTouched && !touched.has(file.name)) continue;
+    const mtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : null;
+    if (mtime === null || mtime < startedAt - TURN_MTIME_GRACE_MS) continue;
+    if (windowEnd !== null && mtime > windowEnd) continue;
+    candidates.push(file);
+  }
+  return selectAutoOpenProducedArtifact(candidates, options);
+}
+
 // Pick which of a turn's produced files to auto-open in the viewer. Among
 // previewable files, a higher-priority kind always beats a lower one; ties
 // break to the most recently written file (newest mtime). Returns null when
 // the turn produced nothing previewable.
 export function selectAutoOpenProducedArtifact(
   producedFiles: ReadonlyArray<CandidateFile>,
+  options: SelectAutoOpenOptions = {},
 ): string | null {
+  if (options.preferSiteEntry) {
+    let entry: CandidateFile | null = null;
+    let entryDepth = Number.POSITIVE_INFINITY;
+    for (const file of producedFiles) {
+      if (!isHtmlPreviewFile(file)) continue;
+      const depth = siteEntryDepth(file);
+      if (depth === null) continue;
+      if (depth < entryDepth) {
+        entry = file;
+        entryDepth = depth;
+        continue;
+      }
+      if (depth > entryDepth || !entry) continue;
+      const nextMtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
+      const entryMtime =
+        typeof entry.mtime === 'number' && Number.isFinite(entry.mtime) ? entry.mtime : 0;
+      if (nextMtime >= entryMtime) entry = file;
+    }
+    if (entry) return entry.name;
+  }
   let selected: CandidateFile | null = null;
   let selectedRank = 0;
   for (const file of producedFiles) {

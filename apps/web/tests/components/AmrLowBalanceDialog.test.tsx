@@ -4,12 +4,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AmrLowBalanceDialog } from '../../src/components/AmrLowBalanceDialog';
 
-function renderDialog(plan: string | null) {
+function renderDialog() {
   const onDecision = vi.fn();
   render(
     <AmrLowBalanceDialog
       balanceUsd="1.20"
-      plan={plan}
       profile="prod"
       entrySource="chat_low_balance_warn_recharge"
       metricsConsent={false}
@@ -26,26 +25,9 @@ afterEach(() => {
 });
 
 describe('AmrLowBalanceDialog', () => {
-  it('uses the upgrade-plan primary CTA for free accounts', () => {
+  it('opens the top-up flow for eligible paid accounts', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    const { onDecision } = renderDialog('free');
-
-    const primary = screen.getByTestId('amr-low-balance-dialog-recharge');
-    expect(primary.textContent).toBe('Upgrade plan');
-
-    fireEvent.click(primary);
-
-    expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('view=plans'),
-      '_blank',
-      'noopener,noreferrer',
-    );
-    expect(onDecision).toHaveBeenCalledWith('recharge');
-  });
-
-  it('keeps the top-up primary CTA for paid accounts', () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    renderDialog('plus');
+    renderDialog();
 
     const primary = screen.getByTestId('amr-low-balance-dialog-recharge');
     expect(primary.textContent).toBe('Top up');
@@ -57,7 +39,7 @@ describe('AmrLowBalanceDialog', () => {
   });
 
   it('dismisses from the corner close button', () => {
-    const { onDecision } = renderDialog('free');
+    const { onDecision } = renderDialog();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 

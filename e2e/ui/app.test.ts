@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -680,7 +681,7 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: fileName,
   });
@@ -1164,11 +1165,11 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Three')).toBeVisible();
-  await page.getByLabel('Previous slide').click();
+  await clickDeckPreviousSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 }
 
@@ -1181,13 +1182,13 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await openDesignFile(page, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   await openDesignFile(page, 'deck-beta.html');
   await expect(frame.getByText('Beta One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Beta Two')).toBeVisible();
 
   await page.getByRole('tab', { name: /deck-alpha\.html/i }).click();

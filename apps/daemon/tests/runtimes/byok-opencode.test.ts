@@ -74,6 +74,29 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
+  it('routes OpenAI-protocol BYOK with a non-OpenAI base URL to the OpenAI-compatible provider package', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-deepseek', baseUrl: 'https://api.deepseek.com' },
+      'deepseek-v4-pro',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://api.deepseek.com',
+            apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}`,
+          },
+        },
+      },
+    });
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-openai', baseUrl: 'https://api.openai.com' },
+      'deepseek-v4-pro',
+    )?.config).toMatchObject({
+      provider: { [BYOK_OPENCODE_PROVIDER_ID]: { npm: '@ai-sdk/openai' } },
+    });
+  });
+
   it('normalizes origin-only native provider base URLs for OpenCode provider packages', () => {
     expect(buildOpenCodeByokProviderConfig(
       { protocol: 'anthropic', apiKey: 'sk-ant', baseUrl: 'https://api.anthropic.com' },
@@ -272,7 +295,7 @@ describe('byok-opencode runtime config', () => {
     expect(out?.config).toMatchObject({
       provider: {
         [BYOK_OPENCODE_PROVIDER_ID]: {
-          npm: '@ai-sdk/openai',
+          npm: '@ai-sdk/openai-compatible',
           options: {
             baseURL: 'http://127.0.0.1:8000/v1',
           },

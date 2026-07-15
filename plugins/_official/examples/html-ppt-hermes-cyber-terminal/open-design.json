@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-hermes-cyber-terminal",
-  "title": "Html Ppt Hermes Cyber Terminal",
+  "title": "Run a BYOK Model-Choice Session like an Applied-AI Engineer",
   "title_i18n": {
-    "zh-CN": "Html Ppt Hermes 赛博终端",
-    "zh-TW": "Html Ppt Hermes 賽博終端",
-    "ja": "Html Ppt Hermes サイバーターミナル",
-    "ko": "Html Ppt Hermes 사이버 터미널",
-    "de": "Html Ppt Hermes Cyber-Terminal",
-    "fr": "Html Ppt Hermes Terminal Cyber",
-    "ru": "Html Ppt Hermes Киберт-терминал",
-    "es": "Html Ppt Hermes Terminal Cibernético",
-    "pt-BR": "Html Ppt Hermes Terminal Cibernético",
-    "it": "Html Ppt Hermes Terminale Cyber",
-    "vi": "Html Ppt Hermes Terminal Cyber",
-    "pl": "Html Ppt Hermes Terminal Cybernetyczny",
-    "id": "Html Ppt Hermes Terminal Cyber",
-    "nl": "Html Ppt Hermes Cyberterminal",
-    "ar": "Html Ppt Hermes طرفية سايبر",
-    "tr": "Html Ppt Hermes Siber Terminal",
-    "uk": "Html Ppt Hermes Кібер-термінал",
-    "en": "Html Ppt Hermes Cyber Terminal"
+    "en": "Run a BYOK Model-Choice Session like an Applied-AI Engineer",
+    "zh-CN": "像应用 AI 工程师一样讲 BYOK 选型",
+    "zh-TW": "像应用 AI 工程师一样讲 BYOK 选型"
   },
   "version": "0.1.0",
-  "description": "暗终端 honest-review deck — #0a0c10 黑底 + 56px 赛博网格 + CRT 暗角 + 扫描线、窗口红绿灯 chrome、`$ prompt` 命令行标题、薄荷绿 #7ed3a4 大字、JetBrains Mono、stroke-only 柱状图、blinking 光标、琥珀/绿/红三档 tag、暗色代码块。适合 CLI / agent / dev tool 测评（含 trace、diff、benchmark）。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.",
   "description_i18n": {
-    "zh-CN": "暗色终端风格演示模板，#0a0c10 黑底配 56px 赛博网格、CRT 暗角、扫描线、窗口红绿灯 chrome、`$ prompt` 命令行标题、薄荷绿 #7ed3a4 大字、JetBrains Mono、描边柱状图、闪烁光标、琥珀/绿/红三档标签、暗色代码块。适合 CLI/agent/开发工具测评（含 trace、diff、benchmark）。",
-    "zh-TW": "暗色終端風格簡報範本，#0a0c10 黑底搭配 56px 賽博網格、CRT 暗角、掃描線、視窗紅綠燈 chrome、`$ prompt` 指令列標題、薄荷綠 #7ed3a4 大字、JetBrains Mono、描邊長條圖、閃爍游標、琥珀/綠/紅三檔標籤、暗色程式碼區塊。適合 CLI/agent/開發工具評測（含 trace、diff、benchmark）。",
-    "ja": "ダークターミナル風プレゼンテーションテンプレート。#0a0c10 黒背景、56px サイバーグリッド、CRT ビネット、スキャンライン、ウィンドウ信号灯 chrome、`$ prompt` コマンドラインタイトル、ミントグリーン #7ed3a4 大文字、JetBrains Mono、アウトラインのみの棒グラフ、点滅カーソル、琥珀/緑/赤の3段階タグ、ダークコードブロック。CLI/agent/開発ツールレビューに最適（trace、diff、benchmark を含む）。",
-    "ko": "다크 터미널 스타일 프레젠테이션 템플릿. #0a0c10 검은 배경, 56px 사이버 그리드, CRT 비네팅, 스캔라인, 창 신호등 chrome, `$ prompt` 커맨드라인 제목, 민트그린 #7ed3a4 대형 텍스트, JetBrains Mono, 아웃라인 막대 차트, 깜빡이는 커서, 호박색/녹색/빨간색 3단계 태그, 다크 코드 블록. CLI/agent/개발 도구 리뷰에 적합(trace, diff, benchmark 포함).",
-    "de": "Dunkles Terminal-Stil-Präsentationstemplate mit #0a0c10 schwarzem Hintergrund, 56px Cyber-Raster, CRT-Vignette, Scanlines, Fenster-Ampel-Chrome, `$ prompt`-Befehlszeilen-Titel, Mintgrün #7ed3a4 Großschrift, JetBrains Mono, Outline-Balkendiagrammen, blinkendem Cursor, Bernstein/Grün/Rot-Tags und dunklen Codeblöcken. Ideal für CLI/Agent/Dev-Tool-Reviews (inkl. Trace, Diff, Benchmark).",
-    "fr": "Modèle de présentation style terminal sombre avec fond noir #0a0c10, grille cyber 56px, vignette CRT, lignes de balayage, chrome feux tricolores, titres `$ prompt` en ligne de commande, texte vert menthe #7ed3a4, JetBrains Mono, graphiques en barres outline, curseur clignotant, tags ambre/vert/rouge et blocs de code sombres. Idéal pour les revues CLI/agent/outils dev (trace, diff, benchmark).",
-    "ru": "Шаблон презентации в стиле тёмного терминала с чёрным фоном #0a0c10, кибер-сеткой 56px, виньетированием CRT, сканлайнами, светофором окон chrome, заголовками `$ prompt` в командной строке, мятно-зелёным #7ed3a4 текстом, JetBrains Mono, контурными столбчатыми диаграммами, мигающим курсором, тегами янтарь/зелёный/красный и тёмными блоками кода. Подходит для обзоров CLI/агентов/инструментов разработки (trace, diff, benchmark).",
-    "es": "Plantilla de presentación estilo terminal oscuro con fondo negro #0a0c10, cuadrícula cibernética 56px, viñeta CRT, líneas de escaneo, semáforo de ventana chrome, títulos `$ prompt` de línea de comandos, texto verde menta #7ed3a4, JetBrains Mono, gráficos de barras outline, cursor parpadeante, etiquetas ámbar/verde/rojo y bloques de código oscuros. Ideal para reseñas de CLI/agentes/herramientas dev (trace, diff, benchmark).",
-    "pt-BR": "Template de apresentação estilo terminal escuro com fundo preto #0a0c10, grid cibernético 56px, vinheta CRT, linhas de varredura, chrome de semáforo de janela, títulos `$ prompt` de linha de comando, texto verde-menta #7ed3a4, JetBrains Mono, gráficos de barras outline, cursor piscante, tags âmbar/verde/vermelho e blocos de código escuros. Ideal para reviews de CLI/agentes/ferramentas dev (trace, diff, benchmark).",
-    "it": "Template di presentazione stile terminale scuro con sfondo nero #0a0c10, griglia cyber 56px, vignettatura CRT, linee di scansione, chrome semaforo finestra, titoli `$ prompt` da riga di comando, testo verde menta #7ed3a4, JetBrains Mono, grafici a barre outline, cursore lampeggiante, tag ambra/verde/rosso e blocchi di codice scuri. Ideale per recensioni CLI/agenti/strumenti dev (trace, diff, benchmark).",
-    "vi": "Template trình chiếu phong cách terminal tối với nền đen #0a0c10, lưới cyber 56px, vignette CRT, đường quét, chrome đèn tín hiệu cửa sổ, tiêu đề `$ prompt` dòng lệnh, chữ xanh bạc hà #7ed3a4, JetBrains Mono, biểu đồ cột outline, con trỏ nhấp nháy, thẻ hổ phách/xanh/đỏ và khối code tối. Phù hợp cho đánh giá CLI/agent/công cụ dev (trace, diff, benchmark).",
-    "pl": "Szablon prezentacji w stylu ciemnego terminala z czarnym tłem #0a0c10, siatką cyber 56px, winietowaniem CRT, liniami skanowania, chrome świateł okna, tytułami `$ prompt` wiersza poleceń, tekstem miętowozielonym #7ed3a4, JetBrains Mono, wykresami słupkowymi outline, mrugającym kursorem, tagami bursztyn/zielony/czerwony i ciemnymi blokami kodu. Idealny do recenzji CLI/agentów/narzędzi dev (trace, diff, benchmark).",
-    "id": "Template presentasi bergaya terminal gelap dengan latar hitam #0a0c10, grid cyber 56px, vignette CRT, garis pindai, chrome lampu lalu lintas jendela, judul `$ prompt` baris perintah, teks hijau mint #7ed3a4, JetBrains Mono, grafik batang outline, kursor berkedip, tag amber/hijau/merah, dan blok kode gelap. Cocok untuk ulasan CLI/agen/alat dev (trace, diff, benchmark).",
-    "nl": "Donkere terminal-stijl presentatiesjabloon met #0a0c10 zwarte achtergrond, 56px cybergrid, CRT-vignet, scanlijnen, venster-stoplicht chrome, `$ prompt` commandoregel-titels, mintgroen #7ed3a4 tekst, JetBrains Mono, outline-staafdiagrammen, knipperende cursor, amber/groen/rood tags en donkere codeblokken. Ideaal voor CLI/agent/dev-tool reviews (trace, diff, benchmark).",
-    "ar": "قالب عرض تقديمي بنمط الطرفية الداكنة مع خلفية سوداء #0a0c10، شبكة سايبر 56px، إطار CRT، خطوط مسح، chrome إشارة مرور النافذة، عناوين `$ prompt` سطر الأوامر، نص أخضر نعناعي #7ed3a4، JetBrains Mono، رسوم بيانية شريطية بحدود فقط، مؤشر وامض، علامات كهرمان/أخضر/أحمر وكتل كود داكنة. مثالي لمراجعات CLI/الوكلاء/أدوات التطوير (trace، diff، benchmark).",
-    "tr": "Koyu terminal tarzı sunum şablonu; #0a0c10 siyah arka plan, 56px siber ızgara, CRT vinyet, tarama çizgileri, pencere trafik ışığı chrome, `$ prompt` komut satırı başlıkları, nane yeşili #7ed3a4 metin, JetBrains Mono, çizgi çubuk grafikler, yanıp sönen imleç, amber/yeşil/kırmızı etiketler ve koyu kod blokları. CLI/ajan/geliştirme aracı incelemeleri için ideal (trace, diff, benchmark).",
-    "uk": "Шаблон презентації в стилі темного терміналу з чорним фоном #0a0c10, кібер-сіткою 56px, віньєтуванням CRT, скан-лініями, світлофором вікна chrome, заголовками `$ prompt` командного рядка, м'ятно-зеленим #7ed3a4 текстом, JetBrains Mono, контурними стовпчастими діаграмами, миготливим курсором, тегами бурштин/зелений/червоний та темними блоками коду. Підходить для оглядів CLI/агентів/інструментів розробки (trace, diff, benchmark).",
-    "en": "暗终端 honest-review deck — #0a0c10 黑底 + 56px 赛博网格 + CRT 暗角 + 扫描线、窗口红绿灯 chrome、`$ prompt` 命令行标题、薄荷绿 #7ed3a4 大字、JetBrains Mono、stroke-only 柱状图、blinking 光标、琥珀/绿/红三档 tag、暗色代码块。适合 CLI / agent / dev tool 测评（含 trace、diff、benchmark）。"
+    "en": "Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.",
+    "zh-CN": "像应用 AI 工程师一样讲 BYOK 选型——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像应用 AI 工程师一样讲 BYOK 选型——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,16 @@
     "agent-review",
     "honest-review",
     "dev-tool-review",
-    "untitled"
+    "untitled",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-hermes-cyber-terminal",
+    "enterprise-ai-literacy",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "ai",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +63,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-hermes-cyber-terminal template to create a CLI / agent evaluation deck. Use a dark terminal style with scanlines, command-line titles, and benchmark bar charts. First confirm the evaluated objects, 3-5 comparison dimensions, and benchmark data.",
-        "zh-CN": "用 html-ppt-hermes-cyber-terminal 模板做一份 CLI / agent 测评 PPT。深色终端风 + scanlines + 命令行标题 + benchmark 柱状图。先确认：被测评对象、3-5 个对比维度、benchmark 数据。"
+        "en": "Create \"Run a BYOK Model-Choice Session like an Applied-AI Engineer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Audience: engineers, IT, applied-AI teams. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像应用 AI 工程师一样讲 BYOK 选型。像应用 AI 工程师一样讲 BYOK 选型——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Hermes Cyber Terminal"
+          "title": "Run a BYOK Model-Choice Session like an Applied-AI Engineer",
+          "title_i18n": {
+            "en": "Run a BYOK Model-Choice Session like an Applied-AI Engineer",
+            "zh-CN": "像应用 AI 工程师一样讲 BYOK 选型",
+            "zh-TW": "像应用 AI 工程师一样讲 BYOK 选型"
+          }
         }
       ]
     },
@@ -117,6 +102,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "ai-literacy"
   }
 }

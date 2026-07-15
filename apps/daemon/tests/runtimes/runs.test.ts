@@ -9,6 +9,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatRunService } from '../../src/runtimes/runs.js';
 
 describe('chat run service shutdown', () => {
+  it('publishes the authoritative artifact count in status and terminal events', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    run.artifactCount = 2;
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run)).toMatchObject({ status: 'succeeded', artifactCount: 2 });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { status: 'succeeded', artifactCount: 2 },
+    });
+    await expect(wait).resolves.toMatchObject({ status: 'succeeded', artifactCount: 2 });
+  });
+
   it('retains structured error details on failed run status bodies', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
@@ -63,6 +79,22 @@ describe('chat run service shutdown', () => {
       runs.list({ projectId: 'project-1', conversationId: 'conv-b', status: 'active' }),
     ).toEqual([runB]);
   });
+
+  it('normalizes session mode and run context metadata at creation', () => {
+    const runs = createRuns();
+    const workspaceContext = {
+      workspaceItems: [{ id: 'active-file:index.html', label: 'index.html', kind: 'file' }],
+    };
+
+    const valid = runs.create({ sessionMode: 'plan', context: workspaceContext });
+    expect(valid.sessionMode).toBe('plan');
+    expect(valid.context).toEqual(workspaceContext);
+
+    const invalid = runs.create({ sessionMode: 'review', context: [] });
+    expect(invalid.sessionMode).toBeNull();
+    expect(invalid.context).toBeNull();
+  });
+
   it('cancels a queued run immediately without waiting for child process shutdown', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-queued' });
@@ -253,6 +285,39 @@ describe('chat run service shutdown', () => {
         diagnostics: {
           registryPath: '/tmp/codex-browser-use',
           probeFailureCategory: 'registry-missing',
+        },
+      },
+    });
+  });
+
+  it('stores native session recovery metadata on run status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+    (run as any).nativeSessionRecovery = {
+      agentId: 'codex',
+      state: 'captured_not_resumed',
+      acquisition: 'stream-captured',
+      continuation: 'native-resume-by-id',
+      handle: {
+        present: true,
+        kind: 'cli-thread-id',
+        display: null,
+        sha256: 'a'.repeat(64),
+        redacted: true,
+      },
+      guardReason: null,
+      fallbackReason: null,
+      updatedAt: 123,
+    };
+
+    expect(runs.statusBody(run)).toMatchObject({
+      nativeSessionRecovery: {
+        agentId: 'codex',
+        state: 'captured_not_resumed',
+        handle: {
+          display: null,
+          sha256: 'a'.repeat(64),
+          redacted: true,
         },
       },
     });
@@ -671,6 +736,55 @@ describe('run event log persistence', () => {
     expect(parsed[0]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: 'hello' } });
     expect(parsed[1]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: ' world' } });
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+  });
+
+  it('persists native session recovery diagnostics in the run event log', async () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    runs.emit(run, 'diagnostic', {
+      type: 'native_session_recovery',
+      nativeSessionRecovery: {
+        agentId: 'amr',
+        state: 'resumed',
+        acquisition: 'acp-session-load',
+        continuation: 'acp-session-load',
+        handle: {
+          present: true,
+          kind: 'acp-session-handle',
+          display: null,
+          sha256: 'b'.repeat(64),
+          redacted: true,
+        },
+        guardReason: null,
+        fallbackReason: null,
+        updatedAt: 456,
+      },
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let text = '';
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(logPath)) {
+        text = fs.readFileSync(logPath, 'utf8');
+        if (text.includes('native_session_recovery')) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const parsed = text.trim().split('\n').map((line) => JSON.parse(line));
+    expect(parsed[0]).toMatchObject({
+      event: 'diagnostic',
+      data: {
+        type: 'native_session_recovery',
+        nativeSessionRecovery: {
+          agentId: 'amr',
+          state: 'resumed',
+          handle: { display: null, redacted: true },
+        },
+      },
+    });
   });
 
   it('exposes eventsLogPath on statusBody when runsLogDir is configured', () => {

@@ -24,6 +24,7 @@
     "en": "Github Dashboard"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "GitHub repository analytics dashboard — stars, forks, contributors, issues, pull requests, recent activity, and top contributors. Use when the brief asks for a GitHub repo dashboard, open-source growth report, repository health page, or GitHub analytics view.",
   "description_i18n": {
     "zh-CN": "GitHub 仓库分析仪表板 — 星标、分支、贡献者、议题、拉取请求、近期活动和主要贡献者。适用于 GitHub 仓库仪表板、开源增长报告、仓库健康页面或 GitHub 分析视图。",

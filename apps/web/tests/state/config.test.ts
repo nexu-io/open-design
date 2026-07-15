@@ -5,6 +5,7 @@ import {
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
+  KNOWN_PROVIDERS,
   loadConfig,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
@@ -18,6 +19,27 @@ import type { AppConfig } from '../../src/types';
 
 const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
+
+describe('KNOWN_PROVIDERS', () => {
+  it('includes separate SiliconFlow CN and Global presets', () => {
+    expect(
+      KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('SiliconFlow')),
+    ).toEqual([
+      expect.objectContaining({
+        label: 'SiliconFlow (CN)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        model: 'deepseek-ai/DeepSeek-V3.1',
+      }),
+      expect.objectContaining({
+        label: 'SiliconFlow (Global)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.com/v1',
+        model: 'deepseek-ai/DeepSeek-V3.1',
+      }),
+    ]);
+  });
+});
 
 vi.stubGlobal('localStorage', {
   getItem: vi.fn((key: string) => store.get(key) ?? null),
@@ -154,6 +176,24 @@ describe('syncConfigToDaemon', () => {
       telemetry: { metrics: true, content: true, artifactManifest: false },
     });
   });
+
+  it('syncs the silent update preference to daemon app config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      allowSilentUpdates: true,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      allowSilentUpdates: true,
+    });
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {
@@ -255,7 +295,7 @@ describe('mergeDaemonConfig', () => {
     // Brand-new install: the daemon has no privacy state at all. The product
     // default telemetry channels (metrics + content) are on and an anonymous
     // id is assigned so events have a stable distinct id. This mirrors the
-    // first-run banner's "I get it" opt-in payload; artifactManifest stays
+    // first-run banner's "Share" payload; artifactManifest stays
     // off, matching that surface.
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {});
 
@@ -287,6 +327,18 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.telemetry?.metrics).toBe(false);
     expect(merged.installationId == null).toBe(true);
+  });
+
+  it('uses daemon silent update preference and clears stale local values when absent', () => {
+    expect(
+      mergeDaemonConfig(DEFAULT_CONFIG, { allowSilentUpdates: false }).allowSilentUpdates,
+    ).toBe(false);
+    expect(
+      mergeDaemonConfig(DEFAULT_CONFIG, { allowSilentUpdates: true }).allowSilentUpdates,
+    ).toBe(true);
+    expect(
+      mergeDaemonConfig({ ...DEFAULT_CONFIG, allowSilentUpdates: true }, {}).allowSilentUpdates,
+    ).toBeUndefined();
   });
 });
 
@@ -856,6 +908,25 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(1);
   });
 
+  it('migrates legacy SiliconFlow Global configs to the known OpenAI preset', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.siliconflow.com/v1',
+      model: 'deepseek-ai/DeepSeek-V3.1',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('openai');
+    expect(config.apiProviderBaseUrl).toBe('https://api.siliconflow.com/v1');
+    expect(config.configMigrationVersion).toBe(1);
+  });
+
   it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
     // AIHubMix hides the Base URL field, so older configs persisted an empty
     // baseUrl. An empty base URL blocks the live model-list fetch, so loadConfig
@@ -1191,12 +1262,14 @@ describe('saveConfig', () => {
       installationId: 'install-1',
       privacyDecisionAt: 1778244000000,
       telemetry: { metrics: true },
+      allowSilentUpdates: true,
     });
 
     const saved = JSON.parse(store.get('open-design:config') ?? '{}');
     expect(saved.installationId).toBeUndefined();
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
+    expect(saved.allowSilentUpdates).toBeUndefined();
   });
 
   it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {

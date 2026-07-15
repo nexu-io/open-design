@@ -224,6 +224,40 @@ describe('preview comment attachment helpers', () => {
     expect(messageContentWithCommentAttachments('', [attachment])).not.toContain('selector: ');
   });
 
+  // Issue #4084: a failed screenshot capture (#4080) must not strip the mark's
+  // structured location. The payload still carries bounds/markKind/filePath so
+  // the agent can locate the region without pixels.
+  it('builds visual annotation payloads without a screenshot', () => {
+    const attachment = buildVisualAnnotationAttachment({
+      order: 1,
+      idSeed: 'box-1',
+      markKind: 'stroke',
+      note: 'Make this part bigger',
+      bounds: { x: 120, y: 60, width: 300, height: 200 },
+      target: {
+        filePath: 'index.html',
+        position: { x: 120, y: 60, width: 300, height: 200 },
+      },
+    });
+
+    expect(attachment).toMatchObject({
+      selectionKind: 'visual',
+      markKind: 'stroke',
+      filePath: 'index.html',
+      comment: 'Make this part bigger',
+    });
+    expect(attachment.screenshotPath).toBeUndefined();
+    expect(attachment.pagePosition).toMatchObject({ x: 120, y: 60, width: 300, height: 200 });
+    expect(attachment.id).toContain('box-1');
+    // The prompt context must not point the agent at a screenshot that does
+    // not exist — it renders the structured location instead.
+    const content = messageContentWithCommentAttachments('', [attachment]);
+    expect(content).toContain('targetKind: visual');
+    expect(content).not.toContain('screenshot:');
+    expect(content).toContain('no screenshot');
+    expect(content).toContain('position: x120 y60 300x200');
+  });
+
   it('keeps large queued board-note batches ordered in one send payload', () => {
     const notes = Array.from({ length: 8 }, (_, index) => `Note ${index + 1}`);
     const attachments = buildBoardCommentAttachments({

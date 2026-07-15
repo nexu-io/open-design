@@ -159,6 +159,9 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   await gotoVisualHome(page);
 
   const home = page.getByTestId('entry-view-home');
+  await home.getByTestId('plugins-home-pill-category-prototype').click();
+  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-prototype-starter"]');
+  await expect(card).toBeVisible();
   await home.getByTestId('plugins-home-details-visual-prototype-starter').click({ force: true });
   await expect(page.getByRole('dialog', { name: /Prototype Starter details/i })).toBeVisible();
   await page.getByTestId('plugin-details-use-visual-prototype-starter').click();

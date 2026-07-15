@@ -24,6 +24,7 @@
     "en": "WebGL Experience"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a full-screen, real-time WebGL/WebGL2 experience — animated shaders, 3D scenes, generative visuals, particle fields — that runs live on the GPU. Trigger when the user asks for a WebGL, shader, 3D, generative, GPU, or real-time visual experience.",
   "description_i18n": {
     "zh-CN": "构建全屏、实时的 WebGL/WebGL2 体验——动画着色器、3D 场景、生成式视觉、粒子场——在 GPU 上实时运行。当用户需要 WebGL、着色器、3D、生成式、GPU 或实时视觉效果时触发。",

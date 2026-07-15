@@ -305,7 +305,7 @@ test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-r
   const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
   await expect(authorizeAndRetry).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
 
   await authorizeAndRetry.click();
   await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
@@ -407,7 +407,7 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design & retry/i }).first();
+  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i }).first();
   await expect(switchAndRetry).toBeVisible({ timeout: T.long });
   await switchAndRetry.click();
 
@@ -788,7 +788,7 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
   await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -869,7 +869,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await expect(card).toContainText('内容过长', { timeout: T.long });
   await expect(card).toContainText('本轮输入超出了模型的上下文上限');
   await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
 
   const sourceToggle = card.locator('.run-error__source-bar');
   await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
@@ -959,7 +959,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
 

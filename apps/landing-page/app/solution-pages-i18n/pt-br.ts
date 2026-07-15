@@ -847,6 +847,134 @@ export const PT_BR: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design para engenharia' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — transforme HTML em um PowerPoint editável com o Open Design',
+    description:
+      'Um fluxo HTML-to-PPT gratuito e de código aberto: seu agente de programação monta uma apresentação HTML caprichada e exporta um .pptx real e editável — dentro do agente que você já usa. Sem conversor na nuvem, sem imagens estáticas de slides, sem exportação bloqueada. O HTML e o PowerPoint são arquivos seus.',
+    breadcrumb: 'HTML to PPT',
+    label: 'Ferramenta · HTML to PPT',
+    heading: 'HTML to PPT, no seu agente',
+    lead: 'Tem uma página HTML, um documento markdown ou apenas um prompt? Deixe seu agente de programação transformá-lo em uma apresentação HTML limpa e exportar um PowerPoint real e editável — texto e formas nativos que você continua editando, não uma captura de tela por slide. O HTML é a fonte; o .pptx é seu para apresentar, entregar e possuir.',
+    heroImageAlt:
+      'Ilustração editorial de uma apresentação HTML se convertendo em um arquivo PowerPoint editável dentro de um agente de programação, emoldurada por uma caixa de seleção verde',
+    tldrTitle: 'Em uma linha',
+    tldrBody:
+      'A maioria dos conversores HTML-to-PPT achata sua página em imagens estáticas de slides que você não pode editar. O Open Design monta a apresentação como HTML dentro do seu agente de programação e exporta um .pptx real e editável — texto e formas nativos, o seu sistema de design, sem medidor por licença, sem dependência do fornecedor.',
+    stepsTitle: 'Como funciona o HTML to PPT',
+    steps: [
+      {
+        title: 'Comece de um HTML, um documento ou um prompt',
+        body: 'Aponte seu agente para uma página HTML, um documento markdown ou apenas descreva a apresentação. O Open Design carrega a habilidade certa para que o agente leia estrutura e intenção — títulos, seções, dados — não apenas a marcação bruta.',
+        imageAlt: 'Ilustração de um HTML e um documento markdown sendo entregues a um agente de programação',
+      },
+      {
+        title: 'Monte uma apresentação HTML limpa',
+        body: 'O agente dispõe o conteúdo como uma apresentação HTML sobre um sistema de design real — tipografia, grade e cor consistentes — usando temas prontos (pitch deck, lançamento de produto, editorial, técnico) em vez de uma parede de caixas sem título.',
+        imageAlt: 'Ilustração de conteúdo HTML virando uma sequência de slides projetados',
+      },
+      {
+        title: 'Exporte um .pptx editável',
+        body: 'O pptx-generator do Open Design transforma a apresentação HTML em um PowerPoint real — formas nativas, texto editável e gráficos que você ainda pode alterar — com uma auditoria de fidelidade de HTML-to-PPTX, não uma imagem estática por slide.',
+        imageAlt: 'Ilustração de uma apresentação HTML exportando para um arquivo PowerPoint editável',
+      },
+      {
+        title: 'Seja dono dos slides e entregue-os',
+        body: 'O HTML e o .pptx ficam no seu repositório, totalmente seus. Abra o .pptx no PowerPoint ou no Keynote, apresente pelo navegador ou continue iterando no agente — sem dependência da nuvem, sem redesenho entre o HTML e a apresentação.',
+        imageAlt: 'Ilustração de slides finalizados dentro de uma moldura de seleção verde, prontos para entrega',
+      },
+    ],
+    tableTitle: 'Open Design vs. conversores HTML-to-PPT típicos',
+    tableColCapability: 'O que você precisa',
+    tableColWithOd: 'Com o Open Design',
+    tableColWithout: 'Conversores HTML-to-PPT típicos',
+    tableRows: [
+      {
+        capability: 'Ponto de partida',
+        withOd: 'HTML, um documento ou um prompt — no agente que você já roda',
+        without: 'Colar HTML em um conversor na nuvem separado',
+      },
+      {
+        capability: 'Qualidade dos slides',
+        withOd: 'Apresentação HTML limpa a partir de um sistema de design real + temas prontos',
+        without: 'Uma renderização literal da sua página, caixa por caixa',
+      },
+      {
+        capability: 'Saída editável',
+        withOd: '.pptx real — texto e formas nativos e editáveis',
+        without: 'Imagens estáticas de slides que você não pode alterar',
+      },
+      {
+        capability: 'Iterar após exportar',
+        withOd: 'Refine conversando; regenere e reexporte a qualquer momento',
+        without: 'Um arquivo congelado, feito uma única vez',
+      },
+      {
+        capability: 'Ser dono da saída',
+        withOd: 'Arquivos HTML + .pptx no seu repositório, totalmente seus',
+        without: 'Preso ao editor deles ou a créditos de exportação',
+      },
+      {
+        capability: 'Custo e dependência do fornecedor',
+        withOd: 'Código aberto, use suas próprias chaves, roda localmente',
+        without: 'Assinatura por arquivo ou por crédito, hospedada pelo fornecedor',
+      },
+    ],
+    featuresTitle: 'O que você pode transformar em apresentação',
+    features: [
+      { title: 'Página HTML para PPT', body: 'Transforme uma página ou exportação HTML em uma apresentação PowerPoint editável.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown para PPT', body: 'Entregue ao seu agente um documento markdown e receba uma apresentação limpa mais um .pptx.', thumb: 'example-html-ppt-course-module' },
+      { title: 'Prompt para apresentação', body: 'Descreva a palestra; o agente esboça os slides e exporta o .pptx.', thumb: 'example-html-ppt-product-launch' },
+      { title: 'Pitch decks', body: 'Apresentações para investidores e vendas com narrativa forte e slides de dados limpos.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Modo apresentador', body: 'Apresentações HTML estilo Reveal que também exportam para PowerPoint editável.', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: 'Qualquer gosto visual', body: 'Editorial, marcante ou minimalista — o tema chega até o .pptx.', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: 'Modelos de slides dos quais você pode partir',
+    galleryLead:
+      'Apresentações reais renderizadas pelo Open Design, prontas para exportar para um .pptx editável. Escolha um tema próximo do seu conteúdo, descreva sua variação e o agente monta a apresentação — depois entrega o PowerPoint que é seu.',
+    gallery: [
+      { thumb: 'deck-pitch', caption: 'Pitch deck' },
+      { thumb: 'deck-product-launch', caption: 'Apresentação de lançamento de produto' },
+      { thumb: 'deck-data-graph', caption: 'Apresentação escura com gráficos de dados' },
+      { thumb: 'deck-gradient', caption: 'Keynote com gradiente' },
+      { thumb: 'deck-blueprint', caption: 'Apresentação de planta técnica' },
+      { thumb: 'deck-course', caption: 'Apresentação de módulo de curso' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar modelos de apresentação',
+    faqTitle: 'Perguntas frequentes sobre HTML to PPT',
+    faq: [
+      {
+        q: 'Como o Open Design transforma HTML em PPT?',
+        a: 'Seu agente de programação monta o conteúdo em uma apresentação HTML limpa e, então, a habilidade pptx-generator do Open Design a exporta para um .pptx real e editável — formas e texto nativos, auditados quanto à fidelidade de HTML-to-PPTX, não uma imagem estática por slide.',
+      },
+      {
+        q: 'Posso converter HTML em um PowerPoint editável?',
+        a: 'Sim. O .pptx tem texto e formas nativos e editáveis que você continua alterando no PowerPoint ou no Keynote — não capturas de tela. Você também pode continuar iterando a apresentação de origem no seu agente e reexportar a qualquer momento.',
+      },
+      {
+        q: 'Funciona com o Claude Code?',
+        a: 'Sim — "claude html to ppt" é exatamente este fluxo. Conduza-o com o Claude Code, ou com Codex, Cursor Agent, Gemini CLI e mais. Você traz suas próprias chaves de provedor; nada é hospedado para você.',
+      },
+      {
+        q: 'É gratuito?',
+        a: 'Sim. O Open Design é de código aberto e roda dentro do agente de programação que você já usa com suas próprias chaves — não há medidor por arquivo ou por crédito no fluxo HTML-to-PPT.',
+      },
+      {
+        q: 'Qual a diferença em relação a gerar slides?',
+        a: 'Gerar uma apresentação normalmente parte de um prompt ou de um roteiro; o HTML to PPT parte de HTML ou markdown que você já tem e foca na exportação de um .pptx editável. Ambos usam o mesmo motor de apresentações do Open Design — veja o caso de uso de slides para o fluxo que começa pelo roteiro.',
+      },
+    ],
+    ctaTitle: 'Transforme sua próxima apresentação HTML em um PPT editável',
+    ctaBody:
+      'Dê uma estrela ao repositório, instale o Open Design e transforme HTML — ou um prompt — em uma apresentação limpa e um .pptx real e editável, no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/slides/', label: 'Gerar apresentações de slides' },
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+      { href: '/plugins/templates/', label: 'Explorar modelos de apresentação' },
+      { href: '/solutions/marketing/', label: 'Open Design para marketing' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'Gerador de protótipos com IA — do prompt a um protótipo clicável, depois ao código',
     description:
@@ -1349,8 +1477,8 @@ export const PT_BR: SolutionLocaleCopy = {
         a: 'Não. O agente aplica um modelo de apresentação real com grade, escala tipográfica e hierarquia visual, então os slides parecem projetados em vez de preenchidos automaticamente.',
       },
       {
-        q: 'Posso exportar para PowerPoint para um cliente?',
-        a: 'Sim. As apresentações exportam para PPTX e PDF além do HTML pelo qual você apresenta, então se encaixam no que quer que a plateia espere.',
+        q: 'Posso exportar para um PowerPoint editável?',
+        a: 'Sim. O pptx-generator do Open Design exporta a apresentação para um .pptx real com texto e formas nativos e editáveis — auditado quanto à fidelidade de HTML-to-PPTX, não imagens estáticas de slides — além de PDF e do HTML pelo qual você apresenta. Veja a ferramenta HTML to PPT para o fluxo focado em conversão.',
       },
       {
         q: 'Quais agentes posso usar?',
@@ -1360,6 +1488,13 @@ export const PT_BR: SolutionLocaleCopy = {
     ctaTitle: 'Construa sua próxima apresentação hoje à noite',
     ctaBody:
       'Dê uma estrela ao repositório, instale o Open Design e transforme seu roteiro em uma apresentação projetada — no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'HTML to PPT com o Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+      { href: '/plugins/templates/', label: 'Explorar modelos de apresentação' },
+      { href: '/solutions/marketing/', label: 'Open Design para marketing' },
+    ],
   },
   image: {
     title: 'Gere gráficos fiéis à marca com Open Design + Claude Code',

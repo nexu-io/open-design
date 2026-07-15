@@ -92,14 +92,24 @@ export function applyClaudeStreamJsonRunBookkeeping(
     name?: unknown;
     id?: unknown;
     stopReason?: unknown;
+    isError?: unknown;
   };
 
-  const cleanTerminalTurn =
+  const terminalTurn =
     (event.type === 'turn_end' && event.stopReason !== 'tool_use') ||
     (event.type === 'usage' && event.stopReason !== 'tool_use');
-  if (!cleanTerminalTurn) return;
+  if (!terminalTurn) return;
 
-  run.turnCompletedCleanly = true;
+  // An error termination (is_error result frame) ends the turn — stdin must
+  // still close — but it is NOT a clean completion: marking it clean lets
+  // classifyChatRunCloseStatus translate the CLI's non-zero exit into
+  // 'succeeded' and the failure never reaches the user. A SessionEnd-hook
+  // non-zero exit after a normal result (#3373) carries no isError flag and
+  // keeps taking the clean path.
+  const errorTermination = event.type === 'usage' && event.isError === true;
+  if (!errorTermination) {
+    run.turnCompletedCleanly = true;
+  }
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
       try { run.child.stdin.end(); } catch {}

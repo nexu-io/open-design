@@ -1,5 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
-import { useT } from '../i18n';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react';
+import type { ReactNode } from 'react';
+import { tForLanguageTag, useT } from '../i18n';
 import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
 import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
 
@@ -22,7 +30,17 @@ interface Props {
   // Fires on each real user interaction with a single question (locked forms
   // never reach it). Lets the Questions tab host track chip picks.
   onAnswerChange?: (questionId: string, value: string | string[]) => void;
-  onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
+  onSubmit?: (
+    text: string,
+    answers: Record<string, string | string[]>,
+    files?: QuestionFormFileSubmission[],
+  ) => void;
+}
+
+export interface QuestionFormFileSubmission {
+  questionId: string;
+  questionLabel: string;
+  files: File[];
 }
 
 // Lets a parent (the Questions tab Continue button) trigger submission.
@@ -47,14 +65,110 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   },
   ref,
 ) {
-  const t = useT();
+  const uiT = useT();
+  // Host strings inside the card follow the form's declared content language
+  // (`form.lang`, set by the model alongside the localized labels) so a
+  // Chinese form in an English UI doesn't mix scripts; without a resolvable
+  // tag they follow the app UI locale as before.
+  const t = useMemo(() => tForLanguageTag(form.lang) ?? uiT, [form.lang, uiT]);
   const initial = useMemo(
-    () => buildInitialState(form, submittedAnswers ?? draftAnswers),
+    () => buildInitialState(form, submittedAnswers, draftAnswers),
     [form, submittedAnswers, draftAnswers],
   );
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
+  const [fileAnswers, setFileAnswers] = useState<Record<string, File[]>>({});
+  // Question ids the user has interacted with this mount, seeded with ids
+  // restored from a submitted/draft snapshot (those are prior user input).
+  // "Untouched" for the streamed-default backfill below means absent here —
+  // NOT "currently empty": clearing an answer is itself a touch.
+  const [touched] = useState(
+    () => new Set<string>(Object.keys(submittedAnswers ?? draftAnswers ?? {})),
+  );
+  // Finite-choice questions keep their type-in field collapsed behind a
+  // host-rendered "Other" chip; this tracks which questions the user expanded
+  // this mount. A question whose current answer already carries a custom
+  // value (submitted history, restored draft) renders expanded without an
+  // entry here — see customChoiceExpanded.
+  const [otherOpen, setOtherOpen] = useState<Set<string>>(() => new Set());
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
   const currentAnswers = submittedAnswers ?? answers;
+
+  function hasCustomAnswer(q: QuestionForm['questions'][number]): boolean {
+    const value = currentAnswers[q.id];
+    return q.type === 'checkbox'
+      ? customCheckboxValue(q, value).length > 0
+      : customSingleValue(q, value).length > 0;
+  }
+
+  // Whether a finite-choice question shows its custom type-in field. Locked
+  // forms only ever show it when the recorded answer is a custom value.
+  function customChoiceExpanded(q: QuestionForm['questions'][number]): boolean {
+    if (locked) return hasCustomAnswer(q);
+    return otherOpen.has(q.id) || hasCustomAnswer(q);
+  }
+
+  // Toggle the "Other" chip. Opening a single-choice question's field
+  // deselects the fixed options (the user is saying "none of these");
+  // collapsing discards any custom text and keeps only known option values.
+  function toggleOther(q: QuestionForm['questions'][number]) {
+    if (locked) return;
+    const expanded = customChoiceExpanded(q);
+    setOtherOpen((prev) => {
+      const next = new Set(prev);
+      if (expanded) next.delete(q.id);
+      else next.add(q.id);
+      return next;
+    });
+    if (expanded) {
+      if (q.type === 'checkbox') {
+        const current = Array.isArray(answers[q.id]) ? (answers[q.id] as string[]) : [];
+        update(q.id, current.filter((entry) => questionValueIsKnown(q, entry)));
+      } else {
+        const current = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : '';
+        if (!questionValueIsKnown(q, current)) update(q.id, '');
+      }
+    } else if (q.type !== 'checkbox') {
+      update(q.id, '');
+    }
+  }
+
+  // Picking a fixed option collapses an open (and still empty) "Other" field
+  // on single-choice questions; checkbox questions keep it open since fixed
+  // and custom entries coexist.
+  function pickFixed(q: QuestionForm['questions'][number], value: string) {
+    setOtherOpen((prev) => {
+      if (!prev.has(q.id)) return prev;
+      const next = new Set(prev);
+      next.delete(q.id);
+      return next;
+    });
+    update(q.id, value);
+  }
+
+  function renderOtherChip(q: QuestionForm['questions'][number]) {
+    const on = customChoiceExpanded(q);
+    // A real <button> keeps the escape hatch in the tab order — the previous
+    // display:none checkbox inside a label was mouse-only for keyboard and
+    // screen-reader users.
+    return (
+      <button
+        type="button"
+        className={`qf-chip qf-chip-other${on ? ' qf-chip-on' : ''}`}
+        aria-pressed={on}
+        aria-expanded={on}
+        disabled={locked}
+        onClick={() => toggleOther(q)}
+      >
+        <span className="qf-chip-copy">
+          <span>{t('qf.otherOption')}</span>
+        </span>
+      </button>
+    );
+  }
+
+  useEffect(() => {
+    setFileAnswers({});
+  }, [form.id]);
 
   // When the form streams in question-by-question, backfill state for newly
   // revealed questions without disturbing answers the user already touched.
@@ -63,7 +177,13 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       let changed = false;
       const next = { ...prev };
       for (const q of form.questions) {
-        if (next[q.id] !== undefined) continue;
+        if (next[q.id] !== undefined) {
+          if (shouldAdoptStreamedDefault(q, next[q.id]!, touched)) {
+            next[q.id] = canonicalizeQuestionValue(q, q.defaultValue!);
+            changed = true;
+          }
+          continue;
+        }
         changed = true;
         if (submittedAnswers && submittedAnswers[q.id] !== undefined) {
           next[q.id] = canonicalizeQuestionValue(q, submittedAnswers[q.id]!);
@@ -75,13 +195,14 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       }
       return changed ? next : prev;
     });
-  }, [form, submittedAnswers]);
+  }, [form, submittedAnswers, touched]);
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
+    touched.add(id);
     const next = { ...answers, [id]: value };
     setAnswers(next);
-    onDraftChange?.(next);
+    onDraftChange?.(draftSafeAnswers(form, next));
     onAnswerChange?.(id, value);
   }
 
@@ -90,10 +211,11 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     const current = Array.isArray(answers[id]) ? (answers[id] as string[]) : [];
     const has = current.includes(option);
     if (!has && maxSelections !== undefined && current.length >= maxSelections) return;
+    touched.add(id);
     const next = has ? current.filter((v) => v !== option) : [...current, option];
     const nextAnswers = { ...answers, [id]: next };
     setAnswers(nextAnswers);
-    onDraftChange?.(nextAnswers);
+    onDraftChange?.(draftSafeAnswers(form, nextAnswers));
     onAnswerChange?.(id, next);
   }
 
@@ -110,7 +232,12 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     // skipAll() is the only path that intentionally bypasses this (the new
     // Questions-tab Skip button / countdown).
     if (!ready) return;
-    onSubmit(formatFormAnswers(form, answers), answers);
+    const files = collectFileSubmissions(form, fileAnswers);
+    if (files.length > 0) {
+      onSubmit(formatFormAnswers(form, answers), answers, files);
+    } else {
+      onSubmit(formatFormAnswers(form, answers), answers);
+    }
   }
 
   function handleSkipAll() {
@@ -183,21 +310,24 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                         checked={value === opt.value}
                         disabled={locked}
                         aria-label={opt.label}
-                        onChange={() => update(q.id, opt.value)}
+                        onChange={() => pickFixed(q, opt.value)}
                       />
                       <OptionCopy option={opt} />
                     </label>
                   ))}
+                  {shouldRenderCustomChoice(q) ? renderOtherChip(q) : null}
                 </div>
               ) : null}
               {q.type === 'radio' && q.options && shouldRenderCustomChoice(q) ? (
-                <CustomChoiceInput
-                  label={q.customLabel ?? t('qf.customLabel')}
-                  value={customSingleValue(q, value)}
-                  placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
-                  disabled={locked}
-                  onChange={(next) => update(q.id, next)}
-                />
+                <CollapsibleCustomChoice open={customChoiceExpanded(q)}>
+                  <CustomChoiceInput
+                    label={q.customLabel ?? t('qf.customLabel')}
+                    value={customSingleValue(q, value)}
+                    placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
+                    disabled={locked || !customChoiceExpanded(q)}
+                    onChange={(next) => update(q.id, next)}
+                  />
+                </CollapsibleCustomChoice>
               ) : null}
               {q.type === 'checkbox' && q.options ? (
                 <div className="qf-options">
@@ -224,25 +354,38 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                       </label>
                     );
                   })}
+                  {shouldRenderCustomChoice(q) ? renderOtherChip(q) : null}
                 </div>
               ) : null}
               {q.type === 'checkbox' && q.options && shouldRenderCustomChoice(q) ? (
-                <CustomChoiceInput
-                  label={q.customLabel ?? t('qf.customLabel')}
-                  value={customCheckboxValue(q, value)}
-                  placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
-                  disabled={locked}
-                  onChange={(next) => updateCheckboxCustom(q, next)}
-                />
+                <CollapsibleCustomChoice open={customChoiceExpanded(q)}>
+                  <CustomChoiceInput
+                    label={q.customLabel ?? t('qf.customLabel')}
+                    value={customCheckboxValue(q, value)}
+                    placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
+                    disabled={locked || !customChoiceExpanded(q)}
+                    onChange={(next) => updateCheckboxCustom(q, next)}
+                  />
+                </CollapsibleCustomChoice>
               ) : null}
               {q.type === 'select' && q.options ? (
                 <select
                   className="qf-select"
                   value={
-                    typeof value === 'string' && questionValueIsKnown(q, value) ? value : ''
+                    typeof value === 'string' && value.length > 0 && questionValueIsKnown(q, value)
+                      ? value
+                      : customChoiceExpanded(q)
+                        ? OTHER_SELECT_VALUE
+                        : ''
                   }
                   disabled={locked}
-                  onChange={(e) => update(q.id, e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === OTHER_SELECT_VALUE) {
+                      if (!customChoiceExpanded(q)) toggleOther(q);
+                      return;
+                    }
+                    pickFixed(q, e.target.value);
+                  }}
                 >
                   <option value="" disabled>
                     {q.placeholder ?? t('qf.choose')}
@@ -252,16 +395,21 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                       {opt.label}
                     </option>
                   ))}
+                  {shouldRenderCustomChoice(q) ? (
+                    <option value={OTHER_SELECT_VALUE}>{t('qf.otherOption')}…</option>
+                  ) : null}
                 </select>
               ) : null}
               {q.type === 'select' && q.options && shouldRenderCustomChoice(q) ? (
-                <CustomChoiceInput
-                  label={q.customLabel ?? t('qf.customLabel')}
-                  value={customSingleValue(q, value)}
-                  placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
-                  disabled={locked}
-                  onChange={(next) => update(q.id, next)}
-                />
+                <CollapsibleCustomChoice open={customChoiceExpanded(q)}>
+                  <CustomChoiceInput
+                    label={q.customLabel ?? t('qf.customLabel')}
+                    value={customSingleValue(q, value)}
+                    placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
+                    disabled={locked || !customChoiceExpanded(q)}
+                    onChange={(next) => update(q.id, next)}
+                  />
+                </CollapsibleCustomChoice>
               ) : null}
               {q.type === 'text' ? (
                 <input
@@ -338,9 +486,12 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     type="file"
                     className="qf-file"
                     multiple={q.multiple}
+                    accept={q.accept}
                     disabled={locked}
                     onChange={(e) => {
-                      const names = Array.from(e.target.files ?? []).map((file) => file.name);
+                      const files = Array.from(e.target.files ?? []);
+                      const names = files.map((file) => file.name);
+                      setFileAnswers((current) => ({ ...current, [q.id]: files }));
                       update(q.id, q.multiple ? names : names[0] ?? '');
                     }}
                   />
@@ -381,19 +532,25 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                       questionId={q.id}
                       selected={value === card.id || value === card.label}
                       disabled={locked}
-                      onSelect={() => update(q.id, card.id)}
+                      onSelect={() => pickFixed(q, card.id)}
+                      t={t}
                     />
                   ))}
                 </div>
               ) : null}
               {q.type === 'direction-cards' && q.cards && q.cards.length > 0 && shouldRenderCustomChoice(q) ? (
-                <CustomChoiceInput
-                  label={q.customLabel ?? t('qf.customLabel')}
-                  value={customSingleValue(q, value)}
-                  placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
-                  disabled={locked}
-                  onChange={(next) => update(q.id, next)}
-                />
+                <>
+                  <div className="qf-options">{renderOtherChip(q)}</div>
+                  <CollapsibleCustomChoice open={customChoiceExpanded(q)}>
+                    <CustomChoiceInput
+                      label={q.customLabel ?? t('qf.customLabel')}
+                      value={customSingleValue(q, value)}
+                      placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
+                      disabled={locked || !customChoiceExpanded(q)}
+                      onChange={(next) => update(q.id, next)}
+                    />
+                  </CollapsibleCustomChoice>
+                </>
               ) : null}
             </div>
           );
@@ -434,6 +591,20 @@ function OptionCopy({ option }: { option: FormOption }) {
   );
 }
 
+// Sentinel value for the host-injected "Other…" entry in a select control.
+// Never leaks into answers: choosing it only expands the type-in field.
+const OTHER_SELECT_VALUE = '__od-other__';
+
+// Accordion wrapper for the custom type-in field: stays mounted so the
+// collapse transition can play (see AGENTS.md → UI animation philosophy).
+function CollapsibleCustomChoice({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div className={`accordion-collapsible qf-custom-collapsible${open ? ' open' : ''}`}>
+      <div className="accordion-collapsible-inner">{children}</div>
+    </div>
+  );
+}
+
 function CustomChoiceInput({
   label,
   value,
@@ -447,6 +618,7 @@ function CustomChoiceInput({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const chars = customInputCharCount(value, placeholder);
   return (
     <label className="qf-custom">
       <span>{label}</span>
@@ -456,6 +628,7 @@ function CustomChoiceInput({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
+        style={{ '--qf-custom-chars': String(chars) } as CSSProperties}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -469,6 +642,7 @@ function DirectionCardView({
   selected,
   disabled,
   onSelect,
+  t,
 }: {
   card: DirectionCard;
   formId: string;
@@ -476,8 +650,9 @@ function DirectionCardView({
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
+  // Form-language-aware translator from the owning card (see QuestionFormView).
+  t: (key: Parameters<ReturnType<typeof useT>>[0]) => string;
 }) {
-  const t = useT();
   return (
     <label
       className={`qf-card${selected ? ' qf-card-on' : ''}${disabled ? ' qf-card-disabled' : ''}`}
@@ -528,6 +703,7 @@ function DirectionCardView({
 function buildInitialState(
   form: QuestionForm,
   submitted: Record<string, string | string[]> | undefined,
+  draft: Record<string, string | string[]> | undefined,
 ): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const q of form.questions) {
@@ -535,11 +711,66 @@ function buildInitialState(
       out[q.id] = canonicalizeQuestionValue(q, submitted[q.id]!);
       continue;
     }
+    if (draft && draft[q.id] !== undefined && q.type !== 'file') {
+      out[q.id] = canonicalizeQuestionValue(q, draft[q.id]!);
+      continue;
+    }
     if (q.defaultValue !== undefined) {
       out[q.id] = canonicalizeQuestionValue(q, q.defaultValue);
       continue;
     }
     out[q.id] = emptyQuestionValue(q);
+  }
+  return out;
+}
+
+/**
+ * Whether a question that already holds a value should adopt a
+ * later-arriving streamed `default`.
+ *
+ * The partial-JSON parser reveals a question as soon as its label lands, but
+ * models are free to emit the `default` key after `options` — so the reveal
+ * pass can park a question on its auto-assigned empty value before the
+ * recommendation has streamed in. Invariant: a late default fills a question
+ * only while (a) the user has never touched it and (b) it still holds that
+ * auto-assigned empty value, so it can never clobber a real answer or an
+ * intentional clear.
+ */
+function shouldAdoptStreamedDefault(
+  q: QuestionForm['questions'][number],
+  current: string | string[],
+  touched: ReadonlySet<string>,
+): boolean {
+  if (q.defaultValue === undefined || touched.has(q.id)) return false;
+  if (Array.isArray(current)) return current.length === 0;
+  return current === emptyQuestionValue(q);
+}
+
+function draftSafeAnswers(
+  form: QuestionForm,
+  answers: Record<string, string | string[]>,
+): Record<string, string | string[]> {
+  const fileQuestionIds = new Set(
+    form.questions.filter((q) => q.type === 'file').map((q) => q.id),
+  );
+  if (fileQuestionIds.size === 0) return answers;
+  const out: Record<string, string | string[]> = {};
+  for (const [id, value] of Object.entries(answers)) {
+    if (!fileQuestionIds.has(id)) out[id] = value;
+  }
+  return out;
+}
+
+function collectFileSubmissions(
+  form: QuestionForm,
+  fileAnswers: Record<string, File[]>,
+): QuestionFormFileSubmission[] {
+  const out: QuestionFormFileSubmission[] = [];
+  for (const q of form.questions) {
+    if (q.type !== 'file') continue;
+    const files = fileAnswers[q.id] ?? [];
+    if (files.length === 0) continue;
+    out.push({ questionId: q.id, questionLabel: q.label, files });
   }
   return out;
 }
@@ -593,6 +824,11 @@ function splitCustomEntries(raw: string): string[] {
     .split(/[\n,]/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function customInputCharCount(value: string, placeholder: string): number {
+  const base = value.length > 0 ? value.length : Math.min(placeholder.length, 22);
+  return Math.max(18, Math.min(base + 2, 72));
 }
 
 function normalizeColorInputValue(value: string | string[] | undefined): string {

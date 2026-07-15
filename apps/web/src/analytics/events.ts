@@ -18,6 +18,7 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
+  PreviewRunStatusSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -90,6 +91,8 @@ import type {
   ArtifactHeaderClickProps,
   HandoffClickProps,
   PresentPopoverClickProps,
+  DeckViewerClickProps,
+  DeckViewerSurfaceViewProps,
   ShareOptionPopoverClickProps,
   FileVersionModalClickProps,
   FileVersionModalSurfaceViewProps,
@@ -122,6 +125,7 @@ import type {
   RunFinishedProps,
   FileUploadResultProps,
   ContextLinkResultProps,
+  SpeakerNotesSaveResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
   SketchSaveResultProps,
@@ -146,6 +150,8 @@ import type {
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
   UpdateInstallResultProps,
+  WhatsNewPopupSurfaceViewProps,
+  WhatsNewPopupClickProps,
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
@@ -247,6 +253,13 @@ export function trackAssistantFeedbackReasonPanelSurfaceView(
 export function trackRunFailedToastSurfaceView(
   track: Track,
   props: RunFailedToastSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackPreviewRunStatusSurfaceView(
+  track: Track,
+  props: PreviewRunStatusSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -779,6 +792,27 @@ export function trackPresentPopoverClick(
   send(track, 'ui_click', props);
 }
 
+export function trackDeckViewerSurfaceView(
+  track: Track,
+  props: DeckViewerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeckViewerClick(
+  track: Track,
+  props: DeckViewerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackSpeakerNotesSaveResult(
+  track: Track,
+  props: SpeakerNotesSaveResultProps,
+): void {
+  send(track, 'speaker_notes_save_result', props);
+}
+
 export function trackShareOptionPopoverClick(
   track: Track,
   props: ShareOptionPopoverClickProps,
@@ -1209,4 +1243,20 @@ export function trackUpdateInstallResult(
   props: UpdateInstallResultProps,
 ): void {
   send(track, 'update_install_result', props);
+}
+
+// ---- Post-update "what's new" card ---------------------------------------
+
+export function trackWhatsNewPopupSurfaceView(
+  track: Track,
+  props: WhatsNewPopupSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackWhatsNewPopupClick(
+  track: Track,
+  props: WhatsNewPopupClickProps,
+): void {
+  send(track, 'ui_click', props);
 }

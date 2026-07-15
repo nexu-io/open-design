@@ -54,7 +54,7 @@ let configureGlobals: AnalyticsConfigureGlobals = {
 let lastRegisterPayload: Record<string, unknown> | null = null;
 
 // Returns the installationId the daemon stamped on /api/analytics/config
-// after the user opted in via Privacy → "Share usage data". The provider
+// after the user opted in via Privacy → "Share". The provider
 // uses this in preference to its locally-generated UUID so PostHog,
 // Langfuse, and any future sink share a single anonymous identity.
 //
@@ -256,7 +256,7 @@ export async function getAnalyticsClient(
         // various automation flags). The list also rejects some real users
         // — embedded webviews, fingerprinted browsers, e2e CI runs — which
         // is unacceptable for product analytics that needs to count every
-        // session. We instead rely on the Privacy → "Share usage data"
+        // session. We instead rely on the Privacy → "Share"
         // toggle as the single consent gate and treat every UA equally.
         opt_out_useragent_filter: true,
 
@@ -305,7 +305,7 @@ export async function getAnalyticsClient(
         // and over-redact every content surface — the same
         // "redact-by-default, single audit point" philosophy scrub.ts
         // uses for events (see scrub.ts header). Replay stays gated by the
-        // existing Privacy → "Share usage data" consent: posthog-js's
+        // existing Privacy → "Share" consent: posthog-js's
         // global opt_out_capturing() halts replay too (see applyConsent()).
         //
         // The three redaction layers, in order of how much they cover:

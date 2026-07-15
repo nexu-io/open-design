@@ -16,6 +16,7 @@
     "en": "Halftone Drift"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A self-contained WebGL2 hero: a flowing field screened through a rotated halftone dot grid into a duotone print aesthetic; move the cursor to bend the drift.",
   "description_i18n": {
     "zh-CN": "自包含 WebGL2 主视觉：流场经旋转半调网点屏幕化为双色印刷质感；移动光标扰动漂移。",

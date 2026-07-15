@@ -91,12 +91,15 @@ describe('HomeView community filter decoupling', () => {
       </I18nProvider>,
     );
 
-    // Home boots with a default active type chip; the Community grid must
-    // still come up unfiltered ("All"), not pre-snapped to that chip.
+    // Home boots with a default active type chip and the Community grid now
+    // leads with Slides directly instead of a generic All bucket.
+    // Wait for the *selected* state, not just the pill mount — under full-suite
+    // CI load the pills can paint one frame before resolveDefaultSelection
+    // applies, which made a bare getByTestId assertion flake.
     await waitFor(() => {
-      expect(screen.getByTestId('plugins-home-pill-category-deck')).toBeTruthy();
+      expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
     });
-    expect(ariaSelected('plugins-home-pill-category-all')).toBe('true');
+    expect(screen.queryByTestId('plugins-home-pill-category-all')).toBeNull();
     expect(ariaSelected('plugins-home-pill-category-prototype')).toBe('false');
 
     // Picking another chip drives the composer, not the gallery filter.
@@ -104,12 +107,11 @@ describe('HomeView community filter decoupling', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
     });
-    expect(ariaSelected('plugins-home-pill-category-all')).toBe('true');
-    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('false');
+    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
 
     // And the gallery's own pills still work locally.
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
-    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
+    expect(ariaSelected('plugins-home-pill-category-prototype')).toBe('true');
   });
 
   it('opens duplicated gallery examples at the copied entry file', async () => {

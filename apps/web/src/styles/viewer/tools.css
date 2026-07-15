@@ -573,6 +573,18 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+.present-menu-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.present-menu-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
 
 .share-menu { position: relative; display: inline-block; }
 .template-share-menu > button {

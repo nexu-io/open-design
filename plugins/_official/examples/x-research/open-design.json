@@ -24,6 +24,7 @@
     "en": "X Research"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "X/Twitter public sentiment research for recent market, company, product, or community discourse. Use when the brief asks what people are saying on X, Twitter sentiment, CT sentiment, public opinion, expert posts, or social reaction around a stock, sector, company, product, or market event.",
   "description_i18n": {
     "zh-CN": "针对市场、公司、产品或社区话题进行 X/Twitter 公众情绪研究。当需要了解 X 或 Twitter 上的舆论、加密社区情绪、专家观点或股票、行业、公司、产品、市场事件的社交反应时使用。",

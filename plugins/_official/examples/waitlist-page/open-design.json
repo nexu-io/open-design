@@ -24,6 +24,7 @@
     "en": "Waitlist Page"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer. Reads DESIGN.md for colors, typography, and layout rules. Best for: product launches, beta signups, early access programs, indie projects.",
   "description_i18n": {
     "zh-CN": "简约的预发布落地页，支持邮箱收集、品牌logo和可选装饰层。从 DESIGN.md 读取颜色、排版和布局规则。适用于产品发布、Beta 测试注册、抢先体验计划和独立项目。",

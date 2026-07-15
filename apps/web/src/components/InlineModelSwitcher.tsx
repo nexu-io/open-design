@@ -604,7 +604,7 @@ export function InlineModelSwitcher({
     [apiModelOptions],
   );
   const apiModelChoices = useMemo(
-    () => apiModelOptions.map((model) => ({ id: model.id, label: model.label })),
+    () => apiModelOptions.map((model) => ({ ...model, label: model.label })),
     [apiModelOptions],
   );
 

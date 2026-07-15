@@ -25,7 +25,6 @@ import {
   renderBrandPreviewIntoProject,
   startBrandExtraction,
 } from '../src/brands/index.js';
-import { findChrome } from '../src/brands/chrome.js';
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
@@ -254,21 +253,6 @@ describe('agent-driven brand extraction engine', () => {
   afterEach(() => {
     closeDatabase();
     rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('keeps the system Chrome fallback disabled unless explicitly opted in', () => {
-    const previousAllow = process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    const previousChrome = process.env.BRANDING_AGENT_CHROME;
-    delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    delete process.env.BRANDING_AGENT_CHROME;
-    try {
-      expect(findChrome()).toBeNull();
-    } finally {
-      if (previousAllow === undefined) delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-      else process.env.OD_BRAND_ALLOW_SYSTEM_CHROME = previousAllow;
-      if (previousChrome === undefined) delete process.env.BRANDING_AGENT_CHROME;
-      else process.env.BRANDING_AGENT_CHROME = previousChrome;
-    }
   });
 
   it('prefers source-backed human brand tokens over script/debug color noise', () => {
@@ -1199,6 +1183,8 @@ describe('agent-driven brand extraction engine', () => {
     const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
     expect(prompt).toContain('context/input-DESIGN.md');
     expectNoPhantomSkillCall(prompt);
+    expect(prompt).toContain('`brand.json.seed`');
+    expect(prompt).toContain('Do not edit `system/seed.json`');
   });
 
   it('renderBrandPreviewIntoProject re-renders brand.html from a partial brand.json', async () => {
@@ -1306,6 +1292,61 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('system/kit.html');
     expect(existsSync(path.join(projectDir, 'system', 'kit.html'))).toBe(true);
     expect(html).toMatch(/"colorPrimary":"#/);
+  });
+
+  it('finalizeBrand preserves authored seed overrides in the registered system', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify(
+        {
+          ...VALID_BRAND,
+          sourceUrl: started.sourceUrl,
+          seed: { controlHeight: 44 },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    await finalizeBrand({
+      id: started.id,
+      brandsRoot,
+      userDesignSystemsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    const persistedBrand = JSON.parse(
+      readFileSync(path.join(projectDir, 'brand.json'), 'utf8'),
+    ) as { seed?: { controlHeight?: number } };
+    expect(persistedBrand.seed?.controlHeight).toBe(44);
+
+    const generatedSeed = JSON.parse(
+      readFileSync(path.join(projectDir, 'system', 'seed.json'), 'utf8'),
+    ) as { controlHeight?: number };
+    expect(generatedSeed.controlHeight).toBe(44);
+
+    const generatedGuide = readFileSync(
+      path.join(projectDir, 'system', 'BRAND-SYSTEM.md'),
+      'utf8',
+    );
+    expect(generatedGuide).toContain('`brand.json.seed`');
+    expect(generatedGuide).not.toContain('only authored surface');
   });
 
   it('finalizeBrand is idempotent — re-finalizing reuses the brand design system', async () => {

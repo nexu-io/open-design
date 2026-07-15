@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
+import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
@@ -155,6 +156,10 @@ const residualAllowedPathPrefixes = [
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
+  // Vendored upstream website-clone recon/mirror/audit helpers
+  // (Jane-xiaoer/claude-skill-web-clone). Global skill assets staged into the
+  // project cwd for direct `node scripts/...` execution by the agent.
+  "skills/web-clone/scripts/",
   // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
   // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
   // be directly executable via Node so `child_process.spawn` from test
@@ -1271,7 +1276,6 @@ async function checkCiTopology(): Promise<boolean> {
       "ci_mode: ${{ steps.detect.outputs.ci_mode }}",
       "ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}",
       "run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}",
-      "run_nix_validation: ${{ steps.detect.outputs.run_nix_validation }}",
       "ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}",
       "visual_matrix: ${{ steps.detect.outputs.visual_matrix }}",
       "include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}",
@@ -1299,6 +1303,7 @@ const checks: GuardCheck[] = [
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImports },
+  { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },

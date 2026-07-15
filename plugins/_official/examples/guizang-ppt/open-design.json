@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-guizang-ppt",
-  "title": "Guizang Ppt",
+  "title": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
   "title_i18n": {
-    "zh-CN": "Guizang Ppt",
-    "zh-TW": "Guizang Ppt",
-    "ja": "Guizang Ppt",
-    "ko": "Guizang Ppt",
-    "de": "Guizang Ppt",
-    "fr": "Guizang Ppt",
-    "ru": "Guizang Ppt",
-    "es": "Guizang Ppt",
-    "pt-BR": "Guizang Ppt",
-    "it": "Guizang Ppt",
-    "vi": "Guizang Ppt",
-    "pl": "Guizang Ppt",
-    "id": "Guizang Ppt",
-    "nl": "Guizang Ppt",
-    "ar": "Guizang Ppt",
-    "tr": "Guizang Ppt",
-    "uk": "Guizang Ppt",
-    "en": "Guizang Ppt"
+    "en": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+    "zh-CN": "像增长策略负责人一样写品牌到收入故事",
+    "zh-TW": "像增长策略负责人一样写品牌到收入故事"
   },
   "version": "0.1.0",
-  "description": "Generates an \"editorial magazine × electronic ink\" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions \"magazine-style PPT\", \"horizontal swipe deck\", \"editorial magazine\", or \"e-ink presentation\".",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query \"annual-marketing-plan\", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.",
   "description_i18n": {
-    "zh-CN": "生成「电子杂志 × 电子墨水」风格的横向翻页网页 PPT（单 HTML 文件），含 WebGL 流体背景、衬线标题 + 非衬线正文、章节幕封、数据大字报、图片网格等模板。适用于制作分享、演讲、发布会风格的网页 PPT，或杂志风演示文稿。",
-    "zh-TW": "生成「電子雜誌 × 電子墨水」風格的橫向翻頁網頁 PPT（單一 HTML 檔案），含 WebGL 流體背景、襯線標題 + 非襯線正文、章節幕封、數據大字報、圖片網格等模板。適用於製作分享、演講、發表會風格的網頁 PPT，或雜誌風簡報。",
-    "ja": "電子雑誌 × 電子インク風の横スワイプ Web プレゼンテーション（単一 HTML ファイル）を生成。WebGL 流体背景、セリフ見出し + サンセリフ本文、章扉、データビジュアル、画像グリッドなどのテンプレートを搭載。雑誌風プレゼンや発表会向け。",
-    "ko": "전자 잡지 × 전자 잉크 스타일의 가로 스와이프 웹 프레젠테이션(단일 HTML 파일)을 생성합니다. WebGL 유체 배경, 세리프 제목 + 산세리프 본문, 챕터 표지, 데이터 시각화, 이미지 그리드 등의 템플릿을 포함하며 잡지풍 발표 자료 제작에 적합합니다.",
-    "de": "Erstellt horizontale Swipe-Web-Präsentationen im Magazin- und E-Ink-Stil (einzelne HTML-Datei) mit WebGL-Fluid-Hintergrund, Serifen-Titeln, serifenlosen Texten, Kapitelteilern, Datenvisualisierungen und Bildrastern für Vorträge und Produktvorstellungen.",
-    "fr": "Génère des présentations web à défilement horizontal au style magazine et encre électronique (fichier HTML unique) avec arrière-plan fluide WebGL, titres à empattements, texte sans empattements, séparateurs de chapitres, visualisations de données et grilles d'images pour présentations et conférences.",
-    "ru": "Создаёт горизонтальные веб-презентации в стиле электронного журнала и e-ink (один HTML-файл) с WebGL-фоном, заголовками с засечками, текстом без засечек, разделителями глав, визуализацией данных и сетками изображений для выступлений и релизов.",
-    "es": "Genera presentaciones web de deslizamiento horizontal al estilo revista y tinta electrónica (archivo HTML único) con fondo fluido WebGL, títulos serif, texto sans-serif, separadores de capítulos, visualizaciones de datos y cuadrículas de imágenes para charlas y lanzamientos.",
-    "pt-BR": "Gera apresentações web de deslize horizontal em estilo revista e tinta eletrônica (arquivo HTML único) com fundo fluido WebGL, títulos serifados, texto sem serifa, divisórias de capítulos, visualizações de dados e grades de imagens para palestras e lançamentos.",
-    "it": "Genera presentazioni web a scorrimento orizzontale in stile rivista e inchiostro elettronico (file HTML singolo) con sfondo fluido WebGL, titoli serif, testo sans-serif, separatori di capitoli, visualizzazioni dati e griglie di immagini per presentazioni e conferenze.",
-    "vi": "Tạo bản trình bày web vuốt ngang phong cách tạp chí điện tử và mực điện tử (file HTML đơn) với nền chất lỏng WebGL, tiêu đề serif, nội dung sans-serif, trang chương, biểu đồ dữ liệu và lưới hình ảnh cho thuyết trình và ra mắt sản phẩm.",
-    "pl": "Tworzy poziome prezentacje webowe w stylu magazynu i e-ink (jeden plik HTML) z płynnym tłem WebGL, tytułami szeryfowymi, tekstem bezszeryfowym, stronami rozdziałów, wizualizacjami danych i siatkami obrazów do prezentacji i konferencji.",
-    "id": "Membuat presentasi web geser horizontal bergaya majalah dan tinta elektronik (file HTML tunggal) dengan latar belakang cairan WebGL, judul serif, teks sans-serif, pembatas bab, visualisasi data, dan grid gambar untuk presentasi dan peluncuran produk.",
-    "nl": "Maakt horizontale swipe-webpresentaties in magazine- en e-inktstijl (enkel HTML-bestand) met WebGL-vloeibare achtergrond, schreeftitels, schreefloze tekst, hoofdstukscheidingen, datavisualisaties en afbeeldingsrasters voor presentaties en lanceringen.",
-    "ar": "ينشئ عروض تقديمية ويب أفقية التمرير بأسلوب المجلة والحبر الإلكتروني (ملف HTML واحد) مع خلفية سائلة WebGL وعناوين serif ونصوص sans-serif وفواصل فصول وتصورات بيانات وشبكات صور للعروض والإطلاقات.",
-    "tr": "Dergi ve e-mürekkep stilinde yatay kaydırmalı web sunumları (tek HTML dosyası) oluşturur. WebGL akışkan arka plan, serifli başlıklar, serifsiz metin, bölüm ayırıcıları, veri görselleştirmeleri ve resim ızgaraları ile konuşmalar ve lansmanlar için uygundur.",
-    "uk": "Створює горизонтальні веб-презентації в стилі журналу та електронного чорнила (один HTML-файл) з WebGL-фоном, заголовками з зарубками, текстом без зарубок, розділювачами розділів, візуалізаціями даних та сітками зображень для виступів і презентацій.",
-    "en": "Generates an \"editorial magazine × electronic ink\" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions \"magazine-style PPT\", \"horizontal swipe deck\", \"editorial magazine\", or \"e-ink presentation\"."
+    "en": "For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query \"annual-marketing-plan\", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.",
+    "zh-CN": "市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。",
+    "zh-TW": "市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。"
   },
   "license": "MIT",
   "author": {
@@ -65,7 +36,16 @@
     "horizontal-swipe",
     "horizontal-swipe-deck",
     "editorial-magazine",
-    "e-ink-presentation"
+    "e-ink-presentation",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "launch",
+    "campaign",
+    "pipeline",
+    "decision-deck",
+    "commercial-slide-agent",
+    "guizang-ppt",
+    "marketing-and-gtm"
   ],
   "compat": {
     "agentSkills": [
@@ -86,9 +66,20 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a magazine-style PPT about 'One-person companies: organizations folded by AI' for a 25-minute talk aimed at designers and founders. First recommend one direction for me to choose from: Monocle, WIRED, Kinfolk, Domus, or Lab.",
-        "zh-CN": "帮我做一份杂志风的 PPT —— 关于'一人公司 · 被 AI 折叠的组织'，25 分钟分享会，目标受众是设计师 + 创业者。先推荐一个方向（Monocle / WIRED / Kinfolk / Domus / Lab）让我选。"
-      }
+        "en": "Create \"Write a Brand-to-Revenue Story like a Growth Strategy Lead\" as a Marketing and GTM deck in the Guizang Ppt visual system. Scene: annual-marketing-plan. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像增长策略负责人一样写品牌到收入故事。市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+          "title_i18n": {
+            "en": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+            "zh-CN": "像增长策略负责人一样写品牌到收入故事",
+            "zh-TW": "像增长策略负责人一样写品牌到收入故事"
+          }
+        }
+      ]
     },
     "context": {
       "skills": [

@@ -180,6 +180,45 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  // #1247 / #1060 — locks the canonical predicate: `stopped` counts as unfinished
+  // (status !== 'completed'), so the footer and the daemon's endedWithUnfinishedWork
+  // flag agree. Narrowing to "pending/in_progress only" would reintroduce the drift.
+  it('counts a stopped task as unfinished, matching the daemon predicate', () => {
+    const events: AgentEvent[] = [
+      {
+        kind: 'tool_use',
+        id: 'todo-1',
+        name: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'Draft layout', status: 'completed' },
+            { content: 'Build components', status: 'stopped' },
+          ],
+        },
+      },
+    ];
+    expect(unfinishedTodosFromEvents(events)).toEqual([
+      { content: 'Build components', status: 'stopped', activeForm: undefined },
+    ]);
+  });
+
+  it('treats an all-completed TodoWrite as finished (no unfinished work)', () => {
+    const events: AgentEvent[] = [
+      {
+        kind: 'tool_use',
+        id: 'todo-1',
+        name: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'Draft layout', status: 'completed' },
+            { content: 'Build components', status: 'completed' },
+          ],
+        },
+      },
+    ];
+    expect(unfinishedTodosFromEvents(events)).toEqual([]);
+  });
+
   it('marks the active todo as stopped when a failed run ended without a final TodoWrite', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {

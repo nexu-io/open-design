@@ -44,18 +44,45 @@ function runPosthogTracker(pageName?: string) {
 
   const captures: CaptureCall[] = [];
   const handlers: Record<string, (ev: any) => void> = {};
-  const win: any = { posthog: { capture: (name: string, props: any) => captures.push({ name, props }) } };
+  const win: any = {
+    location: {
+      href: 'https://open-design.dev/?utm_source=twitter&utm_content=readme_download',
+    },
+    posthog: {
+      capture: (name: string, props: any) => captures.push({ name, props }),
+      get_distinct_id: () => 'web-anon-1',
+    },
+  };
   const doc: any = {
     documentElement: { getAttribute: () => 'zh' },
+    referrer: 'https://referrer.example/',
     addEventListener: (type: string, fn: (ev: any) => void) => {
       handlers[type] = fn;
     },
   };
   const nav: any = { userAgent: 'mozilla mac os x', platform: 'MacIntel' };
+  const fetchStub = async () => new Response(JSON.stringify({
+    downloadUrl: 'https://download.open-design.ai/mac/arm64/odtoken_123456/Open.dmg',
+  }), { status: 200 });
 
   // eslint-disable-next-line no-new-func
   new Function('window', 'document', 'navigator', iife)(win, doc, nav);
-  return { captures, click: (target: any) => handlers.click?.({ target }) };
+  return {
+    captures,
+    click: (target: any) => {
+      const oldFetch = globalThis.fetch;
+      (globalThis as any).fetch = fetchStub;
+      let ev: any;
+      ev = { target, defaultPrevented: false, preventDefault: () => { ev.defaultPrevented = true; } };
+      try {
+        handlers.click?.(ev);
+        return ev;
+      } finally {
+        (globalThis as any).fetch = oldFetch;
+      }
+    },
+    win,
+  };
 }
 
 test('posthog: page_view fires on load', () => {
@@ -81,6 +108,15 @@ test('posthog: hero direct download (rewritten to .dmg) → direct + placement=h
   assert.equal(dl!.props.download_target, 'direct');
   assert.equal(dl!.props.placement, 'hero');
   assert.equal(dl!.props.platform, 'macos');
+  const ev = click(
+    makeLink({
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: { 'data-download-placement': 'hero' },
+      text: '下载桌面端',
+    }),
+  );
+  assert.equal(ev.defaultPrevented, true, 'direct download should be routed through attribution mint');
 });
 
 test('posthog: cta-band direct download → direct + placement=cta', () => {

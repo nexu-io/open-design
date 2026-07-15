@@ -25,7 +25,9 @@ export async function dismissPrivacyDialog(page: Page) {
     .first();
   await privacySurface.waitFor({ state: 'visible', timeout: 1_000 }).catch(() => {});
   if (await privacySurface.isVisible().catch(() => false)) {
-    await privacySurface.getByRole('button', { name: /not now|i get it|got it/i }).click();
+    await privacySurface
+      .getByRole('button', { name: /don['’]?t share|不分享|not now|i get it|got it/i })
+      .click();
     await expect(privacySurface).toBeHidden();
   }
 }

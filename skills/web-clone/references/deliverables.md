@@ -1,6 +1,6 @@
 # 产物规范与模板
 
-每个复刻子项目（`$WEB_CLONE_PROJECT/`）的标准产物。
+每个复刻子项目（`当前项目目录/`）的标准产物。
 
 ## NOTES.md（必须）
 
@@ -27,7 +27,7 @@
 
 ## 跑起来
 \`\`\`bash
-cd "$WEB_CLONE_PROJECT"
+cd 当前项目目录
 # 单文件静态站: python3 -m http.server 8123
 # 框架站: nvm use <ver> && npm install && npm run dev
 \`\`\`
@@ -80,7 +80,7 @@ cd "$WEB_CLONE_PROJECT"
 - **B. 二手分析校验表**（若有 AI 分析文档：`声称 | 真源码 | 准确度✅/⚠️/❌ | 说明`，重点揪实质性错误）
 - **C. 可迁移方法论**（通用套路 / 本站特有 / 复刻路径）
 
-范例：`./website-clones/marbles-clone/TEARDOWN.md`。
+范例：`当前项目目录/marbles-clone/TEARDOWN.md`。
 
 ## RECON/（侦察产物）
 - `screenshots/original-{1440,768,390}.png` 原站三档
@@ -139,6 +139,6 @@ cd "$WEB_CLONE_PROJECT"
 - 素材和 license 风险是否已记录
 
 ## 收尾
-- 更新中枢 `./website-clones/README.md` 索引行（状态 emoji：🟡侦察/🟢跑通/🔵改造/✅上线/🔴卡住/🗂️归档）
+- 更新中枢 `当前项目目录/README.md` 索引行（状态 emoji：🟡侦察/🟢跑通/🔵改造/✅上线/🔴卡住/🗂️归档）
 - 原始源码留只读基准 `index-original.html`，不要在它上面改
 - 跑完关掉本地服务器进程

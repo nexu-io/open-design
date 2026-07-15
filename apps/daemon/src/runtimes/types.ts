@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -12,6 +12,7 @@ export type RuntimeModelOption = {
   default?: boolean;
   inputPriceUsdPerMillion?: number;
   outputPriceUsdPerMillion?: number;
+  metadata?: ModelMetadata;
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';

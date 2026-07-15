@@ -68,6 +68,7 @@ export async function exportPdfFromHtml(input: DesktopExportPdfInput): Promise<D
       { name: "All Files", extensions: ["*"] },
     ],
     title: "Save PDF",
+    properties: ["dontAddToRecent"],
   });
   if (save.canceled || !save.filePath) return { canceled: true, ok: true };
 
@@ -195,6 +196,7 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
           { name: "All Files", extensions: ["*"] },
         ],
         title: "Save PDF",
+        properties: ["dontAddToRecent"],
       });
       return save.canceled || !save.filePath ? null : save.filePath;
     },

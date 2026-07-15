@@ -57,8 +57,9 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        Contract this framework provides:
          - 1920×1080 fixed canvas, scaled to fit the viewport
          - Only .slide.active is visible at a time
-         - Prev/next + counter rendered outside the scaled stage
-         - Keyboard (← → space PgUp PgDn Home End), click, and stored
+         - Programmatic prev/next + counter elements kept outside the scaled
+           stage but hidden by default so the host can render the UI chrome
+         - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
            position survive iframe focus quirks
          - "Save as PDF" produces a multi-page vertical PDF, one slide
            per page, by toggling every slide visible under @media print
@@ -117,14 +118,15 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        specific. The hide rule above still wins for inactive slides. */
     :where(.slide.active) { display: flex; flex-direction: column; }
 
-    /* Chrome — counter + prev/next live outside the scaled stage so they
-       don't shrink with it. Do not relocate them inside .deck-stage. */
+    /* Programmatic chrome — counter + prev/next live outside the scaled
+       stage so the host bridge can read/update them, but they stay hidden
+       in preview, presentation, fullscreen, and new-tab modes. */
     .deck-counter {
       position: fixed;
       bottom: 22px;
       left: 50%;
       transform: translateX(-50%);
-      display: inline-flex;
+      display: none;
       align-items: center;
       gap: 4px;
       background: rgba(10, 14, 26, 0.92);
@@ -168,6 +170,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       text-transform: uppercase;
       z-index: 999;
       pointer-events: none;
+      display: none;
     }
 
     /* Print / PDF stitching — every slide stacks top-to-bottom, one per
@@ -240,7 +243,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
     <button type="button" id="deck-next" aria-label="Next slide">›</button>
   </nav>
-  <div class="deck-hint">← / → · space</div>
+  <div class="deck-hint">← / → · space · R reset</div>
 
   <script>
     (function () {
@@ -290,9 +293,10 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         if (e.__odDeckKeyHandled) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
         if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
         else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
-        else if (e.key === 'Home') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
         else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
       }
       // Capture phase + listen on both targets — inside the OD iframe,
@@ -302,6 +306,29 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       document.addEventListener('keydown', onKey, true);
       if (prev) prev.addEventListener('click', function () { go(idx - 1); });
       if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        var t = e.target;
+        while (t && t !== document.body && t !== document.documentElement) {
+          var tag = String(t.tagName || '').toUpperCase();
+          if (
+            tag === 'A' ||
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            t.isContentEditable ||
+            t.getAttribute('role') === 'button' ||
+            t.getAttribute('role') === 'link'
+          ) return;
+          t = t.parentElement;
+        }
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
 
       // Auto-focus body so arrow keys work without an initial click.
       document.body.setAttribute('tabindex', '-1');
@@ -327,7 +354,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
 
 export const DECK_FRAMEWORK_DIRECTIVE = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
 
-Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, prev/next + counter, capture-phase keyboard, click-anywhere focus, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
+Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
 
 **You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
 
@@ -337,7 +364,7 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
-2.  Copy the canonical skeleton below as index.html (nothing else first)
+2.  Copy the canonical skeleton below as a semantically named deck HTML file, such as \`investor-pitch-deck.html\` (nothing else first)
 3.  Plan the slide arc and theme rhythm (state aloud before writing)
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
@@ -349,7 +376,7 @@ If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stag
 
 ## The contract
 
-When you start a new deck, your output is a single HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`.
+When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / hidden \`.deck-counter\` / \`.deck-hint\` programmatic chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
 
 You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: deck title\` — the \`<title>\` element.
@@ -366,7 +393,7 @@ These are the failure patterns we just spent days debugging. Each one looks "equ
 - ❌ Don't use \`transform-origin: center center\` on the stage. The framework uses \`top left\` plus an explicit translate so scaled content lands at the same place every render.
 - ❌ Don't use \`document.addEventListener('keydown', …)\` alone. Inside an iframe, focus is sometimes on window. The framework adds capture-phase listeners on **both** targets — replacing this with a single listener silently swallows arrow keys.
 - ❌ Don't replace the localStorage key, the slide-visibility toggle (\`.slide.active\`), or the counter element IDs (\`#deck-cur\`, \`#deck-total\`, \`#deck-prev\`, \`#deck-next\`). The framework reads them by ID.
-- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so they stay legible at any viewport size.
+- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so the host bridge can manage slides without scaling or clipping the control surface.
 - ❌ Don't redefine \`.slide\`, \`.slide.active\`, or \`.slide:not(.active)\` directly. The framework owns the visibility toggle through those exact selectors. If you want a non-flex layout on a slide, **add a variant class to the same \`<section class="slide …">\` element** (e.g. \`.s-cold\`, \`.s-magazine\`) and declare \`display: grid\` / \`display: block\` on the variant. The framework's active default is wrapped in \`:where(...)\` so it has zero specificity — your variant always wins for the active slide. Variant classes do NOT need to be more specific than \`.slide.active\`. (The inactive-hide rule still wins because it uses \`:not(.active) { display: none !important; }\`.)
 - ❌ Don't strip or "tidy" the \`@media print\` block. It is how Share → PDF stitches every slide into a multi-page document. Without it, PDF export collapses to a single screenshot.
 
@@ -397,6 +424,75 @@ Rules — non-negotiable:
 3. **Body slides: ≤ 3 paragraphs, ≤ 56ch lead text width, ≤ 12 words per line.**
 4. **One idea per slide.** Two ideas = two slides.
 
+## Data chart discipline (hand-written bar charts)
+
+Hand-written div/CSS charts fail in two ways users report as "the chart is lying": bar lengths eyeballed as magic numbers that don't match the data, and value labels clipped away inside fixed-height bars. If the active template family ships a chart reference (e.g. the \`html-ppt\` family's Chart.js \`chart-bar.html\` template), prefer it over a hand-written div chart. When you do hand-write a bar chart (horizontal or vertical), build it from this skeleton:
+
+\`\`\`html
+<div class="chart" style="--max: 5.0">
+  <div class="bar-row">
+    <span class="bar-label">2024</span>
+    <div class="bar-track"><div class="bar" style="--v: 5.0"></div></div>
+    <span class="bar-value">5.0 万亿</span>
+  </div>
+  <!-- one .bar-row per data point; put the REAL numeric value in --v -->
+</div>
+\`\`\`
+
+\`\`\`css
+.bar { width: calc(var(--v) / var(--max) * 100%); }
+\`\`\`
+
+Rules — same weight as the density rules above:
+
+1. **Bar lengths are computed, never eyeballed.** Every bar carries its value as an inline \`--v\`; declare \`--max\` ONCE on the chart container so all bars share one baseline. \`--v\` / \`--max\` must be unitless numbers — \`calc()\` division needs a plain number, so units ("万亿", "%", "$") live only in the \`.bar-value\` text. Vertical variant: \`.bar { height: calc(var(--v) / var(--max) * 100%); }\`, and give \`.bar-track\` an explicit height (a percentage height inside an auto-height parent computes to 0 and every bar collapses).
+2. **Every data point gets a visible category label AND value label.** Render the value in its own element outside the bar (like \`.bar-value\` above), never inside a fixed-height \`overflow: hidden\` bar where a short bar clips it away.
+
+- ❌ Don't hand-write eyeballed \`height: 62%\` / \`width: 45%\` magic numbers on bars.
+- ❌ Don't let bars in the same chart imply different baselines — one \`--max\` per chart.
+- ❌ Don't nest value labels inside a clipping fixed-height bar.
+- ❌ Don't omit any data point's label, however short its bar.
+
+## Mermaid diagram theme discipline (dark decks)
+
+Mermaid's default theme is built for white pages: near-black labels (\`#333\`), pale node fills, black strokes, and a TRANSPARENT svg background. Embedded in a dark-themed deck it produces the failure users report as "the diagram text is unreadable in dark mode": dark labels sitting directly on the dark slide background. Prefer a hand-written HTML/CSS/SVG diagram styled with the deck's own tokens (\`--bg\`, \`--fg\`, \`--accent\`) — it never drifts from the theme and needs no external JS. When you do embed Mermaid, pick the theme from the slide background at initialize time — never leave the default (light) theme on a dark deck:
+
+\`\`\`html
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',        // dark slide background
+    // theme: 'default',  // light slide background
+  });
+</script>
+\`\`\`
+
+For brand fidelity, \`theme: 'base'\` + \`themeVariables\` reuses the deck palette — pass concrete color values (Mermaid cannot resolve CSS \`var()\` references). \`darkMode: true\` alone does NOT darken node fills — \`base\` keeps its cream \`primaryColor\` default, so always set \`primaryColor\` to a dark surface tone alongside the light text:
+
+\`\`\`js
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'base',
+  themeVariables: {
+    darkMode: true,                 // match the slide background
+    background: '#101014',          // the deck's --bg value, as a literal
+    primaryColor: '#1c1c24',        // node fill — dark surface tone, NOT the cream default
+    primaryTextColor: '#e8e8ec',    // the deck's --fg value, as a literal
+    primaryBorderColor: '#8a8a94',
+    lineColor: '#8a8a94',
+  },
+});
+\`\`\`
+
+Rules — same weight as the density rules above:
+
+1. **Diagram text color follows the slide background, not Mermaid's default.** Dark background → \`theme: 'dark'\` or \`base\` + dark \`themeVariables\`; light background → the default is fine.
+2. **Never rely on the SVG bringing its own backdrop.** Mermaid emits a transparent-background SVG, so every label sits directly on the slide. If the diagram cannot be themed, give its container an explicit light plate (e.g. \`background: #fff\`, padding, radius) instead of shipping unreadable labels.
+
+- ❌ Don't call \`mermaid.initialize()\` without a \`theme\` on a dark deck.
+- ❌ Don't pass \`var(--fg)\` strings into \`themeVariables\` — Mermaid needs literal colors.
+- ❌ Don't hand-recolor a single label to "fix" contrast; theme the whole diagram.
+
 ## Pre-handoff self-check — run this BEFORE the final file summary
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
@@ -405,6 +501,9 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] If there's an absolutely-positioned footer/header, does flow content stop before the footer's reserved band? (See Rule 2 above.)
 - [ ] Is the display headline ≤ 140px and ≤ 8 words?
 - [ ] Does the slide carry ≤ one big idea? (No mashed-together masthead + display headline + subtitle + absolute footer + sidebar.)
+- [ ] If the slide has a chart: does every data point show a visible category label and value label?
+- [ ] Are bar lengths computed from \`--v\` / \`--max\` so proportions match the data? (Mentally spot-check two bars.)
+- [ ] If the slide embeds a Mermaid diagram: is \`mermaid.initialize\` themed to the slide background (dark background → \`dark\`/\`base\` theme), leaving no dark-on-dark labels?
 
 If any answer is "no", redesign the slide BEFORE handoff. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 

@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-peoples-platform
+en_name: "Make a Public-Transit Funding Case like a Transportation Policy Lead"
+zh_name: "像交通政策负责人一样做公共交通投资论证"
 description: |
-  People's Platform (Block & Bold) — Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush. Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches.
+  A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Built as a decision-grade policy briefing deck for city council, public board.
+en_description: |
+  A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Built as a decision-grade policy briefing deck for city council, public board.
+zh_description: |
+  像交通政策负责人一样做公共交通投资论证——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "government-policy"
+  - "policy-briefing-deck"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-peoples-platform"
 triggers:
-  - "peoples-platform"
-  - "zhangzara-peoples-platform"
-  - "People's Platform (Block & Bold)"
-  - "activist"
-  - "loud"
-  - "punchy"
-  - "direct"
-  - "cultural commentary"
-  - "manifesto"
+  - "policy-briefing-deck"
+  - "government-policy"
+  - "Make a Public-Transit Funding Case like a Transportation Policy Lead"
+  - "像交通政策负责人一样做公共交通投资论证"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/peoples-platform"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "government-policy"
+  scenario: "policy"
+  example_prompt: "Create \"Make a Public-Transit Funding Case like a Transportation Policy Lead\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Audience: city council, public board. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat."
 ---
 
 # People's Platform (Block & Bold)

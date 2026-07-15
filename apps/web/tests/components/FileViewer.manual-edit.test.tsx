@@ -380,6 +380,61 @@ describe('FileViewer manual edit regressions', () => {
     expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
   });
 
+  it('saves text typed in the inspector while an inline text session is active', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    const savedBodies: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        savedBodies.push(String(init.body));
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+    const frame = await previewFrame();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-text-session', id: 'hero', active: true },
+        source: frame.contentWindow,
+      }));
+    });
+
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Edited from panel' } });
+    fireEvent.click(screen.getByText('Save'));
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'od-edit-text-session',
+          id: 'hero',
+          active: false,
+          changed: false,
+          committed: false,
+        },
+        source: frame.contentWindow,
+      }));
+    });
+
+    await waitFor(() => {
+      expect(savedBodies.length).toBe(1);
+    });
+    const payload = JSON.parse(savedBodies[0]!) as { content: string };
+    expect(payload.content).toContain('<main data-od-id="hero">Edited from panel</main>');
+    expect(payload.content).not.toContain('<main data-od-id="hero">Hero</main>');
+  });
+
   it('keeps the preview mounted and does not save when deleting the only rendered root', async () => {
     const source = '<!doctype html><html><body><main data-od-id="app-root">App</main><script>window.bootApp && window.bootApp();</script></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

@@ -31,13 +31,20 @@
  */
 import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
+import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
+const SEMANTIC_OUTPUT_FILE_NAMES = `## Semantic output file names
+
+For new user-facing deliverables, choose a short semantic project-relative filename derived from the user's brief, product, screen, or artifact type. Do not call every new artifact \`index.html\`.
+
+Good examples: \`investor-pitch-deck.html\`, \`ai-community-pr-deck.html\`, \`refund-ops-dashboard.html\`, \`pricing-page.html\`, \`screens/ios-checkout.html\`, \`daily-digest.md\`, \`image-manifest.json\`.
+
+When editing an existing artifact, preserve its existing filename unless the user asks for a copy or version. Use \`index.html\` only for fixed runtime conventions or a lightweight launcher/overview: live-artifact generated previews, HyperFrames compositions, static SPA/deploy entry mapping, plugin previews/examples, \`ui_kits/app/index.html\`, or a multi-screen overview that links to semantic screen files. If an active skill or template says to copy a seed to \`index.html\`, adapt the destination to a semantic filename unless the task is one of those fixed-path exceptions.`;
 
 export interface AudioVoiceOption {
   name: string;
@@ -272,6 +279,12 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  // Website Clone runs reproduce an existing site, so its palette/typography must
+  // win — an active design system being declared "authoritative" would pull the
+  // model away from faithful reproduction. Mirror the daemon (apps/daemon/src/
+  // server.ts suppresses the design-system sections for intent==='web-clone') so
+  // API/BYOK web-clone prompts drop the same guidance.
+  const isWebCloneRun = metadata?.intent === 'web-clone';
   const isMediaSurfaceEarly =
     skillMode === 'image' ||
     skillMode === 'video' ||
@@ -332,7 +345,13 @@ export function composeSystemPrompt({
   // Ask mode skips the multi-thousand-token designer charter entirely — the
   // CHAT_MODE_OVERRIDE above is its self-contained identity. Plan/Design keep it.
   if (!isAskMode) {
-    parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
+    // Website Clone runs swap the "don't recreate copyrighted designs" guardrail
+    // for a faithful-reproduction + pre-deploy-checklist rule, mirroring the
+    // daemon prompt so API/BYOK-backed web-clone runs behave identically.
+    parts.push(
+      '# Identity and workflow charter (background)\n\n',
+      renderOfficialDesignerPrompt({ webCloneFidelity: metadata?.intent === 'web-clone' }),
+    );
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -344,7 +363,7 @@ export function composeSystemPrompt({
   // and a BYOK/API chat route follow-up choices through the same surface
   // instead of drifting back to plain markdown option lists.
   parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
@@ -396,7 +415,7 @@ export function composeSystemPrompt({
     );
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
@@ -407,6 +426,10 @@ export function composeSystemPrompt({
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
+  }
+
+  if (!isAskMode) {
+    parts.push(`\n\n${SEMANTIC_OUTPUT_FILE_NAMES}`);
   }
 
   if (pluginBlock && pluginBlock.trim().length > 0) {
@@ -465,7 +488,7 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
-  if (!isAskMode && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isAskMode && !isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 

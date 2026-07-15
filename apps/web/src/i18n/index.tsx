@@ -90,6 +90,31 @@ export function resolveSystemLocale(languages: readonly string[]): Locale | null
   return null;
 }
 
+/**
+ * A `t()` bound to an explicit content-language tag rather than the app UI
+ * locale. Used by the question-form card so host-rendered strings inside the
+ * card (the "Other" chip, custom-answer copy) match the language the model
+ * localized the form into — a Chinese form in an English UI must not mix
+ * scripts. Returns null when the tag doesn't resolve to a bundled locale;
+ * callers fall back to the context `t`.
+ */
+export function tForLanguageTag(
+  tag: string | undefined,
+): ((key: DictKey, vars?: Record<string, string | number>) => string) | null {
+  if (!tag || !tag.trim()) return null;
+  const locale = resolveSystemLocale([tag]);
+  if (!locale) return null;
+  const dict = DICTS[locale] ?? en;
+  return (key, vars) => {
+    const raw = dict[key] ?? en[key] ?? key;
+    if (!vars) return raw;
+    return raw.replace(/\{(\w+)\}/g, (_, name: string) => {
+      const v = vars[name];
+      return v == null ? `{${name}}` : String(v);
+    });
+  };
+}
+
 // Read the OS locale the desktop host attached to its client descriptor.
 // Packaged desktop builds need this because Chromium otherwise reports
 // en-US through navigator.language regardless of the OS setting. We go

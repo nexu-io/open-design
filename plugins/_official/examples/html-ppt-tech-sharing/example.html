@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Open Design · Tech Sharing</title>
+<title>Give an Engineering Tech Talk like a Staff Developer-Advocate - AI literacy</title>
 <style>/* html-ppt :: tech-sharing webfonts (only families actually used) */
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 </style>
@@ -159,11 +159,11 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
 
   <!-- 1. Cover -->
   <section class="slide" data-title="Cover">
-    <p class="kicker">tech-sharing / open-design</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">Open Design<br>Open, local, <span class="ac">agent-driven</span></h1>
-    <p class="lede mt-m">From idea to prototype, web page, slides, and HTML video — the entire product-design workflow, on your own device.</p>
-    <div class="speaker"><div class="av"></div><div><b>Open Design</b><span>github.com/nexu-io/open-design · 45 min + Q&amp;A</span></div></div>
-    <div class="deck-footer"><span class="mono">#apache-2.0 #local #byok</span><span class="slide-number" data-current="1" data-total="8"></span></div>
+    <p class="kicker">tech-talk playbook / ai-literacy</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Give an Engineering Tech Talk<br>like a <span class="ac">Staff Developer-Advocate</span></h1>
+    <p class="lede mt-m">A worked rundown for engineers who want internal deep-dives to land — rehearsed against Open Design's own agent-stream, sandbox, and artifact internals.</p>
+    <div class="speaker"><div class="av"></div><div><b>Platform DevEx Guild</b><span>internal eng talk · 45 min + Q&amp;A</span></div></div>
+    <div class="deck-footer"><span class="mono">#devrel #eng-talks #agent-stream</span><span class="slide-number" data-current="1" data-total="8"></span></div>
   </section>
 
   <!-- 2. Agenda -->
@@ -171,75 +171,74 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
     <p class="kicker">agenda.toml</p>
     <h2 class="h2">Today's roadmap</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Why: design capability should be open</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Agents: plugging into 21+ coding agents</span><span class="d">~10min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">Workflow: idea to delivery in 5 steps</span><span class="d">~12min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Design System as Markdown</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why now: internal talks are the highest-leverage devrel channel</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow map: the 6-beat rundown that keeps the room with you</span><span class="d">~10min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Pilot: rehearsing the talk on the agent-stream internals</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Risk control: the demo-fails-live playbook</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">ROI + rollout: from one talk to a recurring series</span><span class="d">~5min</span></div>
     </div>
   </section>
 
   <!-- 3. Context -->
   <section class="slide" data-title="Context">
-    <p class="kicker">// why-open</p>
-    <h2 class="h2">The problem: frontier AI design power<br>is locked in the cloud.</h2>
+    <p class="kicker">// why-now</p>
+    <h2 class="h2">The problem: engineers stop trusting<br>demo-slides, not demo-code.</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>Claude Design</h4><p class="dim">In April 2026 it proved for the first time that LLMs can genuinely do design. But it's closed-source, paid, cloud-only — no agent swapping, no self-hosting, no BYOK.</p><span class="tag mt-s">❌ locked in the cloud</span></div>
-      <div class="card card-accent"><h4>Raw coding agents</h4><p class="dim">Claude Code / Codex are strong enough, but lack a design workflow: no visual direction, no design system, no sandbox preview.</p><span class="tag mt-s">😩 no design workflow</span></div>
-      <div class="card card-hot"><h4>Open Design</h4><p class="dim">Open source, local, plugs into the agents you already have. Monthly cost drops from $500 to ~$73 — over 80% less.</p><span class="tag mt-s">✅ Apache-2.0 open source</span></div>
+      <div class="card card-accent"><h4>Slide decks</h4><p class="dim">Static bullets compress a whole system into buzzwords; senior engineers tune out by slide three because there's nothing they can falsify.</p><span class="tag mt-s">❌ nothing to verify</span></div>
+      <div class="card card-accent"><h4>Marketing-style demos</h4><p class="dim">A polished screen recording proves the feature ships, not that you understand why it works — the gap shows up the moment Q&amp;A starts.</p><span class="tag mt-s">😩 no mental-model transfer</span></div>
+      <div class="card card-hot"><h4>Staff-level walkthroughs</h4><p class="dim">Show the real code path live — the SSE stream, the sandboxed iframe, the artifact write — and let the room poke at it. Trust compounds instead of decaying.</p><span class="tag mt-s">✅ engineers verify, then believe</span></div>
     </div>
   </section>
 
   <!-- 4. Deep dive 1 -->
   <section class="slide" data-title="Deep Dive 1">
-    <p class="kicker">deep-dive · 1 / 2</p>
-    <h2 class="h2">Don't build agents. Plug into them.</h2>
+    <p class="kicker">workflow map · 1 / 2</p>
+    <h2 class="h2">Map the talk before you write a single slide.</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">The <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> on your machine are already powerful. Open Design auto-detects the CLIs installed on your PATH and wires them into a complete design workflow — zero configuration.</p>
+        <p class="lede">Pick one running system, then plot six beats against it: why now, architecture, live walkthrough, failure modes, impact numbers, next steps. Every beat should end on a question the audience can actually ask out loud.</p>
         <div class="mt-l">
-          <span class="tag">21 coding agents</span> <span class="tag">zero config</span> <span class="tag">end-to-end BYOK</span>
+          <span class="tag">6 beats</span> <span class="tag">45 minutes</span> <span class="tag">one live system</span>
         </div>
       </div>
       <div class="terminal">
-        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>agents.sh</span></div>
-<pre><span class="cmt"># auto-detect CLIs installed on PATH</span>
-<span class="kw">$</span> <span class="fn">od</span> agents
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>rundown.md</span></div>
+<pre><span class="cmt"># engineering tech-talk rundown</span>
+<span class="kw">$</span> <span class="fn">talk</span> map --subject agent-stream
 
-  <span class="str">✓</span> Claude Code     <span class="str">✓</span> Codex CLI
-  <span class="str">✓</span> Cursor Agent    <span class="str">✓</span> OpenClaw
-  <span class="str">✓</span> Hermes Agent    <span class="str">✓</span> Gemini CLI
-  <span class="str">✓</span> Kimi            <span class="str">✓</span> Copilot CLI
+  <span class="str">✓</span> Why now         <span class="str">✓</span> Architecture map
+  <span class="str">✓</span> Live walkthrough <span class="str">✓</span> Failure modes
+  <span class="str">✓</span> Impact numbers   <span class="str">✓</span> Next steps
   …
 
-<span class="cmt">// 21 agents total, zero config</span>
-<span class="cmt">// OpenAI / Azure / Google endpoints via BYOK</span></pre>
+<span class="cmt">// 6 beats, 45 minutes, one running system</span>
+<span class="cmt">// every beat ends on a question the room can ask live</span></pre>
       </div>
     </div>
   </section>
 
   <!-- 5. Deep dive 2 -->
   <section class="slide" data-title="Deep Dive 2">
-    <p class="kicker">deep-dive · 2 / 2</p>
-    <h2 class="h2">From idea to delivery in 5 steps.</h2>
+    <p class="kicker">pilot · 2 / 2</p>
+    <h2 class="h2">Pilot the talk on a system you actually run.</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">The agent reads the full context and produces real, runnable files you can preview and edit instantly in the sandbox. Every choice becomes context for the next generation — sharper with every use.</p>
+        <p class="lede">The pilot subject is Open Design's own <span class="mono">claude-stream.ts</span> SSE loop, the sandboxed iframe preview, and the artifact write path — nothing hypothetical, nothing slideware. Three colleagues sat in on the dry-runs before the real room.</p>
         <div class="stack mt-m">
-          <div class="tag">✦ 217+ plugins as starting points</div>
-          <div class="tag">✦ instant sandbox preview &amp; edits</div>
-          <div class="tag">✦ HyperFrames HTML→MP4</div>
-          <div class="tag">✦ self-evolving design memory</div>
+          <div class="tag">✦ 3 dry-runs before the real room</div>
+          <div class="tag">✦ timed to the second, per beat</div>
+          <div class="tag">✦ live terminal, no recorded video</div>
+          <div class="tag">✦ audience holds questions to the end</div>
         </div>
       </div>
       <div class="card" style="padding:32px">
-        <h4 class="mono" style="color:var(--accent)">workflow · 5 steps</h4>
+        <h4 class="mono" style="color:var(--accent)">pilot · 5 checkpoints</h4>
         <div class="stack mt-m" style="font-family:var(--font-mono);font-size:14px;line-height:1.9;color:var(--text-2)">
-          <div><span style="color:var(--accent)">1.</span> Pick a starting point — describe the goal in one line, or start from a template / Plugin</div>
-          <div><span style="color:var(--accent)">2.</span> Set the visual direction — palette, fonts, spacing flow in automatically</div>
-          <div><span style="color:var(--accent)">3.</span> Generate the artifact — real runnable files, previewed in the sandbox</div>
-          <div><span style="color:var(--accent)">4.</span> Deliver or make video — engineering takes over, or render a marketing clip</div>
-          <div><span style="color:var(--accent)">5.</span> Build memory — it becomes context for the next generation</div>
+          <div><span style="color:var(--accent)">1.</span> Pick the system — the agent-stream SSE loop, not a hypothetical one</div>
+          <div><span style="color:var(--accent)">2.</span> Script the failure — kill the daemon mid-turn, narrate the reconnect live</div>
+          <div><span style="color:var(--accent)">3.</span> Time-box each beat — 45 min hard stop, timer visible to the speaker only</div>
+          <div><span style="color:var(--accent)">4.</span> Run it past a skeptic — one senior engineer allowed to interrupt</div>
+          <div><span style="color:var(--accent)">5.</span> Cut anything that needs a slide to explain what the code already shows</div>
         </div>
       </div>
     </div>
@@ -247,48 +246,44 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
 
   <!-- 6. Code example -->
   <section class="slide" data-title="Code">
-    <p class="kicker">design-systems/DESIGN.md</p>
-    <h2 class="h2" style="font-size:40px">A design system is a Markdown file you can git diff.</h2>
+    <p class="kicker">talks/agent-stream-deep-dive/risk.md</p>
+    <h2 class="h2" style="font-size:40px">Every live demo needs a written recovery path.</h2>
     <div class="terminal mt-m">
-      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>DESIGN.md</span></div>
-<pre><span class="kw">## Palette</span>
-- primary:   <span class="num">#3B6CFF</span>
-- surface:   <span class="num">#0D1117</span>
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>risk.md</span></div>
+<pre><span class="kw">## Known failure modes</span>
+- daemon restarts mid-stream:  <span class="num">12s</span> reconnect — narrate it, don't hide it
+- sandbox iframe goes blank:   fall back to the 90s recorded clip
+- Q&amp;A runs long:              cut the "further reading" slide, keep the room
 
-<span class="kw">## Typography</span>
-- display: <span class="str">Inter / 600</span>
-- body:    <span class="str">Inter / 400</span>
+<span class="kw">## Rule</span>
+- Never debug live past <span class="num">60</span>s; switch to the fallback clip, explain after
 
-<span class="kw">## Rules</span>
-- Radii fixed at <span class="num">12px</span>; spacing in multiples of <span class="num">8</span>
-- Gradients allowed on marketing pages, banned in product UI
-
-<span class="cmt"># 129 Design Systems: import from GitHub / Figma / local files</span>
-<span class="cmt"># Markdown prevents token drift — brand consistency stays auditable and versioned</span></pre>
+<span class="cmt"># rehearsed 3x against this exact list before the real room</span>
+<span class="cmt"># the backup clip is muted b-roll, not a scripted answer</span></pre>
     </div>
   </section>
 
   <!-- 7. Takeaways -->
   <section class="slide" data-title="Takeaways">
-    <p class="kicker">// takeaways</p>
-    <h2 class="h2">Three things to take home.</h2>
+    <p class="kicker">// roi</p>
+    <h2 class="h2">Three numbers that justify the rehearsal time.</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>1 · Desktop-native</h4><p class="dim">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable — and the agent has full terminal execution power.</p></div>
-      <div class="card card-accent"><h4>2 · Plug into agents, don't build one</h4><p class="dim">The <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> on your machine are already strong; Open Design wires them into a complete design workflow.</p></div>
-      <div class="card card-accent"><h4>3 · Gets smarter with use</h4><p class="dim">Every choice settles into your Design System, preferences, and memory, so the next generation lands closer to what you want.</p></div>
+      <div class="card card-accent"><h4>1 · Time to competence</h4><p class="dim">23 engineers who watched the sandbox walkthrough shipped their first agent-stream patch in under a week, down from roughly three.</p></div>
+      <div class="card card-accent"><h4>2 · Fewer repeat questions</h4><p class="dim">"How does the SSE reconnect work" pings dropped from ~9/week to ~2/week once the recording shipped to the wiki.</p></div>
+      <div class="card card-accent"><h4>3 · A reusable format</h4><p class="dim">The same 6-beat rundown ran twice more this quarter — sandbox isolation, artifact storage — each under 4 hours of prep.</p></div>
     </div>
-    <p class="lede mt-l">Further reading: <span class="mono">github.com/nexu-io/open-design</span> · <span class="mono">discord.gg/mHAjSMV6gz</span></p>
+    <p class="lede mt-l">Recording + rundown: <span class="mono">internal-wiki/agent-stream-talk</span> · <span class="mono">#eng-devrel</span></p>
   </section>
 
   <!-- 8. Q&A -->
   <section class="slide center tc invert" data-title="Q and A">
     <div>
       <div class="mono glyph" style="font-size:96px;font-weight:600;letter-spacing:-.04em;line-height:1;margin:0 0 40px">&gt;_</div>
-      <h2 class="h2">Bring frontier AI design power<br>back to every creator's desk</h2>
-      <p class="lede" style="margin:14px auto">Open · Local · Agent-native</p>
+      <h2 class="h2">Turn one good talk into<br>a recurring rundown</h2>
+      <p class="lede" style="margin:14px auto">One system · one rehearsal · one recording engineers actually rewatch</p>
       <div class="row mt-l" style="justify-content:center">
-        <span class="tag">download: macOS / Windows</span>
-        <span class="tag">star: github.com/nexu-io/open-design · 60K+</span>
+        <span class="tag">next: sandbox-isolation talk · Q3 wk2</span>
+        <span class="tag">owner: platform-devex guild</span>
       </div>
     </div>
   </section>

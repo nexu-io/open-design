@@ -25,4 +25,23 @@ describe('apiProtocols table consistency', () => {
       expect(ollamaCloudProvider?.models).toContain(model);
     }
   });
+
+  it('keeps the Atlas Cloud preset wired to OpenAI-compatible chat models', () => {
+    const atlasCloudProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.atlascloud.ai/v1',
+    );
+
+    expect(atlasCloudProvider).toMatchObject({
+      label: 'Atlas Cloud',
+      model: 'qwen/qwen3.5-flash',
+      apiKeyConsoleLink: {
+        host: 'atlascloud.ai',
+        url: 'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
+      },
+    });
+    expect(atlasCloudProvider?.models).toContain('qwen/qwen3.5-flash');
+    expect(atlasCloudProvider?.models).toContain('deepseek-ai/deepseek-v4-flash');
+  });
 });
