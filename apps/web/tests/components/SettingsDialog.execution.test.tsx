@@ -277,10 +277,14 @@ function renderSettingsDialog(
     appVersionInfo?: AppVersionInfo | null;
     providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
+    onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void> | void;
   } = {},
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
+  const onSilentUpdatePreferenceChange =
+    options.onSilentUpdatePreferenceChange
+    ?? vi.fn(async () => undefined);
   const onClose = vi.fn();
   const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
@@ -294,13 +298,21 @@ function renderSettingsDialog(
       providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
       onPersist={onPersist}
+      onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
   );
 
-  return { onPersist, onPersistComposioKey, onClose, onRefreshAgents, ...view };
+  return {
+    onPersist,
+    onSilentUpdatePreferenceChange,
+    onPersistComposioKey,
+    onClose,
+    onRefreshAgents,
+    ...view,
+  };
 }
 
 function renderIntegrationsView(
@@ -5064,7 +5076,8 @@ describe('SettingsDialog about interactions', () => {
     expect(install).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles allowSilentUpdates on the about page and autosaves without crashing', async () => {
+  it('toggles allowSilentUpdates via the non-optimistic Settings path without crashing', async () => {
+    const onSilentUpdatePreferenceChange = vi.fn(async () => undefined);
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
       {
@@ -5076,36 +5089,53 @@ describe('SettingsDialog about interactions', () => {
           platform: 'darwin',
           arch: 'arm64',
         },
+        onSilentUpdatePreferenceChange,
       },
     );
 
     const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
 
-    // Concurrent sibling updates (about-updater status subscription, autosave
-    // status) can defer the functional setCfg updater until after React has
-    // cleared event.currentTarget. Toggle twice to cover on → off.
     fireEvent.click(checkbox);
     expect(checkbox.checked).toBe(true);
-    expect(screen.getByTestId('settings-allow-silent-updates')).toBeTruthy();
-
-    await waitFor(() => {
-      expect(onPersist).toHaveBeenCalledWith(
-        expect.objectContaining({ allowSilentUpdates: true }),
-        expect.anything(),
-      );
-    });
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(true));
+    // Must not go through optimistic handleConfigPersist autosave.
+    expect(onPersist).not.toHaveBeenCalled();
 
     fireEvent.click(checkbox);
     expect(checkbox.checked).toBe(false);
-    expect(screen.getByTestId('settings-allow-silent-updates')).toBeTruthy();
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(false));
+  });
 
-    await waitFor(() => {
-      expect(onPersist).toHaveBeenCalledWith(
-        expect.objectContaining({ allowSilentUpdates: false }),
-        expect.anything(),
-      );
+  it('reverts the Settings silent-update toggle when the non-optimistic save fails', async () => {
+    let appConfigSilent: boolean | undefined = false;
+    const onSilentUpdatePreferenceChange = vi.fn(async (value: boolean) => {
+      throw new Error('daemon offline');
+      appConfigSilent = value;
     });
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(true));
+    await waitFor(() => {
+      expect((screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement).checked).toBe(false);
+    });
+    // App-wide preference must not keep the rejected value.
+    expect(appConfigSilent).toBe(false);
   });
 
   it('does not read event.currentTarget inside the silent-updates setCfg updater', async () => {
