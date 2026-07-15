@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -78,12 +78,24 @@ describe("mac standalone prebundle policy", () => {
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
-      "better-sqlite3": "12.9.0",
+      "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
     });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
     expect(MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-sidecar.mjs");
     expect(MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/web-sidecar.mjs");
+  });
+
+  it("keeps external daemon runtime dependency versions aligned with daemon package.json", async () => {
+    const daemonPackageJson = JSON.parse(
+      await readFile(join(process.cwd(), "..", "..", "apps", "daemon", "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string> };
+
+    for (const dependency of MAC_PREBUNDLE_POLICIES.daemonSidecar.externals) {
+      expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES[dependency]).toBe(
+        daemonPackageJson.dependencies?.[dependency],
+      );
+    }
   });
 });
 

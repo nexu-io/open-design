@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "./config.js";
+import { PREBUNDLE_RUNTIME_DEPENDENCIES, PREBUNDLE_RUNTIME_DEPENDENCY_NAMES } from "./prebundle-runtime-dependencies.js";
 
 export const WIN_PREBUNDLED_APP_DIR_NAME = "prebundled";
 export const WIN_PREBUNDLE_META_DIR_NAME = "prebundle-meta";
@@ -13,10 +14,7 @@ export const WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER =
   'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
 export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 
-export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
-  "better-sqlite3": "12.9.0",
-  "blake3-wasm": "2.1.5",
-} as const;
+export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = PREBUNDLE_RUNTIME_DEPENDENCIES;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/daemon",
@@ -42,7 +40,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: PREBUNDLE_RUNTIME_DEPENDENCY_NAMES,
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",
@@ -56,7 +54,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: PREBUNDLE_RUNTIME_DEPENDENCY_NAMES,
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",
