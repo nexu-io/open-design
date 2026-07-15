@@ -11,6 +11,7 @@ import type { MemoryListResponse, MemoryTreeNode } from '@open-design/contracts'
 import { useMemoryConfig } from '../../../src/features/memory/hooks/useMemoryConfig.hooks';
 import { useMemoryEntries } from '../../../src/features/memory/hooks/useMemoryEntries.hooks';
 import type { MemoryConfigPort, MemoryEntriesPort } from '../../../src/features/memory/ports';
+import type { MemoryConfigFlagKey } from '../../../src/features/memory/rules';
 
 function makePort(patchConfig = vi.fn(async () => true)): MemoryConfigPort {
   return { patchConfig };
@@ -452,6 +453,75 @@ describe('useMemoryConfig', () => {
     expect(result.current.hookFlags.profileEnabled).toBe(false);
     expect(result.current.hookFlags.verifyEnabled).toBe(true);
   });
+
+  const hookFlagKeys: MemoryConfigFlagKey[] = [
+    'chatExtractionEnabled',
+    'profileEnabled',
+    'rewriteEnabled',
+    'verifyEnabled',
+  ];
+
+  it.each(hookFlagKeys)(
+    'a hydrate arriving while %s has an unsettled write skips only that flag',
+    async (flagKey) => {
+      const list = deferred<MemoryListResponse>();
+      const patch = deferred<boolean>();
+      const configPort = makePort(vi.fn().mockReturnValueOnce(patch.promise));
+      const entriesPort: MemoryEntriesPort = {
+        fetchMemoryList: vi.fn().mockReturnValueOnce(list.promise),
+        fetchMemoryTree: vi.fn(async () => [] as MemoryTreeNode[]),
+        fetchMemoryEntry: vi.fn(async () => null),
+        saveMemoryEntry: vi.fn(async () => null),
+        deleteMemoryEntry: vi.fn(async () => true),
+        saveMemoryIndex: vi.fn(async () => true),
+      };
+      const { result } = renderHook(() => {
+        const config = useMemoryConfig(configPort);
+        const entries = useMemoryEntries(entriesPort, {
+          fireFlash: vi.fn(),
+          captureConfigHydrationRevision: config.captureHydrationRevision,
+          hydrateConfig: config.hydrate,
+          openEditor: vi.fn(),
+          closeEditor: vi.fn(),
+        });
+        return { config, entries };
+      });
+
+      // The toggle starts FIRST. reload() then captures its hydration
+      // revision AFTER that start-time invalidate, so the coarse
+      // `hydrationGuardRef` check at the top of hydrate() does not
+      // short-circuit it — hydrate() reaches the per-flag
+      // `hasUnsettledConfigWrite()` checks below, with this flag's write
+      // still genuinely unsettled (the PATCH has not resolved yet).
+      let toggle!: Promise<void>;
+      act(() => {
+        toggle = result.current.config.onToggleHook(flagKey, false);
+      });
+
+      let reload!: Promise<void>;
+      act(() => {
+        reload = result.current.entries.reload();
+      });
+
+      // The list response arrives while the toggle's PATCH is still pending.
+      await act(async () => {
+        list.resolve(listResponse({ [flagKey]: true, enabled: false }));
+        await reload;
+      });
+
+      // This flag's optimistic value survives the hydrate (its write hasn't
+      // settled), but an unrelated flag DOES get hydrated normally — proving
+      // the skip is scoped to just this flag's own queue.
+      expect(result.current.config.hookFlags[flagKey]).toBe(false);
+      expect(result.current.config.enabled).toBe(false);
+
+      await act(async () => {
+        patch.resolve(true);
+        await toggle;
+      });
+      expect(result.current.config.hookFlags[flagKey]).toBe(false);
+    },
+  );
 });
 
 describe('useMemoryFlash', () => {

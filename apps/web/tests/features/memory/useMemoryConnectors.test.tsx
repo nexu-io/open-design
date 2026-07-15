@@ -177,6 +177,85 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
     expect(result.current.pendingConnectorAuthIds.has('figma')).toBe(false);
   });
 
+  it('records a connect error when connectConnector itself throws, instead of an unhandled rejection', async () => {
+    const port = makePort({
+      connectConnector: vi.fn(async () => {
+        throw new Error('network unreachable');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await expect(act(async () => {
+      await result.current.onConnectMemoryConnector('figma');
+    })).resolves.toBeUndefined();
+
+    expect(result.current.connectorConnectErrors.figma).toBe('network unreachable');
+    expect(result.current.pendingConnectorAuthIds.has('figma')).toBe(false);
+    expect(result.current.connectingConnectorIds.has('figma')).toBe(false);
+  });
+
+  it('stringifies a non-Error thrown from connectConnector', async () => {
+    const port = makePort({
+      connectConnector: vi.fn(async () => {
+        throw 'plain string failure';
+      }),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await act(async () => {
+      await result.current.onConnectMemoryConnector('figma');
+    });
+
+    expect(result.current.connectorConnectErrors.figma).toBe('plain string failure');
+  });
+
+  it('clears a stale pending-auth id when a retry throws instead of resolving', async () => {
+    const outcome: { current: 'pending' | 'throw' } = { current: 'pending' };
+    const port = makePort({
+      connectConnector: vi.fn(async () => {
+        if (outcome.current === 'throw') throw new Error('network unreachable');
+        return { connector: connector('figma'), auth: { kind: 'pending' } };
+      }),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    // First attempt leaves the connector pending mid-authorization.
+    await act(async () => {
+      await result.current.onConnectMemoryConnector('figma');
+    });
+    expect(result.current.pendingConnectorAuthIds.has('figma')).toBe(true);
+
+    // A retry that throws must clear the now-stale pending id, not just skip
+    // touching it.
+    outcome.current = 'throw';
+    await act(async () => {
+      await result.current.onConnectMemoryConnector('figma');
+    });
+    expect(result.current.connectorConnectErrors.figma).toBe('network unreachable');
+    expect(result.current.pendingConnectorAuthIds.has('figma')).toBe(false);
+  });
+
+  it('keeps a successful connect intact when its status refresh rejects', async () => {
+    const port = makePort({
+      connectConnector: vi.fn(async () => ({
+        connector: connector('notion', { status: 'connected' }),
+      })),
+      fetchConnectorStatuses: vi.fn(async () => {
+        throw new Error('status service unavailable');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await expect(act(async () => {
+      await result.current.onConnectMemoryConnector('notion');
+    })).resolves.toBeUndefined();
+
+    expect(result.current.memoryConnectors.find((item) => item.id === 'notion')?.status).toBe('connected');
+    expect(result.current.pendingConnectorAuthIds.has('notion')).toBe(false);
+    expect(result.current.connectingConnectorIds.has('notion')).toBe(false);
+    expect(result.current.connectorLoadError).toMatch(/couldn't be loaded/);
+  });
+
   it('ignores a re-entrant connect call for the same connector while one is already in flight', async () => {
     let resolveConnect!: (value: { connector: ConnectorDetail }) => void;
     const connectConnector = vi.fn(
@@ -202,6 +281,34 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
       resolveConnect({ connector: connector('notion', { status: 'connected' }) });
       await first!;
     });
+    expect(result.current.connectingConnectorIds.has('notion')).toBe(false);
+  });
+
+  it('ignores a re-entrant connect call fired in the SAME batch, before the first render commits', async () => {
+    // Two synchronous calls inside one `act()` never let React's
+    // `connectingConnectorIds` state update land between them — a guard that
+    // only reads that state would let both through. The guard must use a
+    // synchronously-updated ref instead.
+    let resolveConnect!: (value: { connector: ConnectorDetail }) => void;
+    const connectConnector = vi.fn(
+      () => new Promise<{ connector: ConnectorDetail }>((resolve) => { resolveConnect = resolve; }),
+    );
+    const port = makePort({ connectConnector });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => {
+      first = result.current.onConnectMemoryConnector('notion');
+      second = result.current.onConnectMemoryConnector('notion');
+    });
+    expect(connectConnector).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveConnect({ connector: connector('notion', { status: 'connected' }) });
+      await Promise.all([first, second]);
+    });
+    expect(connectConnector).toHaveBeenCalledTimes(1);
     expect(result.current.connectingConnectorIds.has('notion')).toBe(false);
   });
 
@@ -597,6 +704,37 @@ describe('useMemoryConnectors — scan / suggest / save', () => {
     expect(result.current.connectorSuggestions.map((s) => s.id)).toEqual(['s2']);
   });
 
+  it('surfaces a thrown reload() failure after a successful save, instead of an unhandled rejection', async () => {
+    const coord = makeCoord({ reload: vi.fn(async () => { throw new Error('reload failed'); }) });
+    const port = makePort({
+      fetchConnectorStatuses: connectedStatuses,
+      suggestConnectorMemories: vi.fn(async () => scanResponse({ suggestions: [suggestion('s1')] })),
+      saveMemoryEntry: vi.fn(async (draft) => ({
+        id: draft.id ?? 'generated',
+        name: draft.name,
+        description: draft.description,
+        type: draft.type,
+        body: draft.body,
+        updatedAt: 0,
+      })),
+    });
+    const { result } = await connectAndSelect(port, coord);
+    await act(async () => {
+      await result.current.onSuggestConnectorMemory();
+    });
+
+    await expect(act(async () => {
+      await result.current.onSaveConnectorSuggestions();
+    })).resolves.toBeUndefined();
+
+    // The save itself succeeded (savedSuggestionIds is non-empty), so the
+    // suggestion is still pruned locally even though the FOLLOW-UP reload
+    // threw — the reload failure is reported, not silently dropped or left
+    // as an unhandled rejection.
+    expect(result.current.connectorSuggestions).toEqual([]);
+    expect(result.current.connectorError).toBe('reload failed');
+  });
+
   it('captures a thrown error while saving suggestions', async () => {
     const port = makePort({
       fetchConnectorStatuses: connectedStatuses,
@@ -613,6 +751,41 @@ describe('useMemoryConnectors — scan / suggest / save', () => {
       await result.current.onSaveConnectorSuggestions();
     });
     expect(result.current.connectorError).toBe('save failed');
+  });
+
+  it('reconciles saves completed before a later suggestion save throws', async () => {
+    const coord = makeCoord();
+    const port = makePort({
+      fetchConnectorStatuses: connectedStatuses,
+      suggestConnectorMemories: vi.fn(async () => scanResponse()),
+      saveMemoryEntry: vi.fn(async (draft) => {
+        if (draft.id?.includes('s1')) {
+          return {
+            id: draft.id,
+            name: draft.name,
+            description: draft.description,
+            type: draft.type,
+            body: draft.body,
+            updatedAt: 0,
+          };
+        }
+        throw new Error('second save failed');
+      }),
+    });
+    const { result } = await connectAndSelect(port, coord);
+    await act(async () => {
+      await result.current.onSuggestConnectorMemory();
+    });
+
+    await act(async () => {
+      await result.current.onSaveConnectorSuggestions();
+    });
+
+    expect(coord.reload).toHaveBeenCalledTimes(1);
+    expect(result.current.connectorSuggestions.map((item) => item.id)).toEqual(['s2']);
+    expect([...result.current.selectedSuggestionIds]).toEqual(['s2']);
+    expect(result.current.connectorStatus).toMatch(/Saved 1 memory/);
+    expect(result.current.connectorError).toBe('second save failed');
   });
 
   it('connects immediately (no auth step) and notifies, clearing the spinner', async () => {
@@ -818,6 +991,48 @@ describe('useMemoryConnectors — selection + suggestion toggles + guards', () =
     });
     const notion = result.current.memoryConnectors.find((c) => c.id === 'notion');
     expect(notion?.status).toBe('connected');
+  });
+
+  it('carries accountLabel and lastError onto a synthetic catalogue entry when the app is missing from the fetched list', async () => {
+    const port = makePort({
+      fetchMemoryConnectors: vi.fn(async () => [] as ConnectorDetail[]),
+      fetchConnectorStatuses: vi.fn(async () => ({
+        notion: { status: 'error', accountLabel: 'me@example.com', lastError: 'token expired' },
+      }) as ConnectorStatusMap),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    const notion = result.current.memoryConnectors.find((c) => c.id === 'notion');
+    expect(notion?.accountLabel).toBe('me@example.com');
+    expect(notion?.lastError).toBe('token expired');
+  });
+
+  it('reports "Scanning apps" as the scan label while a scan is in flight', async () => {
+    const scan = deferred<ConnectorMemorySuggestionResponse>();
+    const port = makePort({
+      fetchConnectorStatuses: vi.fn(async () => ({ notion: { status: 'connected' } }) as ConnectorStatusMap),
+      suggestConnectorMemories: vi.fn(() => scan.promise),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    act(() => result.current.toggleConnectorSelection('notion'));
+    expect(result.current.connectorScanLabel).toBe('Scan selected apps');
+
+    let suggest!: Promise<void>;
+    act(() => {
+      suggest = result.current.onSuggestConnectorMemory();
+    });
+    expect(result.current.connectorScanLabel).toBe('Scanning apps');
+
+    await act(async () => {
+      scan.resolve({ suggestions: [], attemptedLLM: true, connectors: [], contextBytes: 0 });
+      await suggest;
+    });
+    expect(result.current.connectorScanLabel).toBe('Scan selected apps');
   });
 });
 

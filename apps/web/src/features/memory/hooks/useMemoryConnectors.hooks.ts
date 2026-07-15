@@ -36,7 +36,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ConnectorDetail,
-  MemoryEntry,
   MemoryExtractionRecord,
   MemorySuggestion,
 } from '@open-design/contracts';
@@ -84,7 +83,7 @@ export interface MemoryConnectorsController {
   connectorContextBytes: number;
   connectorStatus: string | null;
   connectorError: string | null;
-  /** Non-null when the connector catalogue could not be refreshed. */
+  /** Non-null when the connector catalogue or its statuses could not be refreshed. */
   connectorLoadError: string | null;
   connectingConnectorIds: Set<string>;
   pendingConnectorAuthIds: Set<string>;
@@ -135,6 +134,13 @@ export function useMemoryConnectors(
   const [connectingConnectorIds, setConnectingConnectorIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Two synchronous `onConnectMemoryConnector(id)` calls in the SAME React
+  // batch (e.g. a double-click before the first render commits) would both
+  // read the same pre-update `connectingConnectorIds` closure and both pass
+  // the re-entrancy guard below — React state updates aren't visible to
+  // their own batch. This ref is updated synchronously (not batched), so the
+  // second call in the same batch still sees the first one's claim.
+  const connectingConnectorIdsRef = useRef<Set<string>>(new Set());
   const [pendingConnectorAuthIds, setPendingConnectorAuthIds] = useState<Set<string>>(
     port.readPendingConnectorAuthIds,
   );
@@ -224,7 +230,10 @@ export function useMemoryConnectors(
       }
       return {
         id,
-        name: MEMORY_CONNECTOR_APP_LABELS[id] ?? id,
+        // `MEMORY_CONNECTOR_APP_LABELS` is typed to require every
+        // MEMORY_CONNECTOR_APP_IDS entry to have a label, so this lookup
+        // can't miss — no `?? id` fallback needed (or reachable).
+        name: MEMORY_CONNECTOR_APP_LABELS[id],
         provider: 'composio',
         category: 'Memory source',
         status: status?.status ?? 'available' as const,
@@ -285,11 +294,24 @@ export function useMemoryConnectors(
 
   const refreshConnectorStatuses = useCallback(async () => {
     const revision = connectorStatusGuardRef.current.begin();
-    const statuses = await port.fetchConnectorStatuses();
+    let statuses: ConnectorStatusMap;
+    try {
+      statuses = await port.fetchConnectorStatuses();
+    } catch {
+      // This function is called by the background OAuth poll and popup callback
+      // subscriptions as well as the connect action. Keep its failures in UI
+      // state so those fire-and-forget callers cannot produce an unhandled
+      // rejection or undo the optimistic connector update.
+      if (connectorStatusGuardRef.current.isCurrent(revision)) {
+        setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
+      }
+      return;
+    }
     if (!connectorStatusGuardRef.current.isCurrent(revision)) return;
     const statusChanged = connectorStatusesChanged(connectorsRef.current, statuses);
     commitConnectorStatuses(statuses);
     setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
+    setConnectorLoadError(null);
     setPendingConnectorAuthIds((prev) => {
       const next = new Set(prev);
       for (const connectorId of prev) {
@@ -317,7 +339,8 @@ export function useMemoryConnectors(
   // and drives `refreshConnectorStatuses` below. See the file header.
 
   const onConnectMemoryConnector = useCallback(async (connectorId: string) => {
-    if (connectingConnectorIds.has(connectorId)) return;
+    if (connectingConnectorIdsRef.current.has(connectorId)) return;
+    connectingConnectorIdsRef.current.add(connectorId);
     setConnectingConnectorIds((prev) => new Set(prev).add(connectorId));
     setConnectorConnectErrors((prev) => {
       if (prev[connectorId] === undefined) return prev;
@@ -326,7 +349,26 @@ export function useMemoryConnectors(
       return next;
     });
     try {
-      const result = await port.connectConnector(connectorId);
+      let result: Awaited<ReturnType<MemoryConnectorsPort['connectConnector']>>;
+      try {
+        result = await port.connectConnector(connectorId);
+      } catch (err) {
+        // A thrown connect (as opposed to a resolved `{ error }` result) must
+        // still land in connect-error state instead of propagating as an
+        // unhandled rejection — the same fix already applied to
+        // refreshConnectorStatuses above, for the call one step earlier.
+        setConnectorConnectErrors((prev) => ({
+          ...prev,
+          [connectorId]: err instanceof Error ? err.message : String(err),
+        }));
+        setPendingConnectorAuthIds((prev) => {
+          if (!prev.has(connectorId)) return prev;
+          const next = new Set(prev);
+          next.delete(connectorId);
+          return next;
+        });
+        return;
+      }
       if (result.connector?.status === 'connected') port.notifyConnectorsChanged();
       const requiresAuthorizationCompletion =
         result.auth?.kind === 'redirect_required' || result.auth?.kind === 'pending';
@@ -365,14 +407,18 @@ export function useMemoryConnectors(
       }
       await refreshConnectorStatuses();
     } finally {
+      // The ref guard above means only one call per connectorId is ever
+      // in-flight at a time, and nothing else touches this state — `prev`
+      // is guaranteed to have `connectorId` here, so there is no "already
+      // removed" case left to check.
+      connectingConnectorIdsRef.current.delete(connectorId);
       setConnectingConnectorIds((prev) => {
-        if (!prev.has(connectorId)) return prev;
         const next = new Set(prev);
         next.delete(connectorId);
         return next;
       });
     }
-  }, [connectingConnectorIds, refreshConnectorStatuses, port]);
+  }, [refreshConnectorStatuses, port]);
 
   const toggleConnectorSuggestion = useCallback((suggestionId: string) => {
     setSelectedSuggestionIds((prev) => {
@@ -462,43 +508,63 @@ export function useMemoryConnectors(
     setConnectorSaving(true);
     setConnectorError(null);
     try {
-      const saved: MemoryEntry[] = [];
       const savedSuggestionIds = new Set<string>();
-      for (const suggestion of selectedConnectorSuggestions) {
-        const entry = await port.saveMemoryEntry({
-          id: memoryEntryIdForConnectorSuggestion(suggestion),
-          name: suggestion.name,
-          description: suggestion.description,
-          type: suggestion.type,
-          body: suggestion.body,
-        });
-        if (entry) {
-          saved.push(entry);
-          savedSuggestionIds.add(suggestion.id);
+      let failure: unknown;
+      try {
+        for (const suggestion of selectedConnectorSuggestions) {
+          const entry = await port.saveMemoryEntry({
+            id: memoryEntryIdForConnectorSuggestion(suggestion),
+            name: suggestion.name,
+            description: suggestion.description,
+            type: suggestion.type,
+            body: suggestion.body,
+          });
+          if (entry) {
+            savedSuggestionIds.add(suggestion.id);
+          }
+        }
+      } catch (err) {
+        failure = err;
+      }
+
+      // A save can succeed before a later request fails. Refresh and reconcile
+      // those confirmed writes before reporting the failure, so saved suggestions
+      // do not remain visible as retryable rows.
+      if (savedSuggestionIds.size > 0 || !failure) {
+        try {
+          await reload();
+        } catch (err) {
+          failure ??= err;
         }
       }
-      await reload();
-      const savedEntriesById = new Map(saved.map((entry) => [entry.id, entry]));
-      setConnectorSuggestions((prev) =>
-        prev.filter((suggestion) => !savedSuggestionIds.has(suggestion.id)),
-      );
-      setSelectedSuggestionIds(
-        new Set(
-          selectedConnectorSuggestions
-            .filter((suggestion) => !savedSuggestionIds.has(suggestion.id))
-            .map((suggestion) => suggestion.id),
-        ),
-      );
-      setConnectorStatus(
-        `Saved ${savedEntriesById.size} memor${savedEntriesById.size === 1 ? 'y' : 'ies'} from connected apps.`,
-      );
-      if (savedEntriesById.size !== selectedConnectorSuggestions.length) {
-        setConnectorError(
-          `Saved ${savedEntriesById.size} of ${selectedConnectorSuggestions.length} selected memories. Please try the remaining items again.`,
+
+      if (savedSuggestionIds.size > 0) {
+        setConnectorSuggestions((prev) =>
+          prev.filter((suggestion) => !savedSuggestionIds.has(suggestion.id)),
+        );
+        setSelectedSuggestionIds(
+          new Set(
+            selectedConnectorSuggestions
+              .filter((suggestion) => !savedSuggestionIds.has(suggestion.id))
+              .map((suggestion) => suggestion.id),
+          ),
+        );
+        setConnectorStatus(
+          `Saved ${savedSuggestionIds.size} memor${savedSuggestionIds.size === 1 ? 'y' : 'ies'} from connected apps.`,
         );
       }
-    } catch (err) {
-      setConnectorError(err instanceof Error ? err.message : String(err));
+
+      // The `selectedConnectorSuggestions.length === 0` early-return above
+      // guarantees the list is non-empty here, so a zero-saved outcome always
+      // has `size !== length` and is already covered by the branch below —
+      // there is no separate "0 of 0" case to report.
+      if (failure) {
+        setConnectorError(failure instanceof Error ? failure.message : String(failure));
+      } else if (savedSuggestionIds.size !== selectedConnectorSuggestions.length) {
+        setConnectorError(
+          `Saved ${savedSuggestionIds.size} of ${selectedConnectorSuggestions.length} selected memories. Please try the remaining items again.`,
+        );
+      }
     } finally {
       setConnectorSaving(false);
     }

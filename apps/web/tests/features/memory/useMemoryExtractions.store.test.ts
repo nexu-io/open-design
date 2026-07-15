@@ -74,6 +74,12 @@ describe('mergeSameAttempt', () => {
     expect(mergeSameAttempt(local, incoming)).toBe(incoming);
   });
 
+  it('keeps local when its startedAt is later than an equally-finished incoming record', () => {
+    const local = record('a', { phase: 'success', finishedAt: 2_000, startedAt: 1_500 });
+    const incoming = record('a', { phase: 'failed', finishedAt: 2_000, startedAt: 1_000 });
+    expect(mergeSameAttempt(local, incoming)).toBe(local);
+  });
+
   it('retains the local terminal value when nothing orders two disagreeing terminal payloads', () => {
     const local = record('a', { phase: 'success', finishedAt: 2_000, startedAt: 1_000 });
     const incoming = record('a', { phase: 'failed', finishedAt: 2_000, startedAt: 1_000 });
@@ -187,6 +193,20 @@ describe('store.beginDelete / settleDeleteSuccess / settleDeleteFailure', () => 
     store.applyFrame(record('a', { phase: 'success', finishedAt: 2_000 }));
 
     expect(store.rows()).toEqual([]);
+  });
+
+  it('merges a SECOND buffered frame for the same pending-delete id, content-ordered, not stacked', () => {
+    const { store } = makeStore();
+    store.applyFrame(record('a', { phase: 'running' }));
+    store.beginDelete('a');
+    // Two frames buffer while the delete is pending — the second must merge
+    // onto the first (rule B) rather than replacing it outright, so a
+    // lower-progress frame arriving second can't regress the buffered value.
+    store.applyFrame(record('a', { phase: 'success', finishedAt: 2_000 }));
+    store.applyFrame(record('a', { phase: 'running' }));
+
+    store.settleDeleteFailure('a');
+    expect(store.rows().find((r) => r.id === 'a')?.phase).toBe('success');
   });
 
   it('settleDeleteFailure replays the best buffered frame', () => {
@@ -325,6 +345,20 @@ describe('store.commitSnapshot', () => {
 
     expect(committed).toEqual(rows);
     expect(store.rows()).toEqual(rows);
+  });
+
+  it('never resurrects a row as a SURVIVOR while its delete is still pending, even if the snapshot also lacks it', () => {
+    const { store } = makeStore();
+    store.applyFrame(record('a'));
+    store.applyFrame(record('b'));
+    const sinceClock = store.snapshotClock();
+    store.beginDelete('a');
+
+    // 'a' is absent from the confirmed snapshot too — without the pending-
+    // delete filter, it could slip back in as a "live survivor" via the
+    // rowStamp branch below, undoing the optimistic delete.
+    store.commitSnapshot([record('b')], sinceClock);
+    expect(store.rows().map((r) => r.id)).toEqual(['b']);
   });
 
   it('drops a row the snapshot no longer has, when nothing local advanced it after the read began', () => {

@@ -9,7 +9,7 @@ import type {
   MemoryType,
 } from '@open-design/contracts';
 import { useT } from '../../i18n';
-import { MEMORY_CONNECTOR_APP_LABELS } from './constants';
+import { connectorAppLabel } from './constants';
 import type {
   ConnectorMemoryAttempt,
   FlashKind,
@@ -29,7 +29,7 @@ export function describeConnectorReadIssue(
 
   const connectorName =
     firstIssue.connectorName
-    || MEMORY_CONNECTOR_APP_LABELS[firstIssue.connectorId]
+    || connectorAppLabel(firstIssue.connectorId)
     || firstIssue.connectorId;
   const reason = (firstIssue.error || firstIssue.summary || '').trim();
   const suffix = reason ? ` ${reason}` : '';
@@ -152,7 +152,7 @@ export function formatConnectorContextBytes(bytes: number): string {
 
 export function connectorAttemptName(attempt: ConnectorMemoryAttempt): string {
   return attempt.connectorName
-    || MEMORY_CONNECTOR_APP_LABELS[attempt.connectorId]
+    || connectorAppLabel(attempt.connectorId)
     || attempt.connectorId;
 }
 

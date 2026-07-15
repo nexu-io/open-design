@@ -175,6 +175,41 @@ describe('useMemoryEntries — reload + filter', () => {
       0,
     );
   });
+
+  it('ignores a stale reload() that REJECTS after a newer reload() already committed successfully', async () => {
+    const coord = makeCoord();
+    const forA = deferred<MemoryListResponse>();
+    const forB = deferred<MemoryListResponse>();
+    const fetchMemoryList = vi.fn().mockReturnValueOnce(forA.promise).mockReturnValueOnce(forB.promise);
+    const port = makePort({ fetchMemoryList, fetchMemoryTree: vi.fn(async () => []) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    let reloadA!: Promise<void>;
+    act(() => {
+      reloadA = result.current.reload();
+    });
+    let reloadB!: Promise<void>;
+    act(() => {
+      reloadB = result.current.reload();
+    });
+
+    // The newer request (B) resolves first and commits successfully.
+    await act(async () => {
+      forB.resolve(listResponse({ rootDir: '/memories-b', entries: [summary('b-only')] }));
+      await reloadB;
+    });
+    expect(result.current.loadError).toBeNull();
+
+    // The abandoned older request (A) REJECTS late — its failure is stale
+    // and must not clobber the newer, already-confirmed success with a
+    // loadError.
+    await act(async () => {
+      forA.reject(new Error('offline'));
+      await reloadA;
+    });
+    expect(result.current.loadError).toBeNull();
+    expect(result.current.rootDir).toBe('/memories-b');
+  });
 });
 
 describe('useMemoryEntries — create / delete / index', () => {
@@ -195,6 +230,25 @@ describe('useMemoryEntries — create / delete / index', () => {
     expect(port.fetchMemoryList).toHaveBeenCalled(); // reload
     expect(coord.closeEditor).toHaveBeenCalled();
     expect(coord.fireFlash).toHaveBeenCalledWith('created');
+  });
+
+  it('onSave for an EXISTING entry saves, reloads, closes the editor, and flashes "saved"', async () => {
+    const coord = makeCoord();
+    const port = makePort({ saveMemoryEntry: vi.fn(async () => savedEntry()) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    act(() =>
+      result.current.setEditing({ id: 'existing', name: 'Edited', description: '', type: 'user', body: 'hi' }),
+    );
+    await act(async () => {
+      await result.current.onSave();
+    });
+
+    expect(port.saveMemoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'existing', name: 'Edited' }),
+    );
+    expect(coord.closeEditor).toHaveBeenCalled();
+    expect(coord.fireFlash).toHaveBeenCalledWith('saved');
   });
 
   it('onSave is a no-op when the name is blank', async () => {
@@ -240,6 +294,32 @@ describe('useMemoryEntries — create / delete / index', () => {
     expect(coord.fireFlash).toHaveBeenCalledWith('indexSaved');
   });
 
+  it('does not discard a newer unsaved index edit made while an earlier save is still in flight', async () => {
+    const coord = makeCoord();
+    const firstSave = deferred<boolean>();
+    const port = makePort({ saveMemoryIndex: vi.fn().mockReturnValueOnce(firstSave.promise) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    act(() => result.current.setIndexDraft('draft A'));
+    let saveA!: Promise<void>;
+    act(() => {
+      saveA = result.current.onSaveIndex();
+    });
+
+    // The user keeps typing while A's save is still pending.
+    act(() => result.current.setIndexDraft('draft B'));
+
+    await act(async () => {
+      firstSave.resolve(true);
+      await saveA;
+    });
+
+    // A's confirmed value lands in `index`, but the newer, still-unsaved
+    // draft B must survive — not be silently cleared by A's stale closure.
+    expect(result.current.index).toBe('draft A');
+    expect(result.current.indexDraft).toBe('draft B');
+  });
+
   it('onSaveIndex is a no-op with no draft, and skips the flash when the write fails', async () => {
     const coord = makeCoord();
     const port = makePort({ saveMemoryIndex: vi.fn(async () => false) });
@@ -280,6 +360,40 @@ describe('useMemoryEntries — create / delete / index', () => {
       await result.current.onDelete('a');
     });
     expect(coord.fireFlash).not.toHaveBeenCalled();
+  });
+
+  it('onSave, onDelete, and onSaveIndex surface a load error instead of an unhandled rejection when the port throws', async () => {
+    const coord = makeCoord();
+    const port = makePort({
+      saveMemoryEntry: vi.fn(async () => {
+        throw new Error('save network failure');
+      }),
+      deleteMemoryEntry: vi.fn(async () => {
+        throw new Error('delete network failure');
+      }),
+      saveMemoryIndex: vi.fn(async () => {
+        throw new Error('index network failure');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    act(() => result.current.setEditing({ name: 'X', description: '', type: 'user', body: '' }));
+    await expect(act(async () => {
+      await result.current.onSave();
+    })).resolves.toBeUndefined();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+    expect(coord.fireFlash).not.toHaveBeenCalled();
+
+    await expect(act(async () => {
+      await result.current.onDelete('a');
+    })).resolves.toBeUndefined();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+
+    act(() => result.current.setIndexDraft('draft'));
+    await expect(act(async () => {
+      await result.current.onSaveIndex();
+    })).resolves.toBeUndefined();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
   });
 });
 
@@ -344,6 +458,40 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
     expect(coord.openEditor).not.toHaveBeenCalled();
     expect(result.current.editing).toBeNull();
     expect(result.current.loadError).toMatch(/couldn't be loaded/);
+  });
+
+  it('clears a failed-read banner when a current preview or edit retry succeeds', async () => {
+    const coord = makeCoord();
+    const port = makePort({
+      fetchMemoryEntry: vi.fn()
+        .mockRejectedValueOnce(new Error('preview failed'))
+        .mockResolvedValueOnce(savedEntry({ id: 'preview', body: 'preview body' }))
+        .mockRejectedValueOnce(new Error('edit failed'))
+        .mockResolvedValueOnce(savedEntry({ id: 'edit', name: 'Edit me' })),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    await act(async () => {
+      await result.current.openPreview('preview');
+    });
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+
+    await act(async () => {
+      await result.current.openPreview('preview');
+    });
+    expect(result.current.previewBody).toBe('preview body');
+    expect(result.current.loadError).toBeNull();
+
+    await act(async () => {
+      await result.current.startEdit('edit');
+    });
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+
+    await act(async () => {
+      await result.current.startEdit('edit');
+    });
+    expect(result.current.editing?.name).toBe('Edit me');
+    expect(result.current.loadError).toBeNull();
   });
 
   it("ignores a stale openPreview() failure once a newer preview took over", async () => {

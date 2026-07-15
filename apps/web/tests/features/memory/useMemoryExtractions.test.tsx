@@ -1410,4 +1410,17 @@ describe('useMemoryExtractions — derived UI state', () => {
       vi.useRealTimers();
     }
   });
+
+  it('clears the nowClock interval on unmount', () => {
+    vi.useFakeTimers();
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    try {
+      const { unmount } = renderHook(() => useMemoryExtractions(makePort()));
+      unmount();
+      expect(clearIntervalSpy).toHaveBeenCalled();
+    } finally {
+      clearIntervalSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

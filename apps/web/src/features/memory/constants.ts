@@ -78,7 +78,11 @@ export const MEMORY_CONNECTOR_APP_IDS = [
   'slack',
 ] as const;
 
-export const MEMORY_CONNECTOR_APP_LABELS: Record<string, string> = {
+// Keyed by the id union itself (not a general `Record<string, string>`) so
+// adding an id above without a label here is a type error, not a silent
+// runtime fallback — this is what makes the `?? id` guard callers used to
+// need provably unnecessary.
+export const MEMORY_CONNECTOR_APP_LABELS: Record<(typeof MEMORY_CONNECTOR_APP_IDS)[number], string> = {
   notion: 'Notion',
   figma: 'Figma',
   linear: 'Linear',
@@ -86,5 +90,14 @@ export const MEMORY_CONNECTOR_APP_LABELS: Record<string, string> = {
   github: 'GitHub',
   slack: 'Slack',
 };
+
+/** Looks up a label for a connector id that ISN'T statically known to be one
+ *  of `MEMORY_CONNECTOR_APP_IDS` — e.g. a `connectorId` string arriving from
+ *  an API response. Returns undefined for an id this app doesn't recognize,
+ *  unlike `MEMORY_CONNECTOR_APP_LABELS[id]` directly, which requires (and is
+ *  typed to guarantee) a known id. */
+export function connectorAppLabel(connectorId: string): string | undefined {
+  return (MEMORY_CONNECTOR_APP_LABELS as Record<string, string | undefined>)[connectorId];
+}
 
 export const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';

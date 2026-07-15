@@ -207,7 +207,11 @@ export function createExtractionHistoryStore(
     pendingDeletes.set(id, (pendingDeletes.get(id) ?? 0) + 1);
   }
 
-  /** Returns true when this was the LAST in-flight delete for the id. */
+  /** Returns true when this was the LAST in-flight delete for the id. Every
+   *  call site pairs this with a prior `markPendingDelete(id)` (beginDelete
+   *  always precedes the settle path that calls this), so `pendingDeletes`
+   *  is guaranteed to already hold `id` here — the `?? 1` is a defensive
+   *  invariant guard against that pairing breaking, not a reachable case. */
   function unmarkPendingDelete(id: string): boolean {
     const count = (pendingDeletes.get(id) ?? 1) - 1;
     if (count <= 0) {
@@ -306,6 +310,10 @@ export function createExtractionHistoryStore(
       .filter((row) => {
         if (pendingDeletes.has(row.id)) return false;
         if (acceptedById.has(row.id)) return true;
+        // Every row that ever enters `rows` is stamped at insertion, by
+        // either applyFrame or this function's own accepted-rows loop below
+        // — `?? 0` is a defensive invariant guard for that, not a reachable
+        // "never stamped" case.
         return (rowStamp.get(row.id) ?? 0) > sinceClock;
       })
       .map((row) => {

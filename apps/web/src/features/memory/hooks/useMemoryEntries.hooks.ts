@@ -203,6 +203,7 @@ export function useMemoryEntries(
         return;
       }
       if (previewRequestTokenRef.current !== token) return;
+      setLoadError(null);
       setPreviewBody(entry?.body ?? '');
     },
     [previewId, port],
@@ -220,7 +221,9 @@ export function useMemoryEntries(
         setLoadError(LOAD_ERROR_MESSAGE);
         return;
       }
-      if (!entry || editRequestTokenRef.current !== token) return;
+      if (editRequestTokenRef.current !== token) return;
+      setLoadError(null);
+      if (!entry) return;
       openEditor();
       setEditing({
         id: entry.id,
@@ -257,6 +260,11 @@ export function useMemoryEntries(
         closeEditor();
         fireFlash(wasNew ? 'created' : 'saved');
       }
+    } catch {
+      // A thrown save (as opposed to a resolved `null` failure) must still
+      // surface as a load error instead of propagating as an unhandled
+      // rejection with no user-visible feedback at all.
+      setLoadError(LOAD_ERROR_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -264,10 +272,14 @@ export function useMemoryEntries(
 
   const onDelete = useCallback(
     async (id: string) => {
-      const ok = await port.deleteMemoryEntry(id);
-      if (ok) {
-        await reload();
-        fireFlash('deleted');
+      try {
+        const ok = await port.deleteMemoryEntry(id);
+        if (ok) {
+          await reload();
+          fireFlash('deleted');
+        }
+      } catch {
+        setLoadError(LOAD_ERROR_MESSAGE);
       }
     },
     [reload, fireFlash, port],
@@ -275,14 +287,21 @@ export function useMemoryEntries(
 
   const onSaveIndex = useCallback(async () => {
     if (indexDraft === null) return;
+    const savedDraft = indexDraft;
     setBusy(true);
     try {
-      const ok = await port.saveMemoryIndex(indexDraft);
+      const ok = await port.saveMemoryIndex(savedDraft);
       if (ok) {
-        setIndex(indexDraft);
-        setIndexDraft(null);
+        setIndex(savedDraft);
+        // Only clear the draft if the user hasn't already typed a NEWER,
+        // still-unsaved edit while this save was in flight — a stale closure
+        // unconditionally clearing here would silently discard that edit
+        // even though it was never sent to the server.
+        setIndexDraft((current) => (current === savedDraft ? null : current));
         fireFlash('indexSaved');
       }
+    } catch {
+      setLoadError(LOAD_ERROR_MESSAGE);
     } finally {
       setBusy(false);
     }
