@@ -590,17 +590,26 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* #5663: allow this column to shrink below its content's intrinsic
+     width when the parent .present-menu hits its viewport max-width
+     clamp, so the hint <small> can be truncated instead of pushing the
+     popover off-screen. */
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .present-menu-copy small {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.2;
-  /* #5663: keep the localized helper on a single line; the parent
-     .present-menu uses width: max-content so the column grows to
-     fit this text instead of wrapping it. */
+  /* #5663: keep the localized helper on a single line while the popover
+     can grow to fit it (width: max-content). When the popover is
+     clamped by its viewport max, the ellipsis fallback keeps the hint
+     visible inside the menu instead of spilling out. */
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .share-menu { position: relative; display: inline-block; }
