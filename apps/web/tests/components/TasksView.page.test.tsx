@@ -2124,5 +2124,6 @@ describe('TasksView page shell', () => {
     const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
     expect(css).toContain('@media (max-width: 960px) {\n  .creator-release-layout,');
     expect(css).toContain('@media (max-width: 640px) {\n  .creator-release-create,');
+    expect(css).toContain('.creator-release-editor .creator-check {');
   });
 });

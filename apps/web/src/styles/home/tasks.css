@@ -714,7 +714,7 @@
   resize: vertical;
 }
 
-.creator-release .creator-check {
+.creator-release-editor .creator-check {
   display: flex;
   flex-direction: row;
   align-items: center;
