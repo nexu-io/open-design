@@ -2,7 +2,7 @@
 // and live artifact refreshers. The daemon still stores these as routines;
 // the UI presents them as scheduled agent conversations.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@open-design/components';
 import type {
   AutomationEvolutionProposal,
@@ -34,6 +34,11 @@ import type {
   CreatorContentStatus,
   CreatorMediaProjectData,
   CreatorWorkbenchProjectData,
+  CreatorReleaseChecklist,
+  CreatorReleasePackage,
+  CreatorReleasePackageData,
+  CreatorReleasePlatform,
+  CreatorReleaseStatus,
   Project,
 } from '@open-design/contracts';
 
@@ -72,6 +77,38 @@ type CreatorContentProjectState = {
   data: CreatorContentProjectData;
   failed: boolean;
 };
+type CreatorReleaseProjectState = {
+  projectId: string;
+  data: CreatorReleasePackageData;
+  failed: boolean;
+};
+
+// Release 素材选择：始终提供「未关联」选项；当前关联素材即便已 missing 或库中没有也保留；
+// 仅把当前项目中 availability === 'available' 的素材作为新增候选。
+function releaseAssetOptions(currentId: string | undefined, media: CreatorMediaProjectState | undefined): ReactElement[] {
+  const available = media && !media.failed ? media.data.assets.filter((asset) => asset.availability === 'available') : [];
+  const options: ReactElement[] = [<option key="__none" value="">未关联</option>];
+  if (currentId && !available.some((asset) => asset.id === currentId)) {
+    const current = media?.data.assets.find((asset) => asset.id === currentId);
+    options.push(
+      <option key={currentId} value={currentId}>
+        {current ? `${current.fileName} (${current.availability === 'missing' ? 'Missing' : 'Unavailable'})` : currentId}
+      </option>,
+    );
+  }
+  for (const asset of available) {
+    options.push(<option key={asset.id} value={asset.id}>{asset.fileName}</option>);
+  }
+  return options;
+}
+
+// 当前关联素材的展示信息；库中没有时标记为 unavailable（不误计为 missing）。
+function currentReleaseAsset(assetId: string | undefined, media: CreatorMediaProjectState | undefined) {
+  if (!assetId) return undefined;
+  const found = media && !media.failed ? media.data.assets.find((asset) => asset.id === assetId) : undefined;
+  if (found) return found;
+  return { id: assetId, fileName: assetId, relativePath: '', availability: 'unavailable' as const };
+}
 const CREATOR_STAGES: CreatorTaskStage[] = ['topic', 'material', 'editing', 'release', 'review'];
 const CREATOR_STATUSES: CreatorTaskStatus[] = ['todo', 'ready', 'blocked', 'done'];
 const CREATOR_PRIORITIES: CreatorTaskPriority[] = ['low', 'medium', 'high'];
@@ -466,6 +503,14 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const [creatorContentTitle, setCreatorContentTitle] = useState('');
   const [creatorContentEdit, setCreatorContentEdit] = useState<CreatorContentProject | null>(null);
   const [creatorContentSaving, setCreatorContentSaving] = useState(false);
+  const [creatorReleaseProjectData, setCreatorReleaseProjectData] = useState<CreatorReleaseProjectState[]>([]);
+  const [creatorReleaseProjectId, setCreatorReleaseProjectId] = useState('');
+  const [creatorReleaseContentId, setCreatorReleaseContentId] = useState('');
+  const [creatorReleasePlatform, setCreatorReleasePlatform] = useState<CreatorReleasePlatform>('bilibili');
+  const [creatorReleaseTitle, setCreatorReleaseTitle] = useState('');
+  const [creatorReleaseEdit, setCreatorReleaseEdit] = useState<CreatorReleasePackage | null>(null);
+  const [creatorReleaseTagsInput, setCreatorReleaseTagsInput] = useState('');
+  const [creatorReleaseSaving, setCreatorReleaseSaving] = useState(false);
   const [creatorContentTaskId, setCreatorContentTaskId] = useState('');
   const [creatorStoryboardMediaAssetId, setCreatorStoryboardMediaAssetId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -545,6 +590,19 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       ? creatorProjectData.find((value) => value.projectId === creatorContentEdit.projectId)?.data.tasks ?? []
       : [],
     [creatorContentEdit, creatorProjectData],
+  );
+
+  const selectedCreatorRelease = useMemo(
+    () => creatorReleaseProjectData.find((value) => value.projectId === creatorReleaseProjectId),
+    [creatorReleaseProjectData, creatorReleaseProjectId],
+  );
+  const selectedReleaseContent = useMemo(
+    () => creatorContentProjectData.find((value) => value.projectId === creatorReleaseProjectId),
+    [creatorContentProjectData, creatorReleaseProjectId],
+  );
+  const selectedReleaseMedia = useMemo(
+    () => creatorMediaProjectData.find((value) => value.projectId === creatorReleaseProjectId),
+    [creatorMediaProjectData, creatorReleaseProjectId],
   );
 
   const templates = useMemo(
@@ -639,6 +697,21 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         }
       }));
       setCreatorContentProjectData(creatorContentData);
+      const creatorReleaseData = await Promise.all(entryProjects.map(async (project): Promise<CreatorReleaseProjectState> => {
+        try {
+          const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-release-packages`);
+          if (!response.ok) return { projectId: project.id, data: { releasePackages: [] }, failed: true };
+          const data = await response.json() as Partial<CreatorReleasePackageData>;
+          return {
+            projectId: project.id,
+            data: { releasePackages: Array.isArray(data.releasePackages) ? data.releasePackages : [] },
+            failed: false,
+          };
+        } catch {
+          return { projectId: project.id, data: { releasePackages: [] }, failed: true };
+        }
+      }));
+      setCreatorReleaseProjectData(creatorReleaseData);
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
       }
@@ -695,6 +768,12 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setCreatorContentProjectId(entryProjects[0].id);
     }
   }, [creatorContentProjectId, entryProjects]);
+
+  useEffect(() => {
+    if (!creatorReleaseProjectId && entryProjects[0]?.id) {
+      setCreatorReleaseProjectId(entryProjects[0].id);
+    }
+  }, [creatorReleaseProjectId, entryProjects]);
 
   const replaceCreatorContent = useCallback((content: CreatorContentProject) => {
     setCreatorContentProjectData((current) => current.map((entry) => entry.projectId !== content.projectId
@@ -784,6 +863,208 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setCreatorContentSaving(false);
     }
   }, [creatorContentEdit]);
+
+  // Release 面板：本地 helper、CRUD、导出下载。
+
+  function isoToLocalInput(iso?: string): string {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function localInputToIso(value: string): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) throw new Error('invalid local date');
+    return date.toISOString();
+  }
+
+  const triggerReleaseDownload = useCallback((filename: string, content: string, mime: string) => {
+    try {
+      const blob = new Blob([content], { type: mime });
+      const url = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : '';
+      const anchor = document.createElement('a');
+      anchor.href = url || '#';
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      if (url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+    } catch {
+      // 浏览器不支持下载时静默忽略（例如测试环境）。
+    }
+  }, []);
+
+  const replaceCreatorRelease = useCallback((release: CreatorReleasePackage) => {
+    setCreatorReleaseProjectData((current) => current.map((entry) => entry.projectId !== release.projectId
+      ? entry
+      : {
+        ...entry,
+        data: {
+          releasePackages: entry.data.releasePackages.some((candidate) => candidate.id === release.id)
+            ? entry.data.releasePackages.map((candidate) => candidate.id === release.id ? release : candidate)
+            : [...entry.data.releasePackages, release],
+        },
+      }));
+  }, []);
+
+  const createCreatorRelease = useCallback(async () => {
+    const title = creatorReleaseTitle.trim();
+    const contentId = creatorReleaseContentId;
+    if (!creatorReleaseProjectId || !contentId || !title) return;
+    setCreatorReleaseSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(creatorReleaseProjectId)}/creator-release-packages`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contentId, platform: creatorReleasePlatform, title }),
+      });
+      if (!response.ok) throw new Error(`creator release create: ${response.status}`);
+      const result = await response.json() as { releasePackage: CreatorReleasePackage };
+      replaceCreatorRelease(result.releasePackage);
+      setCreatorReleaseEdit(result.releasePackage);
+      setCreatorReleaseTagsInput(result.releasePackage.tags.join(', '));
+      setCreatorReleaseTitle('');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorReleaseSaving(false);
+    }
+  }, [creatorReleaseProjectId, creatorReleaseContentId, creatorReleasePlatform, creatorReleaseTitle, replaceCreatorRelease]);
+
+  const updateCreatorReleaseEdit = useCallback((update: (release: CreatorReleasePackage) => CreatorReleasePackage) => {
+    setCreatorReleaseEdit((current) => current ? update(current) : current);
+  }, []);
+
+  const saveCreatorRelease = useCallback(async () => {
+    if (!creatorReleaseEdit) return;
+    const release = creatorReleaseEdit;
+    const title = release.title.trim();
+    if (!title) {
+      setError('Release title is required');
+      return;
+    }
+    const tags = Array.from(new Set(creatorReleaseTagsInput.split(',').map((item) => item.trim()).filter(Boolean)));
+    // 可选字段：空值 -> null 显式清空；非空值 -> 原样发送（ISO 或 URL）。
+    const toNullable = (value: string | undefined): string | null => (value && value.trim() ? value : null);
+    const body: Record<string, unknown> = {
+      contentId: release.contentId,
+      platform: release.platform,
+      status: release.status,
+      title,
+      description: release.description,
+      tags,
+      coverAssetId: toNullable(release.coverAssetId),
+      exportAssetId: toNullable(release.exportAssetId),
+      scheduledAt: toNullable(release.scheduledAt),
+      publishedAt: toNullable(release.publishedAt),
+      publishedUrl: toNullable(release.publishedUrl),
+      checklist: release.checklist,
+    };
+    setCreatorReleaseSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(release.projectId)}/creator-release-packages/${encodeURIComponent(release.id)}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(`creator release update: ${response.status}`);
+      const result = await response.json().catch(() => null) as { releasePackage?: CreatorReleasePackage } | null;
+      const saved = result?.releasePackage ?? release;
+      replaceCreatorRelease(saved);
+      setCreatorReleaseEdit(saved);
+      setCreatorReleaseTagsInput(saved.tags.join(', '));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorReleaseSaving(false);
+    }
+  }, [creatorReleaseEdit, creatorReleaseTagsInput, replaceCreatorRelease]);
+
+  const deleteCreatorRelease = useCallback(async (release: CreatorReleasePackage) => {
+    if (!window.confirm('Delete this release package?')) return;
+    setCreatorReleaseSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(release.projectId)}/creator-release-packages/${encodeURIComponent(release.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`creator release delete: ${response.status}`);
+      setCreatorReleaseProjectData((current) => current.map((entry) => entry.projectId !== release.projectId ? entry : {
+        ...entry, data: { releasePackages: entry.data.releasePackages.filter((candidate) => candidate.id !== release.id) },
+      }));
+      if (creatorReleaseEdit?.id === release.id) setCreatorReleaseEdit(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorReleaseSaving(false);
+    }
+  }, [creatorReleaseEdit]);
+
+  const downloadReleaseJson = useCallback(async (release: CreatorReleasePackage) => {
+    if (!release) return;
+    setCreatorReleaseSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(release.projectId)}/creator-release-packages/${encodeURIComponent(release.id)}/export`);
+      if (!response.ok) throw new Error(`creator release export: ${response.status}`);
+      const data = await response.json();
+      triggerReleaseDownload(`release-${release.id}.json`, JSON.stringify(data, null, 2), 'application/json');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorReleaseSaving(false);
+    }
+  }, [triggerReleaseDownload]);
+
+  const downloadReleaseMarkdown = useCallback(async (release: CreatorReleasePackage) => {
+    if (!release) return;
+    setCreatorReleaseSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(release.projectId)}/creator-release-packages/${encodeURIComponent(release.id)}/export`);
+      if (!response.ok) throw new Error(`creator release export: ${response.status}`);
+      const data = await response.json() as {
+        id: string; projectId: string; contentId: string; platform: string; status: string; title: string;
+        description: string; tags: string[]; scheduledAt?: string; publishedAt?: string; publishedUrl?: string;
+        checklist: CreatorReleaseChecklist; content: { id: string; title: string };
+        coverAsset: { id: string; availability: string } | null; exportAsset: { id: string; availability: string } | null;
+      };
+      const lines = [
+        `# ${data.title}`,
+        '',
+        `- Platform: ${data.platform}`,
+        `- Status: ${data.status}`,
+        `- Content: ${data.content.title} (${data.content.id})`,
+        `- Description: ${data.description || '-'}`,
+        `- Tags: ${data.tags.join(', ') || '-'}`,
+        `- Scheduled: ${data.scheduledAt ?? '-'}`,
+        `- Published: ${data.publishedAt ?? '-'}`,
+        `- URL: ${data.publishedUrl ?? '-'}`,
+        '',
+        '## Checklist',
+        `- contentComplete: ${data.checklist.contentComplete}`,
+        `- exportConfirmed: ${data.checklist.exportConfirmed}`,
+        `- coverConfirmed: ${data.checklist.coverConfirmed}`,
+        `- metadataConfirmed: ${data.checklist.metadataConfirmed}`,
+        `- platformConfirmed: ${data.checklist.platformConfirmed}`,
+        '',
+        '## Assets',
+        `- cover: ${data.coverAsset?.id ?? '-'} (${data.coverAsset?.availability ?? 'none'})`,
+        `- export: ${data.exportAsset?.id ?? '-'} (${data.exportAsset?.availability ?? 'none'})`,
+        '',
+      ];
+      triggerReleaseDownload(`release-${release.id}.md`, lines.join('\n'), 'text/markdown');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCreatorReleaseSaving(false);
+    }
+  }, [triggerReleaseDownload]);
+
+  const onReleaseProjectChange = useCallback((value: string) => {
+    setCreatorReleaseProjectId(value);
+    setCreatorReleaseContentId('');
+  }, []);
 
   const updateCreatorContentEdit = useCallback((update: (content: CreatorContentProject) => CreatorContentProject) => {
     setCreatorContentEdit((current) => current ? update(current) : current);
@@ -1610,6 +1891,121 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                     <div className="creator-list__actions"><Button variant="primary" className="creator-list__action" disabled={creatorContentSaving || !creatorContentEdit.title.trim()} onClick={() => void saveCreatorContent()}>Save content</Button><Button variant="ghost" className="creator-list__action" disabled={creatorContentSaving} onClick={() => { setCreatorContentTaskId(''); setCreatorStoryboardMediaAssetId(''); setCreatorContentEdit(null); }}>Cancel content edit</Button></div>
                   </div>
                 ) : <p className="creator-list__desc">Select content to edit its chain.</p>}
+              </div>
+            )}
+          </section>
+
+          <section className="creator-panel creator-release-panel" aria-labelledby="creator-release-title">
+            <div className="creator-panel__head">
+              <div>
+                <h3 id="creator-release-title" className="creator-panel__title">Release</h3>
+                <span className="creator-panel__meta">Manual publish packages</span>
+              </div>
+            </div>
+            {entryProjects.length === 0 ? <p className="creator-list__desc">Create a project before adding releases.</p> : (
+              <div className="creator-release-layout">
+                <div className="creator-release-sidebar">
+                  <div className="creator-release-create">
+                    <select aria-label="Release project" value={creatorReleaseProjectId} onChange={(event) => onReleaseProjectChange(event.target.value)}>
+                      {entryProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    </select>
+                    <select aria-label="Release content" value={creatorReleaseContentId} onChange={(event) => setCreatorReleaseContentId(event.target.value)}>
+                      <option value="">Select content…</option>
+                      {selectedReleaseContent && !selectedReleaseContent.failed ? selectedReleaseContent.data.contentProjects.map((content) => <option key={content.id} value={content.id}>{content.title}</option>) : null}
+                    </select>
+                    <select aria-label="Release platform" value={creatorReleasePlatform} onChange={(event) => setCreatorReleasePlatform(event.target.value as CreatorReleasePlatform)}>
+                      {(['bilibili', 'youtube', 'xiaohongshu', 'other'] as CreatorReleasePlatform[]).map((platform) => <option key={platform} value={platform}>{platform}</option>)}
+                    </select>
+                    <input aria-label="Release title" value={creatorReleaseTitle} onChange={(event) => setCreatorReleaseTitle(event.target.value)} placeholder="New release title" />
+                    <Button variant="ghost" className="creator-list__action" disabled={creatorReleaseSaving || !creatorReleaseContentId || !creatorReleaseTitle.trim()} onClick={() => void createCreatorRelease()}>Create release</Button>
+                  </div>
+                  {selectedReleaseContent?.failed ? <p className="creator-list__desc">Content unavailable for this project.</p> : selectedReleaseContent && selectedReleaseContent.data.contentProjects.length === 0 ? <p className="creator-list__desc">Add content before creating a release.</p> : null}
+                  {selectedCreatorRelease?.failed ? <p className="creator-list__desc">Release unavailable for this project.</p> : (
+                    <ul className="creator-list">
+                      {selectedCreatorRelease?.data.releasePackages.map((release) => {
+                        const missingReleaseAssets = selectedReleaseMedia && !selectedReleaseMedia.failed
+                          ? [release.coverAssetId, release.exportAssetId].filter((assetId) => {
+                            if (!assetId) return false;
+                            const asset = selectedReleaseMedia.data.assets.find((candidate) => candidate.id === assetId);
+                            return asset !== undefined && asset.availability === 'missing';
+                          }).length
+                          : 0;
+                        const contentEntry = selectedReleaseContent?.data.contentProjects.find((candidate) => candidate.id === release.contentId);
+                        const checkedCount = Object.values(release.checklist).filter(Boolean).length;
+                        return (
+                          <li key={release.id} className="creator-list__item">
+                            <div className="creator-list__main">
+                              <strong className="creator-list__title">{release.title}</strong>
+                              <div className="creator-list__chips">
+                                <span className="creator-chip">{release.platform}</span>
+                                <span className="creator-chip">{release.status}</span>
+                                <span className="creator-chip">{contentEntry ? contentEntry.title : release.contentId}</span>
+                                <span className="creator-chip">{checkedCount}/5 checked</span>
+                                {release.scheduledAt ? <span className="creator-chip">{release.scheduledAt}</span> : null}
+                                {missingReleaseAssets > 0 ? <span className="creator-chip">{missingReleaseAssets} missing asset{missingReleaseAssets === 1 ? '' : 's'}</span> : null}
+                              </div>
+                            </div>
+                            <div className="creator-list__actions">
+                              <Button variant="ghost" className="creator-list__action" aria-label={`Edit release ${release.title}`} onClick={() => { setCreatorReleaseEdit(release); setCreatorReleaseTagsInput(release.tags.join(', ')); }}>Edit</Button>
+                              <Button variant="ghost" className="creator-list__action" aria-label={`Delete release ${release.title}`} disabled={creatorReleaseSaving} onClick={() => void deleteCreatorRelease(release)}>Delete</Button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                {creatorReleaseEdit ? (() => {
+                  const currentCover = currentReleaseAsset(creatorReleaseEdit.coverAssetId, selectedReleaseMedia);
+                  const currentExport = currentReleaseAsset(creatorReleaseEdit.exportAssetId, selectedReleaseMedia);
+                  return (
+                  <div className="creator-release-editor">
+                    <div className="creator-content-fields creator-content-fields--top">
+                      <label>Title<input aria-label="Edit release title" value={creatorReleaseEdit.title} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, title: event.target.value }))} /></label>
+                      <label>Platform<select aria-label="Edit release platform" value={creatorReleaseEdit.platform} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, platform: event.target.value as CreatorReleasePlatform }))}>{(['bilibili', 'youtube', 'xiaohongshu', 'other'] as CreatorReleasePlatform[]).map((platform) => <option key={platform} value={platform}>{platform}</option>)}</select></label>
+                      <label>Status<select aria-label="Edit release status" value={creatorReleaseEdit.status} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, status: event.target.value as CreatorReleaseStatus }))}>{(['draft', 'ready', 'published', 'archived'] as CreatorReleaseStatus[]).map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+                    </div>
+                    <div className="creator-content-fields">
+                      <label>Description<textarea aria-label="Edit release description" value={creatorReleaseEdit.description} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, description: event.target.value }))} /></label>
+                      <label>Tags (comma separated)<input aria-label="Edit release tags" value={creatorReleaseTagsInput} onChange={(event) => setCreatorReleaseTagsInput(event.target.value)} /></label>
+                      <label>Cover asset<select aria-label="Edit release cover asset" value={creatorReleaseEdit.coverAssetId ?? ''} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, coverAssetId: event.target.value || '' }))}>{releaseAssetOptions(creatorReleaseEdit.coverAssetId, selectedReleaseMedia)}</select></label>
+                      {currentCover ? (
+                        <div className="creator-list__chips">
+                          <span className="creator-chip">{currentCover.fileName}</span>
+                          {currentCover.relativePath ? <span className="creator-chip">{currentCover.relativePath}</span> : null}
+                          <span className="creator-chip">{currentCover.availability === 'missing' ? 'Missing' : currentCover.availability === 'available' ? 'Available' : 'Unavailable'}</span>
+                        </div>
+                      ) : null}
+                      <label>Export asset<select aria-label="Edit release export asset" value={creatorReleaseEdit.exportAssetId ?? ''} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, exportAssetId: event.target.value || '' }))}>{releaseAssetOptions(creatorReleaseEdit.exportAssetId, selectedReleaseMedia)}</select></label>
+                      {currentExport ? (
+                        <div className="creator-list__chips">
+                          <span className="creator-chip">{currentExport.fileName}</span>
+                          {currentExport.relativePath ? <span className="creator-chip">{currentExport.relativePath}</span> : null}
+                          <span className="creator-chip">{currentExport.availability === 'missing' ? 'Missing' : currentExport.availability === 'available' ? 'Available' : 'Unavailable'}</span>
+                        </div>
+                      ) : null}
+                      <label>Scheduled at<input aria-label="Edit release scheduled at" type="datetime-local" value={isoToLocalInput(creatorReleaseEdit.scheduledAt)} onChange={(event) => { try { updateCreatorReleaseEdit((release) => ({ ...release, scheduledAt: localInputToIso(event.target.value) })); } catch { /* 保留输入 */ } }} /></label>
+                      <label>Published at<input aria-label="Edit release published at" type="datetime-local" value={isoToLocalInput(creatorReleaseEdit.publishedAt)} onChange={(event) => { try { updateCreatorReleaseEdit((release) => ({ ...release, publishedAt: localInputToIso(event.target.value) })); } catch { /* 保留输入 */ } }} /></label>
+                      <label>Published URL<input aria-label="Edit release published url" value={creatorReleaseEdit.publishedUrl ?? ''} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, publishedUrl: event.target.value }))} /></label>
+                    </div>
+                    <fieldset className="creator-content-storyboard"><legend>Checklist</legend>
+                      {(['contentComplete', 'exportConfirmed', 'coverConfirmed', 'metadataConfirmed', 'platformConfirmed'] as (keyof CreatorReleaseChecklist)[]).map((key) => (
+                        <label key={key} className="creator-check">
+                          <input type="checkbox" aria-label={`Release checklist ${key}`} checked={creatorReleaseEdit.checklist[key]} onChange={(event) => updateCreatorReleaseEdit((release) => ({ ...release, checklist: { ...release.checklist, [key]: event.target.checked } }))} />
+                          {key}
+                        </label>
+                      ))}
+                    </fieldset>
+                    <div className="creator-list__actions">
+                      <Button variant="primary" className="creator-list__action" disabled={creatorReleaseSaving || !creatorReleaseEdit.title.trim()} onClick={() => void saveCreatorRelease()}>Save release</Button>
+                      <Button variant="ghost" className="creator-list__action" disabled={creatorReleaseSaving} onClick={() => setCreatorReleaseEdit(null)}>Cancel release edit</Button>
+                      <Button variant="ghost" className="creator-list__action" disabled={creatorReleaseSaving} onClick={() => void downloadReleaseJson(creatorReleaseEdit)}>Download JSON</Button>
+                      <Button variant="ghost" className="creator-list__action" disabled={creatorReleaseSaving} onClick={() => void downloadReleaseMarkdown(creatorReleaseEdit)}>Download Markdown</Button>
+                    </div>
+                  </div>
+                  );
+                })() : <p className="creator-list__desc">Select a release to edit its package.</p>}
               </div>
             )}
           </section>

@@ -633,6 +633,111 @@
   }
 }
 
+/* ---------- Creator release panel ---------- */
+
+.creator-release-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, .7fr) minmax(0, 1.8fr);
+  gap: 16px;
+}
+
+.creator-release-sidebar,
+.creator-release-editor,
+.creator-release-create,
+.creator-release-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.creator-release-create,
+.creator-release-fields--top {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.creator-release-create .creator-list__action {
+  grid-column: 1 / -1;
+}
+
+.creator-release-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-release-editor fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md);
+}
+
+.creator-release-editor legend {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.creator-release-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.creator-release-editor input,
+.creator-release-editor select,
+.creator-release-editor textarea,
+.creator-release-create input,
+.creator-release-create select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.creator-release-editor textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.creator-release-editor .creator-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@media (max-width: 960px) {
+  .creator-release-layout,
+  .creator-release-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .creator-release-create,
+  .creator-release-fields--top {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Saved automations ---------- */
 
 .automations-saved {
