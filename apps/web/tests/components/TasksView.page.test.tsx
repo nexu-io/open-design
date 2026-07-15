@@ -2225,6 +2225,33 @@ describe('TasksView page shell', () => {
     expect(screen.queryByRole('button', { name: 'Save snapshot' })).toBeNull();
   });
 
+  it('retains archived performance snapshots and permits deleting a mistaken entry', async () => {
+    const creatorProject: Project = { id: 'project-perf-archived', name: '归档复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:archived', projectId: 'project-perf-archived', title: '归档包', status: 'archived' });
+    const snapshot: CreatorPerformanceSnapshot = {
+      id: 'creator-performance:archived', projectId: 'project-perf-archived', releaseId: release.id, source: 'manual',
+      capturedAt: '2026-07-04T00:00:00.000Z', metrics: { views: 8 }, createdAt: '2026-07-04T00:00:00.000Z',
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-archived': { releasePackages: [release] } },
+      creatorPerformanceData: { 'project-perf-archived': { snapshots: [snapshot] } },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 归档包' }));
+
+    expect(await screen.findByText('Performance snapshots require a published release.')).toBeTruthy();
+    expect(screen.getByText('views: 8')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save snapshot' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete performance snapshot 2026-07-04T00:00:00.000Z' }));
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+      (call) => String(call[0]).includes('/creator-performance-snapshots/creator-performance%3Aarchived') && (call[1] as RequestInit | undefined)?.method === 'DELETE',
+    )).toBe(true));
+  });
+
   it('preserves performance snapshot input and shows an alert on a failed create', async () => {
     const creatorProject: Project = { id: 'project-perf-3', name: '失败复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
     const release = makePublishedRelease({ id: 'creator-release:perf3', projectId: 'project-perf-3', title: '已发布包3' });

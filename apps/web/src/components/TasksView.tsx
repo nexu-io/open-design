@@ -2117,12 +2117,14 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                     </fieldset>
                     <fieldset className="creator-performance">
                       <legend>Performance</legend>
-                      {creatorReleaseEdit.status !== 'published' ? (
-                        <p className="creator-list__desc">Performance snapshots require a published release.</p>
-                      ) : selectedPerformance?.failed ? (
+                      {selectedPerformance?.failed ? (
                         <p className="creator-list__desc">Performance unavailable for this project.</p>
                       ) : (
                         <>
+                          {creatorReleaseEdit.status !== 'published' ? (
+                            <p className="creator-list__desc">Performance snapshots require a published release.</p>
+                          ) : (
+                            <>
                           <div className="creator-performance-fields">
                             {PERFORMANCE_METRIC_KEYS.map((key) => (
                               <label key={key}>{key}
@@ -2143,6 +2145,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                           <div className="creator-list__actions">
                             <Button variant="primary" className="creator-list__action" disabled={performanceSaving || Object.keys(performanceMetrics).every((key) => !performanceMetrics[key]?.trim())} onClick={() => void createPerformanceSnapshot()}>Save snapshot</Button>
                           </div>
+                            </>
+                          )}
                           <ul className="creator-list">
                             {selectedReleaseSnapshots.map((snapshot, index) => {
                               const older = selectedReleaseSnapshots[index + 1];
