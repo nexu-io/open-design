@@ -1046,7 +1046,7 @@ function codexImagegenMissingOutputError(threadDir: string, stdout: string): Err
     );
   }
   return new Error(
-    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    `Codex imagegen completed but did not write an ig_* or call_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
   );
 }
 
@@ -1066,7 +1066,11 @@ async function readCodexGeneratedImage(
     throw err;
   }
   const match = entries
-    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
+    // #5527: Codex imagegen on gpt-image-2 writes files with the `call_*`
+    // prefix (e.g. call_Er2KDML8Fof5QcOXdSovI85V.png); older builds and the
+    // documented contract use `ig_*`. Accept both so a successful generation
+    // is no longer misclassified as a missing-output failure.
+    .filter((name) => /^(?:ig_|call_).*\.(?:png|jpe?g|webp)$/i.test(name))
     .sort()[0];
   if (!match) {
     throw codexImagegenMissingOutputError(threadDir, stdout);

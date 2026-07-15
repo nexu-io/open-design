@@ -611,6 +611,60 @@ process.stdin.on('end', () => {
     })).rejects.toThrow(/codex-gpt-image-2/);
   });
 
+  it('accepts the newer call_* filename prefix Codex imagegen writes (#5527)', async () => {
+    // gpt-image-2 on Codex writes `call_*.png` (e.g.
+    // call_Er2KDML8Fof5QcOXdSovI85V.png) instead of the older `ig_*.png`.
+    // The daemon must ingest both so a successful generation is not
+    // misclassified as a missing-output failure.
+    const generatedHome = path.join(root, 'call-prefix-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    const codexBin = path.join(root, 'fake-codex-call-prefix.mjs');
+    await writeFile(codexBin, `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+const pngBase64 = '${PNG_BASE64}';
+const args = process.argv.slice(2);
+const addDirIndex = args.indexOf('--add-dir');
+const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
+  const outDir = path.join(generatedRoot, 'call-prefix-thread');
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'call_Er2KDML8Fof5QcOXdSovI85V.png'), Buffer.from(pngBase64, 'base64'));
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'call-prefix-thread' }) + '\\\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.CODEX_BIN = codexBin;
+    process.env.CODEX_HOME = generatedHome;
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'call-prefix.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    expect(fetchMock).not.toHaveBeenCalled();
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'call-prefix.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
   it('keeps aliased gpt-image-2 on the explicit OpenAI API path', async () => {
     const generatedHome = path.join(root, 'aliased-subscription-codex-home');
     await writeCodexAuth(generatedHome, {
