@@ -4,6 +4,7 @@
 import argparse
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -23,10 +24,30 @@ REQUIRED_FILES = [
 GUIZANG_BRIEF_FILE = "guizang-production-prompt.md"
 NO_FAKE_GUIZANG_HTML = "outputs/guizang/index.html"
 
+# v1.1.1: marketplace packages ship without examples/. If DEFAULT_SOURCE is
+# missing, fall back to this minimal inline fixture instead of failing with
+# file-not-found — the smoke check should still exercise the brief-only path.
+INLINE_FIXTURE_MARKDOWN = """# AI 工具更新，不只是功能清单
+
+## 更新不是罗列功能
+
+新版本发布时,大多数团队做的是穷举 changelog。但用户真正想知道的是:这个更新
+改变了我的工作方式吗?
+
+## 从功能到叙事
+
+把每条更新翻译成"它解决了什么问题""它替代了哪个旧流程"，比一份功能列表更
+容易被记住,也更容易被转发。
+
+## 收束
+
+一次好的更新说明,最后要留下一句用户能复述给同事听的话。
+"""
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run a no-dependency Humanize PPT smoke check.")
-    parser.add_argument("--source", default=str(DEFAULT_SOURCE), help="Source markdown file to use for the smoke run.")
+    parser.add_argument("--source", default=None, help="Source markdown file to use for the smoke run. Defaults to the packaged example, falling back to an inline fixture if that is not present.")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="Output directory. It will be replaced by the smoke run.")
     parser.add_argument("--title", default=DEFAULT_TITLE, help="Deck title for the smoke run.")
     return parser.parse_args()
@@ -36,11 +57,25 @@ def main():
     args = parse_args()
     out = Path(args.out).expanduser().resolve()
     entrypoint = ROOT / "scripts" / "humanize_ppt.py"
+
+    fallback_dir = None
+    if args.source:
+        source_path = Path(args.source).expanduser()
+    elif DEFAULT_SOURCE.exists():
+        source_path = DEFAULT_SOURCE
+    else:
+        # Packaged/marketplace install without examples/: generate a
+        # throwaway fixture instead of failing with file-not-found.
+        fallback_dir = tempfile.TemporaryDirectory(prefix="humanize-ppt-smoke-fixture-")
+        source_path = Path(fallback_dir.name) / "source.md"
+        source_path.write_text(INLINE_FIXTURE_MARKDOWN, encoding="utf-8")
+        print(f"smoke check: examples/ not found, using inline fixture at {source_path}")
+
     command = [
         sys.executable,
         str(entrypoint),
         "--source",
-        str(Path(args.source).expanduser()),
+        str(source_path),
         "--out",
         str(out),
         "--title",
@@ -50,7 +85,11 @@ def main():
         # v0.6.4: --no-render now also skips the production brief.
         # Smoke must exercise the brief-only path.
     ]
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    try:
+        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    finally:
+        if fallback_dir is not None:
+            fallback_dir.cleanup()
     if result.returncode != 0:
         print(result.stdout, end="")
         print(result.stderr, end="", file=sys.stderr)

@@ -2,6 +2,8 @@
 
 CLI examples moved out of `SKILL.md`. The recommended stable entrypoint is `scripts/humanize_ppt.py`. Versioned scripts remain available for compatibility.
 
+> **`--out` must be a dedicated run directory.** Brief mode (no `--preview-outline`/`--confirm-outline`/`--qa-from`/`--style-gallery` flag) wipes `--out` and rebuilds it from scratch on every run. It only does that automatically when `--out` is missing, empty, or already looks like a previous Humanize PPT run (has `run_manifest.json` or `style_gallery_plan.json` at its root). Point it at anything else — a folder with unrelated files in it — and the run refuses with a clear error instead of deleting your content; pass `--force` if you really want it wiped anyway.
+
 Brief mode (v0.6.4 default — writes a Guizang production brief, no HTML):
 
 ```bash

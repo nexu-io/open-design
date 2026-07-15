@@ -18,7 +18,7 @@ except ImportError:  # Stable scripts/humanize_ppt.py entrypoint imports this as
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = SKILL_ROOT / "registry" / "renderer_registry.json"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 BEAUTIFUL_REPO_URL = "https://github.com/zarazhangrui/beautiful-html-templates.git"
 DEFAULT_ZH_PREVIEW_COUNT = 3
 DEFAULT_EN_PREVIEW_COUNT = 5
@@ -144,12 +144,57 @@ def expand_user_path(value):
     return Path(value).expanduser()
 
 
+# v1.1.1: markers a previous Humanize PPT run leaves at the root of --out.
+# Used by ensure_clean_out_dir to tell "safe to wipe and rebuild" apart from
+# "someone else's directory" before a destructive rmtree.
+HUMANIZE_OUT_MARKERS = ("run_manifest.json", "style_gallery_plan.json")
+
+
+def ensure_clean_out_dir(out, force=False):
+    """Prepare --out for a fresh brief-mode write without silently wiping
+    directories Humanize PPT did not create.
+
+    - Missing --out: create it.
+    - Empty --out: use it as-is.
+    - Non-empty --out that carries a Humanize marker file at its root (i.e.
+      a previous humanize_ppt run) or when the caller passed --force: wipe
+      and recreate it.
+    - Otherwise: refuse. Returns an error message string instead of raising
+      or exiting so callers can report it via stderr with their own exit
+      code, matching this module's existing error-handling style.
+
+    Returns None on success (the directory is ready to use).
+    """
+    if not out.exists():
+        out.mkdir(parents=True, exist_ok=True)
+        return None
+    if not any(out.iterdir()):
+        return None
+    if force or any((out / marker).exists() for marker in HUMANIZE_OUT_MARKERS):
+        shutil.rmtree(out)
+        out.mkdir(parents=True, exist_ok=True)
+        return None
+    return (
+        f"--out {out} already exists, is not empty, and does not look like a "
+        "previous Humanize PPT run (no run_manifest.json or style_gallery_plan.json "
+        "at its root). Refusing to wipe it: it may hold content you did not intend "
+        "to lose. Point --out at a dedicated run directory, or pass --force to wipe "
+        "it anyway.\n"
+    )
+
+
 def read_source(source):
     path = Path(source).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"source not found: {path}")
     if path.suffix.lower() in {".ppt", ".pptx"}:
-        return path, f"PPTX source: {path.name}\n", []
+        raise ValueError(
+            f"brief mode reads markdown/text raw material, not rendered decks: {path}. "
+            "Extract the text first (see scripts/pptx_qa.py's dump/inspect output for an "
+            "existing .ppt/.pptx) and pass that as --source. If this is a deck Humanize "
+            "PPT already rendered, run the presentation checkup instead: "
+            "--qa-from <path-to-this-file.pptx>."
+        )
     text = path.read_text(encoding="utf-8", errors="replace")
     return path, text, markdown_segments(text)
 
@@ -2984,8 +3029,13 @@ def parse_args():
     ap = argparse.ArgumentParser(
         description=f"Humanize PPT v{VERSION} — AST outline director + media plan + HTML/PPTX brief orchestrator + presentation checkup"
     )
-    ap.add_argument("--source", default=None, help="Source markdown / PPTX. Required for brief mode.")
-    ap.add_argument("--out", required=True, help="Output directory.")
+    ap.add_argument("--source", default=None, help="Source markdown / text raw material. Required for brief mode. Old .ppt/.pptx must be extracted to text first; a rendered .pptx belongs in --qa-from, not --source.")
+    ap.add_argument("--out", required=True, help="Output directory. Brief mode wipes and recreates it, but only when empty, missing, already a Humanize PPT run (has run_manifest.json or style_gallery_plan.json), or --force is passed.")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow brief mode to wipe --out even when it is non-empty and does not look like a previous Humanize PPT run. Use only when you are sure --out holds nothing you need.",
+    )
     ap.add_argument("--title", default=None, help="Deck title. Required for brief mode.")
     ap.add_argument("--qa-from", default=None, help="Path to a rendered HTML deck or native PPTX. Switches to QA mode. Mutually exclusive with --source.")
     ap.add_argument("--max-qa-iterations", type=int, default=3, help="Max QA rounds before status flips to needs-human. Default 3.")
@@ -3505,6 +3555,9 @@ def run_style_gallery_mode(args):
     except FileNotFoundError as e:
         sys.stderr.write(f"Source not found: {e}\n")
         return 2
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        return 2
 
     language = detect_language(text)
     primary, _routes = choose_routes(args, source_path, text, language)
@@ -3623,6 +3676,9 @@ def run_preview_outline_mode(args):
             source_path, text, segments = read_source(str(source_path))
     except FileNotFoundError as e:
         sys.stderr.write(f"Source not found: {e}\n")
+        return 2
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
         return 2
     language = detect_language(text)
     plan = build_slide_plan(args.title, text, segments, args.renderer)
@@ -3772,21 +3828,29 @@ def main():
         return run_confirm_outline_mode(args)
 
     out = Path(args.out).expanduser().resolve()
-    if out.exists():
-        shutil.rmtree(out)
-    out.mkdir(parents=True, exist_ok=True)
+    guard_error = ensure_clean_out_dir(out, force=getattr(args, "force", False))
+    if guard_error:
+        sys.stderr.write(guard_error)
+        return 2
 
     # v0.6.5: if --research-md is provided, it takes priority over --source.
     # The HV research document becomes the authoritative source. The brief
     # writer does not re-parse raw material.
-    if getattr(args, "research_md", None):
-        research_path = Path(args.research_md).expanduser().resolve()
-        if not research_path.exists():
-            sys.stderr.write(f"--research-md path not found: {research_path}\n")
-            return 2
-        source_path, text, segments = read_source(str(research_path))
-    else:
-        source_path, text, segments = read_source(args.source)
+    try:
+        if getattr(args, "research_md", None):
+            research_path = Path(args.research_md).expanduser().resolve()
+            if not research_path.exists():
+                sys.stderr.write(f"--research-md path not found: {research_path}\n")
+                return 2
+            source_path, text, segments = read_source(str(research_path))
+        else:
+            source_path, text, segments = read_source(args.source)
+    except FileNotFoundError as e:
+        sys.stderr.write(f"Source not found: {e}\n")
+        return 2
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        return 2
     language = detect_language(text)
     preview_count = resolve_preview_count(language, args.preview_count)
     registry = load_registry()

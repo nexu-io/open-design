@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "owner": {
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.1"
+    "version": "0.2.2"
   },
   "plugins": [
     {
@@ -85,7 +85,7 @@
     {
       "name": "community/humanize-ppt",
       "title": "Humanize PPT",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "source": "github:nexu-io/open-design@main/plugins/community/humanize-ppt",
       "publisher": {
         "id": "learnprompt",

@@ -14,7 +14,7 @@ Humanize PPT is a **presentation system** for agent-made HTML presentations and 
 
 Three core capabilities frame everything:
 
-1. **Outline director** — turns raw material (markdown / PPTX / research doc) into an AST outline (audience-state-transfer; every page turn moves the audience forward) and a per-page production brief.
+1. **Outline director** — turns raw material (markdown / text / research doc) into an AST outline (audience-state-transfer; every page turn moves the audience forward) and a per-page production brief. Old `.ppt`/`.pptx` files are not read directly — extract their text first (`scripts/pptx_qa.py`), then pass the text as `--source`; a rendered `.pptx` is consumed via `--qa-from`, not `--source`.
 2. **Visual-enhancement director** — decides, per page, whether the page needs an image (preferred: `baoyu-image-gen` via the local Codex CLI, no API key; alt: imagegen / imagen / nanobanana-ppt), a deterministic inline SVG diagram, or a video (Remotion), and emits machine-actionable asset slots (`asset_path` + `prompt_hint`).
 3. **Presentation checkup + presenter hand-off** — auto-catches "look-only" pages after render (§7) and feeds presenter-mode speaker notes (§1 boundary below).
 
@@ -42,7 +42,7 @@ python3 scripts/humanize_ppt.py --out <dir> [mode flags] [inputs] [renderer/styl
 ```
 
 ### Inputs (one required for brief/outline/gallery modes)
-- `--source <path>` — markdown / PPTX raw material.
+- `--source <path>` — markdown / text raw material. Old `.ppt`/`.pptx` are rejected (fail closed): extract text first via `scripts/pptx_qa.py`, then pass that text. A rendered `.pptx` goes through `--qa-from`, not `--source`.
 - `--research-md <path>` — pre-existing research doc (e.g. hv-analysis output). Takes priority over `--source`; the brief writer does not re-parse raw material.
 - `--title <str>` — deck title (required for non-QA modes).
 
@@ -51,7 +51,7 @@ python3 scripts/humanize_ppt.py --out <dir> [mode flags] [inputs] [renderer/styl
 2. `--style-gallery` (v0.9) → **cover-style gate** (§6). Wins over `--preview-outline`.
 3. `--preview-outline` → write `outline-preview.md` and stop (review checkpoint).
 4. `--confirm-outline` → validate freshness, write `preview-confirmed.json`. Refuses if the outline is missing or the source mtime is newer. Mutually exclusive with `--preview-outline`.
-5. (no mode flag) → **brief mode**: write the full output contract (§5) and the renderer's production prompt.
+5. (no mode flag) → **brief mode**: write the full output contract (§5) and the renderer's production prompt. Wipes and recreates `--out` first, but only when it is missing, empty, or already a Humanize PPT run (`run_manifest.json` / `style_gallery_plan.json` at its root) — otherwise refuses unless `--force` is passed.
 
 ### Renderer / style selection
 - `--renderer {auto,guizang,beautiful-html-templates,html-ppt,frontend-slides,ppt-master}` (default `auto`). `ppt-master` is explicit unless `--ppt-master-template` forces it.
@@ -63,7 +63,7 @@ python3 scripts/humanize_ppt.py --out <dir> [mode flags] [inputs] [renderer/styl
 - `--ppt-master-native-objects`, `--ppt-master-transition`, `--ppt-master-animation`, `--ppt-master-animation-trigger`, `--ppt-master-visual-review` — native export and explicit visual-review settings. On raw-template fill, only page transitions are written; existing native objects/animations are preserved and image replacement or new object animation is reported as a template-fill v1 boundary.
 
 ### Adapters & flags
-`--presenter-adapter`, `--export-adapter`, `--presenter`, `--no-render`, `--skip-install-check`, `--max-qa-iterations N` (default 3), `--beautiful-repo`, `--no-beautiful-auto-clone`.
+`--presenter-adapter`, `--export-adapter`, `--presenter`, `--no-render`, `--skip-install-check`, `--max-qa-iterations N` (default 3), `--beautiful-repo`, `--no-beautiful-auto-clone`, `--force` (brief mode only — wipe a non-empty `--out` that is not already a Humanize PPT run).
 
 ## 4. Data flow
 
