@@ -2,9 +2,16 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
   ChatRunStatusResponse,
   CreatorContentProjectData,
+  CreatorReleaseChecklist,
+  CreatorReleasePackage,
+  CreatorReleasePackageData,
+  CreatorReleasePlatform,
   Project,
   Routine,
 } from '@open-design/contracts';
@@ -47,6 +54,8 @@ function mockTasksViewFetch({
   creatorContentData = {},
   creatorMediaFailures = [],
   creatorContentFailures = [],
+  creatorReleaseData = {},
+  creatorReleaseFailures = [],
 }: {
   routines?: Routine[];
   creatorProjects?: Project[];
@@ -56,7 +65,13 @@ function mockTasksViewFetch({
   creatorContentData?: Record<string, CreatorContentProjectData>;
   creatorMediaFailures?: string[];
   creatorContentFailures?: string[];
+  creatorReleaseData?: Record<string, CreatorReleasePackageData>;
+  creatorReleaseFailures?: string[];
 } = {}) {
+  const releaseStore: Record<string, CreatorReleasePackage[]> = {};
+  for (const [projectId, data] of Object.entries(creatorReleaseData)) {
+    releaseStore[projectId] = Array.isArray(data.releasePackages) ? data.releasePackages.map((release) => ({ ...release })) : [];
+  }
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/routines' && (!init || init.method === undefined)) {
@@ -100,6 +115,77 @@ function mockTasksViewFetch({
         headers: { 'content-type': 'application/json' },
       });
     }
+    const releaseListRead = /^\/api\/projects\/([^/]+)\/creator-release-packages$/.exec(url);
+    if (releaseListRead && (!init || init.method === undefined)) {
+      const projectId = decodeURIComponent(releaseListRead[1]!);
+      if (creatorReleaseFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'release unavailable' }), { status: 503 });
+      return new Response(JSON.stringify({ releasePackages: releaseStore[projectId] ?? [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (releaseListRead && init?.method === 'POST') {
+      const projectId = decodeURIComponent(releaseListRead[1]!);
+      const body = JSON.parse(String(init.body)) as { contentId: string; platform: string; title: string; coverAssetId?: string; exportAssetId?: string };
+      const id = `creator-release:${(releaseStore[projectId]?.length ?? 0) + 1}`;
+      const now = new Date().toISOString();
+      const pkg: CreatorReleasePackage = {
+        id, projectId, contentId: body.contentId, platform: body.platform as CreatorReleasePlatform,
+        status: 'draft', title: body.title, description: '', tags: [],
+        checklist: { contentComplete: false, exportConfirmed: false, coverConfirmed: false, metadataConfirmed: false, platformConfirmed: false },
+        createdAt: now, updatedAt: now,
+        ...(body.coverAssetId ? { coverAssetId: body.coverAssetId } : {}),
+        ...(body.exportAssetId ? { exportAssetId: body.exportAssetId } : {}),
+      };
+      releaseStore[projectId] = [...(releaseStore[projectId] ?? []), pkg];
+      return new Response(JSON.stringify({ releasePackage: pkg }), { status: 201, headers: { 'content-type': 'application/json' } });
+    }
+    const releaseExportRead = /^\/api\/projects\/([^/]+)\/creator-release-packages\/([^/]+)\/export$/.exec(url);
+    if (releaseExportRead && (!init || init.method === undefined || init.method === 'GET')) {
+      const projectId = decodeURIComponent(releaseExportRead[1]!);
+      const releaseId = decodeURIComponent(releaseExportRead[2]!);
+      const release = (releaseStore[projectId] ?? []).find((candidate) => candidate.id === releaseId);
+      if (!release) return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      const exportDoc = {
+        ...release,
+        content: { id: release.contentId, title: release.contentId },
+        coverAsset: release.coverAssetId ? { id: release.coverAssetId, availability: 'available' } : null,
+        exportAsset: release.exportAssetId ? { id: release.exportAssetId, availability: 'available' } : null,
+      };
+      return new Response(JSON.stringify(exportDoc), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    const releaseItem = /^\/api\/projects\/([^/]+)\/creator-release-packages\/([^/]+)$/.exec(url);
+    if (releaseItem && (init?.method === 'PATCH' || init?.method === 'DELETE')) {
+      const projectId = decodeURIComponent(releaseItem[1]!);
+      const releaseId = decodeURIComponent(releaseItem[2]!);
+      const store = releaseStore[projectId] ?? [];
+      const existing = store.find((candidate) => candidate.id === releaseId);
+      if (!existing) return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      if (init.method === 'DELETE') {
+        releaseStore[projectId] = store.filter((candidate) => candidate.id !== releaseId);
+        return new Response(null, { status: 204 });
+      }
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      const merged: CreatorReleasePackage = { ...existing, ...(body as Partial<CreatorReleasePackage>), projectId, id: releaseId };
+      // Mirror the daemon status gate: ready/published require a complete checklist;
+      // published additionally requires a valid publishedAt and publishedUrl.
+      const checklist = merged.checklist ?? existing.checklist;
+      const checklistComplete = !!checklist && (Object.values(checklist) as boolean[]).every(Boolean);
+      if (merged.status === 'ready' && !checklistComplete) {
+        return new Response(JSON.stringify({ error: 'ready requires all checklist items complete' }), { status: 400, headers: { 'content-type': 'application/json' } });
+      }
+      if (merged.status === 'published') {
+        if (!checklistComplete) {
+          return new Response(JSON.stringify({ error: 'published requires all checklist items complete' }), { status: 400, headers: { 'content-type': 'application/json' } });
+        }
+        if (!merged.publishedAt || !merged.publishedUrl) {
+          return new Response(JSON.stringify({ error: 'published requires a valid publishedAt and publishedUrl' }), { status: 400, headers: { 'content-type': 'application/json' } });
+        }
+      }
+      const updated: CreatorReleasePackage = merged;
+      releaseStore[projectId] = store.map((candidate) => candidate.id === releaseId ? updated : candidate);
+      return new Response(JSON.stringify({ releasePackage: updated }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
     if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ templates: [] }), {
         status: 200,
@@ -120,6 +206,28 @@ function mockTasksViewFetch({
     }
     return new Response(JSON.stringify({}), { status: 404 });
   }) as typeof fetch;
+}
+
+function makeRelease(overrides: Partial<CreatorReleasePackage> = {}): CreatorReleasePackage {
+  return {
+    id: 'creator-release:1',
+    projectId: 'project-release-1',
+    contentId: 'creator-content:1',
+    platform: 'bilibili',
+    status: 'draft',
+    title: '首发短片',
+    description: '',
+    tags: [],
+    coverAssetId: undefined,
+    exportAssetId: undefined,
+    scheduledAt: undefined,
+    publishedAt: undefined,
+    publishedUrl: undefined,
+    checklist: { contentComplete: false, exportConfirmed: false, coverConfirmed: false, metadataConfirmed: false, platformConfirmed: false },
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
+    ...overrides,
+  };
 }
 
 describe('TasksView page shell', () => {
@@ -1764,5 +1872,257 @@ describe('TasksView page shell', () => {
     expect(await screen.findByText('Content unavailable for this project.')).toBeTruthy();
     expect(screen.getAllByText('surviving task').length).toBeGreaterThan(0);
     expect(screen.getAllByText('clip.mp4').length).toBeGreaterThan(0);
+  });
+
+  it('reads release list per project and sends a create body limited to contentId, platform, and title', async () => {
+    const creatorProject: Project = { id: 'project-release-1', name: '发布项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-1': { contentProjects: [{
+        id: 'creator-content:1', projectId: 'project-release-1', title: '校园短片', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const contentSelect = await screen.findByLabelText('Release content');
+    await screen.findByRole('option', { name: '校园短片' });
+    fireEvent.change(contentSelect, { target: { value: 'creator-content:1' } });
+    fireEvent.change(screen.getByLabelText('Release title'), { target: { value: '首发短片' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create release' }));
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (call) => String(call[0]).endsWith('/creator-release-packages') && (call[1] as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(postCall).toBeTruthy();
+      const sent = JSON.parse(String((postCall![1] as RequestInit).body));
+      expect(sent).toEqual({ contentId: 'creator-content:1', platform: 'bilibili', title: '首发短片' });
+    });
+    // The new package appears in the project's release list.
+    expect(await screen.findByText('首发短片')).toBeTruthy();
+  });
+
+  it('sends null to clear optional release fields on save', async () => {
+    const creatorProject: Project = { id: 'project-release-2', name: '空字段发布', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({
+      id: 'creator-release:2', projectId: 'project-release-2', title: '待清空',
+      coverAssetId: 'creator-media:cover',
+      scheduledAt: '2025-06-01T00:00:00.000Z',
+      publishedAt: '2025-06-02T00:00:00.000Z',
+      publishedUrl: 'https://example.com/x',
+    });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-2': { contentProjects: [{
+        id: 'creator-content:2', projectId: 'project-release-2', title: '内容B', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorReleaseData: { 'project-release-2': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 待清空' }));
+    fireEvent.change(screen.getByLabelText('Edit release cover asset'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Edit release scheduled at'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Edit release published at'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Edit release published url'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save release' }));
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (call) => String(call[0]).includes('/creator-release-packages/creator-release%3A2') && (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patchCall).toBeTruthy();
+      const sent = JSON.parse(String((patchCall![1] as RequestInit).body));
+      expect(sent.coverAssetId).toBeNull();
+      expect(sent.exportAssetId).toBeNull();
+      expect(sent.scheduledAt).toBeNull();
+      expect(sent.publishedAt).toBeNull();
+      expect(sent.publishedUrl).toBeNull();
+    });
+  });
+
+  it('rejects ready/published release saves when the checklist is incomplete and preserves the editor input', async () => {
+    const creatorProject: Project = { id: 'project-release-3', name: '门禁发布', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:3', projectId: 'project-release-3', title: '待发布' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-3': { contentProjects: [{
+        id: 'creator-content:3', projectId: 'project-release-3', title: '内容C', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorReleaseData: { 'project-release-3': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 待发布' }));
+    fireEvent.change(screen.getByLabelText('Edit release status'), { target: { value: 'ready' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save release' }));
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(async () => {
+      const idx = fetchMock.mock.calls.findIndex(
+        (call) => String(call[0]).includes('/creator-release-packages/creator-release%3A3') && (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(idx).toBeGreaterThan(-1);
+      const res = await (fetchMock.mock.results[idx] as { value: Promise<Response> }).value;
+      expect(res.status).toBe(400);
+    });
+    // Editor input is preserved (status stays "ready", title unchanged) and an error is shown.
+    expect((screen.getByLabelText('Edit release status') as HTMLSelectElement).value).toBe('ready');
+    expect((screen.getByLabelText('Edit release title') as HTMLInputElement).value).toBe('待发布');
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  it('keeps a missing asset reference on the release and offers it as a retained candidate', async () => {
+    const creatorProject: Project = { id: 'project-release-4', name: '缺失素材发布', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:4', projectId: 'project-release-4', title: '带缺失素材', coverAssetId: 'creator-media:missing' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-4': { contentProjects: [{
+        id: 'creator-content:4', projectId: 'project-release-4', title: '内容D', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorMediaData: { 'project-release-4': { assets: [
+        { id: 'creator-media:missing', fileName: 'missing.jpg', kind: 'image', relativePath: 'missing.jpg', availability: 'missing' },
+        { id: 'creator-media:available', fileName: 'available.jpg', kind: 'image', relativePath: 'available.jpg', availability: 'available' },
+      ], taskLinks: [] } },
+      creatorReleaseData: { 'project-release-4': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    // The list surfaces the missing-asset chip before opening the editor.
+    expect(await screen.findByText('1 missing asset')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit release 带缺失素材' }));
+    // The missing asset is retained as a candidate and flagged Missing.
+    const coverSelect = screen.getByLabelText('Edit release cover asset') as HTMLSelectElement;
+    expect(within(coverSelect).getByRole('option', { name: 'missing.jpg (Missing)' })).toBeTruthy();
+    const editor = document.querySelector('.creator-release-editor') as HTMLElement;
+    expect(within(editor).getByText('Missing')).toBeTruthy();
+    // Saving without changing the cover keeps the missing reference (not nulled).
+    fireEvent.click(screen.getByRole('button', { name: 'Save release' }));
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (call) => String(call[0]).includes('/creator-release-packages/creator-release%3A4') && (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patchCall).toBeTruthy();
+      const sent = JSON.parse(String((patchCall![1] as RequestInit).body));
+      expect(sent.coverAssetId).toBe('creator-media:missing');
+    });
+  });
+
+  it('shows the release unavailable state when the release API fails but keeps other panels usable', async () => {
+    const creatorProject: Project = {
+      id: 'project-release-5', name: '发布失败项目', skillId: null, designSystemId: null,
+      createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' },
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseFailures: ['project-release-5'],
+      creatorProjectData: { 'project-release-5': { tasks: [{
+        id: 'creator-task:release-fail', projectId: 'project-release-5', title: 'surviving task', stage: 'topic', status: 'todo',
+        priority: 'medium', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }], activities: [] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Release unavailable for this project.')).toBeTruthy();
+    expect(screen.getAllByText('surviving task').length).toBeGreaterThan(0);
+  });
+
+  it('asks for confirmation before deleting a release and cancels on decline', async () => {
+    const creatorProject: Project = { id: 'project-release-6', name: '删除发布', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:6', projectId: 'project-release-6', title: '待删除' });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-6': { contentProjects: [{
+        id: 'creator-content:6', projectId: 'project-release-6', title: '内容E', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorReleaseData: { 'project-release-6': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete release 待删除' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete release 待删除' }));
+    await waitFor(() => {
+      const deleteCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (call) => String(call[0]).includes('/creator-release-packages/creator-release%3A6') && (call[1] as RequestInit | undefined)?.method === 'DELETE',
+      );
+      expect(deleteCalls.length).toBe(1);
+    });
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('downloads the release package as JSON and Markdown blobs', async () => {
+    const creatorProject: Project = { id: 'project-release-7', name: '导出发布', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({
+      id: 'creator-release:7', projectId: 'project-release-7', title: '导出包', contentId: 'creator-content:7',
+      description: '简介', tags: ['a', 'b'],
+      checklist: { contentComplete: true, exportConfirmed: true, coverConfirmed: false, metadataConfirmed: true, platformConfirmed: false },
+    });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorContentData: { 'project-release-7': { contentProjects: [{
+        id: 'creator-content:7', projectId: 'project-release-7', title: '内容F', status: 'drafting', brief: {}, outline: {}, retrospective: {}, taskIds: [], storyboardItems: [],
+        createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      }] } },
+      creatorReleaseData: { 'project-release-7': { releasePackages: [release] } },
+    });
+
+    const capturedBlobs: Blob[] = [];
+    const originalCreate = (URL as { createObjectURL?: (blob: Blob) => string }).createObjectURL;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      writable: true,
+      value: (blob: Blob) => { capturedBlobs.push(blob); return 'blob:mock'; },
+    });
+
+    try {
+      render(<TasksView projects={[creatorProject]} />);
+      fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit release 导出包' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Download JSON' }));
+      await waitFor(() => expect(capturedBlobs.length).toBeGreaterThanOrEqual(1));
+      const json = JSON.parse(await capturedBlobs[0]!.text()) as { id: string; title: string; content: { id: string }; checklist: CreatorReleaseChecklist };
+      expect(json.id).toBe('creator-release:7');
+      expect(json.title).toBe('导出包');
+      expect(json.content.id).toBe('creator-content:7');
+      expect(json.checklist.contentComplete).toBe(true);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Download Markdown' }));
+      await waitFor(() => expect(capturedBlobs.length).toBeGreaterThanOrEqual(2));
+      const md = await capturedBlobs[1]!.text();
+      expect(md).toContain('# 导出包');
+      expect(md).toContain('- Platform: bilibili');
+      expect(md).toContain('- Tags: a, b');
+      expect(md).toContain('## Checklist');
+      expect(md).toContain('contentComplete: true');
+    } finally {
+      if (originalCreate) {
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreate });
+      } else {
+        delete (URL as { createObjectURL?: unknown }).createObjectURL;
+      }
+    }
+  });
+
+  it('ships responsive release layout rules for the 960px and 640px breakpoints', () => {
+    // jsdom does not evaluate media queries, so we assert the rules exist in the stylesheet.
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'styles', 'home', 'tasks.css');
+    const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
+    expect(css).toContain('@media (max-width: 960px) {\n  .creator-release-layout,');
+    expect(css).toContain('@media (max-width: 640px) {\n  .creator-release-create,');
   });
 });
