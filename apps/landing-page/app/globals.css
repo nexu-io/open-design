@@ -1052,6 +1052,63 @@ body::before {
   overflow-y: auto;
 }
 
+/* Product mega menu — category columns side by side. Each `.nav-mega-col` is
+   one top-level category (Products, Agent, and later e.g. Feature); adding a
+   column just widens the panel. Reuses the base `.nav-dropdown` card chrome
+   (paper, border, shadow, item hover fills) and only lays the columns out.
+   Product is the leftmost nav item, so the panel opens rightward with no
+   right-edge overflow risk. */
+.nav-dropdown-mega {
+  display: flex;
+  gap: 0;
+  min-width: 0;
+  max-width: min(94vw, 640px);
+}
+.nav-dropdown-mega .nav-mega-col {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 216px;
+}
+.nav-dropdown-mega .nav-mega-col + .nav-mega-col {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(26, 26, 26, 0.08);
+}
+.nav-dropdown-mega .nav-mega-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Column header — small-caps category label, matching the grouped-dropdown
+   label. When it is a link (Agent → /agents/ hub) it tints on hover; it
+   overrides the generic `.nav-dropdown a` block/padding/hover-fill styles. */
+.nav-dropdown-mega .nav-mega-col-head {
+  display: block;
+  padding: 4px 12px 6px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+a.nav-mega-col-head:hover {
+  background: transparent;
+  color: var(--coral);
+}
+a.nav-mega-col-head.is-active {
+  background: transparent;
+  color: var(--ink);
+}
+/* A long column (Agent: 21 rows) caps its own height and scrolls so the
+   panel never runs off short viewports; shorter columns stay static. */
+.nav-dropdown-mega .nav-mega-list-scroll {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
 /*
  * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
  * viewports it replaces the inline nav-links and toggles a panel
@@ -5561,6 +5618,17 @@ footer .container {
   /* Let the Solution panel flow naturally inside the flattened nav panel
      instead of scrolling within a capped box. */
   .nav-dropdown-solution { max-height: none; overflow: visible; }
+  /* Product mega menu flattens to stacked full-width categories in the mobile
+     drawer: drop the flex columns, dividers, and the agent scroll cap so each
+     category reads as a labeled vertical list. */
+  .nav-dropdown-mega { display: block; max-width: none; }
+  .nav-dropdown-mega .nav-mega-col { min-width: 0; }
+  .nav-dropdown-mega .nav-mega-col + .nav-mega-col {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+  .nav-dropdown-mega .nav-mega-list-scroll { max-height: none; overflow: visible; }
 }
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }
