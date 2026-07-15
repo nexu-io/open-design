@@ -26,13 +26,20 @@ afterEach(() => {
 });
 
 describe('connectors transport', () => {
-  it('returns discovered connectors, [] when absent, and rejects on failure', async () => {
+  it('returns discovered connectors, a present empty catalogue, and rejects on failure', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({ connectors: [{ id: 'notion' }] }) }));
     expect(await fetchMemoryConnectors()).toEqual([{ id: 'notion' }]);
-    mockFetch(() => ({ ok: true, json: async () => ({}) }));
+    mockFetch(() => ({ ok: true, json: async () => ({ connectors: [] }) }));
     expect(await fetchMemoryConnectors()).toEqual([]);
     mockFetch(() => ({ ok: false, status: 503 }));
     await expect(fetchMemoryConnectors()).rejects.toThrow('Connector discovery request failed');
+  });
+
+  it('rejects rather than mapping a malformed 2xx discovery response (missing connectors) to []', async () => {
+    mockFetch(() => ({ ok: true, json: async () => ({}) }));
+    await expect(fetchMemoryConnectors()).rejects.toThrow(
+      "Connector discovery request succeeded without a 'connectors' field",
+    );
   });
 
   it('omits chatAgentId/chatModel from the body when not provided', async () => {

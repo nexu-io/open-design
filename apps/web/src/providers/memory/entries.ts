@@ -9,6 +9,8 @@ import type {
   UpsertMemoryRequest,
 } from '@open-design/contracts';
 
+import { requiredField, requiredNonNullField } from './response-fields';
+
 export async function fetchMemoryList(): Promise<MemoryListResponse> {
   const resp = await fetch('/api/memory');
   if (!resp.ok) throw new Error(`Memory list request failed (${resp.status})`);
@@ -19,7 +21,7 @@ export async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {
   const resp = await fetch('/api/memory/tree');
   if (!resp.ok) throw new Error(`Memory tree request failed (${resp.status})`);
   const json = (await resp.json()) as MemoryTreeListResponse;
-  return json.tree ?? [];
+  return requiredField(json, 'tree', 'Memory tree request');
 }
 
 export async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> {
@@ -31,12 +33,7 @@ export async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> 
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error(`Memory entry request failed (${resp.status})`);
   const json = (await resp.json()) as { entry?: MemoryEntry };
-  // A 2xx response is a required read succeeding — it must carry the entry.
-  // Falling back to null here would be the same masking bug as above: a
-  // malformed success payload would render as "not found" instead of
-  // surfacing the backend regression.
-  if (!json.entry) throw new Error('Memory entry request succeeded without an entry');
-  return json.entry;
+  return requiredNonNullField(json, 'entry', 'Memory entry request');
 }
 
 export async function saveMemoryEntry(draft: UpsertMemoryRequest): Promise<MemoryEntry | null> {
@@ -49,8 +46,8 @@ export async function saveMemoryEntry(draft: UpsertMemoryRequest): Promise<Memor
     body: JSON.stringify(draft),
   });
   if (!resp.ok) return null;
-  const json = (await resp.json()) as { entry: MemoryEntry };
-  return json.entry ?? null;
+  const json = (await resp.json()) as { entry?: MemoryEntry };
+  return requiredNonNullField(json, 'entry', 'Memory entry save');
 }
 
 export async function deleteMemoryEntry(id: string): Promise<boolean> {

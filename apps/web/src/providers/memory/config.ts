@@ -11,6 +11,8 @@ import type {
   MemoryExtractionMaskedConfig,
 } from '@open-design/contracts';
 
+import { requiredField } from './response-fields';
+
 /**
  * PATCH a subset of the memory config. Resolves `true` when the daemon accepts
  * the merge, `false` otherwise (the slice uses that to roll an optimistic
@@ -45,14 +47,5 @@ export async function patchMemoryExtractionConfig(
     enabled: boolean;
     extraction?: MemoryExtractionMaskedConfig | null;
   };
-  // A 2xx response is the daemon's merge succeeding — it must echo the
-  // extraction field, even when it legitimately clears to null. A response
-  // missing the field entirely is a malformed echo, not an intentional
-  // clear; collapsing both into null (the same masking bug already fixed for
-  // fetchMemoryEntry) would silently discard a saved override instead of
-  // surfacing the broken `/api/memory/config` response.
-  if (!('extraction' in json)) {
-    throw new Error('Memory config PATCH succeeded without an extraction field');
-  }
-  return json.extraction ?? null;
+  return requiredField(json, 'extraction', 'Memory config PATCH') ?? null;
 }

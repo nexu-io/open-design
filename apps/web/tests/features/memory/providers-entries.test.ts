@@ -37,13 +37,20 @@ describe('entries transport', () => {
     await expect(fetchMemoryList()).rejects.toThrow('Memory list request failed');
   });
 
-  it('returns the tree, [] when absent, and rejects on failure', async () => {
+  it('returns the tree, a present empty tree, and rejects on failure', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({ tree: [{ id: 't' }] }) }));
     expect(await fetchMemoryTree()).toEqual([{ id: 't' }]);
-    mockFetch(() => ({ ok: true, json: async () => ({}) }));
+    mockFetch(() => ({ ok: true, json: async () => ({ tree: [] }) }));
     expect(await fetchMemoryTree()).toEqual([]);
     mockFetch(() => ({ ok: false }));
     await expect(fetchMemoryTree()).rejects.toThrow('Memory tree request failed');
+  });
+
+  it('rejects rather than mapping a malformed 2xx tree read (missing tree) to []', async () => {
+    mockFetch(() => ({ ok: true, json: async () => ({}) }));
+    await expect(fetchMemoryTree()).rejects.toThrow(
+      "Memory tree request succeeded without a 'tree' field",
+    );
   });
 
   it('returns the entry, and null only when it genuinely does not exist', async () => {
@@ -66,7 +73,7 @@ describe('entries transport', () => {
   it('rejects rather than mapping a malformed 2xx entry read (missing entry) to null', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
     await expect(fetchMemoryEntry('x')).rejects.toThrow(
-      'Memory entry request succeeded without an entry',
+      "Memory entry request succeeded without a 'entry' field",
     );
   });
 
@@ -92,11 +99,11 @@ describe('entries transport', () => {
     ).toBeNull();
   });
 
-  it('returns null when the save succeeds but the response omits the entry', async () => {
+  it('rejects when the save succeeds but the response omits the entry', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
-    expect(
-      await saveMemoryEntry({ name: 'n', description: 'd', type: 'user', body: 'b' }),
-    ).toBeNull();
+    await expect(
+      saveMemoryEntry({ name: 'n', description: 'd', type: 'user', body: 'b' }),
+    ).rejects.toThrow("Memory entry save succeeded without a 'entry' field");
   });
 
   it('reports delete + index-save success from the ok flag', async () => {

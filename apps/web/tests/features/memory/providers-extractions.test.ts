@@ -1,6 +1,6 @@
 // Transport adapters for the extraction-history routes are thin `fetch`
 // wrappers; these mock the global `fetch` to pin the ok/non-ok branches and the
-// `extractions ?? []` fallback.
+// required extraction-list response field.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -28,9 +28,11 @@ describe('extractions transport', () => {
     expect(await fetchExtractions()).toEqual([{ id: 'r1' }]);
   });
 
-  it('falls back to [] when the response omits extractions', async () => {
+  it('rejects when a successful response omits extractions', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({}) }));
-    expect(await fetchExtractions()).toEqual([]);
+    await expect(fetchExtractions()).rejects.toThrow(
+      "Memory extractions request succeeded without a 'extractions' field",
+    );
   });
 
   it('rejects rather than fabricating an empty list when the fetch fails', async () => {

@@ -7,6 +7,7 @@ import type {
 } from '@open-design/contracts';
 
 import { fetchConnectorDiscoveryResponse } from '../registry';
+import { requiredField } from './response-fields';
 
 export async function fetchMemoryConnectors(): Promise<ConnectorDetail[]> {
   const resp = await fetchConnectorDiscoveryResponse('?hydrateTools=false');
@@ -14,7 +15,7 @@ export async function fetchMemoryConnectors(): Promise<ConnectorDetail[]> {
     throw new Error(`Connector discovery request failed (${resp.status})`);
   }
   const json = (await resp.json()) as ConnectorDiscoveryResponse;
-  return json.connectors ?? [];
+  return requiredField(json, 'connectors', 'Connector discovery request');
 }
 
 export async function suggestConnectorMemories(

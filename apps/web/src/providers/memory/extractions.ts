@@ -6,11 +6,13 @@ import type {
   MemoryExtractionsResponse,
 } from '@open-design/contracts';
 
+import { requiredField } from './response-fields';
+
 export async function fetchExtractions(): Promise<MemoryExtractionRecord[]> {
   const resp = await fetch('/api/memory/extractions');
   if (!resp.ok) throw new Error(`Memory extractions request failed (${resp.status})`);
   const json = (await resp.json()) as MemoryExtractionsResponse;
-  return json.extractions ?? [];
+  return requiredField(json, 'extractions', 'Memory extractions request');
 }
 
 // Drop one extraction row server-side. Returns true on a 2xx — the

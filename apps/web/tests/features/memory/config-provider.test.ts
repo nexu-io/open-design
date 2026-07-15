@@ -68,7 +68,7 @@ describe('patchMemoryExtractionConfig', () => {
       json: async () => ({ enabled: true }),
     } as Partial<Response> & { ok: boolean });
     await expect(patchMemoryExtractionConfig({} as never)).rejects.toThrow(
-      'Memory config PATCH succeeded without an extraction field',
+      "Memory config PATCH succeeded without a 'extraction' field",
     );
   });
 
