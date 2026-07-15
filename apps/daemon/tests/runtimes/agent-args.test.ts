@@ -728,29 +728,22 @@ test('kilo args use acp subcommand for json-rpc streaming', () => {
   assert.equal(kilo.streamFormat, 'acp-json-rpc');
 });
 
-test('kimi args use print mode with stream-json output', () => {
+test('kimi args use ACP so composed prompts do not travel through argv', () => {
   const args = kimi.buildArgs('design a page', [], [], {});
 
-  assert.deepEqual(args, ['-p', 'design a page', '--output-format', 'stream-json']);
+  assert.deepEqual(args, ['acp']);
   assert.equal(args.includes('--yolo'), false);
-  assert.equal(kimi.streamFormat, 'json-event-stream');
-  assert.equal(kimi.eventParser, 'kimi');
-  assert.equal(kimi.mcpDiscovery, undefined);
-  assert.equal(kimi.externalMcpInjection, undefined);
-  assert.equal(kimi.maxPromptArgBytes, 30_000);
+  assert.equal(kimi.streamFormat, 'acp-json-rpc');
+  assert.equal(kimi.eventParser, undefined);
+  assert.equal(kimi.mcpDiscovery, 'mature-acp');
+  assert.equal(kimi.externalMcpInjection, 'acp-merge');
+  assert.equal(kimi.maxPromptArgBytes, undefined);
 });
 
-test('kimi args pass explicit model selection to the CLI', () => {
+test('kimi args leave model selection to the ACP session', () => {
   const args = kimi.buildArgs('hello', [], [], { model: 'moonshot-v1-32k' });
 
-  assert.deepEqual(args, [
-    '-p',
-    'hello',
-    '--output-format',
-    'stream-json',
-    '--model',
-    'moonshot-v1-32k',
-  ]);
+  assert.deepEqual(args, ['acp']);
 });
 
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {

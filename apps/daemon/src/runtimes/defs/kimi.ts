@@ -20,14 +20,8 @@ export const kimiAgentDef = {
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
-    buildArgs: (prompt, _imagePaths, _extraAllowedDirs, options = {}) => {
-      const args = ['-p', prompt, '--output-format', 'stream-json'];
-      if (options.model && options.model !== 'default') {
-        args.push('--model', options.model);
-      }
-      return args;
-    },
-    streamFormat: 'json-event-stream',
-    eventParser: 'kimi',
-    maxPromptArgBytes: 30_000,
+    buildArgs: () => ['acp'],
+    streamFormat: 'acp-json-rpc',
+    mcpDiscovery: 'mature-acp',
+    externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;
