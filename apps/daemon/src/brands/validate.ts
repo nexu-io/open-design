@@ -1,8 +1,9 @@
 // Brand validation + normalization.
 //
 // Ported from the branding-agent schema, retargeted onto the '@open-design/
-// contracts' Brand type and BRAND_COLOR_ROLES. The SeedToken / seed-override
-// path from the source is dropped — Open Design brands carry no Ant seed.
+// contracts' Brand type and BRAND_COLOR_ROLES. Authored `seed` overrides on
+// the source brand are retained (sanitized) so downstream finalize can apply
+// them — see #5612.
 
 import {
   BRAND_COLOR_ROLES,
@@ -12,6 +13,7 @@ import {
   type BrandFontSpec,
   type BrandImagerySample,
 } from '@open-design/contracts';
+import { sanitizeSeedOverrides } from './schema.js';
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
 const strArr = (v: unknown): string[] => (Array.isArray(v) ? v.filter(isStr) : []);
@@ -94,6 +96,7 @@ export function validateBrand(raw: unknown, sourceUrl: string): Brand {
     tagline: isStr(o.tagline) ? o.tagline : '',
     description: isStr(o.description) ? o.description : '',
     sourceUrl,
+    ...(sanitizeSeedOverrides(o.seed) ? { seed: sanitizeSeedOverrides(o.seed) } : {}),
     logo: {
       primary: isStr(logoRaw.primary) && logoRaw.primary ? logoRaw.primary : null,
       alternates: strArr(logoRaw.alternates),
