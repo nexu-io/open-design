@@ -200,6 +200,14 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
         next,
         (value) => port.patchConfig(enabledPatch(value)),
         (ok, value, hasNewerIntent) => {
+          // Invalidate again at SETTLE, not just at the optimistic start: a
+          // reload() can capture this guard's revision anywhere during the
+          // in-flight window (after the start-invalidate, before this callback
+          // runs) and still observe a pre-write server snapshot once its GET
+          // resolves. Only invalidating at start left that window open —
+          // hasUnsettledConfigWrite() had already flipped false by the time
+          // such a read's response arrived, so hydrate() applied it anyway.
+          hydrationGuardRef.current.invalidate();
           if (ok) enabledConfirmedRef.current = value;
           else if (!hasNewerIntent) setEnabled(enabledConfirmedRef.current);
         },
@@ -232,6 +240,8 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
         next,
         (value) => port.patchConfig(singleFlagPatch(key, value)),
         (ok, value, hasNewerIntent) => {
+          // See onToggleEnabled above for why settle needs its own invalidate.
+          hydrationGuardRef.current.invalidate();
           if (ok) hookConfirmedRef.current[key] = value;
           else if (!hasNewerIntent) setter(() => hookConfirmedRef.current[key]);
         },

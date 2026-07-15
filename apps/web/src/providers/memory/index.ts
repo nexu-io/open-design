@@ -9,7 +9,6 @@ export {
   saveMemoryEntry,
   deleteMemoryEntry,
   saveMemoryIndex,
-  type SaveMemoryEntryInput,
 } from './entries';
 export {
   fetchExtractions,

@@ -6,17 +6,8 @@ import type {
   MemoryListResponse,
   MemoryTreeListResponse,
   MemoryTreeNode,
-  MemoryType,
+  UpsertMemoryRequest,
 } from '@open-design/contracts';
-
-/** Wire body for creating (POST) or updating (PUT) a memory entry. */
-export interface SaveMemoryEntryInput {
-  id?: string;
-  name: string;
-  description: string;
-  type: MemoryType;
-  body: string;
-}
 
 export async function fetchMemoryList(): Promise<MemoryListResponse> {
   const resp = await fetch('/api/memory');
@@ -43,7 +34,7 @@ export async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> 
   return json.entry ?? null;
 }
 
-export async function saveMemoryEntry(draft: SaveMemoryEntryInput): Promise<MemoryEntry | null> {
+export async function saveMemoryEntry(draft: UpsertMemoryRequest): Promise<MemoryEntry | null> {
   const url = draft.id
     ? `/api/memory/${encodeURIComponent(draft.id)}`
     : '/api/memory';

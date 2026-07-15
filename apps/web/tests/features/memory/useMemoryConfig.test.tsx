@@ -387,6 +387,58 @@ describe('useMemoryConfig', () => {
     expect(result.current.config.enabled).toBe(false);
   });
 
+  it('does not let a reload begun during an in-flight toggle hydrate its stale server snapshot after the toggle succeeds', async () => {
+    const list = deferred<MemoryListResponse>();
+    const patch = deferred<boolean>();
+    const configPort = makePort(vi.fn().mockReturnValueOnce(patch.promise));
+    const entriesPort: MemoryEntriesPort = {
+      fetchMemoryList: vi.fn().mockReturnValueOnce(list.promise),
+      fetchMemoryTree: vi.fn(async () => [] as MemoryTreeNode[]),
+      fetchMemoryEntry: vi.fn(async () => null),
+      saveMemoryEntry: vi.fn(async () => null),
+      deleteMemoryEntry: vi.fn(async () => true),
+      saveMemoryIndex: vi.fn(async () => true),
+    };
+    const { result } = renderHook(() => {
+      const config = useMemoryConfig(configPort);
+      const entries = useMemoryEntries(entriesPort, {
+        fireFlash: vi.fn(),
+        captureConfigHydrationRevision: config.captureHydrationRevision,
+        hydrateConfig: config.hydrate,
+        openEditor: vi.fn(),
+        closeEditor: vi.fn(),
+      });
+      return { config, entries };
+    });
+
+    // The toggle starts first...
+    let toggle!: Promise<void>;
+    act(() => {
+      toggle = result.current.config.onToggleEnabled(false);
+    });
+    // ...then the reload starts WHILE the PATCH is still in flight, capturing
+    // the guard's revision from during that in-flight window (not before the
+    // toggle began).
+    let reload!: Promise<void>;
+    act(() => {
+      reload = result.current.entries.reload();
+    });
+
+    await act(async () => {
+      patch.resolve(true);
+      await toggle;
+    });
+    expect(result.current.config.enabled).toBe(false);
+
+    // The reload's own read resolves AFTER the toggle settled, but with
+    // stale, pre-write server data — its GET raced ahead of the PATCH.
+    await act(async () => {
+      list.resolve(listResponse({ enabled: true }));
+      await reload;
+    });
+    expect(result.current.config.enabled).toBe(false);
+  });
+
   it('hydrate maps a list response onto every flag (missing => true)', () => {
     const { result } = renderHook(() => useMemoryConfig(makePort()));
     act(() =>
