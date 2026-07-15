@@ -25,6 +25,8 @@ import {
 
 const LOAD_ERROR_MESSAGE =
   "Memory extraction history couldn't be loaded. Try again shortly.";
+const MUTATION_ERROR_MESSAGE =
+  "Memory extraction history couldn't be updated. Try again shortly.";
 
 export interface MemoryExtractionsController {
   /** Non-null when the extraction-history read failed. */
@@ -126,6 +128,7 @@ export function useMemoryExtractions(
       }
       if (ok) {
         store.settleDeleteSuccess(id);
+        setLoadError(null);
         return;
       }
       store.settleDeleteFailure(id);
@@ -134,7 +137,10 @@ export function useMemoryExtractions(
         // Reconcile rather than overwrite: newer SSE frames or overlapping
         // mutations may have landed while this recovery read was in flight.
         store.commitSnapshot(confirmed, token.startClock);
-        setLoadError(null);
+        // Recovery restores server truth, but the requested delete still
+        // failed. Keep that failure visible instead of making the restored row
+        // look like an unexplained no-op.
+        setLoadError(MUTATION_ERROR_MESSAGE);
       } catch {
         store.restoreIfUnchanged(token);
         setLoadError(LOAD_ERROR_MESSAGE);
@@ -153,13 +159,14 @@ export function useMemoryExtractions(
     }
     if (ok) {
       store.settleClearSuccess(token);
+      setLoadError(null);
       return;
     }
     store.settleClearFailure();
     try {
       const confirmed = await port.fetchExtractions();
       store.commitSnapshot(confirmed, token.startClock);
-      setLoadError(null);
+      setLoadError(MUTATION_ERROR_MESSAGE);
     } catch {
       store.restoreIfUnchanged(token);
       setLoadError(LOAD_ERROR_MESSAGE);

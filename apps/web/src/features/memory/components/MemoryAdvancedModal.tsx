@@ -40,11 +40,9 @@ export function MemoryAdvancedModal({
     <div
       className="memory-action-modal-backdrop"
       role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      // The dialog below stops propagation, so any mouse-down that reaches the
+      // backdrop must have originated on the backdrop itself.
+      onMouseDown={onClose}
     >
       <div
         className="memory-action-modal memory-action-modal--advanced"

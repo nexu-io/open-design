@@ -1426,6 +1426,11 @@ describe('MemorySection', () => {
           ],
         }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
+      if (url === '/api/connectors/status') {
+        return new Response(JSON.stringify({
+          statuses: { notion: { status: 'connected', accountLabel: 'Product wiki' } },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
       if (url === '/api/memory/connectors/suggest' && init?.method === 'POST') {
         return new Response(JSON.stringify({
           suggestions: [],
@@ -2255,6 +2260,40 @@ describe('MemorySection', () => {
       expect(screen.getByRole('status').textContent).toContain('Memory is currently OFF.');
     });
     expect(patchBodies).toEqual([{ enabled: false }]);
+  });
+
+  it('turns a rejected config toggle into a visible error instead of an unhandled event promise', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/memory/config' && init?.method === 'PATCH') {
+        throw new Error('network down');
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Enable memory injection' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Memory settings couldn't be saved. Try again shortly.",
+    );
   });
 
   it('toggles chat conversation learning off and persists the PATCH payload', async () => {

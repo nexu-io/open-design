@@ -845,13 +845,35 @@ export async function fetchConnectorStatuses(options?: {
   signal?: AbortSignal;
 }): Promise<ConnectorStatusResponse['statuses']> {
   try {
-    const resp = await fetch('/api/connectors/status', { signal: options?.signal });
-    if (!resp.ok) return {};
-    const json = (await resp.json()) as ConnectorStatusResponse;
-    return json.statuses ?? {};
+    return await fetchConnectorStatusesStrict(options);
   } catch {
     return {};
   }
+}
+
+/**
+ * Strict status reader for consumers which can show a failed refresh to the
+ * user. `fetchConnectorStatuses` intentionally preserves its historical
+ * best-effort `{}` fallback for existing catalogue callers; the memory slice
+ * must instead distinguish an empty, valid status map from a broken response.
+ */
+export async function fetchConnectorStatusesStrict(options?: {
+  signal?: AbortSignal;
+}): Promise<ConnectorStatusResponse['statuses']> {
+  const resp = await fetch('/api/connectors/status', { signal: options?.signal });
+  if (!resp.ok) throw new Error(`Connector status request failed (${resp.status})`);
+  const json = (await resp.json()) as ConnectorStatusResponse;
+  if (
+    !json
+    || typeof json !== 'object'
+    || !('statuses' in json)
+    || !json.statuses
+    || typeof json.statuses !== 'object'
+    || Array.isArray(json.statuses)
+  ) {
+    throw new Error("Connector status request succeeded without a 'statuses' field");
+  }
+  return json.statuses;
 }
 
 let connectorDiscoveryCache: ConnectorDetail[] | null = null;
@@ -1007,12 +1029,22 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       return { connector: null, error };
     }
     const json = (await resp.json()) as ConnectorConnectResponse;
+    // A connect response always identifies the connector it acted on. Do not
+    // collapse a malformed 2xx into the same `null` used for an expected
+    // failure: callers would then refresh status and leave the user with no
+    // indication that the daemon violated its response contract.
+    if (!json || typeof json !== 'object' || !('connector' in json) || !json.connector) {
+      const error = "Connector connect request succeeded without a 'connector' field";
+      renderConnectorAuthError(authWindow, error);
+      return { connector: null, error };
+    }
+    const connector = json.connector;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (useExternalBrowser) {
         const opened = await openHostExternalUrl(json.auth.redirectUrl);
         if (!opened.ok) {
           return {
-            connector: json.connector ?? null,
+            connector,
             auth: json.auth,
             error: popupBlockedMessage(),
           };
@@ -1042,7 +1074,7 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
         body: 'The connector responded without a redirect URL. If this seems wrong, retry from Settings → Connectors, and confirm your Composio API key.',
       });
     }
-    return { connector: json.connector ?? null, ...(json.auth === undefined ? {} : { auth: json.auth }) };
+    return { connector, ...(json.auth === undefined ? {} : { auth: json.auth }) };
   } catch (err) {
     renderConnectorAuthError(authWindow, err instanceof Error && err.message ? err.message : 'Could not start connector authentication.');
     return {

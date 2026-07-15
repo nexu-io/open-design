@@ -31,6 +31,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useT } from '../i18n';
@@ -38,9 +39,11 @@ import type {
   MemoryExtractionConfig as MemoryExtractionConfigShape,
   MemoryExtractionMaskedConfig,
   MemoryExtractionProvider,
-  MemoryListResponse,
 } from '@open-design/contracts';
-import { patchMemoryExtractionConfig } from '../providers/memory';
+import {
+  fetchMemoryExtractionConfig,
+  patchMemoryExtractionConfig,
+} from '../providers/memory';
 import type { AgentModelOption, ApiProtocol, ExecMode } from '../types';
 import {
   SUGGESTED_MODELS_BY_PROTOCOL,
@@ -161,14 +164,10 @@ function cliAgentLabel(agentId: string | null | undefined): string | null {
 }
 
 async function fetchMemoryExtraction(): Promise<MemoryExtractionMaskedConfig | null> {
-  try {
-    const resp = await fetch('/api/memory');
-    if (!resp.ok) return null;
-    const json = (await resp.json()) as MemoryListResponse;
-    return json.extraction ?? null;
-  } catch {
-    return null;
-  }
+  // A missing `extraction` field is a malformed successful response, not
+  // "no override". This field-specific reader deliberately preserves the
+  // memory list's legacy defaults for unrelated fields.
+  return fetchMemoryExtractionConfig();
 }
 
 export function MemoryModelInline({
@@ -189,21 +188,38 @@ export function MemoryModelInline({
   const [customEditing, setCustomEditing] = useState(false);
   const [customDraft, setCustomDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Reads and writes target the same server-side extraction override. A late
+  // mount read must never overwrite a user save, and writes must reach the
+  // daemon in intent order (the debounce path can otherwise race a click).
+  const persistenceEpochRef = useRef(0);
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingPersistCountRef = useRef(0);
   // Brief inline confirmation after Save / clear so the user knows
   // their click did something even though the dropdown just settles.
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void fetchMemoryExtraction().then((next) => {
-      if (cancelled) return;
-      setConfig(next);
-      if (next?.model) setCustomDraft(next.model);
-    });
+    const epoch = persistenceEpochRef.current;
+    void fetchMemoryExtraction().then(
+      (next) => {
+        // A save began after this read, so this snapshot is no longer allowed
+        // to rehydrate the picker over the user's newer intent.
+        if (cancelled || persistenceEpochRef.current !== epoch) return;
+        setConfig(next);
+        if (next?.model) setCustomDraft(next.model);
+        setSaveError(null);
+      },
+      () => {
+        if (cancelled || persistenceEpochRef.current !== epoch) return;
+        setSaveError(t('settings.autosaveError'));
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!flash) return;
@@ -292,19 +308,28 @@ export function MemoryModelInline({
   );
 
   const persist = useCallback(
-    async (
+    (
       next: MemoryExtractionConfigShape | null,
       options?: { silent?: boolean },
-    ) => {
+    ): Promise<boolean> => {
+      // Claim the epoch synchronously, before React has a chance to render the
+      // busy state, so the initial GET cannot win the same-event race.
+      persistenceEpochRef.current += 1;
+      pendingPersistCountRef.current += 1;
       setBusy(true);
-      try {
-        const result = await patchMemoryExtractionConfig(next);
-        if (result !== undefined) {
+      const run = async (): Promise<boolean> => {
+        try {
+          const result = await patchMemoryExtractionConfig(next);
+          if (result === undefined) {
+            setSaveError(t('settings.autosaveError'));
+            return false;
+          }
           setConfig(result);
-          // Skip the "Saved!" flash on background re-syncs (provider
-          // tab swap, base-URL keystroke autosave, key rotation). The
-          // user didn't click anything here; flashing every keystroke
-          // would feel like the picker is "fighting" them.
+          setSaveError(null);
+          // Skip the "Saved!" flash on background re-syncs (provider tab swap,
+          // base-URL keystroke autosave, key rotation). The user didn't click
+          // anything here; flashing every keystroke would feel like the picker
+          // is "fighting" them.
           if (!options?.silent) {
             setFlash(
               next === null
@@ -312,10 +337,27 @@ export function MemoryModelInline({
                 : t('settings.memoryModelInlineFlashSaved'),
             );
           }
+          return true;
+        } catch {
+          // Strict providers reject malformed 2xx bodies. Absorb that at this
+          // UI boundary so both button clicks and debounced re-syncs get one
+          // visible failure state, never an unhandled rejection.
+          setSaveError(t('settings.autosaveError'));
+          return false;
+        } finally {
+          pendingPersistCountRef.current -= 1;
+          if (pendingPersistCountRef.current <= 0) {
+            pendingPersistCountRef.current = 0;
+            setBusy(false);
+          }
         }
-      } finally {
-        setBusy(false);
-      }
+      };
+      // Serialize every write, including a timer-triggered re-sync, so the
+      // daemon observes the same order as the user's intent. The tail always
+      // resolves because `run` turns failure into visible state.
+      const queued = persistenceQueueRef.current.then(run, run);
+      persistenceQueueRef.current = queued.then(() => undefined, () => undefined);
+      return queued;
     },
     [t],
   );
@@ -372,9 +414,10 @@ export function MemoryModelInline({
   const onSelectChange = useCallback(
     async (value: string) => {
       if (value === SAME_AS_CHAT_SENTINEL) {
-        setCustomEditing(false);
-        setCustomDraft('');
-        await persist(null);
+        if (await persist(null)) {
+          setCustomEditing(false);
+          setCustomDraft('');
+        }
         return;
       }
       if (value === CUSTOM_MODEL_SENTINEL) {
@@ -387,8 +430,9 @@ export function MemoryModelInline({
         return;
       }
       if (mode === 'api' && !apiMemoryProvider) return;
-      setCustomEditing(false);
-      await persist(buildOverride(value));
+      if (await persist(buildOverride(value))) {
+        setCustomEditing(false);
+      }
     },
     [mode, apiMemoryProvider, persist, buildOverride, savedModel],
   );
@@ -397,8 +441,9 @@ export function MemoryModelInline({
     const trimmed = customDraft.trim();
     if (!trimmed) return;
     if (mode === 'api' && !apiMemoryProvider) return;
-    await persist(buildOverride(trimmed));
-    setCustomEditing(false);
+    if (await persist(buildOverride(trimmed))) {
+      setCustomEditing(false);
+    }
   }, [customDraft, mode, apiMemoryProvider, persist, buildOverride]);
 
   // Stable unique id for the labelling span so multiple instances of
@@ -458,6 +503,15 @@ export function MemoryModelInline({
           }}
         >
           {flash}
+        </span>
+      ) : null}
+      {saveError ? (
+        <span
+          role="alert"
+          aria-live="assertive"
+          style={{ display: 'inline-block', marginLeft: 8, color: 'var(--text-danger, #b42318)' }}
+        >
+          {saveError}
         </span>
       ) : null}
       <SearchableModelSelect

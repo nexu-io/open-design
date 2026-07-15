@@ -3,6 +3,7 @@
 // `/api/memory/index` routes; callers reach these through the slice's port.
 import type {
   MemoryEntry,
+  MemoryExtractionMaskedConfig,
   MemoryListResponse,
   MemoryTreeListResponse,
   MemoryTreeNode,
@@ -14,7 +15,25 @@ import { requiredField, requiredNonNullField } from './response-fields';
 export async function fetchMemoryList(): Promise<MemoryListResponse> {
   const resp = await fetch('/api/memory');
   if (!resp.ok) throw new Error(`Memory list request failed (${resp.status})`);
-  return (await resp.json()) as MemoryListResponse;
+  const json = (await resp.json()) as MemoryListResponse;
+  // `entries` drives this list. The feature flags keep their established
+  // legacy-default semantics in `hydrate`, so their absence is intentionally
+  // not a transport failure here.
+  requiredField(json, 'entries', 'Memory list request');
+  return json;
+}
+
+/** Read the one `/api/memory` field used by the inline model picker.
+ *
+ * Keep this narrower than `fetchMemoryList`: the picker must reject a malformed
+ * successful response that omits `extraction`, but it should not fail merely
+ * because a legacy server omitted unrelated list/config fields.
+ */
+export async function fetchMemoryExtractionConfig(): Promise<MemoryExtractionMaskedConfig | null> {
+  const resp = await fetch('/api/memory');
+  if (!resp.ok) throw new Error(`Memory extraction config request failed (${resp.status})`);
+  const json = (await resp.json()) as { extraction: MemoryExtractionMaskedConfig | null };
+  return requiredField(json, 'extraction', 'Memory extraction config request');
 }
 
 export async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {

@@ -186,6 +186,23 @@ describe('store.beginDelete / settleDeleteSuccess / settleDeleteFailure', () => 
     expect(store.rows()).toEqual([]);
   });
 
+  it('keeps an overlapping delete pending until every success handler settles', () => {
+    const { store } = makeStore();
+    store.applyFrame(record('a'));
+    store.beginDelete('a');
+    store.beginDelete('a');
+
+    // The first success must not unmark the second in-flight delete. A
+    // delayed frame remains hidden either way because confirmed success
+    // tombstones the id immediately.
+    store.settleDeleteSuccess('a');
+    store.applyFrame(record('a', { phase: 'running' }));
+    expect(store.rows()).toEqual([]);
+
+    store.settleDeleteSuccess('a');
+    expect(store.rows()).toEqual([]);
+  });
+
   it('buffers a phase frame for a pending delete instead of showing it', () => {
     const { store } = makeStore();
     store.applyFrame(record('a', { phase: 'running' }));
@@ -247,10 +264,10 @@ describe('store.beginDelete / settleDeleteSuccess / settleDeleteFailure', () => 
   it('never lets a concurrent commitSnapshot resurrect an id while its delete is still pending', () => {
     // A concurrent mutation's own recovery reconciliation (e.g. a separately
     // failed clearExtractions()) can run between this delete's optimistic
-    // removal and its success callback. Because commitSnapshot excludes every
-    // pending-delete id from both the accepted and survivor sets, that
-    // recovery can never put 'a' back — the store invariant closes this
-    // rather than settleDeleteSuccess needing to re-detect it after the fact.
+    // removal and its success callback. beginDelete has already removed 'a'
+    // from the visible rows and commitSnapshot excludes it from the accepted
+    // snapshot, so that recovery can never put 'a' back — the store invariant
+    // closes this rather than settleDeleteSuccess re-detecting it afterward.
     const { store } = makeStore();
     store.applyFrame(record('a'));
     const token = store.beginDelete('a');
@@ -447,6 +464,15 @@ describe('store.commitSnapshot', () => {
 
     store.commitSnapshot([record('old', { startedAt: 1_000 })], sinceClock);
     expect(store.rows().map((r) => r.id)).toEqual(['newer', 'old']);
+  });
+
+  it('slots a newer confirmed row ahead of a live survivor', () => {
+    const { store } = makeStore();
+    const sinceClock = store.snapshotClock();
+    store.applyFrame(record('live', { startedAt: 2_000 }));
+
+    store.commitSnapshot([record('newer', { startedAt: 3_000 })], sinceClock);
+    expect(store.rows().map((r) => r.id)).toEqual(['newer', 'live']);
   });
 
   it('returns exactly what committed, not the raw input snapshot', () => {

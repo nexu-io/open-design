@@ -41,6 +41,7 @@ export interface MemoryEntriesCoordination {
 }
 
 const LOAD_ERROR_MESSAGE = "Memory data couldn't be loaded. Try again shortly.";
+const MUTATION_ERROR_MESSAGE = "Memory changes couldn't be saved. Try again shortly.";
 
 export interface MemoryEntriesController {
   /** Non-null when the list/tree transport failed; callers retain prior state. */
@@ -94,8 +95,34 @@ export function useMemoryEntries(
   const [memoryTree, setMemoryTree] = useState<MemoryTreeNode[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewBody, setPreviewBody] = useState<string | null>(null);
-  const [editing, setEditing] = useState<DraftEntry | null>(null);
+  const [editing, setEditingState] = useState<DraftEntry | null>(null);
+  // The editor can remain interactive while a save is on the wire. Every edit
+  // change gets a revision, allowing the save completion to close only the
+  // exact draft it persisted rather than dismissing a newer draft.
+  const editingRevisionRef = useRef(0);
+  const setEditing = useCallback<Dispatch<SetStateAction<DraftEntry | null>>>((next) => {
+    editingRevisionRef.current += 1;
+    setEditingState(next);
+  }, []);
   const [busy, setBusy] = useState(false);
+  // Entry and index writes can overlap after the user switches tabs. Keep the
+  // shared `busy` signal true until ALL writes finish, rather than letting the
+  // first completion re-enable controls while another request is still live.
+  const busyOperationCountRef = useRef(0);
+  const beginBusy = useCallback(() => {
+    busyOperationCountRef.current += 1;
+    setBusy(true);
+  }, []);
+  const endBusy = useCallback(() => {
+    busyOperationCountRef.current -= 1;
+    if (busyOperationCountRef.current <= 0) {
+      busyOperationCountRef.current = 0;
+      setBusy(false);
+    }
+  }, []);
+  const entrySaveInFlightRef = useRef(false);
+  const indexSaveInFlightRef = useRef(false);
+  const deletingEntryIdsRef = useRef<Set<string>>(new Set());
   const [filter, setFilter] = useState<'all' | MemoryType>('all');
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorNameRef = useRef<HTMLInputElement | null>(null);
@@ -121,8 +148,16 @@ export function useMemoryEntries(
 
   const onCopyPath = useCallback(async () => {
     if (!rootDir) return;
-    await copyToClipboard(rootDir);
-    fireFlash('pathCopied');
+    try {
+      await copyToClipboard(rootDir);
+      fireFlash('pathCopied');
+    } catch {
+      // The shared helper already falls back when Clipboard API access is
+      // denied, but that fallback can still fail in a locked-down document.
+      // Keep this user-triggered callback from escaping as an unhandled
+      // rejection, and do not claim success with a copy flash.
+      setLoadError(LOAD_ERROR_MESSAGE);
+    }
   }, [rootDir, fireFlash]);
 
   const reload = useCallback(async () => {
@@ -233,53 +268,70 @@ export function useMemoryEntries(
         body: entry.body,
       });
     },
-    [port, openEditor],
+    [port, openEditor, setEditing],
   );
 
   const startNew = useCallback(() => {
     editRequestTokenRef.current += 1;
     openEditor();
     setEditing({ ...EMPTY_DRAFT });
-  }, [openEditor]);
+  }, [openEditor, setEditing]);
 
   const cancelEdit = useCallback(() => {
     editRequestTokenRef.current += 1;
     setEditing(null);
-  }, []);
+  }, [setEditing]);
 
   const onSave = useCallback(async () => {
     if (!editing) return;
     if (!editing.name.trim()) return;
+    if (entrySaveInFlightRef.current) return;
+    entrySaveInFlightRef.current = true;
     const wasNew = !editing.id;
-    setBusy(true);
+    const editingRevision = editingRevisionRef.current;
+    beginBusy();
     try {
       const entry = await port.saveMemoryEntry(editing);
-      if (entry) {
-        await reload();
+      if (!entry) {
+        // A resolved `null` is the port's ordinary non-2xx failure signal.
+        // Treat it as a visible failure, like a thrown transport error, rather
+        // than making a click appear to do nothing.
+        setLoadError(MUTATION_ERROR_MESSAGE);
+        return;
+      }
+      await reload();
+      if (editingRevisionRef.current === editingRevision) {
         setEditing(null);
         closeEditor();
-        fireFlash(wasNew ? 'created' : 'saved');
       }
+      fireFlash(wasNew ? 'created' : 'saved');
     } catch {
       // A thrown save (as opposed to a resolved `null` failure) must still
       // surface as a load error instead of propagating as an unhandled
       // rejection with no user-visible feedback at all.
       setLoadError(LOAD_ERROR_MESSAGE);
     } finally {
-      setBusy(false);
+      entrySaveInFlightRef.current = false;
+      endBusy();
     }
-  }, [editing, reload, fireFlash, port, closeEditor]);
+  }, [editing, reload, fireFlash, port, closeEditor, setEditing, beginBusy, endBusy]);
 
   const onDelete = useCallback(
     async (id: string) => {
+      if (deletingEntryIdsRef.current.has(id)) return;
+      deletingEntryIdsRef.current.add(id);
       try {
         const ok = await port.deleteMemoryEntry(id);
         if (ok) {
           await reload();
           fireFlash('deleted');
+        } else {
+          setLoadError(MUTATION_ERROR_MESSAGE);
         }
       } catch {
         setLoadError(LOAD_ERROR_MESSAGE);
+      } finally {
+        deletingEntryIdsRef.current.delete(id);
       }
     },
     [reload, fireFlash, port],
@@ -287,8 +339,10 @@ export function useMemoryEntries(
 
   const onSaveIndex = useCallback(async () => {
     if (indexDraft === null) return;
+    if (indexSaveInFlightRef.current) return;
+    indexSaveInFlightRef.current = true;
     const savedDraft = indexDraft;
-    setBusy(true);
+    beginBusy();
     try {
       const ok = await port.saveMemoryIndex(savedDraft);
       if (ok) {
@@ -298,14 +352,18 @@ export function useMemoryEntries(
         // unconditionally clearing here would silently discard that edit
         // even though it was never sent to the server.
         setIndexDraft((current) => (current === savedDraft ? null : current));
+        setLoadError(null);
         fireFlash('indexSaved');
+      } else {
+        setLoadError(MUTATION_ERROR_MESSAGE);
       }
     } catch {
       setLoadError(LOAD_ERROR_MESSAGE);
     } finally {
-      setBusy(false);
+      indexSaveInFlightRef.current = false;
+      endBusy();
     }
-  }, [indexDraft, fireFlash, port]);
+  }, [indexDraft, fireFlash, port, beginBusy, endBusy]);
 
   return {
     loadError,

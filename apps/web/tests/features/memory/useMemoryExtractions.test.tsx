@@ -965,7 +965,7 @@ describe('useMemoryExtractions — clear flow', () => {
     // Both the confirmed 'a' row and the newer live-arrived row survive; the
     // recovery reconciles instead of being dropped or overwriting.
     expect(result.current.extractions.map((row) => row.id).sort()).toEqual(['a', 'newer']);
-    expect(result.current.loadError).toBeNull();
+    expect(result.current.loadError).toMatch(/couldn't be updated/);
   });
 
   it('keeps a row that arrived during a failed clear\'s recovery ahead of the older rows the snapshot restores', async () => {

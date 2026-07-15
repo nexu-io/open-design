@@ -1,6 +1,6 @@
 // Transport adapters for connector discovery and the suggest-memories call.
-// These mock the global `fetch` to pin the ok/non-ok branches, the
-// `connectors ?? []` fallback, and the optional chatAgentId/chatModel body keys.
+// These mock the global `fetch` to pin the ok/non-ok branches, strict 2xx
+// response fields, and the optional chatAgentId/chatModel body keys.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -47,10 +47,13 @@ describe('connectors transport', () => {
       expect(url).toBe('/api/memory/connectors/suggest');
       const body = JSON.parse((init?.body as string) ?? '{}');
       expect(body).toEqual({ connectorIds: ['notion'] });
-      return { ok: true, json: async () => ({ suggestions: [] }) };
+      return {
+        ok: true,
+        json: async () => ({ suggestions: [], attemptedLLM: true, connectors: [], contextBytes: 0 }),
+      };
     });
     const res = await suggestConnectorMemories(['notion']);
-    expect(res).toEqual({ suggestions: [] });
+    expect(res).toEqual({ suggestions: [], attemptedLLM: true, connectors: [], contextBytes: 0 });
     expect(fn).toHaveBeenCalledOnce();
   });
 
@@ -59,7 +62,10 @@ describe('connectors transport', () => {
       const body = JSON.parse((init?.body as string) ?? '{}');
       expect(body.chatAgentId).toBe('claude');
       expect(body.chatModel).toBe('opus');
-      return { ok: true, json: async () => ({ suggestions: [] }) };
+      return {
+        ok: true,
+        json: async () => ({ suggestions: [], attemptedLLM: true, connectors: [], contextBytes: 0 }),
+      };
     });
     await suggestConnectorMemories(['notion'], { chatAgentId: 'claude', chatModel: 'opus' });
   });
@@ -68,4 +74,21 @@ describe('connectors transport', () => {
     mockFetch(() => ({ ok: false }));
     expect(await suggestConnectorMemories(['notion'])).toBeNull();
   });
+
+  it.each(['suggestions', 'attemptedLLM', 'connectors', 'contextBytes'] as const)(
+    'rejects a malformed 2xx suggestion response missing required %s',
+    async (field) => {
+      const payload: Record<string, unknown> = {
+        suggestions: [],
+        attemptedLLM: true,
+        connectors: [],
+        contextBytes: 0,
+      };
+      delete payload[field];
+      mockFetch(() => ({ ok: true, json: async () => payload }));
+      await expect(suggestConnectorMemories(['notion'])).rejects.toThrow(
+        `Connector memory suggestion request succeeded without a '${field}' field`,
+      );
+    },
+  );
 });

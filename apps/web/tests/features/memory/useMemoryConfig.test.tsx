@@ -65,6 +65,7 @@ describe('useMemoryConfig', () => {
 
     // Optimistic flip reverted because the daemon kept the old value.
     expect(result.current.enabled).toBe(true);
+    expect(result.current.error).toBe("Memory settings couldn't be saved. Try again shortly.");
     expect(patchConfig).toHaveBeenCalledWith({ enabled: false });
   });
 
@@ -79,6 +80,7 @@ describe('useMemoryConfig', () => {
     });
 
     expect(result.current.enabled).toBe(true);
+    expect(result.current.error).toBe("Memory settings couldn't be saved. Try again shortly.");
   });
 
   it('rolls a per-hook flag back when the PATCH fails', async () => {
@@ -92,6 +94,7 @@ describe('useMemoryConfig', () => {
 
     // Optimistic set was reverted because the server rejected it.
     expect(result.current.hookFlags.profileEnabled).toBe(true);
+    expect(result.current.error).toBe("Memory settings couldn't be saved. Try again shortly.");
     expect(patchConfig).toHaveBeenCalledWith({ profileEnabled: false });
   });
 
@@ -111,6 +114,7 @@ describe('useMemoryConfig', () => {
     // Optimistic set reverted even though the transport rejected instead of
     // returning false, so the UI does not diverge from the daemon.
     expect(result.current.hookFlags.profileEnabled).toBe(true);
+    expect(result.current.error).toBe("Memory settings couldn't be saved. Try again shortly.");
   });
 
   it('keeps a per-hook flag flipped when the PATCH succeeds', async () => {

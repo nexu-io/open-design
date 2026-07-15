@@ -6,11 +6,12 @@
 // mocks, no DOM. The two accumulating OAuth subscriptions (poll + message
 // listener) deliberately live in the orchestrator, so they are out of scope
 // here; this pins the state machine the hook actually owns.
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   ConnectorDetail,
   ConnectorMemorySuggestionResponse,
+  MemoryEntry,
   MemoryExtractionRecord,
   MemorySuggestion,
 } from '@open-design/contracts';
@@ -74,10 +75,12 @@ function makeCoord(over: Partial<MemoryConnectorsCoordination> = {}): MemoryConn
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe('useMemoryConnectors — catalogue + selection', () => {
@@ -116,6 +119,110 @@ describe('useMemoryConnectors — catalogue + selection', () => {
 
     expect(result.current.memoryConnectors.find((item) => item.id === 'notion')?.name).toBe('notion');
     expect(result.current.connectorLoadError).toMatch(/couldn't be loaded/);
+  });
+
+  it('does not clear a catalogue error when an independent status refresh succeeds', async () => {
+    const port = makePort({
+      fetchConnectorStatuses: vi.fn(async () => ({}) as ConnectorStatusMap),
+      fetchMemoryConnectors: vi.fn(async () => {
+        throw new Error('discovery offline');
+      }),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    expect(result.current.connectorLoadError).toBe(
+      "Connected apps couldn't be loaded. Try again shortly.",
+    );
+
+    await act(async () => {
+      await result.current.refreshConnectorStatuses();
+    });
+    expect(result.current.connectorLoadError).toBe(
+      "Connected apps couldn't be loaded. Try again shortly.",
+    );
+  });
+
+  it('clears a status error only after a successful status retry', async () => {
+    const port = makePort({
+      fetchConnectorStatuses: vi
+        .fn<MemoryConnectorsPort['fetchConnectorStatuses']>()
+        .mockRejectedValueOnce(new Error('status offline'))
+        .mockResolvedValueOnce({} as ConnectorStatusMap),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    expect(result.current.connectorsLoading).toBe(false);
+    expect(result.current.connectorLoadError).toBe(
+      "Connected app statuses couldn't be loaded. Try again shortly.",
+    );
+
+    await act(async () => {
+      await result.current.refreshConnectorStatuses();
+    });
+    expect(result.current.connectorLoadError).toBeNull();
+  });
+
+  it('does not let an older reload failure update errors or loading after a newer reload wins', async () => {
+    const oldStatus = deferred<ConnectorStatusMap>();
+    const port = makePort({
+      fetchConnectorStatuses: vi
+        .fn<MemoryConnectorsPort['fetchConnectorStatuses']>()
+        .mockReturnValueOnce(oldStatus.promise)
+        .mockResolvedValueOnce({} as ConnectorStatusMap),
+      fetchMemoryConnectors: vi.fn(async () => []),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let oldReload!: Promise<void>;
+    act(() => {
+      oldReload = result.current.reloadConnectors();
+    });
+    await waitFor(() => expect(port.fetchConnectorStatuses).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    expect(result.current.connectorsLoading).toBe(false);
+
+    await act(async () => {
+      oldStatus.reject(new Error('stale status failure'));
+      await oldReload;
+    });
+    expect(result.current.connectorLoadError).toBeNull();
+    expect(result.current.connectorsLoading).toBe(false);
+  });
+
+  it('ignores an older discovery failure after a newer reload already succeeded', async () => {
+    const oldDiscovery = deferred<ConnectorDetail[]>();
+    const fetchMemoryConnectors = vi
+      .fn<MemoryConnectorsPort['fetchMemoryConnectors']>()
+      .mockReturnValueOnce(oldDiscovery.promise)
+      .mockResolvedValueOnce([connector('figma')]);
+    const port = makePort({ fetchMemoryConnectors });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let oldReload!: Promise<void>;
+    act(() => {
+      oldReload = result.current.reloadConnectors();
+    });
+    await waitFor(() => expect(fetchMemoryConnectors).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.reloadConnectors();
+    });
+    expect(result.current.memoryConnectors.find((item) => item.id === 'figma')?.name).toBe('figma');
+
+    await act(async () => {
+      oldDiscovery.reject(new Error('stale discovery failure'));
+      await oldReload;
+    });
+    expect(result.current.connectorLoadError).toBeNull();
   });
 
   it('keeps only connected apps in selectedConnectedConnectorIds and labels the scan', async () => {
@@ -367,6 +474,34 @@ describe('useMemoryConnectors — OAuth connect + refresh', () => {
     });
     expect(result.current.connectorStatuses.notion?.status).toBe('connected');
   });
+
+  it('ignores an older status-refresh failure after a newer refresh succeeded', async () => {
+    const poll = deferred<ConnectorStatusMap>();
+    const port = makePort({
+      fetchConnectorStatuses: vi
+        .fn<MemoryConnectorsPort['fetchConnectorStatuses']>()
+        .mockReturnValueOnce(poll.promise)
+        .mockResolvedValueOnce({ notion: { status: 'connected' } } as ConnectorStatusMap),
+    });
+    const { result } = renderHook(() => useMemoryConnectors(port, makeCoord()));
+
+    let oldRefresh!: Promise<void>;
+    act(() => {
+      oldRefresh = result.current.refreshConnectorStatuses();
+    });
+    await waitFor(() => expect(port.fetchConnectorStatuses).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.refreshConnectorStatuses();
+    });
+    expect(result.current.connectorStatuses.notion?.status).toBe('connected');
+
+    await act(async () => {
+      poll.reject(new Error('stale status failure'));
+      await oldRefresh;
+    });
+    expect(result.current.connectorLoadError).toBeNull();
+  });
 });
 
 describe('useMemoryConnectors — catalogue/status ordering races', () => {
@@ -581,6 +716,38 @@ describe('useMemoryConnectors — scan / suggest / save', () => {
     expect(result.current.connectorStatus).toMatch(/Saved 2 memories/);
   });
 
+  it('serializes a duplicate suggestion save and preserves a selection made while it is in flight', async () => {
+    const saved = deferred<MemoryEntry | null>();
+    const port = makePort({
+      fetchConnectorStatuses: connectedStatuses,
+      suggestConnectorMemories: vi.fn(async () => scanResponse()),
+      saveMemoryEntry: vi.fn(() => saved.promise),
+    });
+    const { result } = await connectAndSelect(port, makeCoord());
+    await act(async () => {
+      await result.current.onSuggestConnectorMemory();
+    });
+
+    // Save only s1, then select s2 while s1 is still on the wire. The second
+    // save call is a same-batch duplicate that must not write s1 twice.
+    act(() => result.current.toggleConnectorSuggestion('s2'));
+    let firstSave!: Promise<void>;
+    let duplicateSave!: Promise<void>;
+    act(() => {
+      firstSave = result.current.onSaveConnectorSuggestions();
+      duplicateSave = result.current.onSaveConnectorSuggestions();
+      result.current.toggleConnectorSuggestion('s2');
+    });
+    expect(port.saveMemoryEntry).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      saved.resolve(savedEntryForSuggestion('s1'));
+      await Promise.all([firstSave, duplicateSave]);
+    });
+    expect(result.current.connectorSuggestions.map((item) => item.id)).toEqual(['s2']);
+    expect([...result.current.selectedSuggestionIds]).toEqual(['s2']);
+  });
+
   function scanResponse(over: Partial<ConnectorMemorySuggestionResponse> = {}): ConnectorMemorySuggestionResponse {
     return {
       suggestions: [suggestion('s1'), suggestion('s2')],
@@ -590,6 +757,41 @@ describe('useMemoryConnectors — scan / suggest / save', () => {
       ...over,
     };
   }
+
+  function savedEntryForSuggestion(id: string) {
+    const item = suggestion(id);
+    return {
+      id,
+      name: item.name,
+      description: item.description,
+      type: item.type,
+      body: item.body,
+      updatedAt: 0,
+    };
+  }
+
+  it('ignores a duplicate scan dispatched before its disabled state renders', async () => {
+    const scan = deferred<ConnectorMemorySuggestionResponse>();
+    const port = makePort({
+      fetchConnectorStatuses: connectedStatuses,
+      suggestConnectorMemories: vi.fn(() => scan.promise),
+    });
+    const { result } = await connectAndSelect(port, makeCoord());
+
+    let firstScan!: Promise<void>;
+    let duplicateScan!: Promise<void>;
+    act(() => {
+      firstScan = result.current.onSuggestConnectorMemory();
+      duplicateScan = result.current.onSuggestConnectorMemory();
+    });
+    expect(port.suggestConnectorMemories).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      scan.resolve(scanResponse({ suggestions: [] }));
+      await Promise.all([firstScan, duplicateScan]);
+    });
+    expect(result.current.connectorExtracting).toBe(false);
+  });
 
   it('surfaces a friendly failure when a connector extraction failed during the scan', async () => {
     const coord = makeCoord({

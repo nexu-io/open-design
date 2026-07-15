@@ -251,6 +251,51 @@ describe('useMemoryEntries — create / delete / index', () => {
     expect(coord.fireFlash).toHaveBeenCalledWith('saved');
   });
 
+  it('does not let a completed save close a newer editor draft', async () => {
+    const saved = deferred<MemoryEntry | null>();
+    const coord = makeCoord();
+    const port = makePort({ saveMemoryEntry: vi.fn(() => saved.promise) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    act(() => result.current.setEditing({ name: 'First', description: '', type: 'user', body: 'one' }));
+    let firstSave!: Promise<void>;
+    act(() => {
+      firstSave = result.current.onSave();
+    });
+
+    // A new draft started while the first save is unresolved is a newer editor
+    // session, not an instruction for the old completion to dismiss it.
+    act(() => result.current.setEditing({ name: 'Second', description: '', type: 'project', body: 'two' }));
+    await act(async () => {
+      saved.resolve(savedEntry());
+      await firstSave;
+    });
+
+    expect(result.current.editing?.name).toBe('Second');
+    expect(coord.closeEditor).not.toHaveBeenCalled();
+    expect(coord.fireFlash).toHaveBeenCalledWith('created');
+  });
+
+  it('ignores a duplicate entry save dispatched before its busy state renders', async () => {
+    const saved = deferred<MemoryEntry | null>();
+    const port = makePort({ saveMemoryEntry: vi.fn(() => saved.promise) });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    act(() => result.current.setEditing({ name: 'Only once', description: '', type: 'user', body: '' }));
+    let firstSave!: Promise<void>;
+    let duplicateSave!: Promise<void>;
+    act(() => {
+      firstSave = result.current.onSave();
+      duplicateSave = result.current.onSave();
+    });
+    expect(port.saveMemoryEntry).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      saved.resolve(savedEntry());
+      await Promise.all([firstSave, duplicateSave]);
+    });
+  });
+
   it('onSave is a no-op when the name is blank', async () => {
     const coord = makeCoord();
     const port = makePort();
@@ -277,6 +322,27 @@ describe('useMemoryEntries — create / delete / index', () => {
 
     expect(port.deleteMemoryEntry).toHaveBeenCalledWith('a');
     expect(coord.fireFlash).toHaveBeenCalledWith('deleted');
+  });
+
+  it('ignores a duplicate delete for the same entry while the first is in flight', async () => {
+    const deleted = deferred<boolean>();
+    const coord = makeCoord();
+    const port = makePort({ deleteMemoryEntry: vi.fn(() => deleted.promise) });
+    const { result } = renderHook(() => useMemoryEntries(port, coord));
+
+    let firstDelete!: Promise<void>;
+    let duplicateDelete!: Promise<void>;
+    act(() => {
+      firstDelete = result.current.onDelete('a');
+      duplicateDelete = result.current.onDelete('a');
+    });
+    expect(port.deleteMemoryEntry).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      deleted.resolve(true);
+      await Promise.all([firstDelete, duplicateDelete]);
+    });
+    expect(coord.fireFlash).toHaveBeenCalledTimes(1);
   });
 
   it('onSaveIndex writes the draft and flashes "indexSaved"', async () => {
@@ -320,7 +386,61 @@ describe('useMemoryEntries — create / delete / index', () => {
     expect(result.current.indexDraft).toBe('draft B');
   });
 
-  it('onSaveIndex is a no-op with no draft, and skips the flash when the write fails', async () => {
+  it('ignores a duplicate index save dispatched before its busy state renders', async () => {
+    const saved = deferred<boolean>();
+    const port = makePort({ saveMemoryIndex: vi.fn(() => saved.promise) });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    act(() => result.current.setIndexDraft('draft'));
+    let firstSave!: Promise<void>;
+    let duplicateSave!: Promise<void>;
+    act(() => {
+      firstSave = result.current.onSaveIndex();
+      duplicateSave = result.current.onSaveIndex();
+    });
+    expect(port.saveMemoryIndex).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      saved.resolve(true);
+      await Promise.all([firstSave, duplicateSave]);
+    });
+  });
+
+  it('keeps busy true until overlapping entry and index writes both settle', async () => {
+    const entrySave = deferred<MemoryEntry | null>();
+    const indexSave = deferred<boolean>();
+    const port = makePort({
+      saveMemoryEntry: vi.fn(() => entrySave.promise),
+      saveMemoryIndex: vi.fn(() => indexSave.promise),
+    });
+    const { result } = renderHook(() => useMemoryEntries(port, makeCoord()));
+
+    act(() => {
+      result.current.setEditing({ name: 'Entry', description: '', type: 'user', body: '' });
+      result.current.setIndexDraft('index');
+    });
+    let saveEntry!: Promise<void>;
+    let saveIndex!: Promise<void>;
+    act(() => {
+      saveEntry = result.current.onSave();
+      saveIndex = result.current.onSaveIndex();
+    });
+    expect(result.current.busy).toBe(true);
+
+    await act(async () => {
+      entrySave.resolve(savedEntry());
+      await saveEntry;
+    });
+    expect(result.current.busy).toBe(true);
+
+    await act(async () => {
+      indexSave.resolve(true);
+      await saveIndex;
+    });
+    expect(result.current.busy).toBe(false);
+  });
+
+  it('onSaveIndex is a no-op with no draft, and reports a resolved write failure', async () => {
     const coord = makeCoord();
     const port = makePort({ saveMemoryIndex: vi.fn(async () => false) });
     const { result } = renderHook(() => useMemoryEntries(port, coord));
@@ -339,9 +459,10 @@ describe('useMemoryEntries — create / delete / index', () => {
     expect(port.saveMemoryIndex).toHaveBeenCalled();
     expect(result.current.indexDraft).toBe('draft');
     expect(coord.fireFlash).not.toHaveBeenCalled();
+    expect(result.current.loadError).toMatch(/couldn't be saved/);
   });
 
-  it('onSave and onDelete skip their side effects when the port reports failure', async () => {
+  it('onSave and onDelete report resolved failures without claiming success', async () => {
     const coord = makeCoord();
     const port = makePort({
       saveMemoryEntry: vi.fn(async () => null),
@@ -355,11 +476,13 @@ describe('useMemoryEntries — create / delete / index', () => {
     });
     expect(coord.closeEditor).not.toHaveBeenCalled();
     expect(coord.fireFlash).not.toHaveBeenCalled();
+    expect(result.current.loadError).toMatch(/couldn't be saved/);
 
     await act(async () => {
       await result.current.onDelete('a');
     });
     expect(coord.fireFlash).not.toHaveBeenCalled();
+    expect(result.current.loadError).toMatch(/couldn't be saved/);
   });
 
   it('onSave, onDelete, and onSaveIndex surface a load error instead of an unhandled rejection when the port throws', async () => {
@@ -749,6 +872,28 @@ describe('useMemoryEntries — preview / edit / copy / tree', () => {
     });
     expect(writeText).toHaveBeenCalledWith('/memories');
     expect(coord.fireFlash).toHaveBeenCalledWith('pathCopied');
+  });
+
+  it('surfaces a clipboard fallback failure instead of letting the copy callback reject', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('clipboard denied')) },
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => { throw new Error('fallback denied'); }),
+    });
+    const coord = makeCoord();
+    const { result } = renderHook(() => useMemoryEntries(makePort(), coord));
+    await act(async () => {
+      await result.current.reload();
+    });
+
+    await expect(act(async () => {
+      await result.current.onCopyPath();
+    })).resolves.toBeUndefined();
+    expect(result.current.loadError).toMatch(/couldn't be loaded/);
+    expect(coord.fireFlash).not.toHaveBeenCalledWith('pathCopied');
   });
 
   it('groups tree entries under their parent folder, ignoring parentless entries', async () => {

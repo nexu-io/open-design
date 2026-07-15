@@ -210,10 +210,9 @@ export function createExtractionHistoryStore(
   /** Returns true when this was the LAST in-flight delete for the id. Every
    *  call site pairs this with a prior `markPendingDelete(id)` (beginDelete
    *  always precedes the settle path that calls this), so `pendingDeletes`
-   *  is guaranteed to already hold `id` here — the `?? 1` is a defensive
-   *  invariant guard against that pairing breaking, not a reachable case. */
+   *  is guaranteed to already hold `id` here. */
   function unmarkPendingDelete(id: string): boolean {
-    const count = (pendingDeletes.get(id) ?? 1) - 1;
+    const count = pendingDeletes.get(id)! - 1;
     if (count <= 0) {
       pendingDeletes.delete(id);
       return true;
@@ -305,16 +304,16 @@ export function createExtractionHistoryStore(
     // sitting in `rows`, and every row here postdates any authoritative
     // clear — so a clear-superseded snapshot rejects only the SNAPSHOT's
     // rows, while current rows (all stamped after the clear, hence after
-    // sinceClock) survive on the rowStamp rule without a special case.
+    // sinceClock) survive on the rowStamp rule without a special case. A
+    // pending delete cannot be present in `rows`: beginDelete removes it and
+    // applyFrame/commitSnapshot keep it hidden until its settle path runs.
     const survivors = rows
       .filter((row) => {
-        if (pendingDeletes.has(row.id)) return false;
         if (acceptedById.has(row.id)) return true;
         // Every row that ever enters `rows` is stamped at insertion, by
         // either applyFrame or this function's own accepted-rows loop below
-        // — `?? 0` is a defensive invariant guard for that, not a reachable
-        // "never stamped" case.
-        return (rowStamp.get(row.id) ?? 0) > sinceClock;
+        // — it is therefore always present in rowStamp here.
+        return rowStamp.get(row.id)! > sinceClock;
       })
       .map((row) => {
         const confirmedRow = acceptedById.get(row.id);

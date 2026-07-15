@@ -19,6 +19,12 @@ describe('requiredField', () => {
       "Widget list request succeeded without a 'items' field",
     );
   });
+
+  it('treats a malformed non-object 2xx body as an absent field', () => {
+    expect(() => requiredField(null as never, 'items' as never, 'Widget list request')).toThrow(
+      "Widget list request succeeded without a 'items' field",
+    );
+  });
 });
 
 describe('requiredNonNullField', () => {

@@ -19,7 +19,7 @@ import {
   writePendingConnectorAuthIds,
   notifyConnectorsChanged,
 } from '../../providers/memory';
-import { connectConnector, fetchConnectorStatuses } from '../../providers/registry';
+import { connectConnector, fetchConnectorStatusesStrict } from '../../providers/registry';
 import type {
   MemoryConfigPort,
   MemoryConnectorsPort,
@@ -52,13 +52,13 @@ export const memoryExtractionsPort: MemoryExtractionsPort = {
 /**
  * Default binding for the connectors cluster: connector list/status/suggest +
  * entry-save transport, plus the OAuth side-effect bridges. `connectConnector`
- * and `fetchConnectorStatuses` come from the shared registry provider; the rest
+ * and `fetchConnectorStatusesStrict` come from the shared registry provider; the rest
  * from the memory provider barrel (which re-homes `notifyConnectorsChanged` and
  * the OAuth subscriptions so this root binds one transport/side-effect surface).
  */
 export const memoryConnectorsPort: MemoryConnectorsPort = {
   fetchMemoryConnectors,
-  fetchConnectorStatuses,
+  fetchConnectorStatuses: fetchConnectorStatusesStrict,
   connectConnector,
   suggestConnectorMemories,
   saveMemoryEntry,

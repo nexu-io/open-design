@@ -20,7 +20,7 @@ export function requiredField<T extends object, K extends keyof T>(
   // A field can be intentionally `null` (e.g. "the daemon cleared this
   // value") — only its ABSENCE from the response is a contract break, not
   // whatever value it holds.
-  if (!(field in json)) {
+  if (!json || typeof json !== 'object' || !(field in json)) {
     throw new Error(`${context} succeeded without a '${String(field)}' field`);
   }
   return json[field];

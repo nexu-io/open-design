@@ -13,6 +13,8 @@ import {
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchConnectorStatuses,
+  fetchConnectorStatusesStrict,
   fetchPluginExampleHtml,
   fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
@@ -40,6 +42,36 @@ function agentStreamResponse(text: string): Response {
     },
   );
 }
+
+describe('connector status response contracts', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the legacy empty fallback while allowing memory to reject a malformed 2xx', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
+
+    await expect(fetchConnectorStatusesStrict()).rejects.toThrow(
+      "Connector status request succeeded without a 'statuses' field",
+    );
+    await expect(fetchConnectorStatuses()).resolves.toEqual({});
+  });
+
+  it('returns a present empty status map from the strict reader', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ statuses: {} }), { status: 200 })));
+
+    await expect(fetchConnectorStatusesStrict()).resolves.toEqual({});
+  });
+
+  it('rejects a present-but-invalid status field instead of passing null into callers', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ statuses: null }), { status: 200 })));
+
+    await expect(fetchConnectorStatusesStrict()).rejects.toThrow(
+      "Connector status request succeeded without a 'statuses' field",
+    );
+  });
+});
 
 describe('fetchAgentsStream', () => {
   afterEach(() => {
@@ -503,6 +535,26 @@ describe('connectConnector', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('turns a malformed successful connect response into a visible action error', async () => {
+    vi.stubGlobal('window', {
+      open: vi.fn(() => null),
+      location: { assign: vi.fn() },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/connectors/auth-configs/prepare') {
+        return new Response(JSON.stringify({
+          results: { github: { status: 'ready', authConfigId: 'ac_github' } },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ auth: { kind: 'pending' } }), { status: 200 });
+    }));
+
+    await expect(connectConnector('github')).resolves.toEqual({
+      connector: null,
+      error: "Connector connect request succeeded without a 'connector' field",
+    });
   });
 
   it('renders a fallback link before navigating the auth popup', async () => {

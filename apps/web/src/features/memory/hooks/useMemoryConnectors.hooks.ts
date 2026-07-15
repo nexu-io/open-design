@@ -121,7 +121,12 @@ export function useMemoryConnectors(
     () => new Set(),
   );
   const [connectorExtracting, setConnectorExtracting] = useState(false);
+  // Button disabled state is only visible after React commits. These refs make
+  // the scan/save re-entrancy guards synchronous too, so two calls in one
+  // event batch cannot duplicate remote work or race stale results back in.
+  const connectorExtractionInFlightRef = useRef(false);
   const [connectorSaving, setConnectorSaving] = useState(false);
+  const connectorSaveInFlightRef = useRef(false);
   const [connectorSuggestions, setConnectorSuggestions] = useState<MemorySuggestion[]>([]);
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(
     () => new Set(),
@@ -130,7 +135,11 @@ export function useMemoryConnectors(
   const [connectorContextBytes, setConnectorContextBytes] = useState(0);
   const [connectorStatus, setConnectorStatus] = useState<string | null>(null);
   const [connectorError, setConnectorError] = useState<string | null>(null);
-  const [connectorLoadError, setConnectorLoadError] = useState<string | null>(null);
+  // Discovery and status polling are independent reads. Keeping one error for
+  // both made a successful status poll erase a still-live catalogue failure,
+  // so the UI falsely implied that all connector data had recovered.
+  const [connectorCatalogueLoadError, setConnectorCatalogueLoadError] = useState<string | null>(null);
+  const [connectorStatusLoadError, setConnectorStatusLoadError] = useState<string | null>(null);
   const [connectingConnectorIds, setConnectingConnectorIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -196,7 +205,18 @@ export function useMemoryConnectors(
       if (connectorStatusGuardRef.current.isCurrent(statusRevision)) {
         commitConnectorStatuses(statuses);
         setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
+        setConnectorStatusLoadError(null);
       }
+    } catch {
+      if (connectorStatusGuardRef.current.isCurrent(statusRevision)) {
+        setConnectorStatusLoadError("Connected app statuses couldn't be loaded. Try again shortly.");
+      }
+      // The catalogue response contains its own connector status. Continue
+      // with that independent read so a status-poll outage does not turn known
+      // connected apps into an unusable empty state; the status error remains
+      // visible until a status retry succeeds.
+    }
+    try {
       const next = await port.fetchMemoryConnectors();
       if (!connectorCatalogueGuardRef.current.isCurrent(catalogueRevision)) return;
       // Merge against the LATEST known status map, not the `statuses` value
@@ -205,13 +225,13 @@ export function useMemoryConnectors(
       // while this discovery fetch was still in flight, and stamping the
       // captured snapshot back over it would silently revert it.
       setConnectors(applyMemoryConnectorStatuses(next, connectorStatusesRef.current));
-      setConnectorLoadError(null);
+      setConnectorCatalogueLoadError(null);
     } catch {
       // Discovery is required for the real catalogue. Keep prior details rather
       // than replacing them with synthetic empty rows, and make the outage
       // visible to the user.
       if (connectorCatalogueGuardRef.current.isCurrent(catalogueRevision)) {
-        setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
+        setConnectorCatalogueLoadError("Connected apps couldn't be loaded. Try again shortly.");
       }
     } finally {
       if (connectorReloadGuardRef.current.isCurrent(reloadRevision)) {
@@ -268,6 +288,7 @@ export function useMemoryConnectors(
     () => connectorSuggestions.filter((suggestion) => selectedSuggestionIds.has(suggestion.id)),
     [connectorSuggestions, selectedSuggestionIds],
   );
+  const connectorLoadError = connectorCatalogueLoadError ?? connectorStatusLoadError;
 
   // Prune selection down to still-connected apps: disconnecting an app should
   // not leave it selected for a scan.
@@ -303,7 +324,7 @@ export function useMemoryConnectors(
       // state so those fire-and-forget callers cannot produce an unhandled
       // rejection or undo the optimistic connector update.
       if (connectorStatusGuardRef.current.isCurrent(revision)) {
-        setConnectorLoadError("Connected apps couldn't be loaded. Try again shortly.");
+        setConnectorStatusLoadError("Connected app statuses couldn't be loaded. Try again shortly.");
       }
       return;
     }
@@ -311,7 +332,7 @@ export function useMemoryConnectors(
     const statusChanged = connectorStatusesChanged(connectorsRef.current, statuses);
     commitConnectorStatuses(statuses);
     setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
-    setConnectorLoadError(null);
+    setConnectorStatusLoadError(null);
     setPendingConnectorAuthIds((prev) => {
       const next = new Set(prev);
       for (const connectorId of prev) {
@@ -433,7 +454,8 @@ export function useMemoryConnectors(
   }, []);
 
   const onSuggestConnectorMemory = useCallback(async () => {
-    if (selectedConnectedConnectorIds.length === 0) return;
+    if (selectedConnectedConnectorIds.length === 0 || connectorExtractionInFlightRef.current) return;
+    connectorExtractionInFlightRef.current = true;
     setConnectorExtracting(true);
     setConnectorSuggestions([]);
     setSelectedSuggestionIds(new Set());
@@ -491,6 +513,7 @@ export function useMemoryConnectors(
     } catch (err) {
       setConnectorError(err instanceof Error ? err.message : String(err));
     } finally {
+      connectorExtractionInFlightRef.current = false;
       setConnectorExtracting(false);
     }
   }, [chatAgentId, chatModel, reloadExtractions, selectedConnectedConnectorIds, port]);
@@ -504,7 +527,8 @@ export function useMemoryConnectors(
   }, []);
 
   const onSaveConnectorSuggestions = useCallback(async () => {
-    if (selectedConnectorSuggestions.length === 0) return;
+    if (selectedConnectorSuggestions.length === 0 || connectorSaveInFlightRef.current) return;
+    connectorSaveInFlightRef.current = true;
     setConnectorSaving(true);
     setConnectorError(null);
     try {
@@ -542,12 +566,11 @@ export function useMemoryConnectors(
         setConnectorSuggestions((prev) =>
           prev.filter((suggestion) => !savedSuggestionIds.has(suggestion.id)),
         );
-        setSelectedSuggestionIds(
-          new Set(
-            selectedConnectorSuggestions
-              .filter((suggestion) => !savedSuggestionIds.has(suggestion.id))
-              .map((suggestion) => suggestion.id),
-          ),
+        // The user can still change the remaining checkboxes while this save
+        // is in flight. Reconcile against that CURRENT selection rather than
+        // restoring the callback's stale snapshot of selected suggestions.
+        setSelectedSuggestionIds((prev) =>
+          new Set([...prev].filter((suggestionId) => !savedSuggestionIds.has(suggestionId))),
         );
         setConnectorStatus(
           `Saved ${savedSuggestionIds.size} memor${savedSuggestionIds.size === 1 ? 'y' : 'ies'} from connected apps.`,
@@ -566,6 +589,7 @@ export function useMemoryConnectors(
         );
       }
     } finally {
+      connectorSaveInFlightRef.current = false;
       setConnectorSaving(false);
     }
   }, [reload, selectedConnectorSuggestions, port]);

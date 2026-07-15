@@ -137,6 +137,18 @@ describe('MemoryConnectedPanel', () => {
     expect(toggleConnectorSelection).toHaveBeenCalledWith('notion');
   });
 
+  it('renders a selected connected connector as checked and selected', () => {
+    renderPanel({
+      connectedCount: 1,
+      selectedConnectorIds: new Set(['notion']),
+      selectedConnectedConnectorIds: ['notion'],
+      memoryConnectors: [connectedConnector('notion')],
+    });
+
+    expect(screen.getByRole('checkbox', { name: 'Use notion for memory extraction' })).toBeChecked();
+    expect(screen.getByText('Selected')).toBeInTheDocument();
+  });
+
   it('fires onConnectMemoryConnector for a not-yet-connected connector and stops the row click', () => {
     const { onConnectMemoryConnector, toggleConnectorSelection } = renderPanel({
       memoryConnectors: [connectedConnector('notion', { status: 'available' })],
@@ -173,6 +185,17 @@ describe('MemoryConnectedPanel', () => {
     expect(screen.getByRole('button', { name: 'Connect notion' })).toBeDisabled();
   });
 
+  it('shows a connecting connector as busy until its connection request settles', () => {
+    renderPanel({
+      memoryConnectors: [connectedConnector('notion', { status: 'available' })],
+      connectingConnectorIds: new Set(['notion']),
+    });
+    const button = screen.getByRole('button', { name: 'Connect notion' });
+    expect(button).toHaveTextContent('Connecting');
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('falls back to the connect-error hint over the default prompt', () => {
     renderPanel({
       memoryConnectors: [connectedConnector('notion', { status: 'available' })],
@@ -190,6 +213,16 @@ describe('MemoryConnectedPanel', () => {
     expect(onSuggestConnectorMemory).toHaveBeenCalled();
   });
 
+  it('disables the scan button and shows its busy icon while a scan is running', () => {
+    const { container } = renderPanel({
+      connectedCount: 1,
+      selectedConnectedConnectorIds: ['notion'],
+      connectorExtracting: true,
+    });
+    expect(screen.getByRole('button', { name: 'Scan selected apps' })).toBeDisabled();
+    expect(container.querySelector('.icon-spin')).toBeInTheDocument();
+  });
+
   it('fires onSaveConnectorSuggestions and onDiscardConnectorSuggestions from their buttons', () => {
     const { onSaveConnectorSuggestions, onDiscardConnectorSuggestions } = renderPanel({
       selectedConnectorSuggestions: [suggestion('s1')],
@@ -198,6 +231,24 @@ describe('MemoryConnectedPanel', () => {
     expect(onSaveConnectorSuggestions).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(onDiscardConnectorSuggestions).toHaveBeenCalled();
+  });
+
+  it('renders selected suggestions and disables their actions while saving', () => {
+    renderPanel({
+      selectedSuggestionIds: new Set(['s1']),
+      selectedConnectorSuggestions: [suggestion('s1')],
+      connectorSaving: true,
+    });
+
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Saving' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
+  });
+
+  it('does not render suggestion actions when no suggestions are available', () => {
+    renderPanel({ connectorSuggestions: [] });
+    expect(screen.queryByText('Suggested memories')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
   });
 
   it('shows the success status and error banners', () => {

@@ -66,6 +66,7 @@ export function MemorySection({
   const t = useT();
   const {
     enabled,
+    error: configError,
     hookFlags,
     onToggleEnabled,
     onToggleHook,
@@ -73,6 +74,17 @@ export function MemorySection({
     hydrate: hydrateConfig,
   } = useConfig();
   const { flash, fireFlash } = useFlash();
+  // `useMemoryConfig` deliberately preserves a rejected Promise for direct
+  // programmatic callers and its focused hook tests. React event handlers do
+  // not observe returned Promises, though, so consume that rejection here; the
+  // hook's `error` state below supplies the visible recovery path instead of an
+  // unhandled browser rejection.
+  const onToggleEnabledFromUi = useCallback((next: boolean) => {
+    void onToggleEnabled(next).catch(() => undefined);
+  }, [onToggleEnabled]);
+  const onToggleHookFromUi = useCallback((key: Parameters<typeof onToggleHook>[0], next: boolean) => {
+    void onToggleHook(key, next).catch(() => undefined);
+  }, [onToggleHook]);
   // Navigation/layout state (top tab, source sub-tab, modal open flags, the
   // records-section ref). Owned by a pure state hook so the transitions are
   // testable in isolation; the orchestrator re-exposes it and keeps the effects
@@ -352,7 +364,7 @@ export function MemorySection({
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(e) => onToggleEnabled(e.target.checked)}
+              onChange={(e) => onToggleEnabledFromUi(e.target.checked)}
             />
             <span className="toggle-slider" />
           </label>
@@ -366,9 +378,9 @@ export function MemorySection({
         </div>
       ) : null}
 
-      {entriesLoadError ?? extractionsLoadError ? (
+      {entriesLoadError ?? extractionsLoadError ?? configError ? (
         <div role="alert" className="memory-disabled-banner">
-          {entriesLoadError ?? extractionsLoadError}
+          {entriesLoadError ?? extractionsLoadError ?? configError}
         </div>
       ) : null}
 
@@ -383,7 +395,7 @@ export function MemorySection({
         <MemoryHowPanel
           enabled={enabled}
           hookFlags={hookFlags}
-          onToggleHook={onToggleHook}
+          onToggleHook={onToggleHookFromUi}
         />
       ) : null}
 

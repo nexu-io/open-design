@@ -39,6 +39,9 @@ interface ConfigWriteQueue {
   pending: PendingConfigWrite | null;
 }
 
+const CONFIG_SAVE_ERROR_MESSAGE =
+  "Memory settings couldn't be saved. Try again shortly.";
+
 function newConfigWriteQueue(): ConfigWriteQueue {
   return { inFlight: false, pending: null };
 }
@@ -104,6 +107,8 @@ function enqueueConfigWrite(
 export interface MemoryConfigController {
   /** Master memory switch. */
   enabled: boolean;
+  /** Non-null after a config PATCH fails; cleared by the next confirmed write. */
+  error: string | null;
   /** The four per-hook flags, in the shape the hooks panel consumes. */
   hookFlags: Record<MemoryConfigFlagKey, boolean>;
   /** Flip the master switch (optimistic; rolls back on a failed PATCH). */
@@ -120,6 +125,7 @@ export interface MemoryConfigController {
 
 export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController {
   const [enabled, setEnabled] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [chatExtractionEnabled, setChatExtractionEnabled] = useState(true);
   const [profileEnabled, setProfileEnabled] = useState(true);
   const [rewriteEnabled, setRewriteEnabled] = useState(true);
@@ -194,6 +200,7 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const onToggleEnabled = useCallback(
     (next: boolean) => {
       hydrationGuardRef.current.invalidate();
+      setError(null);
       setEnabled(next);
       return enqueueConfigWrite(
         enabledQueueRef.current,
@@ -208,8 +215,13 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
           // hasUnsettledConfigWrite() had already flipped false by the time
           // such a read's response arrived, so hydrate() applied it anyway.
           hydrationGuardRef.current.invalidate();
-          if (ok) enabledConfirmedRef.current = value;
-          else if (!hasNewerIntent) setEnabled(enabledConfirmedRef.current);
+          if (ok) {
+            enabledConfirmedRef.current = value;
+            if (!hasNewerIntent) setError(null);
+          } else if (!hasNewerIntent) {
+            setEnabled(enabledConfirmedRef.current);
+            setError(CONFIG_SAVE_ERROR_MESSAGE);
+          }
         },
       );
     },
@@ -233,6 +245,7 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const onToggleHook = useCallback(
     (key: MemoryConfigFlagKey, next: boolean) => {
       hydrationGuardRef.current.invalidate();
+      setError(null);
       const setter = setters[key];
       setter(() => next);
       return enqueueConfigWrite(
@@ -242,8 +255,13 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
         (ok, value, hasNewerIntent) => {
           // See onToggleEnabled above for why settle needs its own invalidate.
           hydrationGuardRef.current.invalidate();
-          if (ok) hookConfirmedRef.current[key] = value;
-          else if (!hasNewerIntent) setter(() => hookConfirmedRef.current[key]);
+          if (ok) {
+            hookConfirmedRef.current[key] = value;
+            if (!hasNewerIntent) setError(null);
+          } else if (!hasNewerIntent) {
+            setter(() => hookConfirmedRef.current[key]);
+            setError(CONFIG_SAVE_ERROR_MESSAGE);
+          }
         },
       );
     },
@@ -262,6 +280,7 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
 
   return {
     enabled,
+    error,
     hookFlags,
     onToggleEnabled,
     onToggleHook,

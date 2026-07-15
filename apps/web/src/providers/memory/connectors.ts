@@ -35,5 +35,13 @@ export async function suggestConnectorMemories(
     body: JSON.stringify(body),
   });
   if (!resp.ok) return null;
-  return (await resp.json()) as ConnectorMemorySuggestionResponse;
+  const json = (await resp.json()) as ConnectorMemorySuggestionResponse;
+  // A successful scan always has all four fields. Do not let a malformed 2xx
+  // become a plausible empty scan; callers need an explicit failure instead.
+  return {
+    suggestions: requiredField(json, 'suggestions', 'Connector memory suggestion request'),
+    attemptedLLM: requiredField(json, 'attemptedLLM', 'Connector memory suggestion request'),
+    connectors: requiredField(json, 'connectors', 'Connector memory suggestion request'),
+    contextBytes: requiredField(json, 'contextBytes', 'Connector memory suggestion request'),
+  };
 }

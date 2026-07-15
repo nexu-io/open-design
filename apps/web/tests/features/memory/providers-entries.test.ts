@@ -1,10 +1,11 @@
 // Transport adapters for the memory-entry, tree, and index routes. These mock
 // the global `fetch` to pin the ok/non-ok branches, the create-vs-update URL/verb
-// split, and the `?? []` / `?? null` payload fallbacks.
+// split, and the strict required-field response contract.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fetchMemoryList,
+  fetchMemoryExtractionConfig,
   fetchMemoryTree,
   fetchMemoryEntry,
   saveMemoryEntry,
@@ -27,14 +28,63 @@ afterEach(() => {
 
 describe('entries transport', () => {
   it('returns the parsed list on a 2xx', async () => {
-    const payload = { enabled: false, entries: [{ id: 'e1' }] };
+    const payload = {
+      enabled: false,
+      chatExtractionEnabled: true,
+      profileEnabled: true,
+      rewriteEnabled: true,
+      verifyEnabled: true,
+      rootDir: '/memory',
+      index: '# Memory',
+      entries: [{ id: 'e1' }],
+      extraction: null,
+    };
     mockFetch(() => ({ ok: true, json: async () => payload }));
-    expect((await fetchMemoryList()).enabled).toBe(false);
+    expect(await fetchMemoryList()).toEqual(payload);
   });
 
   it('rejects rather than fabricating a list when the list fetch fails', async () => {
     mockFetch(() => ({ ok: false }));
     await expect(fetchMemoryList()).rejects.toThrow('Memory list request failed');
+  });
+
+  it.each(['entries'] as const)(
+    'rejects a malformed 2xx list missing required %s',
+    async (field) => {
+      const payload: Record<string, unknown> = {
+        enabled: true,
+        chatExtractionEnabled: true,
+        profileEnabled: true,
+        rewriteEnabled: true,
+        verifyEnabled: true,
+        rootDir: '/memory',
+        index: '# Memory',
+        entries: [],
+        extraction: null,
+      };
+      delete payload[field];
+      mockFetch(() => ({ ok: true, json: async () => payload }));
+      await expect(fetchMemoryList()).rejects.toThrow(
+        `Memory list request succeeded without a '${field}' field`,
+      );
+    },
+  );
+
+  it('rejects a malformed 2xx extraction-config read instead of treating it as cleared', async () => {
+    mockFetch(() => ({ ok: true, json: async () => ({ entries: [] }) }));
+    await expect(fetchMemoryExtractionConfig()).rejects.toThrow(
+      "Memory extraction config request succeeded without a 'extraction' field",
+    );
+
+    mockFetch(() => ({ ok: true, json: async () => ({ extraction: null }) }));
+    expect(await fetchMemoryExtractionConfig()).toBeNull();
+  });
+
+  it('rejects a non-2xx extraction-config read instead of treating it as cleared', async () => {
+    mockFetch(() => ({ ok: false, status: 503 }));
+    await expect(fetchMemoryExtractionConfig()).rejects.toThrow(
+      'Memory extraction config request failed (503)',
+    );
   });
 
   it('returns the tree, a present empty tree, and rejects on failure', async () => {

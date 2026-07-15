@@ -4,6 +4,7 @@
 export { patchMemoryConfig, patchMemoryExtractionConfig } from './config';
 export {
   fetchMemoryList,
+  fetchMemoryExtractionConfig,
   fetchMemoryTree,
   fetchMemoryEntry,
   saveMemoryEntry,
