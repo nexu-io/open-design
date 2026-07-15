@@ -3,52 +3,402 @@
 // injected port; the SSE EventSource itself lives in providers/memory/events.ts
 // (transport can't sit in a feature file), so the orchestrator opens the stream
 // and feeds each `extraction` frame to `applyExtractionEvent` here.
-import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
+//
+// ─── The concurrency model ──────────────────────────────────────────────────
+//
+// This hook receives facts about one server-side resource (the extraction
+// ring buffer) from three concurrent sources:
+//
+//   1. Live SSE frames pushed by the daemon (phase transitions, plus the
+//      pseudo-phases 'deleted'/'cleared' when rows are evicted).
+//   2. GET snapshots this client pulled (manual reloads, and the recovery
+//      reads a failed delete/clear issues to restore server truth).
+//   3. This client's own optimistic mutations (delete/clear start + settle).
+//
+// Earlier revisions of this file grew one ad hoc ref per discovered race.
+// The rewrite replaces them with a single store built on three ordering
+// rules, each matched to what actually CAN be ordered:
+//
+//   A. CLIENT-ORDERED facts share one logical clock. Everything this client
+//      did itself — optimistic writes, the start of each GET — is genuinely
+//      sequenced by the client, so every committed change advances one
+//      monotonic clock and every GET captures the clock at its start
+//      (`sinceClock`). A snapshot is then exactly "the server's answer as of
+//      no later than sinceClock", and reconciliation keeps whichever side is
+//      younger. Overlapping reloads are ordered the same way via the slice's
+//      shared AsyncCommitGuard: only the latest-STARTED reload may commit,
+//      because two reloads are two independent server reads and resolution
+//      order says nothing about freshness.
+//
+//   B. SERVER-CONTENT-ORDERED facts are compared by content, never by
+//      arrival. A GET row and an SSE frame for the SAME id are both
+//      server-originated, racing over two independent channels, so
+//      client-side reception order tells you nothing about server-side event
+//      order. They are ordered by the row's own progression instead: a phase
+//      only ever moves running → exactly one terminal result, so a terminal
+//      phase outranks 'running' regardless of which channel landed last, and
+//      `finishedAt` breaks the (should-not-happen) tie between two terminal
+//      payloads.
+//
+//   C. CONFIRMED REMOVALS ARE PERMANENT. Attempt ids are UUIDs and are never
+//      reused (per the contracts doc comment), so once a removal is
+//      confirmed — an SSE 'deleted'/'cleared' frame, or a local delete/clear
+//      the server acknowledged — the id is tombstoned forever. No revision
+//      comparison is needed: ANY payload that still contains a tombstoned id
+//      is by definition stale for that id. This kills the whole family of
+//      "stale read resurrects a removed row" races by construction,
+//      including the equality-boundary case where a read and a removal
+//      captured the same revision.
+//
+// In-flight destructive operations get one uniform treatment: their targets
+// are hidden (refcounted, since two same-id deletes — or a clear racing a
+// delete — must each keep the id pending until ALL settle), and incoming
+// frames for hidden ids are buffered, content-merged, replayed if the
+// operation fails, and tombstoned if it succeeds. A pending CLEAR hides
+// everything: any frame first observed while a clear is in flight may have
+// been emitted before the daemon performed the clear, so the clear owns it —
+// on success those ids are tombstoned too, on failure the buffered frames
+// are replayed.
+//
+// Store invariant (maintained by every transition, relied on by all of
+// them): `rows` never contains a tombstoned id, never contains an id with a
+// pending delete, and after an authoritative clear contains only rows
+// accepted after that clear.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   MemoryExtractionEvent,
   MemoryExtractionRecord,
 } from '@open-design/contracts';
+import { createAsyncCommitGuard } from '../async-commit-guard';
 import { memoryExtractionsPort } from '../dependencies';
 import type { MemoryExtractionsPort } from '../ports';
 
+const LOAD_ERROR_MESSAGE =
+  "Memory extraction history couldn't be loaded. Try again shortly.";
+
+/** Row cap mirrored from the daemon's ring buffer for live-inserted rows. */
+const MAX_ROWS = 30;
+
 function phaseProgress(phase: MemoryExtractionRecord['phase']): number {
-  // A record only moves from running to one terminal result.  The terminal
-  // results do not have an ordering among themselves, but all are more
+  // A record only moves from running to one terminal result. The terminal
+  // results have no ordering among themselves, but all are more
   // authoritative than running regardless of which transport reached the
   // browser last.
   return phase === 'running' ? 0 : 1;
 }
 
 /**
- * Resolve two versions of the same persisted attempt without using browser
- * reception order. Terminal phase progression is authoritative; when both
- * sides are terminal, the completion timestamp breaks a real tie. Equivalent
- * records are merged so a confirmed read can fill fields an earlier stream
- * frame did not yet contain without erasing fields it omitted.
+ * Ordering rule B: resolve two versions of the same persisted attempt without
+ * using browser reception order. Terminal phase progression is authoritative;
+ * when both sides are terminal, the completion timestamp breaks a real tie.
+ * Equivalent records are merged so a confirmed read can fill fields an
+ * earlier stream frame did not yet contain without erasing fields it omitted.
  */
-function reconcileExtractionRecord(
+function mergeSameAttempt(
   local: MemoryExtractionRecord,
-  confirmed: MemoryExtractionRecord,
+  incoming: MemoryExtractionRecord,
 ): MemoryExtractionRecord {
   const localProgress = phaseProgress(local.phase);
-  const confirmedProgress = phaseProgress(confirmed.phase);
-  if (confirmedProgress > localProgress) return confirmed;
-  if (confirmedProgress < localProgress) return local;
+  const incomingProgress = phaseProgress(incoming.phase);
+  if (incomingProgress > localProgress) return incoming;
+  if (incomingProgress < localProgress) return local;
 
   const localFinishedAt = local.finishedAt ?? Number.NEGATIVE_INFINITY;
-  const confirmedFinishedAt = confirmed.finishedAt ?? Number.NEGATIVE_INFINITY;
-  if (confirmedFinishedAt > localFinishedAt) return confirmed;
-  if (confirmedFinishedAt < localFinishedAt) return local;
+  const incomingFinishedAt = incoming.finishedAt ?? Number.NEGATIVE_INFINITY;
+  if (incomingFinishedAt > localFinishedAt) return incoming;
+  if (incomingFinishedAt < localFinishedAt) return local;
 
   // `id` identifies one attempt, so `startedAt` should normally be equal.
   // Still, prefer the later source if malformed/legacy data disagrees.
-  if (confirmed.startedAt > local.startedAt) return confirmed;
-  if (confirmed.startedAt < local.startedAt) return local;
+  if (incoming.startedAt > local.startedAt) return incoming;
+  if (incoming.startedAt < local.startedAt) return local;
   // A real attempt never changes from one terminal result to another. If
   // legacy/malformed payloads disagree without a timestamp that orders them,
   // retain the existing value rather than making reception order decide.
-  if (confirmed.phase !== local.phase) return local;
-  return { ...local, ...confirmed };
+  if (incoming.phase !== local.phase) return local;
+  return { ...local, ...incoming };
+}
+
+/**
+ * Handed back by `beginDelete`/`beginClear`; carries exactly the facts the
+ * settle path needs and that only the START of the operation can know.
+ */
+interface DeleteOpToken {
+  /** Rows as they were the instant before the optimistic removal. */
+  previousRows: MemoryExtractionRecord[];
+  /**
+   * Logical time of the optimistic write. The failure path's recovery GET
+   * reconciles against it; the recovery-also-failed path restores
+   * `previousRows` only if nothing advanced the clock past it.
+   */
+  startClock: number;
+}
+
+interface ClearOpToken extends DeleteOpToken {
+  /**
+   * Every id this clear owns: rows visible when it started plus ids an
+   * overlapping delete had already optimistically hidden (those can still be
+   * present on the daemon when the clear lands, so the clear covers them
+   * too). Tombstoned wholesale if the clear succeeds.
+   */
+  ownedIds: Set<string>;
+}
+
+/**
+ * The single source of truth for extraction-history state. Pure TypeScript —
+ * no React, no transport — so every transition is synchronous and the
+ * ordering rules in the module doc comment hold by construction rather than
+ * by per-callsite bookkeeping. The hook below is a thin shell that pairs
+ * store transitions with port I/O and mirrors `rows` into React state.
+ */
+interface ExtractionHistoryStore {
+  rows(): MemoryExtractionRecord[];
+  /** Capture the logical clock before starting a GET (rule A). */
+  snapshotClock(): number;
+  /**
+   * Reconcile a resolved GET against everything that happened since it
+   * started. Returns the rows that actually committed — which can differ
+   * from the raw response — so callers can hand them straight to consumers
+   * (useMemoryConnectors reads reloadExtractions()'s return directly).
+   */
+  commitSnapshot(
+    confirmed: MemoryExtractionRecord[],
+    sinceClock: number,
+  ): MemoryExtractionRecord[];
+  /** Apply one live SSE frame (merge/insert/defer/clear/delete). */
+  applyFrame(ev: MemoryExtractionEvent): void;
+  beginDelete(id: string): DeleteOpToken;
+  settleDeleteSuccess(id: string): void;
+  settleDeleteFailure(id: string): void;
+  beginClear(): ClearOpToken;
+  settleClearSuccess(token: ClearOpToken): void;
+  settleClearFailure(): void;
+  /**
+   * Last-resort rollback for "mutation failed AND its recovery GET failed":
+   * restore the pre-mutation rows, but only if nothing at all advanced the
+   * clock while the operation was in flight — anything newer (an SSE frame,
+   * another mutation, a committed snapshot) outranks the stale snapshot.
+   */
+  restoreIfUnchanged(token: DeleteOpToken): void;
+}
+
+function createExtractionHistoryStore(
+  onRowsChanged: (rows: MemoryExtractionRecord[]) => void,
+): ExtractionHistoryStore {
+  let rows: MemoryExtractionRecord[] = [];
+  /** Rule A: the one logical clock ordering everything this client did. */
+  let clock = 0;
+  /** Logical time each visible row was last accepted (rule A per row). */
+  const rowStamp = new Map<string, number>();
+  /** Rule C: ids whose removal the server has confirmed. Never removed. */
+  const tombstones = new Set<string>();
+  /** Logical time the last authoritative clear landed (0 = never). */
+  let clearStamp = 0;
+  /** Refcounted in-flight deletes per id (two same-id deletes may overlap). */
+  const pendingDeletes = new Map<string, number>();
+  /** Refcounted in-flight clears (overlapping clears may overlap too). */
+  let pendingClears = 0;
+  /** Frames buffered while their id is hidden by a pending delete/clear. */
+  const deferred = new Map<string, MemoryExtractionEvent>();
+
+  function commit(next: MemoryExtractionRecord[]): number {
+    clock += 1;
+    rows = next;
+    onRowsChanged(rows);
+    return clock;
+  }
+
+  function markPendingDelete(id: string): void {
+    pendingDeletes.set(id, (pendingDeletes.get(id) ?? 0) + 1);
+  }
+
+  /** Returns true when this was the LAST in-flight delete for the id. */
+  function unmarkPendingDelete(id: string): boolean {
+    const count = (pendingDeletes.get(id) ?? 1) - 1;
+    if (count <= 0) {
+      pendingDeletes.delete(id);
+      return true;
+    }
+    pendingDeletes.set(id, count);
+    return false;
+  }
+
+  function tombstone(id: string): void {
+    tombstones.add(id);
+  }
+
+  function applyFrame(ev: MemoryExtractionEvent): void {
+    if (!ev || !ev.id) return;
+    // Pseudo-phases: the daemon emits these synthetically when a row is
+    // dropped from the buffer, by the per-row delete button or the "Clear"
+    // affordance at the top (possibly in another client).
+    if (ev.phase === 'cleared') {
+      // A remote clear removed every attempt the daemon knew about, which
+      // covers everything this client has observed: visible rows, ids hidden
+      // by a pending local delete, and buffered frames. Tombstone them all
+      // (rule C) so delayed frames cannot recreate discarded attempts.
+      const owned = new Set([
+        ...rows.map((row) => row.id),
+        ...pendingDeletes.keys(),
+        ...deferred.keys(),
+      ]);
+      for (const id of owned) tombstone(id);
+      deferred.clear();
+      clearStamp = commit([]);
+      return;
+    }
+    if (ev.phase === 'deleted') {
+      deferred.delete(ev.id);
+      tombstone(ev.id);
+      commit(rows.filter((row) => row.id !== ev.id));
+      return;
+    }
+    // Rule C: a confirmed-removed id never comes back. A delayed frame on
+    // the SSE connection may have been emitted before the DELETE response
+    // won the fetch race.
+    if (tombstones.has(ev.id)) return;
+    // A running extraction is user-deletable and the list-level clear is
+    // available while it runs, so frames can race an in-flight destructive
+    // operation for their id. Buffer them (content-merged, rule B) so they
+    // cannot visibly undo the optimistic removal; the settle path replays
+    // the best buffered frame on failure and tombstones it on success.
+    if (pendingDeletes.has(ev.id) || pendingClears > 0) {
+      const prior = deferred.get(ev.id);
+      deferred.set(ev.id, prior ? mergeSameAttempt(prior, ev) : ev);
+      return;
+    }
+    // Merge by id (rule B): phase transitions for an in-flight attempt
+    // collapse onto a single row instead of stacking N entries. New ids are
+    // unshifted so the latest appears at the top.
+    const at = rows.findIndex((row) => row.id === ev.id);
+    let next: MemoryExtractionRecord[];
+    if (at >= 0) {
+      next = rows.slice();
+      next[at] = mergeSameAttempt(next[at]!, ev);
+    } else {
+      next = [ev, ...rows].slice(0, MAX_ROWS);
+    }
+    rowStamp.set(ev.id, commit(next));
+  }
+
+  function commitSnapshot(
+    confirmed: MemoryExtractionRecord[],
+    sinceClock: number,
+  ): MemoryExtractionRecord[] {
+    // An authoritative clear younger than this read supersedes the whole
+    // snapshot — every row in it is pre-clear as far as the client can
+    // order, so nothing from it may come back. A clear still IN FLIGHT
+    // rejects the snapshot the same way: if that clear fails, its own
+    // recovery GET (which starts after the failure) restores server truth.
+    const clearSupersedes = clearStamp > sinceClock || pendingClears > 0;
+    const accepted = clearSupersedes
+      ? []
+      : confirmed.filter(
+          (row) => !tombstones.has(row.id) && !pendingDeletes.has(row.id),
+        );
+    const acceptedById = new Map(accepted.map((row) => [row.id, row] as const));
+    // Live rows keep their newest-first positions, content-merged with the
+    // snapshot's version of the same id (rule B). A row the snapshot no
+    // longer has (evicted server-side, or removed by another client) is
+    // dropped, UNLESS a local change accepted it after this read began
+    // (rule A) — then the read simply hasn't caught up and the local copy
+    // survives. The store invariant does the rest: no tombstoned id can be
+    // sitting in `rows`, and every row here postdates any authoritative
+    // clear — so a clear-superseded snapshot rejects only the SNAPSHOT's
+    // rows, while current rows (all stamped after the clear, hence after
+    // sinceClock) survive on the rowStamp rule without a special case.
+    const survivors = rows
+      .filter((row) => {
+        if (pendingDeletes.has(row.id)) return false;
+        if (acceptedById.has(row.id)) return true;
+        return (rowStamp.get(row.id) ?? 0) > sinceClock;
+      })
+      .map((row) => {
+        const confirmedRow = acceptedById.get(row.id);
+        return confirmedRow ? mergeSameAttempt(row, confirmedRow) : row;
+      });
+    const survivorIds = new Set(survivors.map((row) => row.id));
+    const merged = [...survivors];
+    for (const row of accepted) {
+      if (survivorIds.has(row.id)) continue;
+      // Slot restored/new rows in by start time so a newer live-only row is
+      // never pushed behind an older confirmed one.
+      const at = merged.findIndex((existing) => existing.startedAt < row.startedAt);
+      if (at === -1) merged.push(row);
+      else merged.splice(at, 0, row);
+    }
+    const revision = commit(merged);
+    for (const row of accepted) rowStamp.set(row.id, revision);
+    return rows;
+  }
+
+  return {
+    rows: () => rows,
+    snapshotClock: () => clock,
+    commitSnapshot,
+    applyFrame,
+    beginDelete(id) {
+      const previousRows = rows;
+      markPendingDelete(id);
+      const startClock = commit(rows.filter((row) => row.id !== id));
+      return { previousRows, startClock };
+    },
+    settleDeleteSuccess(id) {
+      if (unmarkPendingDelete(id)) deferred.delete(id);
+      tombstone(id);
+      // Re-assert the removal against whatever the array actually holds now,
+      // rather than trusting the optimistic removal is still intact: a
+      // concurrent failed mutation's recovery snapshot can have resurrected
+      // the id between the optimistic removal and this acknowledgement.
+      commit(rows.filter((row) => row.id !== id));
+    },
+    settleDeleteFailure(id) {
+      if (!unmarkPendingDelete(id)) return;
+      const buffered = deferred.get(id);
+      deferred.delete(id);
+      // Replay routes back through applyFrame so a still-pending CLEAR
+      // re-defers it rather than letting it slip past the hide.
+      if (buffered) applyFrame(buffered);
+    },
+    beginClear() {
+      const previousRows = rows;
+      const ownedIds = new Set([
+        ...rows.map((row) => row.id),
+        ...pendingDeletes.keys(),
+      ]);
+      pendingClears += 1;
+      const startClock = commit([]);
+      return { previousRows, startClock, ownedIds };
+    },
+    settleClearSuccess(token) {
+      pendingClears = Math.max(0, pendingClears - 1);
+      // The clear owns every id observed before its success: the rows and
+      // pending deletes it saw when it started, plus every frame first
+      // observed while it was in flight (those may have been emitted before
+      // the daemon performed the clear but arrived late over SSE).
+      for (const id of token.ownedIds) tombstone(id);
+      for (const id of deferred.keys()) tombstone(id);
+      deferred.clear();
+      // Re-assert the wipe (see settleDeleteSuccess for why) and stamp it as
+      // the authoritative clear point for in-flight reads.
+      clearStamp = commit([]);
+    },
+    settleClearFailure() {
+      pendingClears = Math.max(0, pendingClears - 1);
+      if (pendingClears > 0) return;
+      for (const [id, buffered] of [...deferred]) {
+        // Frames owned by a still-pending DELETE stay buffered — that
+        // delete's own settle path decides their fate.
+        if (pendingDeletes.has(id)) continue;
+        deferred.delete(id);
+        applyFrame(buffered);
+      }
+    },
+    restoreIfUnchanged(token) {
+      if (clock !== token.startClock) return;
+      commit(token.previousRows);
+    },
+  };
 }
 
 export interface MemoryExtractionsController {
@@ -71,333 +421,129 @@ export interface MemoryExtractionsController {
 export function useMemoryExtractions(
   port: MemoryExtractionsPort,
 ): MemoryExtractionsController {
-  // Recent extraction attempts, newest first. Driven by a one-shot fetch on
-  // mount + live SSE updates merged by id so phase transitions
-  // (running → success) replace the row in place.
+  // Recent extraction attempts, newest first — a render mirror of the
+  // store's rows. All mutation logic lives in the store (see its docs).
   const [extractions, setExtractions] = useState<MemoryExtractionRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // Every local optimistic change and every live frame advances this revision.
-  // A failed mutation may restore its pre-mutation snapshot only if nothing
-  // newer has changed the history while its request/recovery fetch was pending.
-  const extractionRevision = useRef(0);
-  // Refcounted rather than a Set: two overlapping onDeleteExtraction() calls
-  // for the SAME id must both keep it marked pending until BOTH settle — a
-  // Set's single membership means the first call to settle would delete the
-  // key out from under the second, still-in-flight call.
-  const pendingDeletionCounts = useRef(new Map<string, number>());
-  // A running extraction is user-deletable. Buffer phase frames for an id
-  // while its delete is pending so they cannot visibly undo the optimistic
-  // removal, but replay the best one if that delete ultimately fails.
-  const deferredDeletionEvents = useRef(new Map<string, MemoryExtractionEvent>());
-  const markPendingDeletion = useCallback((id: string) => {
-    pendingDeletionCounts.current.set(id, (pendingDeletionCounts.current.get(id) ?? 0) + 1);
-  }, []);
-  const unmarkPendingDeletion = useCallback((id: string) => {
-    const count = (pendingDeletionCounts.current.get(id) ?? 1) - 1;
-    if (count <= 0) pendingDeletionCounts.current.delete(id);
-    else pendingDeletionCounts.current.set(id, count);
-  }, []);
-  // Ordering for reloadExtractions(): only the latest-started call's response
-  // may commit (see reloadExtractions below); isRefreshing tracks how many
-  // reloads are currently in flight so one completing doesn't clear it while
-  // another is still pending.
-  const reloadGenerationRef = useRef(0);
-  const inFlightReloadsRef = useRef(0);
-  // A confirmed-history fetch answers "what did the server have", but it can
-  // resolve after NEWER local changes: a destructive SSE event (a remote
-  // 'cleared' or 'deleted' frame) that removed rows, or an ordinary phase
-  // transition that advanced one. Reconciling that stale snapshot naively
-  // would resurrect removed rows or regress advanced ones, so every change
-  // stamps the revision it landed at — destructive events per removal, and
-  // every row-content change per row — and reconciliation keeps whichever
-  // side is younger than the recovery read.
-  const clearedAtRevisionRef = useRef(0);
-  const deletedAtRevisionRef = useRef(new Map<string, number>());
-  const rowRevisionRef = useRef(new Map<string, number>());
-  // Mirrors `extractions` synchronously. setExtractions() only ever runs
-  // through updateExtractions() below, so this ref and the state it drives
-  // are always resolved together — callers that need the array a mutation
-  // actually committed (not just a revision number) can read it immediately,
-  // without waiting on React's next render.
-  const extractionsRef = useRef<MemoryExtractionRecord[]>([]);
-  const updateExtractions = useCallback((next: SetStateAction<MemoryExtractionRecord[]>) => {
-    extractionRevision.current += 1;
-    const resolved = typeof next === 'function' ? next(extractionsRef.current) : next;
-    extractionsRef.current = resolved;
-    setExtractions(resolved);
-    return extractionRevision.current;
-  }, []);
-  const reconcileConfirmedExtractions = useCallback(
-    (confirmed: MemoryExtractionRecord[], sinceRevision: number): MemoryExtractionRecord[] => {
-      const pending = new Set(pendingDeletionCounts.current.keys());
-      const confirmedIds = new Set(confirmed.map((row) => row.id));
-      // A clear that landed after this recovery began supersedes the whole
-      // confirmed snapshot — nothing from it should come back.
-      const accepted =
-        clearedAtRevisionRef.current > sinceRevision
-          ? []
-          : confirmed.filter((row) => {
-              if (pending.has(row.id)) return false;
-              const deletedAt = deletedAtRevisionRef.current.get(row.id);
-              if (deletedAt !== undefined && deletedAt > sinceRevision) return false;
-              return true;
-            });
-      const acceptedById = new Map(accepted.map((row) => [row.id, row] as const));
-      const revision = updateExtractions((current) => {
-        // Live rows keep their newest-first positions (taking the confirmed
-        // content where the snapshot is still authoritative for that id, and
-        // never resurrecting a row another optimistic delete still owns).
-        // A row the confirmed read no longer has (evicted server-side, or
-        // removed by another client) is dropped too, UNLESS a local change
-        // advanced it after this read began — then the read simply hasn't
-        // caught up yet and the local copy must survive.
-        const survivors = current
-          .filter((row) => {
-            if (pending.has(row.id)) return false;
-            const rowRevision = rowRevisionRef.current.get(row.id) ?? 0;
-            // A row can end up in `current` despite a confirmed delete/clear
-            // newer than this read — e.g. a second overlapping mutation's own
-            // optimistic update, built from a stale pre-mutation snapshot,
-            // can reintroduce an id another mutation just had removed. Reject
-            // it here too, not just via `pending`, unless something
-            // genuinely newer than the tombstone put it back (rowRevision
-            // only advances through applyExtractionEvent/reconciliation, so a
-            // stale-closure reintroduction never counts as newer).
-            const deletedAt = deletedAtRevisionRef.current.get(row.id);
-            if (deletedAt !== undefined && deletedAt > sinceRevision && rowRevision <= deletedAt) {
-              return false;
-            }
-            if (clearedAtRevisionRef.current > sinceRevision && rowRevision <= clearedAtRevisionRef.current) {
-              return false;
-            }
-            if (confirmedIds.has(row.id)) return true;
-            return rowRevision > sinceRevision;
-          })
-          .map((row) => {
-            const confirmedRow = acceptedById.get(row.id);
-            return confirmedRow ? reconcileExtractionRecord(row, confirmedRow) : row;
-          });
-        const survivorIds = new Set(survivors.map((row) => row.id));
-        const merged = [...survivors];
-        for (const row of accepted) {
-          if (survivorIds.has(row.id)) continue;
-          const at = merged.findIndex((existing) => existing.startedAt < row.startedAt);
-          if (at === -1) merged.push(row);
-          else merged.splice(at, 0, row);
-        }
-        return merged;
-      });
-      for (const row of accepted) rowRevisionRef.current.set(row.id, revision);
-      return extractionsRef.current;
-    },
-    [updateExtractions],
-  );
+  const storeRef = useRef<ExtractionHistoryStore | null>(null);
+  // `setExtractions` is stable, so creating the store once on first render
+  // keeps store state and the rendered rows resolved together.
+  if (!storeRef.current) storeRef.current = createExtractionHistoryStore(setExtractions);
+  const store = storeRef.current;
+
+  // Orders reloadExtractions() against itself (rule A, via the slice's
+  // shared primitive): two overlapping reloads race two INDEPENDENT server
+  // reads, so resolution order says nothing about freshness — only call
+  // order does. Only the latest-started call's response may commit; an older
+  // response is discarded outright, not merely reconciled. Local mutations
+  // do NOT invalidate this guard: their effects are already protected by the
+  // store's tombstones/pending hides, which a committing snapshot respects.
+  const reloadGuard = useRef(createAsyncCommitGuard());
+  // isRefreshing counts in-flight reloads so one completing doesn't clear it
+  // while another is still pending.
+  const inFlightReloads = useRef(0);
 
   const reloadExtractions = useCallback(async () => {
-    // Two overlapping reloadExtractions() calls race two INDEPENDENT server
-    // reads, so resolution order tells you nothing about which read is
-    // chronologically fresher — only call order does. Only the
-    // latest-STARTED call's response is ever allowed to commit; an older
-    // call's response arriving after a newer call has already started (or
-    // committed) is discarded outright, not merely reconciled, since a
-    // strictly newer read supersedes it regardless of which HTTP response
-    // lands first.
-    const generation = ++reloadGenerationRef.current;
-    inFlightReloadsRef.current += 1;
+    const ticket = reloadGuard.current.begin();
+    inFlightReloads.current += 1;
     setIsRefreshing(true);
-    // Capture the revision BEFORE the read starts: mount, SSE frames, and
-    // delete/clear flows can all trigger reload() concurrently, so the fetch
-    // that lands must reconcile against local state rather than overwrite it
-    // — the same seam onDeleteExtraction/clearExtractions already use for
-    // their own recovery reads.
-    const sinceRevision = extractionRevision.current;
+    // Capture the clock BEFORE the read starts (rule A): mount, SSE frames,
+    // and delete/clear flows can all trigger reloads concurrently, so the
+    // snapshot that lands must reconcile against local state, not overwrite.
+    const sinceClock = store.snapshotClock();
     try {
-      const next = await port.fetchExtractions();
-      if (reloadGenerationRef.current !== generation) return extractionsRef.current;
-      // Return what actually got committed, not the raw fetch — reconciliation
+      const confirmed = await port.fetchExtractions();
+      if (!reloadGuard.current.isCurrent(ticket)) return store.rows();
+      // Return what actually committed, not the raw fetch — reconciliation
       // can drop/keep rows differently than the raw response (a real caller,
       // useMemoryConnectors, reads this return value directly).
-      const merged = reconcileConfirmedExtractions(next, sinceRevision);
+      const committed = store.commitSnapshot(confirmed, sinceClock);
       setLoadError(null);
-      return merged;
+      return committed;
     } catch {
-      if (reloadGenerationRef.current !== generation) return extractionsRef.current;
-      // Keep the last confirmed history instead of presenting a synthetic empty
-      // list when the daemon cannot be reached — and return that same
-      // preserved state, not a fabricated empty array, since a real caller
-      // (useMemoryConnectors.onSuggestConnectorMemory) reads this return
-      // value directly to look for a just-written extraction.
-      setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
-      return extractionsRef.current;
+      if (!reloadGuard.current.isCurrent(ticket)) return store.rows();
+      // Keep the last confirmed history instead of presenting a synthetic
+      // empty list when the daemon cannot be reached — and return that same
+      // preserved state, since callers read this value directly.
+      setLoadError(LOAD_ERROR_MESSAGE);
+      return store.rows();
     } finally {
-      inFlightReloadsRef.current -= 1;
-      if (inFlightReloadsRef.current <= 0) {
-        inFlightReloadsRef.current = 0;
+      inFlightReloads.current -= 1;
+      if (inFlightReloads.current <= 0) {
+        inFlightReloads.current = 0;
         setIsRefreshing(false);
       }
     }
-  }, [port, reconcileConfirmedExtractions]);
+  }, [port, store]);
 
-  const applyExtractionEvent = useCallback((ev: MemoryExtractionEvent) => {
-    if (!ev || !ev.id) return;
-    // Pseudo-phases: the daemon emits these synthetically when a row is dropped
-    // from the buffer, either by the per-row delete button or the "Clear"
-    // affordance at the top.
-    if (ev.phase === 'cleared') {
-      deferredDeletionEvents.current.clear();
-      clearedAtRevisionRef.current = updateExtractions([]);
-      return;
-    }
-    if (ev.phase === 'deleted') {
-      deferredDeletionEvents.current.delete(ev.id);
-      const revision = updateExtractions((prev) => prev.filter((r) => r.id !== ev.id));
-      deletedAtRevisionRef.current.set(ev.id, revision);
-      return;
-    }
-    // Once an id has been confirmed deleted, it can never be reintroduced:
-    // ids are attempt UUIDs. A delayed frame on the SSE connection may have
-    // been emitted before the DELETE response won the fetch race.
-    if (deletedAtRevisionRef.current.has(ev.id)) return;
-    if (pendingDeletionCounts.current.has(ev.id)) {
-      const deferred = deferredDeletionEvents.current.get(ev.id);
-      deferredDeletionEvents.current.set(
-        ev.id,
-        deferred ? reconcileExtractionRecord(deferred, ev) : ev,
-      );
-      return;
-    }
-    // Merge by id: phase transitions for an in-flight attempt collapse onto a
-    // single row instead of stacking N entries. New ids are unshifted so the
-    // latest appears at the top.
-    const revision = updateExtractions((prev) => {
-      const existing = prev.findIndex((r) => r.id === ev.id);
-      if (existing >= 0) {
-        const next = prev.slice();
-        next[existing] = reconcileExtractionRecord(next[existing]!, ev);
-        return next;
-      }
-      return [ev, ...prev].slice(0, 30);
-    });
-    rowRevisionRef.current.set(ev.id, revision);
-  }, [updateExtractions]);
+  const applyExtractionEvent = useCallback(
+    (ev: MemoryExtractionEvent) => {
+      store.applyFrame(ev);
+    },
+    [store],
+  );
 
   const onDeleteExtraction = useCallback(
     async (id: string) => {
       // Optimistic removal: drop the row immediately so the click feels
-      // instant. The SSE 'deleted' event will arrive moments later and is a
-      // no-op against an already-removed id; if the request fails we re-fetch
-      // to put the row back instead of silently lying. Snapshot from
-      // extractionsRef, NOT the render-closure `extractions` state: two
-      // deletes issued back-to-back in the same tick (before either has
-      // re-rendered) would otherwise both compute their filtered array from
-      // the SAME stale array, so the second call's write can clobber the
-      // first's removal and resurrect a row that was supposed to be gone.
-      const previous = extractionsRef.current;
-      markPendingDeletion(id);
-      const optimisticRevision = updateExtractions(previous.filter((r) => r.id !== id));
+      // instant. The SSE 'deleted' echo arriving moments later is a no-op
+      // against the tombstone; if the request fails we re-fetch server truth
+      // instead of silently lying.
+      const token = store.beginDelete(id);
       let ok = false;
       try {
         ok = await port.deleteExtraction(id);
       } catch {
-        // A network failure rejects rather than returning the adapter's normal
-        // non-2xx `false` result. Treat both paths alike so the optimistic UI
+        // A network failure rejects rather than returning the adapter's
+        // normal non-2xx `false`. Treat both alike so the optimistic UI
         // never claims the server-side row was deleted when it was not.
       }
-      if (!ok) {
-        unmarkPendingDeletion(id);
-        if (!pendingDeletionCounts.current.has(id)) {
-          const deferred = deferredDeletionEvents.current.get(id);
-          deferredDeletionEvents.current.delete(id);
-          if (deferred) applyExtractionEvent(deferred);
-        }
-        try {
-          const confirmed = await port.fetchExtractions();
-          reconcileConfirmedExtractions(confirmed, optimisticRevision);
-          setLoadError(null);
-        } catch {
-          if (extractionRevision.current === optimisticRevision) {
-            updateExtractions(previous);
-          }
-          setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
-        }
-      } else {
-        unmarkPendingDeletion(id);
-        if (!pendingDeletionCounts.current.has(id)) {
-          deferredDeletionEvents.current.delete(id);
-        }
-        // Re-assert the removal against whatever the array actually holds
-        // right now, rather than trusting the optimistic removal is still
-        // intact: a concurrent mutation's OWN recovery reconciliation can run
-        // between the optimistic removal and this success callback and
-        // resurrect `id` (e.g. a concurrent clearExtractions() failed, and
-        // ITS recovery fetch — resolved before this delete's success — still
-        // listed `id`, since this delete hadn't been confirmed server-side
-        // yet at the time that recovery read fired). Stamping only a
-        // tombstone marker here, without re-touching the array, would leave
-        // that resurrected row in place until an SSE echo eventually arrives.
-        const revision = updateExtractions((current) => current.filter((r) => r.id !== id));
-        // Use the SAME revision this re-assertion produced (not
-        // optimisticRevision): a concurrent reload() can capture that exact
-        // same value as its own sinceRevision (it started right after the
-        // optimistic removal, before this delete's own request settled), and
-        // a non-strict `>` comparison against an equal value would treat this
-        // now-confirmed deletion as already accounted for by that read —
-        // even though the read's OWN server round-trip may have raced ahead
-        // of the delete and returned stale, pre-delete data.
-        deletedAtRevisionRef.current.set(id, revision);
+      if (ok) {
+        store.settleDeleteSuccess(id);
+        return;
+      }
+      store.settleDeleteFailure(id);
+      try {
+        const confirmed = await port.fetchExtractions();
+        // Reconcile rather than overwrite: newer SSE frames or overlapping
+        // mutations may have landed while this recovery read was in flight.
+        store.commitSnapshot(confirmed, token.startClock);
+        setLoadError(null);
+      } catch {
+        store.restoreIfUnchanged(token);
+        setLoadError(LOAD_ERROR_MESSAGE);
       }
     },
-    [
-      port,
-      reconcileConfirmedExtractions,
-      updateExtractions,
-      markPendingDeletion,
-      unmarkPendingDeletion,
-      applyExtractionEvent,
-    ],
+    [port, store],
   );
 
   const clearExtractions = useCallback(async () => {
-    // See the delete path above for why this reads extractionsRef instead of
-    // the render-closure `extractions` state.
-    const previous = extractionsRef.current;
-    const optimisticRevision = updateExtractions([]);
+    const token = store.beginClear();
     let ok = false;
     try {
       ok = await port.clearExtractionHistory();
     } catch {
       // See the per-row delete path above: fetch rejects on transport failure.
     }
-    if (!ok) {
-      try {
-        const confirmed = await port.fetchExtractions();
-        // Reconcile rather than overwrite: a newer SSE frame may have already
-        // advanced the revision while this recovery fetch was in flight, and
-        // dropping the confirmed response entirely would leave the failed
-        // clear's rows missing from state.
-        reconcileConfirmedExtractions(confirmed, optimisticRevision);
-        setLoadError(null);
-      } catch {
-        if (extractionRevision.current === optimisticRevision) {
-          updateExtractions(previous);
-        }
-        setLoadError("Memory extraction history couldn't be loaded. Try again shortly.");
-      }
-    } else {
-      // Re-assert the wipe against whatever the array actually holds right
-      // now (see the per-row delete path above for why: a concurrent
-      // mutation's own recovery reconciliation can resurrect rows between
-      // this clear's optimistic wipe and its own success callback), using
-      // the SAME revision this re-assertion produces for the tombstone.
-      const revision = updateExtractions(() => []);
-      clearedAtRevisionRef.current = revision;
+    if (ok) {
+      store.settleClearSuccess(token);
+      return;
     }
-  }, [port, reconcileConfirmedExtractions, updateExtractions]);
+    store.settleClearFailure();
+    try {
+      const confirmed = await port.fetchExtractions();
+      store.commitSnapshot(confirmed, token.startClock);
+      setLoadError(null);
+    } catch {
+      store.restoreIfUnchanged(token);
+      setLoadError(LOAD_ERROR_MESSAGE);
+    }
+  }, [port, store]);
 
-  // The "no API key" banner only shows when the most recent attempt skipped for
-  // that specific reason. We don't show it for memory-disabled (the user's own
-  // toggle) or empty-message (a routine no-op on tool-only turns).
+  // The "no API key" banner only shows when the most recent attempt skipped
+  // for that specific reason. We don't show it for memory-disabled (the
+  // user's own toggle) or empty-message (a routine no-op on tool-only turns).
   const showNoProviderBanner = useMemo(() => {
     const latest = extractions[0];
     return Boolean(
