@@ -3045,6 +3045,8 @@ export function SettingsDialog({
   // Silent-update toggles use a dedicated non-optimistic path; skip the next
   // autosave effect tick so we do not double-write through handleConfigPersist.
   const suppressNextAutosaveRef = useRef(false);
+  const silentUpdateWriteTokenRef = useRef(0);
+  const [silentUpdateBusy, setSilentUpdateBusy] = useState(false);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveSavedTimerRef = useRef<number | null>(null);
   const autosaveRetryTimerRef = useRef<number | null>(null);
@@ -5683,6 +5685,7 @@ export function SettingsDialog({
                   <input
                     checked={cfg.allowSilentUpdates === true}
                     data-testid="settings-allow-silent-updates"
+                    disabled={silentUpdateBusy}
                     type="checkbox"
                     onChange={(event) => {
                       // Capture before setState: React clears event.currentTarget
@@ -5693,15 +5696,20 @@ export function SettingsDialog({
                       const previous = cfg.allowSilentUpdates;
                       // Dedicated non-optimistic path: do not flush through
                       // handleConfigPersist (which setConfig before daemon write).
+                      // Serialize via busy + write token so a slow earlier save
+                      // cannot re-apply UI after a later toggle.
+                      const writeToken = ++silentUpdateWriteTokenRef.current;
                       suppressNextAutosaveRef.current = true;
                       setCfg((current) => ({
                         ...current,
                         allowSilentUpdates,
                       }));
                       if (onSilentUpdatePreferenceChange == null) return;
+                      setSilentUpdateBusy(true);
                       void (async () => {
                         try {
                           await onSilentUpdatePreferenceChange(allowSilentUpdates);
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
                           autosaveLastSavedRef.current = {
                             ...autosaveLatestRef.current,
                             allowSilentUpdates,
@@ -5715,12 +5723,17 @@ export function SettingsDialog({
                             setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
                           }, 1800);
                         } catch {
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
                           suppressNextAutosaveRef.current = true;
                           setCfg((current) => ({
                             ...current,
                             allowSilentUpdates: previous,
                           }));
                           setAutosaveStatus('error');
+                        } finally {
+                          if (writeToken === silentUpdateWriteTokenRef.current) {
+                            setSilentUpdateBusy(false);
+                          }
                         }
                       })();
                     }}

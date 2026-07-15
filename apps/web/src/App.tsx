@@ -89,6 +89,7 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
+import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
 import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import {
@@ -1214,22 +1215,32 @@ function AppInner() {
   }, []);
 
   /**
-   * Non-optimistic write for the daemon-owned silent-update preference.
-   * Unlike handleConfigPersist (which setConfig before awaiting the daemon),
-   * this only commits app-wide state after /api/app-config succeeds, so a
-   * failed save cannot leave Settings / remounted popups on the rejected value.
+   * Non-optimistic, serialized write for the daemon-owned silent-update
+   * preference. Concurrent Settings / popup toggles cannot commit out of
+   * order: only the latest request applies to app state after its daemon
+   * write succeeds.
    */
+  const silentUpdatePreferenceWriterRef = useRef(
+    createSilentUpdatePreferenceWriter<AppConfig>({
+      readBase: () => latestPersistedConfigRef.current,
+      writeDaemon: async (next) => {
+        await syncConfigToDaemon(next, { throwOnError: true });
+      },
+      commit: (allowSilentUpdates) => {
+        const next: AppConfig = {
+          ...latestPersistedConfigRef.current,
+          allowSilentUpdates,
+        };
+        latestPersistedConfigRef.current = next;
+        setConfig((prev) => ({ ...prev, allowSilentUpdates }));
+        // saveConfig strips daemon-owned keys from localStorage; in-memory
+        // config still carries allowSilentUpdates for the rest of the session.
+        saveConfig(next);
+      },
+    }),
+  );
   const handleSilentUpdatePreferenceChange = useCallback(async (allowSilentUpdates: boolean) => {
-    const next: AppConfig = {
-      ...latestPersistedConfigRef.current,
-      allowSilentUpdates,
-    };
-    await syncConfigToDaemon(next, { throwOnError: true });
-    latestPersistedConfigRef.current = next;
-    setConfig((prev) => ({ ...prev, allowSilentUpdates }));
-    // saveConfig strips daemon-owned keys from localStorage; in-memory config
-    // still carries allowSilentUpdates for the rest of the session.
-    saveConfig(next);
+    await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
   }, []);
 
   /**

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
@@ -5136,6 +5136,41 @@ describe('SettingsDialog about interactions', () => {
     });
     // App-wide preference must not keep the rejected value.
     expect(appConfigSilent).toBe(false);
+  });
+
+  it('disables the Settings silent-update checkbox while a save is in flight', async () => {
+    let resolveSave: (() => void) | null = null;
+    const onSilentUpdatePreferenceChange = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(checkbox.disabled).toBe(true));
+
+    await act(async () => {
+      resolveSave?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(checkbox.disabled).toBe(false));
+    expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1);
   });
 
   it('does not read event.currentTarget inside the silent-updates setCfg updater', async () => {
