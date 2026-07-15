@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import type {
   ChatRunStatusResponse,
   CreatorContentProjectData,
+  CreatorPerformanceProjectData,
+  CreatorPerformanceSnapshot,
   CreatorReleaseChecklist,
   CreatorReleasePackage,
   CreatorReleasePackageData,
@@ -56,6 +58,9 @@ function mockTasksViewFetch({
   creatorContentFailures = [],
   creatorReleaseData = {},
   creatorReleaseFailures = [],
+  creatorPerformanceData = {},
+  creatorPerformanceFailures = [],
+  creatorPerformanceCreateError = false,
 }: {
   routines?: Routine[];
   creatorProjects?: Project[];
@@ -67,10 +72,17 @@ function mockTasksViewFetch({
   creatorContentFailures?: string[];
   creatorReleaseData?: Record<string, CreatorReleasePackageData>;
   creatorReleaseFailures?: string[];
+  creatorPerformanceData?: Record<string, CreatorPerformanceProjectData>;
+  creatorPerformanceFailures?: string[];
+  creatorPerformanceCreateError?: boolean;
 } = {}) {
   const releaseStore: Record<string, CreatorReleasePackage[]> = {};
   for (const [projectId, data] of Object.entries(creatorReleaseData)) {
     releaseStore[projectId] = Array.isArray(data.releasePackages) ? data.releasePackages.map((release) => ({ ...release })) : [];
+  }
+  const performanceStore: Record<string, CreatorPerformanceSnapshot[]> = {};
+  for (const [projectId, data] of Object.entries(creatorPerformanceData)) {
+    performanceStore[projectId] = Array.isArray(data.snapshots) ? data.snapshots.map((snapshot) => ({ ...snapshot })) : [];
   }
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
@@ -186,6 +198,36 @@ function mockTasksViewFetch({
       releaseStore[projectId] = store.map((candidate) => candidate.id === releaseId ? updated : candidate);
       return new Response(JSON.stringify({ releasePackage: updated }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
+    const performanceListRead = /^\/api\/projects\/([^/]+)\/creator-performance-snapshots$/.exec(url);
+    if (performanceListRead && (!init || init.method === undefined || init.method === 'GET')) {
+      const projectId = decodeURIComponent(performanceListRead[1]!);
+      if (creatorPerformanceFailures.includes(projectId)) return new Response(JSON.stringify({ error: 'performance unavailable' }), { status: 503 });
+      return new Response(JSON.stringify({ snapshots: performanceStore[projectId] ?? [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (performanceListRead && init?.method === 'POST') {
+      const projectId = decodeURIComponent(performanceListRead[1]!);
+      if (creatorPerformanceCreateError) return new Response(JSON.stringify({ error: 'performance create failed' }), { status: 500, headers: { 'content-type': 'application/json' } });
+      const body = JSON.parse(String(init.body)) as { releaseId: string; capturedAt?: string; metrics: Record<string, number>; note?: string };
+      const now = new Date().toISOString();
+      const snapshot: CreatorPerformanceSnapshot = {
+        id: `creator-performance:${(performanceStore[projectId]?.length ?? 0) + 1}`,
+        projectId, releaseId: body.releaseId, source: 'manual',
+        capturedAt: body.capturedAt ?? now, metrics: { ...body.metrics },
+        ...(body.note && body.note.trim() ? { note: body.note.trim() } : {}),
+        createdAt: now,
+      };
+      performanceStore[projectId] = [...(performanceStore[projectId] ?? []), snapshot];
+      return new Response(JSON.stringify({ snapshot }), { status: 201, headers: { 'content-type': 'application/json' } });
+    }
+    const performanceItem = /^\/api\/projects\/([^/]+)\/creator-performance-snapshots\/([^/]+)$/.exec(url);
+    if (performanceItem && init?.method === 'DELETE') {
+      const projectId = decodeURIComponent(performanceItem[1]!);
+      const snapshotId = decodeURIComponent(performanceItem[2]!);
+      const store = performanceStore[projectId] ?? [];
+      if (!store.some((candidate) => candidate.id === snapshotId)) return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      performanceStore[projectId] = store.filter((candidate) => candidate.id !== snapshotId);
+      return new Response(null, { status: 204 });
+    }
     if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
       return new Response(JSON.stringify({ templates: [] }), {
         status: 200,
@@ -228,6 +270,16 @@ function makeRelease(overrides: Partial<CreatorReleasePackage> = {}): CreatorRel
     updatedAt: '2025-01-01T00:00:00Z',
     ...overrides,
   };
+}
+
+function makePublishedRelease(overrides: Partial<CreatorReleasePackage> = {}): CreatorReleasePackage {
+  return makeRelease({
+    status: 'published',
+    checklist: { contentComplete: true, exportConfirmed: true, coverConfirmed: true, metadataConfirmed: true, platformConfirmed: true },
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    publishedUrl: 'https://www.bilibili.com/video/BV1',
+    ...overrides,
+  });
 }
 
 describe('TasksView page shell', () => {
@@ -2125,5 +2177,186 @@ describe('TasksView page shell', () => {
     expect(css).toContain('@media (max-width: 960px) {\n  .creator-release-layout,');
     expect(css).toContain('@media (max-width: 640px) {\n  .creator-release-create,');
     expect(css).toContain('.creator-release-editor .creator-check {');
+  });
+
+  it('creates a performance snapshot with only the filled metric keys for a published release', async () => {
+    const creatorProject: Project = { id: 'project-perf-1', name: '表现复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:perf1', projectId: 'project-perf-1', title: '已发布包' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-1': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 已发布包' }));
+    const views = await screen.findByLabelText('Performance views');
+    fireEvent.change(views, { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Performance likes'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save snapshot' }));
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (call) => String(call[0]).endsWith('/creator-performance-snapshots') && (call[1] as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(postCall).toBeTruthy();
+      const sent = JSON.parse(String((postCall![1] as RequestInit).body));
+      expect(sent).toEqual({ releaseId: 'creator-release:perf1', metrics: { views: 100, likes: 20 } });
+    });
+    // 成功后表单清空，且新快照出现在列表中。
+    expect((screen.getByLabelText('Performance views') as HTMLInputElement).value).toBe('');
+    expect(await screen.findByText('views: 100')).toBeTruthy();
+  });
+
+  it('hides the performance snapshot form for a non-published release', async () => {
+    const creatorProject: Project = { id: 'project-perf-2', name: '草稿复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:perf2', projectId: 'project-perf-2', title: '草稿包', status: 'draft' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-2': { releasePackages: [release] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 草稿包' }));
+    expect(await screen.findByText('Performance snapshots require a published release.')).toBeTruthy();
+    expect(screen.queryByLabelText('Performance views')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save snapshot' })).toBeNull();
+  });
+
+  it('retains archived performance snapshots and permits deleting a mistaken entry', async () => {
+    const creatorProject: Project = { id: 'project-perf-archived', name: '归档复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makeRelease({ id: 'creator-release:archived', projectId: 'project-perf-archived', title: '归档包', status: 'archived' });
+    const snapshot: CreatorPerformanceSnapshot = {
+      id: 'creator-performance:archived', projectId: 'project-perf-archived', releaseId: release.id, source: 'manual',
+      capturedAt: '2026-07-04T00:00:00.000Z', metrics: { views: 8 }, createdAt: '2026-07-04T00:00:00.000Z',
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-archived': { releasePackages: [release] } },
+      creatorPerformanceData: { 'project-perf-archived': { snapshots: [snapshot] } },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 归档包' }));
+
+    expect(await screen.findByText('Performance snapshots require a published release.')).toBeTruthy();
+    expect(screen.getByText('views: 8')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save snapshot' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete performance snapshot 2026-07-04T00:00:00.000Z' }));
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+      (call) => String(call[0]).includes('/creator-performance-snapshots/creator-performance%3Aarchived') && (call[1] as RequestInit | undefined)?.method === 'DELETE',
+    )).toBe(true));
+  });
+
+  it('preserves performance snapshot input and shows an alert on a failed create', async () => {
+    const creatorProject: Project = { id: 'project-perf-3', name: '失败复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:perf3', projectId: 'project-perf-3', title: '已发布包3' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-3': { releasePackages: [release] } },
+      creatorPerformanceCreateError: true,
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 已发布包3' }));
+    const views = await screen.findByLabelText('Performance views');
+    fireEvent.change(views, { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save snapshot' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect((screen.getByLabelText('Performance views') as HTMLInputElement).value).toBe('100');
+  });
+
+  it('lists performance snapshots by capturedAt desc and shows signed deltas for shared metrics', async () => {
+    const creatorProject: Project = { id: 'project-perf-4', name: '增量复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:perf4', projectId: 'project-perf-4', title: '已发布包4' });
+    const older: CreatorPerformanceSnapshot = {
+      id: 'creator-performance:old', projectId: 'project-perf-4', releaseId: 'creator-release:perf4', source: 'manual',
+      capturedAt: '2026-07-01T00:00:00.000Z', metrics: { views: 100, likes: 10 }, createdAt: '2026-07-01T00:00:00.000Z',
+    };
+    const newer: CreatorPerformanceSnapshot = {
+      id: 'creator-performance:new', projectId: 'project-perf-4', releaseId: 'creator-release:perf4', source: 'manual',
+      capturedAt: '2026-07-03T00:00:00.000Z', metrics: { views: 150, likes: 20 }, createdAt: '2026-07-03T00:00:00.000Z',
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-4': { releasePackages: [release] } },
+      creatorPerformanceData: { 'project-perf-4': { snapshots: [older, newer] } },
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 已发布包4' }));
+
+    // 较新快照在前，显示相对紧邻更旧快照的增量。
+    expect(await screen.findByText('views: 150 (+50)')).toBeTruthy();
+    expect(screen.getByText('likes: 20 (+10)')).toBeTruthy();
+    // 较旧快照没有更旧的可比对象，不显示增量。
+    expect(screen.getByText('views: 100')).toBeTruthy();
+    expect(screen.getAllByText(/\(\+50\)/).length).toBe(1);
+    expect(screen.getAllByText(/\(\+10\)/).length).toBe(1);
+  });
+
+  it('confirms before deleting a performance snapshot and removes it only after confirm', async () => {
+    const creatorProject: Project = { id: 'project-perf-5', name: '删除复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:perf5', projectId: 'project-perf-5', title: '已发布包5' });
+    const snapshot: CreatorPerformanceSnapshot = {
+      id: 'creator-performance:del', projectId: 'project-perf-5', releaseId: 'creator-release:perf5', source: 'manual',
+      capturedAt: '2026-07-02T00:00:00.000Z', metrics: { views: 5 }, createdAt: '2026-07-02T00:00:00.000Z',
+    };
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-5': { releasePackages: [release] } },
+      creatorPerformanceData: { 'project-perf-5': { snapshots: [snapshot] } },
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 已发布包5' }));
+    const deleteBtn = await screen.findByRole('button', { name: 'Delete performance snapshot 2026-07-02T00:00:00.000Z' });
+    fireEvent.click(deleteBtn);
+    fireEvent.click(deleteBtn);
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const delCalls = fetchMock.mock.calls.filter(
+        (call) => String(call[0]).includes('/creator-performance-snapshots/creator-performance%3Adel') && (call[1] as RequestInit | undefined)?.method === 'DELETE',
+      );
+      expect(delCalls.length).toBe(1);
+    });
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.queryByText('views: 5')).toBeNull());
+  });
+
+  it('degrades the performance snapshot panel for a failing project without breaking the Release panel', async () => {
+    const creatorProject: Project = { id: 'project-perf-6', name: '降级复盘', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:perf6', projectId: 'project-perf-6', title: '已发布包6' });
+    mockTasksViewFetch({
+      creatorProjects: [creatorProject],
+      creatorReleaseData: { 'project-perf-6': { releasePackages: [release] } },
+      creatorPerformanceFailures: ['project-perf-6'],
+    });
+
+    render(<TasksView projects={[creatorProject]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit release 已发布包6' }));
+    expect(await screen.findByText('Performance unavailable for this project.')).toBeTruthy();
+    // Release 面板仍可用。
+    expect(screen.getByRole('button', { name: 'Save release' })).toBeTruthy();
+    expect(screen.queryByLabelText('Performance views')).toBeNull();
+  });
+
+  it('ships responsive performance snapshot layout rules for the 640px breakpoint', () => {
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'styles', 'home', 'tasks.css');
+    const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
+    expect(css).toContain('.creator-performance {');
+    expect(css).toContain('.creator-performance-fields {');
+    expect(css).toContain('@media (max-width: 640px) {\n  .creator-release-create,\n  .creator-release-fields--top {\n    grid-template-columns: 1fr;\n  }\n  .creator-performance-fields {\n    grid-template-columns: 1fr;\n  }\n}');
   });
 });
