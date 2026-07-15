@@ -1,6 +1,6 @@
 # Clone Audit
 
-- Project: /Users/godbest/Library/Application Support/Open Design/namespaces/release-stable/data/projects/688fba5a-2ead-4de3-9390-de6bca2160f1
+- Project: <local website-clone workspace>
 - Scanned files: 15
 - Findings: 42
 
