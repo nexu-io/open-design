@@ -891,6 +891,17 @@
   font-size: 12px;
 }
 
+.creator-performance-overview__unavailable {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--amber) 12%, var(--bg-panel));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .creator-performance-overview__scroll {
   width: 100%;
   overflow-x: auto;

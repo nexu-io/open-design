@@ -2714,6 +2714,108 @@ describe('TasksView page shell', () => {
     expect(within(overview).getByText('表现健康包')).toBeTruthy();
   });
 
+  it('performance overview shows an unavailable hint when a project release API fails, keeps healthy projects, and leaves other panels usable', async () => {
+    const failing: Project = { id: 'ov-relfail2', name: '发布失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const healthy: Project = { id: 'ov-relok2', name: '健康项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const failRelease = makePublishedRelease({ id: 'creator-release:relfail2', projectId: 'ov-relfail2', title: '失败项目包' });
+    const okRelease = makePublishedRelease({ id: 'creator-release:relok2', projectId: 'ov-relok2', title: '健康项目包' });
+    mockTasksViewFetch({
+      creatorProjects: [failing, healthy],
+      creatorReleaseData: {
+        'ov-relfail2': { releasePackages: [failRelease] },
+        'ov-relok2': { releasePackages: [okRelease] },
+      },
+      creatorReleaseFailures: ['ov-relfail2'],
+      creatorPerformanceData: {
+        'ov-relfail2': { snapshots: [makeSnapshot({ id: 'rf2', projectId: 'ov-relfail2', releaseId: 'creator-release:relfail2', capturedAt: '2026-07-02T00:00:00.000Z', metrics: { views: 1 } })] },
+        'ov-relok2': { snapshots: [makeSnapshot({ id: 'ro2', projectId: 'ov-relok2', releaseId: 'creator-release:relok2', capturedAt: '2026-07-03T00:00:00.000Z', metrics: { views: 2 } })] },
+      },
+    });
+
+    render(<TasksView projects={[failing, healthy]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const overview = await screen.findByRole('region', { name: 'Performance overview' });
+    await waitFor(() => expect(performanceOverviewReleaseOrder(overview).length).toBe(1));
+    // 健康项目仍显示，失败项目不显示任何聚合数据。
+    expect(performanceOverviewReleaseOrder(overview)).toEqual(['creator-release:relok2']);
+    expect(within(overview).queryByText('失败项目包')).toBeNull();
+    expect(within(overview).getByText('健康项目包')).toBeTruthy();
+    // 项目级降级提示可见，且为单数形式。
+    expect(within(overview).getByText('Performance overview unavailable for 1 project.')).toBeTruthy();
+    // 既有 Tasks 区域（Automations 子标签）仍可用，未被总览失败破坏。
+    expect(screen.getByRole('tab', { name: /Automations/i })).toBeTruthy();
+  });
+
+  it('performance overview shows an unavailable hint when a project performance API fails and keeps healthy projects', async () => {
+    const failing: Project = { id: 'ov-perffail2', name: '表现失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const healthy: Project = { id: 'ov-perfok2', name: '健康项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const failRelease = makePublishedRelease({ id: 'creator-release:perffail2', projectId: 'ov-perffail2', title: '表现失败包' });
+    const okRelease = makePublishedRelease({ id: 'creator-release:perfok2', projectId: 'ov-perfok2', title: '表现健康包' });
+    mockTasksViewFetch({
+      creatorProjects: [failing, healthy],
+      creatorReleaseData: {
+        'ov-perffail2': { releasePackages: [failRelease] },
+        'ov-perfok2': { releasePackages: [okRelease] },
+      },
+      creatorPerformanceData: {
+        'ov-perffail2': { snapshots: [makeSnapshot({ id: 'pf2', projectId: 'ov-perffail2', releaseId: 'creator-release:perffail2', capturedAt: '2026-07-02T00:00:00.000Z', metrics: { views: 1 } })] },
+        'ov-perfok2': { snapshots: [makeSnapshot({ id: 'po2', projectId: 'ov-perfok2', releaseId: 'creator-release:perfok2', capturedAt: '2026-07-03T00:00:00.000Z', metrics: { views: 2 } })] },
+      },
+      creatorPerformanceFailures: ['ov-perffail2'],
+    });
+
+    render(<TasksView projects={[failing, healthy]} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const overview = await screen.findByRole('region', { name: 'Performance overview' });
+    await waitFor(() => expect(performanceOverviewReleaseOrder(overview).length).toBe(1));
+    expect(performanceOverviewReleaseOrder(overview)).toEqual(['creator-release:perfok2']);
+    expect(within(overview).queryByText('表现失败包')).toBeNull();
+    expect(within(overview).getByText('表现健康包')).toBeTruthy();
+    expect(within(overview).getByText('Performance overview unavailable for 1 project.')).toBeTruthy();
+  });
+
+  it('performance overview counts a project only once when both its release and performance APIs fail', async () => {
+    const failing: Project = { id: 'ov-bothfail', name: '双失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:bothfail', projectId: 'ov-bothfail', title: '双失败包' });
+    mockTasksViewFetch({
+      creatorProjects: [failing],
+      creatorReleaseData: { 'ov-bothfail': { releasePackages: [release] } },
+      creatorReleaseFailures: ['ov-bothfail'],
+      creatorPerformanceData: { 'ov-bothfail': { snapshots: [] } },
+      creatorPerformanceFailures: ['ov-bothfail'],
+    });
+
+    render(<TasksView projects={[failing] } />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const overview = await screen.findByRole('region', { name: 'Performance overview' });
+    // 同一项目两个接口都失败 → 只计 1，不重复计数。
+    expect(await within(overview).findByText('Performance overview unavailable for 1 project.')).toBeTruthy();
+    expect(within(overview).queryByText('Performance overview unavailable for 2 projects.')).toBeNull();
+    expect(performanceOverviewReleaseOrder(overview).length).toBe(0);
+  });
+
+  it('performance overview keeps the unavailable hint and shows an available-releases empty state when every project fails', async () => {
+    const failing: Project = { id: 'ov-allfail', name: '全失败项目', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
+    const release = makePublishedRelease({ id: 'creator-release:allfail', projectId: 'ov-allfail', title: '全失败包' });
+    mockTasksViewFetch({
+      creatorProjects: [failing],
+      creatorReleaseData: { 'ov-allfail': { releasePackages: [release] } },
+      creatorReleaseFailures: ['ov-allfail'],
+      creatorPerformanceData: { 'ov-allfail': { snapshots: [] } },
+      creatorPerformanceFailures: ['ov-allfail'],
+    });
+
+    render(<TasksView projects={[failing] } />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const overview = await screen.findByRole('region', { name: 'Performance overview' });
+    // 失败提示必须保留。
+    expect(await within(overview).findByText('Performance overview unavailable for 1 project.')).toBeTruthy();
+    // 空态不得仅暗示“没有已发布 release”，必须表达为“没有可用已发布 release”。
+    expect(within(overview).getByText('No available published releases to compare yet.')).toBeTruthy();
+    expect(within(overview).queryByText('No published releases to compare yet.')).toBeNull();
+    expect(overview.querySelector('table')).toBeNull();
+  });
+
   it('performance overview resolves content titles and falls back to the content id', async () => {
     const project: Project = { id: 'ov-content', name: '内容标题', skillId: null, designSystemId: null, createdAt: Date.now(), updatedAt: Date.now(), metadata: { kind: 'video' } };
     const titled = makePublishedRelease({ id: 'creator-release:ct-titled', projectId: 'ov-content', title: '有标题包', contentId: 'creator-content:1' });

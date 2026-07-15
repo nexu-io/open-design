@@ -107,5 +107,46 @@
 | C15 | Responsive at 960px+ and 640px- | PASS |
 | C16 | Semantic HTML table structure | PASS |
 | C17 | Read-only (no mutation endpoints called) | PASS |
+| C18 | Project-level unavailable hint when Release/Performance API fails | PASS (post-P1 fix) |
+| C19 | Same project failing both APIs counted once (no double count) | PASS (post-P1 fix) |
+| C20 | All projects failed → hint kept + "available" empty state (not misleading) | PASS (post-P1 fix) |
+| C21 | Healthy projects still shown; failed projects expose no partial aggregate | PASS (post-P1 fix) |
+| C22 | Hint is non-blocking accessible status (`role="status"`) | PASS (post-P1 fix) |
 
-**Overall Verdict**: **PASS — All acceptance criteria met.**
+**Overall Verdict**: **PASS — All acceptance criteria met (including P1 fix follow-up).**
+
+---
+
+## 4. P1 Fix Follow-up (`fix: report unavailable performance overview projects`)
+
+### Problem
+When a project's Release API or Performance API failed, the overview silently dropped the
+project. If **all** loaded projects failed, the user saw only "No published releases to
+compare yet." — implying there were simply no published releases, which is misleading.
+
+### Fix
+- Added `performanceOverviewUnavailableCount` memo: counts loaded projects whose Release
+  state **or** Performance state has `failed === true`, deduplicated per project via a `Set`.
+  A project is only counted once even if both APIs fail. Projects whose states are not yet
+  loaded (data still loading) are **not** counted, avoiding false positives.
+- When the count > 0, a non-blocking, accessible status hint renders below the controls:
+  - 1 project → `Performance overview unavailable for 1 project.`
+  - N projects → `Performance overview unavailable for N projects.`
+  - Implemented with `role="status"` (non-blocking, polite live region).
+- Empty state logic now distinguishes context:
+  - If any project is unavailable → `No available published releases to compare yet.`
+  - Otherwise → `No published releases to compare yet.`
+- Failed projects still expose **no** partial aggregate data; healthy projects continue to render.
+- Platform-filter zero results are independent of the failure count (filter is view-only).
+
+### New Tests (4, names include `performance overview`)
+- Release API fails → hint present, healthy project shown, failed project absent, Automations tab usable.
+- Performance API fails → hint present, healthy project shown, failed project absent.
+- Both APIs fail for the same project → hint shows `1 project.` (no double count).
+- All projects fail → hint kept + `No available published releases to compare yet.` shown; original misleading empty state absent.
+
+### Re-verification (post-fix)
+- `vitest run -t "performance overview"`: **20 passed** (16 original + 4 new), 61 skipped.
+- `typecheck`: PASS (engine WARN only).
+- `build`: PASS.
+- `git diff --check`: clean.

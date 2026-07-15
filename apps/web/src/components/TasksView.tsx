@@ -841,6 +841,23 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     return [...filtered].sort((left, right) => comparePerformanceOverviewRows(left, right, performanceOverviewSort));
   }, [performanceOverviewRows, performanceOverviewPlatformFilter, performanceOverviewSort]);
 
+  // CW-05 P1：可见的项目级降级提示计数。
+  // 统计当前已加载项目中，Release 或 Performance 任一状态 failed === true 的项目数；
+  // 同一项目两个接口都失败只计一次（Set 去重）。
+  // 数据尚未加载（两个状态都还不存在）时不得误报失败，因此仅当 release 与
+  // performance 状态均存在（即 refresh 已就该项目发起请求）时才计入。
+  const performanceOverviewUnavailableCount = useMemo<number>(() => {
+    const unavailable = new Set<string>();
+    for (const project of entryProjects) {
+      const releaseState = creatorReleaseProjectData.find((value) => value.projectId === project.id);
+      const performanceState = creatorPerformanceProjectData.find((value) => value.projectId === project.id);
+      // 两个状态都尚未加载 → 跳过，避免把「还在加载」误报为「失败」。
+      if (!releaseState || !performanceState) continue;
+      if (releaseState.failed || performanceState.failed) unavailable.add(project.id);
+    }
+    return unavailable.size;
+  }, [entryProjects, creatorReleaseProjectData, creatorPerformanceProjectData]);
+
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
     [automationCatalog, designTemplates, t],
@@ -2423,8 +2440,23 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                 </label>
               </div>
             </div>
+            {performanceOverviewUnavailableCount > 0 ? (
+              <p
+                className="creator-performance-overview__unavailable"
+                role="status"
+                data-testid="creator-performance-overview-unavailable"
+              >
+                {performanceOverviewUnavailableCount === 1
+                  ? 'Performance overview unavailable for 1 project.'
+                  : `Performance overview unavailable for ${performanceOverviewUnavailableCount} projects.`}
+              </p>
+            ) : null}
             {visiblePerformanceOverviewRows.length === 0 ? (
-              <p className="creator-performance-overview__empty">No published releases to compare yet.</p>
+              <p className="creator-performance-overview__empty">
+                {performanceOverviewUnavailableCount > 0
+                  ? 'No available published releases to compare yet.'
+                  : 'No published releases to compare yet.'}
+              </p>
             ) : (
               <div className="creator-performance-overview__scroll">
                 <table className="creator-performance-overview__table">
