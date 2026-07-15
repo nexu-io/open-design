@@ -24,6 +24,7 @@
     "en": "Live Dashboard"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Notion-style team dashboard rendered as a Live Artifact. A single-page, self-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time activity feed and a linked-database task table — wired to Notion via the Composio connector catalog. Refreshes on demand and when the artifact is opened. Falls back to seeded mock data when no connector is bound, so it works offline / in screenshots / in the picker preview.",
   "description_i18n": {
     "zh-CN": "Notion 风格的团队仪表板，以 Live Artifact 形式呈现。单页自包含 HTML 仪表板，包含 KPI、7 天趋势图、实时活动流和关联数据库任务表，通过 Composio 连接器目录连接到 Notion。支持按需刷新和打开时自动刷新，未绑定连接器时使用模拟数据，可离线使用。",

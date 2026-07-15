@@ -1225,9 +1225,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   return (
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark">
-          <img src="/logo.svg" alt="" draggable={false} />
-        </span>
+        <span className="home-hero__brand-mark od-brand-glyph" />
         <span className="home-hero__brand-name">Open Design</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
@@ -2386,6 +2384,7 @@ function PluginPromptPresetCard({
             pluginId={record.id}
             pluginTitle={title}
             preview={preview}
+            eager={odMode === 'deck'}
           />
           {active ? (
             <span className="home-hero__plugin-preset-check" aria-hidden>

@@ -93,11 +93,13 @@ describe('HomeView community filter decoupling', () => {
 
     // Home boots with a default active type chip and the Community grid now
     // leads with Slides directly instead of a generic All bucket.
+    // Wait for the *selected* state, not just the pill mount — under full-suite
+    // CI load the pills can paint one frame before resolveDefaultSelection
+    // applies, which made a bare getByTestId assertion flake.
     await waitFor(() => {
-      expect(screen.getByTestId('plugins-home-pill-category-deck')).toBeTruthy();
+      expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
     });
     expect(screen.queryByTestId('plugins-home-pill-category-all')).toBeNull();
-    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
     expect(ariaSelected('plugins-home-pill-category-prototype')).toBe('false');
 
     // Picking another chip drives the composer, not the gallery filter.

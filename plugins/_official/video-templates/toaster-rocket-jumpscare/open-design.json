@@ -24,6 +24,7 @@
     "en": "Toaster Rocket Jumpscare"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A prompt for a realistic home-video style shot of an old man being jumpscared by a toaster launching bread like a rocket.",
   "description_i18n": {
     "zh-CN": "生成老人被弹射面包的烤面包机吓到的家庭录像风格真实画面提示词。",

@@ -18,6 +18,7 @@ import {
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
+import { deployErrorCode } from '../analytics/deploy-error-code';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
@@ -9565,7 +9566,7 @@ function HtmlViewer({
       }
       fireDeployResult(
         'failed',
-        tokenRequired ? 'CONFIG_REQUIRED' : err instanceof Error ? err.name : 'UNKNOWN',
+        tokenRequired ? 'CONFIG_REQUIRED' : deployErrorCode(err),
       );
     } finally {
       setDeploying(false);

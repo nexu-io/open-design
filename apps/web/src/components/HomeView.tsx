@@ -252,6 +252,7 @@ interface Props {
   }) => boolean | void | Promise<boolean | void>;
   onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
+  artifactUpgradeSlot?: ReactNode;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -325,6 +326,7 @@ export function HomeView({
   onRecommendationStart,
   onRecommendationDismiss,
   executionSwitcher,
+  artifactUpgradeSlot,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -2187,7 +2189,7 @@ export function HomeView({
                 onOpenNewProject?.('template');
               }}
             />
-          ) : undefined
+          ) : artifactUpgradeSlot
         }
       />
 

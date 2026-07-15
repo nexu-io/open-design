@@ -71,6 +71,13 @@ describe('Toast', () => {
     expect(container.querySelector('.od-toast.tone-success .od-toast-icon')).not.toBeNull();
   });
 
+  it('distinguishes the error status glyph from the dismiss icon', () => {
+    const { container } = render(<Toast message="Could not read the page" tone="error" onDismiss={() => {}} />);
+    expect(
+      container.querySelector('.od-toast.tone-error .od-toast-icon path[d^="m21.73 18"]'),
+    ).not.toBeNull();
+  });
+
   it('renders a Dismiss button when both code and onDismiss are present', () => {
     render(<Toast message="manual copy" code="x" onDismiss={() => {}} />);
     expect(screen.getByRole('button', { name: /Dismiss/i })).not.toBeNull();

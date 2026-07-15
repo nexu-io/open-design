@@ -1169,12 +1169,8 @@ export function DesignBrowserPanel({
     setSuggestionsOpen(false);
     setMenuOpen(true);
     setDownloadAttentionNonce(attentionRequest.nonce);
-    if (pageSnapshotToastRef.current) {
-      setStatusMessage(null);
-    } else {
-      setStatusMessage(t('designBrowser.status.downloadAssistHint'));
-    }
-  }, [attentionRequest, t]);
+    setStatusMessage(null);
+  }, [attentionRequest]);
 
   const syncFromFallbackFrame = useCallback((frame: HTMLIFrameElement | null) => {
     if (!frame || loadUrl === EMPTY_URL) return;
@@ -2371,6 +2367,14 @@ export function DesignBrowserPanel({
           ) : null}
         </div>
       </div>
+      {downloadAttentionNonce != null ? (
+        <div className="db-download-assist" role="status">
+          <span className="db-download-assist-icon" aria-hidden>
+            <Icon name="download" size={14} />
+          </span>
+          <span>{t('designBrowser.status.downloadAssistHint')}</span>
+        </div>
+      ) : null}
       {showStatusMessage ? (
         <div className="db-status" role="status">
           <span>{statusText}</span>

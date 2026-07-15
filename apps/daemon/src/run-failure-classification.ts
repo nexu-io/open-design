@@ -260,7 +260,7 @@ function isSessionResumeExpiredText(text: string): boolean {
 function isPromptTooLargeText(text: string): boolean {
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
-  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
+  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
     .test(text);
 }
 
@@ -325,7 +325,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
-  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
+  if (/\b(stream disconnected before completion|stream idle timeout|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
     .test(text)) {
     return 'stream_disconnected';
   }
@@ -373,6 +373,9 @@ function signalInterruptClassification(
     return classification('process_exit', 'signal_killed', 'child_close', false, 'none');
   }
   if (PROCESS_CRASH_SIGNALS.has(signal)) {
+    return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
+  }
+  if (isProcessCrashText(text)) {
     return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
   }
   if (signal === 'SIGINT' || isInterruptExit) {
@@ -432,6 +435,8 @@ function processExitDetail(
 
 function isProcessCrashText(text: string): boolean {
   return /\bBun v\d+\.\d+\.\d+\b[\s\S]*\b(oh no: Bun has crashed|panic\(|Illegal instruction|Segmentation fault)\b/i
+    .test(text) ||
+    /\b(?:exit status )?0xc0000409\b/i
     .test(text);
 }
 
@@ -776,6 +781,32 @@ export function classifyRunFailure(
     );
   }
 
+  // ACP fatal paths ask the host to terminate the child after the protocol
+  // failure. The resulting exit/signal is therefore cleanup, not the cause.
+  // Prefer the runtime_close reason once specific text classifiers above have
+  // had a chance to claim auth, quota, upstream, prompt-size, and other known
+  // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
+  // error code at all, so it must also refine signal/unknown/exit fallbacks.
+  const runtimeCloseReason = readRuntimeCloseReason(input.events);
+  if (
+    runtimeCloseReason === 'fatal_rpc_error' &&
+    (
+      errorCode === 'AGENT_EXECUTION_FAILED' ||
+      errorCode === 'AGENT_TERMINATED_UNKNOWN' ||
+      errorCode.startsWith('AGENT_SIGNAL_') ||
+      errorCode.startsWith('AGENT_EXIT_')
+    )
+  ) {
+    const retryable = retryableHint ?? true;
+    return classification(
+      'process_exit',
+      'fatal_rpc_error',
+      inferFailureStageFromEvents(input.events, 'child_close'),
+      retryable,
+      retryable ? 'retry' : 'none',
+    );
+  }
+
   const signalInterrupt = signalInterruptClassification(errorCode, text, retryableHint);
   if (signalInterrupt) return signalInterrupt;
 
@@ -785,14 +816,18 @@ export function classifyRunFailure(
     errorCode === 'AGENT_EXECUTION_FAILED'
   ) {
     const baseDetail = processExitDetail(errorCode, text);
+    const refinedDetail = baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail;
+    const defaultRetryable =
+      refinedDetail === 'stream_error' ||
+      refinedDetail === 'fatal_rpc_error';
     return classification(
       'process_exit',
       // Only the generic AGENT_EXECUTION_FAILED catch-all is refined; the
       // specific exit_code / terminated_unknown labels already carry meaning.
-      baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail,
+      refinedDetail,
       inferFailureStageFromEvents(input.events, 'child_close'),
-      retryableHint ?? false,
-      retryableHint ? 'retry' : 'none',
+      retryableHint ?? defaultRetryable,
+      (retryableHint ?? defaultRetryable) ? 'retry' : 'none',
     );
   }
 

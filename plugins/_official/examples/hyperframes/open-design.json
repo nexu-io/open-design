@@ -24,6 +24,7 @@
     "en": "Hyperframes"
   },
   "version": "0.1.1",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Create video compositions, animations, title cards, overlays, captions, voiceovers, audio-reactive visuals, and scene transitions in HyperFrames HTML. Use when asked to build any HTML-based video content, add captions or subtitles synced to audio, generate text-to-speech narration, create audio-reactive animation (beat sync, glow, pulse driven by music), add animated text highlighting (marker sweeps, hand-drawn circles, burst lines, scribble, sketchout), or add transitions between scenes (crossfades, wipes, reveals, shader transitions). Covers composition authoring, timing, media, and the full video production workflow. For CLI commands (init, lint, preview, render, transcribe, tts) see the hyperframes-cli skill.",
   "description_i18n": {
     "zh-CN": "使用 HyperFrames HTML 创建视频合成、动画、标题卡、叠加层、字幕、配音、音频响应式视觉效果和场景转场。支持构建 HTML 视频内容、添加音频同步字幕、生成语音合成旁白、创建音乐驱动的动画效果（节拍同步、发光、脉冲）、添加动画文本高亮（标记扫描、手绘圆圈、爆发线、涂鸦、素描）以及场景转场效果（淡入淡出、擦除、显示、着色器转场）。",

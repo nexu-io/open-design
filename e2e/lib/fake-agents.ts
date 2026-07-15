@@ -177,6 +177,13 @@ async function emitRun(promptText) {
     await emitPluginAuthoringRun();
     return;
   }
+  // Checked before the plan-document fixture: a follow-up generation turn's
+  // stdin can carry the first turn's "Create a deterministic plan document"
+  // text as conversation history.
+  if (promptText.includes('Generate the deterministic artifact from the plan document')) {
+    await emitPlanArtifactGenerateRun();
+    return;
+  }
   if (promptText.includes('Create a deterministic plan document')) {
     await emitPlanDocumentRun();
     return;
@@ -300,6 +307,62 @@ async function emitPlanDocumentRun() {
     'utf8',
   );
   emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+// Plan-mode generation turn (issue: Plan 模式生成 HTML 后没有自动打开): the
+// agent reads the reviewed plan document, writes the final HTML deliverable
+// as a project FILE (not an inline <artifact> echo), then touches the plan
+// document again (e.g. updating its "Next step" section). Mirrors the real
+// event order captured in the bug report: index.html first, plan.md second.
+async function emitPlanArtifactGenerateRun() {
+  const dir = projectDir();
+  const html = '<!doctype html><html><body><main><h1>Plan Generated Deck</h1><p>Generated from the reviewed plan document.</p></main></body></html>';
+  const planUpdate = [
+    '# Deterministic Plan',
+    '',
+    '## Scope',
+    '- Confirm the target workflow.',
+    '- Draft the project milestones.',
+    '',
+    '## Next step',
+    '- Review the generated index.html.',
+    '',
+  ].join('\\n');
+  await writeFileFs(join(dir, 'index.html'), html, 'utf8');
+  await writeFileFs(join(dir, 'plan.md'), planUpdate, 'utf8');
+  if (agentId === 'claude') {
+    // Emit the real Claude stream-json shape (tool_use + tool_result pairs)
+    // so the web per-write auto-open path sees the same events a live
+    // filesystem run produces.
+    writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-plan-html', name: 'Write', input: { file_path: join(dir, 'index.html'), content: html } }],
+      },
+    });
+    writeJson({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu-plan-html', content: 'ok' }] } });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [{ type: 'tool_use', id: 'toolu-plan-md', name: 'Write', input: { file_path: join(dir, 'plan.md'), content: planUpdate } }],
+      },
+    });
+    writeJson({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu-plan-md', content: 'ok' }] } });
+    writeJson({
+      type: 'assistant',
+      message: { id: 'msg-3', content: [{ type: 'text', text: 'Generated index.html from plan.md and refreshed the plan next steps.' }] },
+    });
+    writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: 'end_turn' });
+    process.exitCode = 0;
+    exitSoon(0);
+    return;
+  }
+  emitSuccess('Generated index.html from plan.md and refreshed the plan next steps.', false, false);
   process.exitCode = 0;
   exitSoon(0);
 }

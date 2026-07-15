@@ -17,6 +17,10 @@ import { join } from "node:path";
 import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
+import {
+  claimPackagedDownloadAttribution,
+  discoverPackagedDownloadAttribution,
+} from "./download-attribution.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import { PackagedPathAccessError } from "./errors.js";
 import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "./launcher-after-quit.js";
@@ -145,6 +149,10 @@ async function main(): Promise<void> {
   };
 
   await ensurePackagedNamespacePaths(paths);
+  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
+    console.warn("[attribution] failed to discover packaged download attribution", error);
+    return null;
+  });
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
   applyPackagedElectronPathOverrides(paths);
@@ -212,6 +220,14 @@ async function main(): Promise<void> {
       setSplashStage(splash.window, stage);
     },
   });
+  if (sidecars.daemon.url) {
+    void claimPackagedDownloadAttribution({
+      attribution: downloadAttribution,
+      daemonUrl: sidecars.daemon.url,
+      installerObservationRoot: paths.installerObservationRoot,
+      logger: packagedLogger,
+    });
+  }
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).

@@ -102,7 +102,7 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
     // Second connection (reconnect with ?after=2): send one more delta + end.
     const secondReader = makeFiniteReader([
       enc(sseEvent(3, 'stdout', { chunk: 'world' })),
-      enc(sseEvent(4, 'end', { status: 'succeeded', code: 0 })),
+      enc(sseEvent(4, 'end', { status: 'succeeded', code: 0, artifactCount: 2 })),
     ]);
 
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

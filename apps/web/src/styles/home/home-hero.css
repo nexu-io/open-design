@@ -32,6 +32,8 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+/* The brand glyph is a self-shaped superellipse tile (rendered through
+   .od-brand-glyph), so it needs no panel disc behind it. */
 .home-hero__brand-mark {
   position: absolute;
   top: 50%;
@@ -39,21 +41,6 @@
   transform: translateY(-50%);
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 2px;
-}
-.home-hero__brand-mark img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 .home-hero__brand-name {
   font-family: var(--serif);
@@ -430,11 +417,21 @@
   margin-top: 0;
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
+/* While one of the composer's popovers is open, the whole card (a stacking
+   context) is lifted so the popover escapes above the static home content
+   below it (recent projects, plugin tiles — their contexts top out at 8).
+   The lift must stay BELOW `.entry-main__topbar` (z-index 10): the sticky
+   topbar is opaque chrome and the card scrolling under it must never cover
+   the chip cluster. It must also stay below the fixed modal family
+   (`.home-hero-confirm__backdrop` 80, `.plus-menu__popup` 90,
+   `.plugins-import-modal__backdrop` 100, `.use-everywhere-modal-backdrop`
+   920). Popover z-indexes inside the card (1503/1701/…) are local to the
+   card's stacking context and only order its own children. */
 .home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker),
 .home-hero__input-card:has(.home-hero__template-menu) {
-  z-index: 1700;
+  z-index: 9;
   overflow: visible;
 }
 .home-hero__input-card--compact-authoring {

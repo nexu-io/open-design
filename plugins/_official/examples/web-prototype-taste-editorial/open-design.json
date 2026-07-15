@@ -24,6 +24,7 @@
     "en": "Web Prototype Taste Editorial"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Editorial-minimalist web prototype. Warm monochrome canvas, serif display + grotesque body, 1px hairline borders, muted pastel chips, generous macro-whitespace, ambient micro-motion. Distilled from Leonxlnx/taste-skill `minimalist-skill`.",
   "description_i18n": {
     "zh-CN": "极简编辑风格网页原型。暖色单色调画布，衬线标题配无衬线正文，1px 细线边框，柔和粉彩色块，大量留白，微妙动效。",

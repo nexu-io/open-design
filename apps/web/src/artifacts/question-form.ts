@@ -113,6 +113,13 @@ export interface QuestionForm {
   description?: string;
   questions: FormQuestion[];
   submitLabel?: string;
+  /**
+   * BCP-47 tag of the language the model localized the form into (e.g.
+   * "zh-CN"). Host-rendered strings inside the form card (the "Other" chip,
+   * custom input copy) follow this language so a Chinese form in an English
+   * UI doesn't mix scripts; absent → the app UI locale.
+   */
+  lang?: string;
 }
 
 export type FormSegment =
@@ -145,7 +152,22 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     const openEnd = openStart + m[0].length;
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
-      // Unterminated — leave the rest as prose so we don't swallow it.
+      // No matching close tag found for this open tag name. The body may
+      // contain an open tag of the other name (e.g. prose mentioned
+      // <ask-question> but the real form uses <question-form>). Try to
+      // unwind to an inner open before giving up.
+      const remainder = input.slice(openEnd);
+      const nestedOpen = OPEN_RE.exec(remainder);
+      if (nestedOpen) {
+        const resumeAt = openEnd + nestedOpen.index;
+        if (openStart > cursor) {
+          out.push({ kind: 'text', text: input.slice(cursor, openStart) });
+        }
+        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
+        cursor = resumeAt;
+        continue;
+      }
+      // Genuinely unterminated — leave the rest as prose.
       out.push({ kind: 'text', text: slice });
       break;
     }
@@ -158,11 +180,26 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     const blockEnd = closeIdx + closeTag.length;
     if (form) {
       out.push({ kind: 'form', form, raw: input.slice(openStart, blockEnd) });
+      cursor = blockEnd;
     } else {
-      // Malformed — keep raw text so the user can still see it.
-      out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
+      // The body between this open tag and the matched close tag isn't valid
+      // JSON. If the body itself contains another question-form / ask-question
+      // open tag, the outer match was a false positive (e.g. the model
+      // mentioned the tag name inside backtick-quoted prose). Unwind to the
+      // nested open so it gets a clean parse on the next iteration.
+      const nestedOpen = OPEN_RE.exec(body);
+      if (nestedOpen) {
+        const resumeAt = openEnd + nestedOpen.index;
+        // Text before the false-positive tag was already emitted above.
+        // Slice from openStart so only the tag and the gap up to the
+        // nested open are emitted — no duplication.
+        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
+        cursor = resumeAt;
+      } else {
+        out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
+        cursor = blockEnd;
+      }
     }
-    cursor = blockEnd;
   }
   return out;
 }
@@ -261,12 +298,14 @@ function tryParseForm(body: string, attrs: Record<string, string>): QuestionForm
     attrs.title ?? (typeof obj.title === 'string' ? obj.title : 'A few quick questions');
   const description = typeof obj.description === 'string' ? obj.description : undefined;
   const submitLabel = typeof obj.submitLabel === 'string' ? obj.submitLabel : undefined;
+  const lang = typeof obj.lang === 'string' && obj.lang.trim().length > 0 ? obj.lang.trim() : undefined;
   return {
     id,
     title,
     questions,
     ...(description ? { description } : {}),
     ...(submitLabel ? { submitLabel } : {}),
+    ...(lang ? { lang } : {}),
   };
 }
 
@@ -375,6 +414,10 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
   // omitting it here makes a custom CTA flicker in only once the close tag
   // arrives.
   const submitLabel = typeof top.submitLabel === 'string' ? top.submitLabel : undefined;
+  // Adopt `lang` only once its string literal is fully terminated (same
+  // churn-avoidance as `id`): a partially streamed "zh-C" would briefly
+  // resolve to the wrong dictionary.
+  const lang = completeTopLevelString(body, 'lang');
   const questions = shapeStreamingQuestions(top.questions, countClosedQuestionObjects(body));
   return {
     id,
@@ -382,6 +425,7 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
     questions,
     ...(description ? { description } : {}),
     ...(submitLabel ? { submitLabel } : {}),
+    ...(lang ? { lang } : {}),
   };
 }
 
@@ -510,7 +554,17 @@ function shapeStreamingQuestions(rawQuestions: unknown, closedCount: number): Fo
     const hasId = typeof q.id === 'string' && q.id.trim().length > 0;
     if (!isClosed && !hasId) return;
     const mapped = mapRawQuestion(raw, index);
-    if (mapped) out.push(mapped);
+    if (mapped) {
+      // The trailing in-flight object may hold a MID-STREAM `default`: the
+      // partial-JSON repair terminates it early ("单位教育" → "单位教",
+      // ["历史背景与经过", "抗战精神…"] → ["历史背景与经过", "抗战精"]).
+      // The card adopts a streamed default only while the answer is still
+      // empty, so surfacing a truncated one would freeze garbage the
+      // completed value can never overwrite. A closed object's braces are
+      // balanced, so its default is complete — only then expose it.
+      if (!isClosed && mapped.defaultValue !== undefined) delete mapped.defaultValue;
+      out.push(mapped);
+    }
   });
   return out;
 }
@@ -642,7 +696,7 @@ function parseDefaultValue(
       ? question.defaultValue
       : typeof question.defaultValue === 'number' || typeof question.defaultValue === 'boolean'
         ? String(question.defaultValue)
-      : typeof question.default === 'string'
+      : typeof question.default === 'string' || Array.isArray(question.default)
         ? question.default
         : typeof question.default === 'number' || typeof question.default === 'boolean'
           ? String(question.default)

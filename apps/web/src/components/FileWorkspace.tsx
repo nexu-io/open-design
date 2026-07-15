@@ -1453,6 +1453,10 @@ export function FileWorkspace({
     [files],
   );
 
+  // Known-file set for the side chat's file-link routing — same shape
+  // ProjectView feeds its primary ChatPane.
+  const sideChatFileNames = useMemo(() => new Set(files.map((file) => file.name)), [files]);
+
   const projectPagePresets = useMemo(
     () => [
       ...BLANK_PAGE_PRESETS,
@@ -3438,6 +3442,7 @@ export function FileWorkspace({
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
+        browserSnapshotToast ? 'has-browser-snapshot-toast' : '',
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
@@ -3668,24 +3673,32 @@ export function FileWorkspace({
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
+      {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
+          the viewport's: a bare fixed .od-toast centers across the whole
+          window, drifting over the chat pane and covering the composer send
+          area in split view. */}
       {browserSnapshotToast ? (
-        <Toast
-          message={browserSnapshotToast.message}
-          details={browserSnapshotToast.details}
-          actionLabel={browserSnapshotToast.actionLabel}
-          className={browserSnapshotToast.className}
-          onAction={browserSnapshotToast.onAction}
-          role={browserSnapshotToast.role}
-          tone={browserSnapshotToast.tone}
-          ttlMs={browserSnapshotToast.ttlMs}
-          onDismiss={() => setBrowserSnapshotToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={browserSnapshotToast.message}
+            details={browserSnapshotToast.details}
+            actionLabel={browserSnapshotToast.actionLabel}
+            className={browserSnapshotToast.className}
+            onAction={browserSnapshotToast.onAction}
+            role={browserSnapshotToast.role}
+            tone={browserSnapshotToast.tone}
+            ttlMs={browserSnapshotToast.ttlMs}
+            onDismiss={() => setBrowserSnapshotToast(null)}
+          />
+        </div>
       ) : launcherToast ? (
-        <Toast
-          message={launcherToast}
-          role="alert"
-          onDismiss={() => setLauncherToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={launcherToast}
+            role="alert"
+            onDismiss={() => setLauncherToast(null)}
+          />
+        </div>
       ) : null}
       <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
@@ -3932,6 +3945,8 @@ export function FileWorkspace({
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
             projectFiles={visibleFiles}
+            projectFileNames={sideChatFileNames}
+            projectResolvedDir={resolvedDir}
             conversations={conversations}
             onSelectConversation={onSelectConversation ?? (() => {})}
             onDeleteConversation={onDeleteConversation ?? (() => {})}

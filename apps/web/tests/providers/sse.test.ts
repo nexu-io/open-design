@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDaemonTranscript,
+  DAEMON_RUN_FINISHED_EVENT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
+  type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
@@ -66,6 +68,79 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('pre-consent brief');
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
+  });
+
+  it('publishes an authoritative successful run with an artifact to the app gate', async () => {
+    const handlers = createDaemonHandlers();
+    const eventTarget = new EventTarget();
+    const published: DaemonRunFinishedEventDetail[] = [];
+    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+    });
+    vi.stubGlobal('window', eventTarget);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
+      if (url === '/api/runs/run-artifact-success/events') {
+        return sseResponse(
+          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'make a design' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    expect(published).toEqual([{
+      runId: 'run-artifact-success',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      result: 'success',
+      artifactCount: 2,
+    }]);
+  });
+
+  it.each([
+    ['no artifact', '{"code":0,"status":"succeeded","artifactCount":0}'],
+    ['failed', '{"code":1,"status":"failed","artifactCount":1}'],
+    ['canceled', '{"code":null,"signal":"SIGTERM","status":"canceled","artifactCount":1}'],
+    ['implicit success', '{"code":0,"artifactCount":1}'],
+  ])('does not publish a run-finished upgrade event for %s', async (_label, payload) => {
+    const handlers = createDaemonHandlers();
+    const eventTarget = new EventTarget();
+    const published: DaemonRunFinishedEventDetail[] = [];
+    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+    });
+    vi.stubGlobal('window', eventTarget);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-not-eligible' });
+      if (url === '/api/runs/run-not-eligible/events') {
+        return sseResponse(`event: end\ndata: ${payload}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'make a design' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    expect(published).toEqual([]);
   });
 
   it('does not surface an error when a still-running same-run retry later succeeds', async () => {

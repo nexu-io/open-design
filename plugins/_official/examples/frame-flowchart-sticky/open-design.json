@@ -24,6 +24,7 @@
     "uk": "Липка блок-схема"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
   "description": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
   "description_i18n": {
     "en": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",

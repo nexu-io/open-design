@@ -905,6 +905,17 @@
   transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .qf-chip input { width: auto; margin: 0; display: none; }
+/* Host-injected "Other" chip on finite-choice questions — dashed border
+   reads as "escape hatch", distinct from the model-authored options. It is a
+   real <button> so keyboard users can reach and toggle it; reset the UA
+   button chrome to the shared chip look and give focus a visible ring. */
+.qf-chip-other { border-style: dashed; }
+button.qf-chip-other { font: inherit; color: inherit; text-align: inherit; }
+button.qf-chip-other:focus-visible { outline: 2px solid var(--accent, var(--border-strong)); outline-offset: 2px; }
+button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
+/* The collapsed custom field still occupies a slot in .qf-field's 6px
+   column gap; cancel it so a closed accordion leaves no phantom spacing. */
+.qf-custom-collapsible:not(.open) { margin-top: -6px; }
 .qf-chip-copy {
   display: flex;
   flex-direction: column;

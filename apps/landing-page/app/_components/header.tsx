@@ -70,6 +70,7 @@ const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
   { href: '/solutions/design-to-code/', key: 'designToCode' },
   { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
   { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
 ];
 
 // Agent column — the coding agents with a dedicated long-form design page
@@ -271,20 +272,6 @@ export function Header({
               >
                 <li className='nav-dropdown-group'>
                   <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.tools}
-                  </span>
-                </li>
-                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
-                  <li key={key}>
-                    <a href={href(toolHref)}>
-                      <span className='dropdown-name'>
-                        {getSolutionPageCopy(locale, key).breadcrumb}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
                     {productMenuCopy.useCases}
                   </span>
                 </li>
@@ -304,6 +291,20 @@ export function Header({
                   <li key={name}>
                     <a href={href(ROLE_HREFS[index]!)}>
                       <span className='dropdown-name'>{name}</span>
+                    </a>
+                  </li>
+                ))}
+                <li className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>
+                    {productMenuCopy.tools}
+                  </span>
+                </li>
+                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+                  <li key={key}>
+                    <a href={href(toolHref)}>
+                      <span className='dropdown-name'>
+                        {getSolutionPageCopy(locale, key).breadcrumb}
+                      </span>
                     </a>
                   </li>
                 ))}

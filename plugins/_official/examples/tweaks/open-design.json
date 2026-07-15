@@ -24,6 +24,7 @@
     "en": "Tweaks"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Wrap any HTML artifact with a side panel of live, parameterized controls — accent color, type scale, density, motion, theme — that rewrite CSS custom properties in real time and persist to localStorage. Lets the user explore variants of a design without re-prompting the agent. Use when the brief asks for \"variants\", \"side-by-side options\", \"tweak this\", \"let me adjust\", \"live knobs\", or \"实时调参\".",
   "description_i18n": {
     "zh-CN": "为任何 HTML 组件添加侧面板实时控制器，可调整主题色、字体比例、密度、动效等参数，修改实时同步到 CSS 自定义属性并保存到 localStorage，让用户无需重新提示即可探索设计变体。",

@@ -121,13 +121,21 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   const [shadowFailed, setShadowFailed] = useState(false);
   useEffect(() => setShadowFailed(false), [parsedDeck, index]);
   const useShadow = parsedDeck !== null && !shadowFailed;
-  const [thumbnailReady, setThumbnailReady] = useState(false);
+  // Tie readiness to the renderer currently mounted in this item. Resetting a
+  // boolean from an effect races the shadow child's layout effect: the child
+  // can report ready first, then the parent's effect writes `false` and leaves
+  // the loading cover over an otherwise-rendered slide forever. A source key
+  // makes a new deck/fallback synchronously not-ready during render, while a
+  // ready callback can only mark the source it belongs to.
+  const thumbnailSource = useShadow ? parsedDeck : getSrcDoc;
+  const [readySource, setReadySource] = useState<typeof thumbnailSource | null>(null);
+  const thumbnailReady = mounted && readySource === thumbnailSource;
   useEffect(() => {
-    setThumbnailReady(false);
-  }, [mounted, useShadow, parsedDeck, index]);
-  const handleThumbnailReady = useCallback(() => setThumbnailReady(true), []);
+    if (!mounted) setReadySource(null);
+  }, [mounted]);
+  const handleThumbnailReady = useCallback(() => setReadySource(thumbnailSource), [thumbnailSource]);
   const handleShadowError = useCallback(() => {
-    setThumbnailReady(false);
+    setReadySource(null);
     setShadowFailed(true);
   }, []);
 

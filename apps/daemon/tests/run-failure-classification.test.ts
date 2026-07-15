@@ -1153,6 +1153,8 @@ describe('execution_failed close-reason refinement', () => {
     expect(withCloseReason('stream_error')).toMatchObject({
       failure_category: 'process_exit',
       failure_detail: 'stream_error',
+      retryable: true,
+      user_action: 'retry',
     });
   });
 
@@ -1167,6 +1169,21 @@ describe('execution_failed close-reason refinement', () => {
     expect(withCloseReason('fatal_rpc_error')).toMatchObject({
       failure_category: 'process_exit',
       failure_detail: 'fatal_rpc_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('honors an explicit non-retryable hint on fatal close reasons', () => {
+    const result = classify('AGENT_EXECUTION_FAILED', '', [
+      errorEvent('AGENT_EXECUTION_FAILED', '', false),
+      runtimeCloseEvent('fatal_rpc_error'),
+    ]);
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+      retryable: false,
+      user_action: 'none',
     });
   });
 
@@ -1291,6 +1308,16 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     );
     expect(result?.failure_category).toBe('prompt_too_large');
     expect(result?.failure_detail).toBe('prompt_too_large');
+  });
+
+  it('classifies AMR request body limits as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=request_too_large] request body exceeds configured limit"}}}}',
+    );
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+    expect(result?.user_action).toBe('reduce_context');
   });
 
   it('classifies an ACP "thread/start failed" as agent_protocol_error', () => {
@@ -1426,6 +1453,34 @@ describe('classifyRunFailure — custom Anthropic endpoint disconnects', () => {
     const result = classify(
       'AGENT_CONNECTION_DROPPED',
       'Claude Code lost its connection to the configured custom Anthropic endpoint before the response finished.',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});
+
+describe('classifyRunFailure — AMR sampled failures', () => {
+  it('classifies Windows opencode readiness crash status as process_crashed', () => {
+    const result = classify(
+      'AGENT_SIGNAL_SIGTERM',
+      'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 0xc0000409',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'process_crashed',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies AMR stream idle timeout as a disconnected upstream stream', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=upstream_error] stream idle timeout: no data received within configured window"}}}}',
     );
     expect(result).toMatchObject({
       failure_category: 'upstream_unavailable',

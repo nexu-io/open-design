@@ -54,6 +54,8 @@ const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
+const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
+const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
 const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
@@ -627,7 +629,6 @@ process.stdin.on("end", () => {
     try {
       await Promise.all([
         mkdir(join(dir, "apps", "web"), { recursive: true }),
-        mkdir(join(dir, "apps", "telemetry-worker"), { recursive: true }),
         mkdir(join(dir, "packages", "platform"), { recursive: true }),
         mkdir(join(dir, "packages", "components"), { recursive: true }),
         mkdir(join(dir, "tools", "dev"), { recursive: true }),
@@ -636,7 +637,6 @@ process.stdin.on("end", () => {
       await Promise.all([
         writeJson("package.json", { name: "root", version: "0.12.0", dependencies: { untouched: "0.12.0" } }),
         writeJson("apps/web/package.json", { name: "@open-design/web", version: "0.12.0" }),
-        writeJson("apps/telemetry-worker/package.json", { name: "telemetry-worker", version: "0.1.0" }),
         writeJson("packages/platform/package.json", { name: "@open-design/platform", version: "0.12.0" }),
         writeJson("packages/components/package.json", { name: "@open-design/components", version: "0.5.0" }),
         writeJson("tools/dev/package.json", { name: "@open-design/dev", version: "0.12.0" }),
@@ -664,9 +664,6 @@ process.stdin.on("end", () => {
       });
       await expect(readFile(join(dir, "e2e", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.12.1",
-      });
-      await expect(readFile(join(dir, "apps", "telemetry-worker", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
-        version: "0.1.0",
       });
       await expect(readFile(join(dir, "packages", "components", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.5.0",
@@ -1527,8 +1524,10 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, productionWorkflow, script] = await Promise.all([
+    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
       readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
+      readFile(landingPageCiWorkflowPath, "utf8"),
+      readFile(landingPageStagingWorkflowPath, "utf8"),
       readFile(landingPageProductionWorkflowPath, "utf8"),
       readFile(landingPageDailyFeishuScriptPath, "utf8"),
     ]);
@@ -1555,6 +1554,19 @@ process.stdin.on("end", () => {
     expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
     expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
     expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
+
+    // Wrangler Pages ignores custom --config paths. Before every staging
+    // migration/deploy, replace the default config with staging's isolated
+    // bindings so preview/staging traffic can never touch production KV/D1.
+    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
+      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
+      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
+      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
+      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
+      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
+    }
+    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
+    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
 
     expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
     expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');

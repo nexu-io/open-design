@@ -24,6 +24,7 @@
     "en": "Worker Visualizer"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a real-time visualizer whose heavy compute runs in a Web Worker — particle systems, physics, fractals, data/audio viz — optionally sharing memory via SharedArrayBuffer, rendered to canvas at 60fps. Trigger when the user asks for a web worker, simulation, particle system, physics, fractal, off-main-thread compute, or real-time visualizer.",
   "description_i18n": {
     "zh-CN": "构建一个实时可视化器，将繁重计算放到 Web Worker 中运行——粒子系统、物理、分形、数据/音频可视化——可通过 SharedArrayBuffer 共享内存，以 60fps 渲染到画布。当用户需要 web worker、模拟、粒子系统、物理、分形、离主线程计算或实时可视化时触发。",

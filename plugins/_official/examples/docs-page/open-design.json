@@ -24,6 +24,7 @@
     "en": "Docs Page"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A documentation page — inline-start nav, scrollable article body, inline-end table of contents. Use when the brief mentions \"docs\", \"documentation\", \"guide\", \"API reference\", or \"tutorial\".",
   "description_i18n": {
     "zh-CN": "文档页面 — 侧边导航、可滚动正文和目录。当需求提到'文档'、'指南'、'API 参考'或'教程'时使用。",

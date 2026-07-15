@@ -426,6 +426,46 @@ Rules — same weight as the density rules above:
 - ❌ Don't nest value labels inside a clipping fixed-height bar.
 - ❌ Don't omit any data point's label, however short its bar.
 
+## Mermaid diagram theme discipline (dark decks)
+
+Mermaid's default theme is built for white pages: near-black labels (\`#333\`), pale node fills, black strokes, and a TRANSPARENT svg background. Embedded in a dark-themed deck it produces the failure users report as "the diagram text is unreadable in dark mode": dark labels sitting directly on the dark slide background. Prefer a hand-written HTML/CSS/SVG diagram styled with the deck's own tokens (\`--bg\`, \`--fg\`, \`--accent\`) — it never drifts from the theme and needs no external JS. When you do embed Mermaid, pick the theme from the slide background at initialize time — never leave the default (light) theme on a dark deck:
+
+\`\`\`html
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',        // dark slide background
+    // theme: 'default',  // light slide background
+  });
+</script>
+\`\`\`
+
+For brand fidelity, \`theme: 'base'\` + \`themeVariables\` reuses the deck palette — pass concrete color values (Mermaid cannot resolve CSS \`var()\` references). \`darkMode: true\` alone does NOT darken node fills — \`base\` keeps its cream \`primaryColor\` default, so always set \`primaryColor\` to a dark surface tone alongside the light text:
+
+\`\`\`js
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'base',
+  themeVariables: {
+    darkMode: true,                 // match the slide background
+    background: '#101014',          // the deck's --bg value, as a literal
+    primaryColor: '#1c1c24',        // node fill — dark surface tone, NOT the cream default
+    primaryTextColor: '#e8e8ec',    // the deck's --fg value, as a literal
+    primaryBorderColor: '#8a8a94',
+    lineColor: '#8a8a94',
+  },
+});
+\`\`\`
+
+Rules — same weight as the density rules above:
+
+1. **Diagram text color follows the slide background, not Mermaid's default.** Dark background → \`theme: 'dark'\` or \`base\` + dark \`themeVariables\`; light background → the default is fine.
+2. **Never rely on the SVG bringing its own backdrop.** Mermaid emits a transparent-background SVG, so every label sits directly on the slide. If the diagram cannot be themed, give its container an explicit light plate (e.g. \`background: #fff\`, padding, radius) instead of shipping unreadable labels.
+
+- ❌ Don't call \`mermaid.initialize()\` without a \`theme\` on a dark deck.
+- ❌ Don't pass \`var(--fg)\` strings into \`themeVariables\` — Mermaid needs literal colors.
+- ❌ Don't hand-recolor a single label to "fix" contrast; theme the whole diagram.
+
 ## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
@@ -436,6 +476,7 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] Does the slide carry ≤ one big idea? (No mashed-together masthead + display headline + subtitle + absolute footer + sidebar.)
 - [ ] If the slide has a chart: does every data point show a visible category label and value label?
 - [ ] Are bar lengths computed from \`--v\` / \`--max\` so proportions match the data? (Mentally spot-check two bars.)
+- [ ] If the slide embeds a Mermaid diagram: is \`mermaid.initialize\` themed to the slide background (dark background → \`dark\`/\`base\` theme), leaving no dark-on-dark labels?
 
 If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 

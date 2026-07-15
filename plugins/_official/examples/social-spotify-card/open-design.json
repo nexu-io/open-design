@@ -24,6 +24,7 @@
     "uk": "Картка Spotify «Зараз грає»"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
   "description": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
   "description_i18n": {
     "en": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",

@@ -569,6 +569,35 @@
   text-align: center;
 }
 
+/* Browser-assist guidance belongs beside the action it explains. Keep this
+   light and in-flow so it never obscures either the chat composer or webpage. */
+.db-download-assist {
+  z-index: 210;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+  color: var(--text);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 22%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+.db-download-assist-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent);
+}
+
 /* ---- Status toast -------------------------------------------------------- */
 .db-status {
   position: absolute;

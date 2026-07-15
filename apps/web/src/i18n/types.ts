@@ -2471,6 +2471,20 @@ export interface Dict {
   'chat.amrLowBalance.rechargeCta': string;
   'chat.amrLowBalance.proceedCta': string;
   'chat.amrLowBalance.dontRemind': string;
+  'chat.amrArtifactUpgrade.title': string;
+  'chat.amrArtifactUpgrade.message': string;
+  'chat.amrArtifactUpgrade.benefit1': string;
+  'chat.amrArtifactUpgrade.benefit2': string;
+  'chat.amrArtifactUpgrade.benefit3': string;
+  'chat.amrArtifactUpgrade.benefit4': string;
+  'chat.amrArtifactUpgrade.promoBanner': string;
+  'chat.amrArtifactUpgrade.countdownLabel': string;
+  'chat.amrArtifactUpgrade.plansCta': string;
+  'chat.amrArtifactUpgrade.homePlansCta': string;
+  'chat.amrArtifactUpgrade.laterCta': string;
+  'chat.amrArtifactUpgrade.homeTitle': string;
+  'chat.amrArtifactUpgrade.homeMessage': string;
+  'chat.amrArtifactUpgrade.homeArtifactCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
@@ -3903,6 +3917,7 @@ export interface Dict {
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
+  'qf.otherOption': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;

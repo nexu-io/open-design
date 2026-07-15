@@ -24,6 +24,7 @@
     "en": "Saas Landing"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T05:25:44Z",
   "description": "Single-page SaaS landing with hero, features, social proof, pricing, and CTA. Respects the active DESIGN.md color/typography/layout tokens. Trigger keywords: \"saas landing\", \"marketing page\", \"product landing\".",
   "description_i18n": {
     "zh-CN": "单页 SaaS 落地页，包含主视觉、功能特性、社会证明、价格方案和行动号召。遵循当前 DESIGN.md 的颜色/排版/布局规范。触发关键词：\"saas landing\"、\"marketing page\"、\"product landing\"。",

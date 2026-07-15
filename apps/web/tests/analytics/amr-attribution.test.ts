@@ -43,6 +43,7 @@ describe('AMR attribution helper', () => {
       'generation_preview_authorize_retry',
       'generation_preview_recharge',
       'generation_preview_switch_retry_card',
+      'artifact_success_upgrade',
     ] as const;
 
     for (const [index, source] of sources.entries()) {

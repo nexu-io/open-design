@@ -24,6 +24,7 @@
     "en": "Last30days"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Recent community and social trend research over the last 30 days. Use when the brief asks what people are saying now, recent sentiment, community reactions, social proof, launch reaction, trend scan, or last-30-days context.",
   "description_i18n": {
     "zh-CN": "最近30天的社区和社交趋势研究。适用于了解当前舆论、近期情绪、社区反应、社交证明、发布反馈、趋势扫描或最近30天的背景信息。",

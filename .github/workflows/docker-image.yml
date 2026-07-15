@@ -67,6 +67,8 @@ jobs:
             type=raw,value=${{ inputs.release_version }},enable=${{ inputs.release_version != '' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ inputs.publish_latest == true }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -86,3 +88,26 @@ jobs:
           # the Dockerfile's apk lines re-cast for apt.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify public GHCR pull access
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          PUBLISHED_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          docker logout ghcr.io >/dev/null 2>&1 || true
+
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            echo "Verifying anonymous access for $image"
+            if ! docker buildx imagetools inspect "$image" >/dev/null; then
+              printf '%s\n' \
+                "Published image is not anonymously pullable: $image" \
+                "" \
+                "Make the GHCR package public before cutting a public Docker release:" \
+                "GitHub organization -> Packages -> od -> Package settings -> Change visibility -> Public." >&2
+              exit 1
+            fi
+          done <<< "$PUBLISHED_TAGS"
