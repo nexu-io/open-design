@@ -11,24 +11,30 @@ import ts from "typescript";
 //
 //   1. Slice files are transport-free — no `fetch`, `EventSource`,
 //      `XMLHttpRequest`, `WebSocket`, `localStorage`, `sessionStorage`,
-//      `window`, or `document`, whether reached as a bare identifier or
-//      qualified through `globalThis.<name>` or `globalThis["name"]`.
-//      Transport lives behind a
-//      provider + port.
+//      `window`, or `document`, whether reached as a bare identifier,
+//      qualified through `globalThis.<name>` / `globalThis["name"]` (or the
+//      `self.<name>` / `self["name"]` worker-safe alias), or extracted by
+//      destructuring one of those two global objects (`const { fetch } =
+//      globalThis`, including a renamed binding: `const { fetch: doFetch } =
+//      self`). Transport lives behind a provider + port.
 //   2. Only a slice's `dependencies.ts` may import from `providers/`. Every
 //      other feature file depends on the port, not the adapter.
 //   3. No cross-slice deep imports: a slice may import another slice only
 //      through its public barrel (`features/<other>`), never a deep file. This
 //      also holds from OUTSIDE `features/**`: the orchestrator (and any other
 //      app file) may reach a slice only through its barrel, so the boundary the
-//      slice publishes is the boundary every consumer sees. Both the relative
-//      (`../features/<slice>/...`) and the `@/*` path-alias form of a deep
-//      import are rejected — `apps/web/tsconfig.json` maps `@/*` onto the
-//      `apps/web` root, so `@/src/features/<slice>/...` resolves to the same
-//      file and must not be a boundary escape hatch. This applies equally to a
-//      static `import ... from`, a dynamic `import("...")` call, and an
-//      `import("...").Type` type-only reference — all three resolve to the
-//      same file.
+//      slice publishes is the boundary every consumer sees. A specifier is
+//      resolved the way the real TypeScript compiler would resolve it — the
+//      relative (`../features/<slice>/...`) and `@/*` path-alias
+//      (`apps/web/tsconfig.json` maps `@/*` onto the `apps/web` root) forms are
+//      matched directly, and any other specifier falls through to
+//      `ts.resolveModuleName` against the actual parsed `apps/web/tsconfig.json`
+//      — so a future tsconfig `paths` entry, `baseUrl`-relative specifier, or
+//      `package.json` `imports` subpath field resolving INTO this repo is still
+//      caught, instead of silently passing as an assumed-harmless bare package.
+//      This applies equally to a static `import ... from`, a dynamic
+//      `import("...")` call, and an `import("...").Type` type-only reference —
+//      all three resolve to the same file.
 //   4. One transport home per route: a route fetched inside a provider
 //      resource home — either a multi-adapter folder (`providers/<resource>/`)
 //      or a flat single-file provider (`providers/<resource>.ts`) — must not
@@ -52,8 +58,15 @@ import ts from "typescript";
 // ways a normal PR can violate the slice architecture — a forgotten port, a
 // stray deep import, a duplicated `fetch` — and has been hardened over several
 // review rounds against real (non-adversarial) bypasses: path aliases,
-// dynamic imports, `require`/`import =`, `globalThis` bracket access, template
-// routes, flat vs. folder provider homes, JS/JSX/symlinked files. It is NOT
+// dynamic imports, `require`/`import =`, `globalThis`/`self` bracket access
+// and destructuring, template routes, flat vs. folder provider homes, JS/JSX/
+// symlinked files. Rules 2-3's specifier resolution is delegated to
+// TypeScript's own `ts.resolveModuleName` (see `resolveWebImport` below)
+// rather than a hand-matched syntax list, specifically so a future resolver
+// config change doesn't quietly reopen the fail-open gap that motivated this
+// rewrite — but the semantic RULES on top of that resolution (which slice
+// owns a path, which files may hold a `dependencies.ts` exception, etc.) are
+// still this file's own bespoke logic and can still have gaps. It is NOT
 // designed to withstand a deliberately obfuscated bypass (e.g. an import
 // specifier assembled at runtime from string fragments, reflection, or
 // tooling outside this repo's TS/JS build). Finding a new theoretical gap is
@@ -62,8 +75,8 @@ import ts from "typescript";
 // that specific gap.
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const webSrcDir = path.join(repoRoot, "apps", "web", "src");
-const webAppDir = path.join(repoRoot, "apps", "web", "app");
+const webRootDir = path.join(repoRoot, "apps", "web");
+const webSrcDir = path.join(webRootDir, "src");
 const featuresDir = path.join(webSrcDir, "features");
 const providersDir = path.join(webSrcDir, "providers");
 
@@ -174,12 +187,101 @@ function isSliceBarrelImport(resolved: string, slice: string): boolean {
   return isSameRelPath(resolved, barrel) || isSameRelPath(resolved, `${barrel}/index`);
 }
 
+/** Parse `apps/web/tsconfig.json`, resolving `extends`, `include`, and
+ *  `exclude` the same way the real compiler would. Always fresh (not
+ *  memoized) — callers that run once per guard invocation (like the rule-3
+ *  outside-in file enumeration) should call this directly so they reflect
+ *  the current filesystem; `webTsConfig()` below memoizes it for the
+ *  per-specifier resolver hot path instead. */
+function parseWebTsConfig(): ts.ParsedCommandLine {
+  const tsconfigPath = path.join(webRootDir, "tsconfig.json");
+  const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  if (configFile.error) {
+    throw new Error(
+      `check-web-slice-boundaries: failed to read ${tsconfigPath}: ` +
+        ts.flattenDiagnosticMessageText(configFile.error.messageText, "\n"),
+    );
+  }
+  return ts.parseJsonConfigFileContent(configFile.config, ts.sys, webRootDir);
+}
+
+let cachedWebTsConfig: ts.ParsedCommandLine | null = null;
+
+/** Memoized `parseWebTsConfig()` so `resolveViaTypeScript` stays a cheap
+ *  per-specifier call rather than re-reading and re-parsing config on every
+ *  resolution — it's called once per specifier, potentially many times per
+ *  guard run, unlike the once-per-run file enumeration above. */
+function webTsConfig(): ts.ParsedCommandLine {
+  if (cachedWebTsConfig) return cachedWebTsConfig;
+  cachedWebTsConfig = parseWebTsConfig();
+  return cachedWebTsConfig;
+}
+
+const realModuleResolutionHost: ts.ModuleResolutionHost = {
+  fileExists: ts.sys.fileExists,
+  readFile: ts.sys.readFile,
+  directoryExists: ts.sys.directoryExists,
+  getCurrentDirectory: () => webRootDir,
+  getDirectories: ts.sys.getDirectories,
+  // `exactOptionalPropertyTypes` rejects assigning `ts.sys.realpath`
+  // directly (its type is `(...) => string | undefined`); only include the
+  // key when a real implementation exists, matching the interface's own
+  // optional-property contract instead of forcing an `undefined` value in.
+  ...(ts.sys.realpath ? { realpath: ts.sys.realpath } : {}),
+};
+
+/**
+ * Resolve a specifier neither of `resolveWebImport`'s two hand-matched forms
+ * (relative, `@/*`) covers, via TypeScript's own `ts.resolveModuleName`
+ * against the real parsed `apps/web/tsconfig.json` — so a future tsconfig
+ * `paths` entry, `baseUrl`-relative specifier, or `package.json` `imports`
+ * subpath field resolving into this repo is still caught, instead of falling
+ * through as an assumed-harmless bare package (the fail-open gap this
+ * function replaces). Returns the repo-relative POSIX path (extension and any
+ * trailing `/index` stripped) when the specifier resolves to a file inside
+ * `apps/web`, or null when it resolves into `node_modules` (a genuine
+ * external package) or doesn't resolve at all. `host` and `compilerOptions`
+ * are both injectable — defaulting to the real filesystem and the real
+ * parsed tsconfig — so a test can prove a HYPOTHETICAL future config change
+ * (a `paths` entry this repo doesn't have yet) is caught, without mutating
+ * the real `apps/web/tsconfig.json` or touching real disk.
+ */
+export function resolveViaTypeScript(
+  importerRepoPath: string,
+  specifier: string,
+  host: ts.ModuleResolutionHost = realModuleResolutionHost,
+  compilerOptions: ts.CompilerOptions = webTsConfig().options,
+): string | null {
+  const importerFullPath = path.join(repoRoot, importerRepoPath);
+  const result = ts.resolveModuleName(specifier, importerFullPath, compilerOptions, host);
+  const resolvedFileName = result.resolvedModule?.resolvedFileName;
+  if (!resolvedFileName) return null;
+  const normalized = resolvedFileName.split(path.sep).join("/");
+  // Case-insensitive to match this file's own convention elsewhere
+  // (`isUnderRel`/`isSameRelPath`) — on a case-insensitive filesystem or an
+  // unusually-cased checkout, a case-sensitive check here could let an
+  // external dependency be misclassified as an internal web path.
+  if (normalized.toLowerCase().includes("/node_modules/")) return null;
+  const rel = repositoryPath(resolvedFileName.split(path.sep).join(path.sep));
+  if (!isUnderRel(rel, WEB_ROOT_REL)) return null;
+  return rel.replace(/\.[cm]?[tj]sx?$/, "").replace(/\/index$/, "");
+}
+
 /**
  * Resolve a module specifier to a repo-relative POSIX path under `apps/web`, or
- * null for a bare package import that never touches the slice boundary. Handles
- * the relative form and the `@/*` path alias from `apps/web/tsconfig.json`
- * (rooted at `apps/web`), so an aliased deep import is checked exactly like its
- * relative twin instead of slipping past as a non-relative specifier.
+ * null for a bare package import that never touches the slice boundary. The
+ * relative form is matched directly, string-only — plain relative path-joining
+ * never drifts with tsconfig, so it stays pure and disk-free. Every OTHER
+ * specifier (including `@/*`) is resolved through `resolveViaTypeScript`
+ * FIRST, against the real configured mapping: hand-mapping `@/* -> apps/web`
+ * here as the primary path would silently keep using that assumption even
+ * after `apps/web/tsconfig.json`'s `@/*` entry is repointed (e.g. to `src/*`
+ * instead of `./*`), which is exactly the config-drift false-negative this
+ * rewrite exists to close. The hand-mapped `@/*` join is kept ONLY as a
+ * fallback for when real resolution fails outright — e.g. a specifier whose
+ * casing doesn't match the real file on a case-sensitive filesystem, which a
+ * real resolver correctly refuses to resolve, but which must still be caught
+ * as an escape attempt rather than silently dropped.
  */
 export function resolveWebImport(importerRepoPath: string, specifier: string): string | null {
   const pathOnly = specifier.split(/[?#]/, 1)[0];
@@ -187,19 +289,24 @@ export function resolveWebImport(importerRepoPath: string, specifier: string): s
   // Normalize like path.resolve did: strip any trailing slash so a barrel import
   // written `../features/<slice>/` still matches its barrel path.
   const strip = (p: string): string => p.replace(/\/+$/, "") || "/";
-  if (pathOnly.startsWith("@/")) {
-    return strip(path.posix.normalize(path.posix.join(WEB_ROOT_REL, pathOnly.slice("@/".length))));
-  }
   if (pathOnly.startsWith(".")) {
     return strip(path.posix.normalize(path.posix.join(path.posix.dirname(importerRepoPath), pathOnly)));
+  }
+  const viaCompiler = resolveViaTypeScript(importerRepoPath, pathOnly);
+  if (viaCompiler) return viaCompiler;
+  if (pathOnly.startsWith("@/")) {
+    return strip(path.posix.normalize(path.posix.join(WEB_ROOT_REL, pathOnly.slice("@/".length))));
   }
   return null;
 }
 
 /**
  * All per-file import-boundary violations (rules 1–3) for a single web source
- * file, given its repo-relative POSIX path and its text. Pure and disk-free so
- * the guard is unit-testable; the disk walkers below just feed it every file.
+ * file, given its repo-relative POSIX path and its text. Pure and disk-free
+ * for every relative and `@/*`-aliased specifier (the common case, and what
+ * every existing unit test below exercises); a specifier that resolves via
+ * `resolveViaTypeScript`'s fallback reads the real `apps/web` filesystem and
+ * tsconfig instead. The disk walkers below just feed this every file.
  * Whether the importer lives inside `features/**` decides which rules apply:
  * feature files get the transport-free + provider-binding rules, files inside
  * a named slice get the cross-slice rule, and everything without a slice of
@@ -368,8 +475,15 @@ function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
   return routes;
 }
 
-/** Literal routes remain literal when parenthesized or narrowed with TS syntax. */
-function routeLiteralOf(expression: ts.Expression): string | null {
+/**
+ * Unwrap parenthesization and the TS-only wrapper expressions (`as`, an
+ * angle-bracket type assertion, non-null `!`, `satisfies`) that don't change
+ * an expression's runtime value — shared by every check below that needs to
+ * recognize a literal or identifier regardless of how it's wrapped, so a
+ * harmless-looking wrapper (`(globalThis)`, `x as typeof x`, `["fetch"]`'s
+ * inner literal written as `("fetch")`) can't hide what's underneath.
+ */
+function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (
     ts.isParenthesizedExpression(current) ||
@@ -380,52 +494,167 @@ function routeLiteralOf(expression: ts.Expression): string | null {
   ) {
     current = current.expression;
   }
+  return current;
+}
+
+/** Literal routes remain literal when parenthesized or narrowed with TS syntax. */
+function routeLiteralOf(expression: ts.Expression): string | null {
+  const current = unwrapExpression(expression);
   if (ts.isStringLiteralLike(current)) return current.text;
   return ts.isTemplateExpression(current) ? templateRouteFamily(current) : null;
 }
 
-/** Direct `fetch` and its `globalThis.fetch` / `globalThis["fetch"]` twins. */
+// `self` is the worker-safe alias for `globalThis` (and, in a browser window,
+// for `window` itself) — `self.fetch(...)` / `self["fetch"]` reach the exact
+// same transport as `globalThis.fetch(...)`, so both object names are checked
+// identically everywhere below.
+const globalObjectAliases = new Set(["globalThis", "self"]);
+
+/** Direct `fetch` and its `globalThis.fetch` / `self["fetch"]` twins. */
 function isGlobalFetchExpression(expression: ts.Expression): boolean {
   return (
-    (ts.isIdentifier(expression) && expression.text === "fetch") || globalThisPropertyName(expression) === "fetch"
+    (ts.isIdentifier(expression) && expression.text === "fetch") || globalObjectPropertyName(expression) === "fetch"
   );
 }
 
-/** The statically named member read directly from globalThis, if any. */
-function globalThisPropertyName(node: ts.Node): string | null {
-  if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "globalThis") {
-    return node.name.text;
+/** The statically named member read directly from `globalThis` or `self`, if any
+ *  — through a wrapper like `(globalThis).fetch` or `self[("fetch")]` too. */
+function globalObjectPropertyName(node: ts.Node): string | null {
+  if (ts.isPropertyAccessExpression(node)) {
+    const target = unwrapExpression(node.expression);
+    if (ts.isIdentifier(target) && globalObjectAliases.has(target.text)) {
+      return node.name.text;
+    }
   }
-  if (
-    ts.isElementAccessExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "globalThis" &&
-    node.argumentExpression &&
-    ts.isStringLiteralLike(node.argumentExpression)
-  ) {
-    return node.argumentExpression.text;
+  if (ts.isElementAccessExpression(node)) {
+    const target = unwrapExpression(node.expression);
+    if (ts.isIdentifier(target) && globalObjectAliases.has(target.text) && node.argumentExpression) {
+      const key = unwrapExpression(node.argumentExpression);
+      if (ts.isStringLiteralLike(key)) return key.text;
+    }
   }
   return null;
 }
 
 /**
- * Bare-identifier uses of a forbidden global (not a property name / import),
- * plus the qualified `globalThis.<forbidden>` and `globalThis["forbidden"]`
- * forms. A bare `fetch` and either globalThis form reach the exact same
- * transport; scoping the check to unqualified identifiers alone would leave
- * an unchecked alias for every forbidden global.
+ * True when a `{ propertyName }` (or `{ propertyName: renamed }`) binding
+ * element destructures directly from `globalThis` or `self` — e.g.
+ * `const { fetch } = globalThis`, `const { fetch: doFetch } = self`, or a
+ * parameter default `function f({ fetch: doFetch } = self) {}`. This
+ * extracts the forbidden global exactly as effectively as a direct property
+ * read; a rename doesn't change what was extracted, only the local name it's
+ * called by afterward, and a parameter default is just as reachable a source
+ * as a variable initializer.
+ */
+function isDestructuredFromGlobalObject(bindingElement: ts.BindingElement): boolean {
+  const pattern = bindingElement.parent;
+  if (!ts.isObjectBindingPattern(pattern)) return false;
+  const owner = pattern.parent;
+  const initializer =
+    ts.isVariableDeclaration(owner) || ts.isParameter(owner) ? owner.initializer : undefined;
+  if (!initializer) return false;
+  const source = unwrapExpression(initializer);
+  return ts.isIdentifier(source) && globalObjectAliases.has(source.text);
+}
+
+/**
+ * The statically-determinable string key a binding element's `propertyName`
+ * names, for the forms that are NOT a plain `Identifier` — `{"fetch": x}`
+ * (a direct string-literal key) and `{["fetch"]: x}` (a `ComputedPropertyName`
+ * wrapping a string-literal expression). These never surface as an
+ * `Identifier` node, so `forbiddenGlobalUses`'s generic identifier scan below
+ * never visits them; this is a dedicated, non-overlapping check for them.
+ */
+function bindingElementLiteralPropertyName(bindingElement: ts.BindingElement): string | null {
+  const propertyName = bindingElement.propertyName;
+  if (!propertyName) return null;
+  if (ts.isStringLiteralLike(propertyName)) return propertyName.text;
+  if (ts.isComputedPropertyName(propertyName)) {
+    const key = unwrapExpression(propertyName.expression);
+    if (ts.isStringLiteralLike(key)) return key.text;
+  }
+  return null;
+}
+
+/**
+ * True when an object literal is itself an ASSIGNMENT-destructuring target —
+ * `({ fetch: request } = globalThis)` — whose right-hand side unwraps to
+ * `globalThis` or `self`. This is a different AST shape from a binding
+ * pattern (`const { ... } = ...`): the same syntax reused as an assignment
+ * expression's left side instead of a declaration, but it extracts a
+ * forbidden global exactly as effectively.
+ */
+function isAssignmentDestructuredFromGlobalObject(objectLiteral: ts.ObjectLiteralExpression): boolean {
+  const parent = objectLiteral.parent;
+  if (!ts.isBinaryExpression(parent)) return false;
+  if (parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return false;
+  if (parent.left !== objectLiteral) return false;
+  const source = unwrapExpression(parent.right);
+  return ts.isIdentifier(source) && globalObjectAliases.has(source.text);
+}
+
+/**
+ * The statically-determinable string key an assignment-pattern object
+ * literal's property names — the `{ fetch: request }`-inside-an-assignment
+ * counterpart of `bindingElementLiteralPropertyName`, for the non-Identifier
+ * key forms (`{"fetch": x}`, `{["fetch"]: x}`) that never surface as an
+ * `Identifier` node.
+ */
+function assignmentPropertyLiteralKeyName(property: ts.ObjectLiteralElementLike): string | null {
+  if (!ts.isPropertyAssignment(property)) return null;
+  const name = property.name;
+  if (ts.isStringLiteralLike(name)) return name.text;
+  if (ts.isComputedPropertyName(name)) {
+    const key = unwrapExpression(name.expression);
+    if (ts.isStringLiteralLike(key)) return key.text;
+  }
+  return null;
+}
+
+/**
+ * Bare-identifier uses of a forbidden global (not an unrelated property name
+ * or import binding), plus the qualified `globalThis.<forbidden>` /
+ * `self["forbidden"]` forms, plus destructuring one out of `globalThis` or
+ * `self` — as a plain or renamed identifier key, a string-literal key, or a
+ * computed string-literal key, from a variable initializer, a parameter
+ * default, OR a plain assignment-expression destructure. A bare `fetch`,
+ * either global-object form, and any of these destructured-extraction forms
+ * all reach the exact same transport; scoping the check to unqualified
+ * identifiers alone would leave an unchecked alias for every forbidden global.
  */
 function forbiddenGlobalUses(source: ts.SourceFile): Array<{ name: string; position: number }> {
   const uses: Array<{ name: string; position: number }> = [];
   const visit = (node: ts.Node): void => {
-    const globalThisProperty = globalThisPropertyName(node);
-    if (globalThisProperty && forbiddenSliceGlobals.has(globalThisProperty)) {
-      uses.push({ name: globalThisProperty, position: node.getStart(source) });
+    const globalObjectProperty = globalObjectPropertyName(node);
+    if (globalObjectProperty && forbiddenSliceGlobals.has(globalObjectProperty)) {
+      uses.push({ name: globalObjectProperty, position: node.getStart(source) });
       return;
+    }
+    if (ts.isBindingElement(node)) {
+      const literalName = bindingElementLiteralPropertyName(node);
+      if (literalName && forbiddenSliceGlobals.has(literalName) && isDestructuredFromGlobalObject(node)) {
+        uses.push({ name: literalName, position: node.getStart(source) });
+      }
+    }
+    if (ts.isObjectLiteralExpression(node) && isAssignmentDestructuredFromGlobalObject(node)) {
+      for (const property of node.properties) {
+        const literalName = assignmentPropertyLiteralKeyName(property);
+        if (literalName && forbiddenSliceGlobals.has(literalName)) {
+          uses.push({ name: literalName, position: property.getStart(source) });
+        }
+      }
     }
     if (ts.isIdentifier(node) && forbiddenSliceGlobals.has(node.text)) {
       const parent = node.parent;
+      const isDestructuredFromGlobal =
+        !!parent &&
+        ((ts.isBindingElement(parent) && parent.propertyName === node && isDestructuredFromGlobalObject(parent)) ||
+          (ts.isPropertyAssignment(parent) &&
+            parent.name === node &&
+            ts.isObjectLiteralExpression(parent.parent) &&
+            isAssignmentDestructuredFromGlobalObject(parent.parent)));
       const isPropertyName =
+        !isDestructuredFromGlobal &&
         parent &&
         ((ts.isPropertyAccessExpression(parent) && parent.name === node) ||
           (ts.isPropertyAssignment(parent) && parent.name === node) ||
@@ -517,15 +746,31 @@ async function checkSliceFiles(violations: Violation[]): Promise<void> {
 // walks featuresDir — reports success. The same collector resolves `@/*` aliases
 // too, so `@/src/features/<slice>/...` is not a boundary escape hatch.
 async function checkExternalSliceImports(violations: Violation[]): Promise<void> {
-  // `app/` contains live Next.js entrypoints alongside the shared `src/`
-  // runtime. Both are consumers outside a slice and therefore must use its
-  // public barrel; scanning only src/ would leave app-route deep imports as an
-  // escape hatch.
-  for (const root of [webSrcDir, webAppDir]) {
-    for (const fullPath of await collectSourceFiles(root)) {
-      if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
-      violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), await readFile(fullPath, "utf8")));
+  // The concrete file set is the real compiler-resolved list — parsed FRESH
+  // here via `parseWebTsConfig()` (not the memoized `webTsConfig()` the
+  // per-specifier resolver uses), so it reflects the current filesystem on
+  // every guard run. This correctly handles every way a file can be
+  // "included": explicit standalone entries (`next.config.ts`), glob
+  // patterns (`app/**/*`, `sidecar/**/*`), and `extends` semantics — an
+  // approximation from each include pattern's leading path segment would
+  // miss standalone file entries and mis-resolve an inherited config.
+  const testsDir = path.join(webRootDir, "tests") + path.sep;
+  for (const fullPath of parseWebTsConfig().fileNames) {
+    if (!sourceExtensions.has(path.extname(fullPath))) continue;
+    if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
+    // Unit tests intentionally reach into a slice's internals directly to
+    // test them in isolation (this repo's convention: AGENTS.md keeps tests
+    // in a sibling `tests/` directory, not colocated) — that is not the
+    // outside-in barrel escape rule 3 exists to catch, which is about
+    // PRODUCTION consumers coupling to slice internals.
+    if (fullPath.startsWith(testsDir)) continue;
+    let text: string;
+    try {
+      text = await readFile(fullPath, "utf8");
+    } catch {
+      continue; // A config-listed file that vanished mid-scan isn't this guard's concern.
     }
+    violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), text));
   }
 }
 
