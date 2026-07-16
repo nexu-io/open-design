@@ -2917,7 +2917,7 @@ function FormBlock({
         }
         releaseSubmitLock();
       };
-          const acceptSubmission = () => {
+      const acceptSubmission = () => {
         clearInlineQuestionFormDraft(formKey);
         setDraftAnswers(undefined);
         releaseSubmitLock();
