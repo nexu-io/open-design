@@ -1236,7 +1236,13 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   };
   let url = buildOpenAIImageUrl(baseUrl, false);
   if (ctx.imageRef?.dataUrl) {
-    body.response_format = 'b64_json';
+    // gpt-image-* does NOT accept response_format on /v1/images/edits
+    // (HTTP 400 "Unknown parameter: 'response_format'"). dall-e-2
+    // accepts it; the base b64 path is what callers expect either way,
+    // so we only set response_format for non-gpt-image models.
+    if (!wireModel.startsWith('gpt-image-')) {
+      body.response_format = 'b64_json';
+    }
     body.images = [{ image_url: ctx.imageRef.dataUrl }];
     url = buildOpenAIImageEditUrl(baseUrl);
   }
