@@ -675,7 +675,7 @@ export const fa: Dict = {
   'workspaceTabs.project': 'پروژه',
   'workspaceTabs.pluginDetails': 'جزئیات افزونه',
   'workspaceTabs.marketplace': 'بازارچه',
-  'homeHero.title': 'امروز چه چیزی طراحی می‌کنید؟',
+  'homeHero.title': 'امروز با عامل خود چه چیزی طراحی می‌کنید؟',
   'homeHero.startWithTemplate': 'با یک قالب شروع کنید…',
   'homeHero.startBlankProject': '…یا یک پروژه خالی شروع کنید',
   'homeHero.templatePicker.label': 'قالب',

@@ -675,7 +675,7 @@ export const hu: Dict = {
   'workspaceTabs.project': 'Projekt',
   'workspaceTabs.pluginDetails': 'Plugin részletei',
   'workspaceTabs.marketplace': 'Marketplace',
-  'homeHero.title': 'Mit tervezel ma?',
+  'homeHero.title': 'Mit tervezel ma az ügynököddel?',
   'homeHero.startWithTemplate': 'Kezdés sablonnal…',
   'homeHero.startBlankProject': '…vagy kezdj egy üres projektet',
   'homeHero.templatePicker.label': 'Sablon',

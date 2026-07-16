@@ -675,7 +675,7 @@ export const ko: Dict = {
   'workspaceTabs.project': '프로젝트',
   'workspaceTabs.pluginDetails': '플러그인 세부 정보',
   'workspaceTabs.marketplace': '마켓플레이스',
-  'homeHero.title': '오늘 무엇을 디자인하시겠어요?',
+  'homeHero.title': '오늘 당신의 에이전트와 무엇을 디자인하시겠어요?',
   'homeHero.startWithTemplate': '템플릿으로 시작하기…',
   'homeHero.startBlankProject': '…또는 빈 프로젝트로 시작',
   'homeHero.templatePicker.label': '템플릿',

@@ -675,7 +675,7 @@ export const ar: Dict = {
   'workspaceTabs.project': 'المشروع',
   'workspaceTabs.pluginDetails': 'تفاصيل الإضافة',
   'workspaceTabs.marketplace': 'المتجر',
-  'homeHero.title': 'ماذا ستصمّم اليوم؟',
+  'homeHero.title': 'ماذا ستصمم مع وكيلك اليوم؟',
   'homeHero.startWithTemplate': 'ابدأ بقالب…',
   'homeHero.startBlankProject': '…أو ابدأ مشروعًا فارغًا',
   'homeHero.templatePicker.label': 'قالب',

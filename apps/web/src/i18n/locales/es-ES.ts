@@ -675,7 +675,7 @@ export const esES: Dict = {
   'workspaceTabs.project': 'Proyecto',
   'workspaceTabs.pluginDetails': 'Detalles del plugin',
   'workspaceTabs.marketplace': 'Marketplace',
-  'homeHero.title': '¿Qué diseñarás hoy?',
+  'homeHero.title': '¿Qué diseñarás hoy con tu agente?',
   'homeHero.startWithTemplate': 'Empezar con una plantilla…',
   'homeHero.startBlankProject': '…o empezar un proyecto en blanco',
   'homeHero.templatePicker.label': 'Plantilla',

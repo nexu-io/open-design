@@ -697,7 +697,7 @@ export const zhTW: Dict = {
   "workspaceTabs.project": "專案",
   "workspaceTabs.pluginDetails": "外掛詳細資料",
   "workspaceTabs.marketplace": "市集",
-  "homeHero.title": "你今天要設計什麼？",
+  "homeHero.title": "今天想和你的 Agent 一起設計什麼？",
   "homeHero.startWithTemplate": "從範本開始…",
   "homeHero.startBlankProject": "…或建立一個空白專案",
   "homeHero.templatePicker.label": "範本",

@@ -675,7 +675,7 @@ export const uk: Dict = {
   'workspaceTabs.project': 'Проєкт',
   'workspaceTabs.pluginDetails': 'Деталі плагіна',
   'workspaceTabs.marketplace': 'Маркетплейс',
-  'homeHero.title': 'Що ви спроєктуєте сьогодні?',
+  'homeHero.title': 'Що ви спроєктуєте сьогодні разом зі своїм агентом?',
   'homeHero.startWithTemplate': 'Почати з шаблону…',
   'homeHero.startBlankProject': '…або створити порожній проєкт',
   'homeHero.templatePicker.label': 'Шаблон',
