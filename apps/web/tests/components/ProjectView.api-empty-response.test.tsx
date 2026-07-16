@@ -403,9 +403,45 @@ describe('ProjectView API empty response handling', () => {
     });
   });
 
-  it('records no_result without downgrading a successful Design run', async () => {
+  it('keeps a text-only successful Design run as a report-only success', async () => {
+    // Report-only turns (image analysis, audits) legitimately end with prose
+    // and zero produced files (#5714, #5718). They must not be downgraded to
+    // ARTIFACT_NOT_FOUND.
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       const { handlers } = options;
+      handlers.onDelta('hello');
+      handlers.onDone('hello');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(screen.getAllByText('hello').length).toBeGreaterThan(0));
+    await waitFor(() => {
+      expect(
+        hasSavedAssistantMessage(
+          (message) =>
+            message.runStatus === 'succeeded' &&
+            message.resultDeliveryState === undefined &&
+            message.producedFiles !== undefined &&
+            message.events?.some(
+              (event) => event.kind === 'status' && event.code === 'ARTIFACT_NOT_FOUND',
+            ) !== true,
+        ),
+      ).toBe(true);
+    });
+    expect(screen.queryByText(/without producing a deliverable project file/i)).toBeNull();
+  });
+
+  it('records no_result when a Design run attempted file writes that never landed', async () => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      handlers.onAgentEvent({
+        kind: 'tool_use',
+        id: 'write-1',
+        name: 'Write',
+        input: { file_path: 'index.html', content: '<!doctype html>' },
+      });
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -548,6 +584,12 @@ describe('ProjectView API empty response handling', () => {
   it('waits for delivery verification before playing the failure sound for a missing result', async () => {
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       const { handlers } = options;
+      handlers.onAgentEvent({
+        kind: 'tool_use',
+        id: 'write-1',
+        name: 'Write',
+        input: { file_path: 'index.html', content: '<!doctype html>' },
+      });
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
