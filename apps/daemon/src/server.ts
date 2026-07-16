@@ -328,6 +328,7 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
+import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -2423,6 +2424,23 @@ export async function startServer({
     console.warn(`[plugins] snapshot GC startup sweep failed: ${(err)?.message ?? err}`);
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
+
+  // Memory hygiene: one-time removal of entries the retired chat
+  // auto-extraction pipelines wrote (regex-pack artifacts + chat-form
+  // residue in user_profile). Marker-gated inside, so this is a no-op on
+  // every boot after the first. Best-effort — memory cleanup must never
+  // block the daemon from serving.
+  try {
+    const memoryCleanup = await runAutoExtractionCleanup(RUNTIME_DATA_DIR);
+    if (memoryCleanup.ran && (memoryCleanup.deletedIds.length > 0 || memoryCleanup.profilePruned)) {
+      console.log(
+        `[memory] auto-extraction cleanup removed ${memoryCleanup.deletedIds.length} entr(y/ies)`
+        + `${memoryCleanup.profilePruned ? ' and pruned user_profile to canonical fields' : ''}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[memory] auto-extraction cleanup failed:', err);
+  }
 
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat

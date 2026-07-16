@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { extractWithLLM } from '../src/memory-llm.js';
-import { memoryDir } from '../src/memory.js';
+import { memoryDir, writeMemoryConfig } from '../src/memory.js';
 import { __resetExtractionsForTests } from '../src/memory-extractions.js';
 
 const dataDir = path.join(process.env.OD_DATA_DIR as string, 'memory-google-default-test');
@@ -11,6 +11,9 @@ const originalFetch = globalThis.fetch;
 beforeEach(async () => {
   await fsp.rm(memoryDir(dataDir), { recursive: true, force: true });
   __resetExtractionsForTests();
+  // Chat auto-extraction defaults OFF product-wide; this spec covers the
+  // provider auto-pick inside the extractor, so opt in explicitly.
+  await writeMemoryConfig(dataDir, { chatExtractionEnabled: true });
 });
 
 afterEach(() => {

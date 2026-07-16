@@ -4,7 +4,7 @@
 // Layout (under <dataDir>/memory/):
 //   MEMORY.md            ← short index; one bullet per fact file
 //   <type>_<slug>.md     ← per-fact body + frontmatter
-//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": true }
+//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": false }
 //
 // Frontmatter format (matches Claude Code's auto-memory pattern):
 //   ---
@@ -59,10 +59,31 @@ export interface MemoryChangeEvent {
   // pass. Lets the toast say "Memory updated (3 new)" instead of three
   // separate toasts.
   count?: number;
-  source?: 'heuristic' | 'llm' | 'manual' | 'connector' | 'brand';
+  source?: MemoryEntrySource;
   enabled?: boolean;
   at: number;
 }
+
+// Writer provenance. Persisted into entry frontmatter (`source:`) so later
+// audits, migrations, and per-pipeline stats can tell an auto-extracted fact
+// from one the user typed by hand. Entries written before this field existed
+// have no marker and must be classified by content fingerprints instead.
+export type MemoryEntrySource =
+  | 'heuristic'
+  | 'llm'
+  | 'manual'
+  | 'connector'
+  | 'brand'
+  | 'annotation';
+
+const VALID_SOURCES = new Set<string>([
+  'heuristic',
+  'llm',
+  'manual',
+  'connector',
+  'brand',
+  'annotation',
+]);
 
 function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
   memoryEvents.emit('change', { ...event, at: Date.now() });
@@ -180,7 +201,12 @@ export async function readMemoryConfig(dataDir) {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
-      chatExtractionEnabled: parsed?.chatExtractionEnabled !== false,
+      // Chat auto-extraction (regex pack + chat-form profile capture + LLM
+      // extractor) is retired by default: it minted junk facts from ordinary
+      // chat text ("我在…" progressive-aspect sentences became "user
+      // location"). Only an explicit opt-in (`=== true`) re-enables it;
+      // injection of existing/manual memory stays governed by `enabled`.
+      chatExtractionEnabled: parsed?.chatExtractionEnabled === true,
       // Two-loop memory per-hook flags. All default-ON (`!== false`) so a
       // config written before these existed still injects the profile,
       // rewrites short queries, and self-verifies output.
@@ -190,12 +216,12 @@ export async function readMemoryConfig(dataDir) {
       extraction: normalizeExtractionPatch(parsed?.extraction),
     };
   } catch {
-    // Default-on. The whole point of the feature is to surface user
-    // context across runs; making it opt-in would mean the first 3
-    // chats happen with no memory and no warning.
+    // Injection defaults on — the whole point of the feature is to surface
+    // user context across runs. Chat auto-extraction defaults OFF (see the
+    // parse path above): writing memory is opt-in, reading it is not.
     return {
       enabled: true,
-      chatExtractionEnabled: true,
+      chatExtractionEnabled: false,
       profileEnabled: true,
       rewriteEnabled: true,
       verifyEnabled: true,
@@ -244,7 +270,7 @@ export async function writeMemoryConfig(dataDir, patch) {
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
   if (typeof next.chatExtractionEnabled !== 'boolean') {
-    next.chatExtractionEnabled = true;
+    next.chatExtractionEnabled = false;
   }
   // Default-on if a prior config or a malformed patch left these undefined.
   if (typeof next.profileEnabled !== 'boolean') next.profileEnabled = true;
@@ -308,6 +334,9 @@ function summarize(id, raw, mtime) {
       name: typeof data?.name === 'string' && data.name ? data.name : id,
       description: typeof data?.description === 'string' ? data.description : '',
       type,
+      // Absent on files written before provenance landed; those must be
+      // classified by content fingerprints, never assumed manual.
+      source: VALID_SOURCES.has(data?.source) ? data.source : undefined,
       updatedAt: mtime,
     },
     body: typeof body === 'string' ? body.trimStart() : '',
@@ -444,12 +473,13 @@ export async function readMemoryEntry(dataDir, id) {
   return { ...summary, body };
 }
 
-function renderEntryFile(name, description, type, body) {
+function renderEntryFile(name, description, type, body, source) {
   const safeName = String(name || 'Untitled').replace(/\r?\n/g, ' ').trim();
   const safeDesc = String(description || '').replace(/\r?\n/g, ' ').trim();
   const safeType = isValidType(type) ? type : 'user';
+  const safeSource = VALID_SOURCES.has(source) ? source : 'manual';
   const trimmedBody = String(body || '').replace(/^\s+/, '');
-  return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
+  return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\nsource: ${safeSource}\n---\n\n${trimmedBody}\n`;
 }
 
 export async function updateMemoryTreeNode(dataDir, id, patch) {
@@ -485,7 +515,7 @@ export async function upsertMemoryEntry(dataDir, input, options) {
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(
     entryPath(dataDir, id),
-    renderEntryFile(name, description, type, body),
+    renderEntryFile(name, description, type, body, options?.source ?? 'manual'),
   );
   await ensureIndexHasEntry(dataDir, id, name, description);
   const entry = await readMemoryEntry(dataDir, id);
@@ -873,6 +903,40 @@ function applyTemplate(template, captured) {
   return String(template || '').replace(/\$1/g, String(captured));
 }
 
+// ----- Heuristic-artifact fingerprinting -----------------------------------
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// One matcher per retired regex-pack pattern: the entry's display `name`
+// must equal the pattern's fixed name AND the body must be an instance of
+// its bodyTemplate (template `$1` slots widened to a wildcard). Entries from
+// before source provenance landed carry no `source:` frontmatter, so this
+// content fingerprint is the only reliable classifier for them.
+const HEURISTIC_ARTIFACT_MATCHERS = REMEMBER_PATTERNS.map((pattern) => ({
+  name: pattern.name,
+  bodyRe: new RegExp(
+    `^${escapeRegExp(pattern.bodyTemplate.trim()).replace(/\\\$1/g, '[\\s\\S]*')}$`,
+  ),
+}));
+
+/**
+ * True when a memory entry is provably an artifact of the retired chat
+ * regex pack — its name matches one of the pack's fixed display names and
+ * its body is an instance of that pattern's fill-in template. Used by the
+ * one-time cleanup migration; LLM, connector, and hand-written entries never
+ * match because their bodies are free prose, not template instances.
+ */
+export function isHeuristicExtractionArtifact(entry) {
+  const name = typeof entry?.name === 'string' ? entry.name : '';
+  const body = typeof entry?.body === 'string' ? entry.body.trim() : '';
+  if (!name || !body) return false;
+  return HEURISTIC_ARTIFACT_MATCHERS.some(
+    (m) => m.name === name && m.bodyRe.test(body),
+  );
+}
+
 // ----- Onboarding → structured profile ------------------------------------
 
 // Form ids that should seed / update the singleton `user_profile`. Discovery
@@ -945,6 +1009,30 @@ function renderProfileBody(map) {
     lines.push(`- ${label}: ${value}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * Reduce a user_profile body to the canonical field set the settings-panel
+ * profile editor writes (`CANONICAL_PROFILE_LABELS`). Rows under any other
+ * label were accumulated by the retired chat-form capture — per-project
+ * discovery answers re-keyed by whatever the form question's wording was
+ * ("要做什么？", "What should I build?", …) — and are dropped. Returns null
+ * when no canonical row survives, i.e. the whole profile was form residue.
+ */
+export function pruneProfileBodyToCanonical(body) {
+  const canonical = new Set(CANONICAL_PROFILE_LABELS.map((l) => l.toLowerCase()));
+  const kept = new Map();
+  for (const line of String(body || '').split(/\r?\n/)) {
+    const m = PROFILE_FIELD_LINE_RE.exec(line);
+    if (!m) continue;
+    const label = canonicalProfileLabel(m[1] ?? '');
+    if (!canonical.has(label.toLowerCase())) continue;
+    const value = (m[2] ?? '').trim();
+    if (!value) continue;
+    kept.set(label, value);
+  }
+  if (kept.size === 0) return null;
+  return renderProfileBody(kept);
 }
 
 // Merge freshly-answered form pairs into the existing profile, by label, and
