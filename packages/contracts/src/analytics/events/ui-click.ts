@@ -868,14 +868,14 @@ export interface NextStepActionClickProps {
   chip_id?: string;
 }
 
-// Studio Questions tab discovery form (the agent-emitted <question-form>
-// rendered in the right-hand panel before generation starts). The form body
-// is model-generated JSON, so chips are question options, not fixed UI:
+// Studio inline discovery form (the agent-emitted <question-form> rendered in
+// its originating assistant message). The form body is model-generated JSON,
+// so chips are question options, not fixed UI:
 //   - `task_type_chip`: a pick on the `taskType` radio (Prototype / Live
 //     artifact / Slide deck / Image / Video / HyperFrames / Audio / Other).
 //   - `brand_bg_chip`: a pick on the `brand` radio (pick_direction /
 //     brand_spec / reference_match).
-//   - `skip`: the Skip button or the auto-continue countdown elapsing
+//   - `skip`: the Skip button or an optional-only auto-continue countdown
 //     (`skip_source` says which). The countdown honours any picks the user
 //     made, so skip also carries the counts.
 //   - `submit`: the Continue CTA (or the form's own submit).
@@ -884,7 +884,18 @@ export interface NextStepActionClickProps {
 export interface QuestionsFormClickProps {
   page_name: 'chat_panel';
   area: 'questions_form';
-  element: 'task_type_chip' | 'brand_bg_chip' | 'skip' | 'submit';
+  element:
+    | 'task_type_chip'
+    | 'brand_bg_chip'
+    | 'skip'
+    | 'submit'
+    | 'visual_style_card'
+    | 'visual_style_refresh'
+    | 'visual_style_gallery_open'
+    | 'visual_style_category_tab'
+    | 'step_back'
+    | 'step_next'
+    | 'step_skip';
   // task_type_chip / brand_bg_chip only: the picked option value, snake_case.
   chip_id?: string;
   // skip only: user pressed the button vs the countdown elapsed.
@@ -894,6 +905,13 @@ export interface QuestionsFormClickProps {
   skipped_count?: number;
   // 'task_type' (single-shot default-router brief) | 'discovery' | other.
   form_id?: string;
+  question_id?: string;
+  style_id?: string;
+  style_context?: 'deck' | 'prototype';
+  interaction_source?: 'inline' | 'gallery';
+  category_id?: 'all' | 'business' | 'editorial' | 'creative' | 'minimal';
+  step_index?: number;
+  step_count?: number;
   project_id: string;
 }
 

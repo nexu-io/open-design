@@ -204,8 +204,8 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
   return out;
 }
 
-// First parseable form in a message, used to surface the active discovery
-// form in the right-hand Questions tab instead of inline in the chat.
+// First parseable form in a message, used by callers that need to inspect the
+// active discovery form without duplicating the renderer's split logic.
 export function findFirstQuestionForm(
   input: string,
 ): { form: QuestionForm; raw: string } | null {
@@ -369,9 +369,9 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
  * {@link tryParseForm} it does not require valid, complete JSON: it reads the
  * title/id from the open tag's attrs (available the instant the tag streams in)
  * and extracts however many *complete* question objects have arrived so far.
- * This lets the Questions tab render a frame immediately and fill questions in
- * progressively as the model streams them, instead of flashing a skeleton and
- * then a finished table. Returns null only when no open tag is present.
+ * This lets the chat render a frame immediately and fill questions in
+ * progressively as the model streams them, instead of flashing raw JSON and
+ * then a finished form. Returns null only when no open tag is present.
  */
 export function parsePartialQuestionForm(input: string): QuestionForm | null {
   const m = OPEN_RE.exec(input);
