@@ -932,7 +932,16 @@ describe('ProjectView conversation run isolation', () => {
     expect(showCompletionNotification).not.toHaveBeenCalled();
   });
 
-  it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
+  it('treats a reloaded terminal Design run with file mutations as delivered when producedFiles is missing', async () => {
+    // Regression for #5753: a successful daemon run with file-mutation tool
+    // calls (Write/Edit/Delete) IS the delivery, even when the frontend
+    // never received the producedFiles list before the crash/reattach.
+    // Treating it as "no_result" surfaced a false-negative toast:
+    //   "finished without producing a deliverable project file"
+    // despite the files being correctly written on disk and the preview
+    // pane showing the result. The daemon's success verdict + tool mutation
+    // is the authoritative signal; missing producedFiles metadata is a
+    // client-side data-loss condition that should not downgrade the outcome.
     conversationAMessages = [
       {
         ...succeededAssistant,
@@ -966,26 +975,16 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => {
       const recoveredMessage = saveMessage.mock.calls
         .map((call) => call[2] as ChatMessage)
-        .find((message) => message.id === succeededAssistant.id && message.resultDeliveryState === 'no_result');
+        .find((message) => message.id === succeededAssistant.id && message.resultDeliveryState === 'delivered');
       expect(recoveredMessage).toMatchObject({
         runStatus: 'succeeded',
-        resultDeliveryState: 'no_result',
+        resultDeliveryState: 'delivered',
         producedFiles: [],
         traceObjectFiles: [],
       });
-      expect(recoveredMessage?.events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'status',
-            label: 'error',
-            code: 'ARTIFACT_NOT_FOUND',
-          }),
-        ]),
-      );
     });
-    expect(screen.getByTestId('chat-error').textContent).toMatch(
-      /finished without producing a deliverable project file/i,
-    );
+    // No chat-error shown: the daemon's success verdict means the file was
+    // written, even if producedFiles metadata is missing post-reattach (#5753).
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
