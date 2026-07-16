@@ -1,8 +1,9 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { promisify } from "node:util";
 
 import {
   APP_KEYS,
@@ -35,6 +36,7 @@ import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "HOME",
   "HTTP_PROXY",
@@ -329,6 +331,85 @@ function extractPort(url: string): string {
 // resolver and this PATH builder cannot drift again. See issue #442.
 const PACKAGED_POSIX_SYSTEM_BINS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
+const LOGIN_SHELL_PATH_MARKER = "_OPEN_DESIGN_PATH_";
+const LOGIN_SHELL_PATH_COMMAND =
+  `command printf '${LOGIN_SHELL_PATH_MARKER}%s${LOGIN_SHELL_PATH_MARKER}' "$PATH"; exit`;
+const LOGIN_SHELL_PATH_MAX_BUFFER = 256 * 1024;
+const LOGIN_SHELL_PATH_TIMEOUT_MS = 3_000;
+
+type MacosLoginShellExecOptions = {
+  encoding: "utf8";
+  env: NodeJS.ProcessEnv;
+  maxBuffer: number;
+  timeout: number;
+  windowsHide: true;
+};
+
+type MacosLoginShellExec = (
+  command: string,
+  args: string[],
+  options: MacosLoginShellExecOptions,
+) => Promise<{ stdout: string }>;
+
+export type MacosLoginShellPathOptions = {
+  basePath?: string;
+  env?: NodeJS.ProcessEnv;
+  exec?: MacosLoginShellExec;
+  platform?: NodeJS.Platform;
+};
+
+async function execMacosLoginShell(
+  command: string,
+  args: string[],
+  options: MacosLoginShellExecOptions,
+): Promise<{ stdout: string }> {
+  const { stdout } = await execFileAsync(command, args, options);
+  return { stdout };
+}
+
+/**
+ * Recover the user's PATH for a normally-launched macOS GUI app.
+ *
+ * Finder/LaunchServices does not inherit PATH changes made by shell startup
+ * files, so arbitrary npm prefixes can be invisible even though the same CLI
+ * works in Terminal. Only PATH is retained: profile chatter is ignored via a
+ * marker, and any timeout, oversized output, or shell failure falls back to
+ * the inherited value.
+ */
+export async function resolveMacosLoginShellPath(
+  input: MacosLoginShellPathOptions = {},
+): Promise<string> {
+  const env = input.env ?? process.env;
+  const basePath = input.basePath ?? env.PATH ?? "";
+  if ((input.platform ?? process.platform) !== "darwin") return basePath;
+
+  const shell = env.SHELL?.trim() || "/bin/zsh";
+  const run = input.exec ?? execMacosLoginShell;
+  try {
+    const { stdout } = await run(shell, ["-ilc", LOGIN_SHELL_PATH_COMMAND], {
+      encoding: "utf8",
+      env: {
+        ...env,
+        DISABLE_AUTO_UPDATE: "true",
+        ZSH_TMUX_AUTOSTART: "false",
+        ZSH_TMUX_AUTOSTARTED: "true",
+      },
+      maxBuffer: LOGIN_SHELL_PATH_MAX_BUFFER,
+      timeout: LOGIN_SHELL_PATH_TIMEOUT_MS,
+      windowsHide: true,
+    });
+    const markerStart = stdout.indexOf(LOGIN_SHELL_PATH_MARKER);
+    if (markerStart === -1) return basePath;
+    const pathStart = markerStart + LOGIN_SHELL_PATH_MARKER.length;
+    const markerEnd = stdout.indexOf(LOGIN_SHELL_PATH_MARKER, pathStart);
+    if (markerEnd === -1) return basePath;
+    const shellPath = stdout.slice(pathStart, markerEnd);
+    return shellPath.length > 0 ? shellPath : basePath;
+  } catch {
+    return basePath;
+  }
+}
+
 export function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): string {
   const candidates = [
     ...basePath.split(delimiter),
@@ -447,6 +528,7 @@ async function spawnSidecarChild(options: {
   entryPath: string;
   env: NodeJS.ProcessEnv;
   nodeCommand: string | null;
+  pathEnv: string;
   paths: PackagedNamespacePaths;
   runtime: SidecarRuntimeContext<SidecarStamp>;
 }): Promise<ManagedSidecarChild> {
@@ -481,7 +563,7 @@ async function spawnSidecarChild(options: {
       ),
       ...options.env,
       NODE_ENV: "production",
-      PATH: resolvePackagedPathEnv(),
+      PATH: options.pathEnv,
       ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
     stamp,
@@ -570,6 +652,13 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronUserDataRoot, { recursive: true });
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
+  // Headless packaged launches already inherit their invoking shell and should
+  // not source interactive startup files. Only the desktop runtime needs to
+  // recover the PATH omitted by macOS GUI launch services.
+  const basePath = options.requireDesktopAuth
+    ? await resolveMacosLoginShellPath()
+    : process.env.PATH ?? "";
+  const pathEnv = resolvePackagedPathEnv(basePath);
   const children: ManagedSidecarChild[] = [];
 
   try {
@@ -589,6 +678,7 @@ export async function startPackagedSidecars(
       }),
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
+      pathEnv,
       paths,
       runtime,
     });
@@ -620,6 +710,7 @@ export async function startPackagedSidecars(
       },
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
+      pathEnv,
       paths,
       runtime,
     });

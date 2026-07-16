@@ -27,6 +27,7 @@ import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-pro
 import {
   buildPackagedDaemonSpawnEnv,
   resolveDaemonStatusTimeoutMs,
+  resolveMacosLoginShellPath,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
   resolvePackagedPathEnv,
@@ -233,6 +234,80 @@ describe('packaged child Vite+ environment forwarding', () => {
       else process.env.VP_HOME = originalVpHome;
       rmSync(vpHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe('resolveMacosLoginShellPath', () => {
+  it('recovers an arbitrary npm bin from a noisy macOS login shell', async () => {
+    const customBin = '/Users/tester/programing-languages/node-v22.16.0/bin';
+    const inheritedPath = '/usr/bin:/bin';
+    const calls: Array<{
+      args: string[];
+      command: string;
+      options: {
+        env: NodeJS.ProcessEnv;
+        maxBuffer: number;
+        timeout: number;
+      };
+    }> = [];
+
+    const shellPath = await resolveMacosLoginShellPath({
+      basePath: inheritedPath,
+      env: {
+        HOME: '/Users/tester',
+        PATH: inheritedPath,
+        SHELL: '/bin/zsh',
+      },
+      exec: async (command, args, options) => {
+        calls.push({ command, args, options });
+        return {
+          stdout: `profile output\n_OPEN_DESIGN_PATH_${customBin}:/usr/local/bin:/usr/bin:/bin_OPEN_DESIGN_PATH_more profile output`,
+        };
+      },
+      platform: 'darwin',
+    });
+
+    expect(shellPath).toBe(`${customBin}:/usr/local/bin:/usr/bin:/bin`);
+    expect(resolvePackagedPathEnv(shellPath).split(delimiter)[0]).toBe(customBin);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: '/bin/zsh',
+      args: ['-ilc', expect.stringContaining('_OPEN_DESIGN_PATH_')],
+      options: {
+        env: {
+          DISABLE_AUTO_UPDATE: 'true',
+          ZSH_TMUX_AUTOSTART: 'false',
+          ZSH_TMUX_AUTOSTARTED: 'true',
+        },
+        maxBuffer: 256 * 1024,
+        timeout: 3_000,
+      },
+    });
+  });
+
+  it('falls back to the inherited PATH when the login-shell probe fails', async () => {
+    await expect(resolveMacosLoginShellPath({
+      basePath: '/usr/bin:/bin',
+      exec: async () => {
+        throw new Error('shell startup failed');
+      },
+      platform: 'darwin',
+    })).resolves.toBe('/usr/bin:/bin');
+  });
+
+  it('does not launch a login shell outside macOS', async () => {
+    let called = false;
+    const value = await resolveMacosLoginShellPath({
+      basePath: '/custom/bin:/usr/bin',
+      exec: async () => {
+        called = true;
+        return { stdout: '' };
+      },
+      platform: 'linux',
+    });
+
+    expect(value).toBe('/custom/bin:/usr/bin');
+    expect(called).toBe(false);
   });
 });
 
