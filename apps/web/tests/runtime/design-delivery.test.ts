@@ -41,6 +41,9 @@ describe('resolveDesignDeliveryOutcome', () => {
     // Requiring a *new* project file here surfaces the false-negative
     // "without producing a deliverable project file" toast when the user is
     // already looking at the freshly edited file in the preview pane.
+    //
+    // #5776 (PerishCode review): the mutation must have a non-error
+    // tool_result — a failed write/edit/delete must NOT be delivered.
     for (const attempt of [
       { kind: 'tool_use' as const, id: 'w-1', name: 'Write', input: { file_path: 'index.html' } },
       { kind: 'tool_use' as const, id: 'e-1', name: 'Edit', input: { file_path: 'index.html' } },
@@ -51,12 +54,62 @@ describe('resolveDesignDeliveryOutcome', () => {
           sessionMode: 'design',
           runStatus: 'succeeded',
           content: 'I finished the design.',
-          events: [attempt],
+          events: [
+            attempt,
+            { kind: 'tool_result', toolUseId: attempt.id, isError: false },
+          ],
           producedFileCount: 0,
           traceObjectFileCount: 0,
         }),
       ).toBe('delivered');
     }
+  });
+
+  it('treats a failed mutation turn as no_result, not delivered (#5776)', () => {
+    // PerishCode review: a turn that attempted to mutate files but every
+    // attempt errored must NOT be flipped to delivered by hasFileMutationToolUse.
+    // It must fall through to no_result, surfacing a retry affordance.
+    for (const attempt of [
+      { kind: 'tool_use' as const, id: 'w-2', name: 'Write', input: { file_path: 'index.html' } },
+      { kind: 'tool_use' as const, id: 'e-2', name: 'Edit', input: { file_path: 'index.html' } },
+      { kind: 'tool_use' as const, id: 'b-2', name: 'Bash', input: { command: 'rm stale.html' } },
+    ]) {
+      // With substantive text + a failed mutation → no_result (matcher is
+      // allMutationsFailed AND content; the report_only branch is intentionally
+      // skipped because an attempted-and-failed mutation is not the same as
+      // never trying — the user owes the agent a retry, not a pass).
+      expect(
+        resolveDesignDeliveryOutcome({
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          content: 'I tried but the tool errored.',
+          events: [
+            attempt,
+            { kind: 'tool_result', toolUseId: attempt.id, isError: true },
+          ],
+          producedFileCount: 0,
+          traceObjectFileCount: 0,
+        }),
+      ).toBe('no_result');
+    }
+  });
+
+  it('treats a mutation attempt with no tool_result yet as no_result (still running)', () => {
+    // While the tool call is in flight (no tool_result paired), deriveFileOps
+    // marks it "running" — neither a successful mutation nor a confirmed
+    // failure. The turn should not flip to delivered prematurely.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '',
+        events: [
+          { kind: 'tool_use', id: 'w-3', name: 'Write', input: { file_path: 'index.html' } },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('no_result');
   });
 
   it('does not accept an empty answer as a report-only result', () => {
