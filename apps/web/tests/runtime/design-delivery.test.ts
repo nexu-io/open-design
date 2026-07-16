@@ -96,6 +96,17 @@ describe('resolveDesignDeliveryOutcome', () => {
         events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
+        artifactCount: 1,
+      }),
+    ).toBe('delivered');
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
         persistenceSucceeded: true,
       }),
     ).toBe('delivered');
