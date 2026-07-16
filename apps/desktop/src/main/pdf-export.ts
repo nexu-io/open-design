@@ -44,9 +44,6 @@ export const DECK_PRINT_CSS = `
   .ppt-slide,
   .ppt-slide:not(.active) {
     display: flex !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    visibility: visible !important;
     flex: none !important;
     width: 1920px !important;
     height: 1080px !important;
@@ -61,6 +58,7 @@ export const DECK_PRINT_CSS = `
     /* Decks commonly show one slide at a time via opacity; without this the
        inactive slides print as blank pages. */
     opacity: 1 !important;
+    pointer-events: auto !important;
     visibility: visible !important;
     animation: none !important;
     transition: none !important;
