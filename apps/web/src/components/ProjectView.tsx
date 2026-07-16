@@ -3526,7 +3526,8 @@ export function ProjectView({
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
           spuriouslyFailedPending ||
-          recoverableGenericDisconnectFailed;
+          recoverableGenericDisconnectFailed ||
+          reconcilingHistoricalDelivery;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -3617,6 +3618,38 @@ export function ProjectView({
             );
             completedReattachRunsRef.current.add(runId);
           }
+          continue;
+        }
+        if (reconcilingHistoricalDelivery && isTerminalRunStatus(status.status)) {
+          // Durable terminal evidence is sufficient to repair a stale
+          // historical delivery verdict. Do not route this through content
+          // replay or SSE reattach: after restart the status log survives, but
+          // the in-memory event stream intentionally does not.
+          const deliveryContent =
+            textContentFromAgentEvents(message.events).trim() || message.content;
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: status.status,
+            content: deliveryContent,
+            events: message.events,
+            producedFileCount: message.producedFiles?.length ?? 0,
+            traceObjectFileCount: message.traceObjectFiles?.length ?? 0,
+            artifactCount: status.artifactCount,
+          });
+          if (deliveryOutcome === 'delivered') {
+            setError(null);
+            updateMessageById(
+              message.id,
+              (prev) =>
+                applyDesignDeliveryOutcome(
+                  { ...prev, content: deliveryContent },
+                  deliveryOutcome,
+                ),
+              true,
+              { telemetryFinalized: true },
+            );
+          }
+          completedReattachRunsRef.current.add(runId);
           continue;
         }
         // When the daemon authoritative status is 'failed', the run ended in a
@@ -9306,7 +9339,6 @@ export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (message.role !== 'assistant') return false;
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
-  if (shouldReconcileHistoricalDesignDelivery(message)) return true;
   // A daemon can persist terminal success before the browser finishes its
   // project-file refresh. Reattach once even when prose already exists so the
   // delivery invariant can confirm a file or downgrade the turn after reload.

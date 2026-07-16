@@ -774,9 +774,25 @@ describe('run event log persistence', () => {
     });
   });
 
-  it('does not read missing, malformed, or traversal-shaped historical run ids', () => {
+  it('does not read missing, malformed, symlinked, or traversal-shaped historical evidence', () => {
     const runs = createRunsWithLog(tmpDir);
     expect(runs.readPersistedStatus('missing-run')).toBeNull();
+    const malformedDir = path.join(tmpDir, 'malformed-run');
+    fs.mkdirSync(malformedDir, { recursive: true });
+    fs.writeFileSync(path.join(malformedDir, 'events.jsonl'), '{not-json}\n');
+    expect(runs.readPersistedStatus('malformed-run')).toBeNull();
+    if (process.platform !== 'win32') {
+      const externalLog = path.join(tmpDir, 'external-events.jsonl');
+      fs.writeFileSync(externalLog, JSON.stringify({
+        event: 'end',
+        data: { status: 'succeeded', artifactCount: 1 },
+        timestamp: Date.now(),
+      }));
+      const symlinkDir = path.join(tmpDir, 'symlink-run');
+      fs.mkdirSync(symlinkDir, { recursive: true });
+      fs.symlinkSync(externalLog, path.join(symlinkDir, 'events.jsonl'));
+      expect(runs.readPersistedStatus('symlink-run')).toBeNull();
+    }
     expect(runs.readPersistedStatus('../outside')).toBeNull();
     expect(runs.readPersistedStatus('')).toBeNull();
   });

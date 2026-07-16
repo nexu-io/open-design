@@ -989,7 +989,7 @@ describe('ProjectView conversation run isolation', () => {
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
-  it('repairs a historical false no-result verdict from durable artifact evidence', async () => {
+  it('repairs historical no-result from status-only evidence without text-event replay', async () => {
     conversationAMessages = [
       {
         ...succeededAssistant,
@@ -997,7 +997,12 @@ describe('ProjectView conversation run isolation', () => {
         sessionMode: 'design',
         resultDeliveryState: 'no_result',
         events: [
-          { kind: 'text', text: 'I updated the existing design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
           {
             kind: 'status',
             label: 'error',
@@ -1031,6 +1036,7 @@ describe('ProjectView conversation run isolation', () => {
             && message.resultDeliveryState === 'delivered',
         );
       expect(repaired).toBeTruthy();
+      expect(repaired?.content).toBe('I updated the existing design.');
       expect(repaired?.events).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
