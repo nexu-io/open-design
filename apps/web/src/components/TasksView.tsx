@@ -275,6 +275,87 @@ function renderPerformanceOverviewMetricCell(cell: PerformanceOverviewMetricCell
   );
 }
 
+// CW-06 发布排期议程：只读聚合。仅读取既有 Release 状态，不新增 API，不含任何写操作。
+type ReleaseSchedulePlatformFilter = 'all' | CreatorReleasePlatform;
+const RELEASE_SCHEDULE_PLATFORM_FILTERS: ReleaseSchedulePlatformFilter[] = [
+  'all',
+  'bilibili',
+  'youtube',
+  'xiaohongshu',
+  'other',
+];
+const RELEASE_SCHEDULE_PLATFORM_FILTER_LABELS: Record<ReleaseSchedulePlatformFilter, string> = {
+  all: 'All',
+  bilibili: 'Bilibili',
+  youtube: 'YouTube',
+  xiaohongshu: 'Xiaohongshu',
+  other: 'Other',
+};
+
+type ReleaseScheduleTimeRange = 'all' | 'next7' | 'next30' | 'overdue';
+const RELEASE_SCHEDULE_TIME_RANGES: Array<{ key: ReleaseScheduleTimeRange; label: string }> = [
+  { key: 'all', label: 'All scheduled' },
+  { key: 'next7', label: 'Next 7 days' },
+  { key: 'next30', label: 'Next 30 days' },
+  { key: 'overdue', label: 'Overdue' },
+];
+
+type ReleaseScheduleItem = {
+  projectId: string;
+  projectName: string;
+  releaseId: string;
+  releaseTitle: string;
+  platform: CreatorReleasePlatform;
+  contentTitle: string;
+  status: CreatorReleaseStatus;
+  scheduledAt: string; // ISO 8601
+};
+
+// 归一化平台：无法归入前三项的统一归入 Other（与 CW-05 一致）。
+function normalizeReleaseSchedulePlatform(
+  platform: CreatorReleasePlatform,
+): CreatorReleasePlatform {
+  return platform === 'bilibili' || platform === 'youtube' || platform === 'xiaohongshu'
+    ? platform
+    : 'other';
+}
+
+// 本地日期分组键（按浏览器本地时区的 YYYY-MM-DD）。同一本地日的排期归入同一组。
+function releaseScheduleLocalDateKey(iso: string): string {
+  const date = new Date(iso);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// 本地时区下的人类可读日期标签（仅日期，用于分组标题）。
+function formatReleaseScheduleDateLabel(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeZone }).format(new Date(iso));
+}
+
+// 本地时区下的人类可读日期时间（用于每条排期项）。
+function formatReleaseScheduleLocalTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone,
+  }).format(new Date(iso));
+}
+
+// scheduledAt 升序；相同时间用 release 标题、release id 作稳定次级排序。不信任 API 原顺序。
+function compareReleaseScheduleItems(left: ReleaseScheduleItem, right: ReleaseScheduleItem): number {
+  if (left.scheduledAt !== right.scheduledAt) return left.scheduledAt < right.scheduledAt ? -1 : 1;
+  if (left.releaseTitle !== right.releaseTitle) return left.releaseTitle < right.releaseTitle ? -1 : 1;
+  if (left.releaseId !== right.releaseId) return left.releaseId < right.releaseId ? -1 : 1;
+  return 0;
+}
+
+// 逾期判定：scheduledAt 早于给定 now（绝对时间比较，与时区显示无关）。
+function isReleaseScheduleOverdue(iso: string, now: Date): boolean {
+  return new Date(iso).getTime() < now.getTime();
+}
+
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
   | { kind: 'edit'; routine: Routine }
@@ -286,6 +367,8 @@ interface Props {
   designTemplates?: SkillSummary[];
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
+  // CW-06：注入当前时间以便测试确定性断言；不传则使用组件挂载时的真实本地时间。
+  now?: Date;
 }
 
 function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate> {
@@ -614,7 +697,7 @@ function creatorRetryAssistantMessageKey(projectId: string): string {
   return `od:creator-retry-assistant:${projectId}`;
 }
 
-export function TasksView({ projects: entryProjects = [], skills = [], designTemplates = [], connectors = [] }: Props) {
+export function TasksView({ projects: entryProjects = [], skills = [], designTemplates = [], connectors = [], now }: Props) {
   const t = useT();
   const analytics = useAnalytics();
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
@@ -681,6 +764,9 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   // CW-05 发布表现总览：平台筛选与排序仅影响视图，不修改底层数据。
   const [performanceOverviewPlatformFilter, setPerformanceOverviewPlatformFilter] = useState<PerformanceOverviewPlatformFilter>('all');
   const [performanceOverviewSort, setPerformanceOverviewSort] = useState<PerformanceOverviewSortKey>('latest');
+  // CW-06 发布排期议程：平台筛选与时间范围筛选仅影响视图，不修改底层数据。
+  const [releaseSchedulePlatformFilter, setReleaseSchedulePlatformFilter] = useState<ReleaseSchedulePlatformFilter>('all');
+  const [releaseScheduleTimeRange, setReleaseScheduleTimeRange] = useState<ReleaseScheduleTimeRange>('all');
   const [creatorContentTaskId, setCreatorContentTaskId] = useState('');
   const [creatorStoryboardMediaAssetId, setCreatorStoryboardMediaAssetId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -857,6 +943,98 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     }
     return unavailable.size;
   }, [entryProjects, creatorReleaseProjectData, creatorPerformanceProjectData]);
+
+  // CW-06 发布排期议程：当前时间（可被测试注入）与浏览器本地时区。
+  const releaseScheduleNow = useMemo(() => now ?? new Date(), [now]);
+  const releaseScheduleTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
+  // CW-06 发布排期议程：跨已加载项目聚合所有「有 scheduledAt 且状态为 draft/ready」的 release。
+  // 项目级失败隔离：某项目 Release API 失败 → 该项目整体不进入议程（禁止不完整聚合）。
+  // Content 缺失不排除 release，仅回退显示 contentId。
+  const releaseScheduleItems = useMemo<ReleaseScheduleItem[]>(() => {
+    const items: ReleaseScheduleItem[] = [];
+    for (const project of entryProjects) {
+      const releaseState = creatorReleaseProjectData.find((value) => value.projectId === project.id);
+      if (!releaseState || releaseState.failed) continue;
+      const contentState = creatorContentProjectData.find((value) => value.projectId === project.id);
+      const contentProjects = contentState && !contentState.failed ? contentState.data.contentProjects : [];
+      for (const release of releaseState.data.releasePackages) {
+        // 进入条件：有合法 scheduledAt 且 status 为 draft 或 ready；published/archived/无 scheduledAt 不进入。
+        if (release.status !== 'draft' && release.status !== 'ready') continue;
+        if (!release.scheduledAt) continue;
+        // 非法 scheduledAt（如 "not-a-date"）→ Invalid Date → getTime() 非有限，必须忽略，
+        // 否则会出现 NaN 时间范围误判或 "Invalid Date" 分组。
+        const scheduledMs = new Date(release.scheduledAt).getTime();
+        if (!Number.isFinite(scheduledMs)) continue;
+        const contentEntry = contentProjects.find((candidate) => candidate.id === release.contentId);
+        const contentTitle = contentEntry ? contentEntry.title : release.contentId;
+        items.push({
+          projectId: project.id,
+          projectName: project.name,
+          releaseId: release.id,
+          releaseTitle: release.title,
+          platform: release.platform,
+          contentTitle,
+          status: release.status,
+          scheduledAt: release.scheduledAt,
+        });
+      }
+    }
+    return items;
+  }, [entryProjects, creatorReleaseProjectData, creatorContentProjectData]);
+
+  // 平台筛选 + 时间范围筛选 + 排序仅作用于视图副本，不修改底层聚合结果。
+  const releaseScheduleVisibleItems = useMemo<ReleaseScheduleItem[]>(() => {
+    const nowMs = releaseScheduleNow.getTime();
+    const window7 = nowMs + 7 * 24 * 60 * 60 * 1000;
+    const window30 = nowMs + 30 * 24 * 60 * 60 * 1000;
+    const filtered = releaseScheduleItems.filter((item) => {
+      if (releaseSchedulePlatformFilter !== 'all'
+        && normalizeReleaseSchedulePlatform(item.platform) !== releaseSchedulePlatformFilter) {
+        return false;
+      }
+      const scheduledMs = new Date(item.scheduledAt).getTime();
+      let inRange = true;
+      if (releaseScheduleTimeRange === 'overdue') inRange = scheduledMs < nowMs;
+      else if (releaseScheduleTimeRange === 'next7') inRange = scheduledMs >= nowMs && scheduledMs < window7;
+      else if (releaseScheduleTimeRange === 'next30') inRange = scheduledMs >= nowMs && scheduledMs < window30;
+      // 'all' → inRange 保持 true
+      return inRange;
+    });
+    return [...filtered].sort(compareReleaseScheduleItems);
+  }, [releaseScheduleItems, releaseSchedulePlatformFilter, releaseScheduleTimeRange, releaseScheduleNow]);
+
+  // 按本地日期分组（可见项已按 scheduledAt 升序，故分组天然按日期升序）。
+  const releaseScheduleGroups = useMemo(() => {
+    const groups: Array<{ key: string; label: string; items: ReleaseScheduleItem[] }> = [];
+    for (const item of releaseScheduleVisibleItems) {
+      const key = releaseScheduleLocalDateKey(item.scheduledAt);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.items.push(item);
+      } else {
+        groups.push({
+          key,
+          label: formatReleaseScheduleDateLabel(item.scheduledAt, releaseScheduleTimeZone),
+          items: [item],
+        });
+      }
+    }
+    return groups;
+  }, [releaseScheduleVisibleItems, releaseScheduleTimeZone]);
+
+  // CW-06 失败降级：仅当某项目的 Release 状态已加载且 failed === true 时计入。
+  // 数据尚未加载（release 状态还不存在）时不得误报失败。同一项目不重复计数（Set 去重）。
+  const releaseScheduleUnavailableCount = useMemo<number>(() => {
+    const unavailable = new Set<string>();
+    for (const project of entryProjects) {
+      const releaseState = creatorReleaseProjectData.find((value) => value.projectId === project.id);
+      // release 状态尚未加载 → 跳过，避免把「还在加载」误报为「失败」。
+      if (!releaseState) continue;
+      if (releaseState.failed) unavailable.add(project.id);
+    }
+    return unavailable.size;
+  }, [entryProjects, creatorReleaseProjectData]);
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -2497,6 +2675,91 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
               </div>
             )}
           </section>
+
+          <section className="creator-release-schedule" aria-labelledby="creator-release-schedule-title">
+            <div className="creator-release-schedule__head">
+              <div>
+                <h3 id="creator-release-schedule-title" className="creator-release-schedule__title">Release schedule</h3>
+                <span className="creator-release-schedule__meta">
+                  Scheduled draft &amp; ready releases across loaded projects (read-only) · Time zone: {releaseScheduleTimeZone}
+                </span>
+              </div>
+              <div className="creator-release-schedule__controls">
+                <div className="creator-release-schedule__filter" role="group" aria-label="Release schedule platform filter">
+                  {RELEASE_SCHEDULE_PLATFORM_FILTERS.map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className="creator-release-schedule__filter-button"
+                      aria-pressed={releaseSchedulePlatformFilter === filter}
+                      onClick={() => setReleaseSchedulePlatformFilter(filter)}
+                    >
+                      {RELEASE_SCHEDULE_PLATFORM_FILTER_LABELS[filter]}
+                    </button>
+                  ))}
+                </div>
+                <div className="creator-release-schedule__filter creator-release-schedule__timerange" role="group" aria-label="Release schedule time range">
+                  {RELEASE_SCHEDULE_TIME_RANGES.map((range) => (
+                    <button
+                      key={range.key}
+                      type="button"
+                      className="creator-release-schedule__filter-button"
+                      aria-pressed={releaseScheduleTimeRange === range.key}
+                      onClick={() => setReleaseScheduleTimeRange(range.key)}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {releaseScheduleUnavailableCount > 0 ? (
+              <p
+                className="creator-release-schedule__unavailable"
+                role="status"
+                data-testid="creator-release-schedule-unavailable"
+              >
+                {releaseScheduleUnavailableCount === 1
+                  ? 'Release schedule unavailable for 1 project.'
+                  : `Release schedule unavailable for ${releaseScheduleUnavailableCount} projects.`}
+              </p>
+            ) : null}
+            {releaseScheduleVisibleItems.length === 0 ? (
+              <p className="creator-release-schedule__empty">
+                {releaseScheduleUnavailableCount > 0
+                  ? 'No available scheduled releases to show.'
+                  : 'No scheduled releases to show yet.'}
+              </p>
+            ) : (
+              <div className="creator-release-schedule__agenda">
+                {releaseScheduleGroups.map((group) => (
+                  <div key={group.key} className="creator-release-schedule__group" data-testid="creator-release-schedule-group" data-group-date={group.key}>
+                    <h4 className="creator-release-schedule__group-date">{group.label}</h4>
+                    <ul className="creator-release-schedule__list">
+                      {group.items.map((item) => (
+                        <li key={item.releaseId} className="creator-release-schedule__item" data-release-id={item.releaseId}>
+                          <div className="creator-release-schedule__item-main">
+                            <span className="creator-release-schedule__release-title">{item.releaseTitle}</span>
+                            <span className="creator-release-schedule__release-project">{item.projectName}</span>
+                          </div>
+                          <div className="creator-release-schedule__item-meta">
+                            <span className="creator-release-schedule__platform">{item.platform}</span>
+                            <span className="creator-release-schedule__content">{item.contentTitle}</span>
+                            <span className={`creator-release-schedule__status creator-release-schedule__status--${item.status}`}>{item.status}</span>
+                            <span className="creator-release-schedule__time">{formatReleaseScheduleLocalTime(item.scheduledAt, releaseScheduleTimeZone)}</span>
+                            {isReleaseScheduleOverdue(item.scheduledAt, releaseScheduleNow) ? (
+                              <span className="creator-release-schedule__overdue">Overdue</span>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
         </section>
       ) : null}
       {surface === 'automations' ? (
