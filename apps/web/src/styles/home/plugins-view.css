@@ -715,6 +715,11 @@
   color: var(--accent);
 }
 
+.plugins-import-modal__choice:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .plugins-import-modal__choice-icon {
   display: inline-flex;
   flex: 0 0 auto;

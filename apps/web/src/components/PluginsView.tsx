@@ -183,11 +183,17 @@ export function PluginsView({
 
   async function finishImport(
     work: () => Promise<PluginInstallOutcome>,
-    targetTab: PluginsTab = 'installed',
+    {
+      targetTab = 'installed',
+      showFailureNotice = true,
+    }: {
+      targetTab?: PluginsTab;
+      showFailureNotice?: boolean;
+    } = {},
   ) {
     setNotice(null);
     const outcome = await work();
-    setNotice(outcome);
+    if (outcome.ok || showFailureNotice) setNotice(outcome);
     if (outcome.ok) {
       setImportOpen(false);
       await refresh();
@@ -287,7 +293,7 @@ export function PluginsView({
     try {
       const outcome = await finishImport(
         () => installPluginSource(plugin.installSource ?? plugin.entry.name),
-        'installed',
+        { targetTab: 'installed' },
       );
       if (outcome.ok) setAvailableDetails(null);
     } finally {
@@ -616,9 +622,15 @@ export function PluginsView({
       {importOpen ? (
         <PluginImportModal
           onClose={() => setImportOpen(false)}
-          onInstallSource={(source) => finishImport(() => installPluginSource(source))}
-          onUploadZip={(file) => finishImport(() => uploadPluginZip(file))}
-          onUploadFolder={(files) => finishImport(() => uploadPluginFolder(files))}
+          onInstallSource={(source) =>
+            finishImport(() => installPluginSource(source), { showFailureNotice: false })
+          }
+          onUploadZip={(file) =>
+            finishImport(() => uploadPluginZip(file), { showFailureNotice: false })
+          }
+          onUploadFolder={(files) =>
+            finishImport(() => uploadPluginFolder(files), { showFailureNotice: false })
+          }
         />
       ) : null}
     </section>
@@ -819,7 +831,10 @@ function Notice({
   const warnings = 'warnings' in outcome ? outcome.warnings : [];
   const log = 'log' in outcome ? outcome.log : [];
   return (
-    <div className={`plugins-view__notice${outcome.ok ? ' is-success' : ' is-error'}`} role="status">
+    <div
+      className={`plugins-view__notice${outcome.ok ? ' is-success' : ' is-error'}`}
+      role={outcome.ok ? 'status' : 'alert'}
+    >
       <div>{outcome.message}</div>
       {warnings.length > 0 ? (
         <div className="plugins-view__notice-sub">
@@ -1560,14 +1575,17 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
+  const [importError, setImportError] = useState<PluginInstallOutcome | null>(null);
 
   function selectKind(next: ImportKind) {
+    if (working) return;
     trackPluginImportModalClick(analytics.track, {
       page_name: 'plugins',
       area: 'import_modal',
       element: 'source_tab',
       import_source: next,
     });
+    setImportError(null);
     setKind(next);
   }
 
@@ -1579,6 +1597,7 @@ function PluginImportModal({
       import_source: kind,
     });
     setWorking(true);
+    setImportError(null);
     try {
       let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
@@ -1597,6 +1616,7 @@ function PluginImportModal({
           result: outcome.ok ? 'success' : 'failed',
           ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
         });
+        if (!outcome.ok) setImportError(outcome);
       }
     } finally {
       setWorking(false);
@@ -1635,6 +1655,7 @@ function PluginImportModal({
         <nav className="plugins-import-modal__tabs" aria-label="Import source">
           <ImportChoice
             active={kind === 'github'}
+            disabled={working}
             icon="github"
             title="From GitHub"
             body="Install github:owner/repo paths."
@@ -1642,6 +1663,7 @@ function PluginImportModal({
           />
           <ImportChoice
             active={kind === 'zip'}
+            disabled={working}
             icon="upload"
             title="Upload zip"
             body="Upload a plugin archive."
@@ -1649,6 +1671,7 @@ function PluginImportModal({
           />
           <ImportChoice
             active={kind === 'folder'}
+            disabled={working}
             icon="folder"
             title="Upload folder"
             body="Upload a plugin directory."
@@ -1664,7 +1687,10 @@ function PluginImportModal({
                 <input
                   id="plugin-source"
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    setImportError(null);
+                  }}
                   placeholder="github:owner/repo@main/plugins/my-plugin"
                   disabled={working}
                 />
@@ -1691,7 +1717,10 @@ function PluginImportModal({
               accept=".zip,application/zip"
               working={working}
               fileLabel={zipFile?.name ?? 'No zip selected'}
-              onChange={(files) => setZipFile(files[0] ?? null)}
+              onChange={(files) => {
+                setZipFile(files[0] ?? null);
+                setImportError(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
@@ -1708,12 +1737,16 @@ function PluginImportModal({
                   : 'No folder selected'
               }
               folder
-              onChange={setFolderFiles}
+              onChange={(files) => {
+                setFolderFiles(files);
+                setImportError(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
           ) : null}
 
+          {importError && !importError.ok ? <Notice outcome={importError} /> : null}
         </div>
 
         <footer className="plugins-import-modal__foot">
@@ -1743,12 +1776,14 @@ function PluginImportModal({
 
 function ImportChoice({
   active,
+  disabled,
   icon,
   title,
   body,
   onClick,
 }: {
   active: boolean;
+  disabled: boolean;
   icon: 'github' | 'upload' | 'folder';
   title: string;
   body: string;
@@ -1758,6 +1793,7 @@ function ImportChoice({
     <button
       type="button"
       className={`plugins-import-modal__choice${active ? ' is-active' : ''}`}
+      disabled={disabled}
       onClick={onClick}
     >
       <span className="plugins-import-modal__choice-icon" aria-hidden>

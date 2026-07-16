@@ -13,6 +13,7 @@ import {
   refreshPluginMarketplace,
   removePluginMarketplace,
   setPluginMarketplaceTrust,
+  type PluginInstallOutcome,
   type PluginShareProjectOutcome,
   uploadPluginFolder,
   uploadPluginZip,
@@ -711,6 +712,73 @@ describe('PluginsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
     await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledWith([folderFile]));
     expect(await screen.findByText('Installed Folder Plugin.')).toBeTruthy();
+  });
+
+  it('shows failed folder imports only inside the import modal', async () => {
+    mockedUploadPluginFolder.mockResolvedValueOnce({
+      ok: false,
+      warnings: [],
+      log: [],
+      message: 'Plugin folder contains no SKILL.md or open-design.json.',
+    });
+
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload folder/i }));
+    const folderFile = new File(['not a plugin'], 'notes.txt', { type: 'text/plain' });
+    fireEvent.change(screen.getByTestId('plugins-folder-input'), {
+      target: { files: [folderFile] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledWith([folderFile]));
+    const dialog = screen.getByRole('dialog', { name: 'Import a plugin' });
+    const inlineError = await within(dialog).findByText(
+      'Plugin folder contains no SKILL.md or open-design.json.',
+    );
+    expect(screen.getAllByText('Plugin folder contains no SKILL.md or open-design.json.'))
+      .toEqual([inlineError]);
+
+    const replacement = new File(['{}'], 'open-design.json', { type: 'application/json' });
+    fireEvent.change(screen.getByTestId('plugins-folder-input'), {
+      target: { files: [replacement] },
+    });
+    expect(within(dialog).queryByText('Plugin folder contains no SKILL.md or open-design.json.'))
+      .toBeNull();
+  });
+
+  it('locks source switching while an import request is pending', async () => {
+    let resolveImport: ((outcome: PluginInstallOutcome) => void) | undefined;
+    mockedInstallPluginSource.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveImport = resolve;
+      }),
+    );
+
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Import a plugin' });
+    fireEvent.change(within(dialog).getByLabelText('GitHub, archive, or marketplace source'), {
+      target: { value: 'github:example/missing-plugin' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => expect(mockedInstallPluginSource)
+      .toHaveBeenCalledWith('github:example/missing-plugin'));
+    const zipChoice = within(dialog).getByRole('button', { name: /upload zip/i });
+    await waitFor(() => expect(zipChoice.getAttribute('disabled')).not.toBeNull());
+    fireEvent.click(zipChoice);
+    expect(within(dialog).getByLabelText('GitHub, archive, or marketplace source')).toBeTruthy();
+
+    resolveImport?.({
+      ok: false,
+      warnings: [],
+      log: [],
+      message: 'GitHub import failed.',
+    });
+    expect(await within(dialog).findByText('GitHub import failed.')).toBeTruthy();
   });
 
   it('confirms a plugin share action before starting the GitHub repo task', async () => {
