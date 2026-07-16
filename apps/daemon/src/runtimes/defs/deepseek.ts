@@ -37,6 +37,6 @@ export const deepseekAgentDef = {
       return args;
     },
     promptViaStdin: true,
-    promptInputFormat: 'stream-json',
+    promptInputFormat: 'deepseek-stream-json',
     streamFormat: 'claude-stream-json', // We changed this from deepseek to claude
 } satisfies RuntimeAgentDef;
