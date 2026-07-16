@@ -45,6 +45,24 @@ cli
   });
 
 cli
+  .command("prepare-release-note", "Discover and validate release note sources")
+  .action(async () => {
+    await import("./release-note/prepare.ts");
+  });
+
+cli
+  .command("publish-release-note", "Publish immutable release note content")
+  .action(async () => {
+    await import("./release-note/publish.ts");
+  });
+
+cli
+  .command("verify-release-note", "Verify a release note publication")
+  .action(async () => {
+    await import("./release-note/verify.ts");
+  });
+
+cli
   .command("publish-metadata", "Publish combined release metadata")
   .action(async () => {
     await import("./storage/publish-metadata.ts");

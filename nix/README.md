@@ -241,19 +241,18 @@ installing the workspace.
 
 ## CI
 
-`.github/workflows/ci.yml` owns Nix validation through the required
-`Validate workspace` gate. Pull requests run `nix flake check` only when they
-touch Nix inputs, daemon/web Nix build closures, or generated hash maintenance
-workflows. Merge queue and manual full CI runs execute the full Nix path before
-merge. The flake also filters each derivation down to only the workspace
-packages it actually installs, so unrelated package/tool changes stay off the
-slower Nix path and do not churn the other derivation's pnpm store hash.
+Nix validation is a **standalone** workflow (`.github/workflows/nix.yml`), not
+part of core merge validation (`ci.yml` / `Validate workspace` / merge queue).
+It runs `nix flake check` on pull requests and `main` pushes that touch flake,
+lock, or `nix/**` inputs (plus manual `workflow_dispatch`).
 
-When a PR run fails because `nix/pnpm-deps.nix` is stale, the CI job also
-tries to regenerate a hash-only patch:
+Refresh a stale `nix/pnpm-deps.nix` locally:
 
-- same-repo PRs get a bot-authored commit pushed back to the PR branch when
-  the generated patch only touches `nix/pnpm-deps.nix`;
-- fork PRs get a PR comment plus a workflow artifact containing the patch;
-- the failing run still stays red until the generated patch lands and a
-  fresh validation run passes.
+```bash
+pnpm nix:update-hash
+nix flake check --print-build-logs --keep-going
+```
+
+The flake filters each derivation down to only the workspace packages it
+actually installs, so unrelated package/tool changes stay off the slower Nix
+path and do not churn the other derivation's pnpm store hash.

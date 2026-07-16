@@ -284,4 +284,27 @@ describe('BYOK draft validation', () => {
       }),
     ).toEqual({ model: 'provider-model', source: 'provider_default' });
   });
+
+  it('skips disabled provider models when choosing an automatic preference', () => {
+    expect(
+      resolveByokModelPreference({
+        currentModel: '',
+        accountModels: [
+          { id: 'disabled-model', label: 'Disabled model', enabled: false },
+          { id: 'enabled-model', label: 'Enabled model' },
+        ],
+        providerDefaultModel: 'provider-model',
+      }),
+    ).toEqual({ model: 'enabled-model', source: 'account' });
+
+    expect(
+      resolveByokModelPreference({
+        currentModel: '',
+        accountModels: [
+          { id: 'disabled-default', label: 'Disabled default', enabled: false },
+        ],
+        providerDefaultModel: 'disabled-default',
+      }),
+    ).toEqual({ model: '', source: 'empty' });
+  });
 });

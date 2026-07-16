@@ -47,17 +47,59 @@ export function writeStoredSortOrder(order: PluginSortOrder): void {
   }
 }
 
-// Newest-first ordering. `updatedAt` moves on reinstall/upgrade so it is
-// the freshness signal; `installedAt` breaks ties for records written in
-// the same batch. The sort is stable, so records with identical
-// timestamps (e.g. a bundled catalog seeded in one transaction) keep
-// their incoming visual-appeal order instead of degrading to raw
-// daemon order.
+// The manifest's `publishedAt` is the shipped publication date. It is the
+// only recency signal that survives a fresh install: the local
+// installed-record timestamps are written when THIS machine seeds its
+// database, so a first boot (or an upgrade that re-stamps the catalog)
+// stamps the whole bundled catalog milliseconds apart in folder-walk
+// order — "newest" would otherwise show reverse walk order (roughly
+// reverse-alphabetical), not publication recency (#1457).
+//
+// Catalog-only: for a plugin the user installed themselves (github /
+// local / marketplace / ...), "newest" means install recency, and a
+// third-party manifest may carry any `publishedAt` value — so only
+// bundled records take their freshness from it.
+function publishedAtMs(record: InstalledPluginRecord): number | null {
+  if (record.sourceKind !== 'bundled') return null;
+  const raw = record.manifest?.publishedAt;
+  if (typeof raw !== 'string') return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// Newest-first ordering. Freshness is the manifest publication date for
+// bundled catalog records that ship one, else `updatedAt` (which moves on
+// install/reinstall/upgrade — the right signal for user-installed
+// plugins).
+//
+// Ties: when BOTH records ship the same usable `publishedAt` (one catalog
+// release stamps whole batches — hundreds of manifests — with a single
+// date), local `updatedAt`/`installedAt` carry no publication signal: a
+// fresh install writes them milliseconds apart in folder-walk order, so
+// consulting them would reshuffle every batch per machine (#1457). The
+// incoming visual-appeal ranking is the shipped within-batch order, so
+// same-publication records keep their incoming position. Local
+// timestamps break ties only when at least one side has no usable
+// `publishedAt`, where local write recency is the best signal left.
 export function sortByNewest<T extends InstalledPluginRecord>(
   records: readonly T[],
 ): T[] {
-  const annotated = records.map((record, idx) => ({ record, idx }));
+  const annotated = records.map((record, idx) => {
+    const published = publishedAtMs(record);
+    return {
+      record,
+      idx,
+      published,
+      freshness: published ?? record.updatedAt,
+    };
+  });
   annotated.sort((a, b) => {
+    if (b.freshness !== a.freshness) {
+      return b.freshness - a.freshness;
+    }
+    if (a.published !== null && b.published !== null) {
+      return a.idx - b.idx;
+    }
     if (b.record.updatedAt !== a.record.updatedAt) {
       return b.record.updatedAt - a.record.updatedAt;
     }

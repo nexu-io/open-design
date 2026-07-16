@@ -1,16 +1,34 @@
 ---
 name: html-ppt-tech-sharing
-description: Conference / internal tech-talk deck — GitHub-dark, JetBrains Mono, terminal code blocks, agenda + Q&A pages. Use for engineering presentations, internal sharing sessions, conference talks, and code-heavy walkthroughs.
+en_name: "Give an Engineering Tech Talk like a Staff Developer-Advocate"
+zh_name: "像 Staff DevRel 一样做工程分享"
+description: |
+  Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
+en_description: |
+  Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.
+zh_description: |
+  像 Staff DevRel 一样做工程分享——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "ai-literacy"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-tech-sharing"
 triggers:
-  - "tech sharing"
-  - "tech talk"
-  - "技术分享"
-  - "engineering talk"
-  - "conference talk"
-  - "dev talk"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai-literacy"
+  - "Give an Engineering Tech Talk like a Staff Developer-Advocate"
+  - "像 Staff DevRel 一样做工程分享"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: engineering
   featured: 22
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -20,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "帮我用 html-ppt-tech-sharing 模板做一份 8 页的技术分享 PPT。先确认：分享主题、目标听众（同事 / 社区 / 客户）、要不要包含代码片段和 benchmark。GitHub 暗色主题 + JetBrains Mono，agenda + Q&A 页备好。"
+  category: "ai-literacy"
+  scenario: "ai"
+  example_prompt: "Create \"Give an Engineering Tech Talk like a Staff Developer-Advocate\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Audience: engineers, dev community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · Tech Sharing
 

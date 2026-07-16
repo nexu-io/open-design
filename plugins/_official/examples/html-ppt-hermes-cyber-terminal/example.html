@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hermes Cyber Terminal</title>
+<title>Run a BYOK Model-Choice Session like an Applied-AI Engineer - AI literacy</title>
 <style>/* html-ppt :: webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500&display=swap');
 </style>
@@ -243,16 +243,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-vignette"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>~/open-design · zsh · 118x42 · 01:37:04</div></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>~/od-byok-session · zsh · 118x42 · 01:37:04</div></div>
     <div style="margin:auto 0">
-      <p class="hc-prompt">od --version</p>
-      <h1 class="hc-h1" style="font-size:104px">OPEN<br>DESIGN<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">An open-source, local, agent-driven design platform.<br>From idea to prototypes, websites, slides, and HTML video — the entire product design workflow, on your own machine.</p>
+      <p class="hc-prompt">od model list --byok</p>
+      <h1 class="hc-h1" style="font-size:96px">BYOK<br>SESSION<span class="hc-cursor"></span></h1>
+      <p class="hc-lede">A hands-on walkthrough for choosing and wiring your own model.<br>The cost, quality, and routing decisions an applied-AI engineer has to make before shipping — run live, not slideware.</p>
       <div style="margin-top:26px">
-        <span class="hc-tag">local-first</span>
         <span class="hc-tag">byok</span>
-        <span class="hc-tag amber">apache-2.0</span>
-        <span class="hc-tag red">no-signup</span>
+        <span class="hc-tag">multi-model-routing</span>
+        <span class="hc-tag amber">cost-vs-quality</span>
+        <span class="hc-tag red">hands-on</span>
       </div>
     </div>
     <div class="hc-footer"><span>github.com/nexu-io/open-design · 2026</span><span>01 / 08</span></div>
@@ -264,97 +264,96 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>section · 01/04</div></div>
     <div style="margin:auto 0">
-      <p class="hc-prompt">cat why_open_design.md</p>
-      <h1 class="hc-h1" style="font-size:110px">// Why</h1>
-      <p class="hc-lede">In April 2026, Claude Design proved for the first time that LLMs can truly design. But it is <code style="color:var(--hc-amber)">closed-source · cloud-only</code> — no agent swapping, no self-hosting, no BYOK. Open Design sets that capability free.</p>
+      <p class="hc-prompt">cat why_now.md</p>
+      <h1 class="hc-h1" style="font-size:110px">// Why Now</h1>
+      <p class="hc-lede">Model prices and quality shift every few weeks — Opus 4.6, GPT-5.1, and Gemini 2.5 Pro all moved last quarter alone. Teams that hardcode one vendor either overpay or fall behind. Open Design is <code style="color:var(--hc-amber)">local-first · BYOK · Apache-2.0</code> — bring your own keys, swap providers per task, keep every routing decision in your own hands.</p>
     </div>
-    <div class="hc-footer"><span>section · why</span><span>02 / 08</span></div>
+    <div class="hc-footer"><span>section · why now</span><span>02 / 08</span></div>
   </section>
 
   <!-- 3. CONTENT — spec cards -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>stats · ecosystem</div></div>
-    <h2 class="hc-h2">The ecosystem in numbers</h2>
-    <p class="hc-lede">Public GitHub figures · Apache-2.0 open source</p>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>workflow · byok routing</div></div>
+    <h2 class="hc-h2">The BYOK workflow, mapped</h2>
+    <p class="hc-lede">Four steps from a raw API key to a routed, budget-capped model roster</p>
     <div class="hc-grid-3">
-      <div class="hc-card"><div class="lbl">github stars</div><div class="val">60K+</div><div class="desc">An open-source project maintained by 300+ contributors.</div></div>
-      <div class="hc-card"><div class="lbl">plugins</div><div class="val">217+</div><div class="desc">Prototypes, slides, posters, dashboards, weekly reports, OKRs.</div></div>
-      <div class="hc-card"><div class="lbl">coding agents</div><div class="val">21</div><div class="desc">Auto-detects CLIs already on your PATH — zero config.</div></div>
+      <div class="hc-card"><div class="lbl">connect</div><div class="val">4 keys</div><div class="desc">Anthropic, OpenAI, Google, Azure — added once in Settings, never leave your machine.</div></div>
+      <div class="hc-card"><div class="lbl">compare</div><div class="val">3 models</div><div class="desc">Same prompt, same task — latency, cost, and output quality side by side.</div></div>
+      <div class="hc-card"><div class="lbl">route</div><div class="val">1 policy</div><div class="desc">Task-type rules decide which model answers — no manual switching mid-project.</div></div>
     </div>
     <div class="hc-grid-2">
-      <div class="hc-card"><div class="lbl">// open design</div><div class="val" style="color:var(--hc-green);font-size:18px">desktop-native · runs locally</div><div class="desc">Reads local files, Figma exports, and code repos directly; the agent gets full terminal execution power.</div></div>
-      <div class="hc-card"><div class="lbl">// closed alternatives</div><div class="val" style="color:var(--hc-red);font-size:18px">model lock-in · cloud-only</div><div class="desc">No agent swapping, self-hosting, or BYOK — and every generation leaves your machine.</div></div>
+      <div class="hc-card"><div class="lbl">// keep</div><div class="val" style="color:var(--hc-green);font-size:18px">byok = your cost, your data</div><div class="desc">Every call rides your own key; nothing routes through a shared subscription.</div></div>
+      <div class="hc-card"><div class="lbl">// avoid</div><div class="val" style="color:var(--hc-red);font-size:18px">single-vendor lock-in</div><div class="desc">One outage or price hike shouldn't stall the whole team's roadmap.</div></div>
     </div>
-    <div class="hc-footer"><span>data · github public</span><span>03 / 08</span></div>
+    <div class="hc-footer"><span>data · pilot verified</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · od run</div></div>
-    <p class="hc-prompt">od run "build a landing page for the new product launch"</p>
-    <h3 class="hc-h3" style="margin-top:12px">↓ From idea to delivery in 5 steps</h3>
-    <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># open design · session 42a1</span>
-[<span class="fn">start</span>]   <span class="st">"pick a start: a one-sentence goal, or straight from a template / plugin"</span>
-[<span class="fn">style</span>]   design-systems/DESIGN.md   <span class="cm">// palette · type · spacing auto-applied</span>
-[<span class="kw">think</span>]   <span class="st">"agent reads local files + figma exports + the full repo context"</span>
-[<span class="fn">gen</span>]     artifacts/landing.html     <span class="hl">real runnable file</span>
-[<span class="fn">preview</span>] sandbox                    <span class="st">instant preview · live edits</span>
-[<span class="fn">ship</span>]    <span class="var">"hand off to engineering, or convert to a marketing video via HyperFrames"</span>
-[<span class="fn">memory</span>]  preferences saved          <span class="st">ok</span>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · pilot run</div></div>
+    <p class="hc-prompt">od model pilot --tasks 42 --models opus-4.6,gpt-5.1,gemini-2.5-pro</p>
+    <h3 class="hc-h3" style="margin-top:12px">↓ Two-week pilot, three teams, one dashboard</h3>
+    <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># open design · pilot session 07c3</span>
+[<span class="fn">connect</span>] anthropic + openai + google keys   <span class="cm">// added once, stored locally</span>
+[<span class="fn">route</span>]   <span class="st">"long-context spec review → gemini-2.5-pro"</span>
+[<span class="fn">route</span>]   <span class="st">"quick UI copy pass → gpt-5.1-mini"</span>
+[<span class="fn">route</span>]   <span class="st">"complex agent planning → claude-opus-4.6"</span>
+[<span class="kw">measure</span>] cost/task, latency, pass-rate      <span class="hl">per model, per task type</span>
+[<span class="fn">report</span>]  pilot-summary.md                  <span class="st">PASS 42/42 tasks routed</span>
 
-<span class="cm"># every choice becomes context for the next run — sharper with every use</span></pre>
-    <div class="hc-footer"><span>trace · workflow</span><span>04 / 08</span></div>
+<span class="cm"># 2 weeks · 3 teams · 42 tasks · zero vendor lock-in</span></pre>
+    <div class="hc-footer"><span>trace · pilot</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. CHART -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · monthly cost</div></div>
-    <h2 class="hc-h2">Monthly cost: -80%</h2>
-    <p class="hc-lede">vs Claude Design: $500 → ~$73 (measured BYOK usage, demo data)</p>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · spend variance</div></div>
+    <h2 class="hc-h2">Risk control: -71% cost variance</h2>
+    <p class="hc-lede">vs single-vendor default: day-to-day spend swings tamed by routing guardrails (pilot data, 3 teams)</p>
     <svg viewBox="0 0 1000 380" style="width:100%;max-width:1040px;margin-top:24px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="JetBrains Mono, monospace" font-size="13" fill="#96949d">
         <!-- axis -->
         <line x1="80" y1="40" x2="80" y2="320" stroke="rgba(126,211,164,.2)"/>
         <line x1="80" y1="320" x2="960" y2="320" stroke="rgba(126,211,164,.2)"/>
         <!-- y labels -->
-        <text x="70" y="46" text-anchor="end">$500</text>
-        <text x="70" y="116" text-anchor="end">$375</text>
-        <text x="70" y="186" text-anchor="end">$250</text>
-        <text x="70" y="256" text-anchor="end">$125</text>
+        <text x="70" y="46" text-anchor="end">$400</text>
+        <text x="70" y="116" text-anchor="end">$300</text>
+        <text x="70" y="186" text-anchor="end">$200</text>
+        <text x="70" y="256" text-anchor="end">$100</text>
         <text x="70" y="324" text-anchor="end">0</text>
-        <!-- bar: claude design -->
+        <!-- bar: no routing -->
         <g>
           <rect x="240" y="40" width="140" height="280" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
-          <text x="310" y="34" text-anchor="middle" fill="#e9c58a" font-weight="700">$500 / mo</text>
-          <text x="310" y="345" text-anchor="middle">claude design</text>
+          <text x="310" y="34" text-anchor="middle" fill="#e9c58a" font-weight="700">$340/day swing</text>
+          <text x="310" y="345" text-anchor="middle">no routing</text>
         </g>
-        <!-- bar: open design -->
+        <!-- bar: byok + routing -->
         <g>
-          <rect x="560" y="279" width="140" height="41" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
-          <text x="630" y="273" text-anchor="middle" fill="#7ed3a4" font-weight="700">~$73 / mo</text>
-          <text x="630" y="345" text-anchor="middle">open design (byok)</text>
+          <rect x="560" y="240" width="140" height="80" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="630" y="234" text-anchor="middle" fill="#7ed3a4" font-weight="700">$98/day swing</text>
+          <text x="630" y="345" text-anchor="middle">byok + routing</text>
         </g>
         <!-- delta annotation -->
         <g>
-          <text x="470" y="150" text-anchor="middle" fill="#7ed3a4" font-size="34" font-weight="700">-80%</text>
-          <text x="470" y="176" text-anchor="middle" fill="#96949d">same usage, lower monthly bill</text>
+          <text x="470" y="150" text-anchor="middle" fill="#7ed3a4" font-size="34" font-weight="700">-71%</text>
+          <text x="470" y="176" text-anchor="middle" fill="#96949d">same 3 teams, same workload</text>
         </g>
         <!-- legend -->
         <g transform="translate(800,50)">
           <rect x="0" y="0" width="14" height="14" fill="rgba(233,197,138,.12)" stroke="#e9c58a"/>
-          <text x="22" y="12" fill="#e9c58a">subscription · cloud</text>
+          <text x="22" y="12" fill="#e9c58a">no routing</text>
           <rect x="0" y="22" width="14" height="14" fill="rgba(126,211,164,.15)" stroke="#7ed3a4"/>
-          <text x="22" y="34" fill="#7ed3a4">byok · local</text>
+          <text x="22" y="34" fill="#7ed3a4">byok + routing</text>
         </g>
       </g>
     </svg>
-    <div class="hc-footer"><span>benchmark · $500 → ~$73</span><span>05 / 08</span></div>
+    <div class="hc-footer"><span>benchmark · n=3 teams</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. STATS -->
@@ -362,14 +361,14 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>tldr</div></div>
-    <p class="hc-prompt">echo $STARS</p>
-    <div class="hc-big">60K+<span style="font-size:60px;color:var(--hc-ink2)"> stars</span></div>
-    <p class="hc-lede" style="margin-top:14px">Apache-2.0 open source · built with 300+ contributors.</p>
+    <p class="hc-prompt">echo $ROI</p>
+    <div class="hc-big">3.1x<span style="font-size:60px;color:var(--hc-ink2)"> roi</span></div>
+    <p class="hc-lede" style="margin-top:14px">42 tasks, 3 models, 2 weeks — routed spend down 46%, output quality held within 2 points of the best single-model baseline.</p>
     <div class="hc-grid-2" style="margin-top:24px">
-      <div class="hc-card"><div class="lbl">+ core capabilities</div><div class="desc">• 129 design systems: import from GitHub / Figma / local files<br>• HyperFrames: full HTML→MP4 video pipeline<br>• Self-evolving design memory — it understands you better with use</div></div>
-      <div class="hc-card"><div class="lbl">+ open by default</div><div class="desc">• BYOK end to end: Anthropic / OpenAI / Azure / Google<br>• All data stays local, no sign-up<br>• Forking, self-hosting, and commercial use all allowed</div></div>
+      <div class="hc-card"><div class="lbl">+ what moved</div><div class="desc">• cost down 46% vs single-vendor baseline<br>• latency down 31% avg — simple tasks route to a faster model<br>• zero missed SLA across the pilot</div></div>
+      <div class="hc-card"><div class="lbl">+ what's included</div><div class="desc">• 4-provider BYOK, keys stored locally<br>• per-task-type routing policy<br>• budget caps + audit log on every call</div></div>
     </div>
-    <div class="hc-footer"><span>numbers · canonical</span><span>06 / 08</span></div>
+    <div class="hc-footer"><span>roi · pilot verified</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
@@ -377,20 +376,20 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>install</div></div>
-    <h2 class="hc-h2">Want to run it yourself?</h2>
-    <p class="hc-lede">Download Open Design (macOS / Windows), or boot it from source with three commands.</p>
+    <h2 class="hc-h2">Roll it out to your team</h2>
+    <p class="hc-lede">Three commands to stand up your own BYOK routing pilot.</p>
     <pre class="hc-codebox" style="margin-top:22px"><span class="cm"># 1. clone (apache-2.0)</span>
 <span class="kw">$</span> git clone https://github.com/nexu-io/open-design
 
-<span class="cm"># 2. install (node 24 + pnpm)</span>
-<span class="kw">$</span> cd open-design && pnpm install
+<span class="cm"># 2. add your keys (byok, stored locally)</span>
+<span class="kw">$</span> od keys add anthropic openai google
 
-<span class="cm"># 3. start (byok: your own api key)</span>
-<span class="kw">$</span> pnpm tools-dev</pre>
+<span class="cm"># 3. start a routed pilot</span>
+<span class="kw">$</span> od model pilot --tasks <span class="st">./pilot-tasks.json</span></pre>
     <div style="margin-top:26px">
       <span class="hc-tag">local-first</span>
-      <span class="hc-tag">21-coding-agents</span>
-      <span class="hc-tag amber">byok</span>
+      <span class="hc-tag">byok</span>
+      <span class="hc-tag amber">budget-caps</span>
     </div>
     <div class="hc-footer"><span>try-it-now</span><span>07 / 08</span></div>
   </section>
@@ -403,7 +402,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <p class="hc-prompt">exit 0</p>
       <h1 class="hc-h1" style="font-size:120px">// thanks<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">Putting frontier AI design capability back on every creator's desk.<br><span style="color:var(--hc-amber)">github.com/nexu-io/open-design</span> · discord.gg/mHAjSMV6gz · x.com/nexudotio</p>
+      <p class="hc-lede">Full pilot data, routing policy templates, and the cost dashboard live at <span style="color:var(--hc-amber)">github.com/nexu-io/open-design</span> · discord.gg/mHAjSMV6gz · x.com/nexudotio</p>
     </div>
     <div class="hc-footer"><span>open · local · agent-native</span><span>08 / 08</span></div>
   </section>

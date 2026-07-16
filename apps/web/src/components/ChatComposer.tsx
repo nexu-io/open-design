@@ -23,6 +23,7 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackComposerBarClick,
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackDesignToolboxClick,
   trackFigmaHelpModalSurfaceView,
@@ -33,6 +34,7 @@ import type {
   ComposerBarClickProps,
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
@@ -205,6 +207,8 @@ type DesignToolboxResource =
   | (DesignToolboxResourceBase & { kind: 'connector'; connector: ConnectorDetail })
   | (DesignToolboxResourceBase & { kind: 'file'; file: ProjectFile });
 
+export type ChatSendOutcome = void | 'restore-draft';
+
 interface Props {
   projectId: string | null;
   projectFiles: ProjectFile[];
@@ -234,7 +238,7 @@ interface Props {
     attachments: ChatAttachment[],
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
-  ) => void;
+  ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onStop: () => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
@@ -1168,6 +1172,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
+    function finishComposedSend(
+      outcome: ChatSendOutcome | Promise<ChatSendOutcome>,
+      pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
+    ) {
+      void Promise.resolve(outcome).then(
+        (result) => {
+          if (result === 'restore-draft') {
+            if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+              pendingEntryFromRef.current = pendingMetadata.entryFrom;
+            }
+            if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+              pendingSessionModeRef.current = pendingMetadata.sessionMode;
+            }
+            return;
+          }
+          reset();
+        },
+        () => {
+          if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+            pendingEntryFromRef.current = pendingMetadata.entryFrom;
+          }
+          if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+            pendingSessionModeRef.current = pendingMetadata.sessionMode;
+          }
+        },
+      );
+    }
+
     function sendComposedTurn(
       prompt: string,
       attachments: ChatAttachment[],
@@ -1200,8 +1232,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
-      onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
-      reset();
+      finishComposedSend(
+        onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
+        { entryFrom: pendingEntryFrom, sessionMode: pendingSessionMode },
+      );
       return true;
     }
 
@@ -1842,31 +1876,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const result = await uploadProjectFiles(id, annotationFiles);
               if (result.uploaded.length > 0) {
                 uploaded = assignChatAttachmentOrders(result.uploaded, orderStart);
-                const screenshot = detail.file ? uploaded[0] : null;
-                if (screenshot && detail.markKind && detail.bounds) {
-                  visualAttachmentInput = {
-                    order: isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : orderStart,
-                    idSeed: screenshot.path,
-                    screenshotPath: screenshot.path,
-                    markKind: detail.markKind,
-                    note: detail.note,
-                    bounds: detail.bounds,
-                    target: detail.target
-                      ? {
-                          filePath: detail.target.filePath || detail.filePath || screenshot.path,
-                          elementId: detail.target.elementId,
-                          selector: detail.target.selector,
-                          label: detail.target.label,
-                          text: detail.target.text,
-                          position: detail.target.position,
-                          htmlHint: detail.target.htmlHint,
-                        }
-                      : {
-                          filePath: detail.filePath || screenshot.path,
-                          position: detail.bounds,
-                        },
-                  };
-                }
               }
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
@@ -1876,6 +1885,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   return;
                 }
               }
+            }
+            // The structured visual comment is built whenever the mark has a
+            // location, with or without the screenshot upload. When the
+            // preview capture failed (#4080) the screenshot is absent, but
+            // file/bounds/markKind still anchor the marked region for the
+            // agent (#4084) — dropping them would reduce the send to bare
+            // prose and force the agent to guess what "this part" means.
+            if (detail.markKind && detail.bounds) {
+              const screenshot = detail.file && uploaded.length > 0 ? uploaded[0] : null;
+              visualAttachmentInput = {
+                order: screenshot && isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : 1,
+                idSeed: screenshot?.path
+                  ?? `${detail.filePath || 'preview'}-${detail.markKind}-${Math.round(detail.bounds.x * 1000)}-${Math.round(detail.bounds.y * 1000)}`,
+                ...(screenshot ? { screenshotPath: screenshot.path } : {}),
+                markKind: detail.markKind,
+                note: detail.note,
+                bounds: detail.bounds,
+                target: detail.target
+                  ? {
+                      filePath: detail.target.filePath || detail.filePath || screenshot?.path || '',
+                      elementId: detail.target.elementId,
+                      selector: detail.target.selector,
+                      label: detail.target.label,
+                      text: detail.target.text,
+                      position: detail.target.position,
+                      htmlHint: detail.target.htmlHint,
+                    }
+                  : {
+                      filePath: detail.filePath || screenshot?.path || '',
+                      position: detail.bounds,
+                    },
+              };
             }
             setUploading(false);
 
@@ -2383,19 +2424,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(hatched, staged, nextCommentAttachments, contextMeta);
-        reset();
+        finishComposedSend(onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(search.prompt, staged, nextCommentAttachments, {
-          ...contextMeta,
-          research: { enabled: true, query: search.query },
-        });
-        reset();
+        finishComposedSend(
+          onSend(search.prompt, staged, nextCommentAttachments, {
+            ...contextMeta,
+            research: { enabled: true, query: search.query },
+          }),
+        );
         return;
       }
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) {
@@ -3002,7 +3043,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {footerAccessory}
             <SessionModeToggle
               mode={sessionMode}
-              onChange={onSessionModeChange}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                    project_id: projectId ?? undefined,
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
             />
             {showStopButton ? (
               <button

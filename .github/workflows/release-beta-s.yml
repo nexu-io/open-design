@@ -942,6 +942,30 @@ jobs:
           source "$OPEN_DESIGN_RELEASE_PROFILE"
           fnm exec --using=24 -- pnpm exec tools-release download-platform-manifest
 
+      - name: Prepare and publish betas release notes
+        env:
+          RELEASE_CHANNEL: betas
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+          RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-metadata/release-note-plan.json
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
+          RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        working-directory: _release-scripts
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          fnm exec --using=24 -- pnpm exec tools-release prepare-release-note
+          fnm exec --using=24 -- pnpm exec tools-release publish-release-note
+          fnm exec --using=24 -- pnpm exec tools-release verify-release-note
+
       - name: Publish betas metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
@@ -957,6 +981,7 @@ jobs:
           RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
           RELEASE_SIGNED: ${{ inputs.enable_mac_arm64 && (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}

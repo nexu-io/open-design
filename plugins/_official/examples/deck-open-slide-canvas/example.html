@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Open-Slide Canvas · Open Design · Cloud or Desktop?</title>
+<title>Write an Architecture Review like a World-Class Staff Engineer - Product management</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* Sea Indigo - locked palette: bg #0a0e1a / ink #f5f5f7 / accent #5ac8fa */
@@ -264,14 +264,14 @@
     </header>
 
     <div>
-      <div class="kicker mono reveal d1">The Question</div>
+      <div class="kicker mono reveal d1">Decision Needed — RFC-014</div>
       <h1 class="reveal d2">
-        AI can design now.<br/>
-        Keep it in the <span class="cloud">cloud</span>,<br/>
-        or on your <span class="desk">desktop</span>?
+        Local daemon<br/>
+        architecture: lock it,<br/>
+        or keep it <span class="desk">open</span>?
       </h1>
       <p class="sub reveal d3">
-        Open Design's answer: open source, local, agent-driven — the whole flow runs on your own machine.
+        This review recommends freezing the daemon + agent-runtime data boundary before v1.0 GA. Staff eng, tech leads, and security sign off below.
       </p>
     </div>
 
@@ -292,21 +292,21 @@
 
     <div class="split">
       <div class="split-main">
-        <div class="kicker mono reveal d1">The Answer</div>
+        <div class="kicker mono reveal d1">The Problem</div>
         <h2 class="reveal d2">
-          Open source.<br/>
-          Local.<br/>
-          <span class="u">Agent-driven.</span>
+          Three teams.<br/>
+          Three runtimes.<br/>
+          <span class="u">Zero agreement.</span>
         </h2>
       </div>
       <aside class="split-aside reveal d3">
         <p>
-          Open Design is a design platform that lives on your machine.
-          Describe what you need; coding agents build the design system,
-          components, and pages right in your repo.
+          Desktop, web, and packaged builds each spawn the agent runtime
+          differently today. Namespace collisions and orphaned sidecars
+          account for 41% of this quarter's P1 tickets.
         </p>
-        <p>Nothing leaves your desk unless you push it.</p>
-        <p class="tags mono">APACHE-2.0 · BYOK · NO SIGN-UP</p>
+        <p>Every new agent adapter re-derives its own data path instead of inheriting one resolved root.</p>
+        <p class="tags mono">OD_DATA_DIR · SIDECAR-PROTO · P1 × 41%</p>
       </aside>
     </div>
 
@@ -326,9 +326,9 @@
     </header>
 
     <div class="break-wrap">
-      <div class="kicker mono reveal d1">Part 01 — Evidence</div>
-      <h2 class="reveal d2">PROOF<span class="accent">.</span></h2>
-      <p class="break-sub reveal d3">Numbers from a community that chose local.</p>
+      <div class="kicker mono reveal d1">Part 01 — The Pain</div>
+      <h2 class="reveal d2">DRIFT<span class="accent">.</span></h2>
+      <p class="break-sub reveal d3">What happens when every surface guesses its own data root.</p>
     </div>
 
     <footer class="meta meta-bottom mono">
@@ -347,13 +347,13 @@
     </header>
 
     <div>
-      <div class="kicker mono reveal d1">Community</div>
+      <div class="kicker mono reveal d1">Incident History</div>
       <div class="stat-row reveal d2">
-        <span class="stat-num">60K+</span>
-        <span class="stat-label">GitHub stars</span>
+        <span class="stat-num">6</span>
+        <span class="stat-label">sidecar identity clashes this quarter</span>
       </div>
       <p class="stat-foot mono reveal d3">
-        <b>300+ contributors</b> building the platform in the open — no growth team, no ad budget.
+        <b>3 of 6</b> traced to a runtime writing outside RUNTIME_DATA_DIR — root cause, not symptom.
       </p>
     </div>
 
@@ -373,22 +373,22 @@
     </header>
 
     <div>
-      <div class="kicker mono reveal d1">Ecosystem</div>
+      <div class="kicker mono reveal d1">Options On The Table</div>
       <div class="cols3">
         <div class="col reveal d1">
-          <div class="col-num">217+</div>
-          <div class="col-name">plugins</div>
-          <p class="col-desc">Decks, sites, image, video, audio — install any of them with one command.</p>
+          <div class="col-num">A</div>
+          <div class="col-name">status quo</div>
+          <p class="col-desc">Each app resolves OD_DATA_DIR itself. Fast to ship, impossible to audit.</p>
         </div>
         <div class="col reveal d2">
-          <div class="col-num">129</div>
-          <div class="col-name">design systems</div>
-          <p class="col-desc">Brand DESIGN.md files, ready to bind to any project in your workspace.</p>
+          <div class="col-num">B</div>
+          <div class="col-name">shared config file</div>
+          <p class="col-desc">One JSON on disk every app reads. Removes drift but adds a second source of truth.</p>
         </div>
         <div class="col reveal d3">
-          <div class="col-num">21</div>
-          <div class="col-name">coding agents</div>
-          <p class="col-desc">Claude Code, Codex, Gemini and more — every one a first-class citizen.</p>
+          <div class="col-num">C</div>
+          <div class="col-name">daemon-resolved root</div>
+          <p class="col-desc">server.ts resolves OD_DATA_DIR once into RUNTIME_DATA_DIR; every path derives from it.</p>
         </div>
       </div>
     </div>
@@ -409,21 +409,21 @@
     </header>
 
     <div>
-      <div class="kicker mono reveal d1">The Bill</div>
+      <div class="kicker mono reveal d1">The Tradeoff</div>
       <div class="cmp-row">
         <div class="reveal d2">
-          <div class="cmp-label mono">Seat-based cloud stack</div>
-          <div class="cmp-old">$500</div>
-          <div class="cmp-sub">per designer, per month</div>
+          <div class="cmp-label mono">Shared config file (Option B)</div>
+          <div class="cmp-old">2 wk</div>
+          <div class="cmp-sub">ship time, new failure mode</div>
         </div>
         <div class="cmp-arrow reveal d3">→</div>
         <div class="reveal d4">
-          <div class="cmp-label mono on">Open Design + BYOK</div>
-          <div class="cmp-new">~$73</div>
-          <div class="cmp-sub">tokens you already pay for</div>
+          <div class="cmp-label mono on">Daemon-resolved root (Option C)</div>
+          <div class="cmp-new">5 wk</div>
+          <div class="cmp-sub">one truth source, harder to bypass</div>
         </div>
       </div>
-      <p class="cmp-foot mono reveal d5">$500 → ~$73 (−80%) · SAME OUTPUT, YOUR KEY, YOUR MACHINE</p>
+      <p class="cmp-foot mono reveal d5">2wk → 5wk (+3wk) · PAY THE MIGRATION ONCE, NOT PER INCIDENT</p>
     </div>
 
     <footer class="meta meta-bottom mono">
@@ -442,24 +442,24 @@
     </header>
 
     <div>
-      <div class="kicker mono reveal d1">How It Works</div>
+      <div class="kicker mono reveal d1">The Recommendation</div>
       <div class="flow">
         <div class="node reveal d2" style="left:0;top:30px;width:430px">
-          <div class="n mono">01 · DESCRIBE</div>
-          <h3>One prompt</h3>
-          <p>A goal, a vibe, a deadline — written in plain language.</p>
+          <div class="n mono">01 · RESOLVE</div>
+          <h3>server.ts owns it</h3>
+          <p>OD_DATA_DIR is read exactly once, at daemon startup, into RUNTIME_DATA_DIR.</p>
         </div>
         <div class="edge" style="left:430px;top:160px;width:212px;transform:rotate(33deg)"></div>
         <div class="node on reveal d3" style="left:610px;top:190px;width:460px">
-          <div class="n mono">02 · AGENTS RUN LOCALLY</div>
-          <h3>Your repo, your key</h3>
-          <p>Any of 21 coding agents executes the brief on your machine.</p>
+          <div class="n mono">02 · DERIVE</div>
+          <h3>Every path descends</h3>
+          <p>PROJECTS_DIR, ARTIFACTS_DIR, SQLite, MCP tokens — all constants of RUNTIME_DATA_DIR.</p>
         </div>
         <div class="edge" style="left:1070px;top:330px;width:200px;transform:rotate(36deg)"></div>
         <div class="node reveal d4" style="left:1190px;top:360px;width:410px">
-          <div class="n mono">03 · YOU SHIP</div>
-          <h3>Committed as code</h3>
-          <p>design.md, component library, blocks — all in version control.</p>
+          <div class="n mono">03 · INHERIT</div>
+          <h3>Agents don't guess</h3>
+          <p>Subprocesses receive the resolved root as OD_DATA_DIR; adapters stop inventing their own.</p>
         </div>
       </div>
     </div>
@@ -482,10 +482,10 @@
     <div class="quote-wrap">
       <div class="qmark reveal d1">&ldquo;</div>
       <blockquote class="reveal d2">
-        Your design system should live where your code lives —
-        on your machine, in your repo, <span class="u">under your license</span>.
+        If a change needs a data-path rule not covered here, request a
+        core-maintainer decision — <span class="u">don't invent a new convention</span>.
       </blockquote>
-      <div class="cite mono reveal d3">— Open Design principles · README, line one</div>
+      <div class="cite mono reveal d3">— Architecture review · daemon data directory contract, decision record</div>
     </div>
 
     <footer class="meta meta-bottom mono">
@@ -504,27 +504,27 @@
     </header>
 
     <div>
-      <h2 class="list-head reveal d1">No lock-in, <span class="u">by design</span>.</h2>
+      <h2 class="list-head reveal d1">Lock these four, <span class="u">nothing else</span>.</h2>
       <ul class="plist">
         <li class="reveal d2">
           <span class="pnum mono">01</span>
-          <span class="pname">Apache-2.0</span>
-          <span class="pdesc">Read it, fork it, ship it commercially. The license is the contract.</span>
+          <span class="pname">Single root</span>
+          <span class="pdesc">RUNTIME_DATA_DIR is the only daemon data-root truth source — no exceptions.</span>
         </li>
         <li class="reveal d3">
           <span class="pnum mono">02</span>
-          <span class="pname">BYOK</span>
-          <span class="pdesc">Your API key, your model choice, your bill — no middleman markup.</span>
+          <span class="pname">Named exceptions only</span>
+          <span class="pdesc">OD_MEDIA_CONFIG_DIR and OD_LEGACY_DATA_DIR are the sole sanctioned overrides.</span>
         </li>
         <li class="reveal d4">
           <span class="pnum mono">03</span>
-          <span class="pname">No sign-up</span>
-          <span class="pdesc">No account, no upload, no waitlist. Clone and run.</span>
+          <span class="pname">Inherited, not inferred</span>
+          <span class="pdesc">Agent subprocesses receive OD_DATA_DIR from the daemon; they never resolve their own.</span>
         </li>
         <li class="reveal d5">
           <span class="pnum mono">04</span>
-          <span class="pname">Local-first</span>
-          <span class="pdesc">The entire flow executes on your desktop, even offline.</span>
+          <span class="pname">Escape hatches banned</span>
+          <span class="pdesc">Cwd-relative defaults and per-adapter data-root helpers are blocked in review, not just noted.</span>
         </li>
       </ul>
     </div>
@@ -598,5 +598,6 @@
     fromHash();
   })();
 </script>
+
 </body>
 </html>

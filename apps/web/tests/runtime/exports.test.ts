@@ -12,11 +12,13 @@ import {
   exportAsImage,
   exportAsMd,
   exportAsPdf,
+  exportProjectImageDataUrl,
   isUsablePrintSize,
   reportPrintSizeWhenStable,
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsPptx,
+  exportProjectAsZip,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
@@ -468,6 +470,28 @@ describe('exportProjectAsPdf', () => {
     });
   });
 
+  it('passes versionId to the daemon desktop PDF export API', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: fallback,
+      filePath: 'index.html',
+      projectId: 'proj-1',
+      title: 'Landing v1',
+      versionId: 'v1',
+    });
+
+    expect(result).toBe('desktop');
+    expect(fallback).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/pdf', {
+      body: JSON.stringify({ deck: false, fileName: 'index.html', title: 'Landing v1', versionId: 'v1' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
   it('treats a canceled desktop PDF save dialog as a silent no-op', async () => {
     const fallback = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 })));
@@ -556,6 +580,25 @@ describe('exportProjectAsHtml', () => {
     expect(await capturedBlob!.text()).toBe('<!doctype html><p>inlined</p>');
   });
 
+  it('passes versionId to the daemon inline HTML export endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    })));
+
+    await exportProjectAsHtml({
+      projectId: 'proj 1',
+      filePath: 'screens/main page.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Main Page v1',
+      versionId: 'v1',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1&versionId=v1');
+    expect(capturedFilename).toBe('Main-Page-v1.html');
+    expect(await capturedBlob!.text()).toBe('<!doctype html><p>version</p>');
+  });
+
   it('falls back to the source HTML export when the daemon inline endpoint fails', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
@@ -569,6 +612,40 @@ describe('exportProjectAsHtml', () => {
 
     expect(capturedFilename).toBe('Fallback.html');
     expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+  });
+});
+
+describe('exportProjectImageDataUrl', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('passes versionId to the daemon image export endpoint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'desktop only' } }), { status: 501 })),
+    );
+
+    const result = await exportProjectImageDataUrl({
+      projectId: 'proj 1',
+      fileName: 'screens/main page.html',
+      index: 2,
+      deck: false,
+      versionId: 'v1',
+    });
+
+    expect(result).toEqual({ ok: false, unavailable: true });
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'screens/main page.html',
+        index: 2,
+        deck: false,
+        versionId: 'v1',
+      }),
+    });
   });
 });
 
@@ -646,6 +723,27 @@ describe('binary project/design-system downloads', () => {
     });
     expect(capturedFilename).toBe('pitch.pptx');
     expect(await capturedBlob!.text()).toBe('PK-editable-pptx');
+  });
+
+  it('passes versionId to the screenshot export route', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('PK-version-pptx', { status: 200 })),
+    );
+
+    const res = await exportProjectAsPptx({
+      projectId: 'proj 1',
+      fileName: 'decks/pitch.html',
+      versionId: 'v1',
+    });
+
+    expect(res.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/pptx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'decks/pitch.html', versionId: 'v1', deck: true }),
+    });
+    expect(capturedFilename).toBe('pitch.pptx');
   });
 
   it('honors the server UTF-8 Content-Disposition filename over the local fallback', async () => {
@@ -806,6 +904,25 @@ describe('binary project/design-system downloads', () => {
     expect(ok).toBe(true);
     expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=system');
     expect(capturedFilename).toBe('system.zip');
+  });
+
+  it('downloads version ZIPs from the daemon inline HTML export endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    })));
+
+    await exportProjectAsZip({
+      projectId: 'proj 1',
+      filePath: 'screens/main page.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Main Page v1',
+      versionId: 'v1',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1&versionId=v1');
+    expect(capturedFilename).toBe('Main-Page-v1.zip');
+    expect(capturedBlob?.type).toBe('application/zip');
   });
 });
 
@@ -1254,6 +1371,25 @@ describe('requestPreviewSnapshot', () => {
 
     const result = await promise;
     expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 });
+  });
+
+  it('can request a full-document snapshot from the bridge', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100, { full: true });
+
+    expect(postMessageMock).toHaveBeenCalledOnce();
+    const message = postMessageMock.mock.calls[0]![0] as { type: string; id: string; full?: boolean };
+    expect(message).toMatchObject({ type: 'od:snapshot', full: true });
+
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id: message.id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 200 } } as unknown as Event,
+    );
+
+    const result = await promise;
+    expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 200 });
   });
 
   it('resolves null when the bridge responds with an error', async () => {

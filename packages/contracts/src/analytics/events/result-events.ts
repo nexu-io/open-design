@@ -44,6 +44,25 @@ export interface PluginReplacementResultProps {
   error_code?: string;
 }
 
+// Outcome of persisting a slide's speaker notes back into the deck HTML.
+// Fires when a save settles (success/failure), so we can measure how many
+// users actually author speaker notes and how reliable the save is. Editing
+// closes on blur/auto-save, so this is the completion event for the
+// deck_viewer speaker_notes_edit click. `edit_surface` distinguishes the
+// in-preview notes panel from the presenter popup; `has_content` is whether
+// the saved note for that slide is non-empty (authoring vs. clearing).
+export interface SpeakerNotesSaveResultProps {
+  page_name: 'artifact';
+  area: 'deck_viewer';
+  edit_surface: 'preview' | 'presenter';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  slide_count?: number;
+  has_content?: boolean;
+  result: TrackingResult;
+  error_code?: string;
+}
+
 // Outcome of an actual import attempt from the plugin import modal. Fires
 // once per executed import (after the install/upload promise settles), not
 // for clicks that no-op. `error_code` carries the backend failure message —
@@ -448,6 +467,32 @@ export interface ArtifactExportResultProps {
   project_kind: TrackingProjectKind | null;
 }
 
+// Fired when the user explicitly clicks "Save" in the Excalidraw sketch editor
+// — NOT the background autosave (which carries no user intent and is not
+// tracked). `result` is 'success' once the sketch file is persisted, 'failed'
+// on a write error. Together with `sketch_export_result` this is the
+// completion signal for the sketch flow that starts at `new_sketch`.
+export interface SketchSaveResultProps {
+  page_name: 'file_manager';
+  area: 'sketch_editor';
+  result: TrackingExportResult;
+  error_code?: string;
+  project_id: string;
+}
+
+// Fired when the user exports a sketch to a PNG from the sketch editor, which
+// writes the image into the project's files — the sketch's real "output" (the
+// drawing becomes a project asset that can then be attached to a run). This is
+// the strongest completion signal for the sketch flow. `result` is 'success'
+// once the PNG is written, 'failed' on a write error.
+export interface SketchExportResultProps {
+  page_name: 'file_manager';
+  area: 'sketch_editor';
+  result: TrackingExportResult;
+  error_code?: string;
+  project_id: string;
+}
+
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
 
 // Fired from the deploy modal when a real publish attempt resolves — NOT when
@@ -650,6 +695,11 @@ export type PackagedStartupFailureKind =
   | 'daemon-start'
   | 'web-start'
   | 'path-access'
+  // A sidecar that never reported ready within the status-wait budget — the
+  // pipe/socket never bound in time (e.g. win32 first-launch AV scanning slowing
+  // the daemon cold start), as opposed to a sidecar that exited (`daemon-start` /
+  // `web-start`). Split out so this bucket stops hiding inside `unknown`.
+  | 'status-timeout'
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged

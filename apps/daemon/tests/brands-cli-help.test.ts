@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BRAND_USAGE,
   isBrandHelpArg,
-} from '../src/brands-cli-help.js';
+} from '../src/cli-help/index.js';
 
 describe('od brand help surface', () => {
   it('routes help, --help, and -h to the usage text', () => {

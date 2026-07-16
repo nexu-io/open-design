@@ -80,13 +80,16 @@ export async function exportProjectAsHtml(opts: {
   filePath: string;
   fallbackHtml: string;
   fallbackTitle: string;
+  versionId?: string;
 }): Promise<void> {
   const segments = opts.filePath
     .split('/')
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?inline=1`;
+  const query = new URLSearchParams({ inline: '1' });
+  if (opts.versionId) query.set('versionId', opts.versionId);
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
@@ -380,6 +383,8 @@ export function exportAsMd(source: string, title: string): void {
  */
 export type PreviewSnapshot = { dataUrl: string; w: number; h: number };
 
+export type PreviewSnapshotOptions = { full?: boolean };
+
 export type PreviewSnapshotResult =
   | { ok: true; snapshot: PreviewSnapshot }
   | { ok: false; reason: 'loading' | 'post-message-error' | 'render-error' | 'timeout'; error?: string };
@@ -387,6 +392,7 @@ export type PreviewSnapshotResult =
 export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
   timeout = 8000,
+  options: PreviewSnapshotOptions = {},
 ): Promise<PreviewSnapshotResult> {
   const win = iframe.contentWindow;
   if (!win) return Promise.resolve({ ok: false, reason: 'loading' });
@@ -412,7 +418,7 @@ export function requestPreviewSnapshotResult(
     }
     window.addEventListener('message', onMsg);
     try {
-      win.postMessage({ type: 'od:snapshot', id }, '*');
+      win.postMessage({ type: 'od:snapshot', id, ...(options.full ? { full: true } : {}) }, '*');
     } catch {
       done = true;
       window.removeEventListener('message', onMsg);
@@ -431,8 +437,9 @@ export function requestPreviewSnapshotResult(
 export async function requestPreviewSnapshot(
   iframe: HTMLIFrameElement,
   timeout = 8000,
+  options: PreviewSnapshotOptions = {},
 ): Promise<PreviewSnapshot | null> {
-  const result = await requestPreviewSnapshotResult(iframe, timeout);
+  const result = await requestPreviewSnapshotResult(iframe, timeout, options);
   return result.ok ? result.snapshot : null;
 }
 
@@ -754,6 +761,7 @@ export async function exportProjectAsPdf(opts: {
   filePath: string;
   projectId: string;
   title: string;
+  versionId?: string;
 }): Promise<ProjectPdfExportResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/pdf`, {
@@ -761,6 +769,7 @@ export async function exportProjectAsPdf(opts: {
         deck: opts.deck,
         fileName: opts.filePath,
         title: opts.title,
+        ...(opts.versionId ? { versionId: opts.versionId } : {}),
       }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
@@ -838,7 +847,26 @@ export async function exportProjectAsZip(opts: {
   filePath: string;
   fallbackHtml: string;
   fallbackTitle: string;
+  versionId?: string;
 }): Promise<void> {
+  if (opts.versionId) {
+    const segments = opts.filePath
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const query = new URLSearchParams({ inline: '1', versionId: opts.versionId });
+    try {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`);
+      if (!resp.ok) throw new Error(`version html export request failed (${resp.status})`);
+      exportAsZip(await resp.text(), opts.fallbackTitle);
+      return;
+    } catch (err) {
+      console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
+      exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+      return;
+    }
+  }
   const root = archiveRootFromFilePath(opts.filePath);
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
     root ? `?root=${encodeURIComponent(root)}` : ''
@@ -877,6 +905,7 @@ export async function exportProjectAsPptx(opts: {
   title?: string;
   format?: 'pptx' | 'pdf';
   deck?: boolean;
+  versionId?: string;
   // pptx only: produce an editable deck (native shapes/text) instead of a
   // screenshot one (one image per slide).
   editable?: boolean;
@@ -892,6 +921,7 @@ export async function exportProjectAsPptx(opts: {
       body: JSON.stringify({
         fileName: opts.fileName,
         ...(opts.title ? { title: opts.title } : {}),
+        ...(opts.versionId ? { versionId: opts.versionId } : {}),
         ...(format === 'pptx'
           ? { deck: true, ...(opts.editable ? { editable: true } : {}) }
           : typeof opts.deck === 'boolean'
@@ -1008,6 +1038,7 @@ export async function exportProjectImageDataUrl(opts: {
   fileName: string;
   index?: number;
   deck?: boolean;
+  versionId?: string;
 }): Promise<ProjectImageExportResult> {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/image`;
   let resp: Response;
@@ -1019,6 +1050,7 @@ export async function exportProjectImageDataUrl(opts: {
         fileName: opts.fileName,
         ...(typeof opts.index === 'number' ? { index: opts.index } : {}),
         ...(typeof opts.deck === 'boolean' ? { deck: opts.deck } : {}),
+        ...(opts.versionId ? { versionId: opts.versionId } : {}),
       }),
     });
   } catch {
@@ -1060,6 +1092,7 @@ export function exportProjectScreenshotPdf(opts: {
   fileName: string;
   title?: string;
   deck?: boolean;
+  versionId?: string;
 }): Promise<ProjectScreenshotExportResult> {
   return exportProjectAsPptx({ ...opts, format: 'pdf' });
 }
@@ -1628,10 +1661,12 @@ async function captureArtifactSlides(
     width?: number;
     height?: number;
     onProgress?: ExportProgress;
+    timeoutMs?: number;
   },
 ): Promise<CapturedSlide[]> {
   const width = opts.width ?? (opts.deck ? 1920 : 1440);
   const height = opts.height ?? (opts.deck ? 1080 : 900);
+  const timeoutMs = opts.timeoutMs ?? 45_000;
 
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', 'allow-scripts');
@@ -1643,7 +1678,7 @@ async function captureArtifactSlides(
 
   const slides: CapturedSlide[] = [];
   try {
-    const win = await waitForIframeWindow(iframe);
+    const win = await waitForIframeWindow(iframe, Math.min(timeoutMs, 15_000));
     // Give the deck bridge time to fit fixed-canvas (transform: scale) layouts
     // to the iframe before the first capture.
     await delayMs(opts.deck ? 600 : 150);
@@ -1659,7 +1694,7 @@ async function captureArtifactSlides(
         slides.push(slide);
         opts.onProgress?.(slides.length, total);
       },
-      45_000,
+      timeoutMs,
     );
   } finally {
     iframe.remove();
@@ -1668,16 +1703,55 @@ async function captureArtifactSlides(
   return slides;
 }
 
+/** Programmatic, client-side image export for an in-memory HTML snapshot. */
+export async function exportArtifactImageDataUrl(
+  html: string,
+  opts: { deck: boolean; onProgress?: ExportProgress; timeoutMs?: number },
+): Promise<PreviewSnapshot> {
+  const slides = await captureArtifactSlides(html, {
+    deck: opts.deck,
+    mode: 'image',
+    onProgress: opts.onProgress,
+    timeoutMs: opts.timeoutMs,
+  });
+  const images = slides.filter((s) => s.dataUrl && s.w > 0 && s.h > 0);
+  if (!images.length) throw new Error('Nothing was captured for image export');
+  if (images.length === 1) {
+    const image = images[0]!;
+    return { dataUrl: image.dataUrl!, w: image.w, h: image.h };
+  }
+
+  const width = Math.max(...images.map((image) => image.w));
+  const height = images.reduce((sum, image) => sum + image.h, 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not available');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+
+  let top = 0;
+  for (const image of images) {
+    const element = await loadImageFromDataUrl(image.dataUrl!);
+    ctx.drawImage(element, 0, top, image.w, image.h);
+    top += image.h;
+  }
+
+  return { dataUrl: canvas.toDataURL('image/png'), w: width, h: height };
+}
+
 /** Programmatic, client-side PDF: image-per-slide (deck) or paginated full page. */
 export async function exportArtifactAsPdf(
   html: string,
   title: string,
-  opts: { deck: boolean; onProgress?: ExportProgress },
+  opts: { deck: boolean; onProgress?: ExportProgress; timeoutMs?: number },
 ): Promise<void> {
   const slides = await captureArtifactSlides(html, {
     deck: opts.deck,
     mode: 'image',
     onProgress: opts.onProgress,
+    timeoutMs: opts.timeoutMs,
   });
   const images = slides.filter((s) => s.dataUrl && s.w > 0 && s.h > 0);
   if (!images.length) throw new Error('Nothing was captured for PDF export');
@@ -1712,4 +1786,27 @@ export async function exportArtifactAsPdf(
     pdf.addImage(img.dataUrl!, 'PNG', 0, -p * pageH, img.w, img.h);
   }
   triggerDownload(pdf.output('blob'), filename);
+}
+
+/** Build a one-image PDF from an already-captured preview snapshot. */
+export async function exportSnapshotAsPdf(
+  snapshot: PreviewSnapshot,
+  title: string,
+): Promise<void> {
+  if (!snapshot.dataUrl || snapshot.w <= 0 || snapshot.h <= 0) {
+    throw new Error('Nothing was captured for PDF export');
+  }
+  const image = await loadImageFromDataUrl(snapshot.dataUrl);
+  const width = snapshot.w || image.naturalWidth || image.width;
+  const height = snapshot.h || image.naturalHeight || image.height;
+  if (width <= 0 || height <= 0) throw new Error('Nothing was captured for PDF export');
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({
+    orientation: width >= height ? 'landscape' : 'portrait',
+    unit: 'px',
+    format: [width, height],
+    compress: true,
+  });
+  pdf.addImage(snapshot.dataUrl, 'PNG', 0, 0, width, height);
+  triggerDownload(pdf.output('blob'), `${safeFilename(title, 'artifact')}.pdf`);
 }

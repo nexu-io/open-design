@@ -41,6 +41,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          # Do NOT persist the default GITHUB_TOKEN as a github.com credential.
+          # The rolling manifest branch is force-pushed below with the release-bot
+          # App token (`x-access-token:${APP_TOKEN}`) precisely so the resulting PR
+          # sync is attributed to app/open-design-release-bot and its CI runs
+          # automatically (a github-actions[bot]-attributed pull_request run is held
+          # as `action_required` — GitHub's bot-recursion gate — which starves
+          # bake-plugin-previews-automerge.yml, since that reactor only approves +
+          # enqueues on `workflow_run.conclusion == 'success'`). When checkout
+          # persists the GITHUB_TOKEN it installs an `http.https://github.com/.extraheader`
+          # Authorization header that overrides the inline App token on push, so the
+          # force-push authenticates as github-actions[bot] and the rolling PR's CI
+          # never runs without a manual "Approve and run". Nothing between here and
+          # the push needs the persisted credential (setup-workspace only touches the
+          # pnpm store; render/upload uses R2 creds; gh + push use the App token), so
+          # dropping it is safe and keeps the App token the sole push credential.
+          persist-credentials: false
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace

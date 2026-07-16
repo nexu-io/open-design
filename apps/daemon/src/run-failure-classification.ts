@@ -198,7 +198,10 @@ function isAgentConfigInvalidText(text: string): boolean {
     /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text) ||
     /\bdefault_permissions requires a `?\[permissions\]`? table\b/i.test(text) ||
     /\bdefault_permissions refers to undefined profile\b/i.test(text) ||
-    /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text);
+    /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text) ||
+    /\bBYOK OpenCode requires a provider, API key, and model for this run\b/i.test(text) ||
+    /\bBYOK_PROVIDER_REQUIRED\b/i.test(text) ||
+    /\bEACCES: permission denied, mkdir\b[\s\S]*\.config[\\/]+opencode\b/i.test(text);
 }
 
 function isCliNotInstalledText(text: string): boolean {
@@ -238,7 +241,7 @@ function isPermissionRequestNotFoundText(text: string): boolean {
 }
 
 function isAuthDetailText(text: string): boolean {
-  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required|carry the api (?:secret )?key|No auth type is selected|set an Auth method|organization has disabled .* subscription access)\b/i
+  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*(?:API_)?KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required|carry the api (?:secret )?key|No auth type is selected|set an Auth method|organization has disabled .* subscription access)\b/i
     .test(text);
 }
 
@@ -257,18 +260,40 @@ function isSessionResumeExpiredText(text: string): boolean {
 function isPromptTooLargeText(text: string): boolean {
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
-  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
+  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
     .test(text);
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API|Unexpected server error|AMR model catalog is (?:temporarily )?unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*400\b)\b/i
-    .test(text);
+  return isUpstreamClientErrorText(text) ||
+    /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
+      .test(text);
 }
 
 function isUpstreamClientErrorText(text: string): boolean {
-  return /\b(statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*400\b|validation error|literal_error|Invalid input|Type validation failed)\b/i
+  return /\b(statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|404 page not found|Not Found:\s*(?:404 page not found|Not Found)|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b|Invalid Responses API request|Country, region, or territory not supported|gateway or proxy|validation error|literal_error|Invalid input|Type validation failed|data did not match any variant of untagged enum InputParam)\b/i
     .test(text);
+}
+
+// OpenCode providers do not consistently preserve HTTP status metadata. Some
+// return only a bare "Not Found" (or an equivalent provider JSON body), which
+// previously fell through to the retryable stream_error close reason. Keep the
+// broad bare-text shapes scoped to BYOK OpenCode so an unrelated agent's local
+// resource/session miss is not reclassified as an upstream provider response.
+function isByokOpenCodeProviderNotFoundText(
+  agentId: string | null | undefined,
+  text: string,
+): boolean {
+  if (agentId !== 'byok-opencode') return false;
+
+  return /(?:^|\n)\s*(?:Not Found|Resource not found|The requested resource was not found)\s*(?=\n|$)/i
+    .test(text) ||
+    /\b(?:404(?:\s+(?:page|route))?\s+not found|resource_not_found_error|the requested resource was not found|Not Found:\s*Not support|NotFoundError)\b/i
+      .test(text) ||
+    /\bopencode (?:session error|event stream):[^\n]*\bNot Found\s*(?=$|\n)/im
+      .test(text) ||
+    /\"(?:detail|message)\"\s*:\s*\"Not Found\"/i.test(text) ||
+    /\bstatusCode[\"']?\s*:\s*404\b/i.test(text);
 }
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
@@ -309,7 +334,7 @@ function authDetail(text: string): TrackingRunFailureDetail {
   if (/\binvalid api key|api key.*invalid\b/i.test(text)) {
     return 'invalid_api_key';
   }
-  if (/\bmissing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*missing|credentials? (?:are )?missing\b/i
+  if (/\bmissing environment variable: `?[A-Z0-9_]*(?:API_)?KEY`?|api key.*missing|credentials? (?:are )?missing\b/i
     .test(text)) {
     return 'missing_api_key';
   }
@@ -321,15 +346,15 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
-  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API)\b/i
+  if (/\b(stream disconnected before completion|stream idle timeout|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
     .test(text)) {
     return 'stream_disconnected';
   }
-  if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded|Unexpected server error)\b/i
+  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
+  if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded|Unexpected server error|Failed to process error response)\b/i
     .test(text)) {
     return 'upstream_5xx';
   }
-  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
   return 'network_error';
 }
 
@@ -369,6 +394,9 @@ function signalInterruptClassification(
     return classification('process_exit', 'signal_killed', 'child_close', false, 'none');
   }
   if (PROCESS_CRASH_SIGNALS.has(signal)) {
+    return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
+  }
+  if (isProcessCrashText(text)) {
     return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
   }
   if (signal === 'SIGINT' || isInterruptExit) {
@@ -428,6 +456,8 @@ function processExitDetail(
 
 function isProcessCrashText(text: string): boolean {
   return /\bBun v\d+\.\d+\.\d+\b[\s\S]*\b(oh no: Bun has crashed|panic\(|Illegal instruction|Segmentation fault)\b/i
+    .test(text) ||
+    /\b(?:exit status )?0xc0000409\b/i
     .test(text);
 }
 
@@ -487,7 +517,12 @@ export function isResumableFailure(
   failure: RunFailureClassification | undefined,
 ): boolean {
   if (!failure) return false;
-  if (failure.failure_category === 'upstream_unavailable') return true;
+  if (
+    failure.failure_category === 'upstream_unavailable' &&
+    failure.failure_detail !== 'upstream_client_error'
+  ) {
+    return true;
+  }
   if (
     failure.failure_category === 'timeout' &&
     failure.failure_detail === 'inactivity_timeout'
@@ -531,6 +566,10 @@ export function classifyRunFailure(
   const text = collectFailureText(input);
   const retryableHint = latestRetryable(input.events);
   const amrFailure = classifyAmrAccountFailure(text);
+  const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
+    input.agentId,
+    text,
+  );
 
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
@@ -542,6 +581,19 @@ export function classifyRunFailure(
       'session_init',
       false,
       'recharge',
+    );
+  }
+
+  if (
+    errorCode === 'AMR_TIER_UPGRADE_REQUIRED' ||
+    amrFailure?.code === 'AMR_TIER_UPGRADE_REQUIRED'
+  ) {
+    return classification(
+      'entitlement_required',
+      'amr_tier_upgrade_required',
+      'session_init',
+      false,
+      'upgrade',
     );
   }
 
@@ -691,12 +743,15 @@ export function classifyRunFailure(
     errorCode === 'UPSTREAM_UNAVAILABLE' ||
     errorCode === 'AGENT_CONNECTION_DROPPED' ||
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
-    isUpstreamDetailText(text)
+    isUpstreamDetailText(text) ||
+    byokOpenCodeProviderNotFound
   ) {
-    const retryable = retryableHint ?? !isUpstreamClientErrorText(text);
+    const retryable = byokOpenCodeProviderNotFound
+      ? false
+      : retryableHint ?? !isUpstreamClientErrorText(text);
     return classification(
       'upstream_unavailable',
-      upstreamDetail(text),
+      byokOpenCodeProviderNotFound ? 'upstream_client_error' : upstreamDetail(text),
       inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
@@ -759,6 +814,32 @@ export function classifyRunFailure(
     );
   }
 
+  // ACP fatal paths ask the host to terminate the child after the protocol
+  // failure. The resulting exit/signal is therefore cleanup, not the cause.
+  // Prefer the runtime_close reason once specific text classifiers above have
+  // had a chance to claim auth, quota, upstream, prompt-size, and other known
+  // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
+  // error code at all, so it must also refine signal/unknown/exit fallbacks.
+  const runtimeCloseReason = readRuntimeCloseReason(input.events);
+  if (
+    runtimeCloseReason === 'fatal_rpc_error' &&
+    (
+      errorCode === 'AGENT_EXECUTION_FAILED' ||
+      errorCode === 'AGENT_TERMINATED_UNKNOWN' ||
+      errorCode.startsWith('AGENT_SIGNAL_') ||
+      errorCode.startsWith('AGENT_EXIT_')
+    )
+  ) {
+    const retryable = retryableHint ?? true;
+    return classification(
+      'process_exit',
+      'fatal_rpc_error',
+      inferFailureStageFromEvents(input.events, 'child_close'),
+      retryable,
+      retryable ? 'retry' : 'none',
+    );
+  }
+
   const signalInterrupt = signalInterruptClassification(errorCode, text, retryableHint);
   if (signalInterrupt) return signalInterrupt;
 
@@ -768,14 +849,18 @@ export function classifyRunFailure(
     errorCode === 'AGENT_EXECUTION_FAILED'
   ) {
     const baseDetail = processExitDetail(errorCode, text);
+    const refinedDetail = baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail;
+    const defaultRetryable =
+      refinedDetail === 'stream_error' ||
+      refinedDetail === 'fatal_rpc_error';
     return classification(
       'process_exit',
       // Only the generic AGENT_EXECUTION_FAILED catch-all is refined; the
       // specific exit_code / terminated_unknown labels already carry meaning.
-      baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail,
+      refinedDetail,
       inferFailureStageFromEvents(input.events, 'child_close'),
-      retryableHint ?? false,
-      retryableHint ? 'retry' : 'none',
+      retryableHint ?? defaultRetryable,
+      (retryableHint ?? defaultRetryable) ? 'retry' : 'none',
     );
   }
 

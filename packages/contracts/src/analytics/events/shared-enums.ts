@@ -6,16 +6,18 @@
 
 export type TrackingProjectKind =
   | 'prototype'
-  // `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
-  // Home task rail (task_chip) offers as their own cards. They all reuse the
-  // web-prototype seed (so the product `metadata.kind` stays `prototype`), but
-  // the analytics dimension splits them out so a created project's
-  // `project_kind` lines up 1:1 with the card the user picked:
+  // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind
+  // projects the Home task rail (task_chip) offers as their own cards. They all
+  // reuse the web-prototype seed (so the product `metadata.kind` stays
+  // `prototype`), but the analytics dimension splits them out so a created
+  // project's `project_kind` lines up 1:1 with the card the user picked:
+  //   - `web_clone`     ← metadata.intent === 'web-clone'
   //   - `wireframe`     ← metadata.fidelity === 'wireframe'
   //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
   //   - `live_artifact` ← metadata.intent === 'live-artifact'
-  // Derivation precedence (a prototype that matches several): live_artifact >
-  // wireframe > mobile. See `projectKindToTracking`.
+  // Derivation precedence (a prototype that matches several): web_clone >
+  // live_artifact > wireframe > mobile. See `projectKindToTracking`.
+  | 'web_clone'
   | 'wireframe'
   | 'mobile'
   | 'live_artifact'
@@ -64,6 +66,13 @@ export type TrackingAmrEntrySource =
   | 'handoff_amr_website'
   | 'chat_error_authorize_retry'
   | 'chat_error_recharge'
+  | 'chat_error_upgrade'
+  | 'chat_balance_gate_upgrade'
+  | 'home_balance_gate_upgrade'
+  | 'chat_low_balance_warn_recharge'
+  | 'home_low_balance_warn_recharge'
+  | 'chat_balance_gate_sign_in'
+  | 'home_balance_gate_sign_in'
   | 'chat_error_switch_retry_card'
   | 'generation_preview_authorize_retry'
   | 'generation_preview_recharge'
@@ -71,7 +80,9 @@ export type TrackingAmrEntrySource =
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
   | 'avatar_amr_upgrade'
-  | 'avatar_amr_agent_card';
+  | 'avatar_amr_agent_card'
+  | 'artifact_success_upgrade'
+  | 'home_artifact_upgrade';
 
 export interface AmrEntryAttribution {
   entryId: string;
@@ -118,7 +129,8 @@ export type TrackingByokProviderId =
   | 'azure_openai'
   | 'google_gemini'
   | 'ollama_cloud'
-  | 'senseaudio';
+  | 'senseaudio'
+  | 'aihubmix';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
@@ -176,6 +188,7 @@ export type TrackingRunFailureCategory =
   | 'auth'
   | 'rate_limit'
   | 'insufficient_balance'
+  | 'entitlement_required'
   | 'model_unavailable'
   | 'prompt_too_large'
   | 'upstream_unavailable'
@@ -195,6 +208,7 @@ export type TrackingRunFailureDetail =
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'
+  | 'amr_tier_upgrade_required'
   | 'model_not_found'
   | 'model_not_supported'
   | 'model_disabled'
@@ -285,6 +299,7 @@ export type TrackingRunFailureUserAction =
   | 'retry'
   | 'login'
   | 'recharge'
+  | 'upgrade'
   | 'switch_model'
   | 'reduce_context'
   | 'install_cli'
@@ -412,4 +427,3 @@ export type TrackingFileSizeBucket =
   | '1_10mb'
   | '10_100mb'
   | '100mb_plus';
-

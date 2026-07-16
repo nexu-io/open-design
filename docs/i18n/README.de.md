@@ -115,6 +115,7 @@ Im Studio eines Projekts streamt dasselbe Designsystem mehrere Artefakttypen her
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Unterstützt | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Unterstützt | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Unterstützt | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Unterstützt | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Unterstützt | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Unterstützt | `od mcp install copilot` |
@@ -125,6 +126,7 @@ Im Studio eines Projekts streamt dasselbe Designsystem mehrere Artefakttypen her
 | [Cline](https://github.com/cline/cline) | ✅ Unterstützt | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Unterstützt | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Unterstützt | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Unterstützt | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Unterstützt | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Unterstützt | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Unterstützt | `od mcp install hermes` |

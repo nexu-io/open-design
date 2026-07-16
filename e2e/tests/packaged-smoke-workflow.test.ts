@@ -29,6 +29,12 @@ const bakePreviewsAutomergeWorkflowPath = join(
   "bake-plugin-previews-automerge.yml",
 );
 const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const bakePreviewsReleaseWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "bake-plugin-previews-release.yml",
+);
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
@@ -44,7 +50,12 @@ const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
+const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
+const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
+const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
+const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
 const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
@@ -119,18 +130,24 @@ async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promis
 // Pull the two jq programs that the `validate` job's "Check workspace validation jobs" step runs
 // (the blanket failure scan and the required-jobs scan) straight out of ci.yml, so the gate logic
 // under test stays the real workflow source rather than a reimplementation. Both are invoked as
-// `jq -r --arg event "$EVENT_NAME" '<program>'` and contain no single quotes, so the program is the
-// text between the opening and the next `'`.
+// `jq -r '<program>'` and contain no single quotes, so the program is the text between the opening
+// and the next `'`.
 function extractValidateGateJqPrograms(workflow: string): { failures: string; requiredMisses: string } {
   const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
-  const programs = [...validate.matchAll(/jq -r --arg event "\$EVENT_NAME" '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
+  // Only the "Check workspace validation jobs" step — later validate steps also use jq.
+  const needsCheck = sectionBetween(
+    validate,
+    "      - name: Check workspace validation jobs",
+    "      - name: Block merge while the needs-validation label is present",
+  );
+  const programs = [...needsCheck.matchAll(/jq -r '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
   expect(programs).toHaveLength(2);
   return { failures: programs[0] ?? "", requiredMisses: programs[1] ?? "" };
 }
 
-function runValidateGateJq(program: string, eventName: string, needs: unknown): Promise<string> {
+function runValidateGateJq(program: string, needs: unknown): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile("jq", ["-r", "--arg", "event", eventName, program], { encoding: "utf8" }, (error, stdout, stderr) => {
+    const child = execFile("jq", ["-r", program], { encoding: "utf8" }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }));
         return;
@@ -142,11 +159,11 @@ function runValidateGateJq(program: string, eventName: string, needs: unknown): 
 }
 
 // Mirrors the bash gate decision: the step exits non-zero when either jq program emits any line.
-async function validateGatePasses(workflow: string, eventName: string, needs: unknown): Promise<boolean> {
+async function validateGatePasses(workflow: string, needs: unknown): Promise<boolean> {
   const { failures, requiredMisses } = extractValidateGateJqPrograms(workflow);
   const [failureLines, missLines] = await Promise.all([
-    runValidateGateJq(failures, eventName, needs),
-    runValidateGateJq(requiredMisses, eventName, needs),
+    runValidateGateJq(failures, needs),
+    runValidateGateJq(requiredMisses, needs),
   ]);
   return failureLines === "" && missLines === "";
 }
@@ -304,7 +321,7 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
+    const blobGuard = sectionBetween(workflow, "  static_gate:", "  preflight:");
 
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
     expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
@@ -321,7 +338,7 @@ describe("packaged smoke workflow", () => {
     ]);
 
     const ciTrigger = sectionBetween(ciWorkflow, "on:", "\npermissions:");
-    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  nix_validation:");
+    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  preflight:");
     const dockerTrigger = sectionBetween(dockerWorkflow, "on:", "\njobs:");
 
     expect(ciTrigger).toContain("pull_request:");
@@ -331,15 +348,59 @@ describe("packaged smoke workflow", () => {
     expect(ciBlobGuard).not.toContain('${{ github.event_name }}" = "push"');
     expect(dockerTrigger).toContain("workflow_call:");
     expect(dockerTrigger).toContain("tags: ['v*.*.*']");
+    expect(dockerTrigger).toContain("pull_request:");
+    // Publish stays tag/call only — no continuous main-branch image push.
     expect(dockerTrigger).not.toContain("branches: [main]");
-    expect(dockerTrigger).not.toContain("- main");
+    expect(dockerTrigger).not.toMatch(/push:\s*\n\s*branches:/);
+    // Publish mode must not key only on event_name == workflow_call (caller keeps
+    // its own event name). Release calls pass release_version / publish_latest.
+    const dockerMode = sectionBetween(dockerWorkflow, "Resolve publish mode", "Set up QEMU");
+    expect(dockerMode).toContain("RELEASE_VERSION");
+    expect(dockerMode).toContain("PUBLISH_LATEST");
+    expect(dockerMode).toContain('[ "$EVENT_NAME" = "push" ]');
+    expect(dockerMode).toContain('[ -n "${RELEASE_VERSION:-}" ]');
+    // Shell condition must not treat literal workflow_call as the publish signal.
+    expect(dockerMode).not.toMatch(/\[\s*"\$EVENT_NAME"\s*=\s*"workflow_call"\s*\]/);
+    // Smoke-only sha tags must be disabled whenever publish mode is true (release
+    // callers are workflow_dispatch with release_version, and would otherwise push
+    // manual-sha-* alongside the real version tags).
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request'");
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch'");
     expect(commentWorkflow).toContain("workflows: [ci]");
-    expect(commentWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    // comment.atom consumes merge_group runs too, so the needs-validation gate can surface a
+    // queue-ejection notice on the PR; autofix/report stay pull_request-only trusted consumers.
+    expect(commentWorkflow).toContain(
+      "(github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group')",
+    );
     expect(autofixWorkflow).toContain("workflows: [ci]");
     expect(autofixWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).not.toContain("merge_group");
     expect(autofixWorkflow).not.toContain("ci-nix");
     expect(reportWorkflow).toContain("workflows: [ci]");
     expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(reportWorkflow).not.toContain("merge_group");
+  });
+
+  it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
+    const [ciWorkflow, commentWorkflow] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+    ]);
+
+    // Producer: the merge_group gate emits a handoff/comment artifact for the labeled PR when
+    // it blocks, and uploads it on the failure path (the gate exits 1 exactly when it produces).
+    expect(ciWorkflow).toContain("<!-- merge-queue-needs-validation -->");
+    expect(ciWorkflow).toContain("emit_ejection_notice");
+    expect(ciWorkflow).toContain(
+      "if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}",
+    );
+
+    // Consumer: a merge_group run's head_sha is the queue's synthetic merge commit, so the atom
+    // binds merge_group artifacts to their producing run by run_id and skips the base-freshness
+    // check (PRs ahead in the queue move the base while the run completes).
+    expect(commentWorkflow).toContain('"$RUN_EVENT" = "merge_group"');
+    expect(commentWorkflow).toContain('"$artifact_run_id" != "$RUN_ID"');
+    expect(commentWorkflow).toContain('[ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]');
   });
 
   it("[P2] gates the backport auto-merge follow-up as a trusted workflow_run consumer", async () => {
@@ -590,7 +651,6 @@ process.stdin.on("end", () => {
     try {
       await Promise.all([
         mkdir(join(dir, "apps", "web"), { recursive: true }),
-        mkdir(join(dir, "apps", "telemetry-worker"), { recursive: true }),
         mkdir(join(dir, "packages", "platform"), { recursive: true }),
         mkdir(join(dir, "packages", "components"), { recursive: true }),
         mkdir(join(dir, "tools", "dev"), { recursive: true }),
@@ -599,7 +659,6 @@ process.stdin.on("end", () => {
       await Promise.all([
         writeJson("package.json", { name: "root", version: "0.12.0", dependencies: { untouched: "0.12.0" } }),
         writeJson("apps/web/package.json", { name: "@open-design/web", version: "0.12.0" }),
-        writeJson("apps/telemetry-worker/package.json", { name: "telemetry-worker", version: "0.1.0" }),
         writeJson("packages/platform/package.json", { name: "@open-design/platform", version: "0.12.0" }),
         writeJson("packages/components/package.json", { name: "@open-design/components", version: "0.5.0" }),
         writeJson("tools/dev/package.json", { name: "@open-design/dev", version: "0.12.0" }),
@@ -627,9 +686,6 @@ process.stdin.on("end", () => {
       });
       await expect(readFile(join(dir, "e2e", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.12.1",
-      });
-      await expect(readFile(join(dir, "apps", "telemetry-worker", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
-        version: "0.1.0",
       });
       await expect(readFile(join(dir, "packages", "components", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
         version: "0.5.0",
@@ -811,6 +867,32 @@ process.stdin.on("end", () => {
     expect(workflow).not.toContain("git/ref/heads/main");
   });
 
+  it("[P2] keeps the release-cut bake pushing its manifest as a ruleset bypass bot", async () => {
+    // release/** is guarded by the "Protected branches (preview/*, release/v*)" ruleset whose
+    // pull_request rule rejects a direct push (GH013) unless the pusher is a bypass actor. The
+    // release-cut bake writes the authoritative manifest straight onto the release branch, so it
+    // must push as open-design-bot — a bypass actor on that ruleset — not github-actions[bot],
+    // which is NOT and gets rejected (this stranded release/v0.14.2's manifest). These three auth
+    // invariants only work together; a refactor that drops any one silently reintroduces the
+    // GH013 regression, so lock them here rather than rely on YAML review.
+    const workflow = await readFile(bakePreviewsReleaseWorkflowPath, "utf8");
+
+    // 1. Checkout must NOT persist GITHUB_TOKEN: its http.extraheader would override the inline bot
+    //    token on push and re-authenticate as github-actions[bot] (the same override fixed in the
+    //    post-merge bake — #5357).
+    expect(workflow).toContain("persist-credentials: false");
+    // 2. The run mints an open-design-bot token via the BOT_APP_* creds — the App that IS a bypass
+    //    actor on the release ruleset. RELEASE_BOT_APP_ID (used by the post-merge bake) is a
+    //    different App and is NOT a bypass actor, so pin the correct credentials, not just the
+    //    generic token action.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.BOT_APP_CLIENT_ID");
+    expect(workflow).toContain("secrets.BOT_APP_PRIVATE_KEY");
+    // 3. The manifest push goes through the explicit tokenized URL with that bot token, so it
+    //    authenticates as the bypass actor rather than the checkout's default credential.
+    expect(workflow).toContain("x-access-token:${BOT_TOKEN}");
+  });
+
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
@@ -826,35 +908,45 @@ process.stdin.on("end", () => {
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
       run_ui_p0: true,
-      run_nix_validation: false,
     });
     await expect(runScopesPrint("workflow_dispatch", { inputs: {} })).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
-      run_docker_build: true,
-      run_nix_validation: true,
       run_ui_p0: true,
+      run_preflight: true,
     });
     await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
-      run_docker_build: true,
-      run_nix_validation: true,
       run_ui_p0: true,
+      run_preflight: true,
     });
+    // Packaging (nix / docker) is no longer part of core scopes / Validate workspace.
+    for (const plan of await Promise.all([
+      runScopesPrint("merge_group", {}),
+      runScopesPrint("workflow_dispatch", { inputs: {} }),
+      runScopesPrint("pull_request", { pull_request: { number: 1 } }, ["apps/web/src/app/page.tsx"]),
+    ])) {
+      expect(plan).not.toHaveProperty("run_nix_validation");
+      expect(plan).not.toHaveProperty("run_docker_build");
+      expect(plan).not.toHaveProperty("nix_validation_required");
+      expect(plan).not.toHaveProperty("docker_validation_required");
+    }
   });
 
-  it("[P2] keeps the Validate workspace gate Nix-advisory on PRs and enforced at merge", async () => {
+  it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    // The gate must read the event so it can treat a red nix_validation differently per surface.
-    expect(validate).toContain("EVENT_NAME: ${{ github.event_name }}");
-    expect(validate).toContain('select(.key != "nix_validation" or $event != "pull_request")');
-    expect(validate).toContain('when($out.run_nix_validation == "true" and $event != "pull_request"; ["nix_validation"])');
+    expect(workflow).not.toContain("nix_validation:");
+    expect(workflow).not.toContain("docker_pr:");
+    expect(validate).not.toContain("nix_validation");
+    expect(validate).not.toContain("docker_pr");
+    expect(validate).not.toContain("run_nix_validation");
+    expect(validate).not.toContain("run_docker_build");
+    expect(validate).toContain("Check workspace validation jobs");
 
     const baseOutputs = {
-      run_nix_validation: "true",
       run_preflight: "false",
       run_workspace_unit_tests: "false",
       run_windows_tools_pack_payload_tests: "false",
@@ -863,43 +955,34 @@ process.stdin.on("end", () => {
       run_playwright_critical: "false",
       run_ui_p0: "false",
       run_playwright_visual: "false",
-      run_docker_build: "false",
     };
-    const needsWithFailedNix = {
-      scopes: { result: "success", outputs: baseOutputs },
-      static_gate: { result: "success" },
-      nix_validation: { result: "failure" },
-    };
+    // Core gate only cares about app jobs — unknown packaging keys are ignored.
+    await expect(
+      validateGatePasses(workflow, {
+        scopes: { result: "success", outputs: baseOutputs },
+        static_gate: { result: "success" },
+      }),
+    ).resolves.toBe(true);
 
-    // A stale/failed Nix hash is advisory on pull_request: the gate still passes while autofix heals it.
-    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedNix)).resolves.toBe(true);
-    // ...but it is a hard gate at merge time and on manual full runs — fail closed, never reaching main.
-    await expect(validateGatePasses(workflow, "merge_group", needsWithFailedNix)).resolves.toBe(false);
-    await expect(validateGatePasses(workflow, "workflow_dispatch", needsWithFailedNix)).resolves.toBe(false);
-
-    // The PR exception is scoped to Nix only — any other failed required job still fails the gate on a PR.
     const needsWithFailedWeb = {
       scopes: { result: "success", outputs: { ...baseOutputs, run_web_workspace_tests: "true" } },
       static_gate: { result: "success" },
-      nix_validation: { result: "success" },
       web_workspace_tests: { result: "failure" },
     };
-    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedWeb)).resolves.toBe(false);
+    await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
   });
 
   it("[P2] routes default CI through cost-sensitive runner tiers", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const runners = sectionBetween(workflow, "  runners:", "  scopes:");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
-    const staticGate = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
+    const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");
     const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  windows_tools_pack_payload_tests:");
     const webWorkspaceTests = sectionBetween(workflow, "  web_workspace_tests:", "  e2e_vitest:");
     const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
-    const nixValidation = sectionBetween(workflow, "  nix_validation:", "  preflight:");
     const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
-    const dockerPr = sectionBetween(workflow, "  docker_pr:", "  validate:");
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
-    const visual = sectionBetween(workflow, "  playwright_visual:", "  docker_pr:");
+    const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
 
     expect(runners).toContain("runs-on: ubuntu-24.04");
     expect(runners).toContain("runs_on: ${{ steps.runners.outputs.runs_on }}");
@@ -917,10 +1000,8 @@ process.stdin.on("end", () => {
     expect(e2eVitest).toContain("fromJSON(needs.runners.outputs.runs_on).js_hot");
     expect(e2eVitest).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot)");
     expect(e2eVitest).not.toContain('"od-persistent-ci"');
-    expect(nixValidation).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium)");
-    expect(dockerPr).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_hot");
     expect(uiP0).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot)");
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
@@ -1007,17 +1088,20 @@ process.stdin.on("end", () => {
       readFile(handoffScriptPath, "utf8"),
     ]);
 
+    // Core ci still produces comment + report handoffs (needs-validation, visual).
+    // Packaging hash autofix left core ci with nix — no ci-produced autofix handoffs for now.
     expect(ciWorkflow).toContain("handoff.py dir comment");
-    expect(ciWorkflow).toContain("handoff.py dir autofix");
     expect(ciWorkflow).toContain("handoff.py dir report");
     expect(ciWorkflow).toContain("handoff-comment-");
-    expect(ciWorkflow).toContain("handoff-autofix-");
     expect(ciWorkflow).toContain("handoff-report-");
+    expect(ciWorkflow).not.toContain("handoff.py dir autofix");
+    expect(ciWorkflow).not.toContain("handoff-autofix-");
     expect(ciWorkflow).not.toContain("nix-hash-autofix");
     expect(ciWorkflow).not.toContain("visual-pr-comment");
     expect(commentWorkflow).toContain("artifact-pattern comment");
     expect(commentWorkflow).toContain("merge-multiple: false");
     expect(commentWorkflow).toContain("pull-requests: write");
+    // Atom capability remains available for future producers; it is not required to be fed by ci.
     expect(autofixWorkflow).toContain("artifact-pattern autofix");
     expect(autofixWorkflow).toContain("allowed_paths");
     expect(reportWorkflow).toContain("artifact-pattern report");
@@ -1232,6 +1316,38 @@ process.stdin.on("end", () => {
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
   });
 
+  it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {
+    const workflows = await Promise.all([
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releasePreviewWorkflowPath, "utf8"),
+      readFile(releaseStableWorkflowPath, "utf8"),
+    ]);
+
+    for (const workflow of workflows) {
+      expect(workflow).toContain("tools-release prepare-release-note");
+      expect(workflow).toContain("tools-release publish-release-note");
+      expect(workflow).toContain("tools-release verify-release-note");
+      expect(workflow).toContain("RELEASE_NOTE_MANIFEST_PATH:");
+      expect(workflow.indexOf("tools-release prepare-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release publish-release-note"),
+      );
+      expect(workflow.indexOf("tools-release publish-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release verify-release-note"),
+      );
+      expect(workflow.indexOf("tools-release verify-release-note")).toBeLessThan(
+        workflow.indexOf("tools-release publish-metadata"),
+      );
+    }
+
+    const stableWorkflow = workflows[4] ?? "";
+    expect(stableWorkflow).toContain("Validate stable release note policy");
+    expect(stableWorkflow).toContain(
+      "RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}",
+    );
+  });
+
   it("[P2] requires stable release dispatch to use the release version branch", async () => {
     const [workflow, script] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
@@ -1338,9 +1454,104 @@ process.stdin.on("end", () => {
     expect(resolveJob).not.toContain("refs/heads/release/v*");
   });
 
+  it("[P2] gates the Thursday patch cut on the Tuesday minor being published", async () => {
+    // cut-patch-release is the Tuesday cut-release flow, one weekday later, with a
+    // PATCH bump and a publish guard. Lock the three properties that make it safe:
+    //   1. It fires Thursday and bumps patch (not minor) from the highest release branch.
+    //   2. It only cuts when this line's minor base X.Y.0 is a PUBLISHED stable
+    //      GitHub Release (non-draft, non-prerelease) — otherwise it must NOT create
+    //      a branch or build; it posts a Feishu notice and stops.
+    //   3. The happy path still cuts from main and pushes with the App token, so the
+    //      existing notify-release-feishu push trigger produces the prerelease + card.
+    const [workflow, notice] = await Promise.all([
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+      readFile(feishuNoticeScriptPath, "utf8"),
+    ]);
+
+    // Thursday cron, and a patch (not minor) bump.
+    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+    expect(trigger).toContain("cron: '0 1 * * 4'");
+    expect(workflow).toContain('V="${major}.${minor}.$((patch+1))"');
+    expect(workflow).not.toContain("minor+1");
+
+    // The guard target (MINOR_BASE) must derive from the FINAL version V, not from
+    // the highest branch — otherwise a manual `version=` on another line is gated
+    // against the wrong minor (e.g. version=0.15.1 while latest is 0.14.0 would
+    // wrongly check open-design-v0.14.0). Assert V's own major/minor drive it.
+    expect(workflow).toContain('vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}');
+    expect(workflow).toContain('MINOR_BASE="${vmajor}.${vminor}.0"');
+    expect(workflow).not.toContain('MINOR_BASE="${major}.${minor}.0"');
+
+    // The guard reads the minor base's stable release and requires it published
+    // (neither draft nor prerelease); a missing release falls back to not published.
+    const guard = sectionBetween(workflow, "- name: Check the Tuesday minor is published", "# ---- Skip path");
+    expect(guard).toContain('gh release view "$MINOR_TAG"');
+    expect(guard).toContain("--jq '(.isDraft or .isPrerelease) | not'");
+    expect(guard).toContain("|| published=false");
+    expect(workflow).toContain('echo "minor_tag=open-design-v$MINOR_BASE"');
+
+    // Skip path: no branch, no build — only the Feishu notice runs, gated on !published.
+    const noticeStep = sectionBetween(workflow, "- name: Notify Feishu that the patch cut was skipped", "- name: Stop here when skipping");
+    expect(noticeStep).toContain("if: steps.guard.outputs.published != 'true'");
+    expect(noticeStep).toContain("tools/release/src/notifications/feishu-notice.ts");
+    // Every branch-cutting step must be gated on the guard passing: assert the
+    // guard `if:` is the line immediately after each step name.
+    for (const step of ["Bail out if the branch already exists", "Create branch + bump version + push", "Create backport label"]) {
+      expect(workflow).toContain(`- name: ${step}\n        if: steps.guard.outputs.published == 'true'`);
+    }
+
+    // Happy path keeps cut-release's mechanics: cut from main, App-token push.
+    expect(workflow).toContain("ref: main");
+    expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
+    expect(workflow).toContain('git push origin "$BRANCH"');
+    // The version bump is a no-op whenever main already leads stable by this exact
+    // patch (apps/packaged == $VERSION), so the release commit MUST tolerate an empty
+    // tree — otherwise `git commit` dies on "nothing to commit" and no branch is cut.
+    expect(workflow).toContain('git commit --allow-empty -am "chore(release): v$VERSION"');
+
+    // The notice card is a standalone poster with the same signed-webhook contract.
+    expect(notice).toContain("msg_type: \"interactive\"");
+    expect(notice).toContain('required("NOTICE_TITLE")');
+    expect(notice).toContain('required("NOTICE_BODY")');
+  });
+
+  it("[P2] posts an immediate branch-cut Feishu card naming the backport label on both cut workflows", async () => {
+    // Cutting a release branch triggers a ~20-40 min prerelease build before the
+    // download card lands, so both cut workflows post an eager "branch cut" notice
+    // the moment the branch exists. Each must: reuse feishu-notice.ts, run AFTER the
+    // branch push + label creation, and name the exact backport label so the team
+    // knows which label to apply for backports.
+    const [minorCut, patchCut] = await Promise.all([
+      readFile(cutReleaseWorkflowPath, "utf8"),
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+    ]);
+
+    for (const [label, workflow, kind] of [
+      ["cut-release (minor)", minorCut, "大版本 minor"],
+      ["cut-patch-release (patch)", patchCut, "小版本 patch"],
+    ] as const) {
+      const step = sectionBetween(workflow, "- name: Notify Feishu that the branch was cut", "\n        run:");
+      // Same standalone notifier + the shared release webhook/secret.
+      expect(workflow, label).toContain("run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts");
+      expect(step, label).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}");
+      // Names the version's backport label in the card body.
+      expect(step, label).toContain("backport release/v${{ steps.ver.outputs.version }}");
+      // Distinguishes major vs minor cut.
+      expect(step, label).toContain(kind);
+      // The eager card must come AFTER the branch is actually cut + pushed.
+      expect(workflow.indexOf("- name: Notify Feishu that the branch was cut"), label)
+        .toBeGreaterThan(workflow.indexOf('git push origin "$BRANCH"'));
+    }
+    // The patch workflow's eager card only fires on the happy (published) path.
+    const patchNotice = sectionBetween(patchCut, "- name: Notify Feishu that the branch was cut", "\n        run:");
+    expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
+  });
+
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, productionWorkflow, script] = await Promise.all([
+    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
       readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
+      readFile(landingPageCiWorkflowPath, "utf8"),
+      readFile(landingPageStagingWorkflowPath, "utf8"),
       readFile(landingPageProductionWorkflowPath, "utf8"),
       readFile(landingPageDailyFeishuScriptPath, "utf8"),
     ]);
@@ -1367,6 +1578,19 @@ process.stdin.on("end", () => {
     expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
     expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
     expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
+
+    // Wrangler Pages ignores custom --config paths. Before every staging
+    // migration/deploy, replace the default config with staging's isolated
+    // bindings so preview/staging traffic can never touch production KV/D1.
+    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
+      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
+      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
+      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
+      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
+      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
+    }
+    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
+    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
 
     expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
     expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');

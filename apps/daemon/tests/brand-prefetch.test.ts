@@ -39,6 +39,25 @@ describe('brand prefetch artifacts', () => {
     expect(preview).toBe(html.slice(0, 72));
     expect(preview).toContain('<body>');
   });
+
+  it('defuses script execution in stored captures so previews never run source-site code', () => {
+    const html =
+      '<!doctype html><html><head>' +
+      '<script src="https://accounts.google.com/gsi/client" async></script>' +
+      '<SCRIPT type="module">initOneTap();</SCRIPT>' +
+      '</head><body>page</body></html>';
+
+    const preview = previewablePrefetchHtml(html);
+
+    // The markup stays readable as evidence, but no script tag may remain
+    // executable: every opening tag must lead with the defused type attribute
+    // (first attribute wins on duplicates), covering both external-src and
+    // inline scripts regardless of original casing.
+    expect(preview).toContain('accounts.google.com/gsi/client');
+    expect(preview).not.toMatch(/<script\s+(?!type="text\/od-defused-script")/i);
+    expect(preview.match(/<script type="text\/od-defused-script"/gi)).toHaveLength(2);
+    expect(preview).toContain('page');
+  });
 });
 
 describe('prefetchFromHtml (extract from already-rendered DOM)', () => {

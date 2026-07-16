@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { PDFDocument } from 'pdf-lib';
 import * as PptxGenJSModule from 'pptxgenjs';
+import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
 import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
 
 // pptxgenjs ships a default-export class, but its NodeNext typings resolve the
@@ -32,6 +33,7 @@ export interface BuildDeckRenderInputOptions {
   pageImageFormat?: 'png' | 'jpeg';
   projectId: string;
   projectsRoot: string;
+  sourceHtml?: string;
   stitch?: boolean;
   width?: number;
   height?: number;
@@ -56,19 +58,19 @@ export interface DeckRenderRequest {
 export async function buildDeckRenderInput(
   options: BuildDeckRenderInputOptions,
 ): Promise<DeckRenderRequest> {
-  const file = await readProjectFile(
+  const html = options.sourceHtml ?? (await readProjectFile(
     options.projectsRoot,
     options.projectId,
     options.fileName,
     options.metadata ?? undefined,
-  );
+  )).buffer.toString('utf8');
   const title = displayTitle(options.title, options.fileName);
   return {
     defaultFilename: safeDisplayFilename(title, 'deck'),
     title,
     input: {
       baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
-      html: file.buffer.toString('utf8'),
+      html: injectDeckStageFallback(html),
       ...(options.deck == null ? {} : { deck: options.deck }),
       ...(options.editable == null ? {} : { editable: options.editable }),
       ...(options.index == null ? {} : { index: options.index }),

@@ -12,16 +12,15 @@ export const piAgentDef = {
     // every spawn). The default 3s version-probe timeout is too tight; raise it
     // so detection doesn't silently abort before reaching fetchModels.
     versionProbeTimeoutMs: 15_000,
-    // `pi --list-models` prints a TSV table to stderr (not stdout),
-    // so we use a custom fetchModels that reads stderr.
+    // `pi --list-models` prints its TSV table to stdout.
     fetchModels: async (resolvedBin, env) => {
       try {
-        const { stderr } = await execAgentFile(resolvedBin, ['--list-models'], {
+        const { stdout } = await execAgentFile(resolvedBin, ['--list-models'], {
           env,
           timeout: 60_000, // Windows: 20s exceeded under parallel detection load
           maxBuffer: 8 * 1024 * 1024,
         });
-        const parsed = parsePiModels(stderr);
+        const parsed = parsePiModels(stdout);
         if (!parsed || parsed.length === 0) return null;
         return parsed;
       } catch {

@@ -21,10 +21,12 @@
 // daemon upgrade".
 
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import type Database from 'better-sqlite3';
 import {
   deleteInstalledPlugin,
+  getInstalledPlugin,
   resolvePluginFolder,
   upsertInstalledPlugin,
   type RegistryRoots,
@@ -138,6 +140,69 @@ function pruneRemovedBundledPlugins(
   return pruned;
 }
 
+// Recursively list every file under `dir`, relative to `root`. Bundled
+// plugin folders are curated content directories (no node_modules/.git), so
+// a plain recursive walk is cheap — no need to special-case anything.
+async function listFilesRecursive(root: string, dir: string): Promise<string[]> {
+  let entries;
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...(await listFilesRecursive(root, abs)));
+    } else if (entry.isFile()) {
+      out.push(path.relative(root, abs));
+    }
+  }
+  return out;
+}
+
+// Hashes EVERY file under a bundled plugin's folder, not just
+// open-design.json/SKILL.md. A bundled plugin's runtime behavior is served
+// from far more than its manifest: /api/plugins/:id/preview discovers HTML
+// under assets/, public/, dist/, examples/, preview/, templates/ (see
+// discoverPluginHtmlAssets in routes/plugins/assets.ts), and Community cards
+// render preview media (od.preview.poster/video/gif) from arbitrary
+// manifest-referenced paths. Hardcoding "the files we know matter today"
+// would just be next month's whack-a-mole as new preview/asset consumers get
+// added — hashing the whole tree is the version of this check that doesn't
+// need updating every time. Paths are sorted before hashing so the digest is
+// independent of readdir's (platform-dependent) enumeration order.
+async function computeBundledContentDigest(folder: string): Promise<string> {
+  const hash = createHash('sha256');
+  const relPaths = (await listFilesRecursive(folder, folder))
+    .map((p) => p.split(path.sep).join('/'))
+    .sort();
+  for (const rel of relPaths) {
+    let content: Buffer;
+    try {
+      content = await fsp.readFile(path.join(folder, ...rel.split('/')));
+    } catch {
+      content = Buffer.alloc(0);
+    }
+    // Prefix each file's bytes with its path so "a.txt empty, b.txt has X"
+    // can't hash the same as "a.txt has X, b.txt empty".
+    hash.update(rel).update('\0').update(content).update('\0');
+  }
+  return hash.digest('hex');
+}
+
+function getBundledContentDigest(db: SqliteDb, id: string): string | null {
+  const row = db
+    .prepare(`SELECT bundled_content_digest FROM installed_plugins WHERE id = ?`)
+    .get(id) as { bundled_content_digest: string | null } | undefined;
+  return row?.bundled_content_digest ?? null;
+}
+
+function setBundledContentDigest(db: SqliteDb, id: string, digest: string): void {
+  db.prepare(`UPDATE installed_plugins SET bundled_content_digest = ? WHERE id = ?`).run(digest, id);
+}
+
 async function registerOne(args: {
   folder: string;
   folderId: string;
@@ -167,8 +232,30 @@ async function registerOne(args: {
     args.warnings.push(`bundled plugin ${args.folderId} failed to parse: ${probe.errors.join('; ')}`);
     return;
   }
-  const record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);
+  let record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);
+  // This walker re-runs on every daemon boot (it's how bundled plugins pick up
+  // an upgrade without a boot flag), so `record` always carries a fresh
+  // `installedAt`/`updatedAt` stamped at construction time (registry.ts). If
+  // nothing about this plugin actually changed since last boot, keep the
+  // existing timestamps instead of overwriting them with "now" — otherwise
+  // every restart resets the ENTIRE bundled catalog's `updatedAt` to the same
+  // instant, which collapses the Community gallery's "Newest" sort (it orders
+  // by `updatedAt`) into whatever order ties fall back to, instead of real
+  // recency.
+  //
+  // "Changed" is decided by a digest of the plugin's raw on-disk files, not
+  // by comparing the parsed manifest/version: SKILL.md's markdown body never
+  // makes it into the manifest object (adaptAgentSkill keeps only frontmatter
+  // fields), so a prose-only SKILL.md edit would be invisible to a
+  // manifest-equality check while still being a real content change.
+  const existing = getInstalledPlugin(args.input.db, record.id);
+  const contentDigest = await computeBundledContentDigest(args.folder);
+  const existingDigest = existing ? getBundledContentDigest(args.input.db, record.id) : null;
+  if (existing && existingDigest === contentDigest) {
+    record = { ...record, installedAt: existing.installedAt, updatedAt: existing.updatedAt };
+  }
   upsertInstalledPlugin(args.input.db, record);
+  setBundledContentDigest(args.input.db, record.id, contentDigest);
   args.seenFolderIds.add(record.id);
   args.out.push(record);
 }

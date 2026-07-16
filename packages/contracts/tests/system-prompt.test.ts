@@ -95,6 +95,45 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
       'If this turn only edited an existing HTML file',
     );
   });
+
+  it('defaults generated deliverables to semantic filenames after active skills', () => {
+    const prompt = composeSystemPrompt({
+      skillName: 'simple-deck',
+      skillBody: 'Copy assets/template.html to index.html, then fill the deck.',
+    });
+
+    expect(prompt).toContain('## Semantic output file names');
+    expect(prompt).toContain('Do not call every new artifact `index.html`');
+    expect(prompt).toContain('adapt the destination to a semantic filename');
+    expect(prompt.indexOf('## Semantic output file names')).toBeGreaterThan(
+      prompt.indexOf('## Active skill — simple-deck'),
+    );
+  });
+
+  it('does not make index.html the fixed deck-framework destination', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).not.toContain('Copy the canonical skeleton below as index.html');
+    expect(prompt).toContain('semantically named deck HTML file');
+  });
+
+  it('pins the data chart discipline inside the deck framework (#907)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Data chart discipline');
+    expect(prompt).toContain('calc(var(--v) / var(--max)');
+    expect(prompt).toContain('visible category label AND value label');
+    expect(prompt).toContain('Mentally spot-check two bars');
+  });
+
+  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Mermaid diagram theme discipline');
+    expect(prompt).toContain("theme: 'dark'");
+    expect(prompt).toContain('themeVariables');
+    expect(prompt).toContain('no dark-on-dark labels');
+  });
 });
 
 describe('composeSystemPrompt', () => {

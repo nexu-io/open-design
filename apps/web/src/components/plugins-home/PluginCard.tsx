@@ -12,15 +12,17 @@
 // gallery-clean while the active state surfaces everything the user
 // needs to commit.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { VisuallyHidden } from '@open-design/components';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
+import { useDeckPreviewScale } from '../../lib/use-deck-preview-scale';
 import type { PluginShareAction } from '../../state/projects';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { PreviewSurface } from './cards/PreviewSurface';
 import { canDuplicatePluginPreview } from './duplicate';
+import { pluginCategoryLabel } from './categoryLabel';
 import { localizePluginDescription, localizePluginTitle } from './localization';
 import { inferPluginPreview } from './preview';
 import type { PluginUseAction } from './useActions';
@@ -45,8 +47,8 @@ interface Props {
     action: PluginShareAction,
   ) => void;
   // 'rich' (default) keeps the hover-overlay metadata card. 'gallery'
-  // is the minimal live-preview tile: a top bar (dot + name + open
-  // fullscreen) over an eagerly-rendered example.html iframe.
+  // is the minimal preview tile: a top bar (dot + name + open fullscreen)
+  // over the same lazy PreviewSurface used by the rich cards.
   layout?: 'rich' | 'gallery';
 }
 
@@ -76,6 +78,10 @@ export function PluginCard({
   const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
   const title = localizePluginTitle(locale, record);
   const description = localizePluginDescription(locale, record);
+  // Commercial category ("品类") chip — the same calm type signal the Create
+  // page picker and Home example row show, so the three deck-card surfaces read
+  // consistently. Null for records without a known category (no chip rendered).
+  const categoryLabel = pluginCategoryLabel(record, t);
   const tags = useMemo(
     () =>
       (record.manifest?.tags ?? [])
@@ -91,19 +97,28 @@ export function PluginCard({
   const canDuplicate = Boolean(onDuplicate) && canDuplicatePluginPreview(record);
   const duplicateDisabled = isDuplicatePending || pendingDuplicateAny || pendingAny || shareBusy;
 
+  // Gallery deck tiles render the iframe at a fixed 1280 design width scaled to
+  // fit the 16:9 frame, so a template's first slide previews proportionally
+  // instead of overflowing (see useDeckPreviewScale). Hooks stay top-level;
+  // the ref only attaches (and the observer only runs) on the gallery deck path.
+  const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
+  const galleryFrameRef = useRef<HTMLDivElement>(null);
+  useDeckPreviewScale(
+    galleryFrameRef,
+    layout === 'gallery' && odMode === 'deck' && preview.kind === 'html',
+  );
+
   function pickUseAction(action: PluginUseAction) {
     setUseMenuOpen(false);
     onUse(record, action);
   }
 
   if (layout === 'gallery') {
-    // Live-preview tile: a macOS-window-style bar (status dot + plugin
-    // name) over an eagerly-rendered example.html iframe. The whole tile
-    // opens the detail surface.
+    // Gallery tile: a macOS-window-style bar (status dot + plugin name) over
+    // a lazily-mounted preview. The whole tile opens the detail surface.
     // Decks render a fixed 16:9 stage; tag them so the gallery preview uses a
     // 16:9 frame instead of the tall scroll-preview viewport (which would
     // letterbox the stage and show a dark band above/below the slide).
-    const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
     return (
       <article
         role="listitem"
@@ -126,30 +141,11 @@ export function PluginCard({
         // so screen readers don't announce a bare "listitem" as actionable.
         onClick={() => onOpenDetails(record)}
       >
-        <div className="plugins-home__gallery-bar">
-          <span className="plugins-home__gallery-dot" aria-hidden />
-          <button
-            type="button"
-            className="plugins-home__gallery-name"
-            title={title}
-            aria-label={t('pluginCard.detailsAria', { title })}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenDetails(record);
-            }}
-            // The accessible, focusable control that opens the detail modal;
-            // also the e2e/visual hook equivalent to the rich card's Details.
-            data-testid={`plugins-home-details-${record.id}`}
-          >
-            {title}
-          </button>
-        </div>
-        <div className="plugins-home__gallery-frame">
+        <div className="plugins-home__gallery-frame" ref={galleryFrameRef}>
           <PreviewSurface
             pluginId={record.id}
             pluginTitle={title}
             preview={preview}
-            eager
           />
           <div className="plugins-home__gallery-actions">
             <button
@@ -184,6 +180,43 @@ export function PluginCard({
               </button>
             ) : null}
           </div>
+        </div>
+        <div className="plugins-home__gallery-bar">
+          <div className="plugins-home__gallery-bar-row">
+            <span className="plugins-home__gallery-dot" aria-hidden />
+            <button
+              type="button"
+              className="plugins-home__gallery-name"
+              title={title}
+              aria-label={t('pluginCard.detailsAria', { title })}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenDetails(record);
+              }}
+              // The accessible, focusable control that opens the detail modal;
+              // also the e2e/visual hook equivalent to the rich card's Details.
+              data-testid={`plugins-home-details-${record.id}`}
+            >
+              {title}
+            </button>
+            {categoryLabel ? (
+              <span
+                className="plugins-home__gallery-category"
+                data-testid={`plugins-home-category-${record.id}`}
+              >
+                {categoryLabel}
+              </span>
+            ) : null}
+          </div>
+          {description ? (
+            <p
+              className="plugins-home__gallery-desc"
+              title={description}
+              data-testid={`plugins-home-gallery-desc-${record.id}`}
+            >
+              {description}
+            </p>
+          ) : null}
         </div>
       </article>
     );

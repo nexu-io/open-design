@@ -113,6 +113,7 @@ export interface AppConfigPrefs {
   installationId?: string | null;
   telemetry?: TelemetryPrefs;
   privacyDecisionAt?: number | null;
+  allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
@@ -141,6 +142,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'installationId',
   'telemetry',
   'privacyDecisionAt',
+  'allowSilentUpdates',
   'orbit',
   'customInstructions',
   'projectLocations',
@@ -562,6 +564,14 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'allowSilentUpdates') {
+    if (typeof value === 'boolean') {
+      target[key] = value;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
   if (key === 'orbit') {
     const validated = validateOrbit(value);
     if (validated !== undefined) {
@@ -781,19 +791,37 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
+    && (partial.installationId == null || (
+      typeof existing.installationId === 'string'
+      && typeof normalizedNextWithoutRetiredAgents.installationId === 'string'
+      && existing.installationId !== normalizedNextWithoutRetiredAgents.installationId
+    ));
+  const metricsWereExplicitlyDisabled = isMetricsExplicitlyDisabled(partial.telemetry);
+  const shouldClearAttribution = installationIdWasExplicitlyReset || metricsWereExplicitlyDisabled;
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
-  // explicitly touched `installationId` (avoiding noisy writes on every
-  // unrelated app-config update). A write failure here doesn't roll back
-  // the app-config write — the next read merges them transparently.
-  if (Object.prototype.hasOwnProperty.call(partial, 'installationId')) {
+  // explicitly touches installation identity or consent lifecycle state
+  // (avoiding noisy writes on every unrelated app-config update). A write
+  // failure here doesn't roll back the app-config write — the next read
+  // merges them transparently.
+  if (Object.prototype.hasOwnProperty.call(partial, 'installationId') || shouldClearAttribution) {
     const id = normalizedNextWithoutRetiredAgents.installationId;
     // Caller explicitly touched installationId — mirror the outcome
     // (including the clear case) to installation.json so a future read
     // doesn't keep serving the old value out of the channel-root file.
     // "Delete my data" relies on this clear path.
     const installPatch: InstallationFilePatch = {
-      installationId: typeof id === 'string' && id.length > 0 ? id : null,
+      ...(Object.prototype.hasOwnProperty.call(partial, 'installationId')
+        ? { installationId: typeof id === 'string' && id.length > 0 ? id : null }
+        : {}),
+      ...(shouldClearAttribution
+        ? {
+            pendingAttribution: null,
+            attributionClaimedAt: null,
+            attributionClaimResultAt: null,
+          }
+        : {}),
     };
     try {
       await writeInstallationFile(resolveInstallationDir(dataDir), installPatch);
@@ -803,4 +831,11 @@ async function doWrite(
     }
   }
   return normalizedNextWithoutRetiredAgents;
+}
+
+function isMetricsExplicitlyDisabled(value: unknown): boolean {
+  return value != null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (value as Record<string, unknown>).metrics === false;
 }

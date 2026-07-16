@@ -117,6 +117,19 @@
   z-index: 1000;
   pointer-events: auto;
 }
+.workspace.has-browser-snapshot-toast {
+  position: relative;
+}
+.workspace-toast-anchor {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  pointer-events: none;
+}
+.workspace-toast-anchor .od-toast {
+  position: absolute;
+}
 .od-toast.od-toast-browser-snapshot {
   bottom: 34px;
   width: min(460px, calc(100vw - 48px));
@@ -129,10 +142,72 @@
     0 18px 52px rgba(15, 23, 42, 0.18),
     0 0 0 1px rgba(255, 255, 255, 0.58);
 }
+.workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
+  width: min(460px, calc(100% - 48px));
+  max-width: calc(100% - 48px);
+}
 .od-toast.placement-top {
   top: 64px;
   bottom: auto;
-  z-index: 1200;
+  z-index: 1800;
+}
+.project-actions-toast-anchor {
+  position: relative;
+  z-index: 60;
+  flex: 0 0 auto;
+  width: min(420px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  margin: 0 auto 12px;
+  pointer-events: none;
+}
+.chat-log-wrap.has-chat-log-tray {
+  flex-direction: column;
+}
+.project-actions-toast-anchor .od-toast {
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: 100%;
+  transform: none;
+  animation: none;
+  pointer-events: auto;
+}
+.project-actions-toast-anchor .od-toast.placement-top {
+  top: auto;
+  bottom: auto;
+  z-index: 1000;
+}
+.project-actions-toast-anchor .od-toast.leaving {
+  animation: none;
+}
+/* Workspace-owned toasts (Download Page snapshot progress/result, tab
+   launcher errors) anchor to the workspace pane's bottom-center instead of
+   the viewport's, so they never drift over the chat pane or the composer
+   send area in split view. Requires `.workspace` to be the
+   containing block — see `position: relative` in workspace/drawer.css. */
+.workspace-toast-anchor {
+  position: absolute;
+  inset: auto 24px 24px;
+  display: flex;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+}
+.workspace-toast-anchor .od-toast {
+  /* Relative (not static) so the absolutely-positioned close/action controls
+     keep the toast itself as their containing block. */
+  position: relative;
+  inset: auto;
+  transform: none;
+  animation: none;
+  pointer-events: auto;
+}
+.workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
+  width: min(460px, 100%);
+  max-width: 100%;
+}
+.workspace-toast-anchor .od-toast.leaving {
+  animation: none;
 }
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
@@ -212,6 +287,9 @@
   font-size: 13.5px;
   font-weight: 650;
 }
+.od-toast.od-toast-browser-snapshot.tone-success .od-toast-icon {
+  display: none;
+}
 .od-toast-details {
   margin-top: 4px;
   font-size: 11.5px;
@@ -252,7 +330,7 @@
 }
 .od-toast-close {
   position: absolute;
-  top: 8px;
+  top: 50%;
   right: 8px;
   display: inline-flex;
   align-items: center;
@@ -264,26 +342,29 @@
      − 2px border = 0 content width), collapsing the inner SVG to zero width
      so the glyph clips away and the disc reads as "no close icon". */
   padding: 0;
-  /* A solid surface disc (not a faint tint) so the close affordance lifts off
-     light toast bodies — the pale success/error fills previously swallowed the
-     low-opacity glyph, which read as "no close button". The tinted border +
-     soft shadow keep it integrated with the tone. */
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  /* Keep the full hit target while letting the glyph stay quiet on light
+     success/error surfaces; dark default toasts add their own subtle disc. */
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--bg, #fff);
-  color: var(--text-strong, #1f2328);
+  background: transparent;
+  color: var(--text-muted, #6e7781);
   cursor: pointer;
-  opacity: 1;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.16);
+  opacity: 0.65;
+  box-shadow: none;
+  transform: translateY(-50%);
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.16);
   color: var(--bg, #fff);
+}
+.od-toast.od-toast-browser-snapshot .od-toast-close {
+  top: 8px;
+  transform: none;
 }
 .od-toast-close svg {
   /* flex-shrink:0 so the glyph can never be crushed to 0 width by the
@@ -294,9 +375,9 @@
   stroke-width: 2.4;
 }
 .od-toast-close:hover {
-  border-color: color-mix(in srgb, currentColor 34%, transparent);
-  background: color-mix(in srgb, var(--bg, #fff) 92%, currentColor 8%);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+  border-color: transparent;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  opacity: 1;
 }
 .od-toast:not(.tone-success):not(.tone-error) .od-toast-close:hover {
   border-color: rgba(255, 255, 255, 0.34);
@@ -2271,7 +2352,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   border-top: 0;
 }
 .app .df-section-label {
-  padding: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
 }
 .app .df-cell-name,

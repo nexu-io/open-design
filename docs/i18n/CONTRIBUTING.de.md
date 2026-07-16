@@ -181,7 +181,7 @@ Eine neue Agent-CLI ist ein Eintrag in [`apps/daemon/src/agents.ts`](../../apps/
 }
 ```
 
-Der daemon erkennt sie im `PATH`, der Picker zeigt sie an und der Chat-Pfad funktioniert. Wenn die CLI **typed events** ausgibt, ergänzen Sie einen Parser in [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) und setzen `streamFormat`.
+Der daemon erkennt sie im `PATH`, der Picker zeigt sie an und der Chat-Pfad funktioniert. Wenn die CLI **typed events** ausgibt, ergänzen Sie einen Parser in [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) und setzen `streamFormat`.
 
 Merge-Bar:
 

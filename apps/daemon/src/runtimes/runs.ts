@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
 import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
@@ -38,6 +39,12 @@ export function createChatRunService({
   // external coding agent can `tail` the file in its own shell during
   // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
+  // Optional observer invoked for every emitted event BEFORE the in-memory
+  // ring buffer is truncated. The daemon uses it to fold committed side
+  // effects (tool calls, artifact writes) into a per-run accumulator that
+  // outlives buffer truncation. Kept generic here: this service does not
+  // interpret event semantics, it just hands each record to the observer.
+  onEventEmitted = null,
 }) {
   const runs = new Map();
 
@@ -70,6 +77,14 @@ export function createChatRunService({
       mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
       toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
       browserUse: meta.browserUse && typeof meta.browserUse === 'object' ? meta.browserUse : null,
+      sessionMode:
+        meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+          ? meta.sessionMode
+          : null,
+      context:
+        meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
+          ? meta.context
+          : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -89,6 +104,16 @@ export function createChatRunService({
       cancelRequested: false,
       retryRestartTimer: null,
       stdinOpen: false,
+      // Work-completeness signals (#1247 / #1060), folded from agent events by
+      // captureRunWorkCompletenessSignals (server.ts). `lastTodoSnapshot` is the
+      // most recent TodoWrite `todos` array; `truncatedMidTurn` records a
+      // max_tokens cut-off. At terminal time finish() derives
+      // `endedWithUnfinishedWork` from them via the canonical predicate.
+      lastTodoSnapshot: null,
+      truncatedMidTurn: false,
+      endedWithUnfinishedWork: false,
+      artifactCount: undefined as number | undefined,
+      artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
@@ -147,6 +172,11 @@ export function createChatRunService({
     }
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
+    // Fold committed side effects BEFORE the ring buffer can drop this record,
+    // so the finalization-time verdict survives truncation of run.events.
+    if (onEventEmitted) {
+      try { onEventEmitted(run, record); } catch { /* observer must never break emit */ }
+    }
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
@@ -187,12 +217,17 @@ export function createChatRunService({
     signal: run.signal,
     error: run.error ?? null,
     errorCode: run.errorCode ?? null,
+    failureCategory: run.failureCategory ?? null,
+    failureDetail: run.failureDetail ?? null,
     resumable: run.resumable ?? false,
+    endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
+    ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
+    ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 
@@ -202,7 +237,34 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
-    emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
+    // Derive the work-completeness flag once, at the single terminal choke point,
+    // from the signals the agent-event handler folded onto the run. Uses the
+    // canonical predicate so it can never diverge from the web chat footer
+    // (#1247 / #1060). A truncated turn (max_tokens) counts as unfinished even
+    // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
+    // the flag false, so a text-only answer stays "Completed".
+    run.endedWithUnfinishedWork =
+      Boolean(run.truncatedMidTurn) || todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot);
+    // Release run-scoped resources the starter registered (e.g. the minted
+    // tool-token grant + agent event-sink entries). This runs on EVERY
+    // terminal path — including a startup throw that never reached the child
+    // lifecycle cleanup — so a failed run can never leave its capability token
+    // live for the token TTL. Best-effort + one-shot.
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
+    emit(run, 'end', {
+      code,
+      signal,
+      status,
+      resumable: run.resumable ?? false,
+      endedWithUnfinishedWork: run.endedWithUnfinishedWork,
+      ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+      failureCategory: run.failureCategory ?? null,
+      failureDetail: run.failureDetail ?? null,
+    });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
@@ -297,11 +359,18 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
-  const killChild = (run, signal) => {
-    if (!run.child || childHasExited(run.child)) return false;
-    if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
+  // Signal an EXPLICIT child + its captured process group, rather than
+  // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
+  // SIGKILL) that outlive a same-run retry MUST target the exact generation
+  // they were scheduled for: after a retry swaps `run.child` to a fresh
+  // child, signalling the shared field would kill the healthy new attempt and
+  // leave the stalled old child unreaped. Callers that legitimately want the
+  // current child use `killChild` below.
+  const signalChildProcess = (child, processGroupId, signal) => {
+    if (!child || childHasExited(child)) return false;
+    if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
       try {
-        process.kill(-run.processGroupId, signal);
+        process.kill(-processGroupId, signal);
         return true;
       } catch (err) {
         if (err?.code !== 'ESRCH') {
@@ -312,15 +381,59 @@ export function createChatRunService({
       }
     }
     try {
-      return run.child.kill(signal);
+      return child.kill(signal);
     } catch {
       return false;
     }
   };
 
+  const killChild = (run, signal) => {
+    if (signalChildProcess(run.child, run.processGroupId, signal)) return true;
+    // The direct child has already exited, but its process group can still hold
+    // survivors — grandchildren that inherited its stdio outlive it. Reap them by
+    // pgid so cancel/shutdown don't leave orphans (the same class the retry
+    // teardown reaps). Safe here: every killChild caller is a terminating path
+    // (cancel / shutdownActive) that never re-spawns into this pgid, so there is
+    // no next-generation group to mis-target (cf. #5202).
+    return signalProcessGroup(run.processGroupId, signal);
+  };
+
   const cancelGraceMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 3000;
+  };
+
+  // Signal a whole process group by pgid, even after the direct child object has
+  // already exited. A CLI's spawned descendants (MCP servers, tool subprocesses,
+  // internal runners) share the attempt's process group and outlive the direct
+  // child; reaping them requires targeting the group, not the child. Kept
+  // deliberately SEPARATE from signalChildProcess so the shared cancel/escalation
+  // path keeps its childHasExited guard against the cross-generation kill fixed
+  // in #5202. Returns true when a group signal was actually attempted (POSIX +
+  // a valid pgid), false when not applicable (win32 / no pgid).
+  const signalProcessGroup = (processGroupId, signal) => {
+    if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
+    try {
+      process.kill(-processGroupId, signal);
+    } catch {
+      // ESRCH (group already gone) or EPERM — nothing more we can do; the group
+      // signal was still the right action to take.
+    }
+    return true;
+  };
+
+  // Reap a torn-down attempt's whole process group: SIGTERM now, then SIGKILL any
+  // survivors after the grace window. Both target the CAPTURED pgid passed in —
+  // callers must snapshot run.processGroupId before a same-run retry overwrites
+  // it, so the escalation can never hit the next attempt's group (#5202). Returns
+  // whether the group path handled it (so callers can fall back on win32).
+  const reapProcessGroup = (processGroupId) => {
+    if (!signalProcessGroup(processGroupId, 'SIGTERM')) return false;
+    const timer = setTimeout(() => {
+      signalProcessGroup(processGroupId, 'SIGKILL');
+    }, cancelGraceMs());
+    timer.unref?.();
+    return true;
   };
 
   const finishCanceledFromChildState = (run, fallbackSignal = 'SIGTERM') => {
@@ -437,6 +550,11 @@ export function createChatRunService({
   const drop = (run) => {
     if (!run) return;
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     runs.delete(run.id);
     for (const sse of run.clients) {
       try { sse.end(); } catch { /* best-effort detach */ }
@@ -465,7 +583,10 @@ export function createChatRunService({
     fail,
     drop,
     signalChild: killChild,
+    reapProcessGroup,
+    signalProcessGroup,
     statusBody,
+    signalChildProcess,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },

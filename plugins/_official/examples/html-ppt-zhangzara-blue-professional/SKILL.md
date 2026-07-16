@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-blue-professional
+en_name: "Present a Quarterly Business Review like a Chief of Staff"
+zh_name: "像幕僚长一样做季度经营回顾"
 description: |
-  Blue Professional — Cream paper background with electric cobalt blue accents; clean modern professional. Anything that should feel modern-considered and lightly authoritative: B2B SaaS pitches, consulting deliverables, advisory updates, investor reports.
+  Open Design's QBR for the executive committee: what moved, what stalled, and the resource reallocation ask. Built as a decision-grade corporate strategy deck for executive committee.
+en_description: |
+  Open Design's QBR for the executive committee: what moved, what stalled, and the resource reallocation ask. Built as a decision-grade corporate strategy deck for executive committee.
+zh_description: |
+  像幕僚长一样做季度经营回顾——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "corporate-strategy"
+  - "board-pre-read-deck"
+  - "strategy"
+  - "board"
+  - "business-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-blue-professional"
 triggers:
-  - "blue-professional"
-  - "zhangzara-blue-professional"
-  - "Blue Professional"
-  - "professional"
-  - "modern"
-  - "clean"
-  - "considered"
-  - "B2B SaaS pitch"
-  - "consulting deliverable"
+  - "board-pre-read-deck"
+  - "corporate-strategy"
+  - "Present a Quarterly Business Review like a Chief of Staff"
+  - "像幕僚长一样做季度经营回顾"
+  - "board"
+  - "strategy"
+  - "business-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/blue-professional"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "corporate-strategy"
+  scenario: "strategy"
+  example_prompt: "Create \"Present a Quarterly Business Review like a Chief of Staff\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's QBR for the executive committee: what moved, what stalled, and the resource reallocation ask. Audience: executive committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Blue Professional

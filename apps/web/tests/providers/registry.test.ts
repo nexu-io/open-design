@@ -963,4 +963,58 @@ describe('deploy provider registry helpers', () => {
       }),
     });
   });
+
+  it('carries the HTTP status as an error .code when a failed deploy has only a human message', async () => {
+    // The provider/daemon returns a message but no structured code; the wrapper
+    // must still surface the status so analytics (deployErrorCode reads `.code`
+    // first) can bucket it instead of collapsing to the generic "Error".
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: 'Cloudflare rejected the request' } }),
+      { status: 403 },
+    )));
+    await deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID).then(
+      () => { throw new Error('expected deploy to reject'); },
+      (err: unknown) => {
+        expect((err as { code?: string }).code).toBe('HTTP_403');
+        expect((err as Error).message).toBe('Cloudflare rejected the request');
+      },
+    );
+  });
+
+  it('prefers a structured provider error code over the HTTP status', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: 'quota exceeded', code: 'RATE_LIMITED' } }),
+      { status: 429 },
+    )));
+    await deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID).then(
+      () => { throw new Error('expected deploy to reject'); },
+      (err: unknown) => expect((err as { code?: string }).code).toBe('RATE_LIMITED'),
+    );
+  });
+
+  it('ignores the daemon\'s generic BAD_REQUEST envelope and buckets by the real HTTP status', async () => {
+    // The daemon deploy route wraps every non-404 provider failure as
+    // `error.code = 'BAD_REQUEST'` but keeps the real HTTP status (403/429/5xx).
+    // The wrapper must NOT let BAD_REQUEST win, or every failure collapses to one
+    // code — it falls back to the real status instead.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'Cloudflare returned 403' } }),
+      { status: 403 },
+    )));
+    await deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID).then(
+      () => { throw new Error('expected deploy to reject'); },
+      (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_403'),
+    );
+  });
+
+  it('ignores the daemon\'s FILE_NOT_FOUND envelope and buckets a 404 as HTTP_404', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { code: 'FILE_NOT_FOUND', message: 'file not found' } }),
+      { status: 404 },
+    )));
+    await deployProjectFile('project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID).then(
+      () => { throw new Error('expected deploy to reject'); },
+      (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_404'),
+    );
+  });
 });

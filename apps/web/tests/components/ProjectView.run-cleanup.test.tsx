@@ -1,19 +1,26 @@
 // @vitest-environment jsdom
 
 import type { ComponentProps } from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
+  findExistingNonHtmlArtifactProjectFile,
+  findSameTurnNonHtmlWriteForRecoveredArtifact,
   hasRecoverableArtifactMessage,
   resolveRetryTarget,
   resolveSucceededRunStatus,
   selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
+  shouldReplayTerminalRunMessage,
 } from '../../src/components/ProjectView';
+import {
+  BRAND_BROWSER_TAB_ID,
+  registerBrandBrowser,
+} from '../../src/runtime/brand-browser-bridge';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -38,7 +45,10 @@ const patchProject = vi.fn();
 const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const fetchProjectFileText = vi.fn();
 const cancelBrandExtraction = vi.fn();
+const continueBrandExtraction = vi.fn();
+const originalFetch = globalThis.fetch;
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -132,6 +142,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectDesignSystemPackageAudit: (...args: unknown[]) => fetchProjectDesignSystemPackageAudit(...args),
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
+  fetchProjectFileText: (...args: unknown[]) => fetchProjectFileText(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
   upsertPreviewComment: vi.fn(),
@@ -147,6 +158,7 @@ vi.mock('../../src/runtime/brands', async () => {
   return {
     ...actual,
     cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+    continueBrandExtraction: (...args: unknown[]) => continueBrandExtraction(...args),
   };
 });
 
@@ -181,7 +193,13 @@ const chatPaneSpy = vi.fn();
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: Record<string, unknown>) => {
     chatPaneSpy(props);
-    return null;
+    return (
+      <div className="pane">
+        <div className={`chat-log-wrap${props.chatLogTray ? ' has-chat-log-tray' : ''}`}>
+          {props.chatLogTray as ComponentProps<'div'>['children']}
+        </div>
+      </div>
+    );
   },
 }));
 
@@ -204,6 +222,13 @@ async function waitForReadyChatPaneProps() {
     expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
   });
   return chatPaneSpy.mock.calls.at(-1)?.[0] as {
+    onBrandBrowserAssistConfirm?: (card: {
+      brandId: string;
+      browserTabId?: string;
+      reason?: string;
+      url?: string;
+    }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
+    onContinueBrandExtraction?: () => void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
     initialDraft?: string;
   };
@@ -246,6 +271,97 @@ describe('terminal replay artifact recovery', () => {
         { minMtime: runCreatedAt },
       ),
     ).toBe(currentTarget);
+  });
+
+  it('reuses same-turn non-html artifact files with their declared extension after content matches', async () => {
+    const cssArtifact: Artifact = {
+      identifier: 'theme',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme.css', 'code', 1_000);
+
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
+  });
+
+  it('reuses same-turn non-html artifact files with collision suffixes after content matches', async () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme-2.css', 'code', 1_000);
+
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
+  });
+
+  it('does not reuse same-turn non-html filename matches when contents differ', async () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme.css', 'code', 1_000);
+
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: blue; }',
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('reuses same-turn non-html collision suffixes only when contents match', async () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme-2.css', 'code', 1_000);
+
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
+  });
+
+  it('does not reuse same-turn html files before checking recovered content', () => {
+    const htmlArtifact: Artifact = {
+      identifier: 'landing',
+      artifactType: 'text/html',
+      title: 'Landing',
+      html: '<!doctype html><html><body>final artifact</body></html>',
+    };
+    const sameNameHtmlFile = projectFile('landing.html', 'html', 1_000);
+
+    expect(findExistingArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
+      .toBe(sameNameHtmlFile);
+    expect(findExistingNonHtmlArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
+      .toBeNull();
   });
 
   it('treats standalone HTML terminal assistant messages as recoverable', () => {
@@ -321,11 +437,13 @@ describe('retry target resolution', () => {
     });
   });
 
-  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
+  it('keeps earlier delivery-failure retry attempts visible while reusing the original user turn', () => {
     const firstFailure: ChatMessage = {
       ...failedAssistant,
       id: 'assistant-1',
       content: 'First attempt produced partial output',
+      runStatus: 'succeeded',
+      resultDeliveryState: 'no_result',
       events: [{ kind: 'text', text: 'thinking before failure' }],
       producedFiles: [
         {
@@ -341,6 +459,8 @@ describe('retry target resolution', () => {
       ...failedAssistant,
       id: 'assistant-2',
       content: 'Retry failed too',
+      runStatus: 'succeeded',
+      resultDeliveryState: 'delivery_failed',
     };
 
     expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
@@ -366,12 +486,13 @@ describe('ProjectView daemon cleanup', () => {
     cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-  vi.useRealTimers();
-  window.sessionStorage.clear();
-});
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    globalThis.fetch = originalFetch;
+    window.sessionStorage.clear();
+  });
 
   it('does not abort daemon cancel reattach controllers during unmount cleanup', async () => {
     let seenCancelSignal: { aborted: boolean } | null = null;
@@ -450,6 +571,31 @@ afterEach(() => {
     expect(resolveSucceededRunStatus(undefined)).toBe('succeeded');
     expect(resolveSucceededRunStatus('failed')).toBe('failed');
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
+  });
+
+  it('replays an unverified terminal Design-mode result after reload', () => {
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-unverified-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-unverified-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-chat-answer',
+        role: 'assistant',
+        content: 'Here is the answer.',
+        runId: 'run-chat-answer',
+        runStatus: 'succeeded',
+        sessionMode: 'chat',
+        startedAt: 1,
+      }),
+    ).toBe(false);
   });
 
   // Regression: a phantom 'running' row in DB (no runId, no matching active
@@ -835,6 +981,173 @@ afterEach(() => {
     });
     expect(streamViaDaemon).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
+  });
+
+  it('opens browser assist without adding a global download-guide toast', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    fileWorkspaceSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'Refly Design System',
+          skillId: null,
+          designSystemId: null,
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    expect(chatProps.onBrandBrowserAssistConfirm).toBeTypeOf('function');
+
+    let result: { ok: boolean; action?: string; message?: string } | void = undefined;
+    await act(async () => {
+      result = await chatProps.onBrandBrowserAssistConfirm?.({
+        brandId: 'refly-ai',
+        browserTabId: 'brand-browser-tab',
+        reason: 'Cloudflare',
+        url: 'https://refly.ai/',
+      });
+    });
+
+    expect(result).toMatchObject({ ok: true, action: 'opened' });
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.browserOpenRequest).toMatchObject({
+        tabId: 'brand-browser-tab',
+        url: 'https://refly.ai/',
+        attentionAction: 'download-page',
+      });
+    });
+
+    expect(document.querySelector('.project-actions-toast-anchor .od-toast')).toBeNull();
+  });
+
+  it('anchors continue-extraction snapshot errors in the chat pane', async () => {
+    // Continue extraction snapshot failures should stay between the transcript
+    // and the composer, without resurrecting the long download-guide details
+    // that now live beside the Browser download action.
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+    // No saved page archive on disk…
+    fetchProjectFileText.mockResolvedValue(null);
+    // …and the daemon cannot finish programmatically either.
+    continueBrandExtraction.mockResolvedValue({ ok: false, error: 'still walled' });
+
+    // A mounted desktop Browser tab whose live DOM and page-snapshot download
+    // both fail, so the flow lands on a contained snapshot error toast.
+    registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, {
+      executeJavaScript: () => null,
+      downloadPageSnapshot: async () => ({ ok: false, message: 'snapshot save failed' }),
+      getURL: () => 'https://refly.ai/',
+      isDesktopWebview: true,
+    });
+
+    chatPaneSpy.mockClear();
+    fileWorkspaceSpy.mockClear();
+
+    try {
+      render(
+        <ProjectView
+          project={{
+            id: 'brand-project',
+            name: 'Refly Design System',
+            skillId: null,
+            designSystemId: null,
+            metadata: {
+              kind: 'brand',
+              importedFrom: 'brand-extraction',
+              brandId: 'refly-ai',
+              brandSourceUrl: 'https://refly.ai/',
+            },
+            createdAt: 1,
+            updatedAt: 1,
+          } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      const chatProps = await waitForReadyChatPaneProps();
+      expect(chatProps.onContinueBrandExtraction).toBeTypeOf('function');
+
+      await act(async () => {
+        chatProps.onContinueBrandExtraction?.();
+      });
+
+      const toast = await waitFor(() => {
+        const node = document.querySelector('.od-toast');
+        expect(node?.textContent).toContain('snapshot save failed');
+        return node as HTMLElement;
+      });
+      expect(toast.textContent).not.toContain('chat.brandBrowserAssistDownloadGuideDetails');
+      expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
+      expect(toast.closest('.split-chat-slot')).toBeTruthy();
+      expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
+    } finally {
+      registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, null);
+    }
   });
 
   it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
@@ -3784,6 +4097,88 @@ afterEach(() => {
         expect.objectContaining({ telemetryFinalized: true }),
       );
     });
+  });
+
+  it('persists reload-recovered non-html artifacts when same-turn suffix matches have different contents', async () => {
+    const runCreatedAt = Date.now();
+    const staleCss = projectFile('theme-2.css', 'code', runCreatedAt + 1);
+    const finalCss = 'body { color: red; }';
+    const artifactContent =
+      `<artifact type="text/css" title="Theme">${finalCss}</artifact>`;
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response('body { color: blue; }', { status: 200 }),
+    ) as typeof fetch;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-css-recover',
+        role: 'assistant',
+        content: artifactContent,
+        createdAt: runCreatedAt + 1,
+        runId: 'run-css-recover',
+        runStatus: 'succeeded',
+        producedFiles: [],
+        preTurnFileNames: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () =>
+      writeProjectTextFile.mock.calls.length > 0
+        ? [staleCss, projectFile('theme.css', 'code', runCreatedAt + 2)]
+        : [staleCss],
+    );
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-css-recover',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    writeProjectTextFile.mockImplementation(async (_projectId, name) =>
+      projectFile(String(name), 'code', runCreatedAt + 2),
+    );
+
+    render(
+      <ProjectView
+        project={{ id: 'project-css-recover', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(writeProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(writeProjectTextFile).toHaveBeenCalledWith(
+      'project-css-recover',
+      'theme.css',
+      finalCss,
+      expect.objectContaining({
+        artifactManifest: expect.objectContaining({ entry: 'theme.css' }),
+      }),
+    );
   });
 
   it('does not recover a stale pointer target when reattached artifact persistence falls back to writing', async () => {

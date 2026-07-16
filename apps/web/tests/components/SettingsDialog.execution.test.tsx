@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
@@ -108,10 +108,16 @@ import { IntegrationsView } from '../../src/components/IntegrationsView';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
 import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
+import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
-import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
+import type {
+  AgentInfo,
+  AppConfig,
+  AppVersionInfo,
+  ProviderModelOption,
+} from '../../src/types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -269,11 +275,16 @@ function renderSettingsDialog(
     onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
+    providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
+    onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
   } = {},
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
+  const onSilentUpdatePreferenceChange: (allowSilentUpdates: boolean) => Promise<void> =
+    options.onSilentUpdatePreferenceChange
+    ?? (async () => undefined);
   const onClose = vi.fn();
   const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
@@ -284,15 +295,24 @@ function renderSettingsDialog(
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
       initialSection={options.initialSection ?? 'execution'}
+      providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
       onPersist={onPersist}
+      onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
   );
 
-  return { onPersist, onPersistComposioKey, onClose, onRefreshAgents, ...view };
+  return {
+    onPersist,
+    onSilentUpdatePreferenceChange,
+    onPersistComposioKey,
+    onClose,
+    onRefreshAgents,
+    ...view,
+  };
 }
 
 function renderIntegrationsView(
@@ -444,6 +464,55 @@ beforeEach(() => {
 afterEach(() => {
   restoreOpenDesignHost?.();
   restoreOpenDesignHost = null;
+});
+
+describe('SettingsDialog privacy settings interactions', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('preserves a pending privacy choice when an unrelated parent config update arrives', async () => {
+    const randomUUID = vi.fn(() => 'inst-new');
+    vi.stubGlobal('crypto', { randomUUID });
+    const initial: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentId: null,
+      installationId: null,
+      privacyDecisionAt: 1778244000000,
+      telemetry: { metrics: false, content: false, artifactManifest: true },
+    };
+    const view = renderSettingsDialog(initial, { initialSection: 'privacy' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
+    });
+
+    view.rerender(
+      <SettingsDialog
+        initial={{ ...initial, agentId: 'codex' }}
+        agents={availableAgents}
+        daemonLive={true}
+        appVersionInfo={null}
+        initialSection="privacy"
+        onPersist={view.onPersist}
+        onPersistComposioKey={view.onPersistComposioKey}
+        onClose={view.onClose}
+        onRefreshAgents={view.onRefreshAgents}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
+    expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))
+      .toBe('true');
+  });
 });
 
 describe('SettingsDialog execution settings BYOK interactions', () => {
@@ -734,6 +803,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
+  });
+
+  it('offers Atlas Cloud as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('Atlas Cloud');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'qwen/qwen3.5-flash',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://api.atlascloud.ai/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
+    );
   });
 
   it('keeps Anthropic-compatible gateway presets selectable', () => {
@@ -1505,6 +1596,43 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.queryByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeNull();
     });
+  });
+
+  it('does not reuse discovered models for Anthropic full Messages endpoints', () => {
+    const messagesEndpoint = 'https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages';
+    const staleDiscoveryKey = providerModelsCacheKey(
+      'anthropic',
+      messagesEndpoint,
+      'sk-mimo',
+      '',
+    );
+
+    renderSettingsDialog(
+      {
+        apiProtocol: 'anthropic',
+        apiKey: 'sk-mimo',
+        baseUrl: messagesEndpoint,
+        model: 'mimo-v2.5-pro',
+        apiProviderBaseUrl: null,
+      },
+      {
+        providerModelsCache: {
+          [staleDiscoveryKey]: [{ id: 'deepseek-chat', label: 'deepseek-chat' }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+
+    expect(optionNames(modelPopover)).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('deepseek-chat')]),
+    );
+    expect(within(modelPopover).getByRole('option', { name: 'Custom (type below)…' })).toBeTruthy();
+    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe(
+      'mimo-v2.5-pro',
+    );
+    expect(fetchProviderModelsMock).not.toHaveBeenCalled();
   });
 
   it('renders automatic provider auth failures under the API key field', async () => {
@@ -4459,6 +4587,77 @@ describe('IntegrationsView skills tab', () => {
     expect(screen.queryByText('dashboard')).toBeNull();
   });
 
+  it('updates skill filter counts from the current filter context', async () => {
+    fetchSkillsMock.mockResolvedValue([
+      {
+        id: 'product-image',
+        name: 'product-image',
+        description: 'Product image generation.',
+        mode: 'image',
+        category: 'marketing',
+        previewType: 'PNG',
+        source: 'built-in',
+      },
+      {
+        id: 'document-brief',
+        name: 'document-brief',
+        description: 'Document brief.',
+        mode: 'deck',
+        category: 'documents',
+        previewType: 'HTML',
+        source: 'built-in',
+      },
+      {
+        id: 'landing-page',
+        name: 'landing-page',
+        description: 'Landing page.',
+        mode: 'prototype',
+        category: 'marketing',
+        previewType: 'HTML',
+        source: 'built-in',
+      },
+    ]);
+
+    renderIntegrationsView(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialTab: 'skills' },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('product-image')).toBeTruthy();
+      expect(screen.getByText('document-brief')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Type' }), {
+      target: { value: 'image' },
+    });
+
+    const categorySelect = screen.getByRole('combobox', { name: 'Category' });
+    expect(
+      within(categorySelect).getByRole('option', { name: 'Documents (0)' }),
+    ).toBeTruthy();
+    expect(
+      within(categorySelect).getByRole('option', { name: 'Marketing (1)' }),
+    ).toBeTruthy();
+
+    fireEvent.change(categorySelect, {
+      target: { value: 'documents' },
+    });
+
+    expect(screen.getByText('No items match your search.')).toBeTruthy();
+    expect(
+      within(screen.getByRole('combobox', { name: 'Category' })).getByRole(
+        'option',
+        { name: 'Documents (0)' },
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole('combobox', { name: 'Type' })).getByRole('option', {
+        name: 'image (0)',
+      }),
+    ).toBeTruthy();
+  });
+
   it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {
     const { onConfigPersist } = renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
@@ -4875,5 +5074,181 @@ describe('SettingsDialog about interactions', () => {
       expect(quit).toHaveBeenCalledTimes(2);
     });
     expect(install).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles allowSilentUpdates via the non-optimistic Settings path without crashing', async () => {
+    const onSilentUpdatePreferenceChange = vi.fn(async () => undefined);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(true));
+    // Must not go through optimistic handleConfigPersist autosave.
+    expect(onPersist).not.toHaveBeenCalled();
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(false));
+  });
+
+  it('reverts the Settings silent-update toggle when the non-optimistic save fails', async () => {
+    let appConfigSilent: boolean | undefined = false;
+    const onSilentUpdatePreferenceChange = vi.fn(async (value: boolean) => {
+      throw new Error('daemon offline');
+      appConfigSilent = value;
+    });
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledWith(true));
+    await waitFor(() => {
+      expect((screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement).checked).toBe(false);
+    });
+    // App-wide preference must not keep the rejected value.
+    expect(appConfigSilent).toBe(false);
+  });
+
+  it('disables the Settings silent-update checkbox while a save is in flight', async () => {
+    let resolveSave: (() => void) | null = null;
+    const onSilentUpdatePreferenceChange = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', allowSilentUpdates: false },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    const checkbox = screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(checkbox.disabled).toBe(true));
+
+    await act(async () => {
+      resolveSave?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(checkbox.disabled).toBe(false));
+    expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('still autosaves an unrelated edit that lands during a silent-update save', async () => {
+    // Regression: success must only advance autosaveLastSavedRef for
+    // allowSilentUpdates. Spreading the whole latest draft would mark a
+    // concurrent theme (etc.) change as already saved and skip onPersist.
+    let resolveSave: (() => void) | null = null;
+    const onSilentUpdatePreferenceChange = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        allowSilentUpdates: false,
+        theme: 'light',
+        accentColor: '#2563eb',
+      },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.14.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+        onSilentUpdatePreferenceChange,
+      },
+    );
+
+    fireEvent.click(screen.getByTestId('settings-allow-silent-updates'));
+    await waitFor(() => expect(onSilentUpdatePreferenceChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId('settings-allow-silent-updates') as HTMLInputElement).disabled,
+      ).toBe(true);
+    });
+    expect(onPersist).not.toHaveBeenCalled();
+
+    // Concurrent persisted edit while the silent-update request is in flight.
+    fireEvent.click(screen.getByRole('button', { name: /Appearance/i }));
+    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+
+    // Resolve silent-update AFTER the concurrent edit is in draft. The success
+    // path must not stamp this accent into autosaveLastSavedRef.
+    await act(async () => {
+      resolveSave?.();
+      await Promise.resolve();
+    });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        accentColor: '#059669',
+      }),
+      {},
+    );
+  });
+
+  it('does not read event.currentTarget inside the silent-updates setCfg updater', async () => {
+    // Source invariant: functional updaters must not close over event.currentTarget
+    // (null after the native/React event handler returns under pending lanes).
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const source = await readFile(
+      join(process.cwd(), 'src/components/SettingsDialog.tsx'),
+      'utf8',
+    );
+    const silentToggleBlock = source.match(
+      /data-testid="settings-allow-silent-updates"[\s\S]*?<\/label>/,
+    )?.[0];
+    expect(silentToggleBlock).toBeTruthy();
+    expect(silentToggleBlock).not.toMatch(
+      /setCfg\(\s*\(\s*current\s*\)\s*=>\s*\(\{[\s\S]*?event\.currentTarget\.checked/,
+    );
+    expect(silentToggleBlock).toMatch(/const allowSilentUpdates = event\.currentTarget\.checked/);
   });
 });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/acp.js';
+import { attachAcpSession, buildAcpSessionNewParams, createJsonLineStream, normalizeModels } from '../src/agent-protocol/index.js';
 import { countNewArtifacts } from '../src/runtimes/run-artifacts.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
@@ -1464,4 +1464,60 @@ test('attachAcpSession captures the durable session handle from the result', () 
   writeAcpResult(child, 2, { sessionId: 'vela-opencode-1', openCodeSessionId: 'oc-handle' });
 
   assert.equal(session.getDurableSessionId(), 'oc-handle');
+});
+
+test('createJsonLineStream replays absorbed complete frames when a value-position aggregate turns invalid', () => {
+  const received: Array<Record<string, unknown>> = [];
+  const parser = createJsonLineStream((message) => {
+    received.push(message as Record<string, unknown>);
+  });
+
+  // A truncated line ending in value position ("expecting a value") starts an
+  // aggregate; the next complete frame slots into that value hole, so the
+  // aggregate stays syntactically plausible and absorbs it. The third frame
+  // makes the aggregate invalid. The absorbed frame must still be delivered.
+  parser.feed('{"truncated":\n');
+  parser.feed(`${JSON.stringify({ id: 1, result: {} })}\n`);
+  parser.feed(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  assert.deepEqual(received.map((message) => message.id), [1, 2]);
+});
+
+test('createJsonLineStream flush replays absorbed complete frames from a dead aggregate', () => {
+  const received: Array<Record<string, unknown>> = [];
+  const parser = createJsonLineStream((message) => {
+    received.push(message as Record<string, unknown>);
+  });
+
+  parser.feed('{"truncated":\n');
+  parser.feed(`${JSON.stringify({ id: 7, result: {} })}\n`);
+  parser.flush();
+
+  assert.deepEqual(received.map((message) => message.id), [7]);
+});
+
+test('createJsonLineStream replays absorbed complete frames when the aggregate exceeds its size bound', () => {
+  const received: Array<Record<string, unknown>> = [];
+  const parser = createJsonLineStream((message) => {
+    received.push(message as Record<string, unknown>);
+  });
+
+  parser.feed('{"big":\n');
+  parser.feed(`${JSON.stringify({ id: 3, result: {} })}\n`);
+  // An unterminated string keeps the aggregate classified `incomplete` while
+  // pushing it past the 128k size bound, forcing the bounds eviction path.
+  parser.feed(`{"pad":"${'x'.repeat(130_000)}\n`);
+
+  assert.deepEqual(received.map((message) => message.id), [3]);
+});
+
+test('createJsonLineStream still assembles a legitimate multiline JSON response', () => {
+  const received: Array<Record<string, unknown>> = [];
+  const parser = createJsonLineStream((message) => {
+    received.push(message as Record<string, unknown>);
+  });
+
+  parser.feed('{\n  "id": 5,\n  "result":\n  {}\n}\n');
+
+  assert.deepEqual(received.map((message) => message.id), [5]);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-release",
-  "version": "0.12.1",
+  "version": "0.15.1",
   "private": true,
   "type": "module",
   "bin": {
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@open-design/release": "workspace:*",
-    "cac": "6.7.14"
+    "cac": "6.7.14",
+    "yaml": "2.9.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

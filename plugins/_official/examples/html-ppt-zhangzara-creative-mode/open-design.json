@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-creative-mode",
-  "title": "Html Ppt Zhangzara Creative Mode",
+  "title": "Present a Visual-Identity System like a Lead Brand Designer",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Creative Mode",
-    "zh-TW": "Html Ppt Zhangzara Creative Mode",
-    "ja": "Html Ppt Zhangzara Creative Mode",
-    "ko": "Html Ppt Zhangzara Creative Mode",
-    "de": "Html Ppt Zhangzara Creative Mode",
-    "fr": "Html Ppt Zhangzara Creative Mode",
-    "ru": "Html Ppt Zhangzara Creative Mode",
-    "es": "Html Ppt Zhangzara Creative Mode",
-    "pt-BR": "Html Ppt Zhangzara Creative Mode",
-    "it": "Html Ppt Zhangzara Creative Mode",
-    "vi": "Html Ppt Zhangzara Creative Mode",
-    "pl": "Html Ppt Zhangzara Creative Mode",
-    "id": "Html Ppt Zhangzara Creative Mode",
-    "nl": "Html Ppt Zhangzara Creative Mode",
-    "ar": "Html Ppt Zhangzara Creative Mode",
-    "tr": "Html Ppt Zhangzara Creative Mode",
-    "uk": "Html Ppt Zhangzara Creative Mode",
-    "en": "Html Ppt Zhangzara Creative Mode"
+    "en": "Present a Visual-Identity System like a Lead Brand Designer",
+    "zh-CN": "像主创品牌设计师一样发布视觉识别系统",
+    "zh-TW": "像主创品牌设计师一样发布视觉识别系统"
   },
   "version": "0.1.0",
-  "description": "Creative Mode — Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display. Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Built as a decision-grade design craft deck for brand team, client.",
   "description_i18n": {
-    "zh-CN": "Creative Mode — 奶油纸质画布配以自信的多色调（绿、粉、橙、黄）点缀和 Archivo Black 字体。适用于需要展现设计主导和自信感的场景：创意机构提案、设计工作室演示、广告公司资质展示、品牌创意审查、艺术指导评审。",
-    "zh-TW": "Creative Mode — 奶油紙質畫布配以自信的多色調（綠、粉、橙、黃）點綴和 Archivo Black 字體。適用於需要展現設計主導和自信感的場景：創意機構提案、設計工作室簡報、廣告公司資歷展示、品牌創意審查、藝術指導評審。",
-    "ja": "Creative Mode — クリーム色の紙のキャンバスに自信あふれるマルチカラー（グリーン、ピンク、オレンジ、イエロー）のアクセントと Archivo Black フォントを採用。デザイン主導で自信を感じさせたいあらゆるシーン：クリエイティブエージェンシーのピッチ、デザインスタジオのデッキ、広告代理店の実績資料、ブランドクリエイティブレビュー、アートディレクションレビューに最適。",
-    "ko": "Creative Mode — 크림 페이퍼 캔버스에 자신감 있는 멀티 컬러(그린, 핑크, 오렌지, 옐로우) 액센트와 Archivo Black 디스플레이 폰트를 적용. 디자인 주도적이고 자신감 있는 느낌이 필요한 모든 것에 적합: 크리에이티브 에이전시 피칭, 디자인 스튜디오 덱, 광고 회사 크레덴셜, 브랜드 크리에이티브 리뷰, 아트 디렉션 리뷰.",
-    "de": "Creative Mode — Cremefarbene Papierleinwand mit selbstbewussten Mehrfarbenakzenten (Grün, Pink, Orange, Gelb) und Archivo Black Display-Schrift. Für alles, was designorientiert und selbstbewusst wirken soll: Kreativagentur-Pitches, Designstudio-Decks, Werbeagentur-Credentials, Brand-Creative-Reviews, Art-Direction-Reviews.",
-    "fr": "Creative Mode — Toile papier crème avec accents multicolores audacieux (vert, rose, orange, jaune) et typographie Archivo Black. Pour tout ce qui doit avoir une approche design affirmée : présentations d'agence créative, decks de studio design, credentials d'agence publicitaire, revues créatives de marque, revues de direction artistique.",
-    "ru": "Creative Mode — Кремовый бумажный холст с уверенными многоцветными акцентами (зелёный, розовый, оранжевый, жёлтый) и шрифтом Archivo Black. Для всего, что должно выглядеть дизайнерски и уверенно: питчи креативных агентств, презентации дизайн-студий, портфолио рекламных агентств, креативные ревью брендов, ревью арт-дирекции.",
-    "es": "Creative Mode — Lienzo de papel crema con acentos multicolor confiados (verde, rosa, naranja, amarillo) y tipografía Archivo Black. Para todo lo que deba sentirse dirigido por el diseño y confiado: presentaciones de agencias creativas, decks de estudios de diseño, credenciales de agencias publicitarias, revisiones creativas de marca, revisiones de dirección de arte.",
-    "pt-BR": "Creative Mode — Tela de papel creme com acentos multicoloridos confiantes (verde, rosa, laranja, amarelo) e fonte Archivo Black. Para tudo que deve transmitir design e confiança: pitches de agências criativas, decks de estúdios de design, credenciais de agências de publicidade, revisões criativas de marca, revisões de direção de arte.",
-    "it": "Creative Mode — Tela color crema con accenti multicolore decisi (verde, rosa, arancione, giallo) e carattere Archivo Black. Per tutto ciò che deve apparire design-oriented e sicuro: pitch di agenzie creative, deck di studi di design, credenziali di agenzie pubblicitarie, review creative di brand, review di art direction.",
-    "vi": "Creative Mode — Canvas giấy màu kem với điểm nhấn đa sắc tự tin (xanh lá, hồng, cam, vàng) và phông chữ Archivo Black. Phù hợp cho mọi thứ cần cảm giác thiết kế dẫn dắt và tự tin: bài thuyết trình agency sáng tạo, deck studio thiết kế, hồ sơ năng lực công ty quảng cáo, đánh giá sáng tạo thương hiệu, đánh giá art direction.",
-    "pl": "Creative Mode — Kremowe papierowe płótno z pewnymi siebie wielokolorowymi akcentami (zielony, różowy, pomarańczowy, żółty) i czcionką Archivo Black. Dla wszystkiego, co ma być projektowo zorientowane i pewne siebie: pitche agencji kreatywnych, prezentacje studiów projektowych, portfolio agencji reklamowych, przeglądy kreatywne brandów, przeglądy art direction.",
-    "id": "Creative Mode — Kanvas kertas krem dengan aksen warna-warni percaya diri (hijau, pink, oranye, kuning) dan font Archivo Black. Untuk semua yang harus terasa dipimpin desain dan percaya diri: pitch agensi kreatif, deck studio desain, kredensial agensi iklan, review kreatif brand, review art direction.",
-    "nl": "Creative Mode — Crèmekleurig papieren canvas met zelfverzekerde meerkleurige accenten (groen, roze, oranje, geel) en Archivo Black lettertype. Voor alles wat design-gedreven en zelfverzekerd moet aanvoelen: pitches van creatieve bureaus, decks van designstudio's, credentials van reclamebureaus, creatieve brand reviews, art direction reviews.",
-    "ar": "Creative Mode — لوحة قماشية ورقية كريمية مع لمسات متعددة الألوان واثقة (أخضر، وردي، برتقالي، أصفر) وخط Archivo Black. لكل ما يجب أن يبدو موجهاً بالتصميم وواثقاً: عروض الوكالات الإبداعية، عروض استوديوهات التصميم، أوراق اعتماد وكالات الإعلان، مراجعات العلامات التجارية الإبداعية، مراجعات الإخراج الفني.",
-    "tr": "Creative Mode — Kendinden emin çok renkli vurgularla (yeşil, pembe, turuncu, sarı) ve Archivo Black yazı tipiyle krem kağıt tuval. Tasarım odaklı ve kendinden emin hissettirmesi gereken her şey için: yaratıcı ajans sunumları, tasarım stüdyosu dekleri, reklam ajansı referansları, marka kreatif incelemeleri, sanat yönetimi incelemeleri.",
-    "uk": "Creative Mode — Кремове паперове полотно з впевненими різнокольоровими акцентами (зелений, рожевий, помаранчевий, жовтий) та шрифтом Archivo Black. Для всього, що має виглядати дизайнерським та впевненим: пітчі креативних агентств, презентації дизайн-студій, портфоліо рекламних агентств, креативні огляди брендів, огляди арт-дирекції.",
-    "en": "Creative Mode — Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display. Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews."
+    "en": "A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Built as a decision-grade design craft deck for brand team, client.",
+    "zh-CN": "像主创品牌设计师一样发布视觉识别系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像主创品牌设计师一样发布视觉识别系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,19 @@
     "design-studio-deck",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-creative-mode",
+    "marketing-and-gtm",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +63,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +71,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Creative Mode — Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display. Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews.",
-        "zh-CN": "使用这个插件完成以下任务：Creative Mode — Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display. Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews."
+        "en": "Create \"Present a Visual-Identity System like a Lead Brand Designer\" as a decision-grade Design craft deck in this template's own visual system. Subject: A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Audience: brand team, client. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像主创品牌设计师一样发布视觉识别系统。像主创品牌设计师一样发布视觉识别系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Creative Mode"
+          "title": "Present a Visual-Identity System like a Lead Brand Designer",
+          "title_i18n": {
+            "en": "Present a Visual-Identity System like a Lead Brand Designer",
+            "zh-CN": "像主创品牌设计师一样发布视觉识别系统",
+            "zh-TW": "像主创品牌设计师一样发布视觉识别系统"
+          }
         }
       ]
     },
@@ -123,6 +111,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/pi-rpc.js';
+import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/agent-protocol/index.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
@@ -108,7 +108,7 @@ test('parsePiModels skips duplicate default id', () => {
 // We test the pure event mapper directly — no child process, no stdin.
 // This catches regressions like tool event ordering bugs.
 
-import { createJsonLineStream } from '../src/acp.js';
+import { createJsonLineStream } from '../src/agent-protocol/index.js';
 
 type JsonRecord = Record<string, unknown>;
 type TestAgentEvent = JsonRecord & { type?: string; label?: string; message?: string; delta?: string };

@@ -183,6 +183,16 @@ jobs:
 
       # `--branch=main` IS the Cloudflare Pages production branch, so this
       # publishes to the production domain (open-design.ai).
+      - name: Apply attribution ledger migrations (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          wranglerVersion: "4.110.0"
+          command: d1 migrations apply open-design-landing-attribution --remote
+
       - name: Deploy to Cloudflare Pages (production)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -194,3 +204,52 @@ jobs:
             pages deploy out
             --project-name=open-design-landing
             --branch=main
+
+  # Post a Feishu card to the landing group once the promotion settles. Runs on
+  # BOTH success and failure (a failed production deploy is exactly when people
+  # need a ping), but only when `deploy` actually ran — a dispatch from a
+  # non-main ref skips `deploy`, and we don't want a "deploy failed" card for a
+  # job that never started. Reuses the landing webhook (falling back to the
+  # release webhook), same as landing-page-daily-feishu.
+  notify:
+    name: Notify Feishu (landing production deploy)
+    needs: deploy
+    if: ${{ github.repository == 'nexu-io/open-design' && always() && needs.deploy.result != 'skipped' && needs.deploy.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # actions:read lets the card find the previous successful production run
+      # to compute the changelog baseline; contents:read for the checkout.
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v6.0.2
+        with:
+          # Anchor on the exact commit production shipped and fetch full history
+          # so the changelog range (previous deploy .. this deploy) resolves.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Check landing deploy Feishu script
+        run: node --experimental-strip-types .github/scripts/landing-page-deploy-feishu.ts self-check
+
+      - name: Post landing deploy card to Feishu
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          DEPLOY_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          REASON: ${{ github.event.inputs.reason }}
+          PRODUCTION_URL: https://open-design.ai
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/landing-page-deploy-feishu.ts

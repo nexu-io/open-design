@@ -120,7 +120,7 @@ describe('TasksView automation history', () => {
 
     fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     await waitFor(() => {
-      expect((screen.getByLabelText('Automation title') as HTMLInputElement).value).toBe('Live artifact maintainer');
+      expect((screen.getByTestId('automation-modal-title') as HTMLInputElement).value).toBe('Live artifact maintainer');
     });
   });
 });

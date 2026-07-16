@@ -1,7 +1,7 @@
 # 旗舰案例 · Glass Marbles（真架构 vs AI 臆造）
 
 源站 https://chiuhans111.github.io/marbles/ ·作者 Hans Chiu ·单文件 1067 行 ·许可证 **NONE**。
-完整逐行拆解见 `./website-clones/marbles-clone/TEARDOWN.md`，这里是给 skill 用的精华版。
+完整逐行拆解见 `当前项目目录/marbles-clone/TEARDOWN.md`，这里是给 skill 用的精华版。
 
 ## 一句话真架构
 

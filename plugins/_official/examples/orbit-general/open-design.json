@@ -24,6 +24,7 @@
     "en": "Orbit General"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Open Orbit briefing skill — selected by the Orbit pipeline when the user has two or more connectors connected. Pulls the past 24 hours of activity from every authenticated connector (GitHub, Linear, Notion, Slack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and renders a single adaptive bento-grid dashboard at the top of \"我的设计\". Each connector module picks its own UI form (list, avatar stack, status ring, heatmap, file grid, alert card, …) based on the data shape it returns, so the layout scales as Orbit's connector ecosystem grows. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against the user's live connector data.",
   "description_i18n": {
     "zh-CN": "当用户连接两个或更多连接器时，Orbit 自动调用此技能，汇总过去 24 小时内所有已认证连接器（GitHub、Linear、Notion、Slack、飞书、日历、Gmail、云端硬盘、Sentry、Vercel 等）的活动数据，在「我的设计」顶部生成自适应网格仪表板。由 Orbit 每日摘要调度器自动触发。",

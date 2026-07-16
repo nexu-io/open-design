@@ -29,4 +29,17 @@ describe('design system modal layering', () => {
       Number(ruleValue(composerPopover, 'z-index')),
     );
   });
+
+  it('keeps the sidebar collapse handle above scrollable panel content (OPEND-418)', () => {
+    const sidebar = cssBlock(expandedIndexCss, '.ds-modal-sidebar');
+    const sidebarBody = cssBlock(expandedIndexCss, '.ds-modal-sidebar-body');
+    const stageHandle = cssBlock(expandedIndexCss, '.ds-modal-stage-handle');
+    const collapseHandle = cssBlock(expandedIndexCss, '.ds-modal-stage-handle.is-collapse');
+
+    expect(ruleValue(sidebar, 'overflow')).toBe('hidden');
+    expect(ruleValue(sidebarBody, 'overflow')).toBe('auto');
+    expect(ruleValue(stageHandle, 'position')).toBe('absolute');
+    expect(ruleValue(collapseHandle, 'left')).toBe('0');
+    expect(Number(ruleValue(collapseHandle, 'z-index'))).toBeGreaterThanOrEqual(5);
+  });
 });

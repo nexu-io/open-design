@@ -130,6 +130,7 @@ describe('resolveAgentResumeContext', () => {
     });
     expect(ctx.isResuming).toBe(false);
     expect(ctx.resumeSessionId).toBeNull();
+    expect(ctx.storedSessionId).toBe('sess-A');
     expect(ctx.invalidationReason).toBe('model_changed');
   });
 

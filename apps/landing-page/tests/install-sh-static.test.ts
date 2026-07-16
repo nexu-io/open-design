@@ -85,6 +85,8 @@ exit 0
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /does not look like the Open Design CLI/);
+    assert.match(result.stderr, /macOS, Linux, and WSL2/);
+    assert.match(result.stderr, /Settings -> MCP server/);
     assert.throws(() => readFileSync(argvOut, 'utf8'), /ENOENT/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });

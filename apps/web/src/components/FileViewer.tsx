@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
@@ -18,6 +18,7 @@ import {
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
+import { deployErrorCode } from '../analytics/deploy-error-code';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
@@ -31,8 +32,12 @@ import {
   trackFileVersionRestoreResult,
   trackPageView,
   trackPresentPopoverClick,
+  trackDeckViewerSurfaceView,
+  trackDeckViewerClick,
+  trackSpeakerNotesSaveResult,
   trackShareOptionPopoverClick,
 } from '../analytics/events';
+import { recordFirstLoopStep } from '../onboarding/first-loop';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import {
@@ -61,6 +66,7 @@ import {
   fetchProjectFilePreview,
   fetchProjectFiles,
   fetchProjectFileText,
+  fetchProjectFileTextPreview,
   uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
@@ -81,15 +87,18 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   downloadImageDataUrl,
+  exportAsHtml,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
+  exportAsZip,
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsPptx,
   exportProjectAsZip,
   exportProjectImageDataUrl,
   exportProjectScreenshotPdf,
+  exportSnapshotAsPdf,
   copyImageDataUrlToClipboard,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
@@ -108,15 +117,44 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
-import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
+  buildLazySrcdocTransport,
+  buildRedirectLoopBlockedDoc,
+  buildSrcdoc,
+  canActivateSrcDocTransport,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '../runtime/srcdoc';
+import { DeckThumbnailRail } from './DeckThumbnailRail';
+import { parseDeckThumbnails } from '../runtime/deck-thumbnail-parser';
+import {
+  buildSpeakerNotesPresenterHtml,
+  extractSpeakerNotesFromHtml,
+  normalizeSpeakerNotes,
+  PRESENTER_WINDOW_INITIAL_HEIGHT,
+  PRESENTER_WINDOW_INITIAL_WIDTH,
+  PRESENTER_WINDOW_MIN_HEIGHT,
+  PRESENTER_WINDOW_MIN_WIDTH,
+  removeSpeakerNotesFromHtml,
+  upsertSpeakerNotesInHtml,
+} from '../runtime/speaker-notes';
+import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
+  htmlNeedsPoweredPreview,
+  htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
+import {
+  htmlHasRootRelativeProjectAssetRefs,
+  normalizeRootRelativeProjectAssetRefs,
+  rewriteInlinedCssAssetRefs,
+  rewriteInlinedScriptAssetRefs,
+} from './file-viewer-preview-assets';
+import { resolvePoweredPreviewUrl } from '../runtime/powered-preview';
 import { saveTemplate } from '../state/projects';
 import type {
   LiveArtifactEventItem,
@@ -242,6 +280,31 @@ type DeployResultCard = {
   message?: string;
 };
 const MAX_BRIDGE_COORDINATE = 1_000_000;
+// Powered-preview iframe attributes. `allow-same-origin` is what makes real
+// Workers / Web Storage / SharedArrayBuffer possible; it is safe here because
+// the powered iframe loads from the daemon's preview-only loopback host, which
+// is cross-origin to the app shell and barred from normal daemon APIs. The
+// `allow` list delegates the permissions a GPU/compute artifact typically
+// wants, including `cross-origin-isolated` so the isolated document keeps
+// SharedArrayBuffer.
+const POWERED_PREVIEW_SANDBOX =
+  'allow-scripts allow-same-origin allow-downloads allow-popups allow-forms allow-modals allow-pointer-lock';
+const POWERED_PREVIEW_ALLOW =
+  'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
+const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
+const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
+type HtmlSourceLoadMode = 'full' | 'routing-preview';
+
+function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean {
+  if (!source) return false;
+  return (
+    htmlNeedsSandboxShim(source) ||
+    htmlNeedsFocusGuard(source) ||
+    htmlNeedsRedirectGuard(source) ||
+    hasTweaksTemplate(source)
+  );
+}
+
 const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   {
     id: 'desktop',
@@ -724,7 +787,6 @@ function PreviewViewportControls({
           className="viewer-viewport-icon"
         />
         <span>{t(activePreset.labelKey)}</span>
-        <RemixIcon name="arrow-down-s-line" size={14} />
       </button>
       {open ? (
         <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
@@ -1132,10 +1194,13 @@ function temporarilyExposeIframeForSnapshot(iframe: HTMLIFrameElement): () => vo
   };
 }
 
-async function requestPreviewSnapshotWithRetry(iframe: HTMLIFrameElement): Promise<Awaited<ReturnType<typeof requestPreviewSnapshot>>> {
+async function requestPreviewSnapshotWithRetry(
+  iframe: HTMLIFrameElement,
+  options?: { full?: boolean },
+): Promise<Awaited<ReturnType<typeof requestPreviewSnapshot>>> {
   const timeouts = [1500, 3000, 6000];
   for (const timeout of timeouts) {
-    const snapshot = await requestPreviewSnapshot(iframe, timeout);
+    const snapshot = await requestPreviewSnapshot(iframe, timeout, options);
     if (snapshot) return snapshot;
     await waitForAnimationFrame();
   }
@@ -1187,7 +1252,12 @@ interface Props {
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }
 
-export function FileViewer({
+// Memoized so FileWorkspace-local state churn (tab drag hover, closing a
+// NEIGHBORING tab, launcher toggles) skips this whole subtree — the live
+// preview iframes below are the most expensive thing on screen. Relies on
+// FileWorkspace passing identity-stable props (see the activeFile* memos
+// there).
+export const FileViewer = memo(function FileViewer({
   projectId,
   projectKind,
   file,
@@ -1304,7 +1374,7 @@ export function FileViewer({
     return <DocumentPreviewViewer projectId={projectId} file={file} />;
   }
   return <BinaryViewer projectId={projectId} file={file} />;
-}
+});
 
 export function LiveArtifactViewer({
   projectId,
@@ -2559,12 +2629,64 @@ export function fileVersionPreviewOptions(
   };
 }
 
+function fileVersionPreviewSrcDoc(projectId: string, fileName: string, source: string) {
+  return buildSrcdoc(source, {
+    ...fileVersionPreviewOptions(projectId, fileName, source),
+    previewFocusGuard: true,
+  });
+}
+
+function fileVersionExportTitle(fileName: string, version: ProjectFileVersion): string {
+  const base = fileName.replace(/\.html?$/i, '') || fileName;
+  return `${base}-v${version.version}`;
+}
+
+type HtmlVersionExportContext = {
+  content: string;
+  title: string;
+  versionId?: string;
+};
+
+type ExportToastState = {
+  message: string;
+  tone: 'default' | 'success' | 'error' | 'loading';
+};
+
+export type DeckKeyboardShortcut = 'next' | 'prev' | 'first' | 'last' | 'reset';
+
+type DeckKeyboardShortcutEvent = Pick<
+  KeyboardEvent,
+  'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'
+>;
+
+export function deckKeyboardShortcutForEvent(event: DeckKeyboardShortcutEvent): DeckKeyboardShortcut | null {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  if (event.key === 'ArrowRight' || event.key === 'PageDown') return 'next';
+  if (event.key === 'ArrowLeft' || event.key === 'PageUp') return 'prev';
+  if (event.key === 'Home') return 'first';
+  if (event.key === 'End') return 'last';
+  if (event.key.toLowerCase() === 'r') return 'reset';
+  return null;
+}
+
+function normalizeDeckVisualSource(source: string): string {
+  return source
+    .replace(/\s+(?=<\/body\s*>)/gi, '')
+    .trimEnd();
+}
+
 function FileVersionManagerModal({
   projectId,
   projectKind,
   file,
   currentSource,
   entryFrom,
+  onExportPdf,
+  onOpenImageExport,
+  onExportZip,
+  onExportHtml,
+  exportToast,
+  onExportToastDismiss,
   onClose,
   onRestored,
 }: {
@@ -2573,6 +2695,12 @@ function FileVersionManagerModal({
   file: ProjectFile;
   currentSource: string | null;
   entryFrom: 'toolbar' | 'more_menu';
+  onExportPdf?: (context: HtmlVersionExportContext) => void;
+  onOpenImageExport?: (context: HtmlVersionExportContext) => Promise<void> | void;
+  onExportZip?: (context: HtmlVersionExportContext) => void;
+  onExportHtml?: (context: HtmlVersionExportContext) => void;
+  exportToast?: ExportToastState | null;
+  onExportToastDismiss?: () => void;
   onClose: () => void;
   onRestored: (content: string, version: ProjectFileVersion) => Promise<void> | void;
 }) {
@@ -2596,7 +2724,14 @@ function FileVersionManagerModal({
   const [confirmRestore, setConfirmRestore] = useState(false);
   const restoreWrapRef = useRef<HTMLDivElement | null>(null);
   const restorePopoverId = useId();
+  const [downloadMenuVersionId, setDownloadMenuVersionId] = useState<string | null>(null);
+  const [versionExportToast, setVersionExportToast] = useState<ExportToastState | null>(null);
+  const [versionImageExportVersionId, setVersionImageExportVersionId] = useState<string | null>(null);
+  const [versionImageExportFormat, setVersionImageExportFormat] = useState<ImageExportFormat>('png');
+  const [versionImageExportInFlight, setVersionImageExportInFlight] = useState(false);
+  const versionImageExportTitleId = useId();
   const [previewFrameRef, previewFrameSize] = usePreviewCanvasSize<HTMLDivElement>();
+  const versionPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   // Track which srcDoc the iframe has finished rendering. Deriving readiness by
   // comparing to the current srcDoc during render (rather than toggling a bool
   // in a post-paint effect) keeps the overlay up across a switch with no
@@ -2703,16 +2838,16 @@ function FileVersionManagerModal({
   const selectedRestoredFrom = selectedVersion?.restoreFromVersionId
     ? versionById.get(selectedVersion.restoreFromVersionId)
     : null;
+  const versionImageExportVersion = versionImageExportVersionId
+    ? versionById.get(versionImageExportVersionId) ?? null
+    : null;
+  const visibleExportToast = versionExportToast ?? exportToast ?? null;
   const selectedContentMatchesVersion = Boolean(selectedId && selectedContentVersionId === selectedId && selectedContent);
   const restoreDisabled =
     !selectedVersion || selectedVersion.current || restoring || loadingContent || !selectedContentMatchesVersion;
   const srcDoc = useMemo(() => {
     if (!selectedContent) return '';
-    const previewOptions = fileVersionPreviewOptions(projectId, file.name, selectedContent);
-    return buildSrcdoc(selectedContent, {
-      ...previewOptions,
-      previewFocusGuard: true,
-    });
+    return fileVersionPreviewSrcDoc(projectId, file.name, selectedContent);
   }, [file.name, projectId, selectedContent]);
   const frameReady = loadedSrcDoc === srcDoc;
 
@@ -2772,7 +2907,20 @@ function FileVersionManagerModal({
     setCopied(false);
     setConfirmRestore(false);
     setPromptOpen(false);
+    setDownloadMenuVersionId(null);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!downloadMenuVersionId) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.file-version-download-wrap')) return;
+      setDownloadMenuVersionId(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [downloadMenuVersionId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -2823,6 +2971,14 @@ function FileVersionManagerModal({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (versionImageExportVersionId) {
+        if (!versionImageExportInFlight) setVersionImageExportVersionId(null);
+        return;
+      }
+      if (downloadMenuVersionId) {
+        setDownloadMenuVersionId(null);
+        return;
+      }
       if (confirmRestore) {
         setConfirmRestore(false);
         return;
@@ -2835,7 +2991,14 @@ function FileVersionManagerModal({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, promptOpen, confirmRestore]);
+  }, [
+    onClose,
+    promptOpen,
+    confirmRestore,
+    downloadMenuVersionId,
+    versionImageExportVersionId,
+    versionImageExportInFlight,
+  ]);
 
   useEffect(() => {
     if (!promptOpen) return;
@@ -2866,6 +3029,157 @@ function FileVersionManagerModal({
     if (!ok) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function ensureVersionContent(version: ProjectFileVersion): Promise<string | null> {
+    const cached = contentCacheRef.current.get(version.id);
+    if (cached !== undefined) return cached;
+    await primeVersionContent(version.id);
+    const content = contentCacheRef.current.get(version.id);
+    if (content === undefined) {
+      setError(t('fileViewer.versions.previewFailed'));
+      return null;
+    }
+    return content;
+  }
+
+  async function runVersionExport(
+    version: ProjectFileVersion,
+    action: (content: string, title: string) => Promise<unknown> | unknown,
+  ): Promise<void> {
+    setDownloadMenuVersionId(null);
+    setError(null);
+    setVersionExportToast({ message: t('fileViewer.exportingProgress'), tone: 'loading' });
+    const content = await ensureVersionContent(version);
+    if (!content) {
+      setVersionExportToast({ message: t('fileViewer.exportFailed'), tone: 'error' });
+      return;
+    }
+    try {
+      contentCacheRef.current.set(version.id, content);
+      setSelectedId(version.id);
+      setSelectedContent(content);
+      setSelectedContentVersionId(version.id);
+      setLoadingContent(false);
+      await waitForAnimationFrame();
+      await waitForAnimationFrame();
+      const result = await action(content, fileVersionExportTitle(file.name, version));
+      if (result === 'cancelled') {
+        setVersionExportToast(null);
+        return;
+      }
+      setVersionExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportFailed');
+      setVersionExportToast({ message, tone: 'error' });
+    }
+  }
+
+  async function captureVersionPreviewSnapshot(options?: { full?: boolean }) {
+    const iframe = versionPreviewIframeRef.current;
+    if (!iframe) return null;
+    await waitForIframeLoadOrTimeout(iframe, 250);
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
+    if (options?.full) return requestPreviewSnapshotWithRetry(iframe, options);
+    const hostSnapshot = await captureHostIframeSnapshot(iframe);
+    if (hostSnapshot) return hostSnapshot;
+    return requestPreviewSnapshotWithRetry(iframe, options);
+  }
+
+  async function runProjectVersionExport(
+    version: ProjectFileVersion,
+    action: (context: HtmlVersionExportContext) => Promise<unknown> | unknown,
+  ): Promise<void> {
+    setDownloadMenuVersionId(null);
+    setError(null);
+    setVersionExportToast({ message: t('fileViewer.exportingProgress'), tone: 'loading' });
+    const content = await ensureVersionContent(version);
+    if (!content) {
+      setVersionExportToast({ message: t('fileViewer.exportFailed'), tone: 'error' });
+      return;
+    }
+    const context: HtmlVersionExportContext = {
+      content,
+      title: version.current ? file.name.replace(/\.html?$/i, '') || file.name : fileVersionExportTitle(file.name, version),
+      ...(version.current ? {} : { versionId: version.id }),
+    };
+    setVersionExportToast(null);
+    await action(context);
+  }
+
+  async function exportVersionPdf(version: ProjectFileVersion) {
+    if (onExportPdf) {
+      await runProjectVersionExport(version, onExportPdf);
+      return;
+    }
+    await runVersionExport(version, async (content, title) => {
+      const snapshot = await captureVersionPreviewSnapshot({ full: true });
+      if (!snapshot) throw new Error(t('fileViewer.exportFailed'));
+      await exportSnapshotAsPdf(snapshot, title);
+    });
+  }
+
+  async function exportVersionImage(version: ProjectFileVersion, format: ImageExportFormat) {
+    await runVersionExport(version, async (content, title) => {
+      const snapshot = await captureVersionPreviewSnapshot({ full: true });
+      if (!snapshot) throw new Error(t('fileViewer.exportImageFailed'));
+      const blob = await imageDataUrlToBlob(snapshot.dataUrl, format);
+      if (blob.size <= 0) throw new Error(t('fileViewer.exportImageFailed'));
+      const target = await prepareImageExportTarget(title, format, { useNativePicker: false });
+      if (!target) return 'cancelled';
+      if (target.method === 'download' && format === 'png') {
+        downloadImageDataUrl(snapshot.dataUrl, target.filename);
+      } else {
+        await target.save(blob);
+      }
+    });
+  }
+
+  async function handleVersionImageExportSave() {
+    if (!versionImageExportVersion || versionImageExportInFlight) return;
+    setVersionImageExportInFlight(true);
+    const version = versionImageExportVersion;
+    const format = versionImageExportFormat;
+    setVersionImageExportVersionId(null);
+    try {
+      await exportVersionImage(version, format);
+    } finally {
+      setVersionImageExportInFlight(false);
+    }
+  }
+
+  function openVersionImageExport(version: ProjectFileVersion) {
+    setDownloadMenuVersionId(null);
+    if (onOpenImageExport) {
+      void runProjectVersionExport(version, (context) => {
+        onClose();
+        window.requestAnimationFrame(() => {
+          void onOpenImageExport(context);
+        });
+      });
+      return;
+    }
+    setSelectedId(version.id);
+    void primeVersionContent(version.id);
+    setVersionImageExportFormat('png');
+    setVersionImageExportVersionId(version.id);
+  }
+
+  function exportVersionZip(version: ProjectFileVersion) {
+    if (onExportZip) {
+      void runProjectVersionExport(version, onExportZip);
+      return;
+    }
+    void runVersionExport(version, (content, title) => exportAsZip(content, title));
+  }
+
+  function exportVersionHtml(version: ProjectFileVersion) {
+    if (onExportHtml) {
+      void runProjectVersionExport(version, onExportHtml);
+      return;
+    }
+    void runVersionExport(version, (content, title) => exportAsHtml(content, title));
   }
 
   function openVersionInNewTab() {
@@ -2927,19 +3241,20 @@ function FileVersionManagerModal({
   }
 
   return createPortal(
-    <div
-      className="modal-backdrop viewer-modal-backdrop file-version-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <>
       <div
-        className="file-version-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('fileViewer.versions.title')}
+        className="modal-backdrop viewer-modal-backdrop file-version-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
+        <div
+          className="file-version-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('fileViewer.versions.title')}
+        >
         <div className="file-version-sidebar">
           <div className="file-version-sidebar-head">
             <span className="file-version-count">{versionCountLabel}</span>
@@ -2997,48 +3312,53 @@ function FileVersionManagerModal({
                 const prefetch = () => {
                   void primeVersionContent(version.id);
                 };
+                const selectVersion = () => {
+                  if (!selected) {
+                    fireModalClick('version_item', {
+                      version_source: fileVersionSourceToTracking(version),
+                      version_is_current: Boolean(version.current),
+                    });
+                  }
+                  setSelectedId(version.id);
+                };
                 return (
-                  <button
+                  <div
                     key={version.id}
-                    type="button"
                     className={`file-version-item${selected ? ' active' : ''}`}
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      if (!selected) {
-                        fireModalClick('version_item', {
-                          version_source: fileVersionSourceToTracking(version),
-                          version_is_current: Boolean(version.current),
-                        });
-                      }
-                      setSelectedId(version.id);
-                    }}
                     onMouseEnter={prefetch}
-                    onFocus={prefetch}
                   >
-                    <span className="file-version-item-top">
-                      {version.current ? (
-                        <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
-                      ) : null}
-                      <span className={`file-version-source-badge ${fileVersionSourceClassName(version)}`}>
-                        {fileVersionSourceLabel(version, t)}
-                      </span>
-                      <span className="file-version-time">
-                        {formatVersionDateTime(version.createdAt, locale)}
-                      </span>
-                    </span>
-                    <span className="file-version-item-title">
-                      {version.prompt || version.label || t('fileViewer.versions.versionLabel', { version: version.version })}
-                    </span>
-                    <span className="file-version-item-meta">
-                      {t('fileViewer.versions.versionLabel', { version: version.version })}
-                      {itemRestoredFrom ? (
-                        <span className="file-version-item-restored">
-                          {t('fileViewer.versions.restoredFrom', { version: itemRestoredFrom.version })}
+                    <button
+                      type="button"
+                      className="file-version-item-select"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={selectVersion}
+                      onFocus={prefetch}
+                    >
+                      <span className="file-version-item-top">
+                        {version.current ? (
+                          <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
+                        ) : null}
+                        <span className={`file-version-source-badge ${fileVersionSourceClassName(version)}`}>
+                          {fileVersionSourceLabel(version, t)}
                         </span>
-                      ) : null}
-                    </span>
-                  </button>
+                        <span className="file-version-time">
+                          {formatVersionDateTime(version.createdAt, locale)}
+                        </span>
+                      </span>
+                      <span className="file-version-item-title">
+                        {version.prompt || version.label || t('fileViewer.versions.versionLabel', { version: version.version })}
+                      </span>
+                      <span className="file-version-item-meta">
+                        {t('fileViewer.versions.versionLabel', { version: version.version })}
+                        {itemRestoredFrom ? (
+                          <span className="file-version-item-restored">
+                            {t('fileViewer.versions.restoredFrom', { version: itemRestoredFrom.version })}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </div>
                 );
               })
             )}
@@ -3179,6 +3499,74 @@ function FileVersionManagerModal({
                   ) : null}
                 </div>
               ) : null}
+              {selectedVersion ? (
+                <div className="file-version-download-wrap file-version-head-download-wrap">
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    aria-haspopup="menu"
+                    aria-expanded={downloadMenuVersionId === selectedVersion.id}
+                    aria-label={`${t('fileViewer.download')} ${t('fileViewer.versions.versionLabel', { version: selectedVersion.version })}`}
+                    title={`${t('fileViewer.download')} ${t('fileViewer.versions.versionLabel', { version: selectedVersion.version })}`}
+                    data-tooltip={`${t('fileViewer.download')} ${t('fileViewer.versions.versionLabel', { version: selectedVersion.version })}`}
+                    data-tooltip-placement="bottom"
+                    onClick={() => {
+                      void primeVersionContent(selectedVersion.id);
+                      setDownloadMenuVersionId((current) => current === selectedVersion.id ? null : selectedVersion.id);
+                    }}
+                  >
+                    <RemixIcon name="download-line" size={15} />
+                  </button>
+                  {downloadMenuVersionId === selectedVersion.id ? (
+                    <div className="share-menu-popover file-version-download-menu" role="menu">
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          void exportVersionPdf(selectedVersion);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                        <span>{t('fileViewer.exportPdf')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          openVersionImageExport(selectedVersion);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                        <span>{t('fileViewer.exportImage')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          exportVersionZip(selectedVersion);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
+                        <span>{t('fileViewer.exportZip')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          exportVersionHtml(selectedVersion);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
+                        <span>{t('fileViewer.exportHtml')}</span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <FileVersionViewportControls
                 viewport={previewViewport}
                 onViewport={(viewport) => {
@@ -3227,6 +3615,7 @@ function FileVersionManagerModal({
                     <div className="preview-frame-clip">
                       <div style={previewScaleShellStyle(previewViewport, 1)}>
                         <iframe
+                          ref={versionPreviewIframeRef}
                           title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
                           sandbox="allow-scripts allow-downloads"
                           srcDoc={srcDoc}
@@ -3251,8 +3640,90 @@ function FileVersionManagerModal({
             )}
           </div>
         </div>
+        </div>
       </div>
-    </div>,
+      {versionImageExportVersion ? (
+        <div className="modal-backdrop viewer-modal-backdrop image-export-backdrop file-version-export-backdrop" role="presentation">
+          <div
+            className="modal deploy-modal image-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={versionImageExportTitleId}
+          >
+            <div className="modal-head">
+              <div className="kicker">IMAGE</div>
+              <h2 id={versionImageExportTitleId}>{t('fileViewer.exportImage')}</h2>
+              <p className="subtitle">{t('fileViewer.exportImageModalSubtitle')}</p>
+            </div>
+            <div className="deploy-form image-export-form">
+              <fieldset className="image-export-format-field">
+                <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
+                <div className="image-export-format-options">
+                  {IMAGE_EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`image-export-format-option${versionImageExportFormat === option.value ? ' active' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="version-image-export-format"
+                        value={option.value}
+                        aria-label={option.label}
+                        checked={versionImageExportFormat === option.value}
+                        onChange={() => setVersionImageExportFormat(option.value)}
+                      />
+                      <span className="image-export-format-text">
+                        <strong>{option.label}</strong>
+                        <span aria-hidden="true">{option.extension}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={versionImageExportInFlight}
+                onClick={() => setVersionImageExportVersionId(null)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={versionImageExportInFlight}
+                onClick={() => {
+                  void handleVersionImageExportSave();
+                }}
+              >
+                {versionImageExportInFlight ? t('fileViewer.exportImageSaving') : t('common.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {visibleExportToast ? (
+        <Toast
+          className="file-version-export-toast"
+          message={visibleExportToast.message}
+          tone={visibleExportToast.tone}
+          role={visibleExportToast.tone === 'error' ? 'alert' : 'status'}
+          ttlMs={visibleExportToast.tone === 'loading' ? 60000 : 2200}
+          placement="top"
+          onDismiss={visibleExportToast.tone === 'loading'
+            ? undefined
+            : () => {
+                if (versionExportToast) {
+                  setVersionExportToast(null);
+                } else {
+                  onExportToastDismiss?.();
+                }
+              }}
+        />
+      ) : null}
+    </>,
     document.body,
   );
 }
@@ -5473,6 +5944,10 @@ function HtmlViewer({
         },
         { requestId },
       );
+      // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL export
+      // closes the loop. Project-scoped — a no-op unless the project was
+      // started from the Home recommendation.
+      if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
     };
     const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
     // Programmatic exports compute in-browser and can take a while (one render
@@ -5629,6 +6104,35 @@ function HtmlViewer({
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
     });
   };
+  const fireDeckViewerClick = (
+    element:
+      | 'slide_prev'
+      | 'slide_next'
+      | 'slide_reset'
+      | 'thumbnail_select'
+      | 'thumbnail_rail_toggle'
+      | 'speaker_notes_edit',
+    extra?: {
+      action?: 'expand' | 'collapse';
+      slide_index?: number;
+      slide_count?: number;
+    },
+  ) => {
+    trackDeckViewerClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'deck_viewer',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      ...(extra?.action ? { action: extra.action } : {}),
+      ...(typeof extra?.slide_index === 'number'
+        ? { slide_index: extra.slide_index }
+        : {}),
+      ...(typeof extra?.slide_count === 'number'
+        ? { slide_count: extra.slide_count }
+        : {}),
+    });
+  };
   const fireCommentPopoverClick = (
     element: 'save_comment' | 'send_to_chat' | 'add_note',
   ) => {
@@ -5642,6 +6146,8 @@ function HtmlViewer({
   };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
+  const [routingSource, setRoutingSource] = useState<string | null>(liveHtml ?? null);
+  const [serverPoweredPreviewRequired, setServerPoweredPreviewRequired] = useState(false);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const fileViewportKey = previewViewportStateKey(projectId, file);
@@ -5748,6 +6254,8 @@ function HtmlViewer({
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const [commentComposerHost, setCommentComposerHost] = useState<HTMLDivElement | null>(null);
+  const [commentPreviewCanvasNode, setCommentPreviewCanvasNode] = useState<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -5769,6 +6277,12 @@ function HtmlViewer({
       source === urlPreviewIframeRef.current?.contentWindow ||
       source === srcDocPreviewIframeRef.current?.contentWindow
     );
+  }, []);
+  const setCommentComposerHostRef = useCallback((node: HTMLDivElement | null) => {
+    setCommentComposerHost((current) => (current === node ? current : node));
+  }, []);
+  const setCommentPreviewCanvasRef = useCallback((node: HTMLDivElement | null) => {
+    setCommentPreviewCanvasNode((current) => (current === node ? current : node));
   }, []);
   useEffect(() => {
     if (!onBrandExtractionStopRequest) return;
@@ -5927,6 +6441,7 @@ function HtmlViewer({
   const manualEditTextSessionIdRef = useRef<string | null>(null);
   const manualEditTextFinishRef = useRef<(() => void) | null>(null);
   const manualEditTextCommitInFlightRef = useRef<Promise<unknown> | null>(null);
+  const manualEditTextCommitSequenceRef = useRef(0);
   const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
   const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
@@ -6065,6 +6580,7 @@ function HtmlViewer({
   const [versionRestoredToast, setVersionRestoredToast] = useState<{ id: number; message: string } | null>(null);
   const versionRestoredToastIdRef = useRef(0);
   const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
+  const [imageExportContext, setImageExportContext] = useState<HtmlVersionExportContext | null>(null);
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
   const [imageExportError, setImageExportError] = useState<string | null>(null);
   const [pptxExportModalOpen, setPptxExportModalOpen] = useState(false);
@@ -6089,9 +6605,7 @@ function HtmlViewer({
   const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
   const imageExportInFlightRef = useRef(false);
-  const [exportToast, setExportToast] = useState<
-    { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
-  >(null);
+  const [exportToast, setExportToast] = useState<ExportToastState | null>(null);
   const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
   const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
@@ -6233,6 +6747,19 @@ function HtmlViewer({
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
+  const presenterWindowRef = useRef<Window | null>(null);
+  const presentOverlayRef = useRef<HTMLDivElement | null>(null);
+  const presentFullscreenRequestedRef = useRef(false);
+  const [presentFullscreenPending, setPresentFullscreenPending] = useState(false);
+  // Brief "Press Esc to exit" hint shown in the main window whenever a
+  // presentation (fullscreen stage + presenter popup) starts.
+  const [presentEscHint, setPresentEscHint] = useState(false);
+  const [deckThumbnailsCollapsed, setDeckThumbnailsCollapsed] = useState(false);
+  const [speakerNotesEditMode, setSpeakerNotesEditMode] = useState(false);
+  const [speakerNotesDraft, setSpeakerNotesDraft] = useState('');
+  const [speakerNotesSaving, setSpeakerNotesSaving] = useState(false);
+  const [speakerNotesStatus, setSpeakerNotesStatus] = useState<'saved' | 'error' | null>(null);
+  const speakerNotesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
   const overlayPreviewScale = effectivePreviewScale(
     previewViewport,
@@ -6256,12 +6783,25 @@ function HtmlViewer({
     liveCommentTargetsRef.current = liveCommentTargets;
   }, [liveCommentTargets]);
 
+  const shouldDeferPassivePreviewSource =
+    liveHtml === undefined &&
+    file.size > HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT &&
+    mode === 'preview' &&
+    !manualEditMode &&
+    !manualEditSrcDocActive &&
+    !boardMode &&
+    !inspectMode &&
+    !drawOverlayOpen &&
+    !isDeck;
+
   useEffect(() => {
     const sourceFileKey = `${projectId}\0${file.name}\0${liveHtml === undefined ? 'raw' : 'live'}`;
     if (liveHtml !== undefined) {
       sourceFileKeyRef.current = sourceFileKey;
       sourceEverLoadedRef.current = true;
       setSource(liveHtml);
+      setRoutingSource(liveHtml);
+      setServerPoweredPreviewRequired(false);
       sourceRef.current = liveHtml;
       return;
     }
@@ -6269,6 +6809,8 @@ function HtmlViewer({
     sourceFileKeyRef.current = sourceFileKey;
     if (fileChanged) {
       setSource(null);
+      setRoutingSource(null);
+      setServerPoweredPreviewRequired(false);
       sourceRef.current = null;
       // Note: prevSourceBeforeReloadRef is cleared by the [projectId,
       // file.name] reset effect that runs on file/project switch.  The
@@ -6277,6 +6819,17 @@ function HtmlViewer({
       // switches but before the effect has run.
     }
     let cancelled = false;
+    if (
+      shouldDeferPassivePreviewSource &&
+      sourceRef.current !== null &&
+      !previewTextNeedsFullSourceForSafeInline(sourceRef.current)
+    ) {
+      setRoutingSource(sourceRef.current);
+      sourceEverLoadedRef.current = true;
+      return () => {
+        cancelled = true;
+      };
+    }
     // Cache-bust the fetch on every mtime / reload / files-refresh bump.
     // Without this, an agent edit during Comment mode (srcDoc path) gets
     // stale HTML from the browser HTTP cache — the source state ends up
@@ -6284,14 +6837,47 @@ function HtmlViewer({
     // activated HTML, canActivateSrcDocTransport bails on the dedupe
     // check, and the preview only refreshes when Comment closes and the
     // url-load iframe takes over with its own ?v=mtime cache-bust.
-    void fetchProjectFileText(projectId, file.name, {
-      cacheBustKey: `${file.mtime}-${reloadKey}-${filesRefreshKey}`,
-    }).then((text) => {
+    const cacheBustKey = `${file.mtime}-${reloadKey}-${filesRefreshKey}`;
+    const loadText = shouldDeferPassivePreviewSource
+      ? fetchProjectFileTextPreview(projectId, file.name, {
+          limit: HTML_ROUTING_TEXT_PREVIEW_LIMIT,
+          cacheBustKey,
+        }).then(async (preview) => {
+          const previewText = preview?.text ?? null;
+          if (previewTextNeedsFullSourceForSafeInline(previewText)) {
+            const fullText = await fetchProjectFileText(projectId, file.name, { cacheBustKey });
+            if (fullText !== null) {
+              return {
+                text: fullText,
+                poweredPreviewRequired: preview?.poweredPreview.required === true,
+                sourceLoadMode: 'full' as HtmlSourceLoadMode,
+              };
+            }
+          }
+          return {
+            text: previewText,
+            poweredPreviewRequired: preview?.poweredPreview.required === true,
+            sourceLoadMode: 'routing-preview' as HtmlSourceLoadMode,
+          };
+        })
+      : fetchProjectFileText(projectId, file.name, { cacheBustKey }).then((text) => ({
+        text,
+        poweredPreviewRequired: false,
+        sourceLoadMode: 'full' as HtmlSourceLoadMode,
+      }));
+    void loadText.then(({ text, poweredPreviewRequired, sourceLoadMode }) => {
       if (cancelled) return;
+      setServerPoweredPreviewRequired(poweredPreviewRequired);
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
       // transient null mid-burst would blank source → srcDoc empty →
       // shell stays on prior frame. Keep the last good text instead.
       if (text == null) {
+        if (shouldDeferPassivePreviewSource) {
+          sourceEverLoadedRef.current = true;
+          setRoutingSource('');
+          setServerPoweredPreviewRequired(false);
+          return;
+        }
         // A srcDoc Reload may have cleared source to null just before this
         // fetch resolved.  If the fetch failed (non-2xx, network error),
         // restore the pre-reload source so the iframe doesn't go blank.
@@ -6310,6 +6896,7 @@ function HtmlViewer({
           snap.fileName === file.name
         ) {
           setSource(snap.source);
+          setRoutingSource(snap.source);
           sourceRef.current = snap.source;
           prevSourceBeforeReloadRef.current = null;
         } else if (snap != null) {
@@ -6324,13 +6911,26 @@ function HtmlViewer({
       prevSourceBeforeReloadRef.current = null;
       sourceEverLoadedRef.current = true;
       lastGoodSourceForRoutingRef.current = text;
-      setSource(text);
-      sourceRef.current = text;
+      setRoutingSource(text);
+      if (sourceLoadMode === 'routing-preview') {
+        sourceRef.current = null;
+      } else {
+        setSource(text);
+        sourceRef.current = text;
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, liveHtml, reloadKey, filesRefreshKey]);
+  }, [
+    projectId,
+    file.name,
+    file.mtime,
+    liveHtml,
+    reloadKey,
+    filesRefreshKey,
+    shouldDeferPassivePreviewSource,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6351,23 +6951,97 @@ function HtmlViewer({
     };
   }, [projectId, file.name, deployProviderId]);
 
+  const routingHtmlSource = source ?? routingSource ?? lastGoodSourceForRoutingRef.current;
+  const passiveLargeHtmlPreview = shouldDeferPassivePreviewSource && source === null;
   // Detect deck-shaped HTML even when the project's skill didn't declare
   // `mode: deck`. Freeform projects often produce a deck because the user
   // asked for one in plain prose; without this, prev/next and Present
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
-    const s = source ?? lastGoodSourceForRoutingRef.current;
+    const s = routingHtmlSource;
     if (!s) return false;
-    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s);
-  }, [source]);
-  const effectiveDeck = isDeck || looksLikeDeck;
+    return (
+      /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s) ||
+      sourceLooksLikeExportableDeck(s)
+    );
+  }, [routingHtmlSource]);
+  const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
-  // Extra deck signal for EXPORT only. Runtime-managed decks (`<deck-stage>` /
-  // `data-screen-label`) need deck capture even when the viewer's nav bridge
-  // cannot drive them. Plain `.slide` is intentionally excluded: ordinary pages
-  // use it for carousels/testimonials and must export as full pages.
+  const activeDeckSlideIndex =
+    slideState?.active ??
+    htmlPreviewSlideState.get(previewStateKey)?.active ??
+    0;
+  const deckSlideCount =
+    slideState?.count ??
+    htmlPreviewSlideState.get(previewStateKey)?.count ??
+    0;
+  const speakerNotes = useMemo(
+    () => extractSpeakerNotesFromHtml(source, deckSlideCount),
+    [source, deckSlideCount],
+  );
+  const showSpeakerNotesPanel = source !== null && effectiveDeck && mode === 'preview';
+  const activeSpeakerNote = speakerNotes[activeDeckSlideIndex] ?? '';
+  const deckSlideTotal = Math.max(deckSlideCount, speakerNotes.length, showDeckNavigation ? 1 : 0);
+  // Fire the deck_viewer surface_view once per opened artifact, the first time
+  // its HTML is recognized as a slide deck and the slide chrome mounts. This is
+  // the entry/denominator for the deck experience funnel. Keyed by
+  // project+file so navigating between decks re-arms it.
+  const deckSurfaceSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!effectiveDeck || source === null) return;
+    const key = `${projectId}::${file.name}`;
+    if (deckSurfaceSeenRef.current === key) return;
+    deckSurfaceSeenRef.current = key;
+    trackDeckViewerSurfaceView(analytics.track, {
+      page_name: 'artifact',
+      area: 'deck_viewer',
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      slide_count: deckSlideTotal,
+    });
+    // deckSlideTotal intentionally omitted from deps: we snapshot it at first
+    // recognition and don't want later count updates to refire the view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveDeck, source, projectId, file.name, file.kind]);
+  useEffect(() => {
+    setSpeakerNotesDraft(activeSpeakerNote);
+    setSpeakerNotesEditMode(false);
+    setSpeakerNotesStatus(null);
+  }, [activeSpeakerNote, activeDeckSlideIndex, projectId, file.name]);
+  // The "saved" confirmation is transient feedback, not persistent state —
+  // let it fade so the panel returns to its resting look.
+  useEffect(() => {
+    if (speakerNotesStatus !== 'saved') return;
+    const id = window.setTimeout(() => setSpeakerNotesStatus(null), 4200);
+    return () => window.clearTimeout(id);
+  }, [speakerNotesStatus]);
+  useEffect(() => {
+    if (!speakerNotesEditMode) return;
+    const id = window.requestAnimationFrame(() => {
+      const textarea = speakerNotesTextareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const end = textarea.value.length;
+      try {
+        textarea.setSelectionRange(end, end);
+      } catch {
+        // Some browser/input combinations can reject selection changes; focus
+        // is still the important fallback.
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [speakerNotesEditMode, activeDeckSlideIndex]);
+  // Extra deck signal for export planning. Runtime-managed decks (`<deck-stage>` /
+  // `data-screen-label`) need deck capture even when they have no plain
+  // `class="slide"` marker. Plain `.slide` is intentionally excluded here:
+  // ordinary pages use it for carousels/testimonials and must export as full
+  // pages.
   const structuredDeckExportSignal = sourceLooksLikeExportableDeck(source);
-  const livePreviewSource = inlinedSource ?? source;
+  const deckVisualSource = useMemo(() => {
+    if (!effectiveDeck || source == null) return source;
+    return normalizeDeckVisualSource(removeSpeakerNotesFromHtml(source));
+  }, [effectiveDeck, source]);
+  const livePreviewSource = inlinedSource ?? deckVisualSource;
   // Annotation modes that should hold the preview still while open. Manual
   // Edit is handled by its own freeze just below; these are the non-edit
   // passes (Mark/Draw, Comment, Inspect) that also must not be yanked out
@@ -6401,7 +7075,7 @@ function HtmlViewer({
       ? annotationFrozenSource
       : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
-  const urlModeBridge = hasUrlModeBridge(source);
+  const urlModeBridge = hasUrlModeBridge(routingHtmlSource);
   const manualEditRequiresSrcDoc = manualEditMode || manualEditSrcDocActive;
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
@@ -6414,13 +7088,63 @@ function HtmlViewer({
   // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
   // edit mode toggles, slide nav) don't re-scan the HTML each time.
   const needsSandboxShim = useMemo(() => {
-    const s = source ?? lastGoodSourceForRoutingRef.current;
+    if (passiveLargeHtmlPreview) return false;
+    const s = routingHtmlSource;
     return s != null && htmlNeedsSandboxShim(s);
-  }, [source]);
+  }, [passiveLargeHtmlPreview, routingHtmlSource]);
   const needsFocusGuard = useMemo(() => {
-    const s = source ?? lastGoodSourceForRoutingRef.current;
+    if (passiveLargeHtmlPreview) return false;
+    const s = routingHtmlSource;
     return s != null && htmlNeedsFocusGuard(s);
-  }, [source]);
+  }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  // A self-redirecting artifact must render through srcDoc so buildSrcdoc's
+  // redirect-loop guard is present; on the raw URL-load path the iframe reloads
+  // itself forever and freezes the workspace (nexu-io/open-design#710).
+  const needsRedirectGuard = useMemo(() => {
+    if (passiveLargeHtmlPreview) return false;
+    const s = routingHtmlSource;
+    return s != null && htmlNeedsRedirectGuard(s);
+  }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  // Set by the injected guard's `od:redirect-loop-blocked` postMessage. The
+  // browser makes `window.location` unforgeable, so a runaway reload can only be
+  // stopped host-side — parking the srcDoc iframe on static content below. File-
+  // scoped: reset whenever the file, project, or reload key changes.
+  const [redirectLoopBlocked, setRedirectLoopBlocked] = useState(false);
+  // Project file paths, for confirming root-relative asset refs
+  // (`/reference-assets/main.css`) against real files instead of guessing
+  // from path shape. `null` while the list is in flight — the detection memo
+  // below then runs in conservative candidate mode so a clone artifact never
+  // flashes through the (unstyled) URL-load path before the list lands.
+  const [projectFilePathSet, setProjectFilePathSet] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setProjectFilePathSet(null);
+    void fetchProjectFiles(projectId).then((files) => {
+      if (!cancelled) setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.mtime, filesRefreshKey, reloadKey]);
+  const projectRootAssetRefs = useMemo(
+    () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
+    [source, projectFilePathSet],
+  );
+  // A real WebGL/Worker/WASM/SharedArrayBuffer artifact needs the "powered
+  // preview" path — a cross-origin-isolated iframe with allow-same-origin —
+  // which the opaque preview sandbox cannot provide (issue #724). Powered mode
+  // supersedes the shim/focus-guard srcDoc fallbacks below: those exist only to
+  // work around the opaque origin (localStorage SecurityError, focus theft),
+  // and powered mode fixes the root cause with a REAL same-origin document, so
+  // routing such an artifact to srcDoc would strip exactly the capabilities it
+  // needs. The interactive-bridge srcDoc modes (deck/inspect/edit/palette/
+  // tweaks/comment) still win — they require host-injected bridges powered mode
+  // can't carry.
+  const needsPowered = useMemo(() => {
+    if (serverPoweredPreviewRequired) return true;
+    const s = routingHtmlSource;
+    return s != null && htmlNeedsPoweredPreview(s);
+  }, [routingHtmlSource, serverPoweredPreviewRequired]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
@@ -6432,8 +7156,10 @@ function HtmlViewer({
     urlModeBridge,
     inspectMode,
     drawMode: drawOverlayOpen,
-    forceInline: forceInline || needsSandboxShim,
-    needsFocusGuard,
+    forceInline: (forceInline || needsSandboxShim) && !needsPowered,
+    needsFocusGuard: needsFocusGuard && !needsPowered,
+    needsRedirectGuard: needsRedirectGuard && !needsPowered,
+    projectRootAssetRefs,
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
@@ -6511,6 +7237,60 @@ function HtmlViewer({
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
   }, [useUrlLoadPreview]);
+  // Clear a redirect-loop park whenever the artifact changes or the user hits
+  // reload (reloadKey bump): the previewed content is fresh, so give it a clean
+  // run rather than staying pinned on the "loop detected" placeholder.
+  useEffect(() => {
+    setRedirectLoopBlocked(false);
+  }, [projectId, file.name, reloadKey]);
+  // The injected redirect guard posts `od:redirect-loop-blocked` when a preview
+  // reloads itself past its hop budget. Only trust our own two preview frames,
+  // then park the srcDoc iframe on static content so the loop cannot continue.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const fromPreview =
+        ev.source === srcDocPreviewIframeRef.current?.contentWindow ||
+        ev.source === urlPreviewIframeRef.current?.contentWindow;
+      if (!fromPreview) return;
+      const data = ev.data as { type?: string } | null;
+      if (data?.type !== PREVIEW_REDIRECT_LOOP_MESSAGE) return;
+      setRedirectLoopBlocked(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // Resolve the cross-origin powered-preview URL for artifacts that need it.
+  // `resolved:false` means the (cached) daemon isolation probe is still in
+  // flight — the URL iframe stays parked at about:blank until it settles so a
+  // large artifact is never loaded twice (once opaque, once powered). A null
+  // `url` after resolution means powered mode is unavailable (e.g. no
+  // cross-origin loopback base); the viewer then falls back to the normal
+  // opaque URL-load path, which still runs WebGL/blob-Workers/WASM.
+  const [powered, setPowered] = useState<{ resolved: boolean; url: string | null }>({
+    resolved: false,
+    url: null,
+  });
+  useEffect(() => {
+    if (!(needsPowered && useUrlLoadPreview)) {
+      setPowered({ resolved: false, url: null });
+      return;
+    }
+    let cancelled = false;
+    setPowered({ resolved: false, url: null });
+    void resolvePoweredPreviewUrl(projectId, file.name).then((base) => {
+      if (cancelled) return;
+      setPowered({
+        resolved: true,
+        url: base ? `${base}?v=${Math.round(file.mtime)}&r=${reloadKey}` : null,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsPowered, useUrlLoadPreview, projectId, file.name, file.mtime, reloadKey]);
+  const usePoweredPreview = needsPowered && useUrlLoadPreview && powered.url != null;
+  const poweredResolving = needsPowered && useUrlLoadPreview && !powered.resolved;
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
@@ -6518,7 +7298,11 @@ function HtmlViewer({
     // when the mode closes (interactivePreviewModeActive flips) and applies
     // the now-current URL in one pass.
     if (interactivePreviewModeActive) return;
-    const nextSrc = `${effectiveBasePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    if (needsPowered && useUrlLoadPreview && !powered.resolved) return;
+    const refreshBasePreviewSrcUrl = usePoweredPreview && powered.url
+      ? powered.url
+      : effectiveBasePreviewSrcUrl;
+    const nextSrc = `${refreshBasePreviewSrcUrl}&fr=${filesRefreshKey}`;
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
@@ -6527,26 +7311,50 @@ function HtmlViewer({
       }
     }, 180);
     return () => window.clearTimeout(timeout);
-  }, [effectiveBasePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview, interactivePreviewModeActive]);
+  }, [
+    effectiveBasePreviewSrcUrl,
+    filesRefreshKey,
+    useUrlLoadPreview,
+    interactivePreviewModeActive,
+    needsPowered,
+    powered.resolved,
+    powered.url,
+    usePoweredPreview,
+  ]);
 
   useEffect(() => {
     setInlinedSource(null);
     if (useUrlLoadPreview) return;
-    if (!source || effectiveDeck || !hasRelativeAssetRefs(source)) return;
+    if (!source || effectiveDeck) return;
+    // Root-relative project asset refs need the confirmed file list before
+    // they can be normalized; wait for it rather than inlining a half-fixed
+    // document (the effect re-runs when the set lands).
+    if (projectRootAssetRefs && projectFilePathSet === null) return;
+    if (!hasRelativeAssetRefs(source) && !projectRootAssetRefs) return;
     let cancelled = false;
-    void inlineRelativeAssets(source, projectId, file.name).then((next) => {
+    void inlineRelativeAssets(source, projectId, file.name, projectFilePathSet).then((next) => {
       if (!cancelled) setInlinedSource(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [source, effectiveDeck, projectId, file.name, reloadKey, useUrlLoadPreview]);
+  }, [
+    source,
+    effectiveDeck,
+    projectId,
+    file.name,
+    reloadKey,
+    useUrlLoadPreview,
+    projectRootAssetRefs,
+    projectFilePathSet,
+  ]);
 
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      hideDeckChrome: effectiveDeck,
       selectionBridge: true,
       // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
       // export path), so the document is byte-identical across preview /
@@ -6566,6 +7374,58 @@ function HtmlViewer({
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, reloadKey],
   );
+  // Only materialized while the in-tab presentation overlay is up — building
+  // it eagerly would re-run buildSrcdoc on every source edit for a document
+  // nobody is presenting.
+  const presentationSrcDoc = useMemo(
+    () => (deckVisualSource && inTabPresent ? buildSrcdoc(deckVisualSource, {
+      deck: effectiveDeck,
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      hideDeckChrome: effectiveDeck,
+      deckClickNavigation: effectiveDeck,
+      previewFocusGuard: true,
+    }) : ''),
+    [deckVisualSource, inTabPresent, effectiveDeck, projectId, file.name, previewStateKey],
+  );
+  // Per-slide thumbnail documents are built lazily by DeckThumbnailRail, one
+  // slide at a time and only for thumbnails near the rail viewport. This
+  // callback's identity is the rail's srcdoc cache key: a new deck source
+  // mints a new builder and only the mounted thumbnails rebuild.
+  // `freezeMotion` settles deck animations at their final frame so N
+  // miniature documents don't keep the compositor rasterizing forever.
+  const buildDeckThumbnailSrcDoc = useCallback(
+    (index: number) => buildSrcdoc(deckVisualSource ?? '', {
+      deck: true,
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      initialSlideIndex: index,
+      hideDeckChrome: true,
+      previewFocusGuard: true,
+      freezeMotion: true,
+    }),
+    [deckVisualSource, projectId, file.name],
+  );
+  // Parse the deck once per source into per-slide shadow-root render data. When
+  // renderable, DeckThumbnailRail mounts a single cloned slide per thumbnail
+  // instead of a full-deck iframe — no scripts, no deck bridge, no N documents
+  // saturating the main thread on entry. Decks we can't statically render
+  // (external CSS, viewport-sized slides, no inline styles) keep the iframe
+  // fallback via `parsedDeck = null`.
+  const parsedDeckThumbnails = useMemo(() => {
+    if (!effectiveDeck || !deckVisualSource) return null;
+    const parsed = parseDeckThumbnails(deckVisualSource, projectRawUrl(projectId, baseDirFor(file.name)));
+    return parsed.renderable ? parsed : null;
+  }, [effectiveDeck, deckVisualSource, projectId, file.name]);
+  // Stable thunk so HtmlViewer's frequent re-renders (slide state, streaming
+  // edits) never invalidate the memoized rail; the ref always calls the
+  // freshest goToSlide closure.
+  const goToSlideRef = useRef<(index: number) => void>(() => {});
+  useEffect(() => {
+    goToSlideRef.current = goToSlide;
+  });
+  const handleDeckThumbnailSelect = useCallback((index: number) => {
+    goToSlideRef.current(index);
+  }, []);
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
@@ -6579,7 +7439,11 @@ function HtmlViewer({
   // visibility swap with no re-load. Reset on file/project change.
   const [srcDocMaterialized, setSrcDocMaterialized] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
-  const urlPreviewKeepAliveKey = previewIframeKeepAliveKey(projectId, file.name);
+  // Segregate the pooled-iframe cache by powered-ness: a powered frame carries
+  // a different origin + sandbox, so reusing a plain frame's DOM node for it
+  // (or vice-versa) would leave a stale sandbox attribute on a live iframe.
+  const urlPreviewKeepAliveKey =
+    previewIframeKeepAliveKey(projectId, file.name) + (usePoweredPreview ? ':powered' : '');
   // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
   // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
   // flip this back to true. See #2253.
@@ -6625,7 +7489,16 @@ function HtmlViewer({
   // re-load. Direct-mount path (no #2361/#2791 postMessage race).
   const useLazySrcDocTransport =
     !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview && !srcDocMaterialized;
-  const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
+  // Park on a static "loop detected" document once the guard reports a runaway
+  // redirect. A self-redirecting artifact is forced onto the srcDoc iframe by
+  // `needsRedirectGuard`, so swapping this content is the reliable stop — the
+  // placeholder carries no redirect, so the frame settles the moment it loads.
+  const redirectLoopBlockedDoc = useMemo(() => buildRedirectLoopBlockedDoc(), []);
+  const srcDocTransportContent = redirectLoopBlocked
+    ? redirectLoopBlockedDoc
+    : useLazySrcDocTransport
+      ? lazySrcDocTransport
+      : srcDoc;
   // Materialize the srcDoc iframe the first time it actually becomes the active
   // (visible) transport — i.e. the first Mark/Edit/Comment/Inspect entry. We do
   // NOT pre-render it while hidden/idle: that ran a second live copy during
@@ -6650,6 +7523,19 @@ function HtmlViewer({
     shouldUrlLoadHtmlPreview({ ...urlLoadDecision, drawMode: false });
   const urlTransportSrc =
     useUrlLoadPreview || srcDocForcedOnlyByDraw ? activePreviewSrcUrl : 'about:blank';
+  // Powered preview: swap the URL-load iframe to the cross-origin isolated
+  // daemon origin + `allow-same-origin` so Workers/Storage/WASM/SAB work.
+  // While the isolation probe resolves, park at about:blank instead of loading
+  // the opaque URL, so a large artifact isn't fetched twice.
+  const urlFrameSrc = usePoweredPreview
+    ? (powered.url as string)
+    : poweredResolving
+      ? 'about:blank'
+      : urlTransportSrc;
+  const urlFrameSandbox = usePoweredPreview
+    ? POWERED_PREVIEW_SANDBOX
+    : 'allow-scripts allow-downloads';
+  const urlFrameAllow = usePoweredPreview ? POWERED_PREVIEW_ALLOW : undefined;
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     if (!canActivateSrcDocTransport({
       srcDoc,
@@ -7285,6 +8171,7 @@ function HtmlViewer({
         // iframe-initiated) can await it and honor a failed save before tearing
         // down. It self-clears once resolved, keyed to identity so a newer
         // commit is never clobbered.
+        manualEditTextCommitSequenceRef.current += 1;
         const commit = applyManualEdit({
           id: String(data.id),
           kind: 'set-text',
@@ -7486,9 +8373,9 @@ function HtmlViewer({
   // otherwise an in-flight commit left by an iframe-driven finish (Enter /
   // click-another-target). Returns false on a failed commit so callers keep
   // edit mode open with the error rather than tearing down through it (#4291).
-  async function settlePendingManualEditCommit(): Promise<boolean> {
+  async function settlePendingManualEditCommit(commitActiveSession = true): Promise<boolean> {
     if (manualEditTextSessionIdRef.current) {
-      return finishManualEditTextSession(true);
+      return finishManualEditTextSession(commitActiveSession);
     }
     const commitInFlight = manualEditTextCommitInFlightRef.current;
     if (!commitInFlight) return true;
@@ -7621,11 +8508,20 @@ function HtmlViewer({
   }
 
   async function saveManualEditPanelDraft() {
-    const hadTextSession = Boolean(manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current);
-    if (!(await settlePendingManualEditCommit())) return;
-    if (selectedManualEditTarget && !hadTextSession) {
+    const selectedTarget = selectedManualEditTarget;
+    const contentPatchBeforeText = selectedTarget
+      ? manualEditContentPatchForDraft(selectedTarget, manualEditDraft, sourceRef.current ?? '')
+      : null;
+    const panelContentChanged = contentPatchBeforeText !== null;
+    const textCommitSequenceBeforeSave = manualEditTextCommitSequenceRef.current;
+    const hadTextCommitInFlight = Boolean(manualEditTextCommitInFlightRef.current);
+    if (!(await settlePendingManualEditCommit(!panelContentChanged))) return;
+    const inlineTextCommitted =
+      hadTextCommitInFlight ||
+      manualEditTextCommitSequenceRef.current !== textCommitSequenceBeforeSave;
+    if (selectedTarget && (panelContentChanged || !inlineTextCommitted)) {
       const base = sourceRef.current ?? '';
-      const contentPatch = manualEditContentPatchForDraft(selectedManualEditTarget, manualEditDraft, base);
+      const contentPatch = manualEditContentPatchForDraft(selectedTarget, manualEditDraft, base);
       if (contentPatch && !(await applyManualEdit(contentPatch.patch, contentPatch.label))) return;
     }
     const ok = await flushManualEditStyleSave();
@@ -7900,10 +8796,32 @@ function HtmlViewer({
     return () => window.removeEventListener('message', onMessage);
   }, [inspectMode, isOurPreviewIframeSource]);
 
-  function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
+  function postSlide(action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number) {
+    // Track prev/next here so every entry point (top toolbar, floating nav,
+    // more-menu, keyboard) reports a single deck_viewer slide move. Tracked on
+    // intent, before the iframe-readiness guard below.
+    if (action === 'prev' || action === 'next') {
+      fireDeckViewerClick(action === 'prev' ? 'slide_prev' : 'slide_next', {
+        slide_index: activeDeckSlideIndex,
+        slide_count: deckSlideTotal,
+      });
+    }
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    win.postMessage({ type: 'od:slide', action }, '*');
+    win.postMessage({
+      type: 'od:slide',
+      action,
+      ...(action === 'go' && typeof index === 'number' ? { index } : {}),
+    }, '*');
+  }
+
+  function goToSlide(index: number) {
+    if (!Number.isFinite(index) || index < 0) return;
+    const target = Math.floor(index);
+    const count = Math.max(deckSlideCount, target + 1);
+    setSlideStateCached(previewStateKey, { active: target, count });
+    setSlideState({ active: target, count });
+    postSlide('go', target);
   }
 
   function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
@@ -7911,6 +8829,133 @@ function HtmlViewer({
     const win = target?.contentWindow;
     if (!win || typeof active !== 'number') return;
     win.postMessage({ type: 'od:slide', action: 'go', index: active }, '*');
+  }
+
+  function fireSpeakerNotesSaveResult(
+    editSurface: 'preview' | 'presenter',
+    result: 'success' | 'failed',
+    hasContent: boolean,
+    errorCode?: string,
+  ) {
+    trackSpeakerNotesSaveResult(analytics.track, {
+      page_name: 'artifact',
+      area: 'deck_viewer',
+      edit_surface: editSurface,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      slide_count: deckSlideTotal,
+      has_content: hasContent,
+      result,
+      ...(errorCode ? { error_code: errorCode } : {}),
+    });
+  }
+
+  async function saveSpeakerNotes(
+    nextNotes: readonly string[],
+    options?: { editSurface?: 'preview' | 'presenter' },
+  ) {
+    const editSurface = options?.editSurface ?? 'preview';
+    const currentSource = sourceRef.current ?? source;
+    if (!currentSource) return false;
+    const normalized = normalizeSpeakerNotes(nextNotes, Math.max(deckSlideCount, nextNotes.length));
+    const nextSource = upsertSpeakerNotesInHtml(currentSource, normalized);
+    // "has content" = the note for the slide being edited is non-empty, so we
+    // can separate real authoring from clearing a note.
+    const hasContent = (normalized[activeDeckSlideIndex] ?? '').trim().length > 0;
+    setSpeakerNotesSaving(true);
+    setSpeakerNotesStatus(null);
+    try {
+      const saved = await writeProjectTextFile(projectId, file.name, nextSource, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved) throw new Error('speaker_notes_save_failed');
+      setSource(nextSource);
+      sourceRef.current = nextSource;
+      setInlinedSource(null);
+      setSpeakerNotesStatus('saved');
+      await onFileSaved?.();
+      fireSpeakerNotesSaveResult(editSurface, 'success', hasContent);
+      return true;
+    } catch (err) {
+      console.error('[speaker-notes] save failed:', err);
+      setSpeakerNotesStatus('error');
+      fireSpeakerNotesSaveResult(
+        editSurface,
+        'failed',
+        hasContent,
+        err instanceof Error ? err.message : 'speaker_notes_save_failed',
+      );
+      return false;
+    } finally {
+      setSpeakerNotesSaving(false);
+    }
+  }
+
+  async function saveActiveSpeakerNote(options?: { close?: boolean }) {
+    const next = normalizeSpeakerNotes(speakerNotes, Math.max(deckSlideCount, activeDeckSlideIndex + 1));
+    while (next.length <= activeDeckSlideIndex) next.push('');
+    next[activeDeckSlideIndex] = speakerNotesDraft;
+    const ok = await saveSpeakerNotes(next, { editSurface: 'preview' });
+    if (ok && options?.close !== false) setSpeakerNotesEditMode(false);
+    return ok;
+  }
+
+  function beginSpeakerNotesEdit() {
+    fireDeckViewerClick('speaker_notes_edit', {
+      slide_index: activeDeckSlideIndex,
+      slide_count: deckSlideTotal,
+    });
+    setSpeakerNotesEditMode(true);
+    setSpeakerNotesDraft(activeSpeakerNote);
+    setSpeakerNotesStatus(null);
+  }
+
+  function openPresenterWindow() {
+    if (!deckVisualSource || typeof window === 'undefined') return;
+    const count = Math.max(deckSlideCount, speakerNotes.length, 1);
+    const presenterPreviewHtmlBySlide = Array.from({ length: count }, (_, index) => buildSrcdoc(deckVisualSource, {
+      deck: true,
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      initialSlideIndex: index,
+      hideDeckChrome: true,
+      previewFocusGuard: true,
+    }));
+    const popupFeatures = [
+      'popup',
+      `width=${PRESENTER_WINDOW_INITIAL_WIDTH}`,
+      `height=${PRESENTER_WINDOW_INITIAL_HEIGHT}`,
+      `minWidth=${PRESENTER_WINDOW_MIN_WIDTH}`,
+      `minHeight=${PRESENTER_WINDOW_MIN_HEIGHT}`,
+    ].join(',');
+    const popup = window.open('', `od-presenter-${projectId}-${file.name}`, popupFeatures);
+    if (!popup) return;
+    presenterWindowRef.current = popup;
+    const html = buildSpeakerNotesPresenterHtml({
+      previewHtml: presenterPreviewHtmlBySlide[0] ?? '',
+      previewHtmlBySlide: presenterPreviewHtmlBySlide,
+      title: exportTitle,
+      projectId,
+      fileName: file.name,
+      notes: speakerNotes,
+      initialSlideIndex: activeDeckSlideIndex,
+      slideCount: count,
+      labels: {
+        title: t('fileViewer.speakerNotes'),
+        edit: t('fileViewer.speakerNotesEdit'),
+        save: t('fileViewer.speakerNotesSave'),
+        pause: t('fileViewer.presenterPause'),
+        resume: t('fileViewer.presenterResume'),
+        reset: t('fileViewer.presenterReset'),
+        previous: t('fileViewer.presenterPrevious'),
+        next: t('fileViewer.presenterNext'),
+        empty: t('fileViewer.speakerNotesEmpty'),
+        slide: t('fileViewer.speakerNotesSlide'),
+      },
+    });
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
   }
 
   function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
@@ -8014,23 +9059,124 @@ function HtmlViewer({
         const tag = target.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
       }
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      const shortcut = deckKeyboardShortcutForEvent(e);
+      if (shortcut === 'next') {
         e.preventDefault();
         postSlide('next');
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      } else if (shortcut === 'prev') {
         e.preventDefault();
         postSlide('prev');
-      } else if (e.key === 'Home') {
+      } else if (shortcut === 'first') {
         e.preventDefault();
         postSlide('first');
-      } else if (e.key === 'End') {
+      } else if (shortcut === 'last') {
         e.preventDefault();
         postSlide('last');
+      } else if (shortcut === 'reset') {
+        e.preventDefault();
+        fireDeckViewerClick('slide_reset', {
+          slide_index: activeDeckSlideIndex,
+          slide_count: deckSlideTotal,
+        });
+        goToSlide(0);
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [effectiveDeck, mode]);
+
+  useEffect(() => {
+    function onPresenterMessage(ev: MessageEvent) {
+      if (!presenterWindowRef.current || ev.source !== presenterWindowRef.current) return;
+      const data = ev.data as
+        | {
+            type?: string;
+            projectId?: string;
+            fileName?: string;
+            index?: number;
+            notes?: string[];
+          }
+        | null;
+      if (!data || data.projectId !== projectId || data.fileName !== file.name) return;
+      if (data.type === 'od:presenter-slide-go' && typeof data.index === 'number') {
+        goToSlide(data.index);
+        return;
+      }
+      // Esc inside the presenter popup tears the whole presentation down (popup
+      // window + fullscreen overlay), matching Esc pressed in the main window.
+      if (data.type === 'od:presenter-close') {
+        closeInTabPresentation();
+        return;
+      }
+      if (data.type === 'od:presenter-notes-save' && Array.isArray(data.notes)) {
+        void saveSpeakerNotes(data.notes, { editSurface: 'presenter' });
+      }
+    }
+    window.addEventListener('message', onPresenterMessage);
+    return () => window.removeEventListener('message', onPresenterMessage);
+  }, [projectId, file.name, deckSlideCount, previewStateKey, speakerNotes, source]);
+
+  useEffect(() => {
+    const popup = presenterWindowRef.current;
+    if (!popup || popup.closed) return;
+    popup.postMessage({
+      type: 'od:presenter-slide-state',
+      projectId,
+      fileName: file.name,
+      active: activeDeckSlideIndex,
+      count: Math.max(deckSlideCount, speakerNotes.length, 1),
+      notes: speakerNotes,
+    }, '*');
+  }, [activeDeckSlideIndex, deckSlideCount, speakerNotes, projectId, file.name]);
+
+  // Keep the fullscreen present overlay in lockstep with the active slide. The
+  // overlay is a SEPARATE iframe from the background preview, so host-side
+  // navigation (arrow keys, thumbnail clicks, or a move driven from the
+  // presenter popup) has to be forwarded to it explicitly — otherwise the big
+  // presented slide stays frozen while the counter and popup move on. The
+  // overlay opens on the right slide via buildSrcdoc's initialSlideIndex, so
+  // this only drives subsequent moves.
+  useEffect(() => {
+    if (!inTabPresent || !effectiveDeck) return;
+    const frame = presentOverlayRef.current?.querySelector('iframe');
+    frame?.contentWindow?.postMessage(
+      { type: 'od:slide', action: 'go', index: activeDeckSlideIndex },
+      '*',
+    );
+  }, [inTabPresent, effectiveDeck, activeDeckSlideIndex]);
+
+  // The reverse direction: the fullscreen overlay is its own iframe and drives
+  // its own slide when clicked (deckClickNavigation), so adopt the moves it
+  // reports as the host's active slide. That makes the counter, thumbnail rail
+  // and presenter popup all follow a slide advanced from the big stage. The
+  // main slide-state listener only trusts the ACTIVE preview iframe (the
+  // background one), so the overlay needs its own source-matched listener; the
+  // lockstep effect above re-posts the adopted index back as a no-op, so there
+  // is no feedback loop.
+  useEffect(() => {
+    if (!inTabPresent || !effectiveDeck) return;
+    function onOverlaySlideState(ev: MessageEvent) {
+      const frame = presentOverlayRef.current?.querySelector('iframe');
+      if (!frame || ev.source !== frame.contentWindow) return;
+      const data = ev.data as { type?: string; active?: number; count?: number } | null;
+      if (!data || data.type !== 'od:slide-state') return;
+      if (typeof data.active !== 'number' || typeof data.count !== 'number') return;
+      const next = { active: data.active, count: data.count };
+      setSlideStateCached(previewStateKey, next);
+      setSlideState(next);
+    }
+    window.addEventListener('message', onOverlaySlideState);
+    return () => window.removeEventListener('message', onOverlaySlideState);
+  }, [inTabPresent, effectiveDeck, previewStateKey]);
+
+  // The Esc hint is a momentary confirmation, not a persistent chrome: fade it
+  // out a few seconds after the presentation starts. (closeInTabPresentation
+  // also clears it immediately when the user leaves.)
+  useEffect(() => {
+    if (!presentEscHint) return;
+    const id = window.setTimeout(() => setPresentEscHint(false), 3600);
+    return () => window.clearTimeout(id);
+  }, [presentEscHint]);
 
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -8138,16 +9284,32 @@ function HtmlViewer({
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setInTabPresent(false);
+      if (e.key === 'Escape') closeInTabPresentation();
+    };
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:present-escape') return;
+      const frame = presentOverlayRef.current?.querySelector('iframe');
+      if (frame?.contentWindow && ev.source !== frame.contentWindow) return;
+      closeInTabPresentation();
+    };
+    const onFullscreenChange = () => {
+      if (presentFullscreenRequestedRef.current && !document.fullscreenElement) {
+        closeInTabPresentation();
+      }
     };
     updateChromeHeight();
     document.addEventListener('keydown', onKey);
+    window.addEventListener('message', onMessage);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
     window.addEventListener('resize', updateChromeHeight);
     const chrome = document.querySelector<HTMLElement>('.workspace-tabs-chrome.app-chrome-header');
     const observer = chrome && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateChromeHeight) : null;
     if (observer && chrome) observer.observe(chrome);
     return () => {
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('message', onMessage);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
       window.removeEventListener('resize', updateChromeHeight);
       observer?.disconnect();
       if (previousChromeHeight) {
@@ -8158,12 +9320,49 @@ function HtmlViewer({
     };
   }, [inTabPresent]);
 
+  useEffect(() => {
+    if (!inTabPresent || !presentFullscreenPending) return;
+    const overlay = presentOverlayRef.current;
+    if (!overlay || typeof overlay.requestFullscreen !== 'function') {
+      setPresentFullscreenPending(false);
+      return;
+    }
+    let cancelled = false;
+    overlay.requestFullscreen()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setPresentFullscreenPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inTabPresent, presentFullscreenPending]);
+
+  function closeInTabPresentation() {
+    setInTabPresent(false);
+    setPresentFullscreenPending(false);
+    presentFullscreenRequestedRef.current = false;
+    setPresentEscHint(false);
+    // Tear the presenter popup down together with the fullscreen stage so one
+    // Esc dismisses the whole "presenting" state, not just the main window.
+    const popup = presenterWindowRef.current;
+    if (popup && !popup.closed) {
+      try { popup.close(); } catch { /* already gone */ }
+    }
+    presenterWindowRef.current = null;
+    if (typeof document !== 'undefined' && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+      document.exitFullscreen().catch(() => undefined);
+    }
+  }
+
   function openInNewTab() {
     if (!source) return;
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      hideDeckChrome: effectiveDeck,
+      deckClickNavigation: effectiveDeck,
     });
   }
 
@@ -8227,6 +9426,9 @@ function HtmlViewer({
       },
       { requestId },
     );
+    // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL template
+    // export closes the loop. Project-scoped no-op unless started from Home.
+    if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
   };
 
   async function handleSaveAsTemplate() {
@@ -8448,7 +9650,7 @@ function HtmlViewer({
       }
       fireDeployResult(
         'failed',
-        tokenRequired ? 'CONFIG_REQUIRED' : err instanceof Error ? err.name : 'UNKNOWN',
+        tokenRequired ? 'CONFIG_REQUIRED' : deployErrorCode(err),
       );
     } finally {
       setDeploying(false);
@@ -8517,18 +9719,21 @@ function HtmlViewer({
 
   function presentInThisTab() {
     setPresentMenuOpen(false);
+    presentFullscreenRequestedRef.current = false;
     setMode('preview');
+    if (effectiveDeck) openPresenterWindow();
     setInTabPresent(true);
+    setPresentEscHint(true);
   }
 
   function presentFullscreen() {
     setPresentMenuOpen(false);
-    const el = previewBodyRef.current;
-    if (el && typeof el.requestFullscreen === 'function') {
-      el.requestFullscreen().catch(() => setInTabPresent(true));
-    } else {
-      setInTabPresent(true);
-    }
+    if (effectiveDeck) openPresenterWindow();
+    setMode('preview');
+    presentFullscreenRequestedRef.current = true;
+    setPresentFullscreenPending(true);
+    setInTabPresent(true);
+    setPresentEscHint(true);
   }
 
   function presentNewTab() {
@@ -8603,11 +9808,6 @@ function HtmlViewer({
       id: (versionRestoredToastIdRef.current += 1),
       message: t('fileViewer.versions.restoreSuccess'),
     });
-  }
-
-  function selectMode(nextMode: 'preview' | 'source') {
-    if (nextMode === 'source') setDrawOverlayOpen(false);
-    setMode(nextMode);
   }
 
   function activateBoard(nextTool?: BoardTool) {
@@ -8919,6 +10119,68 @@ function HtmlViewer({
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
 
+  const deckExportSignalForContext = useCallback((context?: HtmlVersionExportContext | null): boolean => {
+    if (!context?.versionId) return deckExportSignal;
+    return isDeckArtifact || sourceLooksLikeExportableDeck(context.content);
+  }, [deckExportSignal, isDeckArtifact]);
+
+  async function exportHtmlPdf(context?: HtmlVersionExportContext | null) {
+    const pdfTitle = context?.title ?? exportTitle;
+    const pdfSource = context?.content ?? source ?? '';
+    const pdfDeck = deckExportSignalForContext(context);
+    if (isOpenDesignHostAvailable()) {
+      const res = await exportProjectScreenshotPdf({
+        projectId,
+        fileName: file.name,
+        title: pdfTitle,
+        // Broader deck signal than the viewer's nav so runtime-managed decks
+        // (<deck-stage>) paginate per slide; the vector fallback below uses
+        // the SAME signal, so an artifact exports identically with or without
+        // a desktop host (no per-host divergence).
+        deck: pdfDeck,
+        ...(context?.versionId ? { versionId: context.versionId } : {}),
+      });
+      if (res.ok) return;
+      // A SEMANTIC failure (bad deck routing, unreadable renderer output,
+      // renderer 502, ...) must surface, not silently downgrade to the vector
+      // PDF, which can reintroduce the fidelity bugs the screenshot path
+      // exists to avoid. Only a genuinely unavailable renderer falls through.
+      if (!('unavailable' in res)) throw new Error(res.error);
+    }
+    await exportProjectAsPdf({
+      deck: pdfDeck,
+      fallbackPdf: () => exportAsPdf(pdfSource, pdfTitle, { deck: pdfDeck, onProgress: onExportProgress }),
+      filePath: file.name,
+      projectId,
+      title: pdfTitle,
+      ...(context?.versionId ? { versionId: context.versionId } : {}),
+    });
+  }
+
+  function triggerPdfExport(context?: HtmlVersionExportContext) {
+    fireShareExport('pdf', () => exportHtmlPdf(context));
+  }
+
+  function triggerZipExport(context?: HtmlVersionExportContext) {
+    fireShareExport('zip', () => exportProjectAsZip({
+      projectId,
+      filePath: file.name,
+      fallbackHtml: context?.content ?? source ?? '',
+      fallbackTitle: context?.title ?? exportTitle,
+      ...(context?.versionId ? { versionId: context.versionId } : {}),
+    }));
+  }
+
+  function triggerHtmlExport(context?: HtmlVersionExportContext) {
+    fireShareExport('html', () => exportProjectAsHtml({
+      projectId,
+      filePath: file.name,
+      fallbackHtml: context?.content ?? source ?? '',
+      fallbackTitle: context?.title ?? exportTitle,
+      ...(context?.versionId ? { versionId: context.versionId } : {}),
+    }));
+  }
+
   useEffect(() => {
     const nudgeKey = `${projectId}\n${file.name}`;
     if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
@@ -9005,8 +10267,10 @@ function HtmlViewer({
     setDeployMenuOpen((v) => !v);
   };
   const captureExportImageSnapshot = useCallback(async (
-    options?: { wholeDeck?: boolean },
+    options?: { wholeDeck?: boolean; context?: HtmlVersionExportContext | null },
   ) => {
+    const exportContext = options?.context ?? null;
+    const imageDeckSignal = deckExportSignalForContext(exportContext);
     // The host compositor grabs on-screen pixels, so any transient hover chrome
     // over the preview leaks into the capture. The screenshot control's own
     // tooltip is already dismissed by TooltipLayer's pointerdown/click listener,
@@ -9023,7 +10287,7 @@ function HtmlViewer({
     // CURRENT slide, mirroring what's on screen. An ordinary page is its
     // full-page capture either way.
     if (isOpenDesignHostAvailable() && projectId && file.name) {
-      // Deck-vs-page uses `deckExportSignal` — broader than the viewer's nav
+      // Deck-vs-page uses the same signal as PDF export — broader than the viewer's nav
       // signal — so runtime-managed decks (`<deck-stage>` / `data-screen-label`,
       // no literal `.slide`) export as a deck instead of a single page-mode shot
       // of slide 1. The vector-PDF fallback below uses the SAME signal, so an
@@ -9036,13 +10300,14 @@ function HtmlViewer({
       // visible host snapshot (= the slide on screen). Whole-deck / pages /
       // tracked `.slide` decks still render off-screen.
       const trackedActive = slideState?.active ?? htmlPreviewSlideState.get(previewStateKey)?.active ?? null;
-      const plan = planDeckImageCapture({ deck: deckExportSignal, wholeDeck, trackedActive });
+      const plan = planDeckImageCapture({ deck: imageDeckSignal, wholeDeck, trackedActive });
       if (plan.useOffscreen) {
         const rendered = await exportProjectImageDataUrl({
           projectId,
           fileName: file.name,
-          deck: deckExportSignal,
+          deck: imageDeckSignal,
           ...(plan.index != null ? { index: plan.index } : {}),
+          ...(exportContext?.versionId ? { versionId: exportContext.versionId } : {}),
         });
         if (rendered.ok) return rendered.snapshot;
         // A semantic failure (e.g. "page is too tall — export as PDF") must surface,
@@ -9051,6 +10316,8 @@ function HtmlViewer({
         if ('error' in rendered) throw new Error(rendered.error);
       }
     }
+
+    if (exportContext?.versionId) return null;
 
     // Fallback: desktop compositor screenshot of the visible preview region.
     // Returns real rendered pixels and is never tainted, unlike the in-iframe
@@ -9101,7 +10368,7 @@ function HtmlViewer({
     srcDocShellReady,
     useLazySrcDocTransport,
     useUrlLoadPreview,
-    deckExportSignal,
+    deckExportSignalForContext,
     slideState?.active,
     previewStateKey,
     projectId,
@@ -9143,7 +10410,7 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
-  const openImageExportModal = async () => {
+  const openImageExportModal = async (context?: HtmlVersionExportContext) => {
     // Don't reopen while an export is still running: reopening resets the shared
     // request/result bookkeeping refs, which would mis-attribute or drop the
     // in-flight export's analytics result.
@@ -9172,6 +10439,7 @@ function HtmlViewer({
     );
     setImageExportError(null);
     imageExportSnapshotDataUrlRef.current = null;
+    setImageExportContext(context ?? null);
     // Just open the modal. Rendering happens on Save, after the user picks a
     // format — not eagerly on open.
     setImageExportModalOpen(true);
@@ -9207,6 +10475,9 @@ function HtmlViewer({
       },
       { requestId },
     );
+    // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL image
+    // export closes the loop. Project-scoped no-op unless started from Home.
+    if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
   };
 
   async function handleImageExportSave() {
@@ -9228,12 +10499,14 @@ function HtmlViewer({
     await waitForAnimationFrame();
     await waitForAnimationFrame();
     try {
+      const context = imageExportContext;
+      const targetTitle = context?.title ?? exportTitle;
       let dataUrl = imageExportSnapshotDataUrlRef.current;
       if (!dataUrl) {
         // Export as image of a deck = the whole deck stitched into one long
         // image (every slide), matching the count the viewer reports. Copy
         // screenshot keeps the current slide.
-        const snap = await captureExportImageSnapshot({ wholeDeck: true });
+        const snap = await captureExportImageSnapshot({ wholeDeck: true, context });
         if (!snap) {
           setExportToast({ message: t('fileViewer.exportImageFailed'), tone: 'error' });
           fireImageExportResult('failed', 'CAPTURE_FAILED');
@@ -9248,7 +10521,7 @@ function HtmlViewer({
         fireImageExportResult('failed', 'EMPTY_IMAGE');
         return;
       }
-      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
+      const target = await prepareImageExportTarget(targetTitle, imageExportFormat, { useNativePicker: false });
       if (!target) {
         // User dismissed the save picker — clear the loading toast.
         setExportToast(null);
@@ -9544,14 +10817,23 @@ function HtmlViewer({
     if (state === 'failed') return t('fileViewer.deployLinkFailed');
     return t('fileViewer.deployLinkPreparingLabel');
   };
+  const initialPreviewLoading = source === null && !sourceEverLoadedRef.current;
+  const sourceModeLoading = mode === 'source' && source === null;
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
+  // Independent of the rail's lazy per-slide documents so a collapsed rail
+  // (which unmounts DeckThumbnailRail entirely) still renders its toggle.
+  const showDeckThumbnailRail = effectiveDeck && source !== null && deckSlideTotal > 0 && !manualEditMode;
+  const showDeckFloatingNav = effectiveDeck && deckSlideTotal > 0 && !manualEditMode && !inTabPresent;
+  const deckNavTotal = Math.max(deckSlideTotal, activeDeckSlideIndex + 1, 1);
   const versioningAvailable = isHtmlVersionableFile(file);
   const commentPreviewLayoutClass = [
     'comment-preview-layer',
     localCommentSideDockActive ? 'comment-preview-layer-with-side-dock' : '',
     localCommentSideDockActive && commentSidePanelCollapsed ? 'comment-preview-layer-dock-collapsed' : '',
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
+    showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
+    showDeckThumbnailRail && deckThumbnailsCollapsed ? 'comment-preview-layer-deck-rail-collapsed' : '',
   ].filter(Boolean).join(' ');
   // Edit mode opens clean: the inspector only appears once the user pins an
   // element (click its hover affordance / a container) or opens page styles by
@@ -9662,7 +10944,26 @@ function HtmlViewer({
     : null;
   const activeComposerAttachments =
     activeComposerComment?.attachments ?? activeCommentExistingAttachments;
-  const commentComposer = boardMode && activeCommentTarget && activeCommentTargetVisible ? (
+  const commentComposerPortalMetrics = (() => {
+    if (!commentComposerHost || !commentPreviewCanvasNode) return null;
+    const hostRect = commentComposerHost.getBoundingClientRect();
+    const canvasRect = commentPreviewCanvasNode.getBoundingClientRect();
+    if (hostRect.width <= 0 || hostRect.height <= 0) return null;
+    return {
+      host: commentComposerHost,
+      bounds: {
+        width: hostRect.width,
+        height: hostRect.height,
+        scrollLeft: commentComposerHost.scrollLeft,
+        scrollTop: commentComposerHost.scrollTop,
+      },
+      offset: {
+        x: canvasRect.left - hostRect.left + commentComposerHost.scrollLeft + overlayPreviewTransform.offsetX,
+        y: canvasRect.top - hostRect.top + commentComposerHost.scrollTop + overlayPreviewTransform.offsetY,
+      },
+    };
+  })();
+  const commentComposerNode = boardMode && activeCommentTarget && activeCommentTargetVisible ? (
     <BoardComposerPopover
       target={activeCommentTarget}
       existing={activeComposerComment}
@@ -9711,12 +11012,20 @@ function HtmlViewer({
       sendDisabled={commentSendDisabled}
       t={t}
       scale={overlayPreviewScale}
-      offset={{ x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY }}
-      bounds={previewBodySize}
+      offset={
+        commentComposerPortalMetrics?.offset ?? {
+          x: overlayPreviewTransform.offsetX,
+          y: overlayPreviewTransform.offsetY,
+        }
+      }
+      bounds={commentComposerPortalMetrics?.bounds ?? previewBodySize}
       docked={false}
       commenting
     />
   ) : null;
+  const commentComposer = commentComposerNode && commentComposerPortalMetrics
+    ? createPortal(commentComposerNode, commentComposerPortalMetrics.host)
+    : commentComposerNode;
   const boardPreviewImage =
     boardPreviewIndex !== null ? boardImagePreviews[boardPreviewIndex] ?? null : null;
   const boardImagePreviewModal = boardPreviewImage
@@ -9829,11 +11138,93 @@ function HtmlViewer({
       composer={null}
     />
   ) : null;
+  const speakerNotesFeedback = speakerNotesStatus === 'saved'
+      ? { className: 'saved', label: t('fileViewer.speakerNotesSaved') }
+      : speakerNotesStatus === 'error'
+        ? { className: 'error', label: t('fileViewer.speakerNotesSaveFailed') }
+        : null;
+  const speakerNotesPanel = showSpeakerNotesPanel ? (
+    <section className="speaker-notes-panel" data-testid="speaker-notes-panel" aria-label={t('fileViewer.speakerNotes')}>
+      <div className="speaker-notes-panel-head">
+        <div className="speaker-notes-panel-title">
+          <span>{t('fileViewer.speakerNotes')}</span>
+          <span className="speaker-notes-panel-meta">
+            {t('fileViewer.speakerNotesSlide', {
+              current: activeDeckSlideIndex + 1,
+              total: Math.max(deckSlideCount, speakerNotes.length, 1),
+            })}
+          </span>
+        </div>
+        {speakerNotesFeedback ? (
+          <span
+            className={`speaker-notes-status speaker-notes-header-status ${speakerNotesFeedback.className}`}
+            aria-live="polite"
+          >
+            {speakerNotesFeedback.label}
+          </span>
+        ) : null}
+      </div>
+      {speakerNotesEditMode ? (
+        <div className="speaker-notes-editor">
+          <textarea
+            ref={speakerNotesTextareaRef}
+            value={speakerNotesDraft}
+            onChange={(event) => setSpeakerNotesDraft(event.currentTarget.value)}
+            onBlur={() => {
+              void saveActiveSpeakerNote();
+            }}
+            placeholder={t('fileViewer.speakerNotesPlaceholder')}
+            rows={4}
+          />
+        </div>
+      ) : (
+        <div
+          className="speaker-notes-preview"
+          role="textbox"
+          tabIndex={0}
+          aria-readonly="true"
+          onClick={beginSpeakerNotesEdit}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            beginSpeakerNotesEdit();
+          }}
+        >
+          {activeSpeakerNote.trim() ? (
+            activeSpeakerNote
+          ) : (
+            <span className="speaker-notes-empty">{t('fileViewer.speakerNotesEmpty')}</span>
+          )}
+        </div>
+      )}
+    </section>
+  ) : null;
 
   return (
     <div className={`viewer html-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
+          {showDeckThumbnailRail ? (
+            <button
+              type="button"
+              className="icon-only deck-thumbnail-toolbar-toggle od-tooltip"
+              aria-expanded={!deckThumbnailsCollapsed}
+              aria-label={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+              title={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+              data-tooltip={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+              data-tooltip-placement="bottom"
+              onClick={() => {
+                fireDeckViewerClick('thumbnail_rail_toggle', {
+                  action: deckThumbnailsCollapsed ? 'expand' : 'collapse',
+                  slide_index: activeDeckSlideIndex,
+                  slide_count: deckSlideTotal,
+                });
+                setDeckThumbnailsCollapsed((value) => !value);
+              }}
+            >
+              <Icon name="panel-left" size={15} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-only od-tooltip"
@@ -9845,31 +11236,6 @@ function HtmlViewer({
           >
             <Icon name="reload" size={14} />
           </button>
-          <div className="viewer-tabs viewer-mode-tabs" role="tablist" aria-label="View mode">
-            {([
-              ['preview', t('fileViewer.preview'), 'eye-line'],
-              ['source', t('fileViewer.source'), 'code-line'],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className={`viewer-tab od-tooltip ${mode === id ? 'active' : ''}`}
-                aria-label={label}
-                aria-selected={mode === id}
-                title={label}
-                data-tooltip={label}
-                data-tooltip-placement="bottom"
-                onClick={() => {
-                  fireArtifactToolbarClick(id);
-                  selectMode(id);
-                }}
-              >
-                <RemixIcon name={id === 'preview' ? 'eye-line' : 'code-line'} size={14} className="viewer-tab-icon" />
-                <span className="viewer-tab-label">{label}</span>
-              </button>
-            ))}
-          </div>
           {versioningAvailable ? (
             <button
               type="button"
@@ -9888,6 +11254,15 @@ function HtmlViewer({
               <span>{t('fileViewer.versions.entry')}</span>
             </button>
           ) : null}
+          <button
+            type="button"
+            className={`viewer-action${mode === 'source' ? ' active' : ''}`}
+            aria-pressed={mode === 'source'}
+            onClick={() => setMode((current) => current === 'source' ? 'preview' : 'source')}
+          >
+            <RemixIcon name="code-s-slash-line" size={14} />
+            <span>{mode === 'source' ? t('fileViewer.preview') : t('fileViewer.source')}</span>
+          </button>
           {showPreviewToolbarControls ? (
             <span className="viewer-preview-toolbar-inline">
               <span className="viewer-divider" aria-hidden />
@@ -9898,7 +11273,7 @@ function HtmlViewer({
               />
             </span>
           ) : null}
-          {showPreviewToolbarControls && showDeckNavigation ? (
+          {showPreviewToolbarControls && showDeckNavigation && !showDeckFloatingNav ? (
             <span
               className="deck-nav viewer-deck-nav-inline"
               role="group"
@@ -10071,26 +11446,6 @@ function HtmlViewer({
             </button>
             {toolbarMoreOpen ? (
               <div className="viewer-toolbar-more-menu" role="menu">
-                {([
-                  ['preview', t('fileViewer.preview'), 'eye-line'],
-                  ['source', t('fileViewer.source'), 'code-line'],
-                ] as const).map(([id, label, icon]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`viewer-toolbar-more-item${mode === id ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={() => {
-                      fireArtifactToolbarClick(id);
-                      selectMode(id);
-                      setToolbarMoreOpen(false);
-                    }}
-                  >
-                    <RemixIcon name={icon} size={15} />
-                    <span>{label}</span>
-                    {mode === id ? <Icon name="check" size={13} /> : null}
-                  </button>
-                ))}
                 {versioningAvailable ? (
                   <button
                     type="button"
@@ -10276,7 +11631,10 @@ function HtmlViewer({
                 <div className="present-menu" role="menu">
                   <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
                     <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentInTab')}
+                    <span className="present-menu-copy">
+                      <span>{t('fileViewer.presentInTab')}</span>
+                      {effectiveDeck ? <small>{t('fileViewer.presentInTabDeckHint')}</small> : null}
+                    </span>
                   </button>
                   <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
                     <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
@@ -10465,43 +11823,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      // Pixel-perfect screenshot PDF (matches the preview, same
-                      // renderer as image/PPTX). Chosen over Chromium's vector
-                      // printToPDF because that path drops CJK glyphs in the
-                      // packaged runtime (no embedded fonts) — unacceptable for a
-                      // Chinese-first product. Falls back to the vector/browser
-                      // print path on web or on failure.
-                      fireShareExport('pdf', async () => {
-                        if (isOpenDesignHostAvailable()) {
-                          const res = await exportProjectScreenshotPdf({
-                            projectId,
-                            fileName: file.name,
-                            title: exportTitle,
-                            // Broader deck signal than the viewer's nav so
-                            // runtime-managed decks (<deck-stage>) paginate per
-                            // slide; the vector fallback below uses the SAME
-                            // signal, so an artifact exports identically with or
-                            // without a desktop host (no per-host divergence).
-                            deck: deckExportSignal,
-                          });
-                          if (res.ok) return;
-                          // A SEMANTIC failure (bad deck routing, unreadable
-                          // renderer output, renderer 502, …) must surface — NOT
-                          // silently downgrade to the vector PDF, which can
-                          // reintroduce the CJK-glyph / fidelity bugs the
-                          // screenshot path exists to avoid. Only a genuinely
-                          // unavailable renderer (no host / 501 / transport)
-                          // falls through to the vector path below.
-                          if (!('unavailable' in res)) throw new Error(res.error);
-                        }
-                        await exportProjectAsPdf({
-                          deck: deckExportSignal,
-                          fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
-                          filePath: file.name,
-                          projectId,
-                          title: exportTitle,
-                        });
-                      });
+                      triggerPdfExport();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
@@ -10533,7 +11855,9 @@ function HtmlViewer({
                       type="button"
                       className="share-menu-item"
                       role="menuitem"
-                      onClick={openImageExportModal}
+                      onClick={() => {
+                        void openImageExportModal();
+                      }}
                     >
                       <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
                       <span>{t('fileViewer.exportImage')}</span>
@@ -10545,12 +11869,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      fireShareExport('zip', () => exportProjectAsZip({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                      }));
+                      triggerZipExport();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
@@ -10562,12 +11881,7 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      fireShareExport('html', () => exportProjectAsHtml({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                      }));
+                      triggerHtmlExport();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
@@ -10617,20 +11931,70 @@ function HtmlViewer({
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        {source === null && !sourceEverLoadedRef.current ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        {initialPreviewLoading || sourceModeLoading ? (
+          initialPreviewLoading ? (
+          <div
+            className="viewer-loading"
+            role="status"
+            aria-busy="true"
+            aria-label={t('fileViewer.loading')}
+          >
+            <div className="viewer-loading-stage" aria-hidden="true">
+              <span className="viewer-loading-card viewer-loading-card-back viewer-loading-card-back-two" />
+              <span className="viewer-loading-card viewer-loading-card-back viewer-loading-card-back-one" />
+              <span className="viewer-loading-card viewer-loading-card-main">
+                <span className="viewer-loading-kicker" />
+                <span className="viewer-loading-title" />
+                <span className="viewer-loading-title viewer-loading-title-short" />
+                <span className="viewer-loading-rule" />
+                <span className="viewer-loading-content">
+                  <span className="viewer-loading-copy">
+                    <span className="viewer-loading-line" />
+                    <span className="viewer-loading-line viewer-loading-line-medium" />
+                    <span className="viewer-loading-line viewer-loading-line-short" />
+                  </span>
+                  <span className="viewer-loading-chart">
+                    <span className="viewer-loading-bar viewer-loading-bar-one" />
+                    <span className="viewer-loading-bar viewer-loading-bar-two" />
+                    <span className="viewer-loading-bar viewer-loading-bar-three" />
+                  </span>
+                </span>
+              </span>
+            </div>
+          </div>
+          ) : (
+            <div className="viewer-empty">{t('fileViewer.loading')}</div>
+          )
         ) : mode === 'preview' ? (
           <div
             className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
+            ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
             {manualEditPanel}
             {manualEditHoverAffordance}
+            {showDeckThumbnailRail && !deckThumbnailsCollapsed ? (
+              <DeckThumbnailRail
+                count={deckSlideTotal}
+                activeIndex={activeDeckSlideIndex}
+                labelTotal={deckNavTotal}
+                buildThumbSrcDoc={buildDeckThumbnailSrcDoc}
+                parsedDeck={parsedDeckThumbnails}
+                onSelect={(index) => {
+                  fireDeckViewerClick('thumbnail_select', {
+                    slide_index: index,
+                    slide_count: deckSlideTotal,
+                  });
+                  handleDeckThumbnailSelect(index);
+                }}
+              />
+            ) : null}
             <div
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
+              ref={manualEditMode ? undefined : setCommentPreviewCanvasRef}
             >
               <div className={manualEditMode ? undefined : 'comment-frame-clip'} style={manualEditMode ? { height: '100%' } : undefined}>
                 <div
@@ -10650,6 +12014,7 @@ function HtmlViewer({
                     sendDisabled={streaming}
                     sendDisabledReason={t('chat.annotationSendDisabledReason')}
                     onToolbarClick={fireDrawToolbarClick}
+                    toolbarHost={manualEditMode ? null : commentComposerHost}
                   >
                     <div className="artifact-preview-transport-stack">
                       {OD_PREVIEW_KEEP_ALIVE ? (
@@ -10662,8 +12027,10 @@ function HtmlViewer({
                           aria-hidden={useUrlLoadPreview ? undefined : true}
                           tabIndex={useUrlLoadPreview ? 0 : -1}
                           title={file.name}
-                          sandbox="allow-scripts allow-downloads"
-                          src={urlTransportSrc}
+                          data-od-powered={usePoweredPreview ? 'true' : undefined}
+                          sandbox={urlFrameSandbox}
+                          allow={urlFrameAllow}
+                          src={urlFrameSrc}
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;
                             if (useUrlLoadPreview) iframeRef.current = frame;
@@ -10687,8 +12054,10 @@ function HtmlViewer({
                           aria-hidden={useUrlLoadPreview ? undefined : true}
                           tabIndex={useUrlLoadPreview ? 0 : -1}
                           title={file.name}
-                          sandbox="allow-scripts allow-downloads"
-                          src={urlTransportSrc}
+                          data-od-powered={usePoweredPreview ? 'true' : undefined}
+                          sandbox={urlFrameSandbox}
+                          allow={urlFrameAllow}
+                          src={urlFrameSrc}
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;
                             if (useUrlLoadPreview) iframeRef.current = frame;
@@ -10800,7 +12169,7 @@ function HtmlViewer({
               ) : null}
               {/* Portaled to <body> so the screenshot/export toast escapes the
                   preview pane's transform + overflow:hidden. */}
-              {exportToast
+              {exportToast && !versionModalOpen
                 ? createPortal(
                     <Toast
                       message={exportToast.message}
@@ -10808,7 +12177,7 @@ function HtmlViewer({
                       role={exportToast.tone === 'error' ? 'alert' : 'status'}
                       ttlMs={exportToast.tone === 'loading' ? 60000 : 2200}
                       placement="top"
-                      onDismiss={() => setExportToast(null)}
+                      onDismiss={exportToast.tone === 'loading' ? undefined : () => setExportToast(null)}
                     />,
                     document.body,
                   )
@@ -10829,6 +12198,55 @@ function HtmlViewer({
                     ttlMs={2200}
                     onDismiss={() => setTemplateSavedToast(null)}
                   />
+                </div>
+              ) : null}
+              {showDeckFloatingNav ? (
+                <div className="deck-floating-nav" aria-label="Deck navigation">
+                  <button
+                    type="button"
+                    className="deck-floating-button od-tooltip"
+                    aria-label={t('fileViewer.previousSlide')}
+                    title={t('fileViewer.previousSlide')}
+                    data-tooltip={t('fileViewer.previousSlide')}
+                    data-tooltip-placement="top"
+                    disabled={activeDeckSlideIndex <= 0}
+                    onClick={() => postSlide('prev')}
+                  >
+                    <Icon name="chevron-left" size={14} />
+                  </button>
+                  <span className="deck-floating-count" aria-live="polite">
+                    <strong>{activeDeckSlideIndex + 1}</strong>
+                    <span>/</span>
+                    <span>{deckNavTotal}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="deck-floating-button od-tooltip"
+                    aria-label={t('fileViewer.nextSlide')}
+                    title={t('fileViewer.nextSlide')}
+                    data-tooltip={t('fileViewer.nextSlide')}
+                    data-tooltip-placement="top"
+                    disabled={activeDeckSlideIndex >= deckNavTotal - 1}
+                    onClick={() => postSlide('next')}
+                  >
+                    <Icon name="chevron-right" size={14} />
+                  </button>
+                  <span className="deck-floating-divider" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="deck-floating-reset"
+                    onClick={() => {
+                      fireDeckViewerClick('slide_reset', {
+                        slide_index: activeDeckSlideIndex,
+                        slide_count: deckSlideTotal,
+                      });
+                      goToSlide(0);
+                    }}
+                    disabled={activeDeckSlideIndex <= 0}
+                  >
+                    {t('fileViewer.presenterReset')}
+                    <kbd>R</kbd>
+                  </button>
                 </div>
               ) : null}
               {commentComposer}
@@ -10953,34 +12371,37 @@ function HtmlViewer({
           <pre className="viewer-source">{source}</pre>
         )}
       </div>
+      {speakerNotesPanel}
       {inTabPresent && source && typeof document !== 'undefined' ? createPortal(
         <div
+          ref={presentOverlayRef}
           className="present-overlay"
           role="dialog"
-          aria-label={t('fileViewer.exitPresentation')}
+          aria-label={t('fileViewer.present')}
         >
-          <button
-            className="present-exit"
-            onClick={() => setInTabPresent(false)}
-            aria-label={t('fileViewer.exitPresentation')}
-          >
-            <Icon name="close" size={13} /> {t('fileViewer.exitPresentation')}
-          </button>
-          {useUrlLoadPreview ? (
+          {effectiveDeck || !useUrlLoadPreview ? (
+            <iframe
+              title="present"
+              sandbox="allow-scripts allow-downloads"
+              data-od-render-mode="srcdoc"
+              srcDoc={effectiveDeck ? presentationSrcDoc : srcDoc}
+            />
+          ) : (
             <iframe
               title="present"
               sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
               src={activePreviewSrcUrl}
             />
-          ) : (
-            <iframe
-              title="present"
-              sandbox="allow-scripts allow-downloads"
-              data-od-render-mode="srcdoc"
-              srcDoc={srcDoc}
-            />
           )}
+          {/* Lives INSIDE the overlay (not a body-portaled toast) so it stays
+              visible when the overlay is the fullscreen element — a sibling
+              toast would be clipped out of the fullscreen render. */}
+          {presentEscHint ? (
+            <div className="present-esc-hint" role="status">
+              {t('fileViewer.presentEscHint')}
+            </div>
+          ) : null}
         </div>,
         document.body,
       ) : null}
@@ -10991,6 +12412,12 @@ function HtmlViewer({
           file={file}
           currentSource={source}
           entryFrom={versionModalOpen}
+          onExportPdf={triggerPdfExport}
+          onOpenImageExport={openImageExportModal}
+          onExportZip={triggerZipExport}
+          onExportHtml={triggerHtmlExport}
+          exportToast={exportToast}
+          onExportToastDismiss={() => setExportToast(null)}
           onClose={() => setVersionModalOpen(false)}
           onRestored={handleVersionRestored}
         />
@@ -11546,7 +12973,7 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {deploySavedToast ? (
+      {deploySavedToast && typeof document !== 'undefined' ? createPortal(
         <Toast
           message={deploySavedToast.message}
           details={deploySavedToast.details}
@@ -11554,7 +12981,8 @@ function HtmlViewer({
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
-        />
+        />,
+        document.body,
       ) : null}
       {deployActionToast && typeof document !== 'undefined' ? createPortal(
         <Toast
@@ -11650,34 +13078,47 @@ async function inlineRelativeAssets(
   html: string,
   projectId: string,
   fileName: string,
+  projectFilePaths: ReadonlySet<string> | null = null,
 ): Promise<string> {
+  const toRawUrl = (projectPath: string) => projectRawUrl(projectId, projectPath);
+  // Root-relative project asset refs (confirmed against the real file list)
+  // become owner-relative first, so the stylesheet/script inlining below and
+  // the srcDoc <base href> rebasing treat them like any other relative ref.
+  const normalized = projectFilePaths
+    ? normalizeRootRelativeProjectAssetRefs(html, fileName, projectFilePaths)
+    : html;
+
   const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  const links = normalized.match(/<link\b[^>]*>/gi) ?? [];
   for (const tag of links) {
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, href).then((css) =>
-        css == null
+      fetchProjectRelativeText(projectId, fileName, href).then((asset) =>
+        asset == null
           ? null
           : {
               from: tag,
               to:
                 `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
-                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+                `${rewriteInlinedCssAssetRefs(asset.text, asset.filePath, projectFilePaths, toRawUrl)
+                  .replace(/<\/style/gi, '<\\/style')}\n</style>`,
             },
       ),
     );
   }
 
-  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
+  const scripts = normalized.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
   for (const tag of scripts) {
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, src).then((js) => {
-        if (js == null) return null;
+      fetchProjectRelativeText(projectId, fileName, src).then((asset) => {
+        if (asset == null) return null;
+        const js = projectFilePaths
+          ? rewriteInlinedScriptAssetRefs(asset.text, asset.filePath, projectFilePaths, toRawUrl)
+          : asset.text;
         const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
         const attrs = open
           .replace(/^<script/i, '')
@@ -11694,20 +13135,20 @@ async function inlineRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), normalized);
 }
 
 async function fetchProjectRelativeText(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
-): Promise<string | null> {
+): Promise<{ filePath: string; text: string } | null> {
   const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
   try {
     const resp = await fetch(projectRawUrl(projectId, filePath));
     if (!resp.ok) return null;
-    return await resp.text();
+    return { filePath, text: await resp.text() };
   } catch {
     return null;
   }

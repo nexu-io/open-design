@@ -1,10 +1,16 @@
 import type {
   TrackingArtifactWriteSource,
   TrackingArtifactWriteStatus,
+  TrackingByokProviderId,
+  TrackingCliProviderId,
   TrackingFirstModelEventType,
   TrackingRunLifecyclePhase,
   TrackingRunPhaseTimingStatus,
   TrackingRuntimeType,
+} from '@open-design/contracts/analytics';
+import {
+  agentIdToTracking,
+  byokProtocolToTracking,
 } from '@open-design/contracts/analytics';
 import type { VelaLoginStatus } from './integrations/vela.js';
 
@@ -33,6 +39,23 @@ export function runtimeTypeForRunAnalytics(args: {
     return args.hint as TrackingRuntimeType;
   }
   return args.derived;
+}
+
+export function agentProviderIdForRunAnalytics(args: {
+  agentId: unknown;
+  byokProvider?: unknown;
+}): TrackingCliProviderId | TrackingByokProviderId {
+  if (args.agentId === 'byok-opencode') {
+    const protocol = readByokProviderProtocol(args.byokProvider);
+    return byokProtocolToTracking(protocol) ?? 'other';
+  }
+  return agentIdToTracking(typeof args.agentId === 'string' ? args.agentId : null);
+}
+
+function readByokProviderProtocol(provider: unknown): string | null {
+  if (!provider || typeof provider !== 'object') return null;
+  const protocol = (provider as { protocol?: unknown }).protocol;
+  return typeof protocol === 'string' && protocol.trim() ? protocol.trim() : null;
 }
 
 // AMR account id stamp for daemon-emitted run events. Browser captures get

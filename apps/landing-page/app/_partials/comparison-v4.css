@@ -17,8 +17,16 @@
 .v4sub{font-size:18px;line-height:1.55;color:var(--ink-soft);font-weight:500;margin:0 0 24px;max-width:520px}
 .v4dek{font-size:18px;line-height:1.65;color:var(--ink-soft);max-width:660px;margin:0 0 34px}
 .v4cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-.v4btn-p{background:var(--ink);color:#fff;font-weight:600;font-size:15px;padding:15px 28px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap}
-.v4btn-g{color:var(--ink);font-weight:600;font-size:15px;padding:15px 24px;border-radius:var(--spacing-8);border:1px solid var(--line);text-decoration:none;display:inline-flex;align-items:center}
+/* Both CTA buttons share one box model (equal padding + a 1px border on each,
+   the primary's border matching its fill) so the filled and outlined buttons
+   stay the same height/shape across every locale — long translated labels no
+   longer make the outlined button wrap or drift out of alignment. The outlined
+   border uses --ink-faint (not the faint --line) so it reads as a real button
+   edge on the near-white paper, not a hairline. */
+.v4btn-p{background:var(--ink);color:#fff;border:1px solid var(--ink);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:background .16s ease,border-color .16s ease}
+.v4btn-p:hover{background:#000;border-color:#000}
+.v4btn-g{color:var(--ink);background:transparent;border:1px solid var(--ink-faint);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:background .16s ease,border-color .16s ease}
+.v4btn-g:hover{border-color:var(--ink);background:var(--paper-warm)}
 /* stats band */
 .v4stats{display:grid;grid-template-columns:repeat(4,1fr);gap:40px}
 .v4stats .n{font-size:clamp(34px,4.4vw,52px);line-height:1;font-weight:800;letter-spacing:-.035em;color:var(--ink)}
@@ -77,8 +85,12 @@
 .v4final>.v4in{position:relative;z-index:1}
 .v4final-h{font-size:clamp(30px,4vw,46px);line-height:1.1;letter-spacing:-.025em;font-weight:780;color:#fff;margin:0 0 16px;max-width:760px}
 .v4final-p{font-size:18px;line-height:1.6;color:rgba(255,255,255,.72);margin:0 0 30px;max-width:560px}
-.v4btn-coral{background:var(--coral);color:#0a0a0a;font-weight:700;font-size:15px;padding:15px 28px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center}
-.v4btn-gd{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);font-weight:600;font-size:15px;padding:15px 26px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center}
+/* Final-CTA pair on the dark band: same equal-box treatment as the hero pair.
+   The outlined button's border is lifted to .55 alpha so it stays legible
+   against the ink background when a translated label makes it wider. */
+.v4btn-coral{background:var(--coral);color:#0a0a0a;border:1px solid var(--coral);font-weight:700;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap}
+.v4btn-gd{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:border-color .16s ease,background .16s ease}
+.v4btn-gd:hover{border-color:#fff;background:rgba(255,255,255,.08)}
 /* hero image (promo moved up) */
 .v4heroimg{margin:44px auto 0;max-width:740px}
 .v4heroimg img{width:100%;border-radius:var(--spacing-8);box-shadow:0 30px 64px -36px rgba(20,20,30,.5);display:block}

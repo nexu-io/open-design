@@ -528,7 +528,8 @@
 .design-card-status-running {
   color: var(--accent);
 }
-.design-card-status-awaiting_input {
+.design-card-status-awaiting_input,
+.design-card-status-incomplete {
   color: var(--amber);
 }
 .design-card-status-queued,
@@ -1360,6 +1361,9 @@
    File workspace — tabs + viewer
    ============================================================ */
 .workspace {
+  /* Containing block for .workspace-toast-anchor (viewer/routines.css), which
+     pins workspace-owned toasts to this pane instead of the viewport. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1623,14 +1627,16 @@
 }
 .ws-tab-close:hover { background: var(--border); color: var(--text); }
 
-.ws-tab.design-files-tab {
+.ws-pages-menu-anchor {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 100%;
   font-weight: 500;
   color: var(--text);
-  /* Pin the Design Files entry to the left edge of the horizontally
+  /* Pin the Pages switcher to the left edge of the horizontally
      scrollable tab strip so the user always has a way back to the file
-     list even when many tabs overflow. Without sticky positioning,
-     Design Files sits at flex index 0 and scrolls off the left edge
-     once the strip is wide enough to require horizontal scrolling.
+     list and page list even when many tabs overflow.
      Issue #775. */
   position: sticky;
   left: 0;
@@ -1642,10 +1648,802 @@
      tabs are scrolled beneath it. */
   box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
 }
-.ws-tab.design-files-tab.active {
-  /* Active state should still read as selected; layer the active tint
-     over the sticky panel surface. */
+.ws-tab.pages-tab {
+  max-width: 172px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-panel);
+}
+.ws-tab.pages-tab.active { background: var(--bg-subtle); }
+.ws-tab.pages-tab .ws-tab-label {
+  max-width: 118px;
+}
+.ws-tab.pages-tab[aria-expanded='true'] {
   background: var(--bg-subtle);
+}
+.ws-pages-menu {
+  position: fixed;
+  z-index: 1800;
+  width: min(280px, calc(100vw - 36px));
+  max-height: min(440px, calc(100vh - 86px));
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+}
+.ws-pages-menu button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-pages-menu button:hover,
+.ws-pages-menu button.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ws-pages-menu-new {
+  color: var(--text) !important;
+  font-weight: 600;
+}
+.ws-pages-menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 5px 0;
+  padding: 5px 0;
+  border-block: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.ws-pages-menu-empty {
+  padding: 10px 9px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+.ws-pages-menu-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-pages-menu-files {
+  font-weight: 500;
+}
+
+.page-creator-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: color-mix(in srgb, #111827 38%, transparent);
+  animation: page-creator-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.page-creator-modal {
+  width: min(1180px, calc(100vw - 40px));
+  height: min(780px, calc(100vh - 48px));
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: 0 28px 88px rgba(15, 23, 42, 0.28);
+  animation: page-creator-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.page-creator-head {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px 17px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.page-creator-head > div {
+  min-width: 0;
+}
+.page-creator-kicker {
+  margin: 0 0 3px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.page-creator-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.page-creator-close {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.page-creator-close:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.page-creator-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  background: var(--bg);
+}
+.page-creator-sidebar {
+  min-width: 0;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+.page-creator-sidebar button {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.page-creator-sidebar button span:not(.page-creator-sidebar-count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-creator-sidebar-count {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-subtle) 86%, transparent);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+}
+.page-creator-sidebar button:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.page-creator-sidebar button.active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent);
+  font-weight: 600;
+}
+.page-creator-sidebar button.active .page-creator-sidebar-count {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  color: var(--accent);
+}
+.page-creator-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 20px;
+  overflow: hidden;
+}
+.page-creator-search {
+  justify-self: center;
+  width: min(400px, 100%);
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  transition:
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+.page-creator-search:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--border));
+}
+.page-creator-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.page-creator-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+/* Cancel the shared primitives.css `input:focus` blue halo (border + ring);
+   the pill itself carries the accent focus treatment via :focus-within. */
+.page-creator-search input:focus,
+.page-creator-search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+.page-creator-search input::placeholder {
+  color: var(--text-faint);
+}
+/* Second-level sub-category filter row (Slides / Prototype / Image / Video). */
+.page-creator-subcats {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 1px 2px 2px 1px;
+}
+.page-creator-subcat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.page-creator-subcat:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+/* Active filter uses the same tinted-fill + accent-text treatment as the
+   sidebar (`.page-creator-sidebar button.active`) and the home-hero subtype
+   chips. Avoid a solid-accent fill with white knockout text here: `--accent`
+   is app-chrome only and can be a light tone, which made the selected pill
+   read as blank white ("反白"). Accent text on a soft accent tint stays legible
+   regardless of the accent's lightness. */
+.page-creator-subcat.active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  color: var(--accent);
+}
+.page-creator-subcat.active:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  color: var(--accent);
+}
+.page-creator-subcat-count {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-faint);
+}
+.page-creator-subcat:hover .page-creator-subcat-count {
+  color: var(--text-muted);
+}
+.page-creator-subcat.active .page-creator-subcat-count {
+  color: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+.page-creator-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 2px 2px 6px 1px;
+  transition: opacity 160ms var(--ease-out);
+}
+/* While the deferred search query settles, dim the (heavy) grid so results
+   fade rather than snap in. */
+.page-creator-grid.is-pending {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.page-creator-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  transition:
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+  /* Newly-mounted cards (category switch / search) fade+rise in; `backwards`
+     holds the start frame before paint and reverts to base after, so the
+     :hover lift keeps working. */
+  animation: page-creator-card-in 240ms var(--ease-out) backwards;
+}
+@keyframes page-creator-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-creator-card:hover {
+  border-color: color-mix(in srgb, var(--border) 55%, var(--text-faint));
+  box-shadow: 0 6px 20px -12px rgba(15, 23, 42, 0.4);
+  transform: translateY(-1px);
+}
+.page-creator-card.active {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.page-creator-card-preview {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-panel);
+  color: inherit;
+  text-align: left;
+}
+.page-creator-card-frame {
+  display: block;
+  height: 132px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.page-creator-card--blank .page-creator-card-frame {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.72)),
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--border) 58%, transparent) 0,
+      color-mix(in srgb, var(--border) 58%, transparent) 1px,
+      transparent 1px,
+      transparent 18px
+    );
+}
+.page-creator-card-frame iframe {
+  width: 480px;
+  height: 300px;
+  border: 0;
+  pointer-events: none;
+  transform: scale(0.4);
+  transform-origin: top left;
+}
+/* Deck presets: a 16:9 frame that renders the first slide at a fixed 1280×720
+   logical viewport and visually scales it down to fit (等比缩小看到全貌).
+   Delegating the fit to the template's own CSS/JS (width/height:100% +
+   transform:none) only works for decks that self-scale to their viewport; a
+   template authored on a fixed pixel canvas (`.deck{width:100vw;height:100vh}`
+   + fixed-px content, no fit script) then renders full-size inside the tiny
+   iframe and its content overflows/overlaps into a cramped mess. Mirroring the
+   PreviewModal treatment (render at designWidth 1280, scale to the stage) makes
+   every template preview proportionally regardless of its internal strategy.
+   `--deck-preview-scale` is measured per-card (frame width / 1280) in
+   PageCreatorPresetFrame; the default is a first-paint fallback for the ~214px
+   grid column until the ResizeObserver lands the exact value. */
+.page-creator-card-frame--deck {
+  height: auto;
+  aspect-ratio: 16 / 9;
+  position: relative;
+  --deck-preview-scale: 0.167;
+}
+.page-creator-card-frame--deck iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform: scale(var(--deck-preview-scale));
+  transform-origin: top left;
+}
+.page-creator-plugin-media,
+.page-creator-preview-skeleton {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: var(--radius-sm);
+}
+.page-creator-plugin-media {
+  object-fit: cover;
+  background: var(--bg-subtle);
+}
+.page-creator-preview-skeleton {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--bg-subtle) 80%, transparent),
+      color-mix(in srgb, var(--border) 42%, transparent),
+      color-mix(in srgb, var(--bg-subtle) 80%, transparent)
+    );
+}
+.page-creator-blank-thumb {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.page-creator-blank-plus {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  color: var(--accent);
+}
+/* Blank-page card: a pure "start from scratch" action, visually distinct from
+   the template cards — dashed accent frame, big centered +, no thumbnail/badge. */
+.page-creator-card--blank {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-panel));
+}
+.page-creator-card--blank:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  box-shadow: 0 6px 20px -12px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.page-creator-blank-card {
+  width: 100%;
+  height: 100%;
+  min-height: 208px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+.page-creator-blank-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.page-creator-blank-card .page-creator-blank-plus {
+  width: 56px;
+  height: 56px;
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  transition:
+    transform 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+.page-creator-card--blank:hover .page-creator-blank-plus {
+  transform: scale(1.06);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+}
+.page-creator-blank-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.page-creator-blank-hint {
+  max-width: 92%;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.page-creator-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.page-creator-source {
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-creator-card-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+/* Description only — must NOT match the sub-category tag span, or the tag
+   inherits the 2-line clamp + 34px min-height and floats in dead space. */
+.page-creator-card-copy > span:not(.page-creator-source) {
+  display: -webkit-box;
+  min-height: 34px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.42;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.page-creator-card-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.page-creator-card:hover .page-creator-card-actions,
+.page-creator-card:focus-within .page-creator-card-actions,
+.page-creator-card.active .page-creator-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.page-creator-preview-button,
+.page-creator-use {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 76%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+.page-creator-preview-button {
+  background: var(--bg-panel);
+  color: var(--accent);
+}
+.page-creator-preview-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 88%, transparent);
+  color: var(--accent);
+}
+.page-creator-use {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+.page-creator-use:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-contrast, #fff);
+  box-shadow: 0 6px 14px -10px color-mix(in srgb, var(--accent) 72%, transparent);
+}
+.page-creator-use:active:not(:disabled),
+.page-creator-preview-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.page-creator-use:disabled {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: color-mix(in srgb, var(--accent) 56%, var(--text-faint));
+  cursor: not-allowed;
+  opacity: 1;
+}
+.page-creator-preview-button:disabled {
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 1;
+}
+.page-creator-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.page-creator-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: var(--bg-panel);
+}
+.page-template-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2700;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #111827 46%, transparent);
+}
+.page-template-preview-modal {
+  width: min(980px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-panel);
+  box-shadow: 0 28px 88px rgba(15, 23, 42, 0.32);
+}
+.page-template-preview-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.page-template-preview-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.page-template-preview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.page-template-preview-head h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.25;
+}
+/* Reuse the card's category chip so the preview reads with the same type
+   signal ("品类") the grid cards show. */
+.page-template-preview-title-row .page-creator-source {
+  flex: 0 0 auto;
+}
+.page-template-preview-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.page-template-preview-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.page-template-preview-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+@keyframes page-creator-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes page-creator-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 980px) {
+  .page-creator-body {
+    grid-template-columns: 156px minmax(0, 1fr);
+  }
+  .page-creator-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .page-creator-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    width: auto;
+  }
+}
+@media (max-width: 680px) {
+  .page-creator-backdrop {
+    padding: 10px;
+  }
+  .page-creator-modal {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    min-height: 0;
+  }
+  .page-creator-body {
+    grid-template-columns: 1fr;
+  }
+  .page-creator-sidebar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-creator-sidebar button {
+    width: auto;
+    flex: 0 0 auto;
+    grid-template-columns: auto minmax(0, auto) auto;
+    white-space: nowrap;
+  }
+  .page-creator-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ws-add-tab {
@@ -1744,6 +2542,26 @@
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+/* Canvas-local Design delivery feedback. It stays with the workspace while
+   the empty placeholder hands over to an actual file preview, rather than
+   becoming a bottom-of-screen notification. */
+.ws-preview-run-status-slot {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 48px);
+  pointer-events: none;
+  transform: translate(-50%, 116px);
+}
+
+@media (max-width: 640px) {
+  .ws-preview-run-status-slot {
+    max-width: calc(100% - 32px);
+    transform: translate(-50%, 104px);
+  }
 }
 
 .ws-browser-panel {

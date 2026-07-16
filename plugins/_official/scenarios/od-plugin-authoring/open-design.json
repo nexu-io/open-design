@@ -24,6 +24,7 @@
     "uk": "Створення плагіна"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T13:38:45Z",
   "description": "Guided scenario for creating a local Open Design plugin folder that can be added to My plugins.",
   "description_i18n": {
     "en": "Guided scenario for creating a local Open Design plugin folder that can be added to My plugins.",

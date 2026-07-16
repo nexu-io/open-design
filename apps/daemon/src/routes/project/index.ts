@@ -7,6 +7,7 @@ import {
   type ChatSessionMode,
   type PluginManifest,
   type ProjectFile,
+  type ProjectFileTextPreviewResponse,
   type ProjectFileVersion,
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
@@ -18,6 +19,7 @@ import { ArtifactPublicationBlockedError } from '../../artifacts/publication-gua
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
 import {
   createProjectFileVersion,
+  ensureCurrentProjectFileVersion,
   isProjectFileVersionPath,
   listProjectFileVersions,
   markProjectFileVersionStoreDeleted,
@@ -30,6 +32,7 @@ import {
   deleteUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
+  propagateWorkspaceProjectRename,
 } from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
@@ -53,6 +56,7 @@ import {
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
+import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation'> {}
 
@@ -1420,8 +1424,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   function projectStatusFromRun(run: any) {
+    const normalized = normalizeProjectDisplayStatus(run.status);
+    // A just-finished in-memory run overrides the DB-derived status for its
+    // project (it is newer), so it must carry the same incomplete signal the
+    // persisted projection derives — otherwise the pill flashes "Completed" for
+    // the ~30 min the run stays in memory before the DB-derived `incomplete`
+    // takes over (#1247 / #1060). run.endedWithUnfinishedWork is set at finish().
+    const value =
+      normalized === 'succeeded' && run.endedWithUnfinishedWork ? 'incomplete' : normalized;
     return {
-      value: normalizeProjectDisplayStatus(run.status),
+      value,
       updatedAt: run.updatedAt,
       runId: run.id,
     };
@@ -1541,11 +1553,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      // Website Clone projects that already carry the target URL skip the
+      // turn-1 discovery brief: for this scenario the URL *is* the brief —
+      // the user asked for a reproduction, not a requirements interview, and
+      // an unanswered question form just stalls the run (the agent then
+      // "answers" it with conservative defaults). An explicit client-provided
+      // skipDiscoveryBrief still wins in both directions.
+      const webCloneUrlSkipsDiscovery =
+        skipDiscoveryBrief === undefined
+        && metadata && typeof metadata === 'object'
+        && (metadata as { intent?: unknown }).intent === 'web-clone'
+        && typeof pendingPrompt === 'string'
+        && /https?:\/\/\S+/i.test(pendingPrompt);
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
               ...metadata,
-              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(skipDiscoveryBrief === true || webCloneUrlSkipsDiscovery
+                ? { skipDiscoveryBrief: true }
+                : {}),
               ...(externalProjectDir
                 ? {
                     baseDir: externalProjectDir,
@@ -2122,6 +2148,31 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         patch.skillId = skillValidation.id;
       }
+      if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
+        // Design-system workspace projects mirror their design system's
+        // title: the workspace ensure re-stamps the project name from the
+        // registry on every open, so a rename applied only to the project
+        // row silently reverts. Write the rename through to the design
+        // system so both records agree.
+        const existing = getProject(db, req.params.id);
+        if (existing) {
+          // Decide from the post-patch shape (updateProject merges the
+          // patch shallowly over the row), so a PATCH that also rebinds
+          // or detaches the design system only ever renames the system
+          // the project remains bound to after this request.
+          const propagation = await propagateWorkspaceProjectRename(
+            USER_DESIGN_SYSTEMS_DIR,
+            { ...existing, ...patch },
+            patch.name,
+          );
+          if (propagation === 'failed') {
+            return sendApiError(
+              res, 409, 'CONFLICT',
+              'rename could not be written through to the bound design system; project left unchanged',
+            );
+          }
+        }
+      }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -2135,6 +2186,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      // Stop any live agent run in this project before its row and directory
+      // are removed, otherwise the CLI subprocess is orphaned — it keeps
+      // billing and writes into a directory that no longer exists (#5468).
+      await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
@@ -2392,6 +2447,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
+  const HTML_PREVIEW_BRIDGE_MAX_BYTES = 2 * 1024 * 1024;
+  const HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES = 128 * 1024 * 1024;
   const projectPreviewCsp = [
     `sandbox ${projectPreviewIframeSandbox}`,
     "default-src 'self' data: blob:",
@@ -2411,6 +2468,38 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
+  }
+
+  // "Powered preview" headers — the opposite trade-off from setProjectPreviewHeaders.
+  // Real WebGL / Web Worker / WASM sites (Gaussian-splat viewers, physics demos,
+  // ffmpeg.wasm, threaded renderers) need capabilities the opaque-origin preview
+  // sandbox blocks: same-origin Workers, real Web Storage, and — for threaded
+  // WASM — SharedArrayBuffer, which requires the document to be crossOriginIsolated.
+  //
+  // `Document-Isolation-Policy: isolate-and-credentialless` grants the SERVED
+  // document its own cross-origin-isolated agent cluster WITHOUT requiring the
+  // embedding app to opt the whole page into COOP/COEP. That is the key that
+  // unlocks SharedArrayBuffer for just this iframe. The `credentialless` variant
+  // (vs `require-corp`) still lets artifacts pull no-cors cross-origin
+  // subresources (CDN fonts/images) — those loads just drop credentials — so
+  // enabling isolation does not blank out otherwise-working artifacts.
+  //
+  // The web host renders the powered iframe with `allow-same-origin` at the
+  // daemon's host-swapped preview origin (see
+  // apps/web/src/runtime/powered-preview.ts), so this document gets same-origin
+  // Workers/storage for sibling /powered assets while the shared /api
+  // middleware rejects browser requests from that origin to normal daemon APIs.
+  function setPoweredPreviewHeaders(res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Document-Isolation-Policy', 'isolate-and-credentialless');
+    // Let cross-origin-isolated contexts embed these bytes (the doc + its
+    // worker/wasm/asset subresources under the same /powered prefix).
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    // No CORS headers: powered documents and their relative subresources load
+    // from the same /powered loopback origin. Foreign browser origins must not
+    // get read access to project files by adding an Origin header.
+    res.removeHeader('Content-Security-Policy');
   }
 
   function rejectInternalVersionPath(res: Response, value: unknown): boolean {
@@ -2620,6 +2709,58 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     return Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
   }
 
+  function htmlHasPoweredPreviewSignal(source: string): boolean {
+    if (/\bSharedArrayBuffer\b/.test(source)) return true;
+    if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
+    if (/\bimportScripts\s*\(/.test(source)) return true;
+    if (/\bWebAssembly\s*\.\s*(?:instantiateStreaming|compileStreaming)\b/.test(source)) return true;
+    if (/\.wasm\b/.test(source)) return true;
+    if (/getContext\s*\(\s*["'`]webgl2["'`]/.test(source)) return true;
+    if (/\bOffscreenCanvas\b/.test(source)) return true;
+    if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
+    return false;
+  }
+
+  async function detectPoweredPreviewHint(meta: {
+    filePath: string;
+    mime: string;
+    size: number;
+  }): Promise<ProjectFileTextPreviewResponse['poweredPreview']> {
+    if (!/^text\/html(?:;|$)/i.test(meta.mime)) {
+      return { required: false, scannedBytes: 0, complete: true };
+    }
+    const scanLimit = Math.min(meta.size, HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES);
+    if (scanLimit <= 0) {
+      return { required: false, scannedBytes: 0, complete: true };
+    }
+
+    let scannedBytes = 0;
+    let tail = '';
+    for await (const chunk of fs.createReadStream(meta.filePath, {
+      start: 0,
+      end: scanLimit - 1,
+      highWaterMark: 256 * 1024,
+    })) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+      scannedBytes += buffer.byteLength;
+      const sample = tail + buffer.toString('utf8');
+      if (htmlHasPoweredPreviewSignal(sample)) {
+        return {
+          required: true,
+          scannedBytes,
+          complete: scannedBytes >= meta.size,
+        };
+      }
+      tail = sample.slice(-512);
+    }
+
+    return {
+      required: false,
+      scannedBytes,
+      complete: scannedBytes >= meta.size,
+    };
+  }
+
   async function sendProjectFile(
     req: any,
     res: Response,
@@ -2639,6 +2780,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     beforeSend?.(meta.mime);
 
     const isStreamed = meta.mime.startsWith('video/') || meta.mime.startsWith('audio/');
+    const shouldStreamBody = isStreamed || !transformFile;
     // A transform (the Vite dev-entry -> dist/index.html substitution, or preview
     // bridge injection) can replace the response bytes — but only for HTML. For
     // HTML the source file's mtime/size is NOT a valid validator, so its ETag is
@@ -2656,7 +2798,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
     }
 
-    if (isStreamed) {
+    if (shouldStreamBody) {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Type', meta.mime);
 
@@ -2935,6 +3077,58 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get(/^\/api\/projects\/([^/]+)\/text-preview\/(.+)$/u, async (req, res) => {
+    let handle: import('fs/promises').FileHandle | null = null;
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
+      const requestedLimit = Number(req.query.limit);
+      const limit = Math.max(
+        1024,
+        Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 96 * 1024, 512 * 1024),
+      );
+      const project = getProject(db, projectId);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const bytesToRead = Math.min(meta.size, limit);
+      const buffer = Buffer.allocUnsafe(bytesToRead);
+      const opened = await fs.promises.open(meta.filePath, 'r');
+      handle = opened;
+      const result = bytesToRead > 0
+        ? await opened.read(buffer, 0, bytesToRead, 0)
+        : { bytesRead: 0 };
+      const text = buffer.subarray(0, result.bytesRead).toString('utf8');
+      const poweredPreview = await detectPoweredPreviewHint(meta);
+      const body: ProjectFileTextPreviewResponse = {
+        text,
+        truncated: meta.size > result.bytesRead,
+        size: meta.size,
+        limit,
+        mime: meta.mime,
+        kind: meta.kind,
+        poweredPreview,
+      };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    } finally {
+      await handle?.close().catch(() => undefined);
+    }
+  });
+
   app.get(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\/(.+)$/u, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
@@ -3011,6 +3205,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const skipHtmlPreviewBridge =
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
 
       await sendProjectFile(
         req,
@@ -3019,7 +3221,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         undefined,
-        async (file) => {
+        skipHtmlPreviewBridge ? undefined : async (file) => {
           let transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,
@@ -3055,6 +3257,62 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           return transformed;
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
+      );
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  // Explicitly do not grant CORS for powered previews. Same-origin subresource
+  // reads under the powered loopback URL do not preflight; foreign preflights
+  // should complete without ACAO so browsers block the read.
+  app.options(/^\/api\/projects\/([^/]+)\/powered\/(.+)$/u, (_req, res) => {
+    res.sendStatus(204);
+  });
+
+  // "Powered preview" file serving. Mirrors /raw but stamps every response
+  // (the HTML document AND its relatively-referenced worker/wasm/asset
+  // subresources, which resolve under the same /powered/ prefix) with the
+  // cross-origin-isolation headers from setPoweredPreviewHeaders. This is the
+  // serving half of WebGL/Worker/WASM/SharedArrayBuffer support; the web host
+  // decides when to route a preview here (see file-viewer-render-mode.ts).
+  app.get(/^\/api\/projects\/([^/]+)\/powered\/(.+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
+      const project = getProject(db, projectId);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const skipPoweredTransform =
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+      await sendProjectFile(
+        req,
+        res,
+        projectId,
+        relPath,
+        project?.metadata,
+        () => setPoweredPreviewHeaders(res),
+        skipPoweredTransform ? undefined : async (file) =>
+          maybeResolveVitePreviewHtml({
+            file,
+            projectId,
+              relPath,
+              metadata: project?.metadata,
+              projectsRoot: PROJECTS_DIR,
+              readProjectFile,
+            }),
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -3132,6 +3390,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       let file: ProjectFile | null = null;
       let historyFileName = fileName;
+      let workingFileContent: string | null = null;
       try {
         const workingFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
         if (!/\.html?$/i.test(workingFile.name)) {
@@ -3139,10 +3398,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         }
         file = workingFile;
         historyFileName = workingFile.name;
+        workingFileContent = workingFile.buffer.toString('utf8');
       } catch (err: any) {
         if (err?.code !== 'ENOENT') throw err;
       }
-      const versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      let versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      if (workingFileContent !== null && versions.length === 0) {
+        const initial = await ensureCurrentProjectFileVersion(
+          PROJECTS_DIR,
+          project.id,
+          historyFileName,
+          workingFileContent,
+          { source: 'manual', promptSource: 'manual' },
+          project.metadata,
+        );
+        if (initial) {
+          versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+        }
+      }
       file ??= fileFromVersionHistory(historyFileName, versions);
       if (!file) {
         return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
@@ -3624,11 +3897,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {}
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
+  const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { handleProjectUpload } = ctx.uploads;
+  const { PROJECTS_DIR } = ctx.paths;
+  const { getProject } = ctx.projectStore;
+  const { readProjectFile } = ctx.projectFiles;
   const { fs } = ctx.node;
 
   app.post(
@@ -3641,6 +3918,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         // stashed by the multer destination resolver. Prepend it so callers
         // get the file's true project-relative path, not just its basename.
         const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
+        const project = getProject(db, req.params.id);
         const out = [];
         for (const f of incoming) {
           try {
@@ -3653,6 +3931,17 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
               mtime: stat.mtimeMs,
               originalName: f.originalname,
             });
+            if (project && /\.html?$/i.test(rel)) {
+              const savedFile = await readProjectFile(PROJECTS_DIR, req.params.id, rel, project.metadata);
+              await ensureCurrentProjectFileVersion(
+                PROJECTS_DIR,
+                project.id,
+                savedFile.name,
+                savedFile.buffer.toString('utf8'),
+                { source: 'manual', promptSource: 'manual' },
+                project.metadata,
+              );
+            }
           } catch {
             // skip files that vanished mid-flight
           }

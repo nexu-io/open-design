@@ -182,7 +182,7 @@ design-systems/your-brand/
 }
 ```
 
-完事 —— daemon 会在 `PATH` 上检测到它、picker 显示出来、对话路径就通了。如果这个 CLI 吐 **类型化事件**（像 Claude Code 的 `--output-format stream-json`），在 [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) 里写一个 parser，并把 `streamFormat` 设成 `'claude-stream-json'`。
+完事 —— daemon 会在 `PATH` 上检测到它、picker 显示出来、对话路径就通了。如果这个 CLI 吐 **类型化事件**（像 Claude Code 的 `--output-format stream-json`），在 [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) 里写一个 parser，并把 `streamFormat` 设成 `'claude-stream-json'`。
 
 合并硬线：
 

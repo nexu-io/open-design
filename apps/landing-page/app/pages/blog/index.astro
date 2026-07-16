@@ -70,6 +70,7 @@ const categoryChips = [
   { label: ui.blog.categories.guides, value: 'guides' },
   { label: ui.blog.categories.useCases, value: 'use-cases' },
   { label: ui.blog.categories.community, value: 'community' },
+  { label: ui.blog.categories.tools, value: 'tools-skills' },
 ];
 const fmtDate = (d: Date) =>
   d.toLocaleDateString(localeDef.htmlLang, {
@@ -77,11 +78,47 @@ const fmtDate = (d: Date) =>
     month: 'long',
     day: 'numeric',
   });
-const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
+const categoryValue = (category: string) => category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 // Cover art for each post. Unified "Figma-selection" editorial style: near-white
 // ground, ink-black line-art, a single acid-green selection frame, and a soft 3D
 // design-tool object. Generated via the `od-site-illustration` skill.
 const postImages: Record<string, { src: string; alt: string }> = {
+  'claude-ppt-skills': {
+    src: '/blog/claude-ppt-skills-cover.webp',
+    alt: 'A clean editorial illustration of a fanned stack of presentation slides on a near-white desk, the top slide held in a green selection frame with corner handles, beside a soft matte 3D cursor and pen, with a dot grid and golden spiral',
+  },
+  'reveal-js': {
+    src: '/blog/reveal-js-cover.webp',
+    alt: 'A clean illustration of an HTML presentation slide in a browser with navigation arrows, held in a green selection frame with corner handles, on a near-white dot-grid ground',
+  },
+  'slidev': {
+    src: '/blog/slidev-cover.webp',
+    alt: 'A clean illustration of a Markdown document with code becoming a developer presentation slide, the slide held in a green selection frame with corner handles, on a near-white dot-grid ground',
+  },
+  'marp': {
+    src: '/blog/marp-cover.webp',
+    alt: 'A clean illustration of a Markdown text file turning into a stack of slides, the top slide held in a green selection frame with corner handles, on a near-white dot-grid ground',
+  },
+  'frontend-slides': {
+    src: '/blog/frontend-slides-cover.webp',
+    alt: 'A clean illustration of a coding-agent cursor assembling a web slide from layout blocks, the finished slide held in a green selection frame with corner handles, on a near-white dot-grid ground',
+  },
+  'guizang-ppt-skill': {
+    src: '/blog/guizang-ppt-skill-cover.webp',
+    alt: 'A clean illustration of an editorial, Swiss-grid presentation slide held in a green selection frame with a pen tool, on a near-white dot-grid ground',
+  },
+  'dashiai-ppt-skill': {
+    src: '/blog/dashiai-ppt-skill-cover.webp',
+    alt: 'A clean illustration of a presentation slide being edited with drag handles beside a row of theme swatches, the slide held in a green selection frame, on a near-white dot-grid ground',
+  },
+  'codex-ppt-skill': {
+    src: '/blog/codex-ppt-skill-cover.webp',
+    alt: 'A clean illustration of an image-forward presentation slide held in a green selection frame with a command-line caret, on a near-white dot-grid ground',
+  },
+  'ppt-master': {
+    src: '/blog/ppt-master-cover.webp',
+    alt: 'A clean illustration of a document turning into an editable slide made of native shape blocks, the slide held in a green selection frame with corner handles, on a near-white dot-grid ground',
+  },
   'how-to-use-claude-code-for-frontend-design': {
     src: '/blog/how-to-use-claude-code-for-frontend-design-cover.webp',
     alt: 'A warm editorial illustration of a terminal prompt becoming a polished UI screen on a tablet, with a design-system file card (DESIGN.md) held in a green selection frame connecting the two, beside soft plants and a coffee mug',

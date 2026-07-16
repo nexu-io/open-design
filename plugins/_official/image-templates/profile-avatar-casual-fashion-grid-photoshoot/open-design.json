@@ -24,6 +24,7 @@
     "en": "Profile / Avatar - Casual Fashion Grid Photoshoot"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A structured JSON prompt for a 4-photo collage of a casual fashion photoshoot with detailed subject and lighting parameters.",
   "description_i18n": {
     "zh-CN": "生成4张休闲时尚照片拼贴的结构化JSON提示词，包含详细的主体和光照参数。",

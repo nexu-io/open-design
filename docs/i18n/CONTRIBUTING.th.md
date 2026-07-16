@@ -185,7 +185,7 @@ Product systems 69 ชุดที่เรา ship import จาก [`VoltAgent
 }
 ```
 
-เท่านี้ — daemon จะ detect บน `PATH`, picker จะแสดง, chat path จะใช้งานได้. ถ้า CLI emit **typed events** (เหมือน `--output-format stream-json` ของ Claude Code), ให้ wire parser ใน [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) และตั้ง `streamFormat: 'claude-stream-json'`.
+เท่านี้ — daemon จะ detect บน `PATH`, picker จะแสดง, chat path จะใช้งานได้. ถ้า CLI emit **typed events** (เหมือน `--output-format stream-json` ของ Claude Code), ให้ wire parser ใน [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) และตั้ง `streamFormat: 'claude-stream-json'`.
 
 Bar สำหรับ merge:
 

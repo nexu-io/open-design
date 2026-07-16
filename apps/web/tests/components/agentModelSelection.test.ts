@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  defaultAgentModelId,
   effectiveAgentModelChoice,
   normalizeAgentModelChoice,
 } from '../../src/components/agentModelSelection';
@@ -49,6 +50,29 @@ describe('agent model selection', () => {
       model: 'glm-5',
       reasoning: 'medium',
     });
+  });
+
+  it('preserves explicit AMR default choices instead of normalizing them to a concrete fallback', () => {
+    const choice = {
+      model: 'default',
+      reasoning: 'default',
+    };
+
+    expect(normalizeAgentModelChoice(amrAgent, choice)).toBeNull();
+    expect(effectiveAgentModelChoice(amrAgent, choice)).toEqual(choice);
+  });
+
+  it('does not select a disabled model as the AMR default when every catalog row is locked', () => {
+    const lockedAmrAgent: AgentInfo = {
+      ...amrAgent,
+      models: [
+        { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', enabled: false },
+        { id: 'kimi-k2.6', label: 'Kimi K2.6', enabled: false, default: true },
+      ],
+    };
+
+    expect(defaultAgentModelId(lockedAmrAgent)).toBeNull();
+    expect(effectiveAgentModelChoice(lockedAmrAgent, undefined)).toBeUndefined();
   });
 
   it('keeps non-AMR custom model choices unchanged', () => {

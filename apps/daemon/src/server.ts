@@ -18,8 +18,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
+import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
 import {
   composeSystemPrompt,
+  detectDeckIntentSignal,
+  detectMediaIntentSignal,
+  detectPlatformIntentSignal,
+  extractUserAuthoredSignalText,
+  renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
@@ -60,14 +66,14 @@ import {
   applyBakedPreviews,
   resolvePluginPreviewsDir,
   PLUGIN_PREVIEWS_ROUTE,
-} from './plugin-preview-bakes.js';
+} from './plugins/plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
 import {
   buildBrowserUseRunState,
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
-} from './browser-use-diagnostics.js';
+} from './browser/index.js';
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -99,6 +105,29 @@ import {
   resolveChatRunInactivityTimeoutMs,
   resolveChatRunShutdownGraceMs,
 } from './runtimes/chat-run-lifecycle.js';
+import {
+  normalizeRunContextSelection,
+  renderRunContextPrompt,
+} from './runtimes/chat-run-context.js';
+import {
+  daemonAgentPayloadToPersistedAgentEvent,
+  persistRunEventToAssistantMessage,
+  persistRunFailureClassification,
+  pinAssistantMessageOnRunCreate,
+} from './runtimes/chat-run-messages.js';
+import {
+  createRunSideEffectLedger,
+  foldEventIntoRunSideEffectLedger,
+  resolveRunProjectKindForAnalytics,
+  retryFinalResultForRunStatus,
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
+  runRetryEventsForAnalytics,
+  runSideEffectsForRun,
+  scanRunEventsForFinishedProps,
+  scanRunEventsForRetrySideEffects,
+} from './runtimes/run-lifecycle-analytics.js';
 export {
   composeLiveInstructionPrompt,
   formatDesignFilesWorkspaceHint,
@@ -128,6 +157,21 @@ export {
   resolveChatRunArtifactQuietPeriodMs,
   resolveChatRunInactivityTimeoutMs,
 } from './runtimes/chat-run-lifecycle.js';
+export {
+  renderRunContextPrompt,
+} from './runtimes/chat-run-context.js';
+export {
+  daemonAgentPayloadToPersistedAgentEvent,
+  persistRunEventToAssistantMessage,
+  pinAssistantMessageOnRunCreate,
+} from './runtimes/chat-run-messages.js';
+export {
+  resolveRunProjectKindForAnalytics as __forTestResolveRunProjectKindForAnalytics,
+  retryFinalResultForRunStatus as __forTestRetryFinalResultForRunStatus,
+  runRetryEventsForAnalytics as __forTestRunRetryEventsForAnalytics,
+  scanRunEventsForFinishedProps as __forTestScanRunEventsForFinishedProps,
+  scanRunEventsForRetrySideEffects as __forTestScanRunEventsForRetrySideEffects,
+} from './runtimes/run-lifecycle-analytics.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -150,11 +194,17 @@ import {
   getRememberedLiveModels,
   preferFreshLiveModels,
   rememberLiveModels,
+  resolveDefaultModelFromOptions,
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
+import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
+import {
+  persistPlainStreamArtifacts,
+  plainStdoutFromRunEvents,
+} from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
   resolveAmrProfile,
@@ -168,7 +218,7 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from './runtimes/defs/amr.js';
-import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
+import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
   consumedImportNonces,
   getDesktopAuthSecret,
@@ -208,7 +258,7 @@ import {
   assetCacheRewriteUrl,
   createPluginAssetCache,
   isCacheableExternalUrl,
-} from './plugin-asset-cache.js';
+} from './plugins/plugin-asset-cache.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
@@ -243,7 +293,6 @@ import {
   applyPlugin,
   buildConnectorProbe,
   defaultBundledRoot,
-  detectSkillPluginCandidate,
   dismissSkillPluginCandidate,
   doctorPlugin,
   FIRST_PARTY_ATOMS,
@@ -252,7 +301,6 @@ import {
   getSnapshot,
   installFromLocalFolder,
   installPlugin,
-  insertSkillPluginCandidate,
   isDiffReviewSurfaceId,
   listSkillPluginCandidates,
   listInstalledPlugins,
@@ -281,8 +329,9 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
+import { runAutoExtractionCleanup } from './memory-cleanup.js';
+import { attachAcpSession } from './agent-protocol/index.js';
+import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -332,11 +381,6 @@ import {
   scanRunEventsForUsageAnalytics,
 } from './run-analytics-observability.js';
 import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
-  didRunCreateDesignSystemFile,
-} from './runtimes/run-artifacts.js';
-import {
   createRunArtifactBaselines,
   diffRunArtifacts,
   snapshotProjectArtifacts,
@@ -351,7 +395,6 @@ import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
-  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -362,14 +405,14 @@ import {
   validateBaseUrlResolved,
 } from './connectionTest.js';
 import { listProviderModels } from './integrations/provider-models.js';
-import { importClaudeDesignZip } from './claude-design-import.js';
+import { importClaudeDesignZip } from './design/index.js';
 import {
   defaultBaseUrlForFinalizeProtocol,
   finalizeDesignPackage,
   FinalizePackageLockedError,
   FinalizeUpstreamError,
   isFinalizeProviderProtocol,
-} from './finalize-design.js';
+} from './design/index.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
@@ -378,7 +421,7 @@ import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './p
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { openBrowser } from './browser-open.js';
+import { openBrowser } from './browser/index.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -390,14 +433,11 @@ import {
 } from './media/models.js';
 import { readMaskedConfig, writeConfig } from './media/config.js';
 import {
-  deleteMediaTask,
-  getMediaTask,
-  insertMediaTask,
   listMediaTasksByProject,
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
-  updateMediaTask,
 } from './media/tasks.js';
+import { TASK_TTL_AFTER_DONE_MS, createMediaTaskStore } from './media/task-store.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -468,7 +508,6 @@ import {
 import { validateArtifactManifestInput } from './artifacts/manifest.js';
 import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
 import {
-  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -486,6 +525,7 @@ import {
   insertRoutineRun,
   insertScheduledRoutineRun,
   insertTemplate,
+  latchConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
   listProjectsAwaitingInput,
@@ -524,23 +564,31 @@ import {
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
 import {
+  initialNativeSessionRecoveryMetadata,
+  markNativeSessionAutoReseeded,
+  markNativeSessionCaptured,
+} from './native-session-recovery.js';
+import {
   createLiveArtifact,
   deleteLiveArtifact,
   ensureLiveArtifactPreview,
   getLiveArtifact,
-  LiveArtifactRefreshLockError,
-  LiveArtifactStoreValidationError,
   listLiveArtifacts,
   listLiveArtifactRefreshLogEntries,
   readLiveArtifactCode,
   recoverStaleLiveArtifactRefreshes,
   updateLiveArtifact,
 } from './live-artifacts/store.js';
-import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
-import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
+import { refreshLiveArtifact } from './live-artifacts/refresh-service.js';
+import {
+  sendLiveArtifactRouteError,
+  setLiveArtifactCodeHeaders,
+  setLiveArtifactPreviewHeaders,
+} from './live-artifacts/http-helpers.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -558,7 +606,7 @@ import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFi
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
-import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
@@ -566,6 +614,7 @@ import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
+import { registerWhatsNewRoutes } from './routes/whats-new.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
@@ -581,16 +630,14 @@ import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, reso
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
-import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
+import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import {
-  aggregateCloudflarePagesStatus,
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
-  cloudflarePagesProjectNameForProject,
   DeployError,
   deployToCloudflarePages,
   deployToVercel,
@@ -599,16 +646,24 @@ import {
   prepareDeployPreflight,
   publicDeployConfigForProvider,
   readDeployConfig,
-  readCloudflarePagesDomain,
   VERCEL_PROVIDER_ID,
   writeDeployConfig,
 } from './deploy.js';
+import {
+  checkCloudflarePagesDeploymentLinks,
+  cloudflarePagesDeploymentMetadata,
+  cloudflarePagesProjectNameForDeploy,
+  cloudflarePagesProjectNameFromDeployment,
+  publicDeployment,
+  publicDeployments,
+} from './deploy/cloudflare-pages-helpers.js';
 import {
   allowedBrowserPorts,
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
   isZeroConfigClipperLibraryRequest,
+  parseHostHeader,
 } from './origin-validation.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
@@ -618,6 +673,34 @@ import {
 import { listLibraryTokenOrigins } from './library-store.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
+import { createWhatsNewService } from './services/whats-new.js';
+import { execCommandViaLoginShell } from './services/login-shell.js';
+import {
+  OFFICIAL_MARKETPLACE_ID,
+  createMarketplaceSeedHelpers,
+} from './plugins/marketplace-seed.js';
+import {
+  PLUGIN_SHARE_ACTION_LABELS,
+  USER_PLUGIN_SOURCE_KINDS,
+  copyPluginFolderForProjectContext,
+  detectSkillPluginCandidateOnRunSuccess,
+  ensureGhReady,
+  githubRepoNameFromPluginName,
+  hasGeneratedPluginArtifacts,
+  isPluginAuthoringRun,
+  normalizePluginShareAction,
+  reconcileAssistantMessageOnRunEnd,
+  renderPluginBriefTemplate,
+  renderPluginSharePrompt,
+} from './plugins/share-helpers.js';
+import { sanitizeArchiveFilename } from './projects/archive-filename.js';
+import {
+  isLoopbackHostname,
+  isLoopbackPeerAddress,
+  requireLocalDaemonRequest,
+} from './http/local-daemon-request.js';
+import { renderOAuthResultPage } from './http/oauth-result-page.js';
+import { createToolRequestAuth } from './http/tool-request-auth.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -632,16 +715,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
-
-function renderPluginBriefTemplate(template, inputs = {}) {
-  if (typeof template !== 'string' || template.length === 0) return '';
-  return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g, (full, key) => {
-    if (!Object.hasOwn(inputs, key)) return full;
-    const value = inputs[key];
-    if (value === undefined || value === null || value === '') return full;
-    return String(value);
-  });
-}
 
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
   safeBases: [
@@ -720,91 +793,18 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
   'plugins/registry',
   path.join(PROJECT_ROOT, 'plugins', 'registry'),
 );
-const OFFICIAL_MARKETPLACE_ID = 'official';
-const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
-
-function defaultMarketplaceSeedConfig(id) {
-  return {
-    trust: id === OFFICIAL_MARKETPLACE_ID ? 'official' : 'restricted',
-    url:   marketplaceManifestUrlForRegistry(id),
-  };
-}
-
-function bundledPluginRegistrySource(sourcePath) {
-  if (isPathWithin(BUNDLED_PLUGINS_DIR, sourcePath)) {
-    const rel = path.relative(BUNDLED_PLUGINS_DIR, sourcePath).split(path.sep).join('/');
-    return `${OFFICIAL_PLUGIN_SOURCE_REPO}/plugins/_official/${rel}`;
-  }
-  const rel = path.relative(PROJECT_ROOT, sourcePath).split(path.sep).join('/');
-  if (!rel || rel.startsWith('..')) return sourcePath;
-  return `${OFFICIAL_PLUGIN_SOURCE_REPO}/${rel}`;
-}
-
-function isPathWithin(base, target) {
-  const relativePath = path.relative(path.resolve(base), path.resolve(target));
-  return (
-    relativePath === '' ||
-    (relativePath.length > 0 &&
-      !relativePath.startsWith('..') &&
-      !path.isAbsolute(relativePath))
-  );
-}
-
-function mergeMarketplaceEntries(manifestText, entries) {
-  try {
-    const parsed = JSON.parse(manifestText);
-    const plugins = Array.isArray(parsed.plugins) ? parsed.plugins : [];
-    const seen = new Set(plugins.map((entry) => String(entry?.name ?? '').toLowerCase()));
-    const generated = entries.filter((entry) => {
-      const key = String(entry.name ?? '').toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    return JSON.stringify({
-      ...parsed,
-      metadata: {
-        ...(parsed.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : {}),
-        bundledPreinstallCount: entries.length,
-      },
-      plugins: [...plugins, ...generated],
-    });
-  } catch {
-    return manifestText;
-  }
-}
-
-async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
-  const manifestPath = path.join(PLUGIN_REGISTRY_DIR, id, 'open-design-marketplace.json');
-  if (!fs.existsSync(manifestPath)) return null;
-  let manifestText = await fs.promises.readFile(manifestPath, 'utf8');
-  if (id === OFFICIAL_MARKETPLACE_ID && bundledMarketplaceEntries.length > 0) {
-    manifestText = mergeMarketplaceEntries(manifestText, bundledMarketplaceEntries);
-  }
-  return manifestText;
-}
-
-function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
-  return async (url) => {
-    const registryId = marketplaceRegistryIdFromUrl(url);
-    if (registryId && (!seedId || registryId === seedId)) {
-      const manifestText = await marketplaceSeedManifestText(registryId, bundledMarketplaceEntries);
-      if (manifestText != null) {
-        return {
-          ok:     true,
-          status: 200,
-          text:   async () => manifestText,
-        };
-      }
-    }
-    const response = await fetch(url, { redirect: 'follow' });
-    return {
-      ok:     response.ok,
-      status: response.status,
-      text:   () => response.text(),
-    };
-  };
-}
+const {
+  bundledPluginRegistrySource,
+  createMarketplaceFetcher,
+  defaultMarketplaceSeedConfig,
+  marketplaceSeedManifestText,
+} = createMarketplaceSeedHelpers({
+  bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+  projectRoot: PROJECT_ROOT,
+  pluginRegistryDir: PLUGIN_REGISTRY_DIR,
+  marketplaceManifestUrlForRegistry,
+  marketplaceRegistryIdFromUrl,
+});
 
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
@@ -1168,237 +1168,36 @@ export function createAgentRuntimeToolPrompt(
   ].join('\n');
 }
 
-const WORKSPACE_CONTEXT_KINDS = new Set([
-  'design-files',
-  'design-system',
-  'file',
-  'folder',
-  'project',
-  'local-code',
-  'browser',
-  'terminal',
-  'side-chat',
-  'live-artifact',
-]);
-
-function normalizeWorkspaceContextItems(items) {
-  if (!Array.isArray(items)) return [];
-  const out = [];
-  const seen = new Set();
-  const cleanString = (value, max = 500) => {
-    if (typeof value !== 'string') return '';
-    return value.trim().slice(0, max);
-  };
-  for (const item of items) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const record = item as Record<string, unknown>;
-    const kind = cleanString(record.kind, 64);
-    if (!WORKSPACE_CONTEXT_KINDS.has(kind)) continue;
-    const id = cleanString(record.id, 240);
-    const label = cleanString(record.label, 240);
-    if (!id || !label) continue;
-    const dedupeKey = `${kind}:${id}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-    const normalized: Record<string, string> = { id, kind, label };
-    const tabId = cleanString(record.tabId, 240);
-    const pathValue = cleanString(record.path, 500);
-    const absolutePath = cleanString(record.absolutePath, 1000);
-    const url = cleanString(record.url, 1000);
-    const title = cleanString(record.title, 500);
-    if (tabId) normalized.tabId = tabId;
-    if (pathValue) normalized.path = pathValue;
-    if (absolutePath) normalized.absolutePath = absolutePath;
-    if (url) normalized.url = url;
-    if (title) normalized.title = title;
-    out.push(normalized);
-  }
-  return out;
-}
-
-function normalizeRunContextSelection(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const stringList = (items) => {
-    if (!Array.isArray(items)) return [];
-    const out = [];
-    const seen = new Set();
-    for (const item of items) {
-      if (typeof item !== 'string') continue;
-      const trimmed = item.trim();
-      if (!trimmed || seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      out.push(trimmed);
-    }
-    return out;
-  };
+export function createOpenDesignToolEnv({
+  daemonUrl,
+  projectDir,
+  projectId,
+}: {
+  daemonUrl: string;
+  projectDir?: string | null;
+  projectId?: string | null;
+}): NodeJS.ProcessEnv {
   return {
-    skillIds: stringList(value.skillIds),
-    pluginIds: stringList(value.pluginIds),
-    mcpServerIds: stringList(value.mcpServerIds),
-    connectorIds: stringList(value.connectorIds),
-    workspaceItems: normalizeWorkspaceContextItems(value.workspaceItems),
-  };
-}
-
-function mergeRunContextSelections(...contexts) {
-  const merged = { skillIds: [], pluginIds: [], mcpServerIds: [], connectorIds: [], workspaceItems: [] };
-  const listKeys = ['skillIds', 'pluginIds', 'mcpServerIds', 'connectorIds'];
-  const workspaceSeen = new Set();
-  for (const context of contexts) {
-    const normalized = normalizeRunContextSelection(context);
-    for (const key of listKeys) {
-      const seen = new Set(merged[key]);
-      for (const id of normalized[key] ?? []) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          merged[key].push(id);
+    OD_BIN,
+    OD_DATA_DIR: RUNTIME_DATA_DIR,
+    OD_NODE_BIN,
+    OD_DAEMON_URL: daemonUrl,
+    ...(typeof projectId === 'string' && projectId && projectDir
+      ? {
+          OD_PROJECT_ID: projectId,
+          OD_PROJECT_DIR: projectDir,
         }
-      }
-    }
-    for (const item of normalized.workspaceItems ?? []) {
-      const key = `${item.kind}:${item.id}`;
-      if (workspaceSeen.has(key)) continue;
-      workspaceSeen.add(key);
-      merged.workspaceItems.push(item);
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(merged).filter(([, ids]) => ids.length > 0),
-  );
-}
-
-function projectMetadataContextSelection(metadata) {
-  if (!metadata || typeof metadata !== 'object') return {};
-  return {
-    pluginIds: Array.isArray(metadata.contextPlugins)
-      ? metadata.contextPlugins.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
-    mcpServerIds: Array.isArray(metadata.contextMcpServers)
-      ? metadata.contextMcpServers.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
-    connectorIds: Array.isArray(metadata.contextConnectors)
-      ? metadata.contextConnectors.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
+      : {}),
   };
 }
 
-function formatContextRefList(ids, refs, titleKey = 'title') {
-  const byId = new Map();
-  if (Array.isArray(refs)) {
-    for (const ref of refs) {
-      if (ref && typeof ref.id === 'string') byId.set(ref.id, ref);
-    }
-  }
-  return ids
-    .map((id) => {
-      const ref = byId.get(id);
-      const label =
-        typeof ref?.[titleKey] === 'string' && ref[titleKey].trim()
-          ? ref[titleKey].trim()
-          : typeof ref?.label === 'string' && ref.label.trim()
-            ? ref.label.trim()
-            : typeof ref?.name === 'string' && ref.name.trim()
-              ? ref.name.trim()
-              : id;
-      const meta = [
-        ref?.provider,
-        ref?.transport,
-        ref?.status,
-        ref?.accountLabel,
-      ].filter((value) => typeof value === 'string' && value.trim()).join(' · ');
-      return `- ${label} (\`${id}\`)${meta ? ` — ${meta}` : ''}`;
-    })
-    .join('\n');
-}
-
-function formatWorkspaceContextList(items) {
-  if (!Array.isArray(items)) return '';
-  return items
-    .map((item, index) => {
-      const details = [
-        item.path ? `path: \`${item.path}\`` : null,
-        item.absolutePath ? `absolute: \`${item.absolutePath}\`` : null,
-        item.url ? `url: ${item.url}` : null,
-        item.title ? `title: ${item.title}` : null,
-        item.tabId ? `tab: \`${item.tabId}\`` : null,
-      ].filter(Boolean).join(' | ');
-      return `${index + 1}. ${item.kind}: ${item.label} (\`${item.id}\`)${details ? ` — ${details}` : ''}`;
-    })
-    .join('\n');
-}
-
-function renderWorkspaceContextToolHints(items) {
-  if (!Array.isArray(items) || items.length === 0) return '';
-  const kinds = new Set(items.map((item) => item?.kind).filter(Boolean));
-  const hints = [];
-  if (kinds.has('browser')) {
-    hints.push(
-      '- Browser tabs: use the selected browser tab URL/title as the target for requests about logos, fonts, images, colors, motion code, element/page screenshots, accessibility, OG/meta tags, or page structure. Prefer mounted browser automation / browser-use style tools when available (DOM snapshot, page screenshot, element screenshot, accessibility tree, evaluated JavaScript). If only URL/title context is available and no inspection tool is mounted, say that explicitly and do not invent page internals.',
-    );
-  }
-  if (kinds.has('terminal')) {
-    hints.push(
-      '- Terminal tabs: treat the selected terminal tab as the target shell/session. If the exact scrollback is not included in the prompt, run safe project-local read-only commands or ask for the terminal transcript instead of guessing hidden output.',
-    );
-  }
-  if (kinds.has('file') || kinds.has('folder') || kinds.has('design-files')) {
-    hints.push(
-      '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
-    );
-  }
-  if (kinds.has('project')) {
-    hints.push(
-      '- Referenced projects: use the absolute path as a read-only reference project when present. Search and read relevant files before applying ideas to the current project; do not edit the referenced project unless the user explicitly asks.',
-    );
-  }
-  if (kinds.has('local-code')) {
-    hints.push(
-      '- Local code folders: use the absolute path as read-only implementation context. Inspect files under that folder when useful, align with its conventions, and make edits only in the active Open Design project unless the user explicitly asks otherwise.',
-    );
-  }
-  if (kinds.has('live-artifact')) {
-    hints.push(
-      '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
-    );
-  }
-  return hints.join('\n');
-}
-
-function renderRunContextPrompt(selection, metadata) {
-  const context = mergeRunContextSelections(projectMetadataContextSelection(metadata), selection);
-  const lines = [];
-  if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
-    lines.push('### Active workspace context');
-    lines.push(
-      'The user selected these workspace contexts or Open Design inferred the currently focused workspace tab. Use them as the default target for phrases like "this", "current", "the browser", "the terminal", "that file", or "the referenced code/project" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files, and treat absolute local paths as reference context unless explicitly asked to edit them.',
-    );
-    lines.push(formatWorkspaceContextList(context.workspaceItems));
-    const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
-    if (toolHints) lines.push(toolHints);
-  }
-  if (Array.isArray(context.pluginIds) && context.pluginIds.length > 0) {
-    lines.push('### Selected plugins');
-    lines.push(
-      'The user selected these plugins as run context. When an active plugin snapshot is pinned, follow that executable plugin block; otherwise combine these plugins as requested references.',
-    );
-    lines.push(formatContextRefList(context.pluginIds, metadata?.contextPlugins ?? [], 'title'));
-  }
-  if (Array.isArray(context.mcpServerIds) && context.mcpServerIds.length > 0) {
-    lines.push('### Selected MCP servers');
-    lines.push(
-      'The user selected these MCP servers for this run. Prefer their tools when they are mounted and relevant before asking where data should come from.',
-    );
-    lines.push(formatContextRefList(context.mcpServerIds, metadata?.contextMcpServers ?? [], 'label'));
-  }
-  if (Array.isArray(context.connectorIds) && context.connectorIds.length > 0) {
-    lines.push('### Selected connectors');
-    lines.push(
-      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
-    );
-    lines.push(formatContextRefList(context.connectorIds, metadata?.contextConnectors ?? [], 'name'));
-  }
-  if (lines.length === 0) return '';
-  return ['## Selected run context', ...lines].join('\n');
+export function createDaemonDataDirConfiguredAgentEnv(
+  configuredAgentEnv: Record<string, string> = {},
+): Record<string, string> {
+  return {
+    ...configuredAgentEnv,
+    OD_DATA_DIR: RUNTIME_DATA_DIR,
+  };
 }
 
 export function normalizeProjectDisplayStatus(status) {
@@ -1422,165 +1221,28 @@ export function composeProjectDisplayStatus(
   };
 }
 
-/**
- * @param {ApiErrorCode} code
- * @param {string} message
- * @param {Omit<ApiError, 'code' | 'message'>} [init]
- * @returns {ApiError}
- */
-function execFileBuffered(command, args, opts = {}) {
-  return new Promise((resolve) => {
-    execFile(command, args, { timeout: 120_000, maxBuffer: 1024 * 1024, ...opts }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code,
-        stdout: String(stdout ?? '').trim(),
-        stderr: String(stderr ?? '').trim(),
-        error,
-      });
-    });
-  });
-}
+const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
-function quotePosixShellArg(value) {
-  const text = String(value ?? '');
-  return `'${text.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildGhShellCommand(args) {
-  return ['gh', ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildCommandShellCommand(command, args) {
-  return [command, ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildLoginShellCommand(innerCommand) {
-  // Use a non-login shell and re-export PATH so test fakes and agent wrappers
-  // remain visible; login shells often reset PATH from profile scripts.
-  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
-}
-
-function execGhBuffered(args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
-    env: process.env,
-    ...opts,
-  });
-}
-
-function execCommandViaLoginShell(command, args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
-    env: process.env,
-    ...opts,
-  });
-}
-
-async function readProjectPluginManifest(folder) {
-  const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
-  const manifest = JSON.parse(raw);
-  const name = typeof manifest.name === 'string' && manifest.name.trim()
-    ? manifest.name.trim()
-    : path.basename(folder);
-  if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
-    throw new Error(
-      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
-    );
+// Fold per-run work-completeness signals off the agent event stream (#1247 /
+// #1060). Invoked for EVERY agent event via the single emitAgentEvent choke
+// point, so it covers every runtime (Claude stream, qoder, pi-rpc, ACP, …), not
+// just Claude:
+//   - the most recent TodoWrite snapshot's `todos` become run.lastTodoSnapshot,
+//     so finish() can judge whether declared work was left unfinished;
+//   - a turn-terminal event cut off by max_tokens sets run.truncatedMidTurn, so
+//     a truncated generation is flagged incomplete regardless of its todos.
+// Never keys off a mid-turn `tool_use` pause — only turn_end / usage terminals.
+function captureRunWorkCompletenessSignals(run, ev) {
+  if (!run || !ev || typeof ev !== 'object') return;
+  if (ev.type === 'tool_use' && isTodoWriteToolName(ev.name)) {
+    const todos = todoItemsFromTodoWriteInput(ev.input);
+    if (Array.isArray(todos)) run.lastTodoSnapshot = todos;
+    return;
   }
-  return {
-    name,
-    title: typeof manifest.title === 'string' ? manifest.title : name,
-    version: typeof manifest.version === 'string' ? manifest.version : '0.1.0',
-    manifest,
-  };
-}
-
-export const __forTestReadProjectPluginManifest = readProjectPluginManifest;
-
-function resolveRunProjectKindForAnalytics({
-  hintProjectKind,
-  projectMetadata,
-}) {
-  if (typeof hintProjectKind === 'string') return hintProjectKind;
-  if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  // Brand-extraction backing projects (kind:'brand', importedFrom:
-  // 'brand-extraction') ARE design systems — a brand is one source for a DS,
-  // not a separate object. Report them as design_system so DS-project runs
-  // (creation + later edits) drill down cleanly. See design-system tracking spec §1.
-  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
-  // Derive straight from the persisted metadata: videoModel splits HyperFrames
-  // (kind=video) out of generic video, and the prototype/other subtype fields
-  // (fidelity / intent / platform) split wireframe/mobile/live_artifact/document
-  // out so the run's project_kind matches the Home card the user picked. The
-  // web-supplied `hintProjectKind` already encodes all of this when set.
-  return projectKindFromMetadataToTracking(projectMetadata);
-}
-
-export function __forTestResolveRunProjectKindForAnalytics(args) {
-  return resolveRunProjectKindForAnalytics(args);
-}
-
-// Scans run.events newest→oldest to extract usage token counts and the
-// agent-reported model name. The scan must not short-circuit on usage
-// before reaching the model signal: usage is a terminal event while
-// status:initializing/model is emitted at the very start of the run, so
-// in reverse iteration usage is seen first. The loop continues until both
-// usage tokens are found AND (the caller already has a model from reqBody
-// OR the agent-reported model has been found).
-function scanRunEventsForFinishedProps(events, reqBodyModel) {
-  const usage = scanRunEventsForUsageAnalytics(events, reqBodyModel, 0);
-  return {
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    agentReportedModel: usage.agent_reported_model,
-  };
-}
-
-export function __forTestScanRunEventsForFinishedProps(events, reqBodyModel) {
-  return scanRunEventsForFinishedProps(events, reqBodyModel);
-}
-
-function scanRunEventsForRetrySideEffects(events) {
-  const sideEffects = {
-    userVisibleOutputSeen: false,
-    toolCallSeen: false,
-    artifactWriteSeen: false,
-    liveArtifactSeen: false,
-  };
-  for (const rec of Array.isArray(events) ? events : []) {
-    if (rec?.event === 'stdout') {
-      const chunk = rec.data?.chunk;
-      if (typeof chunk === 'string' ? chunk.length > 0 : chunk !== undefined) {
-        sideEffects.userVisibleOutputSeen = true;
-      }
-    }
-    const data = rec?.data;
-    if (!data || typeof data !== 'object') continue;
-    if (data.type === 'text_delta' || data.type === 'thinking_delta') {
-      const delta = typeof data.delta === 'string' ? data.delta : '';
-      if (delta.length > 0) sideEffects.userVisibleOutputSeen = true;
-    }
-    if (data.type === 'tool_use') sideEffects.toolCallSeen = true;
-    if (data.type === 'artifact') sideEffects.artifactWriteSeen = true;
-    if (data.type === 'live_artifact' || rec.event === 'live_artifact') {
-      sideEffects.liveArtifactSeen = true;
-    }
+  if ((ev.type === 'turn_end' || ev.type === 'usage') && stopReasonIsTruncation(ev.stopReason)) {
+    run.truncatedMidTurn = true;
   }
-  if (
-    countNewArtifacts(events) > 0 ||
-    didRunCreateDesignSystemFile(events) ||
-    countDesignSystemPreviewModules(events) > 0
-  ) {
-    sideEffects.artifactWriteSeen = true;
-  }
-  return sideEffects;
-}
-
-export function __forTestScanRunEventsForRetrySideEffects(events) {
-  return scanRunEventsForRetrySideEffects(events);
 }
 
 function fileNameFromToolInputPath(value) {
@@ -1643,533 +1305,6 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
-}
-
-function retryFinalResultForRunStatus(status, retryAttemptCount) {
-  const result = runResultFromStatus(status);
-  if ((retryAttemptCount ?? 0) <= 0) {
-    return result === 'failed' ? 'suppressed' : 'not_attempted';
-  }
-  if (result === 'success') return 'success';
-  if (result === 'failed') return 'failed';
-  return 'suppressed';
-}
-
-export function __forTestRetryFinalResultForRunStatus(status, retryAttemptCount) {
-  return retryFinalResultForRunStatus(status, retryAttemptCount);
-}
-
-function runRetryEventsForAnalytics(events) {
-  return (Array.isArray(events) ? events : []).filter((rec) =>
-    rec?.event === 'run_retry_attempted' || rec?.event === 'run_retry_finished'
-  );
-}
-
-export function __forTestRunRetryEventsForAnalytics(events) {
-  return runRetryEventsForAnalytics(events);
-}
-
-function githubRepoNameFromPluginName(name) {
-  const slug = String(name)
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/(^[-._]+|[-._]+$)/g, '');
-  return slug || 'open-design-plugin';
-}
-
-const PLUGIN_SHARE_ACTION_LABELS = {
-  'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Design',
-};
-
-const USER_PLUGIN_SOURCE_KINDS = new Set([
-  'user',
-  'project',
-  'marketplace',
-  'github',
-  'url',
-  'local',
-]);
-
-const PLUGIN_CONTEXT_SKIP_DIRS = new Set([
-  '.git',
-  '.next',
-  '.nuxt',
-  '.od',
-  '.output',
-  '.tmp',
-  '.turbo',
-  '.venv',
-  '__pycache__',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-  'out',
-  'target',
-  'vendor',
-]);
-
-const PLUGIN_CONTEXT_SKIP_FILES = new Set([
-  '.DS_Store',
-  'Thumbs.db',
-]);
-
-function normalizePluginShareAction(input) {
-  const value = typeof input === 'string' ? input.trim() : '';
-  return Object.prototype.hasOwnProperty.call(PLUGIN_SHARE_ACTION_PLUGIN_IDS, value)
-    ? value
-    : null;
-}
-
-function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
-  const title = sourcePlugin.title || sourcePlugin.id;
-  if (action === 'publish-github') {
-    return [
-      `Publish the local Open Design plugin "${title}" as a new public GitHub repository.`,
-      '',
-      `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-      'Use the local daemon share endpoint so the publish flow runs through Open Design\'s validated GitHub path:',
-      '',
-      '```bash',
-      `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/publish-github" \\`,
-      `  -H 'content-type: application/json' \\`,
-      `  -d '${JSON.stringify({ path: stagedPath })}'`,
-      '```',
-      '',
-      'Read the JSON response. If `ok` is true, report the final repository URL and any validation/log summary. If it fails, report the `message`, `code`, and the useful log lines. The endpoint checks `gh` auth and performs the repository creation; do not hand-roll a second GitHub flow unless you are explaining a daemon endpoint failure.',
-      '',
-      'Do not rewrite the plugin unless publishing requires a small metadata fix. If you make any fix, explain it before publishing.',
-    ].join('\n');
-  }
-  return [
-    `Open a pull request to add the local Open Design plugin "${title}" to the Open Design repository.`,
-    '',
-    `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-    'Use the local daemon share endpoint so the contribution flow runs through Open Design\'s validated GitHub path:',
-    '',
-    '```bash',
-    `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design" \\`,
-    `  -H 'content-type: application/json' \\`,
-    `  -d '${JSON.stringify({ path: stagedPath })}'`,
-    '```',
-    '',
-    'Read the JSON response. If `ok` is true, report the PR URL, branch, and any validation/log summary. If it fails, report the `message`, `code`, and the useful log lines. The endpoint checks `gh` auth, forks/clones, pushes, and opens the PR; do not hand-roll a second GitHub flow unless you are explaining a daemon endpoint failure.',
-    '',
-    'Keep the PR focused on this plugin. Report the PR URL and any validation you ran.',
-  ].join('\n');
-}
-
-async function copyPluginFolderForProjectContext(sourceRoot, destRoot) {
-  const rootReal = await fs.promises.realpath(sourceRoot);
-  const stat = await fs.promises.stat(rootReal);
-  if (!stat.isDirectory()) {
-    const err = new Error('plugin source path is not a directory');
-    err.code = 'ENOTDIR';
-    throw err;
-  }
-  await copyPluginContextDir(rootReal, destRoot, rootReal);
-}
-
-async function copyPluginContextDir(src, dest, rootReal) {
-  await fs.promises.mkdir(dest, { recursive: true });
-  const entries = await fs.promises.readdir(src, { withFileTypes: true });
-  for (const entry of entries) {
-    if (shouldSkipPluginContextEntry(entry.name)) continue;
-    if (entry.isSymbolicLink()) continue;
-
-    const from = path.join(src, entry.name);
-    const to = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      const childReal = await fs.promises.realpath(from).catch(() => null);
-      if (!childReal || (childReal !== rootReal && !childReal.startsWith(rootReal + path.sep))) {
-        continue;
-      }
-      await copyPluginContextDir(childReal, to, rootReal);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    await fs.promises.mkdir(path.dirname(to), { recursive: true });
-    await fs.promises.copyFile(from, to);
-  }
-}
-
-function shouldSkipPluginContextEntry(name) {
-  return PLUGIN_CONTEXT_SKIP_DIRS.has(name) || PLUGIN_CONTEXT_SKIP_FILES.has(name);
-}
-
-async function ensureGhReady() {
-  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
-  if (!version.ok) {
-    return {
-      ok: false,
-      code: 'gh-not-installed',
-      message: 'GitHub CLI is not installed. Install it, then click this action again.',
-      url: 'https://cli.github.com/',
-      log: [version.stderr || version.stdout || 'gh --version failed'],
-    };
-  }
-  const auth = await execGhBuffered(['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
-  if (!auth.ok) {
-    return {
-      ok: false,
-      code: 'gh-not-authenticated',
-      message: 'GitHub CLI is installed but not authenticated. Run `gh auth login --web`, finish browser authorization, then click this action again.',
-      url: 'https://github.com/login/device',
-      log: [auth.stderr || auth.stdout || 'gh auth status failed'],
-    };
-  }
-  return { ok: true, log: [version.stdout, auth.stderr || auth.stdout].filter(Boolean) };
-}
-
-const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
-const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
-
-function reconcileAssistantMessageOnRunEnd(db, runs, run) {
-  if (!run.assistantMessageId) return;
-  void runs
-    .wait(run)
-    .then((finalStatus) => {
-      db.prepare(
-        `UPDATE messages
-            SET run_status = ?, ended_at = COALESCE(ended_at, ?)
-          WHERE id = ? AND run_status IN ('queued', 'running')`,
-      ).run(finalStatus.status, Date.now(), run.assistantMessageId);
-    })
-    .catch((err) => {
-      console.warn('[runs] message reconciliation failed', err);
-    });
-}
-
-
-function isPluginAuthoringRun(db, run) {
-  if (run?.pluginId === 'od-plugin-authoring') return true;
-  if (
-    typeof run?.appliedPluginSnapshotId === 'string'
-    && run.appliedPluginSnapshotId.length > 0
-  ) {
-    const snapshot = getSnapshot(db, run.appliedPluginSnapshotId);
-    return snapshot?.pluginId === 'od-plugin-authoring';
-  }
-  return false;
-}
-
-async function hasGeneratedPluginArtifacts(projectRoot) {
-  if (!projectRoot || typeof projectRoot !== 'string') return false;
-  const required = [
-    path.join(projectRoot, 'generated-plugin', 'open-design.json'),
-    path.join(projectRoot, 'generated-plugin', 'SKILL.md'),
-  ];
-  try {
-    await Promise.all(required.map((file) => fs.promises.access(file, fs.constants.F_OK)));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Renderable `<question-form>`/`<ask-question>` detection now lives in
-// `./question-form-detect.ts` so the missing-artifacts guard, awaiting-input
-// status, and run analytics all share ONE renderable-form check. See
-// `emittedRenderableQuestionForm` imported above.
-
-function assistantMessageEmittedQuestionForm(db, assistantMessageId) {
-  if (!assistantMessageId) return false;
-  const row = db.prepare(`SELECT content FROM messages WHERE id = ?`).get(assistantMessageId);
-  return emittedRenderableQuestionForm(row?.content);
-}
-
-function deferredSkillPluginCandidateForRun(db, run) {
-  if (!run.projectId || !run.conversationId) return null;
-  return listSkillPluginCandidates(db, run.projectId)
-    .find((candidate) =>
-      candidate.status !== 'dismissed' &&
-      !candidate.assistantMessageId &&
-      candidate.conversationId === run.conversationId,
-    ) ?? null;
-}
-
-export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
-  if (!run.projectId || !run.conversationId) return;
-  void runs
-    .wait(run)
-    .then(async (finalStatus) => {
-      if (finalStatus.status !== 'succeeded') return;
-      const pausedForQuestion = assistantMessageEmittedQuestionForm(db, run.assistantMessageId);
-      const detected = await detectSkillPluginCandidate({
-        projectId: run.projectId,
-        runId: run.id,
-        conversationId: run.conversationId,
-        assistantMessageId: null,
-        message: input?.message ?? input?.currentPrompt,
-        attachments: input?.attachments,
-        projectRoot,
-      });
-      const candidate = detected ? insertSkillPluginCandidate(db, detected) : null;
-      if (pausedForQuestion) return;
-      const candidateToShow = candidate ?? deferredSkillPluginCandidateForRun(db, run);
-      if (!candidateToShow || candidateToShow.status === 'dismissed') return;
-      upsertSkillPluginCandidateAssistantMessage(db, run, candidateToShow);
-    })
-    .catch((err) => {
-      console.warn('[plugins] skill candidate detection failed', err);
-    });
-}
-
-export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
-  const currentMessagePosition = run.assistantMessageId
-    ? (db.prepare(`SELECT position FROM messages WHERE id = ?`).get(run.assistantMessageId)?.position ?? null)
-    : null;
-  const existingMessagePosition = candidate.assistantMessageId
-    ? (db.prepare(`SELECT position FROM messages WHERE id = ?`).get(candidate.assistantMessageId)?.position ?? null)
-    : null;
-  if (
-    typeof currentMessagePosition === 'number' &&
-    typeof existingMessagePosition === 'number' &&
-    existingMessagePosition > currentMessagePosition
-  ) {
-    return null;
-  }
-  const canReuseExistingMessage =
-    candidate.assistantMessageId &&
-    candidate.assistantMessageId !== run.assistantMessageId &&
-    typeof existingMessagePosition === 'number';
-  const messageId = canReuseExistingMessage ? candidate.assistantMessageId : randomUUID();
-  const shouldMoveReusedMessage =
-    canReuseExistingMessage &&
-    typeof currentMessagePosition === 'number' &&
-    typeof existingMessagePosition === 'number' &&
-    existingMessagePosition <= currentMessagePosition;
-  if (
-    candidate.assistantMessageId &&
-    candidate.assistantMessageId !== messageId &&
-    candidate.assistantMessageId !== run.assistantMessageId
-  ) {
-    db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId);
-  }
-  const now = Date.now();
-  upsertMessage(db, run.conversationId, {
-    id: messageId,
-    role: 'assistant',
-    content: `Open Design found reusable skill material that can become a plugin: ${candidate.title}`,
-    agentId: run.agentId ?? undefined,
-    events: [{
-      kind: 'plugin_candidate',
-      candidateId: candidate.id,
-      title: candidate.title,
-      description: candidate.description,
-      confidence: candidate.confidence,
-      draftPath: candidate.draftPath ?? null,
-    }],
-    createdAt: now,
-    endedAt: now,
-  });
-  if (shouldMoveReusedMessage) {
-    const max = db
-      .prepare(`SELECT COALESCE(MAX(position), -1) AS m FROM messages WHERE conversation_id = ?`)
-      .get(run.conversationId)?.m ?? -1;
-    db.prepare(`UPDATE messages SET position = ? WHERE id = ?`).run(Number(max) + 1, messageId);
-  }
-  db.prepare(
-    `UPDATE skill_plugin_candidates
-        SET assistant_message_id = ?, updated_at = ?
-      WHERE id = ?`,
-  ).run(messageId, now, candidate.id);
-  return messageId;
-}
-
-function persistRunEventToAssistantMessage(db, run, event, data) {
-  if (!run.assistantMessageId) return;
-  const persisted = runSseEventToPersistedAgentEvent(event, data);
-  if (!persisted) return;
-  try {
-    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
-  } catch (err) {
-    console.warn('[runs] message event persistence failed', err);
-  }
-}
-
-function runSseEventToPersistedAgentEvent(event, data) {
-  if (event === 'start') {
-    return {
-      kind: 'status',
-      label: 'starting',
-      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
-    };
-  }
-  if (event === 'stdout') {
-    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
-    return chunk ? { kind: 'text', text: chunk } : null;
-  }
-  if (event === 'error') {
-    const message = typeof data?.error?.message === 'string'
-      ? data.error.message
-      : typeof data?.message === 'string'
-        ? data.message
-        : '';
-    return {
-      kind: 'status',
-      label: 'error',
-      ...(message ? { detail: message } : {}),
-    };
-  }
-  if (event !== 'agent') return null;
-  return daemonAgentPayloadToPersistedAgentEvent(data);
-}
-
-export function daemonAgentPayloadToPersistedAgentEvent(data) {
-  const type = data?.type;
-  if (type === 'status' && typeof data.label === 'string') {
-    const detail =
-      typeof data.detail === 'string'
-        ? data.detail
-        : typeof data.model === 'string'
-          ? data.model
-          : typeof data.ttftMs === 'number'
-            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
-            : undefined;
-    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
-  }
-  if (type === 'text_delta' && typeof data.delta === 'string') {
-    return { kind: 'text', text: data.delta };
-  }
-  if (type === 'conversation_title' && typeof data.title === 'string') {
-    return { kind: 'conversation_title', title: data.title };
-  }
-  if (type === 'thinking_delta' && typeof data.delta === 'string') {
-    return { kind: 'thinking', text: data.delta };
-  }
-  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
-  if (type === 'live_artifact') {
-    return {
-      kind: 'live_artifact',
-      action: data.action,
-      projectId: data.projectId,
-      artifactId: data.artifactId,
-      title: data.title,
-      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
-    };
-  }
-  if (type === 'live_artifact_refresh') {
-    return {
-      kind: 'live_artifact_refresh',
-      phase: data.phase,
-      projectId: data.projectId,
-      artifactId: data.artifactId,
-      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
-      ...(data.title ? { title: data.title } : {}),
-      ...(typeof data.refreshedSourceCount === 'number'
-        ? { refreshedSourceCount: data.refreshedSourceCount }
-        : {}),
-      ...(data.error ? { error: data.error } : {}),
-    };
-  }
-  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
-  }
-  // Live-only incremental tool-input fragments are for real-time display only.
-  // Returning null skips persistence so history replay isn't polluted with
-  // mid-token JSON shards; the full `tool_use` above is the persisted record.
-  if (type === 'tool_input_delta') return null;
-  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
-    return {
-      kind: 'tool_result',
-      toolUseId: data.toolUseId,
-      content: String(data.content ?? ''),
-      isError: Boolean(data.isError),
-    };
-  }
-  if (type === 'usage') {
-    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
-    return {
-      kind: 'usage',
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
-      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
-    };
-  }
-  if (type === 'diagnostic' && typeof data.name === 'string') {
-    return {
-      kind: 'diagnostic',
-      name: data.name,
-      ...(typeof data.source === 'string' ? { source: data.source } : {}),
-      ...(typeof data.elapsedMs === 'number' ? { elapsedMs: data.elapsedMs } : {}),
-      ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
-      ...(typeof data.suppressedChars === 'number' ? { suppressedChars: data.suppressedChars } : {}),
-      ...(typeof data.suppressedChunks === 'number' ? { suppressedChunks: data.suppressedChunks } : {}),
-      ...(typeof data.openedBlocks === 'number' ? { openedBlocks: data.openedBlocks } : {}),
-      ...(typeof data.closedBlocks === 'number' ? { closedBlocks: data.closedBlocks } : {}),
-      ...(typeof data.fileCount === 'number' ? { fileCount: data.fileCount } : {}),
-      ...(Array.isArray(data.files) ? { files: data.files.filter((file) => typeof file === 'string').slice(0, 8) } : {}),
-      ...(typeof data.pendingCandidateChars === 'number'
-        ? { pendingCandidateChars: data.pendingCandidateChars }
-        : {}),
-      ...(typeof data.suppressing === 'boolean' ? { suppressing: data.suppressing } : {}),
-      ...(data.shape && typeof data.shape === 'object' ? { shape: data.shape } : {}),
-    };
-  }
-  if (type === 'fabricated_role_marker' && typeof data.marker === 'string') {
-    return {
-      kind: 'status',
-      label: 'warning',
-      detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated at this point to prevent unauthorized instruction injection. See issue #3247.`,
-    };
-  }
-  // Persist tool-loop warnings/halts so the signal survives a reload or history
-  // replay. Without this the event is transient-only, and in
-  // OD_TOOL_LOOP_GUARD=warn (no terminal TOOL_LOOP_DETECTED error) the user
-  // would lose the only record that a loop was detected. Mirrors the live
-  // mapping in apps/web/src/providers/daemon.ts so replayed and live views match.
-  if (type === 'tool_loop' && typeof data.toolName === 'string') {
-    const toolName = data.toolName;
-    const count = typeof data.count === 'number' ? data.count : 0;
-    const detail =
-      data.action === 'halt'
-        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
-        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
-    return { kind: 'status', label: 'warning', detail };
-  }
-  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
-  return null;
-}
-
-function normalizePersistedToolInput(input) {
-  if (!input || typeof input !== 'object') return input;
-  if ('filePath' in input && typeof input.filePath === 'string') {
-    return { ...input, file_path: input.filePath };
-  }
-  return input;
-}
-
-function pinAssistantMessageOnRunCreate(db, run) {
-  if (!run.conversationId || !run.assistantMessageId) return;
-  const existing = db
-    .prepare(`SELECT id FROM messages WHERE id = ?`)
-    .get(run.assistantMessageId);
-  if (existing) {
-    db.prepare(
-      `UPDATE messages
-          SET run_id = ?,
-              run_status = CASE
-                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
-                ELSE ?
-              END,
-              started_at = COALESCE(started_at, ?)
-        WHERE id = ?`,
-    ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
-    return;
-  }
-  upsertMessage(db, run.conversationId, {
-    id: run.assistantMessageId,
-    role: 'assistant',
-    content: '',
-    agentId: run.agentId ?? undefined,
-    events: [],
-    runId: run.id,
-    runStatus: run.status,
-    startedAt: run.createdAt,
-  });
 }
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
@@ -2450,204 +1585,6 @@ export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown
   return status === 'failed' || status === 'canceled';
 }
 
-const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
-
-function cloudflarePagesDeploymentMetadata(projectName) {
-  const normalized = typeof projectName === 'string' ? projectName.trim() : '';
-  return normalized
-    ? { [CLOUDFLARE_PAGES_PROJECT_METADATA_KEY]: normalized }
-    : undefined;
-}
-
-function cloudflarePagesProjectNameFromDeployment(deployment) {
-  const value = deployment?.providerMetadata?.[CLOUDFLARE_PAGES_PROJECT_METADATA_KEY];
-  if (typeof value === 'string' && value.trim()) return value.trim();
-  return cloudflarePagesProjectNameFromUrl(deployment?.url);
-}
-
-function cloudflarePagesProjectNameFromUrl(rawUrl) {
-  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return '';
-  try {
-    const host = new URL(rawUrl).hostname.toLowerCase();
-    if (!host.endsWith('.pages.dev')) return '';
-    const labels = host.slice(0, -'.pages.dev'.length).split('.').filter(Boolean);
-    return labels.at(-1) || '';
-  } catch {
-    return '';
-  }
-}
-
-function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
-  const priorName = cloudflarePagesProjectNameFromDeployment(prior);
-  if (priorName) return priorName;
-
-  for (const deployment of listDeployments(db, projectId)) {
-    if (deployment.providerId !== CLOUDFLARE_PAGES_PROVIDER_ID) continue;
-    const stableName = cloudflarePagesProjectNameFromDeployment(deployment);
-    if (stableName) return stableName;
-  }
-
-  return cloudflarePagesProjectNameForProject(projectId, projectName);
-}
-
-function publicDeployment(deployment) {
-  if (!deployment || typeof deployment !== 'object') return deployment;
-  const { providerMetadata: _providerMetadata, ...publicShape } = deployment;
-  return publicShape;
-}
-
-function publicDeployments(deployments) {
-  return (deployments || []).map(publicDeployment);
-}
-
-async function checkCloudflarePagesDeploymentLinks(existing) {
-  const current = existing.cloudflarePages || {};
-  const projectName = current.projectName || cloudflarePagesProjectNameFromDeployment(existing);
-  const config = await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID);
-  const pagesDevUrl = current.pagesDev?.url || existing.url;
-  const pagesDevResult = await checkDeploymentUrl(pagesDevUrl);
-  const pagesDev = {
-    ...(current.pagesDev || {}),
-    url: pagesDevUrl,
-    status: pagesDevResult.reachable ? 'ready' : pagesDevResult.status || 'link-delayed',
-    statusMessage: pagesDevResult.reachable
-      ? 'Public link is ready.'
-      : pagesDevResult.statusMessage || current.pagesDev?.statusMessage || 'Cloudflare Pages is still preparing the pages.dev link.',
-    reachableAt: pagesDevResult.reachable ? Date.now() : current.pagesDev?.reachableAt,
-  };
-  let customDomain = current.customDomain;
-  if (customDomain?.url && customDomain.status !== 'conflict') {
-    let pagesDomain = null;
-    if (config?.token && config?.accountId && projectName) {
-      try {
-        pagesDomain = await readCloudflarePagesDomain({ ...config, projectName }, customDomain.hostname);
-      } catch {
-        pagesDomain = null;
-      }
-    }
-    const customResult = await checkDeploymentUrl(customDomain.url);
-    const pagesDomainStatus = pagesDomain?.status || customDomain.pagesDomainStatus;
-    const failedByApi = ['error', 'blocked', 'deactivated'].includes(String(pagesDomainStatus || '').toLowerCase());
-    const activeByApi = String(pagesDomainStatus || '').toLowerCase() === 'active';
-    const readyByReachability = customResult.reachable && activeByApi;
-    customDomain = {
-      ...customDomain,
-      domainStatus: pagesDomain
-        ? pagesDomain.status === 'active'
-          ? 'active'
-          : failedByApi
-            ? 'failed'
-            : 'pending'
-        : customDomain.domainStatus,
-      pagesDomainStatus,
-      validationData: pagesDomain?.validation_data ?? customDomain.validationData,
-      verificationData: pagesDomain?.verification_data ?? customDomain.verificationData,
-      status: readyByReachability
-        ? 'ready'
-        : customDomain.status === 'failed' || failedByApi
-          ? 'failed'
-          : 'pending',
-      statusMessage: readyByReachability
-        ? 'Custom domain is ready.'
-        : failedByApi
-          ? 'Cloudflare Pages reported a custom-domain error.'
-        : customResult.statusMessage || customDomain.statusMessage || 'Custom domain is still being prepared.',
-    };
-  }
-  const cloudflarePages = {
-    ...current,
-    projectName,
-    pagesDev,
-    ...(customDomain ? { customDomain } : {}),
-  };
-  const aggregate = aggregateCloudflarePagesStatus(pagesDev, customDomain);
-  return {
-    url: pagesDev.url,
-    status: aggregate.status,
-    statusMessage: aggregate.statusMessage,
-    cloudflarePages,
-    providerMetadata: {
-      ...(existing.providerMetadata || {}),
-      cloudflarePages,
-    },
-  };
-}
-
-// Filename slug for the Content-Disposition header on archive downloads.
-// Browsers reject quotes and control bytes; we keep Unicode letters/digits
-// so a project name with non-ASCII characters (e.g. "café-design")
-// survives instead of becoming a row of underscores.
-function sanitizeArchiveFilename(raw) {
-  const cleaned = String(raw ?? '')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return cleaned;
-}
-
-function sendLiveArtifactRouteError(res, err) {
-  if (err instanceof LiveArtifactStoreValidationError) {
-    return sendApiError(res, 400, 'LIVE_ARTIFACT_INVALID', err.message, {
-      details: { kind: 'validation', issues: err.issues },
-    });
-  }
-  if (err instanceof LiveArtifactRefreshLockError) {
-    return sendApiError(res, 409, 'REFRESH_LOCKED', err.message, {
-      details: { artifactId: err.artifactId },
-    });
-  }
-  if (err instanceof LiveArtifactRefreshUnavailableError) {
-    return sendApiError(res, 400, 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE', err.message);
-  }
-  if (err instanceof LiveArtifactRefreshAbortError) {
-    return sendApiError(res, err.kind === 'cancelled' ? 499 : 504, 'LIVE_ARTIFACT_REFRESH_TIMEOUT', err.message, {
-      details: { kind: err.kind, timeoutMs: err.timeoutMs ?? null, step: err.step ?? null },
-    });
-  }
-  if (err instanceof ConnectorServiceError) {
-    return sendApiError(res, err.status, err.code, err.message, err.details === undefined ? {} : { details: err.details });
-  }
-  if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-    return sendApiError(res, 404, 'LIVE_ARTIFACT_NOT_FOUND', 'live artifact not found');
-  }
-  return sendApiError(res, 500, 'LIVE_ARTIFACT_STORAGE_FAILED', String(err));
-}
-
-function normalizeLocalAuthority(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || /[\s/@]/.test(trimmed) || trimmed.includes(',')) return null;
-
-  try {
-    const parsed = new URL(`http://${trimmed}`);
-    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
-    if (!hostname || parsed.username || parsed.password || parsed.pathname !== '/') return null;
-    return { hostname, port: parsed.port };
-  } catch {
-    return null;
-  }
-}
-
-function isLoopbackHostname(hostname) {
-  const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (normalized === 'localhost') return true;
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
-  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
-  return false;
-}
-
-function isLoopbackPeerAddress(address) {
-  if (typeof address !== 'string') return false;
-  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
-  if (!normalized) return false;
-  if (normalized.startsWith('::ffff:')) return isLoopbackPeerAddress(normalized.slice('::ffff:'.length));
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
-  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
-  return false;
-}
-
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
 
@@ -2694,220 +1631,6 @@ function parseProjectPreviewAssetPath(pathname) {
   } catch {
     return null;
   }
-}
-
-function localOriginFromHeader(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === 'null' || trimmed.includes(',')) return null;
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
-    if (!isLoopbackHostname(parsed.hostname)) return null;
-    return parsed.origin;
-  } catch {
-    return null;
-  }
-}
-
-function validateLocalDaemonRequest(req) {
-  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
-    return {
-      ok: false,
-      message: 'request peer must be a loopback address',
-      details: { peer: 'remoteAddress' },
-    };
-  }
-
-  const host = normalizeLocalAuthority(req.get('host'));
-  if (!host || !isLoopbackHostname(host.hostname)) {
-    return {
-      ok: false,
-      message: 'request host must be a loopback daemon address',
-      details: { header: 'host' },
-    };
-  }
-
-  const originHeader = req.get('origin');
-  if (originHeader !== undefined && !localOriginFromHeader(originHeader)) {
-    return {
-      ok: false,
-      message: 'request origin must be a loopback daemon origin',
-      details: { header: 'origin' },
-    };
-  }
-
-  return { ok: true, origin: localOriginFromHeader(originHeader) };
-}
-
-function requireLocalDaemonRequest(req, res, next) {
-  const validation = validateLocalDaemonRequest(req);
-  if (!validation.ok) {
-    return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
-  }
-
-  res.setHeader('Vary', 'Origin');
-  if (validation.origin) {
-    res.setHeader('Access-Control-Allow-Origin', validation.origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Max-Age', '600');
-  next();
-}
-
-/**
- * Render the small HTML page that the OAuth callback returns to the
- * user's browser tab. It posts a message back to the opener (the
- * Settings dialog window) and offers a manual close button. We keep
- * the markup pure HTML/CSS — no external scripts, no React — so the
- * page works even if the opener was closed and the user just sees a
- * static success/failure screen.
- */
-function renderOAuthResultPage(opts) {
-  const ok = Boolean(opts.ok);
-  const title = ok ? 'Connected' : 'Authorization failed';
-  const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
-  const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Open Design.`
-    : escapeHtml(opts.message ?? 'Authorization could not be completed.');
-  const accent = ok ? '#1a7f37' : '#cf222e';
-  const payload = ok
-    ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
-    : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(title)} — Open Design</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  :root { color-scheme: light dark; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    display: flex; align-items: center; justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
-    background: #f6f7f9; color: #1f2328; padding: 24px;
-  }
-  @media (prefers-color-scheme: dark) {
-    body { background: #0d1117; color: #e6edf3; }
-    .card { background: #161b22; border-color: #30363d; }
-    code { background: #1f242c; }
-  }
-  .card {
-    max-width: 420px; width: 100%; padding: 28px 28px 22px; border-radius: 12px;
-    background: white; border: 1px solid #d0d7de; box-shadow: 0 8px 24px rgba(0,0,0,.06);
-    text-align: left;
-  }
-  h1 { margin: 0 0 8px; font-size: 18px; color: ${accent}; }
-  p  { margin: 0 0 16px; font-size: 14px; line-height: 1.55; }
-  code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
-  button {
-    appearance: none; border: 1px solid #d0d7de; background: white;
-    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
-  }
-  button:hover { background: #f6f8fa; }
-  @media (prefers-color-scheme: dark) {
-    button { background: #21262d; border-color: #30363d; color: #e6edf3; }
-    button:hover { background: #30363d; }
-  }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>${escapeHtml(heading)}</h1>
-    <p>${body}</p>
-    <button type="button" onclick="window.close()">Close this tab</button>
-  </div>
-  <script>
-    try {
-      var payload = ${JSON.stringify(payload)};
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(payload, '*');
-      }
-      if (window.BroadcastChannel) {
-        var bc = new BroadcastChannel('open-design-mcp-oauth');
-        bc.postMessage(payload);
-        bc.close();
-      }
-    } catch (e) { /* ignore postMessage failures */ }
-  </script>
-</body>
-</html>`;
-}
-
-function escapeHtml(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function setLiveArtifactPreviewHeaders(res) {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader(
-    'Content-Security-Policy',
-    [
-      "default-src 'none'",
-      "base-uri 'none'",
-      "script-src 'none'",
-      "object-src 'none'",
-      "connect-src 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'self'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      'sandbox allow-same-origin',
-    ].join('; '),
-  );
-}
-
-function setLiveArtifactCodeHeaders(res) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-}
-
-function bearerTokenFromRequest(req) {
-  const header = req.get('authorization');
-  if (typeof header !== 'string') return undefined;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1];
-}
-
-function authorizeToolRequest(req, res, operation) {
-  const endpoint = req.path;
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint, operation });
-  if (!validation.ok) {
-    const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
-    sendApiError(res, status, validation.code, validation.message, {
-      details: { endpoint, operation },
-    });
-    return null;
-  }
-  return validation.grant;
-}
-
-function optionalToolGrantFromRequest(req, options = {}) {
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), options);
-  return validation.ok ? validation.grant : null;
-}
-
-function requestProjectOverride(projectId, tokenProjectId) {
-  return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
-}
-
-function requestRunOverride(runId, tokenRunId) {
-  return typeof runId === 'string' && runId.length > 0 && runId !== tokenRunId;
 }
 
 function openNativeFolderDialog() {
@@ -3181,123 +1904,6 @@ function sendMulterError(res, err) {
   return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
 }
 
-const mediaTasks = new Map();
-const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
-const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
-
-function hydrateMediaTask(row) {
-  const task = {
-    id: row.id,
-    projectId: row.projectId,
-    status: row.status,
-    surface: row.surface,
-    model: row.model,
-    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
-    file: row.file ?? null,
-    error: row.error ?? null,
-    startedAt: row.startedAt,
-    endedAt: row.endedAt,
-    waiters: new Set(),
-  };
-  mediaTasks.set(task.id, task);
-  return task;
-}
-
-function getLiveMediaTask(db, taskId) {
-  const cached = mediaTasks.get(taskId);
-  if (cached) return cached;
-  const row = getMediaTask(db, taskId);
-  return row ? hydrateMediaTask(row) : null;
-}
-
-function createMediaTask(db, taskId, projectId, info = {}) {
-  const task = {
-    id: taskId,
-    projectId,
-    status: 'queued',
-    surface: info.surface,
-    model: info.model,
-    progress: [],
-    file: null,
-    error: null,
-    startedAt: Date.now(),
-    endedAt: null,
-    waiters: new Set(),
-  };
-  mediaTasks.set(taskId, task);
-  insertMediaTask(db, {
-    id: taskId,
-    projectId,
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-  return task;
-}
-
-function persistMediaTask(db, task) {
-  updateMediaTask(db, task.id, {
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-}
-
-function appendTaskProgress(db, task, line) {
-  task.progress.push(line);
-  persistMediaTask(db, task);
-  notifyTaskWaiters(db, task);
-}
-
-function notifyTaskWaiters(db, task) {
-  const wakers = Array.from(task.waiters);
-  for (const w of wakers) {
-    try {
-      w();
-    } catch {
-      // Never let one bad waiter block the rest.
-    }
-  }
-  if (
-    MEDIA_TERMINAL_STATUSES.has(task.status) &&
-    !task._gcScheduled
-  ) {
-    task._gcScheduled = true;
-    setTimeout(() => {
-      if (task.waiters.size === 0) {
-        mediaTasks.delete(task.id);
-        deleteMediaTask(db, task.id);
-      }
-    }, TASK_TTL_AFTER_DONE_MS).unref?.();
-  }
-}
-
-function mediaTaskSnapshot(task, since = 0) {
-  const snapshot = {
-    taskId: task.id,
-    status: task.status,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-    progress: task.progress.slice(since),
-    nextSince: task.progress.length,
-  };
-  if (task.status === 'done') snapshot.file = task.file;
-  if (task.status === 'failed' || task.status === 'interrupted') {
-    snapshot.error = task.error;
-  }
-  return snapshot;
-}
-
 export function createSseResponse(
   res,
   { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {},
@@ -3539,10 +2145,24 @@ export async function startServer({
     return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
+  function reportHostForPoweredPreview(): string {
+    return host === '0.0.0.0' || host === '::' || host === '[::]' || host === '::1'
+      ? '127.0.0.1'
+      : host;
+  }
+
+  function poweredPreviewHost(): string | null {
+    const reportHost = reportHostForPoweredPreview();
+    if (reportHost === '127.0.0.1') return 'localhost';
+    if (reportHost === 'localhost') return '127.0.0.1';
+    return null;
+  }
+
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
+  const _POWERED_PREVIEW_SAFE_RE = /^\/projects\/[^/]+\/powered\/.+$/u;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -3563,6 +2183,36 @@ export async function startServer({
     // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
     if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
       return next();
+    }
+
+    const poweredHost = poweredPreviewHost();
+    if (poweredHost && resolvedPort) {
+      const requestHost = parseHostHeader(req.headers.host);
+      const fetchMetadataPresent =
+        req.headers['sec-fetch-site'] != null ||
+        req.headers['sec-fetch-mode'] != null ||
+        req.headers['sec-fetch-dest'] != null;
+      const poweredReferer = (() => {
+        const raw = Array.isArray(req.headers.referer) ? req.headers.referer[0] : req.headers.referer;
+        if (typeof raw !== 'string' || raw.length === 0) return false;
+        try {
+          const parsed = new URL(raw);
+          return parsed.hostname === poweredHost &&
+            (parsed.port || (parsed.protocol === 'https:' ? '443' : '80')) === String(resolvedPort) &&
+            /^\/api\/projects\/[^/]+\/powered\/.+/u.test(parsed.pathname);
+        } catch {
+          return false;
+        }
+      })();
+      const isPoweredPreviewBrowserRequest =
+        requestHost?.hostname === poweredHost &&
+        requestHost.port === String(resolvedPort) &&
+        (fetchMetadataPresent || poweredReferer);
+      if (isPoweredPreviewBrowserRequest && !_POWERED_PREVIEW_SAFE_RE.test(req.path)) {
+        return res.status(403).json({
+          error: 'Powered preview origin cannot access this API route',
+        });
+      }
     }
 
     const origin = req.headers.origin;
@@ -3612,6 +2262,13 @@ export async function startServer({
     PLUGIN_LOCKFILE_PATH,
     PLUGIN_UPLOAD_MAX_BYTES,
   });
+  const mediaTaskStore = createMediaTaskStore(db);
+  const {
+    authorizeToolRequest,
+    optionalToolGrantFromRequest,
+    requestProjectOverride,
+    requestRunOverride,
+  } = createToolRequestAuth(toolTokenRegistry);
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
   projectMetadataLookup = (id) => {
@@ -3673,9 +2330,9 @@ export async function startServer({
         `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
     );
   }
-  mediaTasks.clear();
+  mediaTaskStore.mediaTasks.clear();
   for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
-    hydrateMediaTask(row);
+    mediaTaskStore.hydrateMediaTask(row);
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -3770,6 +2427,23 @@ export async function startServer({
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
 
+  // Memory hygiene: one-time removal of entries the retired chat
+  // auto-extraction pipelines wrote (regex-pack artifacts + chat-form
+  // residue in user_profile). Marker-gated inside, so this is a no-op on
+  // every boot after the first. Best-effort — memory cleanup must never
+  // block the daemon from serving.
+  try {
+    const memoryCleanup = await runAutoExtractionCleanup(RUNTIME_DATA_DIR);
+    if (memoryCleanup.ran && (memoryCleanup.deletedIds.length > 0 || memoryCleanup.profilePruned)) {
+      console.log(
+        `[memory] auto-extraction cleanup removed ${memoryCleanup.deletedIds.length} entr(y/ies)`
+        + `${memoryCleanup.profilePruned ? ' and pruned user_profile to canonical fields' : ''}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[memory] auto-extraction cleanup failed:', err);
+  }
+
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
@@ -3822,6 +2496,14 @@ export async function startServer({
       createSseResponse,
       createSseErrorPayload,
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      // Fold committed side effects into a truncation-proof per-run ledger as
+      // each event is emitted, so the finalization verdict (retry safety gate,
+      // artifact_count, close-status artifactProducedThisRun) does not depend on
+      // early tool_use/artifact events surviving the run.events ring buffer.
+      onEventEmitted: (run, record) => {
+        if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
+        foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
+      },
     }),
     analytics: analyticsService,
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
@@ -3911,6 +2593,13 @@ export async function startServer({
     isLocalSameOrigin,
     resolvedPortRef,
   };
+  const attributionService = registerAttributionRoutes(app, {
+    analytics: analyticsService,
+    appConfig: { readAppConfig },
+    http: httpDeps,
+    paths: { RUNTIME_DATA_DIR },
+    env: process.env,
+  });
   const pathDeps = {
     PROJECT_ROOT,
     PROJECTS_DIR,
@@ -3951,6 +2640,25 @@ export async function startServer({
     res.json({ version });
   });
 
+  // Powered-preview isolation info. Reports the daemon's own directly-reachable
+  // http origin so the web host can render WebGL/Worker/WASM/SharedArrayBuffer
+  // artifacts in a cross-origin-isolated iframe (see the /powered route and
+  // apps/web/src/runtime/powered-preview.ts). The web host always swaps this
+  // loopback hostname before loading powered files; the /api origin middleware
+  // then treats that swapped browser origin as preview-only.
+  app.get('/api/preview/isolation', (_req, res) => {
+    const reportHost = reportHostForPoweredPreview();
+    const baseOrigin = resolvedPort ? `http://${reportHost}:${resolvedPort}` : null;
+    res.setHeader('Cache-Control', 'no-store');
+    /** @type {import('@open-design/contracts').ProjectPreviewIsolationResponse} */
+    const body = {
+      supported: Boolean(baseOrigin),
+      baseOrigin,
+      pathPrefix: 'powered',
+    };
+    res.json(body);
+  });
+
   registerDaemonRoutes(app, {
     db,
     paths: { RUNTIME_DATA_DIR },
@@ -3966,6 +2674,10 @@ export async function startServer({
   registerOpenDesignPublicMetadataRoutes(app, {
     http: httpDeps,
     openDesignPublicMetadata,
+  });
+
+  registerWhatsNewRoutes(app, {
+    whatsNew: createWhatsNewService(),
   });
 
   registerPluginEventRoutes(app, {
@@ -4102,17 +2814,25 @@ export async function startServer({
     readMaskedConfig,
     writeConfig,
     generateMedia,
-    mediaTasks,
-    createMediaTask: (taskId, projectId, info) => createMediaTask(db, taskId, projectId, info),
-    persistMediaTask: (task) => persistMediaTask(db, task),
-    appendTaskProgress: (task, line) => appendTaskProgress(db, task, line),
-    notifyTaskWaiters: (task) => notifyTaskWaiters(db, task),
-    getLiveMediaTask: (taskId) => getLiveMediaTask(db, taskId),
-    mediaTaskSnapshot,
+    mediaTasks: mediaTaskStore.mediaTasks,
+    createMediaTask: mediaTaskStore.createMediaTask,
+    persistMediaTask: mediaTaskStore.persistMediaTask,
+    appendTaskProgress: mediaTaskStore.appendTaskProgress,
+    notifyTaskWaiters: mediaTaskStore.notifyTaskWaiters,
+    getLiveMediaTask: mediaTaskStore.getLiveMediaTask,
+    mediaTaskSnapshot: mediaTaskStore.mediaTaskSnapshot,
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
   };
-  const appConfigDeps = { readAppConfig, writeAppConfig };
+  const appConfigDeps = {
+    readAppConfig,
+    writeAppConfig,
+    onAppConfigWritten: () => {
+      void attributionService.processPending().catch((err: unknown) => {
+        console.warn('[attribution] pending claim failed', err);
+      });
+    },
+  };
   const orbitDeps = { orbitService };
   const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
   const researchDeps = { searchResearch, ResearchError };
@@ -4763,7 +3483,15 @@ export async function startServer({
     },
     helpers: pluginRouteHelpers,
   });
-  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
+  registerProjectUploadRoutes(app, {
+    db,
+    http: httpDeps,
+    uploads: uploadDeps,
+    node: nodeDeps,
+    paths: { PROJECTS_DIR },
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+  });
 
   const composeDaemonSystemPrompt = async ({
     agentId,
@@ -4774,10 +3502,12 @@ export async function startServer({
     streamFormat,
     locale,
     sessionMode,
-    connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
     byokMediaDefaults,
+    freeformDeckSignal,
+    mediaHintSignal,
+    platformHintSignal,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -4806,17 +3536,27 @@ export async function startServer({
     }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const designSystemSelection = resolveEffectiveDesignSystemSelection({
-      requestDesignSystemId: designSystemId,
-      pluginDesignSystemId,
-      projectDesignSystemId: project?.designSystemId,
-      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
-      // A project row with designSystemId=null can mean the user picked
-      // "No design system"; do not reapply the global default behind their back.
-      allowAppDefault: project === null,
-    });
-    const effectiveDesignSystemId = designSystemSelection.id;
     const metadata = project?.metadata;
+    // Website Clone runs reproduce someone else's site: the fidelity target
+    // is the original page. Treating a project/app design system as
+    // authoritative would overwrite the cloned site's palette/typography
+    // with the user's brand, and universal craft rules would "improve"
+    // visual decisions the clone must preserve verbatim — so both prompt
+    // blocks are skipped for these runs. Step 6 of the skill (replace with
+    // the user's own content) is where brand application belongs.
+    const isWebCloneRun = metadata?.intent === 'web-clone';
+    const designSystemSelection = isWebCloneRun
+      ? { id: null, source: 'none' }
+      : resolveEffectiveDesignSystemSelection({
+          requestDesignSystemId: designSystemId,
+          pluginDesignSystemId,
+          projectDesignSystemId: project?.designSystemId,
+          appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          // A project row with designSystemId=null can mean the user picked
+          // "No design system"; do not reapply the global default behind their back.
+          allowAppDefault: project === null,
+        });
+    const effectiveDesignSystemId = designSystemSelection.id;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
       allSkillsPromise ??= listAllSkillLikeEntries();
@@ -4969,6 +3709,39 @@ export async function startServer({
               skillName = local.name;
               activeSkillDir = local.dir;
               registerSkillDir(local.dir);
+            } else {
+              // The plugin references a shared global skill by id
+              // (`od.context.skills[{ ref: '<skill-id>' }]`) instead of
+              // shipping its own SKILL.md — resolve it from the global
+              // registry so the pinned plugin still gets the skill body AND
+              // its companion dir staged into the project cwd (scripts, etc).
+              // Lets many example plugins share one skill without each
+              // duplicating the SKILL.md and its scripts.
+              const skillRef = plugin.manifest?.od?.context?.skills?.find(
+                (ref): ref is { ref: string } =>
+                  typeof (ref as { ref?: unknown })?.ref === 'string'
+                  && (ref as { ref: string }).ref.trim().length > 0,
+              )?.ref?.trim();
+              if (skillRef) {
+                const allSkills = await loadAllSkills();
+                const refSkill = findSkillById(allSkills, skillRef);
+                if (refSkill) {
+                  skillBody = refSkill.body + composedSkillBlocks;
+                  skillName = refSkill.name;
+                  activeSkillDir = refSkill.dir;
+                  registerPrimarySkillMode(refSkill.mode);
+                  registerSkillDir(refSkill.dir);
+                  skillCritiquePolicy = mergeSkillCritiquePolicy(
+                    skillCritiquePolicy,
+                    refSkill.critiquePolicy,
+                  );
+                  if (Array.isArray(refSkill.craftRequires)) {
+                    for (const craft of refSkill.craftRequires) {
+                      if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -5093,9 +3866,12 @@ export async function startServer({
     }
 
     const excludedCraft = new Set(designSystemCraftExemptions);
-    const requestedCraft = Array.from(
-      new Set([...skillCraftRequires, ...designSystemCraftApplies]),
-    ).filter((slug) => !excludedCraft.has(slug));
+    // Web-clone fidelity exemption — see `isWebCloneRun` above.
+    const requestedCraft = isWebCloneRun
+      ? []
+      : Array.from(
+          new Set([...skillCraftRequires, ...designSystemCraftApplies]),
+        ).filter((slug) => !excludedCraft.has(slug));
     if (requestedCraft.length > 0) {
       const loaded = await loadCraftSections(CRAFT_DIR, requestedCraft);
       if (loaded.body) {
@@ -5290,12 +4066,19 @@ export async function startServer({
       byokMediaDefaults,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
-      connectedExternalMcp: Array.isArray(connectedExternalMcp)
-        ? connectedExternalMcp
-        : undefined,
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      freeformDeckSignal,
+      mediaHintSignal,
+      platformHintSignal,
+      // VALIDATION DEFAULT — feat/system-prompt integration branch only.
+      // Slim is the default here so packaged beta builds exercise the
+      // rewritten charter without env plumbing (the packaged sidecar env
+      // allowlist does not forward OD_PROMPT_CORE); OD_PROMPT_CORE=classic
+      // restores the classic stack. main keeps classic as the default —
+      // do NOT carry this flip into a PR against main.
+      promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? undefined : 'slim',
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -5368,14 +4151,16 @@ export async function startServer({
           stage,
           iteration,
           snapshot:       stageSnapshot,
+          runEvents:      run.events,
         });
         return {
           signals:         outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
+          tokensUsed:      outcome.tokensUsed,
         };
       };
     }
-    void runPipelineForRun({
+    const pipelineDone = runPipelineForRun({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
@@ -5395,6 +4180,17 @@ export async function startServer({
         });
       } catch { /* ignore */ }
     });
+    void Promise.all([runs.wait(run), pipelineDone])
+      .then(() => {
+        const tokensUsed = scanRunEventsForUsageAnalytics(run.events, null, 0).total_tokens ?? null;
+        if (tokensUsed === null) return;
+        dbHandle.prepare(
+          'UPDATE run_devloop_iterations SET tokens_used = ? WHERE run_id = ?',
+        ).run(tokensUsed, run.id);
+      })
+      .catch((err) => {
+        console.warn('[plugins] devloop tokens_used reconciliation failed', err);
+      });
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -5662,6 +4458,21 @@ export async function startServer({
       toolTokenRevoked = true;
       toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
     };
+    // The async startup phase below (compose prompt, prepare prompt file,
+    // probe models, …) has many awaits and no blanket try/finally; an
+    // exception there finalizes the run via runs.fail() without running the
+    // per-attempt cleanup wired to the child lifecycle. Register the grant +
+    // sink release on the run's terminal chokepoint so any exit path — startup
+    // throw included — revokes the capability token instead of leaking it for
+    // the token TTL. Idempotent with the explicit pre-spawn/child-close cleanup.
+    if (toolTokenGrant) {
+      run.onFinalize = () => {
+        revokeToolToken('run_finalized');
+        const sinkRunId = toolTokenGrant.runId ?? runId;
+        activeChatAgentEventSinks.delete(sinkRunId);
+        activeChatRunHandles.delete(sinkRunId);
+      };
+    }
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
 
@@ -5742,6 +4553,35 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
+    // Intent signals gate stable-region prompt blocks, so every flip changes
+    // stableInstructionFingerprint and re-sends the whole stable block on
+    // resume. Two rules keep flips down to genuine activations only:
+    //   1. Scan user-authored text only — for transcript-resending agents
+    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      discovery form's own options, delivery summaries) must never flip
+    //      a signal the user did not express.
+    //   2. Latch detections onto the conversation (monotonic ON), so a
+    //      history trim on agent switch or a non-transcript client cannot
+    //      flip a previously seen signal back OFF.
+    // OD_INTENT_SIGNAL_MODE=legacy restores the pre-hotfix whole-text,
+    // unlatched scan.
+    const legacyIntentSignalScan = process.env.OD_INTENT_SIGNAL_MODE === 'legacy';
+    const intentSignalTexts = legacyIntentSignalScan
+      ? [message, currentPrompt]
+      : [
+          extractUserAuthoredSignalText(message),
+          extractUserAuthoredSignalText(currentPrompt),
+        ];
+    const freshIntentSignals = {
+      deck: detectDeckIntentSignal(...intentSignalTexts),
+      media: detectMediaIntentSignal(...intentSignalTexts),
+      platform: detectPlatformIntentSignal(...intentSignalTexts),
+    };
+    const intentSignals =
+      !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
+        ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
+        : freshIntentSignals;
+
     const {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
@@ -5758,13 +4598,19 @@ export async function startServer({
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
         sessionMode: runSessionMode,
-        connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
         byokMediaDefaults,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+        // User-authored-only, conversation-latched detections (see the
+        // intentSignals block above): a deck mention in the user's own words
+        // anywhere in the conversation keeps the freeform maybe-deck
+        // framework injected for the conversation's whole life.
+        freeformDeckSignal: intentSignals.deck,
+        mediaHintSignal: intentSignals.media,
+        platformHintSignal: intentSignals.platform,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -5862,29 +4708,66 @@ export async function startServer({
             : null;
       return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
     };
-    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
-      if (!run?.id || !run.projectId) return;
-      const artifactBaseline = runArtifactBaselines.peek(run.id);
-      if (!artifactBaseline || artifactBaseline.contended) return;
-      let diff;
-      try {
-        diff = diffRunArtifacts(
-          artifactBaseline.before,
-          snapshotProjectArtifacts(artifactBaseline.cwd),
-        );
-      } catch {
-        return;
+    const resolveRunArtifactOutcomeBeforeFinish = () => {
+      if (!run?.id) return null;
+      if (run.artifactOutcome) return run.artifactOutcome;
+
+      const artifactBaseline = runArtifactBaselines.take(run.id);
+      const fallbackOutcome = () => ({
+        artifactCount: runArtifactCountForRun(run),
+        designSystemCreated: runDesignSystemCreatedForRun(run),
+        previewModuleCount: runPreviewModuleCountForRun(run),
+      });
+      let outcome;
+      if (!artifactBaseline || artifactBaseline.contended) {
+        outcome = fallbackOutcome();
+      } else {
+        try {
+          const diff = diffRunArtifacts(
+            artifactBaseline.before,
+            snapshotProjectArtifacts(artifactBaseline.cwd),
+          );
+          outcome = {
+            artifactCount: diff.touched,
+            artifactsCreated: diff.created,
+            artifactsModified: diff.modified,
+            designSystemCreated: diff.designSystemCreated,
+            previewModuleCount: diff.previewModuleCount,
+            projectRoot: artifactBaseline.cwd,
+            diff,
+          };
+        } catch {
+          outcome = fallbackOutcome();
+        }
       }
+      run.artifactCount = outcome.artifactCount;
+      run.artifactOutcome = outcome;
+      return outcome;
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const outcome = resolveRunArtifactOutcomeBeforeFinish();
+      if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
       await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
-        projectRoot: artifactBaseline.cwd,
-        diff,
+        projectRoot: outcome.projectRoot,
+        diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
         metadata: projectRecord?.metadata,
       });
+    };
+    // Chain onto the run service's terminal chokepoint so startup rejection,
+    // direct cancellation, shutdown, and every explicit finish path all consume
+    // their filesystem baseline before the terminal SSE frame is published.
+    const previousOnFinalize = run.onFinalize;
+    run.onFinalize = () => {
+      try {
+        previousOnFinalize?.();
+      } finally {
+        resolveRunArtifactOutcomeBeforeFinish();
+      }
     };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
@@ -5935,14 +4818,10 @@ export async function startServer({
     let capturedSessionId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
-    // CONCRETE model actually launched, not the raw request token: a user who
-    // picked `default` would otherwise store `default`/null, so changing the
-    // effective default between turns would still pass the guard and resume the
-    // old upstream session under the wrong model (#4704, reported by @nettee).
-    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
-    // rewrite is mirrored below so `safeModel` is final before the guard. The
-    // preflight further down stays authoritative for auth/availability and
-    // re-runs the (cached, idempotent) resolution.
+    // model identity actually requested for this turn. Explicit `default` is
+    // kept as a real identity because ACP runtimes can leave model selection to
+    // the upstream session's own configured default; omitted models may still
+    // resolve to an available fallback below.
     let configuredAgentEnv = {};
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
@@ -5967,6 +4846,11 @@ export async function startServer({
       process.env,
       requestedLiveModelScope,
     );
+    const hasDefaultModelEnvOverride = Boolean(
+      def.defaultModelEnvVar &&
+      typeof process.env[def.defaultModelEnvVar] === 'string' &&
+      process.env[def.defaultModelEnvVar]?.trim(),
+    );
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
@@ -5975,10 +4859,10 @@ export async function startServer({
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
-      // Concretize a default/empty model to the live catalog's first entry, the
-      // same rewrite the AMR preflight applies — done here only so the resume
-      // guard sees the launched model. Read-only + cached (hot on follow-up
-      // turns); the preflight below remains the authoritative gate.
+      // Concretize omitted/default AMR model requests to the live catalog
+      // default before the resume guard. The AMR preflight below applies the
+      // same rewrite before spawn; keeping this earlier copy aligned prevents
+      // stored concrete session models from comparing against raw `default`.
       try {
         const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
@@ -5992,8 +4876,18 @@ export async function startServer({
         const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
-        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
-          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+        const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
+        if (
+          !safeModel ||
+          safeModel === 'default' ||
+          (
+            askedForDefault &&
+            !hasDefaultModelEnvOverride &&
+            defaultRunModel &&
+            (!resumeModelIds.has(safeModel) || safeModel !== defaultRunModel)
+          )
+        ) {
+          safeModel = defaultRunModel ?? safeModel ?? null;
           agentOptions.model = safeModel;
         }
       } catch {
@@ -6010,7 +4904,23 @@ export async function startServer({
             currentCwd: effectiveCwd,
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
+        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
+    const publishNativeSessionRecoveryMetadata = () => {
+      if (!run.nativeSessionRecovery) return;
+      design.runs.emit(run, 'diagnostic', {
+        type: 'native_session_recovery',
+        nativeSessionRecovery: run.nativeSessionRecovery,
+      });
+    };
+    run.nativeSessionRecovery = initialNativeSessionRecoveryMetadata({
+      agent: def,
+      supportsSessionResume: agentSupportsSessionResume,
+      isResuming: agentResumeCtx.isResuming,
+      resumeSessionId: agentResumeCtx.resumeSessionId,
+      storedSessionId: agentResumeCtx.storedSessionId,
+      invalidationReason: agentResumeCtx.invalidationReason,
+    });
+    publishNativeSessionRecoveryMetadata();
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -6060,9 +4970,16 @@ export async function startServer({
           'Do not mention this title task to the user. Continue with the normal answer after the title marker.',
         ].join('\n')
       : '';
+    // The connected-external-MCP directive reflects live OAuth token state,
+    // which flips mid-conversation as Bearers expire/refresh. Keeping it out of
+    // the cached stable prefix (daemonSystemPrompt) and re-sending it here in
+    // the per-turn slice keeps the upstream prompt-cache prefix byte-stable
+    // across resumes (protecting the conversation-history cache) while still
+    // giving the model the current MCP auth state on every turn.
+    const mcpConnectedDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt];
+      ? [researchCommandContract, runContextPrompt, mcpConnectedDirective, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt, mcpConnectedDirective, browserUsePromptGuard, titleGenerationPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -6181,6 +5098,17 @@ export async function startServer({
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
+    // Reply text handed to the background memory extractor at child-close.
+    // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
+    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Copilot/ACP/
+    // qoder/pi-rpc) and the plain/BYOK/antigravity family's `stdout` chunks. So
+    // every agent family contributes its actual reply, and none leak raw
+    // transport frames (system:init, stream_event, hooks). Kept separate from
+    // `visibleAssistantText` so the filesystem empty-output guard that reads
+    // that variable keeps its text_delta-only semantics. Bounded — the
+    // extractor only needs the head of the reply.
+    const MEMORY_REPLY_CAP = 32 * 1024;
+    let memoryReplyText = '';
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -6211,6 +5139,22 @@ export async function startServer({
         typeof data.delta === 'string'
       ) {
         visibleAssistantText += data.delta;
+      }
+      // Accumulate the visible reply for the memory extractor from whichever
+      // channel this agent family uses: `agent` text_delta (structured streams)
+      // or `stdout` chunks (plain/BYOK/antigravity). Both carry already-guarded,
+      // user-visible text, so this never captures thinking, tool traffic, or raw
+      // transport frames.
+      if (memoryReplyText.length < MEMORY_REPLY_CAP) {
+        const replyPiece =
+          event === 'agent' && data && data.type === 'text_delta' && typeof data.delta === 'string'
+            ? data.delta
+            : event === 'stdout' && data && typeof data.chunk === 'string'
+              ? data.chunk
+              : '';
+        if (replyPiece) {
+          memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
+        }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -6271,26 +5215,47 @@ export async function startServer({
     // drive a second close-handler pass that finalizes the run as failed before
     // the retry ever spawns.
     const tearDownAttemptForRetry = () => {
+      // Snapshot the failing attempt's child + process group BEFORE we detach
+      // them, so the reap targets THIS attempt's group and never the next one.
+      const priorChild = run.child;
+      const priorProcessGroupId = run.processGroupId;
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
-      destroyChildStdio(run.child);
+      destroyChildStdio(priorChild);
+      // Disband the WHOLE process group of the failed attempt, not just the
+      // direct child. A same-run retry that only SIGTERMs run.child leaves the
+      // CLI's spawned descendants (MCP servers, tool subprocesses) orphaned
+      // (re-parented to PID 1), accumulating one leaked group per retry. Reap by
+      // the CAPTURED pgid — the SIGKILL escalation is bound to it, so it can
+      // never hit the next attempt's group (the cross-generation kill fixed in
+      // #5202). On win32 / no pgid, fall back to signalling the direct child.
+      const reaped = design.runs.reapProcessGroup(priorProcessGroupId);
       if (
-        run.child &&
-        typeof run.child.kill === 'function' &&
-        run.child.exitCode === null &&
-        !run.child.killed
+        !reaped &&
+        priorChild &&
+        typeof priorChild.kill === 'function' &&
+        priorChild.exitCode === null &&
+        !priorChild.killed
       ) {
-        try { run.child.kill('SIGTERM'); } catch {}
+        try { priorChild.kill('SIGTERM'); } catch {}
       }
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
+      run.processGroupId = null;
       run.acpSession = null;
       run.exitCode = null;
       run.signal = null;
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
+      // Any run-scoped state that a single attempt writes and that later feeds
+      // terminal classification must be cleared before the next attempt spawns,
+      // or the prior attempt's verdict leaks forward. turnCompletedCleanly is
+      // set by a clean `turn_end` (applyClaudeStreamJsonRunBookkeeping); without
+      // this reset, a clean-but-empty attempt 1 would vouch for a crashed
+      // attempt 2, classifying the run 'succeeded' off a stale flag.
+      run.turnCompletedCleanly = false;
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
@@ -6381,6 +5346,20 @@ export async function startServer({
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
       lifecycle.mark('finalize_start');
+      // Persist the transport-level close mechanism before classifying this
+      // attempt. Runtime fatal/stream signals are only known in the close
+      // handler, and the retry classifier reads this diagnostic to distinguish
+      // them from a generic process exit. Clear the pending value immediately
+      // so a scheduled retry cannot inherit the previous attempt's reason.
+      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
+      design.runs.emit(run, 'diagnostic', {
+        type: 'runtime_close',
+        rpc_close_reason: rpcCloseReason,
+        status,
+        ...(typeof code === 'number' ? { exit_code: code } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -6403,7 +5382,7 @@ export async function startServer({
         events: run.events,
       });
       const sideEffects = {
-        ...scanRunEventsForRetrySideEffects(run.events),
+        ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
       const decision = decideSafeRunRetry({
@@ -6466,6 +5445,17 @@ export async function startServer({
         committedWorkSeen &&
         isResumableFailure(failure);
       run.resumable = resumableFailure;
+      // Surface the daemon's failure classification (already computed for
+      // retry-policy + telemetry) on the run so statusBody / the SSE `end` frame
+      // carry it to the chat, which maps failureDetail -> a specific named
+      // failure type + fix. Only meaningful on a failed result.
+      run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
+      run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      // Stamp the classification onto the persisted assistant message too, so a
+      // reload (or any daemon-side persistence without the live web error
+      // handler) keeps the specific failure guidance instead of the coarse
+      // errorCode UI. Mirrors what statusBody / the SSE `end` frame carry live.
+      if (result === 'failed') persistRunFailureClassification(db, run);
       if (resumableFailure) {
         upsertAgentSession(db, {
           conversationId: run.conversationId,
@@ -6476,16 +5466,15 @@ export async function startServer({
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
         });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
-      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
       if (executionProfile === 'filesystem' && result === 'success' && visibleAssistantText.trim().length === 0) {
         const fileNames = filesystemWriteFileNamesFromRunEvents(run.events);
         if (fileNames.length > 0) {
@@ -6502,7 +5491,6 @@ export async function startServer({
           });
         }
       }
-      pendingRpcCloseReason = null;
       design.runs.finish(run, status, code, signal);
       return false;
     };
@@ -6738,17 +5726,24 @@ export async function startServer({
       );
       // A request that came in as 'default'/empty is normally pre-resolved to a
       // concrete id via the agent-wide cached model order; if it still is not,
-      // adopt the first catalog entry so the spawn layer always has a real id.
+      // adopt the catalog's enabled default so the spawn layer always has a
+      // usable real id.
       const userAskedForDefault =
         typeof model !== 'string' ||
         !model.trim() ||
         model.trim().toLowerCase() === 'default';
+      const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
         safeModel === 'default' ||
-        (userAskedForDefault && !liveModelIds.has(safeModel))
+        (
+          userAskedForDefault &&
+          !hasDefaultModelEnvOverride &&
+          defaultRunModel &&
+          (!liveModelIds.has(safeModel) || safeModel !== defaultRunModel)
+        )
       ) {
-        safeModel = liveModels[0]?.id ?? safeModel ?? null;
+        safeModel = defaultRunModel ?? (safeModel === 'default' ? null : safeModel ?? null);
         agentOptions.model = safeModel;
       }
       if (liveModelIds.size === 0) {
@@ -6982,6 +5977,15 @@ export async function startServer({
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
           });
+          if (!agentCapturesSessionId) {
+            run.nativeSessionRecovery = markNativeSessionCaptured({
+              previous: run.nativeSessionRecovery,
+              agentId: def.id,
+              sessionId: createTurnSessionId,
+              resumed: false,
+            });
+            publishNativeSessionRecoveryMetadata();
+          }
           return;
         }
         if (agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId) {
@@ -6999,6 +6003,15 @@ export async function startServer({
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
           });
+          if (!agentCapturesSessionId) {
+            run.nativeSessionRecovery = markNativeSessionCaptured({
+              previous: run.nativeSessionRecovery,
+              agentId: def.id,
+              sessionId: agentResumeCtx.resumeSessionId,
+              resumed: true,
+            });
+            publishNativeSessionRecoveryMetadata();
+          }
         }
       };
     }
@@ -7011,7 +6024,13 @@ export async function startServer({
     const runStartTimeMs = Date.now();
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
-    const inactivityKillGraceMs = 3_000;
+    // Grace before the inactivity watchdog escalates a stalled child from
+    // SIGTERM to SIGKILL. Env-tunable like its OD_CHAT_RUN_* cancel-grace
+    // siblings so the escalation path can be exercised deterministically.
+    const inactivityKillGraceMs = (() => {
+      const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS);
+      return Number.isFinite(raw) && raw > 0 ? raw : 3_000;
+    })();
     let inactivityTimer = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
@@ -7077,12 +6096,20 @@ export async function startServer({
     const scheduleForcedChildShutdown = () => {
       if (!child) return;
       clearForcedChildShutdown();
+      // Capture THIS attempt's child and its process group. A same-run retry
+      // can swap `run.child` to a fresh child within the grace window; these
+      // timers must escalate the stalled child they were scheduled for, never
+      // whatever now occupies `run.child` — otherwise the healthy retry gets
+      // killed and this stalled child is left unreaped. See runs.ts
+      // `signalChildProcess`.
+      const targetChild = child;
+      const targetProcessGroupId = run.processGroupId;
       forcedChildShutdownTimers = [
         setTimeout(() => {
-          if (child) design.runs.signalChild(run, 'SIGTERM');
+          design.runs.signalChildProcess(targetChild, targetProcessGroupId, 'SIGTERM');
         }, inactivityKillGraceMs),
         setTimeout(() => {
-          if (child) design.runs.signalChild(run, 'SIGKILL');
+          design.runs.signalChildProcess(targetChild, targetProcessGroupId, 'SIGKILL');
         }, inactivityKillGraceMs * 2),
       ];
     };
@@ -7226,6 +6253,7 @@ export async function startServer({
           OD_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
         }
       : {};
+    const configuredAgentSpawnEnv = createDaemonDataDirConfiguredAgentEnv(configuredAgentEnv);
     const agentSpawnEnv = spawnEnvForAgent(
       def.id,
       {
@@ -7233,12 +6261,12 @@ export async function startServer({
         ...(def.env || {}),
         ...browserUseRuntimeEnv,
       },
-      configuredAgentEnv,
+      configuredAgentSpawnEnv,
       undefined,
       { resolvedBin: agentLaunch.selectedPath },
     );
     if (def.id === 'amr') {
-      const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
+      const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentSpawnEnv);
       if (!loginStatus.loggedIn) {
         cleanupPromptFile();
         revokeToolToken('child_exit');
@@ -7251,17 +6279,11 @@ export async function startServer({
         return design.runs.finish(run, 'failed', 1, null);
       }
     }
-    const odMediaEnv = {
-      OD_BIN,
-      OD_NODE_BIN,
-      OD_DAEMON_URL: daemonUrl,
-      ...(typeof projectId === 'string' && projectId && cwd
-        ? {
-            OD_PROJECT_ID: projectId,
-            OD_PROJECT_DIR: cwd,
-          }
-        : {}),
-    };
+    const odMediaEnv = createOpenDesignToolEnv({
+      daemonUrl,
+      projectDir: cwd,
+      projectId: typeof projectId === 'string' ? projectId : null,
+    });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
       revokeToolToken('child_exit');
@@ -7456,35 +6478,66 @@ export async function startServer({
       agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
-    // ---- Memory: assistant-reply buffer for LLM extraction --------------
-    // Capture up to 32 KiB of raw stdout. The LLM extractor (fired in the
-    // close handler) trims further; we only need enough to ground the
-    // model. Multiple `on('data')` listeners coexist — the wrapper-stream
-    // handlers below also subscribe and that's fine.
-    const MEMORY_BUFFER_CAP = 32 * 1024;
-    let memoryAssistantBuffer = '';
-    child.stdout.on('data', (chunk) => {
-      if (memoryAssistantBuffer.length >= MEMORY_BUFFER_CAP) return;
-      memoryAssistantBuffer += String(chunk);
-      if (memoryAssistantBuffer.length > MEMORY_BUFFER_CAP) {
-        memoryAssistantBuffer = memoryAssistantBuffer.slice(0, MEMORY_BUFFER_CAP);
-      }
-    });
+    // ---- Memory: assistant-reply capture for LLM extraction --------------
+    // Hand the extractor the guarded, rendered reply (`memoryReplyText`, fed
+    // through `send()` from either the `agent` text_delta or the `stdout`
+    // channel), NOT the child's raw stdout. For stream-json agents (Claude Code)
+    // raw stdout is JSONL transport — system:init, stream_event thinking deltas,
+    // hook_started/hook_response frames — none of which is the reply; mining it
+    // produced empty extractions that, near-identical across a build's re-fires,
+    // caused the same turn to be re-analyzed dozens of times.
     child.on('close', () => {
-      const captured = memoryAssistantBuffer;
       const userMsg = typeof message === 'string' ? message : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      //
+      // Also normalize the BYOK provider shape: web side sends
+      // `{ protocol, ... }` via the chat body as `byokProvider`,
+      // but memory-llm.pickProvider expects `{ provider, ... }`
+      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
+      // same mapping the web pre-turn path does (ProjectView.tsx
+      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      const memoryChatProvider: {
+        provider?: string;
+        apiKey?: string;
+        baseUrl?: string;
+        apiVersion?: string;
+        model?: string;
+        requiresApiKey?: boolean;
+      } | null = byokProvider
+        ? {
+            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
+            apiKey: (byokProvider as { apiKey?: string }).apiKey,
+            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
+            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            model: (byokProvider as { model?: string }).model,
+            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+          }
+        : null;
       const memoryOptions = {
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Forward the per-call BYOK provider snapshot so pickProvider()
+        // can run "Same as chat" extraction against the user's actual
+        // provider/endpoint/model instead of falling back to defaults.
+        chatProvider: memoryChatProvider,
+        // Scope the extractor's duplicate-turn de-dup to this conversation, so a
+        // re-fired turn collapses but an identical (message, reply) in another
+        // conversation is still examined.
+        conversationId: run.conversationId ?? null,
       };
       void import('./memory-llm.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          // Read the reply HERE, in the post-import microtask, not in the
+          // synchronous close handler: the Claude stream flush is a later
+          // 'close' listener, so deferring the read lets flush() emit the reply's
+          // final buffered frame first and a reply that ends without a trailing
+          // newline isn't truncated.
+          const captured = memoryReplyText;
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
@@ -7766,6 +6819,7 @@ export async function startServer({
     // Claude has its own per-message guards in claude-stream.ts.
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
+    const visibleStdoutControlStripper = new TerminalControlSequenceStripper();
     const titleMarkerStripper = createAgentTitleMarkerStripper({
       enabled: Boolean(titleGenerationRequested),
       emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
@@ -7924,6 +6978,10 @@ export async function startServer({
     // follows the result that triggered it in the stream. (PR #3375 review:
     // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
     function emitAgentEvent(ev: any) {
+      // Fold work-completeness signals (TodoWrite snapshot / truncation) off the
+      // stream BEFORE the send, so run.lastTodoSnapshot / run.truncatedMidTurn are
+      // set by the time finish() derives run.endedWithUnfinishedWork (#1247/#1060).
+      captureRunWorkCompletenessSignals(run, ev);
       send('agent', ev);
       observeToolEventForLoop(ev);
     }
@@ -7967,7 +7025,6 @@ export async function startServer({
         }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
-          retryable: false,
         }));
         return;
       }
@@ -7985,6 +7042,13 @@ export async function startServer({
         ev.sessionId.length > 0
       ) {
         capturedSessionId = ev.sessionId;
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: capturedSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
       }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
@@ -8028,6 +7092,28 @@ export async function startServer({
         noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
+          // Hold back a resume-failure error so the close handler's transparent
+          // reseed stays invisible. An is_error result frame on a dead --resume
+          // now surfaces here as a stream error; the resume-target-missing
+          // block in the close handler clears the stale handle and re-runs the
+          // turn fresh, so forwarding this error would flash an execution
+          // failure a beat before the invisible recovery. Mirrors the ACP
+          // resume_failed suppression below; the close handler stays the sole
+          // authority on how a resume failure ends.
+          if (
+            (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+            agentResumeCtx.isResuming &&
+            !run.resumeAutoReseeded &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+          ) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_failed_suppressed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            });
+            return;
+          }
           flushVisibleAgentStderr();
           const message = String((ev as any).message || 'Claude Code stream error');
           const failureText = [
@@ -8294,7 +7380,8 @@ export async function startServer({
         // (#3408 §4 marker). A plain adapter has no structured preamble, so
         // this typically coincides with its first model output.
         if (text.length > 0) noteCliReadyAt();
-        const visibleText = titleMarkerStripper.strip(text);
+        const strippedText = visibleStdoutControlStripper.write(text);
+        const visibleText = titleMarkerStripper.strip(strippedText);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
           noteFirstTokenAt();
@@ -8373,6 +7460,12 @@ export async function startServer({
         if (!run.resumeAutoReseeded) {
           run.resumeAutoReseeded = true;
           run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+          run.nativeSessionRecovery = markNativeSessionAutoReseeded({
+            previous: run.nativeSessionRecovery,
+            agentId: def.id,
+            previousSessionId: agentResumeCtx.resumeSessionId,
+          });
+          publishNativeSessionRecoveryMetadata();
           // Persisted to the per-run events.jsonl that the help → diagnostics
           // export bundles, so the whole resume → fail → auto-reseed chain is
           // visible in a support bundle without any user-facing signal.
@@ -8382,6 +7475,7 @@ export async function startServer({
             reason: 'resume_failed',
             previous_session_id: agentResumeCtx.resumeSessionId ?? null,
             stale_session_cleared: true,
+            nativeSessionRecovery: run.nativeSessionRecovery,
           });
           scheduleRetryRestart(0);
           return;
@@ -8444,7 +7538,7 @@ export async function startServer({
         markRpcCloseReason('empty_output');
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+          'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.',
           { retryable: true },
         ));
         return finishWithRetryDecision('failed', code, signal);
@@ -8452,7 +7546,7 @@ export async function startServer({
       if (
         code === 0 &&
         !run.cancelRequested &&
-        isPluginAuthoringRun(db, run) &&
+        isPluginAuthoringRun(db, run, getSnapshot) &&
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(clarifyingQuestionText)
       ) {
@@ -8570,7 +7664,7 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
+      const runArtifactSideEffects = runSideEffectsForRun(run);
       const status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
@@ -8699,11 +7793,67 @@ export async function startServer({
         noteFirstTokenAt(firstBufferedStdoutAt);
       }
       for (const chunk of plaintextStdoutBuffer) {
-        const visibleText = titleMarkerStripper.strip(chunk.text);
+        const strippedText = visibleStdoutControlStripper.write(chunk.text);
+        const visibleText = titleMarkerStripper.strip(strippedText);
         if (visibleText) send('stdout', { chunk: visibleText });
       }
-      const flushedTitleMarkerText = titleMarkerStripper.flush();
+      const flushedControlText = visibleStdoutControlStripper.flush();
+      const flushedTitleMarkerText =
+        titleMarkerStripper.strip(flushedControlText) + titleMarkerStripper.flush();
       if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
+      if (
+        status === 'succeeded' &&
+        (def.streamFormat ?? 'plain') === 'plain' &&
+        run.projectId
+      ) {
+        const plainStdout = plainStdoutFromRunEvents(run.events);
+        if (plainStdout.includes('<artifact')) {
+          try {
+            const project = getProject(db, run.projectId);
+            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+              projectsRoot: PROJECTS_DIR,
+              projectId: run.projectId,
+              stdout: plainStdout,
+              metadata: project?.metadata,
+              writeProjectFile,
+            });
+            if (persistedPlainArtifacts.length > 0) {
+              for (const artifact of persistedPlainArtifacts) {
+                send('agent', {
+                  type: 'artifact',
+                  source: 'plain-stream',
+                  name: artifact.name,
+                  path: artifact.name,
+                  identifier: artifact.identifier,
+                  artifactType: artifact.artifactType,
+                });
+              }
+              send('agent', {
+                type: 'diagnostic',
+                name: 'plain_stream_artifacts_persisted',
+                source: 'daemon-run-finalize',
+                fileCount: persistedPlainArtifacts.length,
+                files: persistedPlainArtifacts.map((artifact) => artifact.name),
+              });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
+            console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
+            send('agent', {
+              type: 'diagnostic',
+              name: 'plain_stream_artifacts_persist_failed',
+              source: 'daemon-run-finalize',
+              message,
+            });
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              failureMessage,
+            ));
+            return finishWithRetryDecision('failed', 1, null);
+          }
+        }
+      }
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so
@@ -8720,6 +7870,13 @@ export async function startServer({
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
           });
+          run.nativeSessionRecovery = markNativeSessionCaptured({
+            previous: run.nativeSessionRecovery,
+            agentId: def.id,
+            sessionId: sessionPath,
+            resumed: agentResumeCtx.isResuming,
+          });
+          publishNativeSessionRecoveryMetadata();
         }
       }
       // ACP session/load adapters (AMR/vela) report a durable upstream handle
@@ -8742,6 +7899,13 @@ export async function startServer({
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
         });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: acpSession.getDurableSessionId(),
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
       }
       if (status === 'succeeded') {
         try {

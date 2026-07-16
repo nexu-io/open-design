@@ -13,6 +13,72 @@ const VALID_BODY = `{
   ]
 }`;
 
+describe('form content language (lang)', () => {
+  it('parses a top-level lang tag from the complete form body', () => {
+    const input = [
+      '<question-form id="discovery" title="快速确认 · 30秒">',
+      '{ "lang": "zh-CN", "questions": [',
+      '  { "id": "output", "label": "我们要做什么？", "type": "radio", "options": ["海报", "网页"] }',
+      '] }',
+      '</question-form>',
+    ].join('\n');
+
+    const segments = splitOnQuestionForms(input);
+    expect(segments[0]?.kind).toBe('form');
+    if (segments[0]?.kind !== 'form') return;
+    expect(segments[0].form.lang).toBe('zh-CN');
+  });
+
+  it('never exposes a defaultValue on the still-streaming trailing question', () => {
+    // Red spec for the truncated-prefill freeze (production run beaf2da0):
+    // while a question object is still streaming, the partial-JSON repair can
+    // terminate mid-default — `"default": ["历史背景与经过", "抗战精` repairs
+    // to ["历史背景与经过", "抗战精"], and `"default": "单位教` to "单位教".
+    // The card adopts a streamed default only while the answer is still
+    // empty, so a truncated adoption freezes garbage that the completed
+    // default can never overwrite. The in-flight question must therefore
+    // expose NO defaultValue until its braces close.
+    const head =
+      '<question-form id="discovery" title="快速确认">\n' +
+      '{ "questions": [\n' +
+      '  { "id": "focus", "label": "内容重点（最多选2项）", "type": "checkbox", "maxSelections": 2,\n' +
+      '    "default": ["历史背景与经过", "抗战精';
+
+    const midDefault = parsePartialQuestionForm(head);
+    const focusMid = midDefault?.questions.find((q) => q.id === 'focus');
+    expect(focusMid).toBeTruthy();
+    expect(focusMid?.defaultValue).toBeUndefined();
+
+    const closed = parsePartialQuestionForm(
+      head +
+        '神与当代意义"],\n' +
+        '    "options": ["历史背景与经过", "重要战役与事件", "抗战精神与当代意义"] },\n' +
+        '  { "id": "tone", "label": "整体基调", "type": "radio", "default": "庄重',
+    );
+    // First question closed → its complete default surfaces; the trailing
+    // in-flight question ("tone", mid-default "庄重…") still exposes none.
+    const focusClosed = closed?.questions.find((q) => q.id === 'focus');
+    expect(focusClosed?.defaultValue).toEqual(['历史背景与经过', '抗战精神与当代意义']);
+    const toneInFlight = closed?.questions.find((q) => q.id === 'tone');
+    expect(toneInFlight).toBeTruthy();
+    expect(toneInFlight?.defaultValue).toBeUndefined();
+  });
+
+  it('adopts a streaming lang only once its string literal terminates', () => {
+    // A half-streamed tag like "zh-C" must not resolve to a dictionary; the
+    // field appears once the closing quote lands (same churn rule as `id`).
+    const partial = parsePartialQuestionForm(
+      '<question-form id="discovery" title="快速确认">\n{ "lang": "zh-C',
+    );
+    expect(partial?.lang).toBeUndefined();
+
+    const complete = parsePartialQuestionForm(
+      '<question-form id="discovery" title="快速确认">\n{ "lang": "zh-CN", "questions": [',
+    );
+    expect(complete?.lang).toBe('zh-CN');
+  });
+});
+
 describe('splitOnQuestionForms', () => {
   it('normalizes string and object question options', () => {
     const input = [
@@ -65,7 +131,7 @@ describe('splitOnQuestionForms', () => {
       '    { "id": "intensity", "label": "Intensity", "type": "range", "min": 1, "max": 10, "step": 1 },',
       '    { "id": "deadline", "label": "Deadline", "type": "date" },',
       '    { "id": "source", "label": "Reference URL", "type": "url" },',
-      '    { "id": "brief", "label": "Upload brief", "type": "file", "multiple": true },',
+      '    { "id": "brief", "label": "Upload brief", "type": "file", "multiple": true, "accept": "image/*,.pdf" },',
       '    { "id": "exact", "label": "Exact id", "type": "select", "allowCustom": false, "options": [{ "label": "A", "value": "a" }] },',
       '    { "id": "tone", "label": "Tone", "type": "radio", "customLabel": "Something else", "customPlaceholder": "Describe it", "options": ["Sharp"] }',
       '  ]',
@@ -86,12 +152,39 @@ describe('splitOnQuestionForms', () => {
       'radio',
     ]);
     expect(segment.form.questions[1]).toMatchObject({ min: 1, max: 10, step: 1 });
-    expect(segment.form.questions[4]).toMatchObject({ multiple: true });
+    expect(segment.form.questions[4]).toMatchObject({ multiple: true, accept: 'image/*,.pdf' });
     expect(segment.form.questions[5]).toMatchObject({ allowCustom: false });
     expect(segment.form.questions[6]).toMatchObject({
       customLabel: 'Something else',
       customPlaceholder: 'Describe it',
     });
+  });
+
+  it('parses the agent-recommended `default` prefill the prompt contract ships', () => {
+    // The system prompt instructs every question to carry a brief-inferred
+    // recommended `default` (option value for radio/select, array for
+    // checkbox, text otherwise) so the user can submit the form unchanged.
+    const input = [
+      '<question-form id="discovery" title="Quick brief">',
+      '{',
+      '  "questions": [',
+      '    { "id": "brand", "label": "Brand context", "type": "radio", "default": "pick_direction",',
+      '      "options": [{ "label": "Pick a direction for me", "value": "pick_direction" }] },',
+      '    { "id": "tone", "label": "Tone", "type": "checkbox", "default": ["Modern minimal", "tech"],',
+      '      "options": ["Modern minimal", { "label": "Tech / utility", "value": "tech" }] },',
+      '    { "id": "scale", "label": "Roughly how much?", "type": "text", "default": "8 slides" }',
+      '  ]',
+      '}',
+      '</question-form>',
+    ].join('\n');
+
+    const segment = splitOnQuestionForms(input).find((s) => s.kind === 'form');
+    if (!segment || segment.kind !== 'form') throw new Error('expected parsed form');
+
+    expect(segment.form.questions[0]?.defaultValue).toBe('pick_direction');
+    // Label-form defaults canonicalize to stable option values.
+    expect(segment.form.questions[1]?.defaultValue).toEqual(['Modern minimal', 'tech']);
+    expect(segment.form.questions[2]?.defaultValue).toBe('8 slides');
   });
 
   it('preserves stable option values when formatting object-option answers', () => {
@@ -163,6 +256,45 @@ describe('splitOnQuestionForms', () => {
     if (out[1]?.kind === 'form') {
       expect(out[1].form.id).toBe('x');
     }
+  });
+
+  it('unwinds a false-positive open tag mentioned in prose and re-parses the real form', () => {
+    // Model mentioned the tag name inside backtick-quoted prose before
+    // emitting the real form — the first open match must not consume the real
+    // close tag, or the real form is lost.
+    const input =
+      `my first output should be \`<question-form id="discovery">\`.\n\n` +
+      `Let me write a custom form:\n\n` +
+      `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
+      `Now I'll proceed.`;
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
+    if (out[2]?.kind === 'form') {
+      expect(out[2].form.id).toBe('discovery');
+      expect(out[2].form.questions).toHaveLength(1);
+    }
+    // Segments must reconstruct the input without gaps or duplication.
+    const reconstructed = out
+      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .join('');
+    expect(reconstructed).toBe(input);
+  });
+
+  it('unwinds a tag-name mismatch — prose mentions <ask-question> but the real form is <question-form>', () => {
+    const input =
+      `In your output you'll see \`<ask-question>\` tags.\n\n` +
+      `<question-form id="real" title="Brief">${VALID_BODY}</question-form>\n\n` +
+      `Done.`;
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
+    if (out[2]?.kind === 'form') {
+      expect(out[2].form.id).toBe('real');
+      expect(out[2].form.questions).toHaveLength(1);
+    }
+    const reconstructed = out
+      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .join('');
+    expect(reconstructed).toBe(input);
   });
 });
 

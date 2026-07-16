@@ -1,27 +1,43 @@
 ---
 name: simple-deck
+en_name: "Write an Operating Review like a Disciplined COO"
+zh_name: "像克制的 COO 一样写经营复盘"
 description: |
-  Single-file horizontal-swipe HTML deck. Built by copying the seed
-  `assets/template.html` (which carries the proven 5-rule iframe nav script)
-  and pasting slide layouts from `references/layouts.md`. Pitch decks,
-  product overviews, study material — when you don't need the magazine
-  aesthetic of `magazine-web-ppt`.
+  Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Built as a decision-grade corporate strategy deck for leadership team.
+en_description: |
+  Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Built as a decision-grade corporate strategy deck for leadership team.
+zh_description: |
+  像克制的 COO 一样写经营复盘——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "corporate-strategy"
+  - "board-pre-read-deck"
+  - "strategy"
+  - "board"
+  - "business-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "simple-deck"
 triggers:
-  - "deck"
-  - "slides"
-  - "ppt"
-  - "presentation"
-  - "幻灯"
-  - "ppt 模板"
+  - "board-pre-read-deck"
+  - "corporate-strategy"
+  - "Write an Operating Review like a Disciplined COO"
+  - "像克制的 COO 一样写经营复盘"
+  - "board"
+  - "strategy"
+  - "business-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: product
   preview:
     type: html
     entry: index.html
   design_system:
     requires: true
     sections: [color, typography, layout, components]
+  category: "corporate-strategy"
+  scenario: "strategy"
+  example_prompt: "Create \"Write an Operating Review like a Disciplined COO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Audience: leadership team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Simple Deck Skill

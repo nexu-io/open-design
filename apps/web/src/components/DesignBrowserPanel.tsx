@@ -232,6 +232,24 @@ type WebviewFaviconEvent = Event & {
   favicons?: string[];
 };
 
+function isPromiseLike<T = unknown>(value: unknown): value is PromiseLike<T> {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+function isBenignWebviewLoadAbort(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /\bERR_ABORTED\b|loading ['"][^'"]+['"] was aborted/i.test(message);
+}
+
 interface DesignBrowserPanelProps {
   initialIconUrl?: string;
   initialTitle?: string;
@@ -1105,9 +1123,15 @@ export function DesignBrowserPanel({
     }
     try {
       const result = webviewNode.loadURL?.(url);
-      if (result instanceof Promise) void result.catch(() => setLoadUrl(url));
+      if (isPromiseLike(result)) {
+        void result.catch((error) => {
+          if (isBenignWebviewLoadAbort(error)) return;
+          setLoadUrl(url);
+        });
+      }
       else if (!webviewNode.loadURL) setLoadUrl(url);
-    } catch {
+    } catch (error) {
+      if (isBenignWebviewLoadAbort(error)) return;
       setLoadUrl(url);
     }
   }, [loadUrl, webviewNode]);
@@ -1145,12 +1169,8 @@ export function DesignBrowserPanel({
     setSuggestionsOpen(false);
     setMenuOpen(true);
     setDownloadAttentionNonce(attentionRequest.nonce);
-    if (pageSnapshotToastRef.current) {
-      setStatusMessage(null);
-    } else {
-      setStatusMessage(t('designBrowser.status.downloadAssistHint'));
-    }
-  }, [attentionRequest, t]);
+    setStatusMessage(null);
+  }, [attentionRequest]);
 
   const syncFromFallbackFrame = useCallback((frame: HTMLIFrameElement | null) => {
     if (!frame || loadUrl === EMPTY_URL) return;
@@ -2347,6 +2367,14 @@ export function DesignBrowserPanel({
           ) : null}
         </div>
       </div>
+      {downloadAttentionNonce != null ? (
+        <div className="db-download-assist" role="status">
+          <span className="db-download-assist-icon" aria-hidden>
+            <Icon name="download" size={14} />
+          </span>
+          <span>{t('designBrowser.status.downloadAssistHint')}</span>
+        </div>
+      ) : null}
       {showStatusMessage ? (
         <div className="db-status" role="status">
           <span>{statusText}</span>

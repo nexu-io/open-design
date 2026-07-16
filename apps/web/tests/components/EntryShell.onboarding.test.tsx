@@ -354,6 +354,49 @@ describe('EntryShell design systems view', () => {
   });
 });
 
+describe('EntryShell route scroll isolation', () => {
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  function entryScrollContainer(): HTMLElement {
+    const scrollContainer = document.querySelector('.entry-main--scroll');
+    expect(scrollContainer).toBeInstanceOf(HTMLElement);
+    if (!(scrollContainer instanceof HTMLElement)) {
+      throw new Error('entry scroll container not found');
+    }
+    return scrollContainer;
+  }
+
+  it('resets the shared scroll offset when navigating from Home to Projects', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    renderHome();
+
+    const scrollContainer = entryScrollContainer();
+    scrollContainer.scrollTop = 280;
+    fireEvent.click(screen.getByTestId('entry-nav-projects'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view-projects').getAttribute('data-active')).toBe('true');
+    });
+    expect(scrollContainer.scrollTop).toBe(0);
+  });
+
+  it('resets the shared scroll offset when navigating from Projects to Home', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    renderHome({}, '/projects');
+
+    const scrollContainer = entryScrollContainer();
+    scrollContainer.scrollTop = 360;
+    fireEvent.click(screen.getByTestId('entry-nav-home'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view-home').getAttribute('data-active')).toBe('true');
+    });
+    expect(scrollContainer.scrollTop).toBe(0);
+  });
+});
+
 describe('EntryShell new project rail', () => {
   it('creates a blank project directly from the rail plus', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'false');
@@ -588,6 +631,90 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     const localPanel = screen.getByText('Local CLI').closest('.onboarding-view__setup-panel');
     expect(localPanel?.textContent).toContain('Claude Code');
     expect(localPanel?.textContent).not.toContain('AMR');
+  });
+
+  it('tests the selected Local CLI agent from onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'sonnet',
+          sample: 'pong',
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
+        agentModels: { 'claude-code': { model: 'sonnet', reasoning: 'high' } },
+      }),
+      agents: [amrAgent(), cliAgent()],
+      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Claude Code replied in 12 ms/i)).toBeTruthy();
+    });
+    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/test/connection'),
+    );
+    expect(connectionTestCalls).toHaveLength(1);
+    expect(JSON.parse(String(connectionTestCalls[0]?.[1]?.body))).toMatchObject({
+      mode: 'agent',
+      agentId: 'claude-code',
+      model: 'sonnet',
+      reasoning: 'high',
+      agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
+    });
+  });
+
+  it('renders Local CLI test failures as alerts in onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: false,
+          kind: 'agent_not_installed',
+          latencyMs: 0,
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({ agentId: 'claude-code' }),
+      agents: [amrAgent(), cliAgent()],
+      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Claude Code is not installed or not in PATH.');
   });
 
   it('keeps AMR login pending while device authorization is waiting', async () => {
@@ -987,6 +1114,57 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('never ships the "Other" free-text to analytics on either survey-snapshot carrier', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    await clickSignedInCloudContinue();
+
+    chooseOnboardingOption('Where did you hear about us?', /Other/i);
+    const otherInput = document.querySelector<HTMLInputElement>(
+      '.onboarding-chip-field__other-input',
+    );
+    expect(otherInput).toBeTruthy();
+    fireEvent.change(otherInput as HTMLInputElement, {
+      target: { value: 'Design podcast' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Create once, build everywhere' }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
+
+    // Both carriers of the survey snapshot — the about_you_submit click and
+    // the onboarding_complete_result fallback — carry only the enumerated
+    // `other` bucket. The raw channel the user typed must NEVER reach analytics
+    // (it lives solely in the app-owned Memory note); analytics events stay
+    // free-text/PII-free.
+    const submit = findTrackedEvent(
+      'ui_click',
+      (payload) => payload.element === 'about_you_submit',
+    );
+    expect(submit).toMatchObject({ discovery_source: 'other' });
+    expect(submit).not.toHaveProperty('discovery_source_other');
+
+    const complete = latestTrackedEvent('onboarding_complete_result');
+    expect(complete).toMatchObject({ discovery_source: 'other' });
+    expect(complete).not.toHaveProperty('discovery_source_other');
+  });
+
   it('submits the optional newsletter email when finishing onboarding', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
@@ -1129,6 +1307,124 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(payload.body).toContain('- Use cases: Product design');
     expect(payload.body).toContain('- Discovery source: Search');
     expect(payload.body).not.toContain('user@example.com');
+  });
+
+  it('keeps the typed "Other" channel in the memory note when finishing immediately after typing', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
+        return jsonResponse({
+          entry: {
+            id: 'user_profile',
+            name: 'Work profile',
+            description: 'Role and defaults',
+            type: 'profile',
+            updatedAt: Date.now(),
+            body: JSON.parse(String(init.body)).body,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    await clickSignedInCloudContinue();
+    chooseOnboardingOption('Where did you hear about us?', /Other/i);
+    const otherInput = document.querySelector<HTMLInputElement>(
+      '.onboarding-chip-field__other-input',
+    );
+    expect(otherInput).toBeTruthy();
+    // Type the custom channel and advance in one act() batch. This is a
+    // behavioral guard that the typed "Other" value reaches the memory note
+    // (its only remaining sink) — it does not reproduce the real-browser race
+    // itself, since jsdom/RTL always flush the state→ref sync effect before the
+    // async memory PUT reads the ref. The fix (mirroring the value into
+    // profileRef synchronously in the input's onChange) removes that timing
+    // dependency by construction.
+    await act(async () => {
+      fireEvent.change(otherInput as HTMLInputElement, {
+        target: { value: 'Design podcast' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile'),
+      ).toBe(true);
+    });
+    const memoryCall = fetchMock.mock.calls.find(
+      ([url]) => String(url) === '/api/memory/user_profile',
+    );
+    const payload = JSON.parse(String(memoryCall?.[1]?.body));
+    expect(payload.body).toContain('- Discovery source: Other (Design podcast)');
+  });
+
+  it('drops the stale "Other" text from the memory note when switching to another source chip', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
+        return jsonResponse({
+          entry: {
+            id: 'user_profile',
+            name: 'Work profile',
+            description: 'Role and defaults',
+            type: 'profile',
+            updatedAt: Date.now(),
+            body: JSON.parse(String(init.body)).body,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    await clickSignedInCloudContinue();
+    // Pick Other, type a channel, then switch the chip to Search and finish in
+    // one batch: the note must reflect the visible chip (Search), never the
+    // abandoned Other free-text, because updateProfile clears sourceOther into
+    // the live ref synchronously.
+    chooseOnboardingOption('Where did you hear about us?', /Other/i);
+    const otherInput = document.querySelector<HTMLInputElement>(
+      '.onboarding-chip-field__other-input',
+    );
+    fireEvent.change(otherInput as HTMLInputElement, {
+      target: { value: 'Design podcast' },
+    });
+    await act(async () => {
+      chooseOnboardingOption('Where did you hear about us?', /Search/i);
+      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile'),
+      ).toBe(true);
+    });
+    const memoryCall = fetchMock.mock.calls.find(
+      ([url]) => String(url) === '/api/memory/user_profile',
+    );
+    const payload = JSON.parse(String(memoryCall?.[1]?.body));
+    expect(payload.body).toContain('- Discovery source: Search');
+    expect(payload.body).not.toContain('Other (Design podcast)');
   });
 
   it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {

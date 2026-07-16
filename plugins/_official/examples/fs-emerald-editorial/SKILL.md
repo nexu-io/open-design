@@ -1,24 +1,45 @@
 ---
 name: fs-emerald-editorial
-description: "Emerald Editorial - magazine-cover business decks: saturated emerald #3CD896 canvas, deep navy #0F1A5C ink, warm paper #F1E9D6 tiles, double-rule masthead ornaments, Bodoni Moda 900 display serif, fixed 1920x1080 stage with uniform viewport scaling. Mixed scheme, 8 slide masters."
+en_name: "Write a Brand-Launch Narrative like a Growth Strategy Lead"
+zh_name: "像增长策略负责人一样写品牌发布叙事"
+description: |
+  Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
+en_description: |
+  Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
+zh_description: |
+  像增长策略负责人一样写品牌发布叙事——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "fs-emerald-editorial"
 triggers:
-  - "emerald editorial"
-  - "祖母绿封面故事"
-  - "magazine cover deck"
-  - "editorial slides"
-  - "bodoni deck"
-  - "leadership briefing deck"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write a Brand-Launch Narrative like a Growth Strategy Lead"
+  - "像增长策略负责人一样写品牌发布叙事"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use Emerald Editorial to turn my quarterly review into a magazine-cover business deck: emerald canvas, navy ink, Bodoni Moda 900 headlines, double-rule masthead ornaments, on a fixed 1920x1080 stage. Start from example.html and replace the content - keep the design system."
   example_prompt_i18n:
     zh-CN: "用祖母绿封面故事（Emerald Editorial）把我的季度回顾做成杂志封面级商务刊幻灯片：祖母绿画布、海军蓝油墨、Bodoni Moda 900 大标题、双线刊头装饰，固定 1920x1080 舞台。从 example.html 出发只替换内容，保留设计系统。"
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Write a Brand-Launch Narrative like a Growth Strategy Lead\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Audience: marketing team, press. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Emerald Editorial（祖母绿封面故事）

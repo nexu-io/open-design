@@ -55,8 +55,9 @@ export function projectKindToTracking(
   switch (kind) {
     case 'prototype':
       // Prototype subtypes share `kind: 'prototype'` but carry a distinguishing
-      // metadata field. Precedence (a prototype matching several): live_artifact
-      // > wireframe > mobile, then plain prototype.
+      // metadata field. Precedence (a prototype matching several): web_clone >
+      // live_artifact > wireframe > mobile, then plain prototype.
+      if (hints?.intent === 'web-clone') return 'web_clone';
       if (hints?.intent === 'live-artifact') return 'live_artifact';
       if (hints?.fidelity === 'wireframe') return 'wireframe';
       if (isMobileSurface(hints)) return 'mobile';
@@ -82,6 +83,9 @@ export function projectKindToTracking(
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';
+    case 'web-clone':
+    case 'web_clone':
+      return 'web_clone';
     default:
       return null;
   }
@@ -239,6 +243,8 @@ export function byokProtocolToTracking(
       return 'ollama_cloud';
     case 'senseaudio':
       return 'senseaudio';
+    case 'aihubmix':
+      return 'aihubmix';
     case 'bedrock':
       return null;
     default:
@@ -479,4 +485,3 @@ export function normalizeCustomReason(
 ): string {
   return (text ?? '').trim();
 }
-

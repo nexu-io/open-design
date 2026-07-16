@@ -9,9 +9,9 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     examplePrompt:
-      'Проверьте локальный preview Open Design через agent-browser: запустите или подключите CDP Chrome, откройте http://127.0.0.1:17573/, сообщите title, URL, видимый текст и сохраните screenshot.',
+      'Проверьте локальный предпросмотр Open Design через agent-browser: запустите или подключите CDP Chrome, откройте http://127.0.0.1:17573/, сообщите заголовок, URL, видимый текст и сохраните снимок экрана.',
     description:
-      'Автоматизация браузера для проверки локального preview Open Design. Подключается к проверенному CDP-эндпоинту Chrome, считывает отрендеренное состояние страницы, при необходимости кликает/вводит текст и сохраняет screenshot.',
+      'Автоматизация браузера для проверки локального предпросмотра Open Design. Подключается к проверенному CDP-эндпоинту Chrome, считывает отрендеренное состояние страницы, при необходимости кликает, вводит текст и сохраняет снимок экрана.',
   },
   'blog-post': {
     examplePrompt:
@@ -70,11 +70,11 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'magazine-web-ppt': {
     examplePrompt:
-      'Сделайте для меня журнальную презентацию о теме "одночеловеческие компании · организации, сжатые ИИ", выступление на 25 минут, аудитория — дизайнеры и фаундеры. Сначала предложите направление (Monocle / WIRED / Kinfolk / Domus / Lab), чтобы я мог выбрать.',
+      'Сделайте для меня журнальную презентацию о теме "компании из одного человека · организации, сжатые ИИ", выступление на 25 минут, аудитория — дизайнеры и фаундеры. Сначала предложите направление (Monocle / WIRED / Kinfolk / Domus / Lab), чтобы я мог выбрать.',
   },
   'hatch-pet': {
     examplePrompt:
-      'Высидите для меня крошечного пиксельного питомца — дружелюбного сиба-ину в уютном свитере. На всем протяжении используйте навык hatch-pet.',
+      'Создайте для меня крошечного пиксельного питомца — дружелюбного сиба-ину в уютном свитере. На всем протяжении используйте навык hatch-pet.',
     description:
       'Создает, чинит, валидирует и упаковывает совместимый с Codex анимированный спрайтшит питомца (атлас 8x9, ячейки 192x208), включая QA-контактный лист, превью-видео и pet.json.',
   },
@@ -154,7 +154,7 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'pm-spec': {
     examplePrompt:
-      'Напишите мне PRD для two-factor authentication в нашем SaaS-приложении — problem, scope, milestones, open questions.',
+      'Напишите PRD для двухфакторной аутентификации в нашем SaaS-приложении: проблема, объем работ, этапы и открытые вопросы.',
   },
   'pptx-html-fidelity-audit': {
     examplePrompt:
@@ -200,7 +200,11 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'web-prototype': {
     examplePrompt:
-      'Универсальный прототип для desktop web.',
+      'Универсальный прототип для десктопного веб-интерфейса.',
+  },
+  'web-clone': {
+    description:
+      'Методология клонирования сайтов: сначала получить реальный исходный код, определить путь реализации, разобрать поведение, собрать проект и заменить контент. Покрывает статические сайты, React/Vue/Next-контентные сайты и тяжелые WebGL/Canvas/Three.js-фронтенды; требует проверять любой AI-сгенерированный код по фактическим исходникам.',
   },
   'weekly-update': {
     examplePrompt:
@@ -237,6 +241,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   figma: 'Совместный дизайн-инструмент. Яркая многокрасочность, игриво и профессионально.',
   framer: 'Конструктор сайтов. Смелый черный и синий, приоритет motion, дизайн-ориентированность.',
   hashicorp: 'Автоматизация инфраструктуры. Чистый enterprise-визуал, черно-белая строгость.',
+  hud: 'Авиационный HUD. Фосфорно-зеленые данные на почти черном фоне, капительные телеметрические оверлеи, угловая геометрия и максимальная читаемость для скоростных панелей управления.',
   ibm: 'Корпоративные технологии. Carbon Design System, структурированная синяя палитра.',
   intercom: 'Клиентские коммуникации. Дружелюбная синяя палитра, разговорные UI-паттерны.',
   kami:
@@ -253,7 +258,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   miro: 'Визуальная коллаборация. Светлый желтый акцент, эстетика бесконечного холста.',
   'mistral-ai': 'Поставщик open-weight LLM. Французски выверенный минимализм с фиолетовым оттенком.',
   mongodb: 'Документная БД. Зеленая leaf-айдентика, акцент на документации для разработчиков.',
-  nike: 'Спортивный ритейл. Монохромный UI, массивный верхний регистр, full-bleed-фотография.',
+  nike: 'Спортивный ритейл. Монохромный UI, массивный верхний регистр, фотографии во весь экран.',
   notion: 'Единое рабочее пространство. Теплый минимализм, серифные заголовки, мягкие поверхности.',
   nvidia: 'GPU-компьютинг. Черно-зеленая энергия, техническая силовая эстетика.',
   ollama: 'Локальный запуск LLM. Terminal-first, монохромная простота.',
@@ -271,7 +276,7 @@ export const RU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   sanity: 'Headless CMS. Красный акцент, content-first редакционная композиция.',
   sentry: 'Мониторинг ошибок. Темный dashboard, плотность данных, розово-фиолетовый акцент.',
   shopify: 'E-commerce-платформа. Dark-first и кинематографично, неоново-зеленый акцент, сверхлегкая типографика.',
-  spacex: 'Космические технологии. Строгий черно-белый язык, full-bleed-изображения, футуризм.',
+  spacex: 'Космические технологии. Строгий черно-белый язык, изображения во весь экран, футуризм.',
   spotify: 'Музыкальный стриминг. Яркий зеленый на темном, жирная типографика, опора на обложки.',
   starbucks:
     'Глобальный кофейный ритейл. Четырехступенчатая зеленая система, теплое кремовое полотно, кнопки full pill.',
@@ -357,9 +362,11 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'ancient-china': 'Древний Китай',
   anime: 'Аниме',
   'app-showcase': 'Демонстрация приложения',
+  ar: 'AR',
   archery: 'Стрельба из лука',
   arpg: 'ARPG',
   'audio-reactive': 'Аудиореактивный',
+  botw: 'BOTW',
   'boss-fight': 'Битва с боссом',
   brand: 'Бренд',
   branding: 'Брендинг',
@@ -378,6 +385,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   cyberpunk: 'Киберпанк',
   dance: 'Танец',
   'data-viz': 'Визуализация данных',
+  'desk-hologram': 'Голограмма на столе',
   editorial: 'Редакционный',
   'elden-ring': 'Elden Ring',
   endcard: 'Финальная заставка',
@@ -387,6 +395,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   fashion: 'Мода',
   'fighting-game': 'Файтинг',
   food: 'Еда',
+  'forbidden-city': 'Запретный город',
   'game-cinematic': 'Игровой синематик',
   'game-ui': 'Игровой UI',
   'grid-sheet': 'Сетка',
@@ -399,9 +408,11 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   idol: 'Айдол',
   illustration: 'Иллюстрация',
   'image-to-image': 'Редактирование по изображению',
+  'image-to-video': 'Из изображения в видео',
   infographic: 'Инфографика',
   japanese: 'Японский',
   karaoke: 'Караоке',
+  keyframe: 'Ключевой кадр',
   'key-visual': 'Ключевой визуал',
   'kinetic-typography': 'Кинетическая типографика',
   'linear-style': 'Стиль Linear',
@@ -417,19 +428,23 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'mounted-combat': 'Конный бой',
   nature: 'Природа',
   'open-world': 'Открытый мир',
+  'open-design': 'Open Design',
   'otaku-dance': 'Отаку-танец',
   outro: 'Аутро',
   overlay: 'Оверлей',
   pipeline: 'Пайплайн',
   'pose-reference': 'Референс позы',
   portrait: 'Портрет',
+  photoreal: 'Фотореализм',
   product: 'Продукт',
   'product-promo': 'Промо продукта',
   rework: 'Переработка',
   route: 'Маршрут',
   saas: 'SaaS',
+  'seedance-2.0': 'Seedance 2.0',
   sequence: 'Последовательность',
   sizzle: 'Сиззл-ролик',
+  'short-form': 'Короткий формат',
   social: 'Соцсети',
   storyboard: 'Сториборд',
   'street-fighter': 'Street Fighter',
@@ -440,6 +455,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'title-card': 'Титульная заставка',
   transform: 'Трансформация',
   travel: 'Путешествия',
+  totk: 'TOTK',
   tts: 'TTS',
   typography: 'Типографика',
   'unreal-engine-5': 'Unreal Engine 5',
@@ -449,6 +465,8 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   'website-to-video': 'Сайт-в-видео',
   wuxia: 'Уся',
   zhaoyun: 'Чжао Юнь',
+  'zelda-style': 'В стиле Zelda',
+  '9:16': '9:16',
   dashboard: 'Дашборд',
   data: 'Данные',
   destruction: 'Разрушение',
@@ -468,6 +486,7 @@ export const RU_PROMPT_TEMPLATE_TAGS: Record<string, string> = {
   shatter: 'Раскалывание',
   text: 'Текст',
   webgl: 'WebGL',
+  workspace: 'Рабочее пространство',
 };
 
 export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>> = {
@@ -496,6 +515,11 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
     title: 'Объясняющий слайд о Момотаро в гибридном стиле',
     summary:
       'Соединяет простую теплую эстетику иллюстраций Irasutoya с высокой информационной плотностью японских ведомственных объясняющих слайдов.',
+  },
+  'notion-team-dashboard-live-artifact': {
+    title: 'Командный дашборд в стиле Notion',
+    summary:
+      'Одноэкранный макет командного дашборда в нативной эстетике Notion: сетка KPI, 7-дневный мини-график, лента активности и таблица задач в стиле связанной базы данных.',
   },
   'profile-avatar-anime-girl-to-cinematic-photo': {
     title: 'Профиль / аватар - от аниме-девушки к кинематографичному фото',
@@ -652,6 +676,11 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
     summary:
       'Создает технологичную взрывную схему VR-гарнитуры с детализированными выносками компонентов и рекламным текстом.',
   },
+  'zelda-style-forbidden-city-game-screenshot': {
+    title: 'Игровой скриншот Запретного города в стиле Zelda',
+    summary:
+      'Генерирует 16:9 изображение в стиле игрового скриншота, вдохновленного Breath of the Wild / Tears of the Kingdom, где персонажи исследуют реальный ориентир вроде пекинского Запретного города.',
+  },
   '3d-animated-boy-building-lego': {
     title: '3D-анимированный мальчик собирает Lego',
     summary:
@@ -756,6 +785,41 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
     summary:
       'Детализированный multi-scene-видеопромпт для Seedance 2.0, рассчитанный на фэнтези-фильм в эстетике Hollywood haute couture с 8K / Unreal Engine.',
   },
+  'hyperframes-html-in-canvas-iphone-device': {
+    title: 'HyperFrames HTML-in-Canvas: 3D-демо продукта на iPhone и MacBook',
+    summary:
+      '15-секундный деморолик продукта, где GLTF-модели iPhone 15 Pro Max и MacBook Pro парят на чистой сцене, а реальные интерфейсы приложения рендерятся на экранах через drawElementImage.',
+  },
+  'hyperframes-html-in-canvas-liquid-background': {
+    title: 'HyperFrames HTML-in-Canvas: жидкий hero-фон',
+    summary:
+      '12-секундный hero-блок: HTML-контент парит над органичной жидкой поверхностью с волновой динамикой, а захваченный DOM остается четким и читаемым.',
+  },
+  'hyperframes-html-in-canvas-liquid-glass': {
+    title: 'HyperFrames HTML-in-Canvas: раскрытие лендинга через Liquid Glass',
+    summary:
+      '20-секундное раскрытие реального продуктового лендинга: DOM захватывается вживую, распадается на преломляющие glass-ячейки и собирается в чистый hero-кадр.',
+  },
+  'hyperframes-html-in-canvas-magnetic': {
+    title: 'HyperFrames HTML-in-Canvas: визуализация магнитного поля',
+    summary:
+      '15-секундная particle-визуализация магнитного поля, реагирующая на живую DOM-теплокарту или график; подходит для ML- и data-продуктов.',
+  },
+  'hyperframes-html-in-canvas-portal-reveal': {
+    title: 'HyperFrames HTML-in-Canvas: дашборд через портал',
+    summary:
+      '10-секундный dimensional portal открывается на живой дашборд: DOM захватывается в реальном времени, вокруг — объемный свет и частицы по краю портала.',
+  },
+  'hyperframes-html-in-canvas-shatter': {
+    title: 'HyperFrames HTML-in-Canvas: финал с разбивающимся стеклом',
+    summary:
+      '12-секундный HTML outro: продуктовая страница или pricing-card удерживается в кадре, затем взрывается на преломляющие стеклянные фрагменты с глубиной и chromatic dispersion.',
+  },
+  'hyperframes-html-in-canvas-text-cursor': {
+    title: 'HyperFrames HTML-in-Canvas: кинематографичное появление текста с курсором',
+    summary:
+      '8-секундное драматичное появление текста с сиянием курсора, хроматическими тенями и направленным светом на черной сцене.',
+  },
   'hyperframes-app-showcase-three-phones': {
     title: 'HyperFrames: 12-секундная демонстрация приложения — три парящих телефона',
     summary:
@@ -789,7 +853,12 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
   'weread-year-in-review-video-template': {
     title: 'Видео-шаблон WeRead Year in Review',
     summary:
-      'Вертикальный 9:16 HyperFrames-шаблон для годовых отчетов о чтении в стиле WeRead: теплая бумажная фактура, редакционная китайская типографика, переходы страниц, статистика чтения, следы заметок, ключевые интересы и финальная карточка читательского persona.',
+      'Вертикальный 9:16 HyperFrames-шаблон для годовых отчетов о чтении в стиле WeRead: теплая бумажная фактура, редакционная китайская типографика, переходы страниц, статистика чтения, следы заметок, ключевые интересы и финальная карточка читательского образа.',
+  },
+  'video-seedance-desk-hologram-ar-realdesk': {
+    title: 'AR-голограмма на рабочем столе',
+    summary:
+      'Двухэтапный процесс Seedance 2.0 для вирусного формата настольной голограммы: сначала фиксируется фотореалистичный ключевой кадр на реальном столе разработчика, затем он анимируется в вертикальный клип из изображения в видео.',
   },
   'hyperframes-product-reveal-minimal': {
     title: 'HyperFrames: 5-секундный минималистичный product reveal',
@@ -902,7 +971,7 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
   'game-ui-ancient-china-open-world-mmo-hud': {
     title: 'Игровой UI - древний Китай, HUD open-world MMO',
     summary:
-      'Создает mockup внутриигрового HUD-скриншота для AAA open-world MMO о древнем Китае в кинематографичном фотореалистичном стиле Black Myth: Wukong, с акцентом на мечницу в туманной горной сцене и полным MMO-HUD (панель персонажа, миникарта, хотбар навыков, трекер квестов, чат).',
+      'Создает макет внутриигрового HUD-скриншота для AAA open-world MMO о древнем Китае в кинематографичном фотореалистичном стиле Black Myth: Wukong, с акцентом на мечницу в туманной горной сцене и полным MMO-HUD (панель персонажа, миникарта, хотбар навыков, трекер квестов, чат).',
   },
   'illustration-crayon-kid-drawing-rework': {
     title: 'Иллюстрация - переработка детского рисунка восковыми мелками',

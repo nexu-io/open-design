@@ -217,7 +217,8 @@
 .recent-projects__card-status-running {
   color: var(--accent);
 }
-.recent-projects__card-status-awaiting_input {
+.recent-projects__card-status-awaiting_input,
+.recent-projects__card-status-incomplete {
   color: var(--amber);
 }
 .recent-projects__card-status-queued,

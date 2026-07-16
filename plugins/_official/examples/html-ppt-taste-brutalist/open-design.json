@@ -24,6 +24,7 @@
     "en": "Html Ppt Taste Brutalist"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode).",
   "description_i18n": {
     "zh-CN": "16:9 HTML 幻灯片，战术遥测 / CRT 终端风格。失活 CRT 炭黑背景、白色荧光等宽字体、警示红强调色、扫描线叠加、ASCII 语法，密度优先于装饰。提取自 Leonxlnx/taste-skill `brutalist-skill`（战术遥测模式）。",

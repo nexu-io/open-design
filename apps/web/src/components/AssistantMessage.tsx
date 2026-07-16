@@ -5,8 +5,13 @@ import {
   renderMarkdown,
   type MarkdownLinkClickHandler,
 } from "../runtime/markdown";
-import { asInProjectFilePath } from "../runtime/in-project-link";
-import { projectFileUrl } from "../providers/registry";
+import {
+  asInProjectFilePath,
+  isPathLikeChatHref,
+  resolveChatFileLink,
+} from "../runtime/in-project-link";
+import { navigate } from "../router";
+import { deleteProjectFile, projectFileUrl, uploadProjectFiles } from "../providers/registry";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
@@ -17,6 +22,8 @@ import {
   trackAssistantFeedbackReasonSubmitClick,
   trackAssistantFeedbackReasonView,
   trackFeedbackSubmitResult,
+  trackQuestionsFormClick,
+  trackQuestionsFormSurfaceView,
 } from "../analytics/events";
 import {
   feedbackAgentProviderIdToTracking,
@@ -27,7 +34,10 @@ import {
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
 } from "@open-design/contracts/analytics";
+import { questionsFormTrackingId } from "@open-design/contracts/analytics";
 import {
+  formOptionLabelForValue,
+  hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   stripTrailingOpenQuestionForm,
   type QuestionForm,
@@ -39,9 +49,21 @@ import {
   type ChatSessionMode,
   type OdCard,
   type OdCardBrandBrowserAssist,
+  type RunContextSelection,
+  type WorkspaceContextItem,
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
-import { parseSubmittedAnswers } from "./QuestionForm";
+import {
+  normalizeVisualStyleQuestionValue,
+  parseSubmittedAnswers,
+  QuestionFormView,
+  type QuestionFormFileSubmission,
+  type QuestionFormInteraction,
+} from "./QuestionForm";
+import {
+  visualStyleCardsForContext,
+  type VisualStyleContext,
+} from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
@@ -67,6 +89,7 @@ import { AgentIcon } from "./AgentIcon";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
+  ChatAttachment,
   ChatMessage,
   ChatMessageFeedbackChange,
   ChatMessageFeedbackRating,
@@ -81,13 +104,18 @@ type TranslateFn = (
   vars?: Record<string, string | number>
 ) => string;
 
-export type QuestionFormOpenRequest = {
-  form: QuestionForm;
-  messageId: string;
-  submittedAnswers?: Record<string, string | string[]>;
-};
+// The host reports whether it accepted the answer into a real chat turn. A
+// `false` result means a pre-run guard (for example the AMR balance gate)
+// prevented the send, so the inline form must remain editable.
+export type QuestionFormSubmitHandler = (
+  text: string,
+  attachments?: ChatAttachment[],
+  context?: RunContextSelection,
+) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+const viewedInlineQuestionForms = new Set<string>();
+const QUESTION_FORM_DRAFT_STORAGE_PREFIX = "open-design:question-form-draft:";
 
 interface ActionNotice {
   message: string;
@@ -323,6 +351,11 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectMetadata?: ProjectMetadata;
   projectFileNames?: Set<string>;
+  // Daemon-resolved on-disk working directory of the current project
+  // (`GET /api/projects/:id` → `resolvedDir`). Positive-proof anchor for
+  // classifying absolute disk hrefs in chat file links — see
+  // `resolveChatFileLink`.
+  projectResolvedDir?: string | null;
   onRequestOpenFile?: (name: string) => void;
   // Client-side action for a <od-card type="brand-browser-assist"> button: open
   // or focus the Browser tab so the user can clear verification. Excluded from
@@ -346,13 +379,10 @@ interface Props {
   // to avoid duplication. Other messages keep their error pill.
   errorCardOwnerId?: string | null;
   // The user message that immediately follows this assistant turn, if any.
-  // Kept for ChatPane compatibility; chat-side question forms now always
-  // render as a compact Questions banner.
+  // Structured form replies are parsed back into the inline answered summary.
   nextUserContent?: string;
-  // Open the right-hand Questions tab. The active discovery form renders
-  // there (Claude-Design style) instead of inline; this assistant message
-  // shows a banner that focuses the tab on click.
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled?: boolean;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
@@ -409,6 +439,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'projectFiles',
   'projectMetadata',
   'projectFileNames',
+  'projectResolvedDir',
   'onRequestOpenFile',
   'onRequestPluginFolderAgentAction',
   'activePluginActionPaths',
@@ -416,6 +447,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'isLast',
   'errorCardOwnerId',
   'nextUserContent',
+  'questionFormSubmitDisabled',
   'forking',
   'shareToOpenDesignBusy',
   'suppressDirectionForms',
@@ -473,6 +505,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectMetadata,
   projectFileNames,
+  projectResolvedDir,
   onRequestOpenFile,
   onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
@@ -483,7 +516,8 @@ function AssistantMessageImpl({
   isLast,
   errorCardOwnerId = null,
   nextUserContent,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled = false,
   onContinueRemainingTasks,
   onForkFromMessage,
   forking = false,
@@ -510,6 +544,12 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  // Thinking text renders markdown too — its file links must route in-app
+  // exactly like prose links (ProseBlock builds the same handler itself).
+  const thinkingLinkClick = useMemo(
+    () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
+    [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
+  );
   const events =
     (message.events?.length ?? 0) > 0
       ? message.events!
@@ -664,6 +704,9 @@ function AssistantMessageImpl({
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
   );
+  const hasResultDeliveryFailure =
+    message.resultDeliveryState === "no_result" ||
+    message.resultDeliveryState === "delivery_failed";
   const isBrandBrowserAssistMessage =
     isBrandExtractionNextStepVariant(nextStepVariant) &&
     (message.content.includes('<od-card type="brand-browser-assist"') ||
@@ -682,6 +725,7 @@ function AssistantMessageImpl({
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
   const runSucceeded =
     !streaming &&
+    !hasResultDeliveryFailure &&
     (
       message.runStatus === "succeeded" ||
       (!message.runStatus && !!message.endedAt) ||
@@ -748,13 +792,30 @@ function AssistantMessageImpl({
             : !!onToolboxAction ||
               !!onNextStepCreateDesignSystem ||
               (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload));
+  // A clarification turn terminates its run while the emitted <question-form>
+  // is still waiting for the user inline. Until the immediate
+  // user reply submits that form's answers (skip-all submits through the same
+  // path), the turn is mid-handshake, not settled. Suppressed direction forms
+  // render as a locked pill the user cannot answer, so they don't hold the
+  // card back.
+  const hasPendingQuestionForm = useMemo(() => {
+    if (hasUnterminatedQuestionForm(message.content)) return true;
+    return splitOnQuestionForms(message.content).some(
+      (seg) =>
+        seg.kind === "form" &&
+        !(suppressDirectionForms && isDirectionForm(seg.form)) &&
+        (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
+    );
+  }, [message.content, nextUserContent, suppressDirectionForms]);
   // Terminal turns should leave the user with an actionable path, including
   // canceled/failed/no-artifact turns. Artifact-backed cards still wire Share
   // and Download to the chosen file; incomplete cards fall back to composer
-  // prompts or toolbox actions.
+  // prompts or toolbox actions. A turn still waiting on question-form answers
+  // is the exception: the next step IS answering the form.
   const showNextStepActions =
     !streaming &&
     runTerminal &&
+    !hasPendingQuestionForm &&
     ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
@@ -777,7 +838,12 @@ function AssistantMessageImpl({
   }
 
   return (
-    <div className="msg assistant">
+    <div
+      id={`assistant-message-${message.id}`}
+      className="msg assistant"
+      data-assistant-message-id={message.id}
+      tabIndex={-1}
+    >
       <div className="role">
         <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
         <span className="role-name">{roleName}</span>
@@ -796,11 +862,14 @@ function AssistantMessageImpl({
                 showStreamCursor={streaming && i === lastTextBlockIndex}
                 nextUserContent={nextUserContent}
                 suppressDirectionForms={suppressDirectionForms}
-                onOpenQuestions={onOpenQuestions}
+                onSubmitQuestionForm={onSubmitQuestionForm}
+                questionFormSubmitDisabled={questionFormSubmitDisabled}
+                visualStyleContext={visualStyleContextForProjectKind(projectKind)}
                 projectId={projectId}
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
+                projectResolvedDir={projectResolvedDir}
                 onRequestOpenFile={onRequestOpenFile}
                 onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
@@ -814,6 +883,7 @@ function AssistantMessageImpl({
                 key={i}
                 text={b.text}
                 streaming={streaming && i === blocks.length - 1}
+                onLinkClick={thinkingLinkClick}
               />
             );
           if (b.kind === "tool-group") {
@@ -1320,7 +1390,13 @@ function isFeedbackEligible({
   hasEmptyResponse: boolean;
   hasUnfinishedTodos: boolean;
 }): boolean {
-  if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
+  if (
+    streaming ||
+    hasEmptyResponse ||
+    hasUnfinishedTodos ||
+    message.resultDeliveryState === "no_result" ||
+    message.resultDeliveryState === "delivery_failed"
+  ) return false;
   if (message.runStatus) return isTerminalRunStatus(message.runStatus);
   return !!message.endedAt;
 }
@@ -2317,6 +2393,45 @@ function hasPluginFinalActionHint(content: string): boolean {
   );
 }
 
+/**
+ * Build the markdown link-click handler that keeps chat file links inside
+ * the app. Current-project files open through the workspace tab opener;
+ * files of another project (e.g. an @-referenced project linked by absolute
+ * disk path or app route) navigate to that project's file route in the same
+ * window; any remaining path-like href is swallowed, because its only
+ * default outcome is a detached Electron window rendering the home screen
+ * (0.14.1 acceptance bug: chatpane file links opened a home-page window). External URLs keep their default behavior.
+ *
+ * The handler is ALWAYS installed: only the workspace-file open action needs
+ * `onRequestOpenFile`. Surfaces that mount the chat without a workspace
+ * opener (e.g. the design-system chat in `DesignSystemFlow`) still must
+ * navigate cross-project targets and swallow unresolvable path-like hrefs —
+ * returning no handler there would reintroduce the detached home window for
+ * every file link.
+ */
+function chatFileLinkClickHandler(
+  onRequestOpenFile: ((name: string) => void) | undefined,
+  projectFileNames: ReadonlySet<string> | undefined,
+  projectId: string | null | undefined,
+  projectResolvedDir?: string | null,
+): MarkdownLinkClickHandler {
+  return (href, event) => {
+    const target = resolveChatFileLink(href, projectFileNames, projectId, projectResolvedDir);
+    if (target) {
+      event.preventDefault();
+      if (target.kind === "workspace-file") {
+        // Without a workspace opener the click stays swallowed: there is no
+        // pane that can preview the current project's file on this surface,
+        // and the default fallback would only open the home-page window.
+        onRequestOpenFile?.(target.filePath);
+      } else {
+        navigate({ kind: "project", projectId: target.projectId, fileName: target.filePath });
+      }
+      return;
+    }
+    if (isPathLikeChatHref(href)) event.preventDefault();
+  };
+}
 
 function ProseBlock({
   text,
@@ -2327,11 +2442,14 @@ function ProseBlock({
   showStreamCursor,
   nextUserContent,
   suppressDirectionForms,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled,
+  visualStyleContext,
   projectId,
   conversationId,
   runId,
   projectFileNames,
+  projectResolvedDir,
   onRequestOpenFile,
   onBrandBrowserAssistConfirm,
 }: {
@@ -2347,7 +2465,10 @@ function ProseBlock({
   conversationId?: string | null;
   runId?: string | null;
   projectFileNames?: Set<string>;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  projectResolvedDir?: string | null;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled: boolean;
+  visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
@@ -2358,8 +2479,7 @@ function ProseBlock({
   }, [hideRecoveredHtmlFallback, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
-  // doesn't flash raw JSON; we surface a banner for it instead. The actual
-  // form streams into the right-hand Questions tab. A not-yet-closed
+  // doesn't flash raw JSON; an inline loading frame takes its place. A not-yet-closed
   // `<od-card>{…` block is stripped the same way so its raw JSON doesn't flash
   // before the close tag arrives (the card renders inline once complete).
   const { text: visibleText, hadOpenForm } = useMemo(() => {
@@ -2378,19 +2498,14 @@ function ProseBlock({
     [visibleText, streaming]
   );
   const segments = useMemo(() => splitOnQuestionForms(head), [head]);
-  // Route relative file-link clicks (`template.html`, `subdir/hero.html`)
-  // through the workspace tab opener. Without this, Electron's window-open
-  // handler creates a new app window whose relative href can't resolve, and
-  // the user lands on the home screen — the file is never previewed.
-  const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
-    if (!onRequestOpenFile) return undefined;
-    return (href, event) => {
-      const path = asInProjectFilePath(href, projectFileNames, projectId);
-      if (!path) return;
-      event.preventDefault();
-      onRequestOpenFile(path);
-    };
-  }, [onRequestOpenFile, projectFileNames, projectId]);
+  // Route file-link clicks away from the default target="_blank" behavior.
+  // Without this, Electron's window-open handler creates a new app window
+  // whose href can't resolve, and the user lands on the home screen — the
+  // file is never previewed (issue #1239 and the 0.14.1 chatpane file-link acceptance bug).
+  const onLinkClick = useMemo<MarkdownLinkClickHandler>(
+    () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
+    [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
+  );
   // Each text segment is further split on `<od-card>` blocks (so memory cards
   // render inline, composing with the surrounding question-form handling) and
   // then on `<system-reminder>` blocks (so those render as their own
@@ -2466,8 +2581,13 @@ function ProseBlock({
             key={seg.key}
             form={seg.form}
             assistantMessageId={assistantMessageId}
+            projectId={projectId}
+            conversationId={conversationId}
             nextUserContent={nextUserContent}
-            onOpenQuestions={onOpenQuestions}
+            interactive={isLastAssistant}
+            onSubmit={onSubmitQuestionForm}
+            submitDisabled={questionFormSubmitDisabled}
+            visualStyleContext={visualStyleContext}
           />
         );
       })}
@@ -2478,46 +2598,8 @@ function ProseBlock({
           code={live.content}
         />
       ) : null}
-      {hadOpenForm ? <QuestionsBanner onOpen={onOpenQuestions} /> : null}
+      {hadOpenForm ? <QuestionFormLoading /> : null}
     </div>
-  );
-}
-
-// Chat-side banner that points to the right-hand Questions tab where discovery
-// forms live. The chat column always stays compact: no inline form preview,
-// answered or not.
-function QuestionsBanner({
-  onOpen,
-  answered = false,
-}: {
-  onOpen?: () => void;
-  answered?: boolean;
-}) {
-  const t = useT();
-  // Once the form has been answered there is nothing left to open, so the
-  // banner becomes a non-interactive "done" marker: no chevron affordance, no
-  // click target, muted styling.
-  return (
-    <button
-      type="button"
-      className={`questions-banner${answered ? " questions-banner-answered" : ""}`}
-      data-testid="questions-banner"
-      data-answered={answered ? "true" : undefined}
-      disabled={answered}
-      onClick={answered ? undefined : () => onOpen?.()}
-    >
-      <span className="questions-banner-icon" aria-hidden>
-        <Icon name={answered ? "check" : "help-circle"} size={15} />
-      </span>
-      <span className="questions-banner-label">
-        {answered ? t("questions.bannerAnswered") : t("questions.banner")}
-      </span>
-      {answered ? null : (
-        <span className="questions-banner-cta" aria-hidden>
-          <Icon name="chevron-right" size={14} />
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -2530,32 +2612,527 @@ function isDirectionForm(form: QuestionForm): boolean {
 function FormBlock({
   form,
   assistantMessageId,
+  projectId,
+  conversationId,
   nextUserContent,
-  onOpenQuestions,
+  interactive,
+  onSubmit,
+  submitDisabled,
+  visualStyleContext,
 }: {
   form: QuestionForm;
   assistantMessageId: string;
+  projectId?: string | null;
+  conversationId?: string | null;
   nextUserContent?: string;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  interactive: boolean;
+  onSubmit?: QuestionFormSubmitHandler;
+  submitDisabled: boolean;
+  visualStyleContext?: VisualStyleContext;
 }) {
-  // A "[form answers …]" reply parked right after this message means the form
-  // was already submitted; the banner then renders as an answered/done state.
+  const t = useT();
+  const analytics = useAnalytics();
+  const formKey =
+    projectId && conversationId
+      ? `${projectId}:${conversationId}:${assistantMessageId}:${form.id}`
+      : null;
+  const [draftAnswers, setDraftAnswers] = useState<
+    Record<string, string | string[]> | undefined
+  >(() => readInlineQuestionFormDraft(formKey));
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const pendingUploadCleanupRef = useRef<ChatAttachment[]>([]);
   const submittedFromHistory = useMemo(
     () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
     [form, nextUserContent],
   );
-  return (
-    <QuestionsBanner
-      answered={submittedFromHistory != null}
-      onOpen={() => {
-        onOpenQuestions?.({
-          form,
-          messageId: assistantMessageId,
-          submittedAnswers: submittedFromHistory ?? undefined,
-        });
-      }}
-    />
+  const submittedSummary = useMemo(() => {
+    const items: Array<{ label: string; value: string }> = [];
+    const visualItems: Array<{
+      label: string;
+      cards: Array<{ title: string; src: string }>;
+    }> = [];
+    if (!submittedFromHistory) return { items, visualItems };
+    for (const question of form.questions) {
+      const raw = submittedFromHistory[question.id];
+      const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+      const labels = values
+        .filter((value) => value.trim().length > 0)
+        .map((value) => formOptionLabelForValue(question, value));
+      if (labels.length === 0) continue;
+
+      const visualStyleCards =
+        visualStyleContext &&
+        question.id === "tone" &&
+        (question.type === "checkbox" || question.type === "radio") &&
+        question.options
+          ? visualStyleCardsForContext(visualStyleContext)
+          : [];
+      const normalizedVisualValues =
+        visualStyleCards.length > 0 && visualStyleContext
+          ? values.map((value) =>
+              normalizeVisualStyleQuestionValue(question, value, visualStyleContext),
+            )
+          : values;
+      const visualCards = visualStyleCards.flatMap((card) =>
+        normalizedVisualValues.includes(card.value) && card.preview
+          ? [{ title: card.title, src: card.preview.src }]
+          : [],
+      );
+      if (visualCards.length > 0) {
+        visualItems.push({ label: question.label, cards: visualCards });
+        const selectedLabelsWithoutPreview = normalizedVisualValues
+          .filter(
+            (value) =>
+              !visualStyleCards.some((card) => card.value === value && card.preview),
+          )
+          .map((value) => {
+            const card = visualStyleCards.find((candidate) => candidate.value === value);
+            return card?.title ?? formOptionLabelForValue(question, value);
+          });
+        if (selectedLabelsWithoutPreview.length > 0) {
+          items.push({
+            label: question.label,
+            value: selectedLabelsWithoutPreview.join(", "),
+          });
+        }
+        continue;
+      }
+      items.push({ label: question.label, value: labels.join(", ") });
+    }
+    return { items, visualItems };
+  }, [form, submittedFromHistory, visualStyleContext]);
+  useEffect(() => {
+    setDraftAnswers(readInlineQuestionFormDraft(formKey));
+    setUploadError(null);
+    submittingRef.current = false;
+    setSubmitting(false);
+    pendingUploadCleanupRef.current = [];
+  }, [formKey]);
+  useEffect(() => {
+    if (!submittedFromHistory) return;
+    clearInlineQuestionFormDraft(formKey);
+    setDraftAnswers(undefined);
+  }, [formKey, submittedFromHistory]);
+  useEffect(() => {
+    if (!submitting || (!submitDisabled && !submittedFromHistory)) return;
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, [submitDisabled, submittedFromHistory, submitting]);
+  const updateDraftAnswers = useCallback(
+    (answers: Record<string, string | string[]>) => {
+      setUploadError(null);
+      setDraftAnswers(answers);
+      writeInlineQuestionFormDraft(formKey, answers);
+    },
+    [formKey],
   );
+  useEffect(() => {
+    if (submittedFromHistory || !projectId) return;
+    const occurrenceKey = `${projectId}:${assistantMessageId}:${form.id}`;
+    if (viewedInlineQuestionForms.has(occurrenceKey)) return;
+    viewedInlineQuestionForms.add(occurrenceKey);
+    trackQuestionsFormSurfaceView(analytics.track, {
+      page_name: "chat_panel",
+      area: "questions_form",
+      project_id: projectId,
+      form_id: questionsFormTrackingId(form.id),
+    });
+  }, [analytics.track, assistantMessageId, form.id, projectId, submittedFromHistory]);
+
+  const handleAnswerChange = useCallback(
+    (questionId: string, value: string | string[]) => {
+      if (!projectId || typeof value !== "string" || value.length === 0) return;
+      const element =
+        questionId === "taskType"
+          ? ("task_type_chip" as const)
+          : questionId === "brand"
+            ? ("brand_bg_chip" as const)
+            : null;
+      if (!element) return;
+      trackQuestionsFormClick(analytics.track, {
+        page_name: "chat_panel",
+        area: "questions_form",
+        element,
+        chip_id: questionsFormTrackingId(value),
+        form_id: questionsFormTrackingId(form.id),
+        project_id: projectId,
+      });
+    },
+    [analytics.track, form.id, projectId],
+  );
+
+  const handleInteraction = useCallback(
+    (interaction: QuestionFormInteraction) => {
+      if (!projectId) return;
+      trackQuestionsFormClick(analytics.track, {
+        page_name: "chat_panel",
+        area: "questions_form",
+        element: interaction.element,
+        form_id: questionsFormTrackingId(form.id),
+        question_id: questionsFormTrackingId(interaction.questionId),
+        project_id: projectId,
+        ...("styleId" in interaction
+          ? { style_id: questionsFormTrackingId(interaction.styleId) }
+          : {}),
+        ...("styleContext" in interaction
+          ? { style_context: interaction.styleContext }
+          : {}),
+        ...("source" in interaction
+          ? { interaction_source: interaction.source }
+          : {}),
+        ...("categoryId" in interaction
+          ? { category_id: interaction.categoryId }
+          : {}),
+        ...("stepIndex" in interaction
+          ? {
+              step_index: interaction.stepIndex,
+              step_count: interaction.stepCount,
+            }
+          : {}),
+      });
+    },
+    [analytics.track, form.id, projectId],
+  );
+
+  const rollbackPendingUploads = useCallback(async () => {
+    const pending = pendingUploadCleanupRef.current;
+    if (pending.length === 0) return true;
+    if (!projectId) return false;
+    const deleted = await Promise.all(
+      pending.map((attachment) => deleteProjectFile(projectId, attachment.path)),
+    );
+    pendingUploadCleanupRef.current = pending.filter((_, index) => !deleted[index]);
+    return pendingUploadCleanupRef.current.length === 0;
+  }, [projectId]);
+
+  const handleSubmit = useCallback(
+    async (
+      text: string,
+      answers: Record<string, string | string[]>,
+      source: "submit" | "skip" | "auto",
+      fileSubmissions: QuestionFormFileSubmission[] = [],
+    ) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
+      if (
+        pendingUploadCleanupRef.current.length > 0 &&
+        !(await rollbackPendingUploads())
+      ) {
+        setUploadError(
+          t("questions.uploadFailed", { failed: Math.max(1, pendingUploadCleanupRef.current.length) }),
+        );
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+      let attachments: ChatAttachment[] = [];
+      let context: RunContextSelection | undefined;
+      let submittedText = text;
+      if (fileSubmissions.length > 0) {
+        if (!projectId) {
+          setUploadError(t("questions.uploadNeedsProject"));
+          submittingRef.current = false;
+          setSubmitting(false);
+          return;
+        }
+        const flatFiles = fileSubmissions.flatMap((submission) =>
+          submission.files.map((file) => ({
+            file,
+            questionLabel: submission.questionLabel,
+          })),
+        );
+        setUploadError(null);
+        const result = await uploadProjectFiles(
+          projectId,
+          flatFiles.map((entry) => entry.file),
+        ).catch((error) => ({
+          uploaded: [],
+          failed: flatFiles.map((entry) => ({
+            name: entry.file.name,
+            error: error instanceof Error ? error.message : String(error),
+          })),
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        if (result.failed.length > 0 || result.uploaded.length !== flatFiles.length) {
+          pendingUploadCleanupRef.current = result.uploaded;
+          await rollbackPendingUploads();
+          const detail = result.error ? ` (${result.error})` : "";
+          setUploadError(t("questions.uploadFailed", { failed: flatFiles.length }) + detail);
+          submittingRef.current = false;
+          setSubmitting(false);
+          return;
+        }
+        attachments = result.uploaded.map((attachment, index) => ({
+          ...attachment,
+          order: index,
+        }));
+        context = {
+          workspaceItems: workspaceItemsForInlineQuestionUploads(attachments),
+        };
+        submittedText = appendInlineQuestionUploadSummary(
+          submittedText,
+          fileSubmissions,
+          attachments,
+        );
+      }
+      if (projectId) {
+        const answeredCount = form.questions.filter((question) => {
+          const value = answers[question.id];
+          return Array.isArray(value)
+            ? value.length > 0
+            : typeof value === "string" && value.trim().length > 0;
+        }).length;
+        trackQuestionsFormClick(analytics.track, {
+          page_name: "chat_panel",
+          area: "questions_form",
+          element: source === "submit" ? "submit" : "skip",
+          ...(source === "skip"
+            ? { skip_source: "button" as const }
+            : source === "auto"
+              ? { skip_source: "countdown" as const }
+              : {}),
+          answered_count: answeredCount,
+          skipped_count: form.questions.length - answeredCount,
+          form_id: questionsFormTrackingId(form.id),
+          project_id: projectId,
+        });
+      }
+      const releaseSubmitLock = () => {
+        submittingRef.current = false;
+        setSubmitting(false);
+      };
+      const rejectSubmission = async () => {
+        if (attachments.length > 0) {
+          pendingUploadCleanupRef.current = attachments;
+          if (!(await rollbackPendingUploads())) {
+            setUploadError(
+              t("questions.uploadFailed", {
+                failed: Math.max(1, pendingUploadCleanupRef.current.length),
+              }),
+            );
+          }
+        }
+        releaseSubmitLock();
+      };
+      const acceptSubmission = () => {
+        clearInlineQuestionFormDraft(formKey);
+        setDraftAnswers(undefined);
+      };
+      let submitOutcome: boolean | void | Promise<boolean | void>;
+      try {
+        submitOutcome =
+          attachments.length > 0 || context
+            ? onSubmit?.(submittedText, attachments, context)
+            : onSubmit?.(submittedText);
+      } catch {
+        void rejectSubmission();
+        return;
+      }
+      void Promise.resolve(submitOutcome).then(
+        (started) => {
+          if (started === false) {
+            void rejectSubmission();
+            return;
+          }
+          acceptSubmission();
+        },
+        () => void rejectSubmission(),
+      );
+    },
+    [analytics.track, form, formKey, onSubmit, projectId, rollbackPendingUploads, t],
+  );
+
+  if (submittedFromHistory) {
+    return (
+      <div
+        className="question-form-summary"
+        data-testid="question-form-summary"
+        data-form-id={form.id}
+        data-message-id={assistantMessageId}
+      >
+        <span className="question-form-summary-icon" aria-hidden>
+          <Icon name="check" size={14} />
+        </span>
+        <div className="question-form-summary-body">
+          <div className="question-form-summary-title">{t("questions.bannerAnswered")}</div>
+          {submittedSummary.items.length > 0 || submittedSummary.visualItems.length > 0 ? (
+            <>
+              {submittedSummary.visualItems.map((item) => (
+                <div key={item.label} className="question-form-summary-visuals">
+                  <span className="question-form-summary-visual-label">{item.label}</span>
+                  <div className="question-form-summary-visual-cards">
+                    {item.cards.map((card) => (
+                      <figure key={card.src} className="question-form-summary-visual-card">
+                        <img src={card.src} alt={`${item.label}: ${card.title}`} />
+                        <figcaption>{card.title}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {submittedSummary.items.length > 0 ? (
+                <div className="question-form-summary-items">
+                  {submittedSummary.items.map((item) => (
+                    <span key={item.label} className="question-form-summary-item">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="question-form-summary-empty">{t("qf.lockedSubmitted")}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <QuestionFormView
+        form={form}
+        interactive={interactive}
+        draftAnswers={draftAnswers}
+        onDraftChange={updateDraftAnswers}
+        onAnswerChange={handleAnswerChange}
+        onInteraction={handleInteraction}
+        onSubmit={onSubmit ? (...args) => void handleSubmit(...args) : undefined}
+        submitDisabled={submitDisabled || submitting}
+        visualStyleContext={visualStyleContext}
+        autoContinueAfterTimeout
+      />
+      {uploadError ? (
+        <div className="qf-upload-error" role="alert">
+          {uploadError}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function workspaceItemsForInlineQuestionUploads(
+  attachments: ChatAttachment[],
+): WorkspaceContextItem[] {
+  return attachments.map((attachment) => ({
+    id: `file:${attachment.path}`,
+    kind: "file",
+    label:
+      attachment.path.split("/").filter(Boolean).pop() || attachment.name,
+    path: attachment.path,
+  }));
+}
+
+function appendInlineQuestionUploadSummary(
+  text: string,
+  fileSubmissions: QuestionFormFileSubmission[],
+  attachments: ChatAttachment[],
+): string {
+  if (attachments.length === 0) return text;
+  const labelsByFileName = new Map<string, string[]>();
+  for (const submission of fileSubmissions) {
+    for (const file of submission.files) {
+      const labels = labelsByFileName.get(file.name) ?? [];
+      labels.push(submission.questionLabel);
+      labelsByFileName.set(file.name, labels);
+    }
+  }
+  const lines = ["[uploaded design files]"];
+  attachments.forEach((attachment, index) => {
+    const labels = labelsByFileName.get(attachment.name) ?? [];
+    const labelSuffix = labels.length > 0 ? ` (for: ${labels.join(", ")})` : "";
+    lines.push(`- Uploaded file ${index + 1}: ${attachment.name} -> ${attachment.path}${labelSuffix}`);
+  });
+  return `${text}\n\n${lines.join("\n")}`;
+}
+
+function inlineQuestionFormDraftStorageKey(
+  formKey: string | null,
+): string | null {
+  return formKey ? `${QUESTION_FORM_DRAFT_STORAGE_PREFIX}${formKey}` : null;
+}
+
+function readInlineQuestionFormDraft(
+  formKey: string | null,
+): Record<string, string | string[]> | undefined {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const answers: Record<string, string | string[]> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value === "string") {
+        answers[id] = value;
+      } else if (
+        Array.isArray(value) &&
+        value.every((item) => typeof item === "string")
+      ) {
+        answers[id] = value;
+      }
+    }
+    return Object.keys(answers).length > 0 ? answers : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeInlineQuestionFormDraft(
+  formKey: string | null,
+  answers: Record<string, string | string[]>,
+): void {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(answers));
+  } catch {
+    // Form input remains usable when browser storage is unavailable.
+  }
+}
+
+function clearInlineQuestionFormDraft(formKey: string | null): void {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // The submitted answer message remains authoritative.
+  }
+}
+
+function QuestionFormLoading() {
+  return (
+    <div className="question-form question-form-loading" aria-hidden data-testid="question-form-loading">
+      <div className="question-form-head">
+        <span className="question-form-icon">?</span>
+        <div className="question-form-loading-lines">
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className="question-form-loading-body">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
+function visualStyleContextForProjectKind(
+  projectKind: TrackingProjectKind | null,
+): VisualStyleContext | undefined {
+  if (projectKind === "slide_deck") return "deck";
+  if (projectKind === "prototype" || projectKind === "mobile") return "prototype";
+  return undefined;
 }
 
 function SystemReminderBlock({
@@ -2600,7 +3177,15 @@ function SystemReminderBlock({
   );
 }
 
-function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+function ThinkingBlock({
+  text,
+  streaming,
+  onLinkClick,
+}: {
+  text: string;
+  streaming?: boolean;
+  onLinkClick?: MarkdownLinkClickHandler;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const isThinking = streaming === true;
@@ -2642,7 +3227,7 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="thinking-body">{renderMarkdown(text)}</div>
+          <div className="thinking-body">{renderMarkdown(text, { onLinkClick })}</div>
         </div>
       </div>
     </div>
@@ -3006,8 +3591,8 @@ function toolFamily(name: string): string {
   if (name === "Grep") return "grep";
   if (name === "Bash") return "bash";
   if (isTodoWriteToolName(name)) return "todo";
-  if (name === "WebFetch" || name === "web_fetch") return "fetch";
-  if (name === "WebSearch" || name === "web_search") return "search";
+  if (name === "WebFetch" || name === "web_fetch" || name === "webfetch") return "fetch";
+  if (name === "WebSearch" || name === "web_search" || name === "websearch") return "search";
   return name.toLowerCase();
 }
 

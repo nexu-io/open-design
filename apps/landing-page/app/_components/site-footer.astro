@@ -8,6 +8,8 @@ import {
   isLandingLocale,
   localizedHref,
 } from '../i18n';
+import { getFooterLegalCopy } from '../footer-legal-i18n';
+import { getSolutionPageCopy, type SolutionPageKey } from '../solution-pages-i18n';
 
 interface Props {
   counts: HeaderProps['counts'];
@@ -38,6 +40,21 @@ const USE_CASE_HREFS = [
   '/solutions/design-system/',
 ] as const;
 
+// Solution → Tools. Kept in lockstep with header.tsx's TOOL_ENTRIES; labels
+// reuse each tool page's own breadcrumb so footer, nav, and hub cards share a
+// single translation source. Rendered at the bottom of the Solution column,
+// mirroring the nav dropdown order (use cases → tools).
+const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
+  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
+  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/ai-prototype-generator/', key: 'aiPrototypeGenerator' },
+  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
+  { href: '/solutions/design-to-code/', key: 'designToCode' },
+  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
+  { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
+] as const;
+
 // A short, recognisable subset of the agent roster for the footer; the
 // column header links to the full /agents/ hub.
 const FOOTER_AGENTS = [
@@ -48,14 +65,9 @@ const FOOTER_AGENTS = [
   { name: 'OpenCode', route: 'opencode-design' },
 ] as const;
 
-// Legal / company labels — small inline map (en/zh/zh-tw, fallback en) so
-// this stays out of the larger footer i18n surface.
-const L = {
-  en: { company: 'Company', about: 'About', careers: 'Careers', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents', allSolutions: 'All use cases' },
-  zh: { company: '公司', about: '关于', careers: '招聘', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent', allSolutions: '全部场景' },
-  'zh-tw': { company: '公司', about: '關於', careers: '招聘', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent', allSolutions: '全部場景' },
-} satisfies Record<string, Record<string, string>>;
-const l = L[locale as keyof typeof L] ?? L.en;
+// Legal / company labels — localized for every landing locale (see
+// footer-legal-i18n.ts), falling back to English for any unknown code.
+const l = getFooterLegalCopy(locale);
 ---
 
 <footer class='sub-footer' data-od-id='footer'>
@@ -75,6 +87,12 @@ const l = L[locale as keyof typeof L] ?? L.en;
         <ul>
           {menu.useCaseItems.map((name, i) => (
             <li><a href={href(USE_CASE_HREFS[i]!)}>{name}</a></li>
+          ))}
+        </ul>
+        <h6 class='sub-footer-subhead'>{menu.tools}</h6>
+        <ul>
+          {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+            <li><a href={href(toolHref)}>{getSolutionPageCopy(locale, key).breadcrumb}</a></li>
           ))}
         </ul>
       </div>
@@ -112,6 +130,7 @@ const l = L[locale as keyof typeof L] ?? L.en;
           <li><a href={href('/alternatives/figma-make/')}>Figma Make</a></li>
           <li><a href={href('/alternatives/qoder/')}>Qoder</a></li>
           <li><a href={href('/alternatives/trae/')}>Trae</a></li>
+          <li><a href={href('/alternatives/pencil-dev/')}>Pencil</a></li>
         </ul>
       </div>
 
@@ -126,26 +145,32 @@ const l = L[locale as keyof typeof L] ?? L.en;
         </ul>
       </div>
 
-      <div class='sub-footer-col'>
-        <h5><a href={href('/community/')}>{menu.community}</a></h5>
-        <ul>
-          <li><a href={href('/community/contributors/')}>{menu.communityItems.contributors}</a></li>
-          <li><a href={href('/community/ambassadors/')}>{menu.communityItems.ambassadors}</a></li>
-          <li><a href={href('/community/moderators/')}>{menu.communityItems.moderators}</a></li>
-        </ul>
-      </div>
+      {/* Community + Company share one grid column, stacked vertically. Eight
+          nav sections into a 7-track grid used to orphan Company onto a second
+          row; pairing the two shortest sections keeps everything on one row. */}
+      <div class='sub-footer-col-stack'>
+        <div class='sub-footer-col'>
+          <h5><a href={href('/community/')}>{menu.community}</a></h5>
+          <ul>
+            <li><a href={href('/community/contributors/')}>{menu.communityItems.contributors}</a></li>
+            <li><a href={href('/community/ambassadors/')}>{menu.communityItems.ambassadors}</a></li>
+            <li><a href={href('/community/moderators/')}>{menu.communityItems.moderators}</a></li>
+            <li><a href={href('/community/events/')}>Events</a></li>
+          </ul>
+        </div>
 
-      <div class='sub-footer-col'>
-        <h5>{l.company}</h5>
-        <ul>
-          <li><a href={href('/about/')}>{l.about}</a></li>
-          <li><a href={href('/careers/')}>{l.careers}</a></li>
-          <li><a href={href('/faq/')}>{l.faq}</a></li>
-          <li><a href={href('/privacy/')}>{l.privacy}</a></li>
-          <li><a href={href('/terms/')}>{l.terms}</a></li>
-          <li><a href={REPO} target='_blank' rel='noopener'>{ui.footer.github}</a></li>
-          <li><a href={DISCORD} target='_blank' rel='noopener'>{ui.footer.discord}</a></li>
-        </ul>
+        <div class='sub-footer-col'>
+          <h5>{l.company}</h5>
+          <ul>
+            <li><a href={href('/about/')}>{l.about}</a></li>
+            <li><a href={href('/careers/')}>{l.careers}</a></li>
+            <li><a href={href('/faq/')}>{l.faq}</a></li>
+            <li><a href={href('/privacy/')}>{l.privacy}</a></li>
+            <li><a href={href('/terms/')}>{l.terms}</a></li>
+            <li><a href={REPO} target='_blank' rel='noopener'>{ui.footer.github}</a></li>
+            <li><a href={DISCORD} target='_blank' rel='noopener'>{ui.footer.discord}</a></li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -220,6 +245,17 @@ const l = L[locale as keyof typeof L] ?? L.en;
     }
     .foot-social a:hover {
       color: var(--ink, #262626);
+    }
+    /* Secondary "Tools" heading inside the Solution column — reuses the h5
+       eyebrow look but sits below the use-case list, so it needs top spacing. */
+    .sub-footer-subhead {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 500;
+      margin: 20px 0 14px;
     }
   </style>
 </footer>

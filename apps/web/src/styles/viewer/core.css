@@ -15,6 +15,8 @@
   overflow: visible;
 }
 .viewer-toolbar {
+  position: relative;
+  z-index: 3;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -101,15 +103,16 @@
   display: none;
 }
 .viewer-viewport-switcher {
-  width: 32px;
+  width: 30px;
 }
 .viewer-viewport-trigger {
   justify-content: center;
-  width: 32px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   padding: 0;
 }
-.viewer-viewport-trigger > span,
-.viewer-viewport-trigger > svg:last-child {
+.viewer-viewport-trigger > span {
   display: none;
 }
 .viewer-toolbar-more {
@@ -586,6 +589,191 @@
   position: relative;
   background: var(--bg);
   overflow: auto;
+}
+/* Initial-load skeleton for the HTML preview, owned by FileViewer's source===null branch. */
+.viewer-loading {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 5vw, 56px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 34% 36%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 88%, var(--bg-panel)), var(--bg));
+  animation: od-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.viewer-loading-stage {
+  position: relative;
+  width: min(760px, 86%);
+  aspect-ratio: 16 / 9;
+  max-height: 76%;
+  animation: od-viewer-loading-float 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite alternate;
+}
+.viewer-loading-card {
+  position: absolute;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  pointer-events: none;
+}
+.viewer-loading-card-back {
+  inset: 0;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle)), color-mix(in srgb, var(--bg-subtle) 88%, var(--accent) 5%));
+  box-shadow: 0 18px 52px color-mix(in srgb, var(--shadow-color, #000) 7%, transparent);
+}
+.viewer-loading-card-back-one {
+  opacity: 0.5;
+  transform: translate(18px, -14px) scale(0.965);
+}
+.viewer-loading-card-back-two {
+  opacity: 0.32;
+  transform: translate(-16px, 16px) scale(0.94);
+}
+.viewer-loading-card-main {
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(10px, 2vw, 18px);
+  overflow: hidden;
+  padding: clamp(26px, 5vw, 58px);
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34%),
+    linear-gradient(140deg, color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%), color-mix(in srgb, var(--bg-subtle) 88%, var(--bg-panel) 12%));
+  box-shadow:
+    0 28px 80px color-mix(in srgb, var(--shadow-color, #000) 9%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 40%, transparent) inset;
+}
+.viewer-loading-card-main::before {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  transform: translateX(-42%) rotate(8deg);
+  background: linear-gradient(
+    90deg,
+    transparent 35%,
+    color-mix(in srgb, #fff 34%, transparent) 50%,
+    transparent 65%
+  );
+  animation: od-viewer-loading-sweep 1.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+.viewer-loading-kicker,
+.viewer-loading-title,
+.viewer-loading-rule,
+.viewer-loading-line,
+.viewer-loading-bar {
+  position: relative;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--text-muted) 12%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 15%, transparent) 40%,
+    color-mix(in srgb, var(--text-muted) 10%, transparent) 80%
+  );
+  background-size: 220% 100%;
+  animation: od-viewer-loading-sheen 1.55s linear infinite;
+}
+.viewer-loading-kicker {
+  width: 21%;
+  height: clamp(7px, 0.85vw, 10px);
+}
+.viewer-loading-title {
+  width: 64%;
+  height: clamp(24px, 3.5vw, 42px);
+  border-radius: 12px;
+}
+.viewer-loading-title-short {
+  width: 46%;
+}
+.viewer-loading-rule {
+  width: 56%;
+  height: 4px;
+  margin: clamp(2px, 0.6vw, 8px) 0;
+}
+.viewer-loading-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 26%);
+  align-items: end;
+  gap: clamp(18px, 4vw, 52px);
+  margin-top: clamp(2px, 1.5vw, 16px);
+}
+.viewer-loading-copy {
+  display: grid;
+  gap: clamp(8px, 1.3vw, 12px);
+  min-width: 0;
+}
+.viewer-loading-line {
+  width: 76%;
+  height: clamp(8px, 1vw, 11px);
+}
+.viewer-loading-line-medium {
+  width: 58%;
+}
+.viewer-loading-line-short {
+  width: 34%;
+}
+.viewer-loading-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: clamp(6px, 1.2vw, 11px);
+  min-height: clamp(44px, 8vw, 82px);
+}
+.viewer-loading-bar {
+  width: clamp(12px, 2vw, 20px);
+  border-radius: 999px 999px 6px 6px;
+}
+.viewer-loading-bar-one {
+  height: 48%;
+}
+.viewer-loading-bar-two {
+  height: 78%;
+  animation-delay: 120ms;
+}
+.viewer-loading-bar-three {
+  height: 60%;
+  animation-delay: 240ms;
+}
+@keyframes od-viewer-loading-float {
+  from { transform: translateY(3px); }
+  to { transform: translateY(-5px); }
+}
+@keyframes od-viewer-loading-sweep {
+  from { transform: translateX(-42%) rotate(8deg); }
+  to { transform: translateX(42%) rotate(8deg); }
+}
+@keyframes od-viewer-loading-sheen {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewer-loading,
+  .viewer-loading-stage,
+  .viewer-loading-card-main::before,
+  .viewer-loading-kicker,
+  .viewer-loading-title,
+  .viewer-loading-rule,
+  .viewer-loading-line,
+  .viewer-loading-bar {
+    animation: none;
+  }
+}
+@media (max-width: 720px) {
+  .viewer-loading-stage {
+    width: min(540px, 92%);
+  }
+  .viewer-loading-content {
+    grid-template-columns: 1fr;
+  }
+  .viewer-loading-chart {
+    display: none;
+  }
 }
 .live-artifact-refresh-notice {
   position: sticky;
@@ -1100,23 +1288,33 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 32px;
+  width: 30px;
 }
 .viewer-viewport-trigger {
-  width: 32px;
-  min-height: 26px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
   justify-content: center;
   gap: 0;
   padding: 0;
   border-color: var(--border);
   background-color: var(--bg-panel);
-  color: var(--text);
+  color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.2;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .viewer-viewport-trigger > svg {
   flex: 0 0 auto;
+}
+.viewer-viewport-trigger > .viewer-viewport-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
 }
 .viewer-viewport-trigger > span {
   flex: 1 1 auto;
@@ -1129,6 +1327,7 @@
 .viewer-viewport-trigger[aria-expanded='true'] {
   border-color: var(--border-strong);
   background-color: var(--bg-subtle);
+  color: var(--text);
 }
 .viewer-viewport-menu {
   position: absolute;
@@ -1143,6 +1342,16 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
+}
+/*
+ * In the main preview toolbar the switcher sits at the LEFT edge of the bar, so a
+ * right-anchored menu spills past the pane's left boundary. Anchor it to the button's
+ * left edge here so it opens rightward into the open toolbar space and stays in bounds.
+ * (The live-artifact toolbar keeps the default right anchor: its switcher sits on the right.)
+ */
+.viewer-preview-toolbar-inline .viewer-viewport-menu {
+  right: auto;
+  left: 0;
 }
 .viewer-viewport-menu-item {
   width: 100%;
@@ -1294,14 +1503,6 @@
   background: var(--bg);
   isolation: isolate;
 }
-/* While the draw toolbar is open in a tablet/mobile device frame, reserve room at the
-   bottom of the preview's scroll area so the device frame (and the page's scrollbar)
-   can clear the pinned toolbar — which is portaled to the non-scrolling .viewer-body —
-   instead of being hidden behind it. Padding keeps the checkered backdrop full-bleed,
-   so the toolbar reads as a floating pill rather than a docked footer bar (#3455). */
-.preview-viewport:not(.preview-viewport-desktop).preview-draw-active {
-  padding-bottom: 84px;
-}
 .comment-overlay-layer {
   position: absolute;
   inset: 0;
@@ -1402,6 +1603,54 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
+}
+.comment-popover-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin: -2px 0 8px;
+}
+.comment-popover-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-popover-drag-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.comment-popover-drag-handle:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.comment-popover-drag-handle:active,
+.comment-popover-dragging .comment-popover-drag-handle {
+  cursor: grabbing;
+}
+.comment-popover-drag-handle span {
+  width: 12px;
+  height: 16px;
+  background-image: radial-gradient(currentColor 1.3px, transparent 1.4px);
+  background-position: 0 0;
+  background-size: 6px 5px;
 }
 .comment-popover-section {
   min-width: 0;
@@ -1595,6 +1844,31 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.comment-popover-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+  box-shadow: var(--shadow-xs);
+}
+.comment-popover-close:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.comment-popover button > svg {
+  display: block;
+  flex: 0 0 auto;
 }
 /* Attached-image thumbnails inside the element-comment composer — mirrors the
    markup overlay's tray so element comments can carry images too. */
@@ -2626,22 +2900,33 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   position: relative;
   width: 100%;
   min-height: 90px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 13px;
+  display: block;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 11px;
   background: var(--bg-panel);
   color: var(--text);
-  text-align: left;
-  cursor: pointer;
   box-shadow: var(--shadow-xs);
   transition:
     border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
     background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.file-version-item-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
 }
 .file-version-item + .file-version-item {
   margin-top: 8px;
@@ -2652,10 +2937,14 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
-.file-version-item:focus-visible {
+.file-version-item:focus-within {
   outline: none;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.file-version-item-select:focus-visible,
+.file-version-head-download-wrap .viewer-action:focus-visible {
+  outline: none;
 }
 .file-version-item.active {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
@@ -2671,6 +2960,20 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
+}
+.file-version-download-wrap {
+  position: relative;
+  display: inline-flex;
+  z-index: 22;
+}
+.file-version-download-menu.share-menu-popover {
+  top: calc(100% + 8px);
+  right: 0;
+  left: auto;
+  min-width: 252px;
+  max-width: calc(100vw - 64px);
+  z-index: 23;
+  pointer-events: auto;
 }
 .file-version-item-top {
   min-width: 0;
@@ -2775,7 +3078,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding: 10px 16px 10px 18px;
   border-bottom: 1px solid var(--border);
   position: relative;
-  z-index: 3;
+  z-index: 20;
 }
 .file-version-meta {
   min-width: 0;
@@ -2879,6 +3182,8 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding-inline: 7px;
 }
 .file-version-actions {
+  position: relative;
+  z-index: 21;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2971,6 +3276,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .file-version-preview {
   position: relative;
+  z-index: 0;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -3080,6 +3386,12 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   display: block;
   border: 0;
   background: #fff;
+}
+.viewer-modal-backdrop.file-version-export-backdrop.modal-backdrop {
+  z-index: 1800;
+}
+.od-toast.file-version-export-toast.placement-top {
+  z-index: 1810;
 }
 
 @media (prefers-reduced-motion: reduce) {

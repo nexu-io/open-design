@@ -105,7 +105,7 @@ decoded to real bytes by `writeBrandSystem` / `write: true`.
 
 | Path | What it is |
 | --- | --- |
-| `seed.json` | The ~20-field SeedToken — the only authored surface. |
+| `seed.json` | Generated snapshot of the effective SeedToken; persistent overrides belong in `brand.json.seed`. |
 | `tokens.default.json` / `.dark.json` / `.compact.json` | Full derived DesignTokens per algorithm. |
 | `variables.css` | `:root{}` (light) + `.dark{}` (dark) CSS custom properties. |
 | `variables.dark.css` | Standalone `:root{}` for the dark theme. |
@@ -118,10 +118,12 @@ decoded to real bytes by `writeBrandSystem` / `write: true`.
 
 ## Recipes
 
-**Change the brand color.** Edit `colorPrimary` in the seed (or the `accent`
-color role in the Brand). The 10-step palette, every interaction state, the
-primary background/border, and every component referencing
-`var(--brand-color-primary)` all update together — re-run the engine.
+**Change the brand color.** Set `seed.colorPrimary` or edit the `accent` color
+role in the Brand. For registered brand projects, persist overrides in
+`brand.json.seed`, then run `od brand finalize <brand-id>`. Do not edit
+`system/seed.json` directly; finalize regenerates it. The 10-step palette, every
+interaction state, the primary background/border, and every component referencing
+`var(--brand-color-primary)` update together.
 
 **Light → dark / compact.** Both are the same seed run through a different
 algorithm. Load `variables.dark.css` (or add the `.dark` class) for dark;

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Caustic Pool — Open Design</title>
+<!--
+  Self-contained WebGL2 hero. Animated water caustics: layered domain-warped
+  ripples run a cheap refraction-network approximation, brightened into caustic
+  filaments. Pointer drops a radial ripple that bends the network. No meshes,
+  no textures, no build step, no external assets.
+-->
+<style>
+  :root{ color-scheme:dark; }
+  html,body{ margin:0; height:100%; overflow:hidden; background:#04121a;
+    font-family:'Albert Sans',ui-sans-serif,system-ui,-apple-system,sans-serif; color:#eafcff; }
+  #gl{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .overlay{ position:fixed; inset:0; z-index:2; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between; padding:5vw; }
+  .top{ display:flex; justify-content:space-between; font-size:clamp(11px,1vw,14px);
+    letter-spacing:0.32em; text-transform:uppercase; color:rgba(234,252,255,0.72); }
+  .top .dot{ width:8px; height:8px; border-radius:50%; background:#7dffd6; box-shadow:0 0 14px #7dffd6;
+    display:inline-block; margin-right:10px; vertical-align:middle; }
+  h1{ margin:0; font-size:clamp(44px,11vw,170px); line-height:0.86; font-weight:800; letter-spacing:-0.04em; mix-blend-mode:overlay; }
+  h1 .thin{ font-weight:300; }
+  .bottom{ display:flex; justify-content:space-between; align-items:flex-end; gap:4vw; }
+  .sub{ font-size:clamp(14px,1.5vw,19px); max-width:42ch; color:rgba(234,252,255,0.8); line-height:1.45; margin:0; }
+  .badge{ font-size:11px; letter-spacing:0.28em; text-transform:uppercase; color:rgba(234,252,255,0.6);
+    border:1px solid rgba(234,252,255,0.22); padding:9px 15px; border-radius:999px; backdrop-filter:blur(8px); white-space:nowrap; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="overlay">
+  <div class="top"><span><span class="dot"></span>Open Design · WebGL Preview</span><span>Real-time · GPU</span></div>
+  <div class="bottom">
+    <div><h1>CAUSTIC<br><span class="thin">POOL</span></h1>
+      <p class="sub">A refraction network woven from domain-warped ripples, brightened into living caustic filaments. Click the water to drop a ripple.</p></div>
+    <div class="badge">Click the water ↗</div>
+  </div>
+</div>
+<script>
+(() => {
+const canvas=document.getElementById('gl');
+const gl=canvas.getContext('webgl2',{antialias:true});
+if (!gl) { document.body.innerHTML='<p style="color:#fff;padding:2rem;font-family:sans-serif">WebGL2 not available.</p>'; return; }
+const VERT=`#version 300 es
+void main(){ vec2 p=vec2((gl_VertexID<<1)&2, gl_VertexID&2); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }`;
+const FRAG=`#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 u_res; uniform float u_time; uniform vec3 u_ripple; // xy=pos(0..1), z=age
+#define TAU 6.28318530718
+// canonical caustic network (folding-coordinate accumulation, needs the mod-tiling)
+float caustic(vec2 uv){
+  float t=u_time*0.4+23.0;
+  vec2 p=mod(uv*TAU, TAU)-250.0;
+  vec2 i=p; float c=1.0; float inten=0.005;
+  for(int n=0;n<5;n++){
+    float tt=t*(1.0-(3.5/float(n+1)));
+    i=p+vec2(cos(tt-i.x)+sin(tt+i.y), sin(tt-i.y)+cos(tt+i.x));
+    c+=1.0/length(vec2(p.x/(sin(i.x+tt)/inten), p.y/(cos(i.y+tt)/inten)));
+  }
+  c/=5.0; c=1.17-pow(c,1.4);
+  return pow(abs(c),8.0);
+}
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res; uv.x*=u_res.x/u_res.y;
+  vec2 p=(gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  // pointer ripple bends the sampling coords
+  vec2 rp=(u_ripple.xy-0.5)*vec2(u_res.x/u_res.y,1.0);
+  float d=length(p-rp), age=u_ripple.z;
+  float wave=sin(d*24.0-age*8.0)*exp(-d*3.5)*exp(-age*1.6);
+  uv += normalize(p-rp+1e-4)*wave*0.4;
+
+  float c=caustic(uv*1.6);
+  vec3 deep=vec3(0.02,0.10,0.17), shallow=vec3(0.05,0.34,0.42);
+  vec3 col=mix(deep,shallow, smoothstep(1.0,-0.3,length(p)));
+  col+=vec3(0.35,0.85,0.80)*c;                  // aqua caustic filaments
+  col+=vec3(0.85,1.0,0.95)*pow(c,1.8)*0.5;        // hot cores
+  col*=0.6+0.6*smoothstep(1.35,0.1,length(p));    // vignette
+  col=col/(col+0.75);
+  col+=(fract(sin(dot(gl_FragCoord.xy,vec2(12.9,78.2)))*43758.5)-0.5)*0.025;
+  o=vec4(pow(max(col,0.0),vec3(0.85)),1.0);
+}`;
+function sh(t,s){const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(x);return x;}
+const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(pr);
+if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw gl.getProgramInfoLog(pr);
+gl.useProgram(pr);
+const uRes=gl.getUniformLocation(pr,'u_res'),uTime=gl.getUniformLocation(pr,'u_time'),uRip=gl.getUniformLocation(pr,'u_ripple');
+let ripple=[0.5,0.5,999];
+addEventListener('pointerdown',e=>{ ripple=[e.clientX/innerWidth, 1.0-e.clientY/innerHeight, 0]; });
+function resize(){const d=Math.min(devicePixelRatio||1,2),w=innerWidth*d|0,h=innerHeight*d|0;if(w===canvas.width&&h===canvas.height)return;canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
+addEventListener('resize',resize);resize();
+const t0=performance.now();
+function frame(now){ resize(); ripple[2]+=1/60;
+  gl.uniform2f(uRes,canvas.width,canvas.height); gl.uniform1f(uTime,(now-t0)/1000); gl.uniform3f(uRip,ripple[0],ripple[1],ripple[2]);
+  gl.drawArrays(gl.TRIANGLES,0,3); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -49,6 +49,7 @@ export const STATUS_ORDER = [
 	"not_started",
 	"running",
 	"awaiting_input",
+	"incomplete",
 	"succeeded",
 	"failed",
 	"canceled",
@@ -59,6 +60,7 @@ export const STATUS_LABEL_KEYS = {
 	queued: "designs.status.queued",
 	running: "designs.status.running",
 	awaiting_input: "designs.status.awaitingInput",
+	incomplete: "designs.status.incomplete",
 	succeeded: "designs.status.succeeded",
 	failed: "designs.status.failed",
 	canceled: "designs.status.canceled",
@@ -201,17 +203,6 @@ export function DesignsTab({
 						] as const;
 					}
 					return [project.id, null] as const;
-				}
-				const html =
-					files.find((f) => (f.path ?? f.name) === "index.html") ??
-					files
-						.filter((f) => f.kind === "html")
-						.sort((a, b) => b.mtime - a.mtime)[0];
-				if (html) {
-					return [
-						project.id,
-						{ kind: "html" as const, name: html.path ?? html.name },
-					] as const;
 				}
 				const image = files
 					.filter((f) => f.kind === "image")
@@ -954,15 +945,8 @@ export function DesignsTab({
 										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
-									) : cover.kind === "html" && cover.src ? (
-										<iframe
-											className="thumb-iframe"
-											src={cover.src}
-											title=""
-											loading="lazy"
-											sandbox="allow-scripts"
-											tabIndex={-1}
-										/>
+									) : cover.kind === "html" ? (
+										<span className="project-thumb-glyph">{cover.initial}</span>
 									) : (
 										<span className="project-thumb-glyph">{cover.initial}</span>
 									)}

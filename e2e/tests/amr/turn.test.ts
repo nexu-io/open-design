@@ -14,13 +14,8 @@
  *      `agentId: 'amr'` through `attachAcpSession` (not the legacy
  *      json-event-stream parser the old `incongruous-megaraptor` branch
  *      used).
- *   2. AMR preflight refreshes `vela models` and substitutes the synthetic
- *      `'default'` model id with the first live model (`glm-5`), so vela
- *      receives a real `session/set_model` before `session/prompt` — a
- *      regression here would manifest as
- *      `session/set_model must be called before session/prompt` on the
- *      real `vela` binary, but the fake here enforces the same gate
- *      so it surfaces locally without a vela install.
+ *   2. The synthetic `'default'` model id is preserved so vela can use the
+ *      upstream account default without an explicit `session/set_model`.
  *   3. The full ACP transport (`initialize` → `session/new` →
  *      `session/set_model` → `session/prompt` → `session/update*`) flows
  *      between the daemon and a spawned subprocess that respects vela's
@@ -160,14 +155,6 @@ function handle(msg) {
   }
   if (method === 'session/prompt') {
     const sid = (params && params.sessionId) || SESSION_ID;
-    if (!sessionsWithModel.has(sid)) {
-      writeMessage({
-        jsonrpc: '2.0',
-        id,
-        error: { code: -32602, message: 'session/set_model must be called before session/prompt' },
-      });
-      return;
-    }
     writeNotification('session/update', {
       sessionId: sid,
       update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ASSISTANT_TEXT } },

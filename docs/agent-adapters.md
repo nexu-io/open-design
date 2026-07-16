@@ -12,63 +12,99 @@ If you're adding a new ACP-backed runtime, start with [`new-agent-runtime-acp.md
 
 ---
 
-## 1. Adapter interface (TypeScript)
+## 1. Adapter contract: a data spec, not a class
 
-Every adapter implements this interface. The current adapter implementation lives in [`apps/daemon/src/agents.ts`](../apps/daemon/src/agents.ts).
+An adapter is **not** a class that implements the agent loop. It is a **plain data object** — one `RuntimeAgentDef` object literal per CLI — that declares *how to talk to* that CLI: which binary to probe, how to build its argv, how it streams, what it can do. A **generic engine** reads those fields and does the detecting, launching, invoking, and stream-parsing for every agent uniformly. There is no per-agent subclass and no `run()` / `cancel()` method to implement.
+
+Where the pieces live (all under `apps/daemon/src/`):
+
+- **The contract (the data spec):** [`runtimes/types.ts`](../apps/daemon/src/runtimes/types.ts) — the `RuntimeAgentDef` type.
+- **One def per CLI:** [`runtimes/defs/*.ts`](../apps/daemon/src/runtimes/defs) — `claude.ts`, `codex.ts`, `cursor-agent.ts`, `devin.ts`, … each exports a single object literal.
+- **The registry (a unique-id array):** [`runtimes/registry.ts`](../apps/daemon/src/runtimes/registry.ts) — `BASE_AGENT_DEFS` collects every def into `AGENT_DEFS`; a boot-time loop throws on any duplicate `id`.
+- **The generic engine (zero per-agent code):** `detection.ts`, `capabilities.ts`, `executables.ts` / `resolution.ts`, `launch.ts`, `invocation.ts`, `env.ts`, `mcp.ts`, `models.ts`, `prompt-budget.ts` under `runtimes/`, plus the stream dispatch in [`server.ts`](../apps/daemon/src/server.ts) that routes each def's `streamFormat` / `eventParser` to the matching `*-stream.ts` parser.
+- **The public barrel:** [`agents.ts`](../apps/daemon/src/agents.ts) re-exports `AGENT_DEFS`, `getAgentDef`, `detectAgents`, `resolveAgentLaunch`, … from `runtimes/`. It defines nothing itself — import from it for convenience, but read `runtimes/` for the contract.
+
+> **Adding a CLI is a one-file change.** Drop a new `runtimes/defs/<cli>.ts` exporting one `RuntimeAgentDef`, add it to the `BASE_AGENT_DEFS` array in `registry.ts`, and the engine detects, launches, invokes, and (for an existing `streamFormat`) streams it — **no engine edits, no new class, no method overrides.** The def is config; the loop is shared. A genuinely new wire format is the only case that also adds an engine file (a new `*-stream.ts` and a `streamFormat` value).
+
+### The data spec (`RuntimeAgentDef`, abbreviated)
+
+The full type lives in `runtimes/types.ts`; the load-bearing fields:
 
 ```ts
-interface AgentAdapter {
-  readonly id: string;                      // "claude-code" | "codex" | …
-  readonly displayName: string;
+type RuntimeAgentDef = {
+  id: string;                 // unique key, e.g. "claude" | "codex" — the registry dedupes on it
+  name: string;               // display name
+  bin: string;                // CLI executable to probe on PATH
+  fallbackBins?: string[];    // alternate executable names
+  versionArgs: string[];      // args for the version / detection probe
+  fallbackModels: RuntimeModelOption[];
 
-  // -- discovery --------------------------------------------------
-  detect(): Promise<AgentDetection | null>; // null if not installed
+  // How to invoke: build the argv for one turn from the composed prompt.
+  buildArgs: (
+    prompt: string,
+    imagePaths: string[],
+    extraAllowedDirs?: string[],
+    options?: RuntimeBuildOptions,
+    runtimeContext?: RuntimeContext,
+  ) => string[];
 
-  // -- capability negotiation ------------------------------------
-  capabilities(): AgentCapabilities;
+  // How it talks back: the engine dispatches these to the matching parser.
+  streamFormat: string;               // e.g. "claude-stream-json" | "acp-json-rpc" | "plain"
+  eventParser?: string;               // named parser, e.g. "codex" | "cursor-agent" | "opencode"
 
-  // -- execution -------------------------------------------------
-  run(params: AgentRunParams): AsyncIterable<AgentEvent>;
-  cancel(runId: string): Promise<void>;
-  resume?(runId: string, message: string): AsyncIterable<AgentEvent>;
-}
+  // How the prompt is delivered.
+  promptViaStdin?: boolean;
+  promptViaFile?: boolean;
+  promptInputFormat?: 'text' | 'stream-json';
 
-interface AgentDetection {
-  executablePath: string;                   // absolute path to CLI
-  version: string;
-  configDir?: string;                       // e.g. ~/.claude
-  skillsDir?: string;                       // e.g. ~/.claude/skills
-  authState: "ok" | "missing" | "expired";
-}
-
-interface AgentCapabilities {
-  surgicalEdit: boolean;                    // can edit a targeted region without rewriting file
-  nativeSkillLoading: boolean;              // picks up ~/.<agent>/skills/ automatically
-  streaming: boolean;                       // emits tool calls in real time
-  resume: boolean;                          // can continue an interrupted run
-  permissionMode: "strict" | "permissive" | "none";
-  contextWindowHint?: number;               // in tokens
-}
-
-interface AgentRunParams {
-  runId: string;
-  cwd: string;                              // absolute path — artifact dir
-  systemPrompt: string;                     // skill's SKILL.md body + DESIGN.md excerpt
-  userPrompt: string;
-  skillDir?: string;                        // if set, adapter should make skill files available
-  allowedTools?: string[];                  // for agents that support it
-  timeoutMs?: number;
-}
-
-type AgentEvent =
-  | { type: "thinking"; text: string }
-  | { type: "tool_call"; name: string; input: unknown; id: string }
-  | { type: "tool_result"; id: string; output: unknown }
-  | { type: "text_delta"; text: string }
-  | { type: "file_write"; path: string }   // synthesized by adapter if agent doesn't emit natively
-  | { type: "error"; error: string }
-  | { type: "done"; reason: "completed" | "cancelled" | "error" };
+  // Optional capability / integration declarations (all data, no behavior).
+  supportsImagePaths?: boolean;
+  externalMcpInjection?: 'claude-mcp-json' | 'acp-merge' | 'opencode-env-content';
+  authProbe?: { args: string[]; timeoutMs?: number };
+  listModels?: RuntimeListModels;     // dynamic model discovery
+  // …~30 more optional fields, every one data or a pure arg-builder.
+};
 ```
+
+Every field is **data or a pure arg-builder** — there is no `run()`, no `cancel()`, no subclass. Capabilities, detection, cancellation, and streaming are the engine's job, driven off these declarations, which is why a new agent needs only a new object rather than a new code path.
+
+### A concrete def (shape)
+
+```ts
+// runtimes/defs/acme.ts (illustrative — a made-up CLI, not a shipped def)
+export const acmeAgentDef: RuntimeAgentDef = {
+  id: 'acme',
+  name: 'Acme CLI',
+  bin: 'acme',
+  versionArgs: ['--version'],
+  fallbackModels: [{ id: 'acme-pro', label: 'Acme Pro' }],
+  streamFormat: 'claude-stream-json',   // reuse an existing parser — no engine change
+  promptViaStdin: true,
+  buildArgs: (prompt, imagePaths, extraDirs, opts) => [
+    '--output-format', 'stream-json',
+    /* … */
+  ],
+};
+```
+
+### The registry (a unique-id array)
+
+```ts
+// runtimes/registry.ts
+const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+  claudeAgentDef, codexAgentDef, devinAgentDef, cursorAgentDef,
+  /* … one entry per CLI (roughly two dozen today) … */
+];
+
+// boot-time invariant: no two defs may share an id
+const ids = new Set<string>();
+for (const def of AGENT_DEFS) {
+  if (ids.has(def.id)) throw new Error(`Duplicate agent definition id: ${def.id}`);
+  ids.add(def.id);
+}
+```
+
+`AGENT_DEFS` = `BASE_AGENT_DEFS` plus any user-defined local profiles (`readLocalAgentProfileDefs`), and `getAgentDef(id)` is the lookup the rest of the daemon uses. The event set the `*-stream.ts` parsers emit onto the UI stream (thinking / tool-call / tool-result / text-delta / file-write / error / done) is defined by those parsers, not by the def — see §11 for where they live and `server.ts` for the dispatch.
 
 ## 2. Detection strategy
 
@@ -244,6 +280,28 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Models: ships `deepseek-v4-pro` and `deepseek-v4-flash` as fallback hints (1M-token context windows, native thinking-mode streaming). Users can paste any other id (e.g. `nvidia-nim/deepseek-v4-pro`, `fireworks/deepseek-v4-flash`) via the Settings dialog's custom-model input.
 - **Gotcha — auth state is not auto-detected.** DeepSeek TUI reads its API key from `~/.deepseek/config.toml` or `DEEPSEEK_API_KEY`. If the user hasn't run `deepseek auth set --provider deepseek` (or set the env var), the first run errors out with a non-actionable message. Detection currently only reports `available: true` based on the binary being on PATH; surface auth state via `deepseek doctor --json` in a follow-up.
 
+### 5.13 Plain stream artifact handoff
+
+Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
+
+```html
+<artifact identifier="landing-page" type="text/html" title="Landing page">
+<!doctype html>
+<html>...</html>
+</artifact>
+```
+
+At run completion, the daemon scans the captured plain stdout for `<artifact>` blocks with supported text types and writes them through the normal project artifact path:
+
+| Artifact type | Project file |
+|---|---|
+| `text/html` or `html` | `<identifier>.html` |
+| `text/css` or `css` | `<identifier>.css` |
+| `image/svg+xml` or `svg` | `<identifier>.svg` |
+| `text/markdown`, `text/x-markdown`, `markdown`, or `md` | `<identifier>.md` |
+
+The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
+
 ## 6. Capability-driven UI
 
 The web UI reads `agents.capabilities()` and disables features that the active adapter can't support:
@@ -311,25 +369,45 @@ The daemon never grants more authority to an agent than it had on its own. We do
 
 ## 11. Adapter source layout
 
+The contract, the per-CLI defs, and the stream parsers live under `apps/daemon/src/runtimes/`; the JSON-RPC transports live under `apps/daemon/src/agent-protocol/`; only `copilot-stream.ts` and the `server.ts` spawn/dispatch glue sit directly in `apps/daemon/src/`.
+
 ```
-apps/daemon/
-├── base.ts                 # shared interface + utility helpers
-├── claude-code/
-│   ├── adapter.ts
-│   ├── stream-parser.ts    # JSON-lines → AgentEvent
-│   └── detect.ts
-├── api-fallback/
-│   ├── adapter.ts
-│   ├── tool-loop.ts        # the minimal tool-use loop
-│   └── tools.ts            # Read/Write/Edit implementations
-├── codex/                  # Phase 1
-├── cursor-agent/           # Phase 1
-├── gemini-cli/             # Phase 2
-├── opencode/               # Phase 2
-└── openclaw/               # Phase 2
+apps/daemon/src/
+├── agents.ts               # public barrel — re-exports AGENT_DEFS / getAgentDef / detectAgents / … from runtimes/ (defines nothing)
+├── runtimes/
+│   ├── types.ts            # the RuntimeAgentDef contract (the data spec) + shared runtime types
+│   ├── registry.ts         # BASE_AGENT_DEFS array → AGENT_DEFS + unique-id guard + getAgentDef()
+│   ├── defs/               # one object literal per CLI — the file you add for a new agent
+│   │   ├── claude.ts
+│   │   ├── codex.ts
+│   │   ├── cursor-agent.ts
+│   │   ├── devin.ts
+│   │   ├── …               # ~two dozen defs (opencode, hermes, qoder, copilot,
+│   │   │                   #   amp, pi, kiro, kilo, vibe, deepseek, aider, antigravity, qwen,
+│   │   │                   #   grok-build, kimi, reasonix, codebuddy, trae-cli, …)
+│   │   └── shared.ts       # helpers reused across defs (not a registered agent)
+│   ├── detection.ts        # generic PATH-scan + config-probe over every def (detectAgents / …Stream)
+│   ├── capabilities.ts     # derives the UI capability map from def fields
+│   ├── executables.ts      # PATH resolution     · resolution.ts — bin resolution
+│   ├── launch.ts           # generic launch descriptor (resolveAgentLaunch / applyAgentLaunchEnv)
+│   ├── invocation.ts       # generic argv/prompt invocation from a def's buildArgs
+│   ├── env.ts              # per-agent spawn env  · mcp.ts — external-MCP injection per def
+│   ├── models.ts           # live/fallback models · prompt-budget.ts — argv size guards
+│   ├── local-profiles.ts   # user-defined local agent profiles merged into AGENT_DEFS
+│   ├── claude-stream.ts    # streamFormat="claude-stream-json": stream-json JSONL → UI events
+│   ├── qoder-stream.ts     # streamFormat="qoder-stream-json": stream-json JSONL → UI events
+│   ├── json-event-stream.ts# streamFormat="json-event-stream": generic JSONL → UI events
+│   └── plain-stream.ts     # streamFormat="plain": scans stdout for <artifact> blocks → project files
+├── copilot-stream.ts       # streamFormat="copilot-stream-json" — the one stream parser that sits flat at src/
+├── agent-protocol/         # JSON-RPC transports, dispatched via agent-protocol/index.ts (attachAcpSession / attachPiRpcSession)
+│   ├── index.ts            # barrel: attachAcpSession / attachPiRpcSession / mapPiRpcEvent
+│   ├── acp/                # streamFormat="acp-json-rpc": shared ACP transport (devin / kimi / kilo / kiro / vibe / hermes)
+│   ├── pi-rpc/             # streamFormat="pi-rpc": pi's JSON-RPC-over-stdio transport
+│   └── core/               # shared JSON-line stream helpers
+└── server.ts               # spawn pipeline + stream dispatch: routes def.streamFormat/eventParser to a parser
 ```
 
-Each adapter is a separate module so community contributions can add new ones without touching core daemon code.
+The engine is agent-agnostic: it iterates `AGENT_DEFS` and reads fields. A community contribution adds a new agent by dropping one `runtimes/defs/<cli>.ts` and appending it to `BASE_AGENT_DEFS` — detection, launch, invocation, and (for an existing `streamFormat`) parsing come for free, with no change to core daemon code.
 
 ## 12. Open questions
 

@@ -736,6 +736,62 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message pin tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-failed-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Failed assistant pin fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        assistantMessageId,
+        message: 'fail before spawn',
+      }),
+    });
+    const body = await response.text();
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    let lastStatus: string | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const sqlite = new Database(dbFile, { readonly: true });
+      try {
+        const row = sqlite
+          .prepare(`SELECT run_status FROM messages WHERE id = ?`)
+          .get(assistantMessageId) as { run_status: string | null } | undefined;
+        lastStatus = row?.run_status ?? null;
+        if (lastStatus && lastStatus !== 'queued' && lastStatus !== 'running') break;
+      } finally {
+        sqlite.close();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(lastStatus).toBe('failed');
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
@@ -2367,6 +2423,54 @@ process.exit(0);
     );
   });
 
+  it('fails plain-stream runs when stdout artifact persistence fails', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('<artifact identifier="blocked" type="text/html" title="Blocked"><!doctype html><html><body>Name to confirm</body></html></artifact>\\n');
+process.exit(0);
+`,
+      async () => {
+        const projectId = `plain-artifact-fail-${randomUUID()}`;
+        const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: projectId, name: 'Plain artifact failure' }),
+        });
+        expect(createProjectResponse.ok).toBe(true);
+
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            projectId,
+            message: 'emit blocked artifact',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('plain-stream artifact');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
     await withFakeAgent(
       'agy',
@@ -2872,6 +2976,122 @@ process.stdin.on('end', () => {
           expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
           expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
           expect(prompt).toContain(formAnswers);
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+      }
+    }
+  });
+
+  it('latches intent signals on the conversation so a signal-free later turn keeps the deck framework', async () => {
+    // Red spec for specs/current/intent-signal-cache-hotfix.md §3 case 6 (R2).
+    // History is trimmed on agent switch (scopeHistoryToAgent) and
+    // non-transcript clients never resend prior turns, so a deck signal that
+    // fired on turn 1 must persist on the conversation row — recomputing it
+    // from the scanned text alone lets it flip OFF again and re-sends the
+    // ~17K stable block in both directions.
+    const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for intent-signal latch tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Intent signal latch fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const createConversationResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(createConversationResponse.ok).toBe(true);
+    const { conversation } = await createConversationResponse.json() as {
+      conversation: { id: string };
+    };
+    const conversationId = conversation.id;
+
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-intent-latch-'));
+    tempDirs.push(captureDir);
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+});
+`,
+        async () => {
+          const runTurn = async (
+            turn: { message: string; currentPrompt: string },
+            capturePath: string,
+          ): Promise<string> => {
+            process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+            const response = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentId: 'opencode',
+                projectId,
+                conversationId,
+                message: turn.message,
+                currentPrompt: turn.currentPrompt,
+              }),
+            });
+            expect(response.status).toBe(202);
+            const { runId } = await response.json() as { runId: string };
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return readFileSync(capturePath, 'utf8');
+          };
+
+          // Turn 1 mentions a deck in the user's own words → framework present.
+          const deckBrief = '帮我做一份路演材料，先出内容大纲';
+          const turn1Prompt = await runTurn(
+            { message: `## user\n${deckBrief}`, currentPrompt: deckBrief },
+            join(captureDir, 'turn1.txt'),
+          );
+          expect(turn1Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // Turn 2 carries no deck vocabulary and a trimmed transcript
+          // (agent-switch trim / non-transcript client): the latched
+          // conversation signal must keep the framework present.
+          const followUp = '把主色调调亮一点';
+          const turn2Prompt = await runTurn(
+            { message: `## user\n${followUp}`, currentPrompt: followUp },
+            join(captureDir, 'turn2.txt'),
+          );
+          expect(turn2Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // The latch is persisted on the conversation row.
+          const dbFile = resolve(process.env.OD_DATA_DIR as string, 'app.sqlite');
+          const sqlite = new Database(dbFile, { readonly: true });
+          try {
+            const row = sqlite
+              .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+              .get(conversationId) as { intentSignalsJson: string | null } | undefined;
+            expect(row?.intentSignalsJson).toBeTruthy();
+            expect(JSON.parse(row?.intentSignalsJson ?? '{}')).toMatchObject({ deck: true });
+          } finally {
+            sqlite.close();
+          }
         },
       );
     } finally {

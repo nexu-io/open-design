@@ -35,6 +35,12 @@ export type ProjectDisplayStatus =
   | 'running'
   | 'awaiting_input'
   | 'succeeded'
+  // Terminal-but-not-really-done: the latest run stamped `succeeded` yet ended
+  // with unfinished declared work (a non-`completed` TodoWrite task, or a
+  // max_tokens truncation). Kept distinct from `succeeded` so the project pill
+  // never reads "Completed" for a run whose work is not actually finished
+  // (#1247 / #1060).
+  | 'incomplete'
   | 'failed'
   | 'canceled';
 
@@ -92,11 +98,17 @@ export interface DesignSystemReviewEntry {
 export interface ProjectMetadata {
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
-  // live-artifact skill/system-prompt path). `document`: resume/report/PDF
-  // projects from the Home `document` card — an analytics-only discriminator
-  // (no product behavior keys off it) so a created `other`-kind project reports
-  // `project_kind: 'document'` instead of generic `other`.
-  intent?: 'live-artifact' | 'document';
+  // live-artifact skill/system-prompt path). `web-clone`: website reproduction
+  // projects from the Home `Website clone` card — stored as prototypes so they
+  // keep prototype preview behavior, but the intent routes the `example-web-clone`
+  // scenario plugin and splits them into their own `web_clone` analytics kind.
+  // `document`: resume/report/PDF projects from the Home `document` card — an
+  // analytics-only discriminator (no product behavior keys off it) so a created
+  // `other`-kind project reports `project_kind: 'document'` instead of generic
+  // `other`. `webgl-experience` and `worker-visualizer`: the powered-preview
+  // GPU / off-main-thread scenario cards — analytics-only discriminators for the
+  // powered-artifact chips.
+  intent?: 'live-artifact' | 'web-clone' | 'document' | 'webgl-experience' | 'worker-visualizer';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

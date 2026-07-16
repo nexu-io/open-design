@@ -13,7 +13,6 @@ import {
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
-  agentIdToTracking,
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
@@ -31,7 +30,14 @@ import {
   readCodexRolloutFirstCall,
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
+import {
+  getConversation,
+  getProject,
+  listConversations,
+  normalizeConversationSessionMode,
+  updateProject,
+  upsertMessage,
+} from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
@@ -53,6 +59,7 @@ import {
 } from '../projects.js';
 import {
   amrUserIdForRunAnalytics,
+  agentProviderIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
   runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -77,12 +84,14 @@ import {
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
   deriveActivationMilestones,
-  didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
+import {
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
+} from '../runtimes/run-lifecycle-analytics.js';
 
 type SqliteDb = Database.Database;
 type JsonRecord = Record<string, unknown>;
@@ -140,6 +149,8 @@ interface ChatRun {
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
   clientType?: 'desktop' | 'web';
+  sessionMode?: string | null;
+  context?: Record<string, unknown> | null;
   events: RunEventRecord[];
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
@@ -147,6 +158,13 @@ interface ChatRun {
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  artifactOutcome?: {
+    artifactCount: number;
+    artifactsCreated?: number;
+    artifactsModified?: number;
+    designSystemCreated: boolean;
+    previewModuleCount: number;
+  };
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;
@@ -283,7 +301,7 @@ export interface RegisterRunRoutesDeps {
   };
   telemetry: {
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
-    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string;
+    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
@@ -357,13 +375,27 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
     : [];
 }
 
+// Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
+// `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
+// stored project row never gets cast into the union.
+const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
+  'live-artifact',
+  'web-clone',
+  'document',
+];
+
+function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
+  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+}
+
 function toScenarioProjectMetadata(
   metadata: ProjectMetadata,
 ): Pick<ContractProjectMetadata, 'kind' | 'intent'> | null {
   if (!metadata || typeof metadata.kind !== 'string') return null;
+  const intent = toScenarioProjectIntent(metadata.intent);
   return {
     kind: metadata.kind as ContractProjectMetadata['kind'],
-    ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
+    ...(intent ? { intent } : {}),
   };
 }
 
@@ -635,6 +667,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] mcp conversation fallback failed', err);
       }
     }
+    const conversationSession =
+      typeof meta.conversationId === 'string' && meta.conversationId
+        ? getConversation(db, meta.conversationId)
+        : null;
+    meta.sessionMode =
+      meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+        ? normalizeConversationSessionMode(meta.sessionMode)
+        : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const run = design.runs.create(meta);
     try {
       pinAssistantMessageOnRunCreate(db, run);
@@ -933,9 +973,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         model_id: modelIdForTracking(
           typeof reqBody.model === 'string' ? reqBody.model : null,
         ),
-        agent_provider_id: agentIdToTracking(
-          typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        ),
+        agent_provider_id: agentProviderIdForRunAnalytics({
+          agentId: reqBody.agentId,
+          byokProvider: reqBody.byokProvider,
+        }),
         skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
         ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
           ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
@@ -1071,42 +1112,51 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
           events: run.events,
         });
-        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
+        const toolStreamArtifactCount = (): number => runArtifactCountForRun(run);
         const toolStreamDesignSystemCreated = (): boolean =>
-          didRunCreateDesignSystemFile(run.events);
+          runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
-          countDesignSystemPreviewModules(run.events);
-        const artifactBaseline = runArtifactBaselines.take(run.id);
+          runPreviewModuleCountForRun(run);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
-        if (artifactBaseline && !artifactBaseline.contended) {
-          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
-          try {
-            diff = diffRunArtifacts(
-              artifactBaseline.before,
-              snapshotProjectArtifacts(artifactBaseline.cwd),
-            );
-          } catch {
-            diff = null;
-          }
-          if (diff) {
-            artifactCount = diff.touched;
-            artifactsCreated = diff.created;
-            artifactsModified = diff.modified;
-            designSystemCreated = diff.designSystemCreated;
-            previewModuleCount = diff.previewModuleCount;
+        const artifactOutcome = run.artifactOutcome;
+        if (artifactOutcome) {
+          artifactCount = artifactOutcome.artifactCount;
+          artifactsCreated = artifactOutcome.artifactsCreated;
+          artifactsModified = artifactOutcome.artifactsModified;
+          designSystemCreated = artifactOutcome.designSystemCreated;
+          previewModuleCount = artifactOutcome.previewModuleCount;
+        } else {
+          const artifactBaseline = runArtifactBaselines.take(run.id);
+          if (artifactBaseline && !artifactBaseline.contended) {
+            let diff: ReturnType<typeof diffRunArtifacts> | null = null;
+            try {
+              diff = diffRunArtifacts(
+                artifactBaseline.before,
+                snapshotProjectArtifacts(artifactBaseline.cwd),
+              );
+            } catch {
+              diff = null;
+            }
+            if (diff) {
+              artifactCount = diff.touched;
+              artifactsCreated = diff.created;
+              artifactsModified = diff.modified;
+              designSystemCreated = diff.designSystemCreated;
+              previewModuleCount = diff.previewModuleCount;
+            } else {
+              artifactCount = toolStreamArtifactCount();
+              designSystemCreated = toolStreamDesignSystemCreated();
+              previewModuleCount = toolStreamPreviewModuleCount();
+            }
           } else {
             artifactCount = toolStreamArtifactCount();
             designSystemCreated = toolStreamDesignSystemCreated();
             previewModuleCount = toolStreamPreviewModuleCount();
           }
-        } else {
-          artifactCount = toolStreamArtifactCount();
-          designSystemCreated = toolStreamDesignSystemCreated();
-          previewModuleCount = toolStreamPreviewModuleCount();
         }
         const activationMilestones = deriveActivationMilestones({
           result,
@@ -1433,6 +1483,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
+    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     design.runs.start(run, () => startChatRun(meta, run));
   });
 }

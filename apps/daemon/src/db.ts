@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
+import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
@@ -79,6 +80,7 @@ function migrate(db: SqliteDb): void {
       project_id TEXT NOT NULL,
       title TEXT,
       session_mode TEXT NOT NULL DEFAULT 'design',
+      intent_signals_json TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -114,6 +116,7 @@ function migrate(db: SqliteDb): void {
       content TEXT NOT NULL,
       agent_id TEXT,
       agent_name TEXT,
+      result_delivery_state TEXT,
       events_json TEXT,
       attachments_json TEXT,
       produced_files_json TEXT,
@@ -264,6 +267,9 @@ function migrate(db: SqliteDb): void {
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
   }
+  if (!conversationCols.some((c: DbRow) => c.name === 'intent_signals_json')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN intent_signals_json TEXT`);
+  }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
@@ -276,6 +282,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'result_delivery_state')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN result_delivery_state TEXT`);
   }
   if (!messageCols.some((c: DbRow) => c.name === 'last_run_event_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
@@ -614,6 +623,7 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
       `SELECT c.project_id AS projectId,
               m.run_id AS runId,
               m.run_status AS status,
+              m.events_json AS eventsJson,
               COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt
          FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
@@ -625,13 +635,26 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
   for (const row of rows) {
     if (!latestByProject.has(row.projectId)) {
       latestByProject.set(row.projectId, {
-        value: normalizeProjectRunStatus(row.status),
+        value: projectDisplayStatusForRunRow(row.status, row.eventsJson),
         updatedAt: Number(row.updatedAt),
         runId: row.runId ?? undefined,
       });
     }
   }
   return latestByProject;
+}
+
+// A terminal `succeeded` run whose PERSISTED events show unfinished declared
+// work (a non-`completed` TodoWrite task) projects as `incomplete`, never
+// `succeeded`, so the project pill can't read "Completed" for a run whose work
+// is not actually done (#1247 / #1060). Derived from the same events the chat
+// footer reads, so the two surfaces cannot disagree, and it survives reload
+// because the events were persisted per-event as the run streamed.
+function projectDisplayStatusForRunRow(status: unknown, eventsJson: unknown) {
+  const normalized = normalizeProjectRunStatus(status);
+  if (normalized !== 'succeeded') return normalized;
+  const events = parseJsonOrUndef(eventsJson);
+  return eventsEndedWithUnfinishedWork(events) ? 'incomplete' : normalized;
 }
 
 export function listLatestConversationRunStatuses(db: SqliteDb) {
@@ -1228,6 +1251,96 @@ export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
 }
 
+// ---------- conversation intent signals ----------
+
+// Latched per-conversation intent detections (deck / media / platform).
+// These gate stable-region prompt blocks; the latch keeps a signal from
+// flipping OFF when the visible transcript is trimmed (agent switch) or the
+// client never resends prior turns. Keyed by conversation only — intent
+// belongs to the conversation, not the agent.
+export interface ConversationIntentSignals {
+  deck: boolean;
+  media: boolean;
+  platform: boolean;
+}
+
+const NO_INTENT_SIGNALS: ConversationIntentSignals = {
+  deck: false,
+  media: false,
+  platform: false,
+};
+
+/**
+ * Read the conversation's latched intent signals. A missing row, NULL
+ * column, or unparsable value all read as all-false (pre-hotfix
+ * conversations and fresh rows).
+ */
+export function readConversationIntentSignals(
+  db: SqliteDb,
+  conversationId: string,
+): ConversationIntentSignals {
+  const row = db
+    .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return normalizeIntentSignals(row?.intentSignalsJson);
+}
+
+function normalizeIntentSignals(value: unknown): ConversationIntentSignals {
+  if (typeof value !== 'string' || value.length === 0) return { ...NO_INTENT_SIGNALS };
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown> | null;
+    return {
+      deck: parsed?.deck === true,
+      media: parsed?.media === true,
+      platform: parsed?.platform === true,
+    };
+  } catch {
+    return { ...NO_INTENT_SIGNALS };
+  }
+}
+
+/**
+ * Latch this turn's fresh intent detections onto the conversation:
+ * `effective = stored OR fresh`, persisted only when it changes. Signals
+ * only ever turn ON for the life of a conversation (monotonic), so a
+ * genuine mid-conversation activation costs exactly one stable-prompt miss
+ * and a later signal-free turn cannot flip it back OFF. A conversationId
+ * without a persisted row degrades to fresh detection (nothing to latch on).
+ *
+ * The read+merge+write runs inside a BEGIN IMMEDIATE transaction: the write
+ * lock is taken before the read, so no other connection can commit between
+ * them and clobber a previously latched bit. Within one daemon process the
+ * sequence is already non-interleavable (better-sqlite3 is synchronous and
+ * there is no await point between read and write); the transaction pins the
+ * monotonic guarantee against future refactors and multi-connection writers.
+ */
+export function latchConversationIntentSignals(
+  db: SqliteDb,
+  conversationId: string,
+  fresh: ConversationIntentSignals,
+): ConversationIntentSignals {
+  const latch = db.transaction((): ConversationIntentSignals => {
+    const stored = readConversationIntentSignals(db, conversationId);
+    const effective: ConversationIntentSignals = {
+      deck: stored.deck || fresh.deck,
+      media: stored.media || fresh.media,
+      platform: stored.platform || fresh.platform,
+    };
+    if (
+      effective.deck !== stored.deck ||
+      effective.media !== stored.media ||
+      effective.platform !== stored.platform
+    ) {
+      db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
+        JSON.stringify(effective),
+        conversationId,
+      );
+    }
+    return effective;
+  });
+  return latch.immediate();
+}
+
 // ---------- agent sessions ----------
 
 export function getAgentSession(
@@ -1375,6 +1488,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -1405,7 +1519,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
-              run_id = ?, run_status = ?, last_run_event_id = ?,
+              run_id = ?, run_status = ?, result_delivery_state = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
@@ -1423,6 +1537,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.agentName ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
+      normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
@@ -1450,8 +1565,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 24 values: id, conversation_id, role, content, agent_id, agent_name,
-    // run_id, run_status, last_run_event_id, events_json, attachments_json,
+    // 25 values: id, conversation_id, role, content, agent_id, agent_name,
+    // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
@@ -1459,12 +1574,12 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
-          run_id, run_status, last_run_event_id, events_json,
+          run_id, run_status, result_delivery_state, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, applied_plugin_snapshot_json,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1474,6 +1589,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.agentName ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
+      normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
       m.events ? JSON.stringify(m.events) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
@@ -1501,6 +1617,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
               attachments_json AS attachmentsJson,
@@ -1880,6 +1997,7 @@ function normalizeMessage(row: DbRow) {
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
+    resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
     lastRunEventId: row.lastRunEventId ?? undefined,
     events: parseJsonOrUndef(row.eventsJson),
     attachments: parseJsonOrUndef(row.attachmentsJson),
@@ -1899,6 +2017,20 @@ function normalizeMessage(row: DbRow) {
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
   return value === 'chat' || value === 'design' || value === 'plan' ? value : undefined;
+}
+
+function normalizeResultDeliveryState(
+  value: unknown,
+): 'delivered' | 'no_result' | 'delivery_failed' | undefined {
+  return value === 'delivered' || value === 'no_result' || value === 'delivery_failed'
+    ? value
+    : undefined;
+}
+
+function normalizeResultDeliveryStateForStorage(
+  value: unknown,
+): 'delivered' | 'no_result' | 'delivery_failed' | null {
+  return normalizeResultDeliveryState(value) ?? null;
 }
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {

@@ -24,6 +24,7 @@
     "en": "Orbit Linear"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Open Orbit briefing skill — selected by the Orbit pipeline when Linear is the user's only connected connector, or when the user explicitly scopes their daily digest to Linear. Pulls the past 24 hours of issue movement, status changes, assignments, and cycle progress from the user's authenticated Linear connection and renders the digest in Linear's native Inbox + cycle-progress visual language. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live Linear data.",
   "description_i18n": {
     "zh-CN": "当 Linear 是用户唯一连接的数据源或用户明确将每日摘要范围限定为 Linear 时，由 Orbit 管道自动触发。提取过去 24 小时的问题动态、状态变更、任务分配和周期进度，并以 Linear 原生收件箱视觉语言呈现。",

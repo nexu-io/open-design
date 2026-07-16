@@ -125,6 +125,25 @@ test('checkPromptArgvBudget does not false-positive on POSIX where argv ceilings
   assert.ok(win, 'Windows must still flag a 50 KB argv prompt');
   assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
 
+  // The default design-router prompt can exceed 100 KB on first turn. POSIX
+  // should allow that size while still leaving headroom below Linux's 128 KiB
+  // per-argument ceiling.
+  const designRouterFirstTurn = 'x'.repeat(116_534);
+  assert.equal(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'linux'),
+    null,
+    'Linux must allow a 116 KB first-turn design-router prompt',
+  );
+  assert.equal(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'darwin'),
+    null,
+    'macOS must allow a 116 KB first-turn design-router prompt',
+  );
+  assert.ok(
+    checkPromptArgvBudget(deepseek, designRouterFirstTurn, 'win32'),
+    'Windows must still flag a 116 KB argv prompt',
+  );
+
   // POSIX still guards a genuinely enormous prompt near the per-arg ceiling,
   // so a runaway prompt fails fast with the actionable message instead of a
   // generic spawn E2BIG.

@@ -18,6 +18,10 @@ import {
   releaseMetadataVersionFields,
   type CountedReleaseChannel,
 } from "@open-design/release";
+import {
+  parseReleaseNotePublication,
+  releaseNoteMetadataFromPublication,
+} from "../release-note/publication.ts";
 
 type PlatformManifest = {
   artifacts?: Record<string, { url?: string }>;
@@ -56,6 +60,7 @@ const releaseVersion = required("RELEASE_VERSION");
 const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
 const metadataDir = required("RELEASE_METADATA_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");
+const releaseNoteManifestPath = optional("RELEASE_NOTE_MANIFEST_PATH");
 const outputsPath = required("RELEASE_OUTPUTS_PATH");
 const requestedAssetVersionSuffix = optional("RELEASE_ASSET_SUFFIX");
 const dryRunMode = optional("RELEASE_DRY_RUN_MODE");
@@ -70,6 +75,29 @@ const versionLockKey = optional(
 );
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
+
+function readReleaseNoteMetadata(): ReturnType<typeof releaseNoteMetadataFromPublication> {
+  if (releaseNoteManifestPath.length === 0) {
+    if (releaseChannel === "stable") {
+      throw new Error("RELEASE_NOTE_MANIFEST_PATH is required for stable metadata publication");
+    }
+    return null;
+  }
+  const publication = parseReleaseNotePublication(JSON.parse(readFileSync(releaseNoteManifestPath, "utf8")) as unknown);
+  if (publication.channel !== releaseChannel || publication.releaseVersion !== releaseVersion) {
+    throw new Error(`release note publication identity mismatch for ${releaseChannel} ${releaseVersion}`);
+  }
+  if (releaseChannel === "stable" && publication.state === "absent") {
+    throw new Error("release note publication is required for stable metadata");
+  }
+  if (publication.state !== "absent") {
+    const expectedState = publishSideEffectsEnabled ? "published" : "planned";
+    if (publication.state !== expectedState) {
+      throw new Error(`release note publication must be ${expectedState} before metadata publication; got ${publication.state}`);
+    }
+  }
+  return releaseNoteMetadataFromPublication(publication);
+}
 
 if (versionLockRequired) {
   if (countedReleaseChannel == null) {
@@ -294,8 +322,10 @@ if (assetVersionSuffix === "auto") {
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 
 const latestMetadataUpdated = releaseState === "complete";
+const releaseNote = readReleaseNoteMetadata();
+const releaseFields = releaseMetadataFields();
 const metadata = {
-  ...releaseMetadataFields(),
+  ...releaseFields,
   channel: releaseChannel,
   expectedPlatforms: expectedTargets,
   expectedTargets,
@@ -306,6 +336,7 @@ const metadata = {
   dryRun: !publishSideEffectsEnabled,
   dryRunMode,
   platforms,
+  ...(releaseNote == null ? {} : { releaseNote }),
   r2: {
     latestMetadataUrl: publicUrl(publicOrigin, latestPrefix, "metadata.json"),
     latestMetadataUpdated,

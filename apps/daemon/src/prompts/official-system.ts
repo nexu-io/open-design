@@ -39,7 +39,7 @@ You can read Markdown, HTML, and other plaintext formats natively. You can read 
 PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.) when the binary is available; if not, ask the user to convert.
 
 ## Design output guidelines
-- Give files descriptive names (\`landing-page.html\`, \`pricing.html\`).
+- Give files descriptive names derived from the user's brief (\`landing-page.html\`, \`pricing.html\`, \`investor-pitch-deck.html\`). Do not default a new user-facing deliverable to \`index.html\` unless a fixed runtime convention requires that path.
 - For significant revisions, copy the file to a versioned name (\`landing.html\` → \`landing-v2.html\`) so the previous version stays browsable.
 - Keep individual files under ~1000 lines. If you're approaching that, split into smaller JSX/CSS files and \`<script>\`/\`<link>\` them in.
 - For decks, slideshows, videos, or anything with a "current position" — persist that position to localStorage so a refresh doesn't lose the user's place.
@@ -128,14 +128,14 @@ const FILESYSTEM_WORKFLOW_HANDOFF = `4. **Build the project files.** Write your 
 When you ship a fresh deliverable in a filesystem run, write the canonical project file instead of emitting its source in chat:
 
 \`\`\`
-index.html
+investor-pitch-deck.html
 styles.css
 app.jsx
 \`\`\`
 
 Rules:
 - The main HTML file must be **complete and standalone** unless the user explicitly asked for a multi-file project. Inline CSS/JS by default; use supporting files only when the task genuinely benefits from them.
-- If you've written multiple files to the project, make \`index.html\` the canonical entry point whenever possible. Reference supporting files by project-relative paths.
+- If you've written multiple files to the project, make the semantic main HTML file the canonical entry point. Use \`index.html\` only when it is a launcher/overview or a fixed runtime convention requires that path. Reference supporting files by project-relative paths.
 - Do not emit a source-code \`<artifact>\` block. The file panel and preview already reflect written project files.
 - After writing files and running the final self-check, output a short ordinary assistant summary. Name the files, describe the result, and stop.
 
@@ -161,8 +161,29 @@ Rules:
 - Do not wrap summaries, prose, paths, or fake tool output inside \`<artifact>\`.
 - After \`</artifact>\`, stop. Do not narrate a filesystem write or invent tool calls.`;
 
+// The default IP guardrail bullet under "What you don't do". Website Clone
+// runs swap it out (see `renderOfficialDesignerPrompt` options): faithfully
+// reproducing an existing site is that scenario's entire job, so the blanket
+// "build something original instead" instruction makes the agent silently
+// substitute placeholder branding / original artwork for the site's real
+// assets — which users experience as "images missing / fonts wrong / colors
+// off". The swapped bullet keeps the legal caution but routes it through a
+// pre-deploy replacement checklist the user owns, instead of a silent
+// downgrade. Must stay byte-identical to the bullet inside
+// OFFICIAL_DESIGNER_PROMPT above (a test guards the substitution).
+export const COPYRIGHT_GUARDRAIL_BULLET =
+  "- Don't recreate copyrighted designs (other companies' distinctive UI patterns, branded visual elements). Help the user build something original instead.";
+export const WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET =
+  '- This is a Website Clone run: the user explicitly asked for a faithful local reproduction of an existing site (evaluation / prototyping use). Reproduce its layout, visuals, assets, fonts, and copy faithfully — do NOT silently swap in placeholder branding or original artwork. Record trademarks and copyrighted media in a pre-deploy replacement checklist (NOTES.md) so the user decides what to replace before publishing.';
+
+export interface RenderOfficialDesignerPromptOptions {
+  // True for runs whose project metadata carries `intent: 'web-clone'`.
+  webCloneFidelity?: boolean;
+}
+
 export function renderOfficialDesignerPrompt(
   executionProfile: ExecutionProfile = 'filesystem',
+  options: RenderOfficialDesignerPromptOptions = {},
 ): string {
   const executionContext =
     executionProfile === 'text_artifact'
@@ -172,7 +193,10 @@ export function renderOfficialDesignerPrompt(
     executionProfile === 'text_artifact'
       ? TEXT_ARTIFACT_WORKFLOW_HANDOFF
       : FILESYSTEM_WORKFLOW_HANDOFF;
-  return OFFICIAL_DESIGNER_PROMPT
+  const rendered = OFFICIAL_DESIGNER_PROMPT
     .replace(EXECUTION_CONTEXT_PLACEHOLDER, executionContext)
     .replace(WORKFLOW_HANDOFF_PLACEHOLDER, workflowHandoff);
+  return options.webCloneFidelity === true
+    ? rendered.replace(COPYRIGHT_GUARDRAIL_BULLET, WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET)
+    : rendered;
 }

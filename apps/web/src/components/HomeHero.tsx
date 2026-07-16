@@ -9,8 +9,10 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,11 +38,13 @@ import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackFigmaHelpModalSurfaceView,
   trackHomeChatComposerClick,
   trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -75,12 +79,14 @@ import {
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { canDuplicatePluginPreview } from './plugins-home/duplicate';
+import { pluginCategoryLabel } from './plugins-home/categoryLabel';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
+import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
 import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
 import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
@@ -234,6 +240,10 @@ interface Props {
   // no design system / template / prompt) and enters it. Omit to hide the link.
   onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
+  // Personalized first-run starting point (spec §7). Rendered directly under
+  // the composer card — before the template section — so a brand-new user sees
+  // their recommended entry without scrolling.
+  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -357,6 +367,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
+    recommendationSlot,
   },
   ref,
 ) {
@@ -1197,15 +1208,24 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyMcpServers.length > 0 ||
     contextOnlyConnectors.length > 0 ||
     contextWorkspaceItems.length > 0;
+  const blankProjectEntry = onStartBlankProject ? (
+    <button
+      type="button"
+      className="home-hero__blank-project"
+      data-testid="home-hero-blank-project"
+      onClick={onStartBlankProject}
+    >
+      {t('homeHero.startBlankProject')}
+      <Icon name="chevron-right" size={13} aria-hidden />
+    </button>
+  ) : null;
 
   let optionRenderIndex = 0;
 
   return (
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg" alt="" draggable={false} />
-        </span>
+        <span className="home-hero__brand-mark od-brand-glyph" />
         <span className="home-hero__brand-name">Open Design</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
@@ -1936,7 +1956,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <div className="home-hero__mode-switcher">
               <SessionModeToggle
                 mode={sessionMode}
-                onChange={onSessionModeChange}
+                onChange={(next) => {
+                  if (next !== sessionMode) {
+                    trackComposerSessionModeClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'session_mode_toggle',
+                      mode_before: sessionModeToTracking(sessionMode),
+                      mode_after: sessionModeToTracking(next),
+                    });
+                  }
+                  onSessionModeChange?.(next);
+                }}
               />
             </div>
             {executionSwitcher ? (
@@ -2009,6 +2040,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
       ) : null}
 
+      {recommendationSlot}
+
       {activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">
           <div className="home-hero__template-heading">
@@ -2039,17 +2072,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               }}
             />
           </RailGroup>
-          {onStartBlankProject ? (
-            <button
-              type="button"
-              className="home-hero__blank-project"
-              data-testid="home-hero-blank-project"
-              onClick={onStartBlankProject}
-            >
-              {t('homeHero.startBlankProject')}
-              <Icon name="chevron-right" size={13} aria-hidden />
-            </button>
-          ) : null}
         </div>
       )}
 
@@ -2090,6 +2112,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pendingDuplicatePluginId={pendingDuplicatePluginId}
           locale={locale}
           onPick={pickExamplePluginPreset}
+          onPreview={onOpenPluginDetails}
           onDuplicate={onDuplicateExamplePlugin}
           pulseFirstPreset={guidePulseFirstPreset}
         />
@@ -2101,21 +2124,34 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__prompt-examples-title">
             {t('homeHero.promptExamples')}
           </div>
-          <div className="home-hero__prompt-examples-grid">
-            {activePromptExamples.map((example, index) => (
-              <button
-                key={example}
-                type="button"
-                className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
-                data-testid="home-hero-prompt-example"
-                onClick={() => usePromptExample(example)}
-              >
-                <span>{example}</span>
-              </button>
-            ))}
+          <div
+            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
+          >
+            {activePromptExamples.map((example, index) =>
+              webCloneExampleSite(example) ? (
+                <WebClonePromptExampleCard
+                  key={example}
+                  example={example}
+                  pulse={guidePulseFirstPreset && index === 0}
+                  onPick={usePromptExample}
+                />
+              ) : (
+                <button
+                  key={example}
+                  type="button"
+                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
+                  data-testid="home-hero-prompt-example"
+                  onClick={() => usePromptExample(example)}
+                >
+                  <span>{example}</span>
+                </button>
+              ),
+            )}
           </div>
         </div>
       ) : null}
+
+      {blankProjectEntry}
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2160,6 +2196,7 @@ function PluginPromptPresets({
   chipId,
   locale,
   onPick,
+  onPreview,
   onDuplicate,
   pendingDuplicatePluginId,
   pendingPluginId,
@@ -2170,6 +2207,7 @@ function PluginPromptPresets({
   chipId: string;
   locale: Locale;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
+  onPreview: (record: InstalledPluginRecord) => void;
   onDuplicate: (record: InstalledPluginRecord) => void;
   pendingDuplicatePluginId: string | null;
   pendingPluginId: string | null;
@@ -2208,6 +2246,7 @@ function PluginPromptPresets({
               duplicateDisabled={pendingDuplicatePluginId !== null || pendingPluginId !== null}
               pulse={pulseFirstPreset && index === 0}
               onPick={onPick}
+              onPreview={onPreview}
               onDuplicate={onDuplicate}
             />
           ))}
@@ -2215,6 +2254,67 @@ function PluginPromptPresets({
         <EdgeScrollZones {...edgeScroll} />
       </div>
     </div>
+  );
+}
+
+// A Website-clone text example ("Website URL to clone: https://open-design.ai") —
+// pull the site out so the card can show the site's own favicon + bare domain
+// instead of the raw prompt line. Returns null for non-URL examples so the
+// generic text card renders unchanged.
+function webCloneExampleSite(example: string): { domain: string; faviconUrl: string } | null {
+  const match = example.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!match) return null;
+  let hostname: string;
+  try {
+    hostname = new URL(match[0]).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+  if (!hostname || !hostname.includes('.')) return null;
+  // The site's own favicon, resolved at render time via Google's public service
+  // — no third-party brand assets are bundled into the repo, and a broken/blocked
+  // fetch falls back to a lettered tile.
+  return {
+    domain: hostname,
+    faviconUrl: `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(hostname)}`,
+  };
+}
+
+function WebClonePromptExampleCard({
+  example,
+  pulse,
+  onPick,
+}: {
+  example: string;
+  pulse: boolean;
+  onPick: (example: string) => void;
+}) {
+  const [iconFailed, setIconFailed] = useState(false);
+  const site = webCloneExampleSite(example);
+  const domain = site?.domain ?? example;
+  const monogram = (domain.replace(/[^a-z0-9]/i, '')[0] ?? '?').toUpperCase();
+  return (
+    <button
+      type="button"
+      className={`home-hero__prompt-example home-hero__prompt-example--site${pulse ? ' home-hero__attention-sheen' : ''}`}
+      data-testid="home-hero-prompt-example"
+      onClick={() => onPick(example)}
+      title={domain}
+    >
+      <span className="home-hero__site-badge" aria-hidden>
+        {site && !iconFailed ? (
+          <img
+            src={site.faviconUrl}
+            alt=""
+            loading="lazy"
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          <span className="home-hero__site-monogram">{monogram}</span>
+        )}
+      </span>
+      <span className="home-hero__site-domain">{domain}</span>
+    </button>
   );
 }
 
@@ -2227,6 +2327,7 @@ function PluginPromptPresetCard({
   locale,
   onDuplicate,
   onPick,
+  onPreview,
   pending,
   pulse = false,
   record,
@@ -2239,6 +2340,9 @@ function PluginPromptPresetCard({
   locale: Locale;
   onDuplicate: (record: InstalledPluginRecord) => void;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
+  // Preview the template in the detail modal (the card body opens this; Use
+  // seeds the composer input, Remix forks a new project).
+  onPreview: (record: InstalledPluginRecord) => void;
   pending: boolean;
   pulse?: boolean;
   record: InstalledPluginRecord;
@@ -2252,11 +2356,18 @@ function PluginPromptPresetCard({
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
     pluginPresetPromptPreview(record, locale, chipId),
   ).text;
-  // Decks ship a fixed 16:9 stage; tag them so the preset thumbnail uses a 16:9
-  // frame the iframe fills natively, instead of letterboxing the stage with a
-  // dark band above it (matches the Community gallery deck treatment).
+  // Deck preset thumbnails render the iframe at a fixed 1280 design width scaled
+  // to fit the preview cell (see useDeckPreviewScale), so a template's first
+  // slide previews proportionally instead of overflowing. The baked-clip path
+  // (preferBaked) is already proportional; this fixes the live-HTML fallback.
   const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
+  const presetPreviewRef = useRef<HTMLSpanElement>(null);
+  useDeckPreviewScale(presetPreviewRef, odMode === 'deck' && preview.kind === 'html');
   const title = localizePluginTitle(locale, record);
+  // Commercial category ("品类") chip — same signal the gallery tile and the
+  // Create page picker show, so the example row reads like the reference
+  // template galleries. Null for records without a known category.
+  const categoryLabel = pluginCategoryLabel(record, t);
   const canDuplicate = canDuplicatePluginPreview(record);
   return (
     <span className="home-hero__plugin-preset-cell" role="listitem">
@@ -2266,14 +2377,14 @@ function PluginPromptPresetCard({
         data-testid="home-hero-plugin-preset"
         data-plugin-id={record.id}
         {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
-        disabled={disabled}
-        onClick={() => onPick(record, chipId, seedPrompt)}
+        onClick={() => onPreview(record)}
       >
-        <span className="home-hero__plugin-preset-preview" aria-hidden>
+        <span className="home-hero__plugin-preset-preview" aria-hidden ref={presetPreviewRef}>
           <PreviewSurface
             pluginId={record.id}
             pluginTitle={title}
             preview={preview}
+            eager={odMode === 'deck'}
           />
           {active ? (
             <span className="home-hero__plugin-preset-check" aria-hidden>
@@ -2281,8 +2392,18 @@ function PluginPromptPresetCard({
             </span>
           ) : null}
         </span>
-        <span className="home-hero__plugin-preset-title">
-          {title}
+        <span className="home-hero__plugin-preset-meta">
+          {categoryLabel ? (
+            <span
+              className="home-hero__plugin-preset-category"
+              data-testid={`home-hero-plugin-preset-category-${record.id}`}
+            >
+              {categoryLabel}
+            </span>
+          ) : null}
+          <span className="home-hero__plugin-preset-title">
+            {title}
+          </span>
         </span>
       </button>
       <span className="home-hero__plugin-preset-actions">
@@ -3279,6 +3400,37 @@ function RailGroup({
   );
 }
 
+function SubTypeChip({
+  sub,
+  isActive,
+  pluginsLoading,
+  onPick,
+}: {
+  sub: HomeHeroSubChip;
+  isActive: boolean;
+  pluginsLoading: boolean;
+  onPick: (sub: HomeHeroSubChip) => void;
+}) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className={`home-hero__subtype-chip${isActive ? ' is-active' : ''}`}
+      data-sub-chip-id={sub.slug}
+      data-testid={`home-hero-subtype-${sub.slug}`}
+      onClick={() => onPick(sub)}
+      disabled={pluginsLoading}
+      role="tab"
+      aria-selected={isActive}
+    >
+      <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+      <span className="home-hero__subtype-chip-label">
+        {pluginSubfacetLabel(sub.slug, sub.label, t)}
+      </span>
+    </button>
+  );
+}
+
 function SubTypeRow({
   subChips,
   selectedSlug,
@@ -3294,48 +3446,175 @@ function SubTypeRow({
 }) {
   const t = useT();
   const allActive = selectedSlug === null;
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLDivElement | null>(null);
+  // How many sub-chips fit on one line after the always-present "All" chip;
+  // the rest collapse into a "More" dropdown so the row never wraps.
+  const [visibleCount, setVisibleCount] = useState(subChips.length);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+
+  // Measure against the always-full hidden ghost row so chip widths are stable
+  // no matter what the visible row currently shows, then pick the largest
+  // prefix that fits (reserving room for the More button when it's needed).
+  const measure = useCallback(() => {
+    const row = rowRef.current;
+    const ghost = measureRef.current;
+    if (!row || !ghost) return;
+    const avail = row.clientWidth;
+    if (avail <= 0) return;
+    const gap = 5;
+    const allWidth = ghost.querySelector<HTMLElement>('[data-measure="all"]')?.offsetWidth ?? 0;
+    const moreWidth = ghost.querySelector<HTMLElement>('[data-measure="more"]')?.offsetWidth ?? 0;
+    const chipEls = Array.from(ghost.querySelectorAll<HTMLElement>('[data-measure="chip"]'));
+    // Everything (All + every chip) fits: no More button needed.
+    let full = allWidth;
+    for (const el of chipEls) full += gap + el.offsetWidth;
+    if (full <= avail) {
+      setVisibleCount(chipEls.length);
+      return;
+    }
+    // Overflow: reserve the More button and count the fitting prefix.
+    const budget = avail - gap - moreWidth;
+    let used = allWidth;
+    let count = 0;
+    for (let i = 0; i < chipEls.length; i++) {
+      const next = used + gap + chipEls[i]!.offsetWidth;
+      if (next <= budget) {
+        used = next;
+        count = i + 1;
+      } else {
+        break;
+      }
+    }
+    setVisibleCount(count);
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [measure, subChips]);
+
+  // Close the More menu on outside pointer / Escape.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    function onDown(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMoreOpen(false);
+    }
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [moreOpen]);
+
+  const visibleChips = subChips.slice(0, visibleCount);
+  const overflowChips = subChips.slice(visibleCount);
+  const overflowActive = overflowChips.some((sub) => sub.slug === selectedSlug);
+  const allChip = (
+    <button
+      type="button"
+      className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
+      data-sub-chip-id="all"
+      data-testid="home-hero-subtype-all"
+      onClick={onSelectAll}
+      disabled={pluginsLoading}
+      role="tab"
+      aria-selected={allActive}
+    >
+      <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+    </button>
+  );
+
   return (
     <div
+      ref={rowRef}
       className="home-hero__subtype-row"
       data-testid="home-hero-subtype-row"
       role="tablist"
       aria-label={t('homeHero.subTypeAria')}
     >
-      <button
-        type="button"
-        className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
-        data-sub-chip-id="all"
-        data-testid="home-hero-subtype-all"
-        onClick={onSelectAll}
-        disabled={pluginsLoading}
-        role="tab"
-        aria-selected={allActive}
-      >
-        <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
-      </button>
-      {subChips.map((sub) => {
-        const isActive = sub.slug === selectedSlug;
-        const cls = ['home-hero__subtype-chip'];
-        if (isActive) cls.push('is-active');
-        return (
+      {allChip}
+      {visibleChips.map((sub) => (
+        <SubTypeChip
+          key={sub.slug}
+          sub={sub}
+          isActive={sub.slug === selectedSlug}
+          pluginsLoading={pluginsLoading}
+          onPick={onPickSubChip}
+        />
+      ))}
+      {overflowChips.length > 0 ? (
+        <div className="home-hero__subtype-more" ref={moreRef}>
           <button
-            key={sub.slug}
             type="button"
-            className={cls.join(' ')}
-            data-sub-chip-id={sub.slug}
-            data-testid={`home-hero-subtype-${sub.slug}`}
-            onClick={() => onPickSubChip(sub)}
+            className={`home-hero__subtype-chip home-hero__subtype-more-btn${overflowActive ? ' is-active' : ''}`}
+            data-testid="home-hero-subtype-more"
+            onClick={() => setMoreOpen((open) => !open)}
             disabled={pluginsLoading}
-            role="tab"
-            aria-selected={isActive}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
           >
+            <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
+            <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
+          </button>
+          {moreOpen ? (
+            <div className="home-hero__subtype-more-menu" role="menu" aria-label={t('homeHero.subTypeMore')}>
+              {overflowChips.map((sub) => {
+                const isActive = sub.slug === selectedSlug;
+                return (
+                  <button
+                    key={sub.slug}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    className={`home-hero__subtype-more-item${isActive ? ' is-active' : ''}`}
+                    data-testid={`home-hero-subtype-more-${sub.slug}`}
+                    disabled={pluginsLoading}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onPickSubChip(sub);
+                    }}
+                  >
+                    <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+                    <span className="home-hero__subtype-chip-label">
+                      {pluginSubfacetLabel(sub.slug, sub.label, t)}
+                    </span>
+                    {isActive ? <Icon name="check" size={13} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {/* Hidden ghost row: always the full set, used only to measure chip
+          widths so the visible row can compute how many fit. */}
+      <div className="home-hero__subtype-measure" aria-hidden ref={measureRef}>
+        <span className="home-hero__subtype-chip" data-measure="all">
+          <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+        </span>
+        {subChips.map((sub) => (
+          <span key={sub.slug} className="home-hero__subtype-chip" data-measure="chip">
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
             <span className="home-hero__subtype-chip-label">
               {pluginSubfacetLabel(sub.slug, sub.label, t)}
             </span>
-          </button>
-        );
-      })}
+          </span>
+        ))}
+        <span className="home-hero__subtype-chip home-hero__subtype-more-btn" data-measure="more">
+          <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
+          <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
+        </span>
+      </div>
     </div>
   );
 }
@@ -3472,6 +3751,7 @@ function ShortcutsMenu({
 function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototypeDesc');
+    case 'web-clone': return t('homeHero.chip.webCloneDesc');
     case 'wireframe': return t('homeHero.chip.wireframeDesc');
     case 'mobile': return t('homeHero.chip.mobileDesc');
     case 'deck': return t('homeHero.chip.deckDesc');
@@ -3480,6 +3760,7 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'video': return t('homeHero.chip.videoDesc');
     case 'audio': return t('homeHero.chip.audioDesc');
     case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
+    case 'webgl': return t('homeHero.chip.webglDesc');
     case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
     default: return '';
@@ -3511,6 +3792,7 @@ function fallbackPlaceholderScenarioText(
 function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
   switch (chip.id) {
     case 'prototype': return t('homeHero.chip.prototypeNext');
+    case 'web-clone': return t('homeHero.chip.webCloneNext');
     case 'wireframe': return t('homeHero.chip.wireframeNext');
     case 'mobile': return t('homeHero.chip.mobileNext');
     case 'deck': return t('homeHero.chip.deckNext');
@@ -3535,7 +3817,15 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
 // card never appears under the audio/image/video chips — and, because the
 // example card's selected state is keyed on the active plugin id, never shows
 // up pre-selected when a media mode is entered.
-const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>(['od-media-generation']);
+//
+// `example-web-clone` is the Website clone chip's own base scenario, not a
+// concrete example. The per-site examples are plain text prompt cards (from
+// HOME_PROMPT_EXAMPLES) rather than plugins, so hide the base plugin to keep the
+// preset rail empty for web-clone and let those text cards show instead.
+const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>([
+  'od-media-generation',
+  'example-web-clone',
+]);
 
 export function homeHeroExamplePluginsForChip(
   chipId: string,
@@ -3609,6 +3899,9 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
+    case 'web-clone':
+      // Website reproduction flows (e.g. example-web-clone / site-clone kits).
+      return has('web-clone', 'website-clone', 'site-clone') || hasPart('web-clone', 'website-clone');
     case 'wireframe':
       // Lo-fi / sketch / whiteboard explorations (e.g. wireframe-sketch).
       return (
@@ -3649,6 +3942,11 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
       return hasPart('hyperframes', 'hyperframe');
     case 'live-artifact':
       return has('live-artifact') || hasPart('live-artifact');
+    case 'webgl':
+      return (
+        has('webgl', 'webgl2', 'shader', 'gpu') ||
+        hasPart('webgl', 'shader', 'gpu')
+      );
     case 'image':
       return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio', 'live-artifact');
     case 'video':
@@ -3895,6 +4193,9 @@ function fallbackPluginPresetPrompt(
 
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
+    "web-clone": [
+      "Website URL to clone: https://open-design.ai",
+    ],
     prototype: [
       "Design a high-converting website for an AI CRM with a clear hero, feature story, proof points, and trial CTA",
       "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
@@ -4027,6 +4328,9 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
     ],
   },
   "zh-CN": {
+    "web-clone": [
+      "想要复刻的网站链接：https://open-design.ai",
+    ],
     prototype: [
       "为 AI CRM 设计一个高转化官网，包含首屏、功能卖点、客户案例和清晰的试用入口",
       "为团队知识库做一个桌面端仪表盘，突出搜索、最近更新、权限状态和协作入口",
@@ -4661,6 +4965,8 @@ function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
     case 'prototype':
       return { artifact_type: 'web prototype', audience: 'product evaluators', fidelity: 'high-fidelity' };
+    case 'web-clone':
+      return { artifact_type: 'website clone', source: 'target URL', fidelity: 'source-first visual reproduction' };
     case 'wireframe':
       return { artifact_type: 'lo-fi wireframe', audience: 'product team', fidelity: 'wireframe' };
     case 'mobile':

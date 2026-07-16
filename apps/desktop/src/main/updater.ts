@@ -335,6 +335,11 @@ export type DesktopUpdaterScheduler = {
   stop(reason?: string): void;
 };
 
+type StartupSilentPayloadUpdateOptions = {
+  isEnabled(): Promise<boolean>;
+  requestQuit(): void;
+};
+
 function isTruthyEnv(value: string | undefined): boolean | null {
   if (value == null || value.length === 0) return null;
   if (value === "1" || value === "true" || value === "yes") return true;
@@ -1015,6 +1020,41 @@ function selectUpdateCandidateWithFallback(
   const payload = selectUpdateCandidate(metadata, config, true);
   if (payload.ok || payload.error.code !== "no-compatible-artifact") return payload;
   return selectUpdateCandidate(metadata, config);
+}
+
+function controlLauncherVersionMin(metadata: Record<string, unknown>): string | null {
+  const control = objectField(metadata, "control");
+  const launcher = control == null ? null : objectField(control, "launcher");
+  const version = launcher == null ? null : objectField(launcher, "version");
+  return version == null ? null : stringField(version, "min");
+}
+
+/**
+ * Installed-base escape hatch: decide whether the remote release is beyond what
+ * this build can adopt as an in-place payload update, forcing a full installer
+ * instead. Two orthogonal guardrails, either of which trips → installer:
+ *
+ *  - `launcher.schema` (ABI axis): the release declares a launcher-contract schema
+ *    number this build cannot interpret (`feed.launcher.schema >
+ *    LAUNCHER_SCHEMA_VERSION`). This is the reseed boundary — a pure int compare.
+ *  - `control.launcher.version.min` (recency axis): the release requires a
+ *    launcher/build version newer than this one (`min > currentVersion`).
+ *
+ * Both are feed declarations read here; a future launcher enforces the same schema
+ * floor locally against on-disk manifests. Missing/malformed fields are ignored
+ * (fail-open) so older feeds keep updating seamlessly.
+ */
+export function remoteRequiresReinstall(metadata: Record<string, unknown>, config: DesktopUpdaterConfig): boolean {
+  const launcher = objectField(metadata, "launcher");
+  const remoteLauncherSchema = launcher == null ? undefined : numberField(launcher, "schema");
+  if (remoteLauncherSchema != null && remoteLauncherSchema > LAUNCHER_SCHEMA_VERSION) {
+    return true;
+  }
+  const minVersion = controlLauncherVersionMin(metadata);
+  if (minVersion != null && compareVersions(minVersion, config.currentVersion) > 0) {
+    return true;
+  }
+  return false;
 }
 
 async function fetchJson(fetchImpl: typeof globalThis.fetch, url: string): Promise<Record<string, unknown>> {
@@ -2623,7 +2663,15 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
-      const selected = selectUpdateCandidateWithFallback(body, config, await hasValidLauncherPayloadContext(config));
+      const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
+      const reseedRequired = launcherPayloadContextValid && remoteRequiresReinstall(body, config);
+      if (reseedRequired) {
+        logUpdateEvent("reseed-required-installer-route", {
+          currentVersion: config.currentVersion,
+          supportedLauncherSchema: LAUNCHER_SCHEMA_VERSION,
+        });
+      }
+      const selected = selectUpdateCandidateWithFallback(body, config, launcherPayloadContextValid && !reseedRequired);
       if (!selected.ok) return setState(selected.state, selected.error);
       if (compareVersions(selected.candidate.version, config.currentVersion) <= 0) {
         logUpdateEvent("check-not-available", { candidateVersion: selected.candidate.version });
@@ -3116,6 +3164,7 @@ export function createDesktopUpdaterScheduler(
     initialDelayMs: number;
     intervalMs: number;
     logger?: DesktopUpdaterLogger;
+    startupSilentPayloadUpdate?: StartupSilentPayloadUpdateOptions;
   },
 ): DesktopUpdaterScheduler {
   const logger = options.logger ?? console;
@@ -3125,6 +3174,7 @@ export function createDesktopUpdaterScheduler(
   let tickRunning = false;
   let unsubscribe: (() => void) | null = null;
   let warnedZeroDelay = false;
+  let startupTickPending = true;
 
   const clearTimer = () => {
     if (timer == null) return;
@@ -3176,8 +3226,32 @@ export function createDesktopUpdaterScheduler(
     if (!running || tickRunning) return;
     tickRunning = true;
     let status: DesktopUpdateStatusSnapshot | null = null;
+    const startupTick = startupTickPending;
+    startupTickPending = false;
     try {
       status = await updater.checkForUpdates();
+      if (
+        startupTick
+        && options.startupSilentPayloadUpdate != null
+        && status.installResult == null
+        && status.state === DESKTOP_UPDATE_STATES.DOWNLOADED
+        && status.artifact?.type === "payload"
+        && status.capabilities.canApplyInPlace
+      ) {
+        try {
+          const enabled = await options.startupSilentPayloadUpdate.isEnabled();
+          if (enabled) {
+            status = await updater.installUpdate();
+            if (status.installResult != null) {
+              stop("silent-payload-installed");
+              options.startupSilentPayloadUpdate.requestQuit();
+              return;
+            }
+          }
+        } catch (silentError) {
+          logger.warn("[open-design updater] startup silent payload update failed", silentError);
+        }
+      }
       if (status.installResult != null) {
         stop("installer-opened");
         return;

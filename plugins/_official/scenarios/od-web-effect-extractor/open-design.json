@@ -8,6 +8,7 @@
     "zh-CN": "网页特效提取"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-06-26T07:15:53Z",
   "description": "Extract visual effects, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable Open Design artifact.",
   "description_i18n": {
     "en": "Extract visual effects, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable Open Design artifact.",

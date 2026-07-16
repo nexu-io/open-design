@@ -1,6 +1,6 @@
 {
   "name": "@open-design/platform",
-  "version": "0.12.1",
+  "version": "0.15.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -22,8 +22,8 @@
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "vitest": "4.1.6",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
   },
   "engines": {
     "node": "~24"

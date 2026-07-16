@@ -1,6 +1,13 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
+import {
+  clickDeckNextSlide,
+  clickDeckPreviousSlide,
+  expectAllProjectFilesActive,
+  expectAllProjectFilesInactive,
+  openAllProjectFiles,
+} from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -206,6 +213,7 @@ test('[P0] switching between projects restores each project workspace to its las
     buffer: pngBytes,
   });
   await expect((await alphaPrimaryUpload).ok()).toBeTruthy();
+  await expect(tabBySuffix(page, 'alpha-primary.png')).toBeVisible();
   const alphaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
@@ -241,6 +249,7 @@ test('[P0] switching between projects restores each project workspace to its las
     buffer: pngBytes,
   });
   await expect((await betaPrimaryUpload).ok()).toBeTruthy();
+  await expect(tabBySuffix(page, 'beta-primary.png')).toBeVisible();
   const betaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
@@ -312,7 +321,7 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
   const uploadedName = await fileTab.getAttribute('title');
   expect(uploadedName).toBeTruthy();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'deep-linked-reference.png',
   });
@@ -332,7 +341,7 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 });
 
 test('[P0] returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
@@ -370,7 +379,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
   const uploadedName = await fileTab.getAttribute('title');
   expect(uploadedName).toBeTruthy();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'root-design-reference.png',
   });
@@ -386,6 +395,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
 
   await gotoProjectRoute(page, `/projects/${projectId}/files/${encodeURIComponent(uploadedName!)}`);
   await expect(fileTab).toBeVisible();
+  await expect(fileTab).toHaveAttribute('aria-selected', 'true');
   await navigateProjectRouteInApp(page, `/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -617,12 +627,7 @@ test('[P0] @critical switching between conversations keeps the composer usable w
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
-  await historyList
-    .locator('.chat-conv-item')
-    .filter({ hasText: firstPrompt })
-    .first()
-    .locator('[data-testid^="conversation-select-"]')
-    .click();
+  await historyList.getByTestId(`conversation-select-${firstContext.conversationId}`).click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
@@ -1207,8 +1212,8 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -1406,7 +1411,7 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(uploadedFileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['conversation-surface-reference.png']);
   const persistedConversations = await listConversationsFromApi(page, projectId);
   expect(persistedConversations.map((conversation) => conversation.id)).toEqual(
@@ -1621,13 +1626,13 @@ test('[P0] returning from a file deep-link to the project root keeps the chosen 
   const fileTab = tabBySuffix(page, 'conversation-root-file.png');
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 
   await navigateProjectRouteInApp(page, `/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 });
 
 test('[P0] returning from an artifact deep-link to the project root keeps the artifact tab reachable after returning to the project root', async ({ page }) => {
@@ -1749,8 +1754,8 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
   });
   await expect(tabBySuffix(page, 'restore-me.png')).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'restore-me.png',
@@ -1766,7 +1771,7 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
 
   await page.reload();
   await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await expectAllProjectFilesActive(page);
 });
 
 test('[P0] @critical daemon error details persist between failed sends', async ({ page }) => {
@@ -1837,7 +1842,7 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     'error-cross-tab.html',
     '<!doctype html><html><body><h1>Error cross tab</h1></body></html>',
   );
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const crossFileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'error-cross-tab.html',
   });
@@ -3086,7 +3091,7 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
 });
 
-test('[P1] questions tab Skip all sends structured skipped answers into the next run request', async ({ page }) => {
+test('[P1] inline question form Skip all sends structured skipped answers into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
@@ -3112,7 +3117,7 @@ test('[P1] questions tab Skip all sends structured skipped answers into the next
               id: 'audience',
               label: 'Audience',
               type: 'text',
-              required: true,
+              required: false,
             },
           ],
         },
@@ -3143,18 +3148,15 @@ test('[P1] questions tab Skip all sends structured skipped answers into the next
     });
   });
 
-  const projectId = await createEmptyProject(page, 'Questions skip all run context');
+  const projectId = await createEmptyProject(page, 'Inline questions skip all');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Plan a landing page after asking clarifying questions.');
-  await expect(page.getByTestId('questions-tab')).toBeVisible();
-  await page.getByTestId('questions-tab').click();
+  const form = page.locator('.question-form').first();
+  await expect(form).toBeVisible();
+  await expect(form.getByText('Audience')).toBeVisible();
 
-  const panel = page.getByTestId('questions-panel');
-  await expect(panel).toBeVisible();
-  await expect(panel.getByText('Audience')).toBeVisible();
-
-  const skipAll = panel.getByRole('button', { name: /Skip all/i });
+  const skipAll = form.getByRole('button', { name: /Skip all/i });
   await expect(skipAll).toBeEnabled();
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -3189,7 +3191,7 @@ test('[P1] questions tab Skip all sends structured skipped answers into the next
   ).toBe(true);
 });
 
-test('[P1] questions tab Continue sends selected answers into the next run request', async ({ page }) => {
+test('[P1] inline question form submits selected answers into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
@@ -3246,23 +3248,20 @@ test('[P1] questions tab Continue sends selected answers into the next run reque
     });
   });
 
-  const projectId = await createEmptyProject(page, 'Questions continue run context');
+  const projectId = await createEmptyProject(page, 'Inline questions submit run context');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Plan a landing page after user choices.');
-  await expect(page.getByTestId('questions-tab')).toBeVisible();
-  await page.getByTestId('questions-tab').click();
-
-  const panel = page.getByTestId('questions-panel');
-  await expect(panel).toBeVisible();
-  const audienceQuestion = panel.locator('.qf-field', { has: page.getByText('Audience') });
+  const form = page.locator('.question-form').first();
+  await expect(form).toBeVisible();
+  const audienceQuestion = form.locator('.qf-field', { has: page.getByText('Audience') });
   await audienceQuestion.locator('input.qf-input').fill('Product marketers');
 
-  const continueButton = panel.getByRole('button', { name: /^Continue$/i });
-  await expect(continueButton).toBeEnabled();
+  const submitButton = form.getByRole('button', { name: 'Send answers' });
+  await expect(submitButton).toBeEnabled();
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-    continueButton.click(),
+    submitButton.click(),
   ]);
 
   await expect.poll(() => runBodies.length).toBe(2);
@@ -3673,81 +3672,6 @@ async function runExampleUsePromptFlow(
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
 }
 
-async function runQuestionFormSelectionLimitFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  await sendPrompt(page, entry.prompt);
-
-  const toneQuestion = page.locator('.qf-field', {
-    has: page.getByText('Visual tone (pick up to two)'),
-  });
-  await expect(toneQuestion).toBeVisible();
-
-  const editorialChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Editorial / magazine'),
-  });
-  const modernChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Modern minimal'),
-  });
-  const softChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Soft / warm'),
-  });
-  const editorial = editorialChip.locator('input[type="checkbox"]');
-  const modern = modernChip.locator('input[type="checkbox"]');
-  const soft = softChip.locator('input[type="checkbox"]');
-
-  await editorialChip.click();
-  await modernChip.click();
-
-  await expect(editorial).toBeChecked();
-  await expect(modern).toBeChecked();
-  await expect(soft).toBeDisabled();
-
-  const checkedOptions = toneQuestion.locator('input[type="checkbox"]:checked');
-  await expect(checkedOptions).toHaveCount(2);
-  await expect(soft).not.toBeChecked();
-  await expect(checkedOptions).toHaveCount(2);
-}
-
-async function runQuestionFormSubmitPersistenceFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  await sendPrompt(page, entry.prompt);
-
-  const form = page.locator('.question-form').first();
-  await expect(form).toBeVisible();
-
-  const toneQuestion = form.locator('.qf-field', {
-    has: page.getByText('Visual tone (pick up to two)'),
-  });
-  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Editorial / magazine') }).click();
-  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Modern minimal') }).click();
-
-  await form.getByRole('button', { name: 'Send answers' }).click();
-
-  await expect(page.getByText('[form answers — discovery]', { exact: false })).toBeVisible();
-  await expect(form.getByText('answered', { exact: true })).toBeVisible();
-  await expect(form.getByText('Answers sent — agent is using these for the rest of the session.')).toBeVisible();
-
-  const { projectId, conversationId } = await getCurrentProjectContext(page);
-  const messagesResponse = await page.request.get(
-    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
-  );
-  expect(messagesResponse.ok()).toBeTruthy();
-  const { messages } = (await messagesResponse.json()) as { messages: Array<{ role: string; content: string }> };
-  const formAnswerMessage = messages.find((message) => message.role === 'user' && message.content.includes('[form answers — discovery]'));
-  expect(formAnswerMessage).toBeTruthy();
-
-  await page.reload();
-  const restoredForm = page.locator('.question-form').first();
-  await expect(restoredForm).toBeVisible();
-  await expect(restoredForm.getByText('answered', { exact: true })).toBeVisible();
-  await expect(restoredForm.locator('input[type="checkbox"]:checked')).toHaveCount(2);
-  await expect(restoredForm.getByRole('button', { name: 'Send answers' })).toHaveCount(0);
-}
-
 async function runGenerationDoesNotCreateExtraFileFlow(
   page: Page,
   entry: UiScenario,
@@ -3856,11 +3780,11 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Three')).toBeVisible();
-  await page.getByLabel('Previous slide').click();
+  await clickDeckPreviousSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 }
 
@@ -3873,13 +3797,13 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await openDesignFile(page, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   await openDesignFile(page, 'deck-beta.html');
   await expect(frame.getByText('Beta One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Beta Two')).toBeVisible();
 
   await page.getByRole('tab', { name: /deck-alpha\.html/i }).click();
@@ -4226,7 +4150,7 @@ async function runDesignFilesUploadFlow(
   });
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'moodboard.png',
   });
@@ -4270,7 +4194,7 @@ async function runDesignFilesDeleteFlow(
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'trash-me.png',
@@ -4287,10 +4211,7 @@ async function runDesignFilesDeleteFlow(
   // Bug #115: deleting from the Design Files panel must not navigate the
   // user into another tab. The Design Files tab should remain the active
   // view, and the sibling tab should still exist (just not auto-activated).
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expectAllProjectFilesActive(page);
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.12.1",
+  "version": "0.15.1",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -39,8 +39,8 @@
     "@open-design/diagnostics": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
-    "@open-design/release": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "@opentelemetry/api": "1.9.1",

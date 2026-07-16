@@ -55,6 +55,7 @@ const PROMOTE_AMR_CODES = new Set<string>([
 //   - retry:                       re-run with the current agent.
 //   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
 //   - recharge:                    open the AMR wallet (manual retry afterwards).
+//   - upgrade:                     open the AMR plans view (manual retry afterwards).
 //   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
 //                                  print mode cannot complete Google
 //                                  Sign-In on its own (no input field
@@ -77,8 +78,13 @@ export type RunFailurePrimaryAction =
   | 'retry'
   | 'authorize'
   | 'recharge'
+  | 'upgrade'
   | 'launch-terminal-auth'
-  | 'launch-terminal-switch-model';
+  | 'launch-terminal-switch-model'
+  // No self-contained recovery button. Used when retrying is futile (e.g. a
+  // hard quota / exhausted credits) and the only forward path is the AMR switch
+  // card rendered below, so the card shows guidance copy without a dead Retry.
+  | 'none';
 
 // i18n keys for the gray-card text override (null = show the raw error).
 // Keys ending in a value with `{agent}` are interpolated at render time via
@@ -89,6 +95,21 @@ export type RunFailureMessageKey =
   | 'chat.connectionDropped'
   | 'chat.runError.signInMessage.amr'
   | 'chat.runError.signInMessage.other'
+  | 'chat.runError.cliMissingMessage'
+  | 'chat.runError.promptTooLargeMessage'
+  | 'chat.runError.modelUnavailableMessage'
+  | 'chat.runError.rateLimitedMessage'
+  | 'chat.runError.upstreamUnavailableMessage'
+  | 'chat.runError.toolLoopMessage'
+  | 'chat.runError.outputInvalidMessage'
+  | 'chat.runError.runtimeConfigMessage'
+  | 'chat.runError.quotaExhaustedMessage'
+  | 'chat.runError.workspaceCreditsMessage'
+  | 'chat.runError.timedOutMessage'
+  | 'chat.runError.inactivityTimeoutMessage'
+  | 'chat.runError.emptyOutputMessage'
+  | 'chat.runError.sessionExpiredMessage'
+  | 'chat.runError.gitBashMissingMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -101,6 +122,19 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.connectionDropped'
   | 'chat.runError.title.signInRequired'
   | 'chat.runError.title.rateLimited'
+  | 'chat.amrBalanceGate.title'
+  | 'chat.runError.title.cliMissing'
+  | 'chat.runError.title.promptTooLarge'
+  | 'chat.runError.title.modelUnavailable'
+  | 'chat.runError.title.upstreamUnavailable'
+  | 'chat.runError.title.toolLoop'
+  | 'chat.runError.title.outputInvalid'
+  | 'chat.runError.title.runtimeConfig'
+  | 'chat.runError.title.quotaExhausted'
+  | 'chat.runError.title.timedOut'
+  | 'chat.runError.title.emptyOutput'
+  | 'chat.runError.title.sessionExpired'
+  | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -117,16 +151,174 @@ export interface RunFailureUi {
   showSwitchCard: boolean;
 }
 
+// Small helper for the common shape: a named failure type + actionable copy,
+// recovered by re-running once the user has followed the instruction. No AMR
+// promotion (these root causes aren't "switch to hosted model" cases).
+function retryWithGuidance(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return {
+    primaryAction: 'retry',
+    titleKey,
+    messageKey,
+    secondaryRetry: false,
+    showSwitchCard: false,
+  };
+}
+
+// Agent-agnostic failure codes that carry a clear root cause and a concrete
+// fix, mapped the same way regardless of which agent produced them. The daemon
+// already classifies these into failure_category / user_action
+// (apps/daemon/src/run-failure-classification.ts); this is the user-facing half
+// of that taxonomy — a human-readable type name plus a one-line instruction,
+// with the raw upstream string preserved in the card's collapsible source area.
+const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
+  // CLI binary not found on PATH (user_action: install_cli).
+  AGENT_UNAVAILABLE: retryWithGuidance(
+    'chat.runError.title.cliMissing',
+    'chat.runError.cliMissingMessage',
+  ),
+  // Input exceeded the model context window (user_action: reduce_context).
+  AGENT_PROMPT_TOO_LARGE: retryWithGuidance(
+    'chat.runError.title.promptTooLarge',
+    'chat.runError.promptTooLargeMessage',
+  ),
+  // Selected model is missing/disabled (user_action: switch_model).
+  AMR_MODEL_UNAVAILABLE: retryWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
+  // Guard halted a repeating, non-progressing tool loop (user_action: retry
+  // after checking the real target).
+  TOOL_LOOP_DETECTED: retryWithGuidance(
+    'chat.runError.title.toolLoop',
+    'chat.runError.toolLoopMessage',
+  ),
+  // Model emitted a fabricated role marker and was aborted; a plain retry
+  // usually recovers.
+  ROLE_MARKER_HALLUCINATION: retryWithGuidance(
+    'chat.runError.title.outputInvalid',
+    'chat.runError.outputInvalidMessage',
+  ),
+  // Checked-in runtime def failed strict validation (user_action: fix_config);
+  // the user can't self-repair, so the copy points at update/support.
+  AGENT_RUNTIME_DEF_INVALID: retryWithGuidance(
+    'chat.runError.title.runtimeConfig',
+    'chat.runError.runtimeConfigMessage',
+  ),
+};
+
+// Same "switch to the hosted alternative" shape for causes where retrying with
+// the current provider is futile (hard quota / exhausted credits): no plain
+// Retry button, just guidance copy + the AMR promotion card below.
+function switchToAlternative(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return {
+    primaryAction: 'none',
+    titleKey,
+    messageKey,
+    secondaryRetry: false,
+    showSwitchCard: true,
+  };
+}
+
+// Failure causes keyed by the daemon's fine-grained `failure_detail`, for the
+// cases where the coarse `error_code` alone is wrong or too vague. This layer
+// can OVERRIDE a code mapping — e.g. `hard_quota` and a transient 429 share
+// `error_code: RATE_LIMITED`, but only the transient one should offer Retry.
+// Applied after AMR/Antigravity agent-specific handling (which own their own
+// quota/auth flows) and before the generic code branches.
+const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  // Provider quota / billing hard-stop: retrying reproduces the failure, so
+  // drop Retry and steer to the hosted-AMR switch card.
+  hard_quota: switchToAlternative(
+    'chat.runError.title.quotaExhausted',
+    'chat.runError.quotaExhaustedMessage',
+  ),
+  workspace_credits_exhausted: switchToAlternative(
+    'chat.runError.title.quotaExhausted',
+    'chat.runError.workspaceCreditsMessage',
+  ),
+  // CLI binary missing detected only from text (leaks in as the opaque
+  // AGENT_EXECUTION_FAILED code, not AGENT_UNAVAILABLE) — reuse the same
+  // "install the CLI, then retry" card the code path already renders.
+  cli_not_installed: retryWithGuidance(
+    'chat.runError.title.cliMissing',
+    'chat.runError.cliMissingMessage',
+  ),
+};
+
+// Agent-agnostic failure causes keyed by the daemon's `failure_detail`, resolved
+// BEFORE the AMR/Antigravity agent branches (unlike DETAIL_FAILURE_UI above).
+// These are engine-neutral run outcomes — a timeout, an empty result, a stale
+// resumed session, a missing Git Bash — that carry the same named type + fix for
+// every agent, including AMR. They leak in under the opaque AGENT_EXECUTION_FAILED
+// / process-exit codes, so without this the card would only show the raw stderr.
+const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  // Hard wall-clock timeout for the run (daemon user_action: retry). A plain
+  // retry — optionally with a smaller task — usually gets through.
+  timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.timedOutMessage',
+  ),
+  // The agent stalled (no new output for too long) and was cut off as a
+  // timeout. Distinct copy from a hard timeout, same retry recovery.
+  inactivity_timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.inactivityTimeoutMessage',
+  ),
+  // Run terminated without producing any output (daemon user_action: retry);
+  // usually transient, so name it and offer a straight retry.
+  empty_output: retryWithGuidance(
+    'chat.runError.title.emptyOutput',
+    'chat.runError.emptyOutputMessage',
+  ),
+  // A resumed agent session id went stale; the daemon already cleared it so the
+  // next run starts fresh (#3408). Name it as recoverable and offer Retry.
+  session_resume_expired: retryWithGuidance(
+    'chat.runError.title.sessionExpired',
+    'chat.runError.sessionExpiredMessage',
+  ),
+  // Windows: the agent needs Git Bash to spawn and it isn't installed
+  // (daemon user_action: install_cli). Point at installing Git for Windows,
+  // then retry — same "install the dependency, then re-run" shape as cli_missing.
+  git_bash_missing: retryWithGuidance(
+    'chat.runError.title.gitBashMissing',
+    'chat.runError.gitBashMissingMessage',
+  ),
+};
+
 // Resolve the failure UI for a failed run:
+//   - agent-agnostic root cause (cli missing, prompt too large, model
+//     unavailable, tool loop, bad output, bad runtime def) → named type + fix
+//   - agent-agnostic failure_detail (timeout, empty output, stale resumed
+//     session, missing Git Bash) → named type + retry, for every agent
 //   - AMR agent, auth required      → authorize-and-retry button, clearer copy
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
+//   - AMR agent, tier entitlement   → upgrade button + manual retry
 //   - AMR agent, anything else      → plain retry
+//   - fine-grained failure_detail (hard quota, workspace credits, text-detected
+//     cli-missing) → named type + fix, overriding a too-coarse code
 //   - non-AMR agent, model/auth/quota error → plain retry + promotion card
 //   - non-AMR agent, generic failure        → plain retry
 export function resolveRunFailureUi(
   code: string | null | undefined,
+  detail: string | null | undefined,
   agentId: string | null | undefined,
 ): RunFailureUi {
+  // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
+  // of them still gets the specific guidance instead of the generic fallback.
+  const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;
+  if (agnostic) return agnostic;
+  // Engine-neutral failure_detail (timeout, empty output, stale resumed session,
+  // missing Git Bash) resolves before the agent branches so it applies to every
+  // agent — including AMR, whose branch below otherwise returns a generic retry.
+  const agnosticDetail =
+    typeof detail === 'string' ? AGENT_AGNOSTIC_DETAIL_FAILURE_UI[detail] : undefined;
+  if (agnosticDetail) return agnosticDetail;
   if (agentId === 'amr') {
     if (code === 'AMR_AUTH_REQUIRED') {
       return {
@@ -146,6 +338,15 @@ export function resolveRunFailureUi(
         primaryAction: 'recharge',
         titleKey: 'chat.runError.title.balance',
         messageKey: 'chat.amrError.balanceMessage',
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    }
+    if (code === 'AMR_TIER_UPGRADE_REQUIRED') {
+      return {
+        primaryAction: 'upgrade',
+        titleKey: 'chat.amrBalanceGate.title',
+        messageKey: null,
         secondaryRetry: true,
         showSwitchCard: false,
       };
@@ -187,6 +388,12 @@ export function resolveRunFailureUi(
       };
     }
   }
+  // Fine-grained daemon classification overrides a too-coarse code (e.g.
+  // hard_quota vs a transient 429 both arriving as RATE_LIMITED). Placed after
+  // the AMR/Antigravity agent branches so their bespoke quota/auth flows still
+  // win, and before the generic code branches so it can correct them.
+  const detailUi = typeof detail === 'string' ? DETAIL_FAILURE_UI[detail] : undefined;
+  if (detailUi) return detailUi;
   // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
   // localized "lost connection — retry" message instead of the raw SDK string.
   // Not an AMR-promotable case: the break is the user's own network path, which
@@ -210,6 +417,28 @@ export function resolveRunFailureUi(
       primaryAction: 'retry',
       titleKey: 'chat.runError.title.signInRequired',
       messageKey: 'chat.runError.signInMessage.other',
+      secondaryRetry: false,
+      showSwitchCard: true,
+    };
+  }
+  // Non-antigravity rate limit / upstream outage: name the type and explain the
+  // recovery (wait & retry / switch service), and still promote AMR as the
+  // steadier hosted alternative. Antigravity's own RATE_LIMITED was handled
+  // above (per-model quota → switch model in terminal).
+  if (code === 'RATE_LIMITED') {
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.rateLimited',
+      messageKey: 'chat.runError.rateLimitedMessage',
+      secondaryRetry: false,
+      showSwitchCard: true,
+    };
+  }
+  if (code === 'UPSTREAM_UNAVAILABLE') {
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.upstreamUnavailable',
+      messageKey: 'chat.runError.upstreamUnavailableMessage',
       secondaryRetry: false,
       showSwitchCard: true,
     };

@@ -1,17 +1,38 @@
 ---
 name: deck-open-slide-canvas
-zh_name: "1920 画布自由 Deck"
-en_name: "Open-Slide 1920 Canvas Deck"
+en_name: "Write an Architecture Review like a World-Class Staff Engineer"
+zh_name: "像世界级 Staff Engineer 一样写架构评审"
+description: |
+  Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
+en_description: |
+  Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Built as a decision-grade product management deck for staff eng, tech leads, security.
+zh_description: |
+  像世界级 Staff Engineer 一样写架构评审——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "product-management"
+  - "pm-feature-business-case-deck"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "deck-open-slide-canvas"
+triggers:
+  - "pm-feature-business-case-deck"
+  - "product-management"
+  - "Write an Architecture Review like a World-Class Staff Engineer"
+  - "像世界级 Staff Engineer 一样写架构评审"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "html deck"
+  - "html slides"
 emoji: "🎨"
-description: "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template."
-zh_description: "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
-en_description: "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template."
 category: slides
 scenario: design
 aspect_hint: "1920×1080 (16:9)"
 featured: 35
 recommended: 9
-tags: ["canvas", "open-slide", "freeform", "1920", "react"]
 example_id: sample-deck-open-slide-canvas
 example_name: "1920 自由画布 · Sea Indigo"
 example_format: markdown
@@ -22,7 +43,6 @@ example_source_label: "1weiho/open-slide"
 od:
   mode: deck
   surface: web
-  scenario: design
   featured: 0.17
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
@@ -31,9 +51,11 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "Use the Open-Slide 1920 Canvas Deck template to turn my content into a locked 1920x1080 free-composition deck with React component-level layout. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
   example_prompt_i18n:
     zh-CN: "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  category: "product-management"
+  scenario: "product"
+  example_prompt: "Create \"Write an Architecture Review like a World-Class Staff Engineer\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's architecture review: the local daemon + agent-runtime design, the tradeoffs, and the decision to lock. Audience: staff eng, tech leads, security. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 
 【模板: 1920 画布自由 Deck】

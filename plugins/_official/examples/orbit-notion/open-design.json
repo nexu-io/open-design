@@ -24,6 +24,7 @@
     "en": "Orbit Notion"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Open Orbit briefing skill — selected by the Orbit pipeline when Notion is the user's only connected connector, or when the user explicitly scopes their daily digest to Notion. Pulls the past 24 hours of document edits, comments, mentions, and database row changes from the user's authenticated Notion connection and renders the digest as a native Notion page (callout / toggle / database table primitives). This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live Notion data.",
   "description_i18n": {
     "zh-CN": "Open Orbit 简报技能 — 当 Notion 是用户唯一连接的连接器或用户明确将每日摘要范围限定为 Notion 时由 Orbit 管道选择。提取过去 24 小时内用户已认证的 Notion 连接中的文档编辑、评论、提及和数据库行更改，并将摘要呈现为原生 Notion 页面（标注/折叠/数据库表元素）。此技能不应手动触发 — 由 Orbit 的每日摘要调度程序针对实时 Notion 数据调用。",

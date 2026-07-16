@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-playful
+en_name: "Run a Sales-Floor Training like a Top Retail Coach"
+zh_name: "像顶级零售教练一样做门店销售培训"
 description: |
-  Playful — Sun-warm peach background with Syne display: a friendly indie launch deck. Anything that should feel warm, indie, and approachable: creator portfolios, indie product launches, lifestyle brands, small-business pitches, newsletter / community decks.
+  A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Built as a decision-grade professional training deck for store associates, floor managers.
+en_description: |
+  A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Built as a decision-grade professional training deck for store associates, floor managers.
+zh_description: |
+  像顶级零售教练一样做门店销售培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "professional-training"
+  - "employee-onboarding-deck"
+  - "education"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-playful"
 triggers:
-  - "playful"
-  - "zhangzara-playful"
-  - "warm"
-  - "approachable"
-  - "upbeat"
-  - "informal"
-  - "creator portfolio"
-  - "indie product launch"
+  - "employee-onboarding-deck"
+  - "professional-training"
+  - "Run a Sales-Floor Training like a Top Retail Coach"
+  - "像顶级零售教练一样做门店销售培训"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/playful"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "professional-training"
+  scenario: "education"
+  example_prompt: "Create \"Run a Sales-Floor Training like a Top Retail Coach\" as a decision-grade Professional training deck in this template's own visual system. Subject: A retail sales-floor training on consultative selling — the flow, the role-plays, and the daily habit that lifts conversion. Audience: store associates, floor managers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
 ---
 
 # Playful

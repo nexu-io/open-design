@@ -187,6 +187,12 @@ export function migratePlugins(db: SqliteDb): void {
     ['resolved_ref', `ALTER TABLE installed_plugins ADD COLUMN resolved_ref TEXT`],
     ['manifest_digest', `ALTER TABLE installed_plugins ADD COLUMN manifest_digest TEXT`],
     ['archive_integrity', `ALTER TABLE installed_plugins ADD COLUMN archive_integrity TEXT`],
+    // Internal bookkeeping for the bundled-plugin boot walker only (bundled.ts)
+    // — a hash of the on-disk files (open-design.json, SKILL.md, …) a bundled
+    // plugin was last registered from, so a no-op reboot can tell "nothing
+    // changed" from "SKILL.md was edited" without touching the parsed
+    // manifest/version fields other InstalledPluginRecord consumers rely on.
+    ['bundled_content_digest', `ALTER TABLE installed_plugins ADD COLUMN bundled_content_digest TEXT`],
   ] as const) {
     if (!installedCols.some((c) => c['name'] === name)) db.exec(ddl);
   }

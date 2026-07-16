@@ -24,6 +24,7 @@
     "en": "Dashboard"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T05:25:44Z",
   "description": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar, top bar with user/search, main grid of KPI cards and one or two charts. Use when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or \"control panel\" screen.",
   "description_i18n": {
     "zh-CN": "单文件 HTML 管理/分析仪表盘。固定左侧边栏，顶部用户/搜索栏，主区域显示 KPI 卡片网格和图表。适用于需要'仪表盘'、'管理后台'、'数据分析'或'控制面板'界面的场景。",

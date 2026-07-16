@@ -6,6 +6,7 @@ import {
   velaLogout,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { openExternalUrl } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import {
   amrHandoffDeviceId,
@@ -44,6 +45,7 @@ interface AmrLoginPillProps {
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
   iconOnlySignOut?: boolean;
+  onSignInStarted?: () => void;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
 
@@ -278,6 +280,7 @@ export function AmrLoginPill({
   revealPendingCancelAction = false,
   showConsoleAction = false,
   iconOnlySignOut = false,
+  onSignInStarted,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
@@ -458,6 +461,7 @@ export function AmrLoginPill({
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
       setPending('login');
+      onSignInStarted?.();
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
             metricsConsent,
@@ -487,6 +491,7 @@ export function AmrLoginPill({
       analytics.track,
       installationId,
       metricsConsent,
+      onSignInStarted,
       startPolling,
       t,
     ],
@@ -548,6 +553,7 @@ export function AmrLoginPill({
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.stopPropagation();
+      event.preventDefault();
       const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
         metricsConsent,
       });
@@ -556,11 +562,16 @@ export function AmrLoginPill({
         resolvedDeviceId: getResolvedDeviceId(),
         installationId,
       });
-      event.currentTarget.href = attributedAmrUrl(
+      const url = attributedAmrUrl(
         amrConsoleUrlForProfile(status?.profile),
         attribution,
         deviceId,
       );
+      event.currentTarget.href = url;
+      // This link deliberately stops propagation to avoid re-selecting its
+      // agent card, so App's document-level first-party bridge cannot see it.
+      // Open the final, attributed URL directly to mint the browser bridge.
+      void openExternalUrl(url);
     },
     [analytics.track, installationId, metricsConsent, status?.profile],
   );

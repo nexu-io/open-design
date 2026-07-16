@@ -115,6 +115,7 @@ Dentro do Studio de um projeto, o mesmo design system produz múltiplos tipos de
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Suportado | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Suportado | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Suportado | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Suportado | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Suportado | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Suportado | `od mcp install copilot` |
@@ -125,6 +126,7 @@ Dentro do Studio de um projeto, o mesmo design system produz múltiplos tipos de
 | [Cline](https://github.com/cline/cline) | ✅ Suportado | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Suportado | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Suportado | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Suportado | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Suportado | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Suportado | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Suportado | `od mcp install hermes` |

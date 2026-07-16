@@ -62,9 +62,18 @@ const EVENT_SCHEMA_VERSION = 2;
 const CLIENT_TYPE = "packaged_main";
 const CAPTURE_SOURCE = "packaged/startup";
 
-// Replicates apps/daemon/src/telemetry-environment.ts (daemon src, not
-// importable here) so the packaged main process resolves the same `env` bucket
-// as daemon-emitted events for a given process environment.
+// Resolve the same `env` bucket as the daemon events this main process's own
+// sidecars emit. The daemon child is ALWAYS spawned with NODE_ENV=production
+// (see spawnSidecarChild in sidecars.ts), so daemon/web events report
+// `production` — but the packaged MAIN process's own NODE_ENV is unset, so the
+// old `development` default mislabeled every packaged_runtime_failed as dev
+// (100% 'development' in prod), hiding real startup crashes from the
+// env=production dashboards. apps/packaged only ever runs as a packaged build,
+// so an unset NODE_ENV here means packaged production, not dev; treat anything
+// that isn't an explicit development marker as production so the two sides
+// match. Explicit overrides (OD_TELEMETRY_ENV / OPEN_DESIGN_ENV / POSTHOG_ENV /
+// LANGFUSE_ENVIRONMENT) still win for anyone who needs to force a bucket
+// (e.g. a maintainer smoke-testing a local packaged build).
 function resolveTelemetryEnv(env: NodeJS.ProcessEnv = process.env): string {
   const explicit =
     env.OD_TELEMETRY_ENV?.trim() ||
@@ -72,8 +81,8 @@ function resolveTelemetryEnv(env: NodeJS.ProcessEnv = process.env): string {
     env.POSTHOG_ENV?.trim() ||
     env.LANGFUSE_ENVIRONMENT?.trim();
   if (explicit) return explicit;
-  if (env.NODE_ENV === "production") return "production";
-  return "development";
+  if (env.NODE_ENV === "development") return "development";
+  return "production";
 }
 
 // Mirrors apps/daemon/src/analytics.ts randomInsertId. $insert_id is PostHog's
@@ -86,6 +95,7 @@ export type StartupFailureKind =
   | "daemon-start"
   | "web-start"
   | "path-access"
+  | "status-timeout"
   | "unknown";
 
 export interface StartupFailureClassification {
@@ -102,6 +112,12 @@ export interface StartupFailureClassification {
 const EXIT_RE =
   /exited before reporting status \(code=(.*?), signal=(.*?)\); see (.*?) for details/;
 
+// `waitForStatus` (apps/packaged/src/sidecars.ts) throws this when the wait
+// budget expires with the child still ALIVE — the daemon/web pipe never bound in
+// time (the win32 first-launch AV-scan case), as opposed to EXIT_RE's dead
+// child. There is no daemon log path in this message, so no log tail is read.
+const STATUS_TIMEOUT_RE = /^timed out waiting for sidecar status at /;
+
 export function classifyStartupFailure(
   error: unknown,
   isPathAccess: boolean,
@@ -112,6 +128,12 @@ export function classifyStartupFailure(
   const message = error instanceof Error ? error.message : String(error ?? "");
   const match = EXIT_RE.exec(message);
   if (!match) {
+    // Distinguish a slow-but-alive sidecar (budget exhausted) from a truly
+    // opaque failure so the status-timeout bucket is measurable on its own —
+    // it is the signal for whether the win32 budget raise drained these.
+    if (STATUS_TIMEOUT_RE.test(message)) {
+      return { failureKind: "status-timeout", exitCode: null, signal: null, logPath: null };
+    }
     return { failureKind: "unknown", exitCode: null, signal: null, logPath: null };
   }
   const rawCode = match[1];

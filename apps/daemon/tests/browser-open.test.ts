@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBrowserOpenInvocation, openBrowser } from '../src/browser-open.js';
+import { createBrowserOpenInvocation, openBrowser } from '../src/browser/index.js';
 
 describe('browser open helper', () => {
   it('opens URLs on Windows through cmd.exe instead of spawning the shell builtin directly', () => {

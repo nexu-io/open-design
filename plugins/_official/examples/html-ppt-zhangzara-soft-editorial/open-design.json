@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-soft-editorial",
-  "title": "Html Ppt Zhangzara Soft Editorial",
+  "title": "Deliver a Digital-Transformation Roadmap like a Big-Four Partner",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara 柔和编辑风格",
-    "zh-TW": "Html Ppt Zhangzara 柔和編輯風格",
-    "ja": "Html Ppt Zhangzara ソフトエディトリアル",
-    "ko": "Html Ppt Zhangzara 소프트 에디토리얼",
-    "de": "Html Ppt Zhangzara Soft Editorial",
-    "fr": "Html Ppt Zhangzara Soft Editorial",
-    "ru": "Html Ppt Zhangzara Мягкий редакционный стиль",
-    "es": "Html Ppt Zhangzara Soft Editorial",
-    "pt-BR": "Html Ppt Zhangzara Soft Editorial",
-    "it": "Html Ppt Zhangzara Soft Editorial",
-    "vi": "Html Ppt Zhangzara Phong cách Biên tập Mềm mại",
-    "pl": "Html Ppt Zhangzara Soft Editorial",
-    "id": "Html Ppt Zhangzara Soft Editorial",
-    "nl": "Html Ppt Zhangzara Soft Editorial",
-    "ar": "Html Ppt Zhangzara التحريري الناعم",
-    "tr": "Html Ppt Zhangzara Soft Editorial",
-    "uk": "Html Ppt Zhangzara М'який редакційний стиль",
-    "en": "Html Ppt Zhangzara Soft Editorial"
+    "en": "Deliver a Digital-Transformation Roadmap like a Big-Four Partner",
+    "zh-CN": "像四大合伙人一样交付数字化转型路线图",
+    "zh-TW": "像四大合伙人一样交付数字化转型路线图"
   },
   "version": "0.1.0",
-  "description": "Soft Editorial — Cormorant Garamond serif on warm paper with sage, blush, and lemon accents. Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Built as a decision-grade consulting deck for client executives.",
   "description_i18n": {
-    "zh-CN": "柔和编辑风格 — 采用 Cormorant Garamond 衬线字体，配以温暖纸质背景、鼠尾草绿、腮红粉和柠檬黄点缀。适合文学、优雅、从容的场景：编辑专题、品牌长文、画廊/博物馆演示、咨询交付物、婚礼/生活方式媒体、创始人随笔。",
-    "zh-TW": "柔和編輯風格 — 採用 Cormorant Garamond 襯線字體，配以溫暖紙質背景、鼠尾草綠、腮紅粉和檸檬黃點綴。適合文學、優雅、從容的場景：編輯專題、品牌長文、畫廊/博物館簡報、諮詢交付物、婚禮/生活風格媒體、創辦人隨筆。",
-    "ja": "ソフトエディトリアル — Cormorant Garamond セリフフォントを温かみのある紙の背景に、セージ、ブラッシュ、レモンのアクセントで。文学的で優雅でゆったりとした雰囲気に：編集特集、ブランドストーリー、ギャラリー/美術館プレゼン、アドバイザリー成果物、ウェディング/ライフスタイルメディア、創業者エッセイ。",
-    "ko": "소프트 에디토리얼 — 따뜻한 종이 배경에 Cormorant Garamond 세리프 폰트와 세이지, 블러시, 레몬 액센트. 문학적이고 우아하며 여유로운 느낌: 편집 특집, 브랜드 장문 스토리, 갤러리/뮤지엄 프레젠테이션, 자문 결과물, 웨딩/라이프스타일 미디어, 창업자 에세이.",
-    "de": "Soft Editorial — Cormorant Garamond Serifenschrift auf warmem Papier mit Salbei-, Rosé- und Zitronenakzenten. Für literarische, elegante und ruhige Inhalte: redaktionelle Features, Marken-Langformen, Galerie-/Museumspräsentationen, Beratungsleistungen, Hochzeits-/Lifestyle-Medien, Gründeressays.",
-    "fr": "Soft Editorial — Police serif Cormorant Garamond sur papier chaleureux avec accents sauge, rose poudré et citron. Pour tout contenu littéraire, élégant et posé : articles éditoriaux, récits de marque longs, présentations galerie/musée, livrables conseil, médias mariage/lifestyle, essais de fondateurs.",
-    "ru": "Мягкий редакционный стиль — шрифт Cormorant Garamond с засечками на тёплой бумаге с акцентами шалфея, румян и лимона. Для литературного, элегантного, неспешного контента: редакционные материалы, длинные истории брендов, презентации галерей/музеев, консалтинговые документы, свадебные/лайфстайл-медиа, эссе основателей.",
-    "es": "Soft Editorial — Fuente serif Cormorant Garamond sobre papel cálido con acentos salvia, rubor y limón. Para contenido literario, elegante y pausado: artículos editoriales, historias de marca largas, presentaciones de galerías/museos, entregables de consultoría, medios de bodas/lifestyle, ensayos de fundadores.",
-    "pt-BR": "Soft Editorial — Fonte serifada Cormorant Garamond em papel quente com detalhes em sálvia, rosa e limão. Para conteúdo literário, elegante e calmo: matérias editoriais, histórias longas de marca, apresentações de galerias/museus, entregas de consultoria, mídia de casamentos/lifestyle, ensaios de fundadores.",
-    "it": "Soft Editorial — Font serif Cormorant Garamond su carta calda con accenti salvia, rosa cipria e limone. Per contenuti letterari, eleganti e rilassati: articoli editoriali, storie di brand lunghe, presentazioni gallerie/musei, deliverable consulenziali, media matrimoni/lifestyle, saggi dei fondatori.",
-    "vi": "Phong cách Biên tập Mềm mại — Phông chữ serif Cormorant Garamond trên nền giấy ấm với điểm nhấn xanh xô thơm, hồng phấn và vàng chanh. Cho nội dung văn học, thanh lịch, không vội vàng: chuyên mục biên tập, câu chuyện thương hiệu dài, bài thuyết trình phòng tranh/bảo tàng, tài liệu tư vấn, truyền thông cưới/phong cách sống, bài tiểu luận của nhà sáng lập.",
-    "pl": "Soft Editorial — Czcionka szeryfowa Cormorant Garamond na ciepłym papierze z akcentami szałwii, różu i cytryny. Do treści literackich, eleganckich i spokojnych: materiały redakcyjne, długie historie marek, prezentacje galerii/muzeów, produkty doradcze, media ślubne/lifestylowe, eseje założycieli.",
-    "id": "Soft Editorial — Font serif Cormorant Garamond di atas kertas hangat dengan aksen sage, blush, dan lemon. Untuk konten sastra, elegan, dan santai: fitur editorial, cerita brand panjang, presentasi galeri/museum, hasil konsultasi, media pernikahan/gaya hidup, esai pendiri.",
-    "nl": "Soft Editorial — Cormorant Garamond schreeflettertype op warm papier met salie-, blush- en citroenaccenten. Voor literaire, elegante en ongehaaste content: redactionele features, lange merkverhalen, galerie-/museumpresentaties, adviesoplevering, bruilofts-/lifestylemedia, oprichtessays.",
-    "ar": "التحريري الناعم — خط Cormorant Garamond بزخارف على ورق دافئ مع لمسات من الميرمية والوردي والليمون. للمحتوى الأدبي والأنيق والهادئ: المقالات التحريرية، قصص العلامات التجارية الطويلة، عروض المعارض/المتاحف، مخرجات الاستشارات، وسائط الزفاف/نمط الحياة، مقالات المؤسسين.",
-    "tr": "Soft Editorial — Sıcak kağıt üzerinde adaçayı, pembe ve limon vurgularıyla Cormorant Garamond serif font. Edebi, zarif ve acele etmeyen içerik için: editoryal özellikler, uzun marka hikayeleri, galeri/müze sunumları, danışmanlık çıktıları, düğün/yaşam tarzı medyası, kurucu denemeleri.",
-    "uk": "М'який редакційний стиль — шрифт Cormorant Garamond із засічками на теплому папері з акцентами шавлії, рум'янцю та лимона. Для літературного, елегантного, неквапливого контенту: редакційні матеріали, довгі історії брендів, презентації галерей/музеїв, консалтингові документи, весільні/лайфстайл-медіа, есеї засновників.",
-    "en": "Soft Editorial — Cormorant Garamond serif on warm paper with sage, blush, and lemon accents. Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays."
+    "en": "A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Built as a decision-grade consulting deck for client executives.",
+    "zh-CN": "像四大合伙人一样交付数字化转型路线图——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像四大合伙人一样交付数字化转型路线图——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,19 @@
     "longform-brand-story",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-soft-editorial",
+    "marketing-and-gtm",
+    "consulting",
+    "consulting-final-deck",
+    "strategy",
+    "consulting-deliverable",
+    "client",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "strategy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Soft Editorial — Cormorant Garamond serif on warm paper with sage, blush, and lemon accents. Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays.",
-        "zh-CN": "使用这个插件完成以下任务：Soft Editorial — Cormorant Garamond serif on warm paper with sage, blush, and lemon accents. Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays."
+        "en": "Create \"Deliver a Digital-Transformation Roadmap like a Big-Four Partner\" as a decision-grade Consulting deck in this template's own visual system. Subject: A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Audience: client executives. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning.",
+        "zh-CN": "像四大合伙人一样交付数字化转型路线图。像四大合伙人一样交付数字化转型路线图——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Soft Editorial"
+          "title": "Deliver a Digital-Transformation Roadmap like a Big-Four Partner",
+          "title_i18n": {
+            "en": "Deliver a Digital-Transformation Roadmap like a Big-Four Partner",
+            "zh-CN": "像四大合伙人一样交付数字化转型路线图",
+            "zh-TW": "像四大合伙人一样交付数字化转型路线图"
+          }
         }
       ]
     },
@@ -122,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "consulting"
   }
 }

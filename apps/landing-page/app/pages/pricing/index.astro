@@ -22,12 +22,10 @@ import {
   fillTemplate,
   PREMIUM_MODELS,
   STANDARD_MODELS,
-  DELIVERABLE_RANGES,
   CREDIT_BONUS_PCT,
-  TEAM_SIZE_VALUES,
-  BUDGET_VALUES,
   type PlanTierId,
 } from '../../_lib/pricing-content';
+import EnterpriseLeadForm from '../../_components/enterprise-lead-form.astro';
 import {
   getStory,
   getFaqs,
@@ -66,9 +64,15 @@ const LF = enterprise.leadForm;
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const title = 'Pricing — Open Design';
 const description =
-  'Open Design subscription plans. Plus, Pro, and Max tiers with monthly credits, one-click deployments, and auto top-up — one unified balance for every Open Design call.';
+  'Open Design subscription plans. Free, Plus, Pro, and Max tiers with monthly credits, one-click deployments, and auto top-up — one unified balance for every Open Design call.';
 
 const tiers: PlanTierConfig[] = PRICING_SNAPSHOT.tiers;
+
+// Free card model roster: trial-pool models lead the premium list, the rest
+// render greyed-out — mirrors the vela modal's Free column.
+const FREE_PREMIUM_MODELS = [...PREMIUM_MODELS].sort(
+  (a, b) => Number(b.trial === true) - Number(a.trial === true),
+);
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 const renderCatalogLabel = (label: string) => fillTemplate(label, catalogLabelVars);
 
@@ -123,13 +127,22 @@ const jsonLd = [
     '@type': 'Product',
     name: 'Open Design Subscription',
     description,
-    offers: tiers.map((t) => ({
-      '@type': 'Offer',
-      name: `Open Design ${t.tier}`,
-      price: String(t.monthly.priceUsd),
-      priceCurrency: 'USD',
-      url: CLOUD_CONSOLE_URL,
-    })),
+    offers: [
+      {
+        '@type': 'Offer',
+        name: 'Open Design free',
+        price: '0',
+        priceCurrency: 'USD',
+        url: CLOUD_CONSOLE_URL,
+      },
+      ...tiers.map((t) => ({
+        '@type': 'Offer',
+        name: `Open Design ${t.tier}`,
+        price: String(t.monthly.priceUsd),
+        priceCurrency: 'USD',
+        url: CLOUD_CONSOLE_URL,
+      })),
+    ],
   },
 ];
 ---
@@ -156,6 +169,55 @@ const jsonLd = [
     </header>
 
     <section class="pr-grid" aria-label="Subscription plans">
+      {/* Free card — content-only (not part of the paid pricing contract).
+          The CTA points at the auth-gated cloud console: signed-in visitors
+          land on the console, signed-out visitors get the login page and
+          resume there after authenticating. */}
+      <article class="pr-card" data-tier="free">
+        <header class="pr-head">
+          <span class="pr-tier-name">Free</span>
+          <p class="pr-tagline">{content.free.tagline}</p>
+        </header>
+
+        <div class="pr-price">
+          <div class="pr-price-row">
+            <span class="pr-amount">$0</span>
+            <span class="pr-per">{L.perMonth}</span>
+          </div>
+          <p class="pr-subline">{L.freeForever}</p>
+        </div>
+
+        <a
+          class="btn btn-ghost pr-cta"
+          href={CLOUD_CONSOLE_URL}
+          data-pricing-cta
+          data-tier="free"
+        >
+          {content.free.ctaLabel}
+        </a>
+
+        <ul class="pr-feats">
+          <li class="pr-feat">{L.freeTrialCreditLabel}</li>
+          <li class="pr-feat">{content.free.concurrency}</li>
+          {content.free.features.map((f) => (
+            <li class="pr-feat">{renderCatalogLabel(f)}</li>
+          ))}
+        </ul>
+
+        <div class="pr-models">
+          <p class="pr-models-head">{L.premiumModels}</p>
+          <ul class="pr-model-list">
+            {FREE_PREMIUM_MODELS.map((m) => (
+              <li class={m.trial ? undefined : 'is-unavailable'}>{m.name}</li>
+            ))}
+          </ul>
+          <p class="pr-models-head">{L.standardModels}</p>
+          <ul class="pr-model-list">
+            {STANDARD_MODELS.map((m) => <li>{m}</li>)}
+          </ul>
+        </div>
+      </article>
+
       {tiers.map((t) => {
         const v = view(t);
         const plan = content.plans[t.tier as PlanTierId];
@@ -200,21 +262,22 @@ const jsonLd = [
               </div>
             </div>
 
-            <p class="pr-anchor">{plan.costAnchor}</p>
-
             <a
               class={t.recommended ? 'btn btn-primary pr-cta' : 'btn btn-ghost pr-cta'}
               href={cloudSubscribeUrl(t.tier, 'yearly')}
               data-pricing-cta
               data-tier={t.tier}
             >
-              {plan.ctaLabel}
+              {/* CTA carries the selected billing interval (mirrors the vela
+                  modal's "升级 Plus · 年付"); the interval CSS swaps the spans. */}
+              <span data-when="monthly">{plan.ctaLabel} · {L.monthly}</span>
+              <span data-when="yearly">{plan.ctaLabel} · {L.yearly}</span>
             </a>
 
-            {/* Fully-expanded benefits — credit + deliverable lead the list,
+            {/* Fully-expanded benefits — credit + concurrency lead the list,
                 then every included benefit; no "includes all <tier>" heading. */}
             <ul class="pr-feats">
-              <li class="pr-feat pr-feat-lead">
+              <li class="pr-feat pr-feat-lead pr-feat-strong">
                 <span data-od-credit>{v.credits}</span>
                 {v.bonusPct != null && (
                   <span class="pr-bonus">
@@ -227,20 +290,7 @@ const jsonLd = [
                   </span>
                 )}
               </li>
-              <li class="pr-feat pr-feat-lead pr-feat-task">
-                <span>{fillTemplate(L.deliverableBenefit, { range: DELIVERABLE_RANGES[t.tier as PlanTierId] })}</span>
-                <button type="button" class="pr-info-btn" aria-label={L.taskTooltip.note} aria-describedby={`pr-task-tip-${t.tier}`}>
-                  <svg class="pr-info-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4M12 8h.01" />
-                  </svg>
-                </button>
-                <span class="pr-task-tip" id={`pr-task-tip-${t.tier}`} role="tooltip">
-                  <span>{L.taskTooltip.line1}</span>
-                  <span>{L.taskTooltip.line2}</span>
-                  <span class="pr-task-tip-note">{L.taskTooltip.note}</span>
-                </span>
-              </li>
+              <li class="pr-feat pr-feat-strong">{plan.concurrency}</li>
               {plan.features.map((f) => (
                 <li class="pr-feat">{renderCatalogLabel(f)}</li>
               ))}
@@ -249,7 +299,7 @@ const jsonLd = [
             <div class="pr-models">
               <p class="pr-models-head">{L.premiumModels}</p>
               <ul class="pr-model-list">
-                {PREMIUM_MODELS.map((m) => <li>{m}</li>)}
+                {PREMIUM_MODELS.map((m) => <li>{m.name}</li>)}
               </ul>
               <p class="pr-models-head">{L.standardModels}</p>
               <ul class="pr-model-list">
@@ -352,84 +402,23 @@ const jsonLd = [
   </section>
 
   {/* Team-plan lead-capture modal — opened by the "Request team access" CTA in
-      the team banner. POSTs to the /contact-sales Pages Function. */}
+      the team banner. Renders the SAME shared lead form as /enterprise
+      (fields, required rules, options, validation, /contact-sales contract),
+      so the two funnels can never drift; only `source` differs for lead
+      attribution. */}
   <div class="pr-modal" data-lead-modal hidden aria-hidden="true">
     <div class="pr-modal-backdrop" data-lead-close></div>
-    <div class="pr-modal-card" role="dialog" aria-modal="true" aria-labelledby="pr-lead-title">
+    <div class="pr-modal-card" role="dialog" aria-modal="true" aria-labelledby="ent-form-heading">
       <button type="button" class="pr-modal-x" data-lead-close aria-label={LF.close}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </button>
-
-      <form class="pr-lead-form" data-lead-form novalidate>
-        <h2 class="pr-modal-title" id="pr-lead-title">{LF.title}</h2>
-        <p class="pr-modal-sub">{LF.subtitle}</p>
-
-        <div class="pr-lead-grid">
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-name">{LF.fields.name} <span class="pr-req">*</span></label>
-            <input class="pr-lead-input" id="pr-lead-name" name="name" type="text" required autocomplete="name" placeholder={LF.placeholders.name} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-email">{LF.fields.email} <span class="pr-req">*</span></label>
-            <input class="pr-lead-input" id="pr-lead-email" name="email" type="email" required autocomplete="email" placeholder={LF.placeholders.email} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-company">{LF.fields.company} <span class="pr-opt">{LF.optional}</span></label>
-            <input class="pr-lead-input" id="pr-lead-company" name="company" type="text" autocomplete="organization" placeholder={LF.placeholders.company} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-teamsize">{LF.fields.teamSize} <span class="pr-opt">{LF.optional}</span></label>
-            <select class="pr-lead-input pr-lead-select" id="pr-lead-teamsize" name="teamSize">
-              <option value="">{LF.selectPlaceholder}</option>
-              {LF.teamSizeOptions.map((label, i) => <option value={TEAM_SIZE_VALUES[i]}>{label}</option>)}
-            </select>
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-role">{LF.fields.role} <span class="pr-opt">{LF.optional}</span></label>
-            <input class="pr-lead-input" id="pr-lead-role" name="role" type="text" placeholder={LF.placeholders.role} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-location">{LF.fields.country} <span class="pr-opt">{LF.optional}</span></label>
-            <input class="pr-lead-input" id="pr-lead-location" name="location" type="text" placeholder={LF.placeholders.country} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-seats">{LF.fields.seats} <span class="pr-opt">{LF.optional}</span></label>
-            <input class="pr-lead-input" id="pr-lead-seats" name="seats" type="text" inputmode="numeric" placeholder={LF.placeholders.seats} />
-          </div>
-          <div class="pr-lead-field">
-            <label class="pr-lead-label" for="pr-lead-budget">{LF.fields.budget} <span class="pr-opt">{LF.optional}</span></label>
-            <select class="pr-lead-input pr-lead-select" id="pr-lead-budget" name="budget">
-              <option value="">{LF.selectPlaceholder}</option>
-              {LF.budgetOptions.map((label, i) => <option value={BUDGET_VALUES[i]}>{label}</option>)}
-            </select>
-          </div>
-          <div class="pr-lead-field pr-lead-field-full">
-            <label class="pr-lead-label" for="pr-lead-message">{LF.fields.useCase} <span class="pr-opt">{LF.optional}</span></label>
-            <textarea class="pr-lead-input pr-lead-textarea" id="pr-lead-message" name="message" rows="3" placeholder={LF.placeholders.useCase}></textarea>
-          </div>
-        </div>
-
-        <p class="pr-lead-error" data-lead-error role="alert" hidden></p>
-        <button type="submit" class="btn btn-primary pr-lead-submit" data-lead-submit>{LF.submit}</button>
-        <p class="pr-lead-privacy">{LF.privacy}</p>
-      </form>
-
-      <div class="pr-lead-success" data-lead-success hidden>
-        <span class="pr-lead-success-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        </span>
-        <h3 class="pr-lead-success-title">{LF.successTitle}</h3>
-        <p class="pr-lead-success-desc">{LF.successDesc}</p>
-        <button type="button" class="btn btn-ghost pr-lead-success-close" data-lead-close>{LF.close}</button>
-      </div>
+      <EnterpriseLeadForm locale={locale} source="pricing_team" pageName="pricing" />
     </div>
   </div>
 
-  <script is:inline define:vars={{ plansUrl: PLANS_JSON_URL, labels: L, subscribeBase: CLOUD_CONSOLE_URL, creditBonusPct: CREDIT_BONUS_PCT, leadForm: LF }}>
+  <script is:inline define:vars={{ plansUrl: PLANS_JSON_URL, labels: L, subscribeBase: CLOUD_CONSOLE_URL, creditBonusPct: CREDIT_BONUS_PCT }}>
     (() => {
       const root = document.querySelector('[data-pricing-root]');
       if (!root) return;
@@ -457,6 +446,9 @@ const jsonLd = [
       const syncCtas = (interval) => {
         for (const cta of root.querySelectorAll('[data-pricing-cta]')) {
           const tier = cta.getAttribute('data-tier') || '';
+          // The Free CTA is a plain console link (auth-gated: login page when
+          // signed out, console when signed in) — no checkout deep-link.
+          if (tier === 'free') continue;
           const q = new URLSearchParams({ view: 'plans', plan: tier, interval, checkout: 'auto' });
           cta.setAttribute('href', subscribeBase + '?' + q.toString());
         }
@@ -544,27 +536,39 @@ const jsonLd = [
 
       // ── Team-plan lead-capture modal ─────────────────────────────────────
       // The banner + modal live OUTSIDE [data-pricing-root], so query document.
+      // Form fields, validation, and the /contact-sales submit are owned by
+      // the shared enterprise-lead-form component; this block only owns the
+      // modal shell (open/close/focus) and the legacy analytics bridge.
       const modal = document.querySelector('[data-lead-modal]');
       if (modal) {
-        const form = modal.querySelector('[data-lead-form]');
-        const errorEl = modal.querySelector('[data-lead-error]');
-        const successEl = modal.querySelector('[data-lead-success]');
-        const submitBtn = modal.querySelector('[data-lead-submit]');
         let lastFocus = null;
 
+        const card = modal.querySelector('.pr-modal-card');
+        const closeBtn = modal.querySelector('.pr-modal-x');
         const openModal = () => {
           lastFocus = document.activeElement;
-          // Restore a clean form on every open so a prior success/error panel
-          // doesn't strand the modal (a second lead can be submitted freely).
-          if (form) { form.reset(); form.hidden = false; }
-          if (successEl) successEl.hidden = true;
-          if (errorEl) errorEl.hidden = true;
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = leadForm.submit; }
+          // Drop any stale error state from a previous failed attempt before
+          // re-presenting the form (entered values and the sticky success
+          // panel are intentionally preserved).
+          const form = modal.querySelector('#ent-form');
+          if (form) form.dispatchEvent(new Event('od:lead-reset'));
           modal.hidden = false;
           modal.setAttribute('aria-hidden', 'false');
           document.body.style.overflow = 'hidden';
-          const first = modal.querySelector('input[name="name"]');
-          if (first) setTimeout(() => first.focus(), 40);
+          // After a successful submit the form is hidden and the sticky success
+          // panel takes its place, so the usual email-field focus target and
+          // the form-heading label are both gone. Point the dialog's name at
+          // whichever heading is actually visible and land focus on a real
+          // target (the close button) so keyboard / SR users are never stranded
+          // on the background trigger.
+          const showingSuccess = !!(form && form.hidden);
+          if (card) {
+            card.setAttribute('aria-labelledby', showingSuccess ? 'ent-success-heading' : 'ent-form-heading');
+          }
+          const focusTarget = showingSuccess
+            ? closeBtn
+            : modal.querySelector('#ent-email');
+          if (focusTarget) setTimeout(() => focusTarget.focus(), 40);
         };
         const closeModal = () => {
           modal.hidden = true;
@@ -586,69 +590,29 @@ const jsonLd = [
           if (e.key === 'Escape' && !modal.hidden) closeModal();
         });
 
-        const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const showError = (msg) => {
-          if (!errorEl) return;
-          errorEl.textContent = msg;
-          errorEl.hidden = false;
-        };
-
-        if (form) {
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = new FormData(form);
-            const val = (k) => (data.get(k) || '').toString().trim();
-            const name = val('name');
-            const email = val('email');
-            if (!name || !email) return showError(leadForm.errorRequired);
-            if (!EMAIL_RE.test(email)) return showError(leadForm.errorEmail);
-            if (errorEl) errorEl.hidden = true;
-            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = leadForm.submitting; }
-
-            const payload = {
-              name, email,
-              company: val('company'),
-              teamSize: (data.get('teamSize') || '').toString(),
-              role: val('role'),
-              location: val('location'),
-              seats: val('seats'),
-              budget: (data.get('budget') || '').toString(),
-              message: val('message'),
-              source: 'pricing_team',
-              locale: document.documentElement.lang || 'en',
-              pageUrl: location.href,
-            };
-
-            try {
-              const res = await fetch('/contact-sales', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-              const body = await res.json().catch(() => ({}));
-              if (!res.ok || !body.ok) throw new Error('failed');
-              form.hidden = true;
-              if (successEl) successEl.hidden = false;
-              // Success conversion — segmentation props only, no PII (name/email
-              // stay out of the analytics payload).
-              track('team_lead_submit', {
-                team_size: payload.teamSize || '(none)',
-                budget: payload.budget || '(none)',
-                has_company: !!payload.company,
-                has_role: !!payload.role,
-                has_seats: !!payload.seats,
-                has_message: !!payload.message,
-              });
-            } catch (err) {
-              // Client-side validation already passed, so a failure here is
-              // transient/network — show the submit-failure hint, not a
-              // "fill required fields" message, and let the user retry.
-              showError(leadForm.errorSubmit);
-              track('team_lead_error', {});
-              if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = leadForm.submit; }
-            }
+        // Legacy funnel continuity: the shared form emits lead_submit_success
+        // (page_name: 'pricing'); existing dashboards also watch
+        // team_lead_submit, so mirror it here. The legacy schema (team_size /
+        // budget with '(none)' fallbacks + has_* presence booleans) is
+        // preserved verbatim so pre-existing filters keep matching, and the
+        // shared form's richer props (seats, country, industry, use case)
+        // ride alongside.
+        modal.addEventListener('od:lead-success', (e) => {
+          const d = (e && e.detail) || {};
+          track('team_lead_submit', {
+            team_size: d.team_size || '(none)',
+            budget: d.budget || '(none)',
+            has_company: !!d.has_company,
+            has_role: !!d.has_role,
+            has_seats: !!d.seats,
+            has_message: !!d.has_message,
+            seats: d.seats || '',
+            country: d.country || '',
+            industry: d.industry || '',
+            use_case: d.use_case || '',
+            use_case_count: d.use_case_count || 0,
           });
-        }
+        });
       }
     })();
   </script>
@@ -714,13 +678,16 @@ const jsonLd = [
   .pr-grid {
     margin-top: 40px;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    max-width: 1180px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 1280px;
     margin-inline: auto;
     align-items: stretch;
   }
-  @media (max-width: 880px) {
+  @media (max-width: 1080px) {
+    .pr-grid { grid-template-columns: repeat(2, 1fr); max-width: 760px; }
+  }
+  @media (max-width: 640px) {
     .pr-grid { grid-template-columns: 1fr; max-width: 460px; }
   }
 
@@ -746,6 +713,16 @@ const jsonLd = [
     height: 22px;
     width: auto;
     display: block;
+  }
+  /* Free tier has no wordmark asset; render the name as muted text like the
+     vela modal's Free column. */
+  .pr-tier-name {
+    display: block;
+    height: 22px;
+    line-height: 22px;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--ink-soft, #999);
   }
   .pr-tagline {
     font-size: 0.82rem;
@@ -798,18 +775,10 @@ const jsonLd = [
   .pr-yearly-nudge-arrow { transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1); }
   .pr-yearly-nudge:hover .pr-yearly-nudge-arrow { transform: translateX(2px); }
 
-  /* ---- Cost anchor ---- */
-  .pr-anchor {
-    margin: 16px 0 0;
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: var(--olive, #218c00);
-  }
-
   /* ---- CTA ---- */
   .pr-cta { margin-top: 18px; width: 100%; justify-content: center; text-align: center; }
 
-  /* ---- Features (fully expanded; credit + deliverable lead the list) ---- */
+  /* ---- Features (fully expanded; credit + concurrency lead the list) ---- */
   .pr-feats {
     list-style: none;
     margin: 22px 0 0;
@@ -834,7 +803,10 @@ const jsonLd = [
     font-weight: 700;
     color: var(--olive, #218c00);
   }
-  /* Lead rows (credit + deliverable) carry an inline badge / info icon. */
+  /* Lead rows (credit + concurrency) read bold on paid tiers, mirroring the
+     vela modal's core-benefit emphasis. */
+  .pr-feat-strong { font-weight: 600; }
+  /* The credit lead row carries an inline bonus badge. */
   .pr-feat-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .pr-bonus {
     display: inline-flex;
@@ -850,51 +822,6 @@ const jsonLd = [
     background: color-mix(in srgb, var(--brand, #2bd200) 20%, transparent);
     border: 1px solid color-mix(in srgb, var(--brand, #2bd200) 45%, transparent);
   }
-  .pr-info-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--ink-soft, #aaa);
-    cursor: help;
-    line-height: 0;
-  }
-  .pr-info-btn:focus-visible { outline: 2px solid var(--brand, #2bd200); outline-offset: 2px; border-radius: 999px; }
-  .pr-info-icon { flex-shrink: 0; }
-  /* Hover/focus tooltip explaining how a "design deliverable" is counted. */
-  .pr-feat-task { position: relative; }
-  .pr-task-tip {
-    position: absolute;
-    left: 22px;
-    top: 100%;
-    margin-top: 6px;
-    z-index: 20;
-    width: 210px;
-    padding: 10px 11px;
-    border-radius: 10px;
-    background: #262626;
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 0.72rem;
-    line-height: 1.55;
-    text-align: left;
-    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-2px);
-    transition: opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1), transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
-    pointer-events: none;
-  }
-  .pr-task-tip span { display: block; }
-  .pr-task-tip-note { margin-top: 5px; color: rgba(255, 255, 255, 0.55); }
-  .pr-feat-task:hover .pr-task-tip,
-  .pr-feat-task:focus-within .pr-task-tip {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-  }
-
   /* ---- Model lists ---- */
   .pr-models { margin-top: 22px; }
   .pr-models-head {
@@ -920,6 +847,12 @@ const jsonLd = [
     top: 0;
     font-weight: 700;
     color: var(--olive, #218c00);
+  }
+  /* Models outside the Free trial pool render greyed-out with an ✕ mark. */
+  .pr-model-list li.is-unavailable { color: var(--ink-soft, #aaa); }
+  .pr-model-list li.is-unavailable::before {
+    content: '✕';
+    color: var(--ink-soft, #bbb);
   }
 
   /* ---- Footnote ---- */
@@ -1176,7 +1109,10 @@ const jsonLd = [
     background: var(--bg, #fff);
     border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
     border-radius: 20px;
-    padding: 30px 30px 26px;
+    /* Top padding clears the absolutely-positioned .pr-modal-x close button
+       (top: 18px, ~32px box) so it never overlaps the incentive banner that
+       leads the form content. */
+    padding: 58px 30px 26px;
     box-shadow: 0 32px 90px -24px rgba(0, 0, 0, 0.45);
     animation: pr-modal-pop 200ms cubic-bezier(0.23, 1, 0.32, 1);
   }
@@ -1199,72 +1135,9 @@ const jsonLd = [
     transition: background 0.2s cubic-bezier(0.23, 1, 0.32, 1), color 0.2s cubic-bezier(0.23, 1, 0.32, 1);
   }
   .pr-modal-x:hover { background: var(--line, rgba(0, 0, 0, 0.06)); color: var(--ink); }
-  .pr-modal-title { margin: 0; font-size: 1.4rem; font-weight: 700; color: var(--ink); }
-  .pr-modal-sub { margin: 8px 0 0; font-size: 0.88rem; line-height: 1.55; color: var(--ink-soft, #666); }
-
-  .pr-lead-grid {
-    margin-top: 22px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 18px;
-  }
-  .pr-lead-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-  .pr-lead-field-full { grid-column: 1 / -1; }
-  .pr-lead-label { font-size: 0.84rem; font-weight: 600; color: var(--ink); }
-  .pr-req { color: #e5484d; font-weight: 700; }
-  .pr-opt { font-size: 0.78rem; font-weight: 400; color: var(--ink-soft, #999); }
-  .pr-lead-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 11px 13px;
-    font: inherit;
-    font-size: 0.9rem;
-    color: var(--ink, #1a1a1a);
-    background: var(--surface, rgba(0, 0, 0, 0.015));
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
-    border-radius: 10px;
-    transition: border-color 0.2s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.2s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .pr-lead-input::placeholder { color: var(--ink-soft, #aaa); }
-  .pr-lead-input:focus {
-    outline: none;
-    border-color: var(--brand, #2bd200);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, #2bd200) 18%, transparent);
-  }
-  .pr-lead-select { appearance: none; cursor: pointer; background-image: none; }
-  .pr-lead-textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
-  .pr-lead-error {
-    margin: 16px 0 0;
-    font-size: 0.84rem;
-    font-weight: 500;
-    color: #e5484d;
-  }
-  .pr-lead-submit { margin-top: 20px; width: 100%; justify-content: center; }
-  .pr-lead-privacy {
-    margin: 14px 0 0;
-    text-align: center;
-    font-size: 0.8rem;
-    color: var(--ink-soft, #999);
-  }
-
-  .pr-lead-success { text-align: center; padding: 26px 8px 12px; }
-  .pr-lead-success-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 54px;
-    height: 54px;
-    border-radius: 999px;
-    color: var(--olive, #218c00);
-    background: color-mix(in srgb, var(--brand, #2bd200) 16%, transparent);
-  }
-  .pr-lead-success-title { margin: 16px 0 0; font-size: 1.2rem; font-weight: 700; color: var(--ink); }
-  .pr-lead-success-desc { margin: 8px 0 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-soft, #666); }
-  .pr-lead-success-close { margin-top: 22px; }
 
   @media (max-width: 560px) {
-    .pr-lead-grid { grid-template-columns: 1fr; }
-    .pr-modal-card { padding: 26px 20px 22px; }
+    .pr-modal-card { padding: 58px 20px 22px; }
   }
 </style>
 
