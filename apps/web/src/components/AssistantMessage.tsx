@@ -2917,9 +2917,10 @@ function FormBlock({
         }
         releaseSubmitLock();
       };
-      const acceptSubmission = () => {
+          const acceptSubmission = () => {
         clearInlineQuestionFormDraft(formKey);
         setDraftAnswers(undefined);
+        releaseSubmitLock();
       };
       let submitOutcome: boolean | void | Promise<boolean | void>;
       try {
