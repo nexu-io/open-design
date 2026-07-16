@@ -9,13 +9,13 @@ import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
-import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
+import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -30,6 +30,7 @@ const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.OD_PACKAGED_E
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH);
+const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE);
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
@@ -40,7 +41,38 @@ const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', names
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const preUpdateScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-before-update.png`);
-const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
+const readinessExpression = `
+  (() => ({
+    href: location.href,
+    mounted: document.documentElement.getAttribute('data-od-app-mounted'),
+    readyState: document.readyState,
+    title: document.title,
+  }))()
+`;
+const healthExpression = `
+  (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch('/api/health', { signal: controller.signal });
+      return {
+        health: await response.json(),
+        href: location.href,
+        status: response.status,
+        title: document.title,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        href: location.href,
+        name: error instanceof Error ? error.name : null,
+        title: document.title,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })()
+`;
 const updaterPopupExpression = `
   (() => {
     const popup = document.querySelector('[data-testid="updater-popup"]');
@@ -111,25 +143,25 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    const amrCard = document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__card');
-    const alternativeCards = Array.from(document.querySelectorAll('.onboarding-view__alternatives .onboarding-view__card'));
-    const localCard = alternativeCards[0] ?? null;
-    const byokCard = alternativeCards[1] ?? null;
+    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
+    // secondary runtime links) replaces the old selectable runtime cards.
+    const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
+    const secondaryLinks = Array.from(
+      document.querySelectorAll('.onboarding-cloud__secondary'),
+    );
+    const localLink = secondaryLinks[0] ?? null;
+    const byokLink = secondaryLinks[1] ?? null;
+    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
     const setupPanel = document.querySelector('.onboarding-view__setup-panel');
-    const selectedCard = document.querySelector('.onboarding-view__card.is-selected');
 
     return {
-      amrCardVisible: amrCard instanceof HTMLElement,
-      amrModelPickerVisible: Boolean(document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')),
-      amrSelected: amrCard?.getAttribute('aria-pressed') === 'true',
-      byokCardVisible: byokCard instanceof HTMLElement,
-      byokSelected: byokCard?.getAttribute('aria-pressed') === 'true',
+      backVisible: backToCloud instanceof HTMLElement,
+      byokLinkVisible: byokLink instanceof HTMLElement,
+      cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
       inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localCardVisible: localCard instanceof HTMLElement,
-      localSelected: localCard?.getAttribute('aria-pressed') === 'true',
+      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      selectedText: selectedCard?.textContent?.trim() ?? null,
       setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
@@ -203,6 +235,9 @@ type WinUninstallResult = {
 };
 
 type WinInspectResult = {
+  daemonStatus: DesktopStatus | null;
+  daemonStatusError?: string;
+  desktopIpcUnavailable?: boolean;
   eval?: {
     error?: string;
     ok: boolean;
@@ -212,6 +247,7 @@ type WinInspectResult = {
     path: string;
   };
   status: DesktopStatus | null;
+  statusError?: string;
   update?: {
     active?: {
       artifact?: {
@@ -242,6 +278,8 @@ type WinInspectResult = {
     };
     state: string;
   };
+  webStatus: DesktopStatus | null;
+  webStatusError?: string;
   launcher: LauncherSnapshot;
 };
 
@@ -300,20 +338,19 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-type OnboardingRuntime = 'amr' | 'local' | 'byok';
+// The redesigned connect step exposes the two alternative runtimes as
+// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
+// not a selectable link).
+type OnboardingRuntime = 'local' | 'byok';
 
 type PackagedOnboardingEvalValue = {
-  amrCardVisible: boolean;
-  amrModelPickerVisible: boolean;
-  amrSelected: boolean;
-  byokCardVisible: boolean;
-  byokSelected: boolean;
+  backVisible: boolean;
+  byokLinkVisible: boolean;
+  cloudSignInVisible: boolean;
   href: string;
   inputCount: number;
-  localCardVisible: boolean;
-  localSelected: boolean;
+  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  selectedText: string | null;
   setupPanelVisible: boolean;
   text: string | null;
   title: string;
@@ -348,7 +385,7 @@ winDescribe('packaged windows runtime smoke', () => {
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let stop: WinStopResult | { skipped: true } = { skipped: true };
     let postUpdateHealth: HealthEvalValue | { skipped: true } = { skipped: true };
-    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
+    let payloadFixture: ToolsServeUpdaterFixture | null = null;
     const updateEnv = captureUpdateEnv();
     try {
       await measureSmokeStep(timings, 'pre-clean uninstall', async () => {
@@ -396,15 +433,18 @@ winDescribe('packaged windows runtime smoke', () => {
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
         if (updateMetadataUrl != null && updateMetadataUrl !== '') {
+          assertUpdateVersionPresent('Windows', updateVersion);
           applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
         } else {
+          assertToolsServeFixtureEnabled('Windows', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
-          payloadFixture = await startPackagedPayloadUpdateFixture({
+          payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
             platform: 'win',
             version: localPayload.targetVersion,
+            workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
         }
@@ -420,10 +460,12 @@ winDescribe('packaged windows runtime smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      if (inspect.desktopIpcUnavailable) expectWindowsFallbackWebUrl(inspect.status?.url);
+      else expectWindowsPackagedAppUrl(inspect.status?.url);
 
       const value = assertHealthEvalValue(inspect.eval?.value);
-      expect(value.href).toBe('od://app/');
+      if (inspect.desktopIpcUnavailable) expectWindowsDaemonUrl(value.href);
+      else expectWindowsPackagedAppUrl(value.href);
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
@@ -431,15 +473,17 @@ winDescribe('packaged windows runtime smoke', () => {
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
-      await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
+      if (!inspect.desktopIpcUnavailable) {
+        await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
 
-      await mkdir(dirname(preUpdateScreenshotPath), { recursive: true });
-      const preUpdateScreenshot = await measureSmokeStep(timings, 'inspect screenshot before update', async () =>
-        runToolsPackJson<WinInspectResult>('inspect', ['--path', preUpdateScreenshotPath]),
-      );
-      expect(preUpdateScreenshot.screenshot?.path).toBe(preUpdateScreenshotPath);
-      expect(await fileSizeBytes(preUpdateScreenshotPath)).toBeGreaterThan(0);
-      await report.report.save('screenshots/open-design-win-before-update.png', await readFile(preUpdateScreenshotPath));
+        await mkdir(dirname(preUpdateScreenshotPath), { recursive: true });
+        const preUpdateScreenshot = await measureSmokeStep(timings, 'inspect screenshot before update', async () =>
+          runToolsPackJson<WinInspectResult>('inspect', ['--path', preUpdateScreenshotPath]),
+        );
+        expect(preUpdateScreenshot.screenshot?.path).toBe(preUpdateScreenshotPath);
+        expect(await fileSizeBytes(preUpdateScreenshotPath)).toBeGreaterThan(0);
+        await report.report.save('screenshots/open-design-win-before-update.png', await readFile(preUpdateScreenshotPath));
+      }
 
       if (!verifyCoreOnly) {
         payloadUpdate = await measureSmokeStep(timings, 'payload update acceptance', async () =>
@@ -474,16 +518,18 @@ winDescribe('packaged windows runtime smoke', () => {
           waitForHealthyDesktop(),
         );
         expect(postReinstallInspect.status?.state).toBe('running');
-        expect(postReinstallInspect.status?.url).toBe('od://app/');
+        expectWindowsPackagedAppUrl(postReinstallInspect.status?.url);
       }
 
-      await mkdir(dirname(screenshotPath), { recursive: true });
-      const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
-        runToolsPackJson<WinInspectResult>('inspect', ['--path', screenshotPath]),
-      );
-      expect(screenshot.screenshot?.path).toBe(screenshotPath);
-      expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
-      await report.saveScreenshot(screenshotPath);
+      if (!inspect.desktopIpcUnavailable) {
+        await mkdir(dirname(screenshotPath), { recursive: true });
+        const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
+          runToolsPackJson<WinInspectResult>('inspect', ['--path', screenshotPath]),
+        );
+        expect(screenshot.screenshot?.path).toBe(screenshotPath);
+        expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
+        await report.saveScreenshot(screenshotPath);
+      }
 
       if (!verifyCoreOnly) {
         logs = await measureSmokeStep(timings, 'logs', async () => runToolsPackJson<LogsResult>('logs'));
@@ -527,11 +573,13 @@ winDescribe('packaged windows runtime smoke', () => {
         namespace,
         payloadUpdate,
         reinstall,
-        screenshot: report.screenshotRelpath,
-        screenshots: {
-          afterUpdate: report.screenshotRelpath,
-          beforeUpdate: 'screenshots/open-design-win-before-update.png',
-        },
+        screenshot: inspect.desktopIpcUnavailable ? null : report.screenshotRelpath,
+        screenshots: inspect.desktopIpcUnavailable
+          ? { afterUpdate: null, beforeUpdate: null }
+          : {
+              afterUpdate: report.screenshotRelpath,
+              beforeUpdate: 'screenshots/open-design-win-before-update.png',
+            },
         start: {
           executablePath: start.executablePath,
           logPath: start.logPath,
@@ -610,46 +658,60 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      // A fresh install boots at `od://app/` and the SPA immediately redirects to the dedicated
+      // onboarding route (`od://app/onboarding`, since the #4513 cloud sign-in redesign). Whether
+      // the desktop is reported healthy just before or just after that redirect is a race, so the
+      // healthy URL/href may be either — match the prefix leniently exactly as the mac smoke and
+      // the onboarding-landing assertion below do, instead of pinning the bare root (which flaked
+      // ~3 of 4 nightly Windows builds when the redirect won the race).
+      expect(inspect.status?.url).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       const health = assertHealthEvalValue(inspect.eval?.value);
-      expect(health.href).toBe('od://app/');
+      expect(health.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(health.status).toBe(200);
       expect(health.health.ok).toBe(true);
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
         snapshot.onboardingVisible &&
-        snapshot.amrCardVisible &&
-        snapshot.localCardVisible &&
-        snapshot.byokCardVisible,
-        'fresh packaged Windows onboarding runtime choices',
+        snapshot.cloudSignInVisible &&
+        snapshot.localLinkVisible &&
+        snapshot.byokLinkVisible,
+        'fresh packaged Windows onboarding cloud sign-in landing',
       );
-      expect(initial.href).toBe('od://app/');
-      expect(initial.amrCardVisible).toBe(true);
-      expect(initial.localCardVisible).toBe(true);
-      expect(initial.byokCardVisible).toBe(true);
+      // Onboarding lives on a dedicated route since the #4513 cloud sign-in
+      // redesign, so the href is `od://app/onboarding` (packaged) — not the
+      // bare app root. Match the prefix the same lenient way the mac smoke
+      // does instead of pinning the exact root path. Before the user-data
+      // reset fix the app booted to Home and never reached this line, which
+      // is why the stale exact-match assertion went unnoticed.
+      expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
+      expect(initial.cloudSignInVisible).toBe(true);
+      expect(initial.localLinkVisible).toBe(true);
+      expect(initial.byokLinkVisible).toBe(true);
 
+      // Expand the BYOK panel from the landing, then collapse back via Back.
       await clickPackagedOnboardingRuntime('byok');
       const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.byokSelected && snapshot.setupPanelVisible && snapshot.inputCount > 0,
+        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
         'packaged Windows onboarding BYOK setup panel',
       );
-      expect(byok.byokSelected).toBe(true);
       expect(byok.setupPanelVisible).toBe(true);
 
+      // The secondary links only live on the landing, so Back before Local.
+      await clickPackagedOnboardingBack();
       await clickPackagedOnboardingRuntime('local');
       const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.localSelected && snapshot.setupPanelVisible,
+        (snapshot) => snapshot.setupPanelVisible,
         'packaged Windows onboarding Local CLI setup panel',
       );
-      expect(local.localSelected).toBe(true);
       expect(local.setupPanelVisible).toBe(true);
 
-      await clickPackagedOnboardingRuntime('amr');
-      const amr = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.amrSelected && !snapshot.setupPanelVisible,
-        'packaged Windows onboarding AMR selection',
+      // Back once more lands on the cloud sign-in surface for the screenshot.
+      await clickPackagedOnboardingBack();
+      const landing = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
+        'packaged Windows onboarding cloud sign-in landing after Back',
       );
-      expect(amr.amrSelected).toBe(true);
+      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -658,10 +720,10 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-win-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        amr,
         byok,
         health,
         initial,
+        landing,
         local,
         namespace,
         screenshot: 'screenshots/open-design-win-onboarding-smoke.png',
@@ -782,9 +844,9 @@ async function runPayloadUpdateAcceptance(options: {
 
   const postUpdateInspect = await waitForHealthyDesktopVersion(targetVersion, previousPid);
   expect(postUpdateInspect.status?.state).toBe('running');
-  expect(postUpdateInspect.status?.url).toBe('od://app/');
+  expectWindowsPackagedAppUrl(postUpdateInspect.status?.url);
   const health = assertHealthEvalValue(postUpdateInspect.eval?.value);
-  expect(health.href).toBe('od://app/');
+  expectWindowsPackagedAppUrl(health.href);
   expect(health.status).toBe(200);
   expect(health.health.ok).toBe(true);
   expect(health.health.version).toBe(targetVersion);
@@ -963,6 +1025,18 @@ function resolveFallbackUpdateBuildJsonPath(): string | null {
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'windows-tools-pack-update-build.json');
 }
 
+function assertToolsServeFixtureEnabled(platformName: string, value: string | null): void {
+  if (value === 'tools-serve') return;
+  throw new Error(
+    `full packaged ${platformName} payload smoke requires explicit tools-serve fixture; set OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE=tools-serve or provide OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL`,
+  );
+}
+
+function assertUpdateVersionPresent(platformName: string, value: string | null): asserts value is string {
+  if (value != null && value.length > 0) return;
+  throw new Error(`full packaged ${platformName} payload smoke requires an explicit update target version with external update metadata`);
+}
+
 async function readLatestYmlVersion(latestYmlPath: string): Promise<string | null> {
   const latestYml = await readFile(resolveFromWorkspace(latestYmlPath), 'utf8').catch(() => null);
   if (latestYml == null) return null;
@@ -1004,13 +1078,27 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
+      const statusInspect = await runToolsPackJson<WinInspectResult>('inspect');
+      lastResult = { inspect: statusInspect, step: 'status' };
+      const fallback = await maybeCoreHealthFallback(statusInspect);
+      if (fallback != null) return fallback;
+      if (statusInspect.status?.state !== 'running') {
+        await delay(1000);
+        continue;
+      }
+
+      const readinessInspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', readinessExpression]);
+      lastResult = { inspect: readinessInspect, step: 'readiness' };
+      if (readinessInspect.eval?.ok !== true) {
+        await delay(1000);
+        continue;
+      }
+
       const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+      lastResult = { inspect, step: 'health' };
+      if (inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
-        if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') {
-          return inspect;
-        }
+        if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') return inspect;
       }
     } catch (error) {
       lastResult = error;
@@ -1019,6 +1107,48 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
   }
 
   throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
+}
+
+async function maybeCoreHealthFallback(inspect: WinInspectResult): Promise<WinInspectResult | null> {
+  if (!verifyCoreOnly) return null;
+  if (inspect.status != null) return null;
+  if (inspect.statusError == null || !inspect.statusError.includes('IPC request timed out')) return null;
+  if (inspect.daemonStatus?.state !== 'running' || inspect.daemonStatus.url == null) return null;
+  if (inspect.webStatus?.state !== 'running' || inspect.webStatus.url == null) return null;
+
+  const health = await fetchPackagedHealth(inspect.daemonStatus.url);
+  if (health.status !== 200 || health.health.ok !== true) return null;
+  return {
+    ...inspect,
+    desktopIpcUnavailable: true,
+    eval: {
+      ok: true,
+      value: health,
+    },
+    status: {
+      ...(inspect.daemonStatus.pid == null ? {} : { pid: inspect.daemonStatus.pid }),
+      state: 'running',
+      title: null,
+      url: inspect.webStatus.url,
+      windowVisible: false,
+    },
+  };
+}
+
+async function fetchPackagedHealth(daemonUrl: string): Promise<HealthEvalValue> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(new URL('/api/health', daemonUrl), { signal: controller.signal });
+    return {
+      health: await response.json() as HealthEvalValue['health'],
+      href: daemonUrl,
+      status: response.status,
+      title: 'Open Design Beta',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function ensureMainAppShell(timeoutMs = 45_000): Promise<void> {
@@ -1045,15 +1175,29 @@ async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
+      const statusInspect = await runToolsPackJson<WinInspectResult>('inspect');
+      lastResult = { inspect: statusInspect, step: 'status' };
+      if (statusInspect.status?.state !== 'running') {
+        await delay(1000);
+        continue;
+      }
+
+      const readinessInspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', readinessExpression]);
+      lastResult = { inspect: readinessInspect, step: 'readiness' };
+      if (readinessInspect.eval?.ok !== true) {
+        await delay(1000);
+        continue;
+      }
+
       const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+      lastResult = { inspect, step: 'health' };
+      if (inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
         if (
           value?.status === 200 &&
           value.health.ok === true &&
           value.health.version === expectedVersion &&
-          (previousPid == null || inspect.status.pid !== previousPid)
+          (previousPid == null || inspect.status?.pid !== previousPid)
         ) {
           return inspect;
         }
@@ -1097,6 +1241,14 @@ async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promi
   const value = inspect.eval?.value;
   if (!isRecord(value) || value.clicked !== true) {
     throw new Error(`failed to click packaged Windows onboarding ${runtime} runtime: ${formatUnknown(value)}`);
+  }
+}
+
+async function clickPackagedOnboardingBack(): Promise<void> {
+  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
+  const value = inspect.eval?.value;
+  if (!isRecord(value) || value.clicked !== true) {
+    throw new Error(`failed to click packaged Windows onboarding back: ${formatUnknown(value)}`);
   }
 }
 
@@ -1262,15 +1414,15 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 }
 
 function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  const selector =
-    runtime === 'amr'
-      ? '.onboarding-view__amr-cloud-card .onboarding-view__card'
-      : `.onboarding-view__alternatives .onboarding-view__card:nth-child(${runtime === 'local' ? 1 : 2})`;
+  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
+  // [1] BYOK. Clicking one expands its setup panel.
+  const index = runtime === 'local' ? 0 : 1;
   return `
     (async () => {
-      const target = document.querySelector(${JSON.stringify(selector)});
+      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
+      const target = links[${index}] ?? null;
       if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-card', runtime: ${JSON.stringify(runtime)} };
+        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
       }
       target.click();
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1279,19 +1431,30 @@ function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): s
   `;
 }
 
+function clickPackagedOnboardingBackExpression(): string {
+  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
+  return `
+    (async () => {
+      const target = document.querySelector('.onboarding-view__back-to-cloud');
+      if (!(target instanceof HTMLElement)) {
+        return { clicked: false, reason: 'missing-back' };
+      }
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { clicked: true };
+    })()
+  `;
+}
+
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.amrCardVisible !== 'boolean') return null;
-  if (typeof value.amrModelPickerVisible !== 'boolean') return null;
-  if (typeof value.amrSelected !== 'boolean') return null;
-  if (typeof value.byokCardVisible !== 'boolean') return null;
-  if (typeof value.byokSelected !== 'boolean') return null;
+  if (typeof value.backVisible !== 'boolean') return null;
+  if (typeof value.byokLinkVisible !== 'boolean') return null;
+  if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
   if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localCardVisible !== 'boolean') return null;
-  if (typeof value.localSelected !== 'boolean') return null;
+  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (value.selectedText != null && typeof value.selectedText !== 'string') return null;
   if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
@@ -1305,6 +1468,18 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
     normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`),
     `${normalizedPath} should be inside ${normalizedRoot}`,
   ).toBe(true);
+}
+
+function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+}
+
+function expectWindowsFallbackWebUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/));
+}
+
+function expectWindowsDaemonUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/));
 }
 
 async function fileSizeBytes(filePath: string): Promise<number> {
@@ -1337,12 +1512,53 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
 }
 
+function isPathInside(filePath: string, expectedRoot: string): boolean {
+  const normalizedPath = normalizePathForComparison(resolve(filePath));
+  const normalizedRoot = normalizePathForComparison(resolve(expectedRoot));
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`);
+}
+
+function normalizePathForComparison(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
+}
+
 async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): Promise<void> {
   await rm(namespaceRoot, { force: true, recursive: true });
 }
 
+// Reset every per-namespace runtime state directory before a fresh-onboarding
+// start, EXCEPT the installed app payload (`install/`). On Windows the install
+// lives UNDER the runtime namespace root, so — unlike the macOS smoke, which
+// installs to /Applications and can `rm` the whole namespace root
+// (resetPackagedMacRuntimeData) — we must preserve `install/` while wiping
+// everything else.
+//
+// Wiping only `data/` is not enough. The packaged web frontend persists its
+// config — including `onboardingCompleted` — to `localStorage`, which Electron
+// stores under the SEPARATE `user-data/` partition, not the daemon's `data/`
+// dir (see the `daemonDataRoot` vs `electronUserDataRoot` split logged on
+// boot). When `<data>/app-config.json` is absent the daemon OMITS
+// `onboardingCompleted`, so `mergeDaemonConfig` keeps the localStorage value;
+// a leftover `onboardingCompleted: true` from an earlier run (e.g. the [P2]
+// smoke that ran first in this file) then boots the app straight to Home
+// instead of onboarding, and this test times out waiting for the cloud
+// sign-in landing. Clearing `user-data/` alongside `data/` gives the same
+// true-first-run guarantee the mac smoke gets from removing the entire root.
 async function resetPackagedRuntimeDataRoot(): Promise<void> {
-  await rm(join(runtimeNamespaceRoot, 'data'), { force: true, recursive: true });
+  // A missing root means the namespace has no runtime state yet — already a
+  // fresh first-run, nothing to wipe. Any OTHER readdir failure (permissions,
+  // I/O) is a real problem that must surface loudly: swallowing it would turn
+  // the reset into a silent no-op and let stale state through, defeating the
+  // very guarantee this helper exists to make.
+  const entries = await readdir(runtimeNamespaceRoot).catch((error: NodeJS.ErrnoException) => {
+    if (error?.code === 'ENOENT') return [] as string[];
+    throw error;
+  });
+  await Promise.all(
+    entries
+      .filter((entry) => entry !== 'install')
+      .map((entry) => rm(join(runtimeNamespaceRoot, entry), { force: true, recursive: true })),
+  );
 }
 
 function resolveFromWorkspace(filePath: string): string {

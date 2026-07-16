@@ -1,21 +1,35 @@
 ---
 name: hps-true-blueprint
-description: True Blueprint deck theme — blueprint-blue #0b3a6f field under a 40px white drafting grid, dashed-border translucent cards, white/ice-blue ink with amber annotations, all JetBrains Mono, 2px corners, zero shadows. Drawing-sheet chrome (title block, sheet index, construction-line numbers, hatched bars, SVG schematics). Use for system-architecture decks, infra migration reviews, engineering design docs, or any presentation that should read like a working drawing. Based on the blueprint theme from lewislulu/html-ppt-skill.
+en_name: "Present an Engineering Blueprint like a Principal Architect"
+zh_name: "像首席架构师一样讲工程蓝图"
+description: |
+  Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
+en_description: |
+  Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
+zh_description: |
+  像首席架构师一样讲工程蓝图——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "product-management"
+  - "pm-feature-business-case-deck"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "hps-true-blueprint"
 triggers:
-  - "blueprint"
-  - "engineering drawing"
-  - "system architecture deck"
-  - "architecture review"
-  - "design review"
-  - "schematic"
-  - "蓝图"
-  - "工程图"
-  - "架构评审"
-  - "系统架构"
+  - "pm-feature-business-case-deck"
+  - "product-management"
+  - "Present an Engineering Blueprint like a Principal Architect"
+  - "像首席架构师一样讲工程蓝图"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -24,9 +38,11 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use True Blueprint to turn my architecture review into a single-file HTML deck that reads like an engineering drawing set. Start from the seed example.html — keep its locked token sheet, 40px drafting-grid background, drawing-frame chrome and navigation script exactly as-is, replace slide content only, draw diagrams as inline SVG schematics, and use real content with no lorem ipsum."
   example_prompt_i18n:
     zh-CN: "用「工程蓝图」把我的架构评审做成一套像工程图纸的单文件 HTML 幻灯片。从种子 example.html 出发——完整保留锁定的 token 表、40px 绘图网格底、图框装置和导航脚本，只替换幻灯片内容，架构图用内联 SVG 简图绘制，使用真实内容，不要 lorem ipsum。"
+  category: "product-management"
+  scenario: "product"
+  example_prompt: "Create \"Present an Engineering Blueprint like a Principal Architect\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Audience: engineering org. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 
 # True Blueprint（工程蓝图）

@@ -18,7 +18,7 @@ without churning code paths.
 | `artifact-handler.ts` | HTTP read path: `GET /api/projects/:id/critique/:runId/artifact`. |
 | `interrupt-handler.ts` | Resolves the kill request from `POST /api/projects/:id/critique/:runId/interrupt`. |
 | `adapter-degraded.ts` | In-memory degraded-adapter registry with 24h TTL. The orchestrator + Settings UI consult `isDegraded(adapterId)` before routing a run to it. |
-| `conformance.ts` | Conformance harness entry point. The nightly cycle calls `runAdapterConformance` per adapter × per brief template and tallies `shipped / degraded / failed`. |
+| `conformance.ts` | Conformance harness entry point. The prerelease cycle calls `runAdapterConformance` per adapter × per brief template and tallies `shipped / degraded / failed`. |
 | `__fixtures__/v1/` | Canonical transcripts the parser tests + conformance harness consume (happy-3-rounds, malformed-unbalanced, missing-artifact, etc.). |
 | `__fixtures__/adapters/` | Synthetic adapter stubs that emit the v1 fixtures. The conformance harness wraps them in `AsyncIterable<string>` so the parser path is exercised end-to-end without a real model. |
 

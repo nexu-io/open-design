@@ -54,13 +54,16 @@ export function buildZip(entries: ZipEntry[]): Blob {
     const dataBytes = enc.encode(entry.content);
     const crc = crc32(dataBytes);
     const size = dataBytes.length;
+    // General-purpose bit 11 (0x0800) signals UTF-8 filenames so readers
+    // decode non-ASCII names (e.g. 日本.md) correctly instead of CP437.
+    const flags = nameBytes.some((b) => b > 0x7f) ? 0x0800 : 0;
 
     // Local file header (30 bytes + name).
     const local = new Uint8Array(30 + nameBytes.length);
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true); // signature
     lv.setUint16(4, 20, true);          // version needed
-    lv.setUint16(6, 0, true);           // flags
+    lv.setUint16(6, flags, true);       // flags (bit 11 = UTF-8 name)
     lv.setUint16(8, 0, true);           // method: stored
     lv.setUint16(10, now.time, true);   // mod time
     lv.setUint16(12, now.date, true);   // mod date
@@ -78,7 +81,7 @@ export function buildZip(entries: ZipEntry[]): Blob {
     cv.setUint32(0, 0x02014b50, true);  // signature
     cv.setUint16(4, 20, true);           // version made by
     cv.setUint16(6, 20, true);           // version needed
-    cv.setUint16(8, 0, true);            // flags
+    cv.setUint16(8, flags, true);        // flags (bit 11 = UTF-8 name)
     cv.setUint16(10, 0, true);           // method
     cv.setUint16(12, now.time, true);
     cv.setUint16(14, now.date, true);

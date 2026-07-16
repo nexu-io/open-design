@@ -24,6 +24,7 @@
     "en": "Motion Frames"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A single-frame motion-design composition with looping CSS animations — rotating type ring, animated globe, ticking timer, parallax labels. Renders as a hero video poster you can hand straight to HyperFrames or any keyframe-based exporter. Use when the brief asks for \"motion design\", \"animated hero\", \"loop\", \"video poster\", \"title card\", or pairs Open Claude Design with HyperFrames for a kinetic export.",
   "description_i18n": {
     "zh-CN": "单帧动态设计合成，包含循环 CSS 动画——旋转文字环、动画地球、计时器、视差标签。渲染为视频封面海报，可直接导入 HyperFrames 或任何基于关键帧的导出工具。适用于动态设计、动画主视觉、循环视频、视频封面、标题卡等需求，搭配 HyperFrames 实现动态导出。",

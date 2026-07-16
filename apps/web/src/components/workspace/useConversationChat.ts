@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamViaDaemon } from '../../providers/daemon';
 import { listMessages, saveMessage } from '../../state/projects';
-import { appendErrorStatusEvent } from '../../runtime/chat-events';
+import { appendErrorStatusEvent, runFailureFieldsFromError } from '../../runtime/chat-events';
 import { agentModelDisplayName } from '../../utils/agentLabels';
 import { randomUUID } from '../../utils/uuid';
 import { effectiveAgentModelChoice } from '../agentModelSelection';
@@ -258,11 +258,12 @@ export function useConversationChat(
           const endedAt = Date.now();
           const code = (err as Error & { code?: string }).code;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
+          const failure = runFailureFieldsFromError(err);
           setError(err.message);
           setMessages((curr) => {
             const next = curr.map((m) => {
               if (m.id !== assistantId) return m;
-              const withError = appendErrorStatusEvent(m, err.message, code);
+              const withError = appendErrorStatusEvent(m, err.message, code, failure);
               return {
                 ...withError,
                 endedAt,

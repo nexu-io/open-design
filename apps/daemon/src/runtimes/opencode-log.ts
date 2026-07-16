@@ -13,6 +13,7 @@ import { classifyAgentServiceFailure, type AgentServiceFailureCode } from './aut
 export interface OpenCodeServiceFailure {
   code: AgentServiceFailureCode;
   message: string;
+  retryable: boolean;
   statusCode: number | null;
 }
 
@@ -84,6 +85,9 @@ export function readLatestOpenCodeLogTail(
 const SERVICE_ERROR_MESSAGE_RE =
   /usage limit|rate[ _-]?limit|quota|limit reached|insufficient|credit|balance|overloaded|unavailable|unauthor|authenticat|invalid[ _-]?(?:api[ _-]?)?key|api key|\/login|exhaust|too many requests/i;
 
+const HARD_QUOTA_MESSAGE_RE =
+  /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|funds)|exceeded your current quota)\b/i;
+
 function pickServiceErrorMessage(line: string): string | null {
   const re = /"message":"((?:[^"\\]|\\.)*)"/g;
   let fallback: string | null = null;
@@ -151,8 +155,11 @@ export function extractOpenCodeServiceFailure(
     statusCode != null ? codeFromStatus(statusCode) : null;
   if (!code && message) code = classifyAgentServiceFailure(message);
   if (!code) return null;
+  const retryable = code === 'UPSTREAM_UNAVAILABLE' || (
+    code === 'RATE_LIMITED' && !HARD_QUOTA_MESSAGE_RE.test(message ?? '')
+  );
 
-  return { code, message: message || defaultMessageForCode(code), statusCode };
+  return { code, message: message || defaultMessageForCode(code), retryable, statusCode };
 }
 
 // Convenience for the run close handler / inactivity watchdog: resolve the

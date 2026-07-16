@@ -15,6 +15,29 @@ type DesignSystemFixture = {
   isEditable?: boolean;
 };
 
+type SkillFixture = {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  mode: 'prototype' | 'deck' | 'image';
+  surface?: string;
+  platform: string;
+  scenario: string;
+  previewType: string;
+  designSystemRequired: boolean;
+  defaultFor: string[];
+  upstream: null;
+  featured: null;
+  fidelity: null;
+  speakerNotes: null;
+  animations: null;
+  hasBody: boolean;
+  examplePrompt: string;
+  source?: string;
+  category?: string;
+};
+
 function baseConfig(): Record<string, unknown> {
   return {
     mode: 'daemon',
@@ -61,6 +84,7 @@ async function routeBootstrapApis(
   page: Page,
   systems: DesignSystemFixture[],
   options?: {
+    skills?: SkillFixture[];
     importLocal?: (route: Route) => Promise<void>;
     patchSystem?: (route: Route) => Promise<void>;
   },
@@ -93,6 +117,10 @@ async function routeBootstrapApis(
       });
       return;
     }
+    if (path === '/api/editors') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"editors":[]}' });
+      return;
+    }
     if (path === '/api/app-config') {
       if (method === 'GET') {
         await route.fulfill({
@@ -122,7 +150,11 @@ async function routeBootstrapApis(
       return;
     }
     if (path === '/api/skills') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"skills":[]}' });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ skills: options?.skills ?? [] }),
+      });
       return;
     }
     if (path === '/api/design-systems' && method === 'GET') {
@@ -190,6 +222,110 @@ async function openDesignSystemsSettings(page: Page) {
 }
 
 test.describe('Settings design systems flows', () => {
+  test('[P1] disabled skills and design systems are filtered from entry creation surfaces after Settings changes', async ({ page }) => {
+    await seedSettingsBase(page);
+    const systems: DesignSystemFixture[] = [
+      {
+        id: 'agentic',
+        title: 'Agentic',
+        category: 'Productivity & SaaS',
+        summary: 'Default agentic design system.',
+        surface: 'web',
+        swatches: ['#111827', '#22c55e'],
+      },
+      {
+        id: 'airbnb',
+        title: 'Airbnb',
+        category: 'Consumer',
+        summary: 'Travel marketplace design language.',
+        surface: 'web',
+        swatches: ['#ff385c', '#ffffff'],
+      },
+    ];
+    const skills: SkillFixture[] = [
+      {
+        id: 'enabled-entry-skill',
+        name: 'Enabled Entry Skill',
+        description: 'Visible from entry pickers.',
+        triggers: [],
+        mode: 'prototype',
+        surface: 'web',
+        platform: 'desktop',
+        scenario: 'qa',
+        previewType: 'html',
+        designSystemRequired: true,
+        defaultFor: [],
+        upstream: null,
+        featured: null,
+        fidelity: null,
+        speakerNotes: null,
+        animations: null,
+        hasBody: true,
+        examplePrompt: '',
+        source: 'builtin',
+        category: 'Marketing',
+      },
+      {
+        id: 'disabled-entry-skill',
+        name: 'Disabled Entry Skill',
+        description: 'Hidden after the Settings toggle is off.',
+        triggers: [],
+        mode: 'prototype',
+        surface: 'web',
+        platform: 'desktop',
+        scenario: 'qa',
+        previewType: 'html',
+        designSystemRequired: true,
+        defaultFor: [],
+        upstream: null,
+        featured: null,
+        fidelity: null,
+        speakerNotes: null,
+        animations: null,
+        hasBody: true,
+        examplePrompt: '',
+        source: 'builtin',
+        category: 'Marketing',
+      },
+    ];
+
+    await routeBootstrapApis(page, systems, { skills });
+
+    const dialog = await openDesignSystemsSettings(page);
+    await dialog.getByRole('button', { name: /Skills|技能/i }).click();
+    await expect(dialog.getByTestId('skill-row-disabled-entry-skill')).toBeVisible();
+    await dialog
+      .getByTestId('skill-row-disabled-entry-skill')
+      .getByRole('checkbox', { name: /Toggle|切换|切換/i })
+      .evaluate((node: HTMLInputElement) => node.click());
+    await expect(dialog.getByText('All changes saved')).toBeVisible();
+
+    await dialog.getByRole('button', { name: /Design systems|设计系统|設計系統/i }).click();
+    await expect(dialog.locator('.library-ds-card', { hasText: 'Airbnb' })).toBeVisible();
+    await dialog
+      .locator('.library-ds-card', { hasText: 'Airbnb' })
+      .getByRole('checkbox', { name: /Show in home gallery/i })
+      .evaluate((node: HTMLInputElement) => node.click());
+    await expect(dialog.getByText('All changes saved')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+
+    const input = page.getByTestId('home-hero-input');
+    await input.click();
+    await input.fill('@entry');
+    const skillPicker = page.getByTestId('home-hero-plugin-picker');
+    await expect(skillPicker).toBeVisible();
+    await skillPicker.getByRole('tab', { name: /Skills/i }).click();
+    await expect(skillPicker.getByRole('option', { name: /Enabled Entry Skill/i })).toBeVisible();
+    await expect(skillPicker.getByRole('option', { name: /Disabled Entry Skill/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('home-hero-design-system-trigger').click();
+    const homePicker = page.getByTestId('project-ds-picker-popover');
+    await expect(homePicker.getByTestId('project-ds-picker-option-agentic')).toBeVisible();
+    await expect(homePicker.getByTestId('project-ds-picker-option-airbnb')).toHaveCount(0);
+  });
+
   test('[P1] imports a local design system and makes it visible immediately', async ({ page }) => {
     await seedSettingsBase(page);
     const systems: DesignSystemFixture[] = [];

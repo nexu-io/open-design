@@ -10,18 +10,14 @@ type ScopeOutputs = {
   web_tests_required: boolean;
   tools_dev_tests_required: boolean;
   tools_pack_tests_required: boolean;
-  nix_validation_required: boolean;
   ui_p0_validation_required: boolean;
   visual_validation_required: boolean;
-  docker_validation_required: boolean;
   workspace_validation_required: boolean;
 };
 
 type ScopePlan = ScopeOutputs & {
   ci_mode: CiMode;
-  run_docker_build: boolean;
   run_e2e_vitest: boolean;
-  run_nix_validation: boolean;
   run_playwright_critical: boolean;
   run_playwright_visual: boolean;
   run_preflight: boolean;
@@ -62,10 +58,8 @@ function createScopePlan(): ScopePlan {
     web_tests_required: false,
     tools_dev_tests_required: false,
     tools_pack_tests_required: false,
-    nix_validation_required: false,
     ui_p0_validation_required: false,
     visual_validation_required: false,
-    docker_validation_required: false,
     workspace_validation_required: false,
   };
 
@@ -96,10 +90,8 @@ function createScopePlan(): ScopePlan {
     outputs.web_tests_required = true;
     outputs.tools_dev_tests_required = true;
     outputs.tools_pack_tests_required = true;
-    outputs.nix_validation_required = true;
     outputs.ui_p0_validation_required = true;
     outputs.visual_validation_required = true;
-    outputs.docker_validation_required = true;
     outputs.workspace_validation_required = true;
   }
 
@@ -130,9 +122,7 @@ function createRunPlan(
 
   return {
     ci_mode: ciMode,
-    run_docker_build: isFull || outputs.docker_validation_required,
     run_e2e_vitest: isFull || outputs.web_tests_required || outputs.ui_p0_validation_required,
-    run_nix_validation: isFull || outputs.nix_validation_required,
     run_playwright_critical: isFull || (outputs.workspace_validation_required && !outputs.ui_p0_validation_required),
     run_playwright_visual: isFull || outputs.visual_validation_required,
     run_preflight: true,
@@ -152,35 +142,39 @@ function changedPullRequestFiles(): string[] {
     throw new Error("pull_request event payload did not include pull_request.number");
   }
 
-  const stdout = execFileSync(
-    "gh",
-    ["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const stdout = runGh(["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"]);
   return stdout.split(/\r?\n/).filter(Boolean);
 }
 
 function changedManualFiles(): string[] {
   const repository = requiredEnv("GITHUB_REPOSITORY");
   const sha = requiredEnv("GITHUB_SHA");
-  const stdout = execFileSync(
-    "gh",
-    [
-      "api",
-      "--paginate",
-      `repos/${repository}/compare/main...${sha}`,
-      "--jq",
-      '(.files // [])[] | select(.status != "removed") | .filename',
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const stdout = runGh([
+    "api",
+    "--paginate",
+    `repos/${repository}/compare/main...${sha}`,
+    "--jq",
+    '(.files // [])[] | select(.status != "removed") | .filename',
+  ]);
   return stdout.split(/\r?\n/).filter(Boolean);
+}
+
+function runGh(args: string[]): string {
+  const nodeScript = process.env.OPEN_DESIGN_GH_NODE_SCRIPT;
+  if (nodeScript != null && nodeScript.length > 0) {
+    return execFileSync(process.execPath, [nodeScript, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  }
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
 function applyChangedFile(file: string, target: ScopeOutputs): void {
   if (
     startsWithAny(file, [
       "apps/daemon/",
+      "packages/release/",
       "packages/contracts/",
       "packages/platform/",
       "packages/sidecar/",
@@ -193,6 +187,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
   if (
     startsWithAny(file, [
       "apps/web/",
+      "packages/release/",
       "packages/components/",
       "packages/contracts/",
       "packages/host/",
@@ -218,6 +213,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
       "tools/pack/",
       "apps/packaged/",
       "apps/desktop/",
+      "packages/release/",
       "packages/components/",
       "packages/host/",
       "packages/platform/",
@@ -243,14 +239,6 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.visual_validation_required = true;
   }
 
-  if (isDockerRelevantFile(file)) {
-    target.docker_validation_required = true;
-  }
-
-  if (isNixRelevantFile(file)) {
-    target.nix_validation_required = true;
-  }
-
   if (!isWorkspaceValidationExemptFile(file)) {
     target.workspace_validation_required = true;
   }
@@ -274,6 +262,7 @@ function isUiP0RelevantFile(file: string): boolean {
     startsWithAny(file, [
       "apps/web/",
       "apps/daemon/",
+      "packages/release/",
       "packages/components/",
       "packages/contracts/",
       "packages/host/",
@@ -316,48 +305,10 @@ function isVisualRelevantFile(file: string): boolean {
       "pnpm-lock.yaml",
       ".github/scripts/handoff.py",
       ".github/workflows/ci.yml",
-      ".github/workflows/comment.yml",
-      ".github/workflows/report.yml",
+      ".github/workflows/comment.atom.yml",
+      ".github/workflows/report.atom.yml",
       ".github/workflows/visual-baseline.yml",
     ].includes(file)
-  );
-}
-
-function isDockerRelevantFile(file: string): boolean {
-  return (
-    startsWithAny(file, [
-      "deploy/",
-    ]) ||
-    [
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      ".dockerignore",
-      ".github/workflows/ci.yml",
-      ".github/workflows/docker-image.yml",
-    ].includes(file) ||
-    isWorkspaceManifestOrCiFile(file)
-  );
-}
-
-function isNixRelevantFile(file: string): boolean {
-  return (
-    startsWithAny(file, [
-      "nix/",
-    ]) ||
-    [
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      "flake.nix",
-      "flake.lock",
-      ".github/scripts/handoff.py",
-      ".github/workflows/autofix.yml",
-      ".github/workflows/ci.yml",
-      ".github/workflows/comment.yml",
-      "scripts/update-nix-pnpm-deps-hash.ts",
-    ].includes(file) ||
-    isWorkspaceManifestOrCiFile(file)
   );
 }
 
@@ -376,13 +327,11 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/landing-page-staging.yml",
       ".github/workflows/landing-page-production.yml",
       ".github/workflows/blog-indexing-on-deploy.yml",
-      ".github/workflows/blog-indexing-monitor.yml",
-      ".github/workflows/blog-3day-report.yml",
-      ".github/workflows/seo-daily-report.yml",
-      ".github/workflows/autofix.yml",
-      ".github/workflows/comment.yml",
-      ".github/workflows/report.yml",
+      ".github/workflows/autofix.atom.yml",
+      ".github/workflows/comment.atom.yml",
+      ".github/workflows/report.atom.yml",
       ".github/workflows/docker-image.yml",
+      ".github/workflows/nix.yml",
     ].includes(file)
   );
 }

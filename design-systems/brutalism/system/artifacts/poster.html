@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Brutalism - Poster</title>
+  <style>
+:root {
+    --accent: #ffef5a;
+    --accent-active: color-mix(in oklab, var(--accent), black 14%);
+    --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+    --accent-on: #000000;
+    --bg: #f5f1e8;
+    --border: #000000;
+    --border-soft: #000000;
+    --container-gutter-desktop: 36px;
+    --container-gutter-phone: 16px;
+    --container-gutter-tablet: 24px;
+    --container-max: 1160px;
+    --danger: #ff2b2b;
+    --ease-standard: steps(2, end);
+    --elev-flat: none;
+    --elev-raised: 8px 8px 0 #000000;
+    --elev-ring: 0 0 0 1px var(--border);
+    --fg: #000000;
+    --fg-2: #222222;
+    --focus-ring: 0 0 0 4px #000000, 0 0 0 8px #ffef5a;
+    --font-body: Arial, Helvetica, sans-serif;
+    --font-display: Arial Black, Impact, sans-serif;
+    --font-mono: "Courier New", ui-monospace, monospace;
+    --leading-body: 1.35;
+    --leading-tight: 0.98;
+    --meta: #000000;
+    --motion-base: 140ms;
+    --motion-fast: 90ms;
+    --muted: #555555;
+    --radius-lg: 0px;
+    --radius-md: 0px;
+    --radius-pill: 9999px;
+    --radius-sm: 0px;
+    --section-y-desktop: 88px;
+    --section-y-phone: 44px;
+    --section-y-tablet: 64px;
+    --space-1: 4px;
+    --space-12: 48px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --success: #00b050;
+    --surface: #ffffff;
+    --surface-warm: #ffef5a;
+    --text-2xl: 42px;
+    --text-3xl: 64px;
+    --text-4xl: 88px;
+    --text-base: 17px;
+    --text-lg: 20px;
+    --text-sm: 14px;
+    --text-xl: 28px;
+    --text-xs: 12px;
+    --tracking-display: 0;
+    --warn: #ff8c00;
+}
+:root {
+  --od-page-bg: #f5f1e8;
+  --od-surface: #ffffff;
+  --od-text: #000000;
+  --od-muted: #555555;
+  --od-border: #000000;
+  --od-accent: #ffef5a;
+  --od-radius: 0px;
+  --od-font-body: Arial, Helvetica, sans-serif;
+  --od-font-display: Arial Black, Impact, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--od-page-bg);
+  color: var(--od-text);
+  font-family: var(--od-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.page { width: min(1100px, calc(100vw - 48px)); margin: 0 auto; padding: 72px 0; }
+.eyebrow { color: var(--od-accent); font-size: 12px; font-weight: 750; letter-spacing: 0; text-transform: uppercase; }
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 32px; align-items: center; }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-family: var(--od-font-display); letter-spacing: 0; line-height: 1.05; }
+h1 { margin-top: 12px; font-size: 64px; }
+h2 { font-size: 40px; }
+h3 { font-size: 22px; }
+.lead { margin-top: 18px; color: var(--od-muted); font-size: 20px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: var(--od-radius); padding: 0 18px; font-weight: 750; text-decoration: none; border: 1px solid var(--od-border); }
+.button.primary { background: var(--od-accent); border-color: var(--od-accent); color: #ffffff; }
+.button.secondary { background: var(--od-surface); }
+.panel, .card, .field, .slide, .email, .poster { border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-surface); }
+.panel { padding: 24px; box-shadow: 0 24px 80px rgba(15, 17, 23, 0.08); }
+.metric-grid, .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.metric, .card { padding: 18px; }
+.metric strong { display: block; font-size: 30px; line-height: 1; }
+.metric span, .card p, .field span { color: var(--od-muted); font-size: 14px; line-height: 1.5; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.chip { border: 1px solid var(--od-border); border-radius: 999px; padding: 8px 12px; color: var(--od-muted); }
+input, textarea, select { width: 100%; min-height: 44px; border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-page-bg); color: var(--od-text); font: inherit; padding: 10px 12px; }
+label { display: grid; gap: 8px; color: var(--od-muted); font-size: 13px; font-weight: 700; }
+@media (max-width: 820px) { .hero, .metric-grid, .card-grid { grid-template-columns: 1fr; } .page { width: min(100vw - 28px, 1100px); padding: 40px 0; } h1 { font-size: 42px; } h2 { font-size: 30px; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Poster module</p>
+        <h1>Brutalism Campaign poster</h1>
+        <p class="lead">High-impact display composition using the system color, type, and spacing rhythm.</p>
+        <div class="actions">
+          <a class="button primary" href="#">Continue</a>
+          <a class="button secondary" href="#">View details</a>
+        </div>
+      </div>
+      <article class="panel">
+        <p class="eyebrow">Preview</p>
+        <h3>Poster</h3>
+        <p class="lead" style="font-size:16px">Bundled Open Design package for Brutalism, derived from curated DESIGN.md, tokens.css, and components.html fixtures.</p>
+        <div class="card-grid" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label>Primary input<input value="Brutalism" /></label></div>
+          <div class="field"><label>Status<select><option>Ready</option><option>Draft</option></select></label></div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

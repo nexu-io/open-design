@@ -1,0 +1,118 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-particle-galaxy",
+  "title": "Particle Galaxy",
+  "title_i18n": {
+    "zh-CN": "粒子星系",
+    "zh-TW": "粒子星系",
+    "ja": "パーティクル銀河",
+    "ko": "파티클 은하",
+    "de": "Partikelgalaxie",
+    "fr": "Galaxie de particules",
+    "ru": "Галактика из частиц",
+    "es": "Galaxia de partículas",
+    "pt-BR": "Galáxia de partículas",
+    "it": "Galassia di particelle",
+    "vi": "Thiên hà hạt",
+    "pl": "Galaktyka cząstek",
+    "id": "Galaksi Partikel",
+    "nl": "Deeltjesmelkweg",
+    "ar": "مجرّة الجسيمات",
+    "tr": "Parçacık Galaksisi",
+    "uk": "Галактика частинок",
+    "en": "Particle Galaxy"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
+  "description": "Build a swirling particle galaxy — tens of thousands of additive-blended GPU points spiraling around a bright core, their orbits solved in the vertex shader — rendered live at 60fps as a single self-contained index.html.",
+  "description_i18n": {
+    "zh-CN": "构建一个旋转的粒子星系——数万个加法混合的 GPU 点围绕明亮的核心螺旋盘旋，轨道在顶点 shader 中求解——以 60fps 实时渲染，作为单个自包含的 index.html。",
+    "zh-TW": "建立一個旋轉的粒子星系——數萬個加法混合的 GPU 點圍繞明亮的核心螺旋盤旋，軌道在頂點 shader 中求解——以 60fps 即時渲染，作為單個自包含的 index.html。",
+    "ja": "渦巻くパーティクル銀河を構築します。数万個の加算合成された GPU ポイントが明るいコアの周りを螺旋を描いて回り、その軌道は頂点 shader で計算されます。60fps でライブに描画し、単一の自己完結型 index.html として出力します。",
+    "ko": "소용돌이치는 파티클 은하를 구축합니다. 수만 개의 가산 혼합 GPU 포인트가 밝은 핵을 중심으로 나선을 그리며 돌고, 그 궤도는 정점 shader에서 계산됩니다. 60fps로 실시간 렌더링되어 단일 자체 완결형 index.html로 제공됩니다.",
+    "de": "Erstellen Sie eine wirbelnde Partikelgalaxie — Zehntausende additiv gemischter GPU-Punkte spiralen um einen leuchtenden Kern, ihre Bahnen im Vertex-Shader berechnet — live mit 60fps gerendert als eine einzige eigenständige index.html.",
+    "fr": "Créez une galaxie de particules tourbillonnante — des dizaines de milliers de points GPU en fusion additive spiralant autour d'un cœur lumineux, leurs orbites résolues dans le vertex shader — rendue en direct à 60fps sous forme d'un unique index.html autonome.",
+    "ru": "Создайте закручивающуюся галактику из частиц — десятки тысяч GPU-точек с аддитивным смешиванием, спирально вращающихся вокруг яркого ядра, орбиты которых вычисляются в вершинном shader — рендеринг вживую на 60fps в виде единого самодостаточного index.html.",
+    "es": "Crea una galaxia de partículas en remolino — decenas de miles de puntos GPU en fusión aditiva girando en espiral alrededor de un núcleo brillante, con sus órbitas resueltas en el vertex shader — renderizada en vivo a 60fps como un único index.html autónomo.",
+    "pt-BR": "Crie uma galáxia de partículas em espiral — dezenas de milhares de pontos de GPU com mistura aditiva girando ao redor de um núcleo brilhante, com suas órbitas resolvidas no vertex shader — renderizada ao vivo a 60fps como um único index.html autossuficiente.",
+    "it": "Crea una galassia di particelle vorticosa — decine di migliaia di punti GPU in fusione additiva che spiraleggiano attorno a un nucleo luminoso, con le orbite risolte nel vertex shader — renderizzata dal vivo a 60fps come un unico index.html autonomo.",
+    "vi": "Xây dựng một thiên hà hạt xoáy tròn — hàng chục nghìn điểm GPU pha trộn cộng dồn xoắn ốc quanh một lõi sáng rực, quỹ đạo được giải trong vertex shader — kết xuất trực tiếp ở 60fps dưới dạng một tệp index.html tự chứa duy nhất.",
+    "pl": "Zbuduj wirującą galaktykę cząstek — dziesiątki tysięcy addytywnie mieszanych punktów GPU okrążających jasny rdzeń po spirali, z orbitami obliczanymi w vertex shaderze — renderowaną na żywo w 60fps jako pojedynczy, samodzielny plik index.html.",
+    "id": "Bangun galaksi partikel yang berputar — puluhan ribu titik GPU dengan pencampuran aditif berpilin mengelilingi inti terang, orbitnya dihitung di vertex shader — dirender secara langsung pada 60fps sebagai satu index.html mandiri.",
+    "nl": "Bouw een wervelende deeltjesmelkweg — tienduizenden additief gemengde GPU-punten die in een spiraal om een heldere kern draaien, met hun banen berekend in de vertex shader — live gerenderd op 60fps als één op zichzelf staande index.html.",
+    "ar": "أنشئ مجرّة جسيمات دوّارة — عشرات الآلاف من نقاط وحدة معالجة الرسوميات ذات المزج الإضافي تدور حلزونيًا حول نواة ساطعة، وتُحسب مداراتها في الـ vertex shader — تُعرَض مباشرةً بمعدل 60fps ضمن ملف index.html واحد مكتفٍ بذاته.",
+    "tr": "Girdap gibi dönen bir parçacık galaksisi oluşturun — parlak bir çekirdeğin çevresinde spiral çizen on binlerce eklemeli karışımlı GPU noktası, yörüngeleri vertex shader içinde çözülür — 60fps'de canlı olarak tek ve kendi kendine yeten bir index.html olarak render edilir.",
+    "uk": "Створіть вихрову галактику з частинок — десятки тисяч GPU-точок з адитивним змішуванням, що спірально обертаються навколо яскравого ядра, а їхні орбіти обчислюються у вершинному shader — рендериться наживо на 60fps як єдиний самодостатній index.html.",
+    "en": "Build a swirling particle galaxy — tens of thousands of additive-blended GPU points spiraling around a bright core, their orbits solved in the vertex shader — rendered live at 60fps as a single self-contained index.html."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-particle-galaxy",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "webgl",
+    "webgl2",
+    "shader",
+    "gpu",
+    "generative",
+    "point-cloud",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a swirling GPU particle galaxy as a single self-contained index.html: tens of thousands of points whose orbits are solved in the vertex shader from gl_VertexID (a log-spiral disk with an inner-fast rotation curve), additive-blended into glowing arms around a bright core, at 60fps.",
+        "zh-CN": "构建一个 GPU 粒子星系，作为单个自包含的 index.html：数万个点的运动轨迹全部在顶点着色器中由 gl_VertexID 求解（内快外慢旋转曲线的对数螺旋盘），叠加混合成围绕明亮内核发光的旋臂，60fps 实时运行。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

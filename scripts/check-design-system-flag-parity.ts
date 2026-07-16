@@ -42,7 +42,7 @@ import { fileURLToPath } from "node:url";
 import {
   readDesignSystemAssets,
   type DesignSystemAssets,
-} from "../apps/daemon/src/design-systems.ts";
+} from "../apps/daemon/src/design-systems/index.ts";
 import { composeSystemPrompt } from "../apps/daemon/src/prompts/system.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");

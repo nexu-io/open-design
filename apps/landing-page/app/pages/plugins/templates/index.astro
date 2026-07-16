@@ -83,9 +83,12 @@ const featuredSet = new Set(
     .map((t) => t.record.manifestId),
 );
 
-const title = `Templates · Open Source Claude Design alternative`;
-const description =
-  'Agent-built templates you can fork and ship — prototypes, slides, image and video artifacts. Apache-2.0, BYOK, run on your own keys.';
+// Locale-aware meta title/description live on the shared PluginsCopy
+// (en baseline + per-locale overrides, en fallback) so every locale
+// gets a localized <title>/<meta description>/og + the CollectionPage
+// JSON-LD below, instead of a hard-coded English string.
+const title = pcopy.templatesMetaTitle;
+const description = pcopy.templatesMetaDescription;
 
 /*
  * FAQ items live on the locale-aware `PluginsCopy` so the visible

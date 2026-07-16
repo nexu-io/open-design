@@ -132,7 +132,7 @@ export function validateRunToolBundleForAgent(
     return { ok: true };
   }
 
-  if (agent.externalMcpInjection === 'opencode-env-content') {
+  if (agent.externalMcpInjection === 'opencode-env-content' || agent.externalMcpInjection === 'mimo-env-content') {
     return { ok: true };
   }
 

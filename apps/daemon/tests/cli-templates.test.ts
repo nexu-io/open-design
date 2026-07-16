@@ -452,7 +452,7 @@ describe('od templates CLI', () => {
 
   it('reports project-not-found (not daemon-not-running) when `templates save` gets 404', async () => {
     // POST /api/templates returns a flat `{ error: '<message>' }` body
-    // (project-routes.ts:679), so the stub mirrors that exact shape
+    // (routes/project/index.ts), so the stub mirrors that exact shape
     // rather than the nested `{ error: { code, message } }` envelope.
     // structuredHttpFailure normalises the flat string into the
     // structured envelope, mapping the 404 to project-not-found via
@@ -480,7 +480,7 @@ describe('od templates CLI', () => {
 
   it('reports missing-input (not daemon-not-running) when `templates save` gets 400', async () => {
     // 400 from POST /api/templates is also a flat `{ error: '<msg>' }`
-    // body (project-routes.ts:669, :675). Same normalisation contract
+    // body (routes/project/index.ts). Same normalisation contract
     // as the 404 case above.
     stub.setResponder(() => ({
       status: 400,

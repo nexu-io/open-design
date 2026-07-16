@@ -24,7 +24,5 @@ export function versionFamilyForAppVersion(appVersion: string): string | null {
 }
 
 export function electronBuilderVersionForAppVersion(appVersion: string): string {
-  const nightly = /^(\d+\.\d+\.\d+)\.nightly\.(\d+)$/i.exec(appVersion);
-  if (nightly?.[1] != null && nightly[2] != null) return `${nightly[1]}-nightly.${nightly[2]}`;
   return appVersion;
 }

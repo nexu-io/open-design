@@ -16,6 +16,7 @@
 // translation.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -449,6 +450,7 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  */
 export interface OpenCodeConfigBuildOptions {
   allowedDirectories?: string[];
+  extraConfig?: Record<string, unknown>;
 }
 
 export function buildOpenCodeMcpConfigContent(
@@ -490,12 +492,22 @@ export function buildOpenCodeMcpConfigContent(
   const externalDirectory = buildOpenCodeExternalDirectoryAllowlist(
     options.allowedDirectories,
   );
-  if (Object.keys(mcp).length === 0 && !externalDirectory) return null;
+  const extraConfig = options.extraConfig ?? {};
+  if (
+    Object.keys(mcp).length === 0 &&
+    !externalDirectory &&
+    Object.keys(extraConfig).length === 0
+  ) return null;
 
-  const config: Record<string, unknown> = {};
+  const config: Record<string, unknown> = { ...extraConfig };
   if (Object.keys(mcp).length > 0) config.mcp = mcp;
   if (externalDirectory) {
+    const priorPermission =
+      config.permission && typeof config.permission === 'object' && !Array.isArray(config.permission)
+        ? config.permission as Record<string, unknown>
+        : {};
     config.permission = {
+      ...priorPermission,
       external_directory: externalDirectory,
     };
   }
@@ -510,7 +522,7 @@ function buildOpenCodeExternalDirectoryAllowlist(
       (directories ?? [])
         .filter((dir) => typeof dir === 'string' && dir.trim().length > 0)
         .filter((dir) => path.isAbsolute(dir))
-        .map((dir) => normalizeAllowedDirectory(dir)),
+        .flatMap((dir) => normalizeAllowedDirectoryVariants(dir)),
     ),
   );
   if (normalized.length === 0) return null;
@@ -529,6 +541,17 @@ function normalizeAllowedDirectory(dir: string): string {
   const root = path.parse(resolved).root;
   if (resolved === root) return root;
   return resolved.replace(/[\\/]+$/, '');
+}
+
+function normalizeAllowedDirectoryVariants(dir: string): string[] {
+  const normalized = normalizeAllowedDirectory(dir);
+  let real: string | null = null;
+  try {
+    real = normalizeAllowedDirectory(realpathSync.native(dir));
+  } catch {
+    real = null;
+  }
+  return real && real !== normalized ? [normalized, real] : [normalized];
 }
 
 function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {

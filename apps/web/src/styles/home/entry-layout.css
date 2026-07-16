@@ -14,6 +14,7 @@
 }
 
 .entry-shell--onboarding {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
@@ -620,11 +621,7 @@
   inset: auto;
   width: 30px;
   height: 30px;
-  object-fit: cover;
-  border-radius: var(--radius);
   display: block;
-  user-select: none;
-  -webkit-user-drag: none;
   pointer-events: none;
 }
 .entry-nav-rail__btn {
@@ -650,6 +647,15 @@
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+.entry-nav-rail__btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.entry-nav-rail__btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
 }
 .entry-nav-rail__btn.is-active {
   background: var(--accent-tint);
@@ -749,6 +755,15 @@
   padding: 12px 16px 0;
   background: var(--bg);
   isolation: isolate;
+}
+/* The topbar is an isolated sticky stacking context at z-index 10, so a
+   child popover's own z-index cannot escape it. While a topbar popover or
+   the updater's "update ready" prompt is open, lift the whole topbar above
+   raised page surfaces (e.g. the home composer card at z-index 1700 when
+   its agent picker is open) so the prompt paints on top. */
+.entry-main__topbar:has(.entry-settings-menu__popover),
+.entry-main__topbar:has(.updater-popup) {
+  z-index: 1900;
 }
 .entry-main__topbar::before {
   content: '';
@@ -1341,6 +1356,9 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  /* Open Design renders as `.inline-switcher__account`; keep the third-party
+     CLI grid after that account row even though their source order differs. */
+  order: 1;
 }
 .inline-switcher__agent-row {
   display: flex;
@@ -1458,6 +1476,190 @@
   transform: translateY(0);
 }
 
+/* Account row: Open Design login/plan, lifted out of the agent card so the
+   agent name is never truncated. */
+.inline-switcher__account {
+  order: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  transition: background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
+}
+/* The Open Design entry is also the agent selector now: hovering the clickable
+   area previews selectability, and the active agent gets the same accent
+   highlight the grid rows use. */
+.inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.inline-switcher__account.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
+}
+.inline-switcher__account.is-active:has(.inline-switcher__account-select:hover) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
+}
+.inline-switcher__account-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+/* The icon+name+plan+balance block is the radio control that selects Open
+   Design; the upgrade / sign-in buttons stay siblings so they never nest in
+   this button. */
+.inline-switcher__account-select {
+  flex: 1 1 auto;
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.inline-switcher__account-id-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+.inline-switcher__amr-reminder-dot--account {
+  top: -1px;
+  right: -1px;
+}
+.inline-switcher__account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-switcher__account-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.inline-switcher__account-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* Balance shown as a muted subtitle line under the Open Design name. Each
+   stat is "label value"; the gap (not a literal separator) keeps them apart. */
+.inline-switcher__account-subtitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+}
+.inline-switcher__account-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.inline-switcher__account-stat-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.inline-switcher__account-stat-value {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+}
+.inline-switcher__account-upgrade {
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .inline-switcher__account-upgrade:hover:not(:disabled) {
+    background: var(--accent-hover);
+    color: #fff;
+    box-shadow:
+      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+.inline-switcher__account-upgrade:active {
+  transform: scale(0.96);
+}
+.inline-switcher__account-upgrade:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher__account-upgrade {
+    transition: background-color 150ms ease;
+  }
+  .inline-switcher__account-upgrade:active {
+    transform: none;
+  }
+}
+.inline-switcher__account-status.is-error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger);
+}
+.inline-switcher__account-action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.inline-switcher__account-action:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.inline-switcher__account-action svg {
+  animation: spin 0.8s linear infinite;
+}
+
 /* Provider chips (BYOK mode) */
 .inline-switcher__chips {
   display: flex;
@@ -1541,6 +1743,13 @@
 .model-select-searchable__option:hover {
   background: var(--bg-subtle);
 }
+.model-select-searchable__option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.model-select-searchable__option.is-disabled:hover {
+  background: transparent;
+}
 .model-select-searchable__option.is-active {
   background: var(--accent-tint);
   color: var(--accent-strong);
@@ -1555,13 +1764,132 @@
   font-weight: 700;
   color: currentColor;
 }
+.model-select-searchable__value,
+.model-select-searchable__option-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+.model-select-searchable__option-content {
+  align-items: flex-start;
+  gap: 10px;
+}
+.model-select-searchable__option-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.model-select-searchable__value-label,
 .model-select-searchable__option-label {
+  display: inline-flex;
+  align-items: center;
   font-size: 12.5px;
   line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__option-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__value-badge,
+.model-select-searchable__option-badge {
+  --model-tag-color: var(--text-muted);
+  --model-tag-bg: color-mix(in srgb, var(--model-tag-color) 10%, var(--bg-panel));
+  --model-tag-border: color-mix(in srgb, var(--model-tag-color) 34%, transparent);
+
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 112px;
+  min-height: 17px;
+  padding: 2px 6px 2px 5px;
+  border: 1px solid var(--model-tag-border);
+  border-radius: 6px;
+  background: var(--model-tag-bg);
+  color: var(--model-tag-color);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 72%, white 28%);
+  font-size: 10.5px;
+  font-weight: 680;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__value-badge::before,
+.model-select-searchable__option-badge::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.88;
+  flex: 0 0 auto;
 }
 .model-select-searchable__option-meta {
   font-size: 11px;
+  line-height: 1.3;
   color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__option-badge {
+  margin-top: 1px;
+}
+.model-select-searchable__option.is-active .model-select-searchable__option-meta {
+  color: color-mix(in srgb, var(--accent-strong) 60%, var(--text-muted));
+}
+.model-select-searchable__option-affordances {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.model-select-searchable__option-lock-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.model-select-searchable__option-lock-inline:hover,
+.model-select-searchable__option-lock-inline:focus-visible {
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+}
+.model-select-searchable__value-badge[data-tag='standard'],
+.model-select-searchable__option-badge[data-tag='standard'] {
+  --model-tag-color: #90887a;
+}
+.model-select-searchable__value-badge[data-tag='advanced'],
+.model-select-searchable__option-badge[data-tag='advanced'] {
+  --model-tag-color: #bf8a34;
+}
+.model-select-searchable__value-badge[data-tag='bestQuality'],
+.model-select-searchable__option-badge[data-tag='bestQuality'] {
+  --model-tag-color: #c77858;
 }
 .model-select-searchable__empty {
   padding: 12px 10px;
@@ -1584,6 +1912,9 @@
   color: var(--text);
   text-align: left;
   cursor: pointer;
+}
+.inline-switcher__select .model-select-searchable__value {
+  justify-content: space-between;
 }
 .inline-switcher__select:focus-visible {
   outline: 2px solid var(--accent);
@@ -1670,6 +2001,247 @@
   justify-items: center;
 }
 
+/* Connect step, cloud sign-in landing. Replaces the grid layout with a
+   centered single column: a top-left language/theme bar, the centered CTA
+   block, and a footer pinned to the bottom. */
+.onboarding-view--cloud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  padding: 72px 24px 64px;
+  gap: 0;
+}
+
+.onboarding-cloud__topbar {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Brand mark above the title; the glyph itself comes from the shared
+   .od-brand-glyph primitive. */
+.onboarding-cloud__logo {
+  display: block;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 22px;
+}
+
+/* Compact, icon-only language switcher used in the cloud landing top bar —
+   matches the round theme toggle next to it instead of the labelled foot-pill. */
+.lang-pill--compact {
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+}
+
+.lang-pill--compact:hover {
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__theme:hover:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--text-muted);
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(440px, 100%);
+}
+
+.onboarding-cloud__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.onboarding-cloud__body {
+  margin: 14px 0 0;
+  max-width: 42ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-cloud__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 32px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--text-strong);
+  color: var(--bg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__primary:hover:not(:disabled) {
+  /* Keep the dark fill on hover — the global `button:hover` rule in
+     primitives.css would otherwise repaint the background to --bg-subtle and
+     wash the white label away. Opacity alone carries the hover feedback. */
+  background: var(--text-strong);
+  border-color: transparent;
+  opacity: 0.88;
+}
+
+.onboarding-cloud__primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.onboarding-cloud__primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.onboarding-cloud__primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.onboarding-cloud__secondary,
+.onboarding-cloud__cancel {
+  margin-top: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__secondary:hover,
+.onboarding-cloud__cancel:hover {
+  color: var(--text-strong);
+}
+
+/* Two secondary links ("local CLI" or "your own key") on one row. */
+.onboarding-cloud__alts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.onboarding-cloud__alts .onboarding-cloud__secondary {
+  margin-top: 0;
+}
+
+.onboarding-cloud__alts-or {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.onboarding-cloud__error {
+  margin-top: 16px;
+  color: var(--danger-text, #991b1b);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-cloud__footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Back link from the expanded runtime chooser to the cloud landing. */
+.onboarding-view__back-to-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-view__back-to-cloud:hover {
+  color: var(--text-strong);
+}
+
+/* Brand mark above the welcome heading — the app icon in a soft rounded
+   chip, mirroring the home-hero brand lockup. */
+.onboarding-view__hero-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  padding: 8px;
+}
+.onboarding-view__hero-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .onboarding-view__kicker {
   font-size: 11px;
   font-weight: 700;
@@ -1695,20 +2267,26 @@
 }
 
 .onboarding-view__steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  width: min(860px, 100%);
-  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: min(620px, 100%);
+  margin: -4px 0 6px;
   padding: 0;
+  border: 0;
+  border-radius: 0;
   list-style: none;
   justify-self: center;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Segmented progress indicator: a horizontal bar per step with the label
    below it. Bars read as progress, not as clickable cards — upcoming steps
    are clearly muted and non-interactive. */
 .onboarding-view__steps li {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1958,6 +2536,19 @@
 .onboarding-view__secondary:hover,
 .onboarding-view__ghost:hover {
   transform: translateY(-1px);
+}
+
+.onboarding-view__primary:disabled,
+.onboarding-view__secondary:disabled,
+.onboarding-view__ghost:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.onboarding-view__primary:hover:disabled,
+.onboarding-view__secondary:hover:disabled,
+.onboarding-view__ghost:hover:disabled {
+  transform: none;
 }
 
 .onboarding-view__primary:hover:not(:disabled) {
@@ -2859,7 +3450,161 @@
 .onboarding-view__form-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Profile fields as flat, tappable chips (replaces dropdowns). */
+.onboarding-chip-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-chip-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.onboarding-chip-field__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onboarding-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Override the global button:hover. Unselected chips get a soft accent-tinted
+   wash + accent-leaning border and a slight lift, so the hover reads as "this
+   is pickable" and previews the selected look. Selected chips deepen toward
+   the accent fill instead. */
+.onboarding-chip:hover:not(:disabled) {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+
+.onboarding-chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.onboarding-chip.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.onboarding-chip.is-selected:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* Free-text detail revealed when the visitor picks "Other" on the "Where did
+   you hear about us?" question. Rendered inline as the last item of the chip
+   row so it sits right after the Other chip (growing to fill the rest of the
+   row, or wrapping onto the next line at a comfortable width) instead of
+   floating below the group. Height matches the chips so the row stays even. */
+.onboarding-chip-field__other-input {
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-chip-field__other-input::placeholder {
+  color: var(--text-muted);
+}
+
+.onboarding-chip-field__other-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+/* Step 2 memory callout — makes it explicit that the answers above are saved
+   to Memory, and sells the compounding benefit of letting it learn. */
+.onboarding-view__memory-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-panel));
+}
+.onboarding-view__memory-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-panel));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.onboarding-view__memory-callout-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.onboarding-view__memory-callout-body strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.onboarding-view__memory-callout-body p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.onboarding-view__memory-benefits {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.onboarding-view__memory-benefits li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.onboarding-view__memory-benefits li svg {
+  color: var(--accent);
 }
 
 .onboarding-view__email-field {
@@ -2869,13 +3614,51 @@
   margin-top: 16px;
 }
 
+.onboarding-view__brand-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.onboarding-view__brand-action-statuses {
+  display: grid;
+  grid-column: 1;
+  justify-self: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.onboarding-view__brand-action-statuses:empty {
+  display: none;
+}
+
+.onboarding-view__brand-action-statuses .onboarding-view__action-status {
+  margin-right: 0;
+}
+
+.onboarding-view__brand-action-group {
+  display: inline-flex;
+  grid-column: 2;
+  justify-self: center;
+  gap: 10px;
+}
+
+.onboarding-view__brand-finish {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .onboarding-view__email-label {
   color: var(--text-strong);
   font-size: 12px;
   font-weight: 700;
 }
 
-.onboarding-view__email-input {
+.onboarding-view__email-input,
+.onboarding-view__brand-url-input {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--border);
@@ -2889,11 +3672,13 @@
   transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-view__email-input::placeholder {
+.onboarding-view__email-input::placeholder,
+.onboarding-view__brand-url-input::placeholder {
   color: var(--text-muted);
 }
 
-.onboarding-view__email-input:focus-visible {
+.onboarding-view__email-input:focus-visible,
+.onboarding-view__brand-url-input:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
@@ -2940,6 +3725,78 @@
   flex: 0 0 auto;
   color: var(--text-muted);
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.onboarding-view__select-trigger-value,
+.onboarding-view__select-option-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.onboarding-view__select-option-content {
+  align-items: flex-start;
+  gap: 10px;
+}
+.onboarding-view__select-trigger-value {
+  flex: 1 1 auto;
+}
+.onboarding-view__select-option-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.onboarding-view__select-option-meta {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onboarding-view__select-badge {
+  --model-tag-color: var(--text-muted);
+  --model-tag-bg: color-mix(in srgb, var(--model-tag-color) 10%, var(--bg-panel));
+  --model-tag-border: color-mix(in srgb, var(--model-tag-color) 34%, transparent);
+
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 112px;
+  min-height: 17px;
+  padding: 2px 6px 2px 5px;
+  border: 1px solid var(--model-tag-border);
+  border-radius: 6px;
+  background: var(--model-tag-bg);
+  color: var(--model-tag-color);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 72%, white 28%);
+  font-size: 10.5px;
+  font-weight: 680;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onboarding-view__select-badge::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.88;
+  flex: 0 0 auto;
+}
+.onboarding-view__select-badge[data-tag='standard'] {
+  --model-tag-color: #90887a;
+}
+.onboarding-view__select-badge[data-tag='advanced'] {
+  --model-tag-color: #bf8a34;
+}
+.onboarding-view__select-badge[data-tag='bestQuality'] {
+  --model-tag-color: #c77858;
 }
 
 .onboarding-view__select-trigger.has-value {
@@ -3082,7 +3939,9 @@
   cursor: pointer;
 }
 
-.onboarding-view__select-option span {
+.onboarding-view__select-option-content,
+.onboarding-view__select-option-copy span:first-child,
+.onboarding-view__select-trigger-value span:first-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3108,6 +3967,256 @@
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Final onboarding step: current branch keeps a design-system CTA while the
+   preceding onboarding layout stays aligned with origin/main. */
+.onboarding-view__build {
+  justify-self: center;
+  width: min(980px, 100%);
+  max-width: none;
+  gap: 24px;
+}
+
+.onboarding-view__build-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: center;
+  align-self: center;
+  padding: 5px 11px 5px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.onboarding-view__build-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.onboarding-view__build-copy {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.onboarding-view__build-head {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 42px;
+  line-height: 1.03;
+  letter-spacing: 0;
+}
+
+.onboarding-view__build-head p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-view__build-benefits {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-benefits > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+}
+
+.onboarding-view__build-benefits svg {
+  grid-row: 1 / span 2;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.onboarding-view__build-benefits strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.onboarding-view__build-benefits span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.onboarding-view__build-preview {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.onboarding-view__build-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.onboarding-view__build-preview-head span {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-head span:nth-child(2) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-head span:nth-child(3) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-head strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.onboarding-view__build-preview-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.onboarding-view__build-preview-body small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.onboarding-view__build-preview-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-swatches i {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(2) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(3) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(4) {
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-type {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+  color: var(--text-strong);
+}
+
+.onboarding-view__build-preview-type strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.onboarding-view__build-preview-type span {
+  font-size: 26px;
+  font-weight: 760;
+}
+
+.onboarding-view__build-preview-type em {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-style: normal;
+}
+
+.onboarding-view__build-preview-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-lines span {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+
+.onboarding-view__build-preview-lines span:nth-child(2) {
+  width: 82%;
+}
+
+.onboarding-view__build-preview-lines span:nth-child(3) {
+  width: 58%;
+}
+
+.onboarding-view__build-chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-view__build-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  background: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-view__build-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.onboarding-view__build-back {
+  margin-inline-end: auto;
+}
+
+
 
 /* ============================================================
    GitHub star pill — sticky top-bar CTA.
@@ -3227,7 +4336,58 @@
   white-space: nowrap;
 }
 
+/* Workspace / team-edition entry. Neutral white-panel chip matching the
+   GitHub-star / Discord pills next to it; keeps its label visible (unlike the
+   icon-only discord/use-everywhere chips) because guiding the click is the
+   whole point. Tokens resolve in both light and dark themes. */
+.entry-workspace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out), transform 120ms var(--ease-out);
+  white-space: nowrap;
+}
+.entry-workspace-chip:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-workspace-chip:active {
+  transform: scale(0.98);
+}
+.entry-workspace-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-workspace-chip__icon {
+  color: var(--text-strong);
+  flex: 0 0 auto;
+}
+.entry-workspace-chip__label {
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
+  .entry-workspace-chip__label {
+    display: none;
+  }
+  .entry-workspace-chip {
+    padding: 0 9px;
+  }
   .entry-star-badge__label {
     display: none;
   }
@@ -3312,7 +4472,25 @@
   }
 
   .onboarding-view__steps {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 8px;
+    width: min(360px, 100%);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .onboarding-view__steps li {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  }
+
+  .onboarding-view__steps li:not(:last-child)::after {
+    display: none;
   }
 
   .onboarding-view__card {
@@ -3359,7 +4537,25 @@
   }
 
   .onboarding-view__steps {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 8px;
+    width: min(360px, 100%);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .onboarding-view__steps li {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  }
+
+  .onboarding-view__steps li:not(:last-child)::after {
+    display: none;
   }
 
   .onboarding-view__ds-points {
@@ -3532,6 +4728,31 @@
   }
 }
 
+@media (max-width: 720px) {
+  .onboarding-view__brand-action-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .onboarding-view__brand-action-statuses,
+  .onboarding-view__brand-action-group,
+  .onboarding-view__brand-finish {
+    grid-column: 1;
+  }
+
+  .onboarding-view__brand-action-statuses {
+    justify-self: stretch;
+  }
+
+  .onboarding-view__brand-action-group {
+    justify-self: center;
+  }
+
+  .onboarding-view__brand-finish {
+    justify-self: stretch;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-view__skeleton-line,
   .onboarding-view__skeleton-model-label,
@@ -3539,5 +4760,48 @@
     animation: none;
     background:
       color-mix(in srgb, var(--bg-muted) 82%, var(--bg-panel));
+  }
+}
+
+@media (max-width: 900px) {
+  .onboarding-view__build {
+    width: min(680px, 100%);
+  }
+
+  .onboarding-view__build-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .onboarding-view__build-head {
+    text-align: center;
+  }
+
+  .onboarding-view__build-head p {
+    margin: 0 auto;
+  }
+
+  .onboarding-view__build-preview {
+    width: min(360px, 100%);
+    justify-self: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .onboarding-view__build-head h2 {
+    font-size: 30px;
+  }
+
+  .onboarding-view__build-actions {
+    justify-content: stretch;
+  }
+
+  .onboarding-view__build-back {
+    width: 100%;
+    margin-inline-end: 0;
+  }
+
+  .onboarding-view__build-actions .onboarding-view__secondary,
+  .onboarding-view__build-actions .onboarding-view__primary {
+    flex: 1 1 180px;
   }
 }

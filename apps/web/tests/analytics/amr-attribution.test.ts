@@ -38,10 +38,12 @@ describe('AMR attribution helper', () => {
       'handoff_amr_website',
       'chat_error_authorize_retry',
       'chat_error_recharge',
+      'chat_error_upgrade',
       'chat_error_switch_retry_card',
       'generation_preview_authorize_retry',
       'generation_preview_recharge',
       'generation_preview_switch_retry_card',
+      'artifact_success_upgrade',
     ] as const;
 
     for (const [index, source] of sources.entries()) {

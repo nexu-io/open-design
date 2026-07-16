@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-open-design-landing-deck",
-  "title": "Open Design Landing Deck",
+  "title": "Write a Brand-Story Deck like a Founder Storyteller",
   "title_i18n": {
-    "zh-CN": "Open Design 着陆演示套件",
-    "zh-TW": "Open Design 著陸簡報套件",
-    "ja": "Open Design ランディングデッキ",
-    "ko": "Open Design 랜딩 덱",
-    "de": "Open Design Landing Deck",
-    "fr": "Open Design Landing Deck",
-    "ru": "Open Design Landing Deck",
-    "es": "Open Design Landing Deck",
-    "pt-BR": "Open Design Landing Deck",
-    "it": "Open Design Landing Deck",
-    "vi": "Open Design Landing Deck",
-    "pl": "Open Design Landing Deck",
-    "id": "Open Design Landing Deck",
-    "nl": "Open Design Landing Deck",
-    "ar": "Open Design Landing Deck",
-    "tr": "Open Design Landing Deck",
-    "uk": "Open Design Landing Deck",
-    "en": "Open Design Landing Deck"
+    "en": "Write a Brand-Story Deck like a Founder Storyteller",
+    "zh-CN": "像会讲故事的创始人一样写品牌故事稿",
+    "zh-TW": "像会讲故事的创始人一样写品牌故事稿"
   },
   "version": "0.1.0",
-  "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.",
   "description_i18n": {
-    "zh-CN": "使用 Atelier Zero 视觉语言（暖纸背景、斜体衬线强调、珊瑚色终止点、超现实拼贴板）生成单文件幻灯片。支持横向杂志式滑动翻页（←/→、滚轮、滑动），包含品牌标识、页码条、ESC 概览网格、珊瑚色进度条，继承自姊妹技能 open-design-landing 的标准样式表和 16 槽图片库。",
-    "zh-TW": "使用 Atelier Zero 視覺語言（溫紙背景、斜體襯線強調、珊瑚色終止點、超現實拼貼板）產生單檔案幻燈片。支援橫向雜誌式滑動翻頁（←/→、滾輪、滑動），包含品牌標誌、頁碼條、ESC 概覽網格、珊瑚色進度條，繼承自姊妹技能 open-design-landing 的標準樣式表和 16 槽圖片庫。",
-    "ja": "Atelier Zero ビジュアル言語（温紙背景、イタリックセリフ強調、コーラル終端ドット、シュールコラージュ）を使用したシングルファイルスライドデッキを生成。横型マガジンスタイルのスワイプページネーション（←/→、ホイール、スワイプ）、ブランドマークとスライドカウンター付きクロームストリップ、ESC 概要グリッド、コーラルプログレスバーを搭載し、姉妹スキル open-design-landing から標準スタイルシートと 16 スロット画像ライブラリを継承。",
-    "ko": "Atelier Zero 비주얼 언어(따뜻한 종이 배경, 이탤릭 세리프 강조, 코랄 종료 점, 초현실 콜라주 플레이트)로 단일 파일 슬라이드 덱을 생성합니다. 가로 매거진 스타일 스와이프 페이지네이션(←/→, 휠, 스와이프), 브랜드 마크와 슬라이드 카운터가 있는 크롬 스트립, ESC 개요 그리드, 코랄 진행 표시줄을 제공하며, 자매 스킬 open-design-landing의 표준 스타일시트와 16슬롯 이미지 라이브러리를 상속합니다.",
-    "de": "Erstellt ein Einzeldatei-Slidedeck in der Atelier Zero Bildsprache (warmer Papierhintergrund, kursive Serifen-Hervorhebungen, korallfarbene Endpunkte, surrealistische Collagen). Mit horizontaler Magazin-Wischnavigation (←/→, Mausrad, Wischen), Chrome-Leiste mit Markenzeichen und Folienzähler, ESC-Übersichtsraster, korallfarbenem Fortschrittsbalken und erbt Stylesheet plus 16-Slot-Bildbibliothek vom Geschwister-Skill open-design-landing.",
-    "fr": "Produit un deck de slides en fichier unique dans le langage visuel Atelier Zero (fond papier chaud, emphases sérif italique, points terminaux corail, planches collage surréaliste). Avec pagination horizontale style magazine (←/→, molette, glissement), bande chrome avec marque et compteur de slides, grille aperçu ESC, barre de progression corail, et hérite de la feuille de style canonique + bibliothèque d'images 16 slots du skill frère open-design-landing.",
-    "ru": "Создает однофайловую презентацию в визуальном языке Atelier Zero (теплый бумажный фон, курсивные засечки для акцента, коралловые завершающие точки, сюрреалистичные коллажи). С горизонтальной журнальной пагинацией (←/→, колесо мыши, свайп), хромированной полосой с логотипом и счетчиком слайдов, обзорной сеткой по ESC, коралловым прогресс-баром и наследует стили + библиотеку из 16 изображений от родственного навыка open-design-landing.",
-    "es": "Produce una presentación de archivo único en el lenguaje visual Atelier Zero (fondo papel cálido, énfasis serif itálica, puntos terminales coral, placas collage surrealista). Con paginación horizontal estilo revista (←/→, rueda, deslizar), barra chrome con marca y contador de diapositivas, cuadrícula resumen ESC, barra de progreso coral, y hereda la hoja de estilos canónica + biblioteca de imágenes de 16 ranuras del skill hermano open-design-landing.",
-    "pt-BR": "Produz um deck de slides em arquivo único na linguagem visual Atelier Zero (fundo papel quente, ênfases serifadas itálicas, pontos terminais coral, placas colagem surrealista). Com paginação horizontal estilo revista (←/→, roda, deslizar), faixa chrome com marca e contador de slides, grade de visão geral ESC, barra de progresso coral, e herda a folha de estilos canônica + biblioteca de imagens de 16 slots da skill irmã open-design-landing.",
-    "it": "Produce un deck di slide in file singolo nel linguaggio visivo Atelier Zero (sfondo carta calda, enfasi serif corsiva, punti terminali corallo, tavole collage surreale). Con paginazione orizzontale stile rivista (←/→, rotella, swipe), striscia chrome con marchio e contatore slide, griglia panoramica ESC, barra progresso corallo, ed eredita il foglio di stile canonico + libreria immagini 16 slot dalla skill sorella open-design-landing.",
-    "vi": "Tạo bộ slide đơn tệp theo ngôn ngữ thị giác Atelier Zero (nền giấy ấm, nhấn mạnh chữ serif nghiêng, chấm kết san hô, tấm ghép siêu thực). Có phân trang vuốt ngang kiểu tạp chí (←/→, con lăn, vuốt), thanh chrome với nhãn hiệu và bộ đếm slide, lưới tổng quan ESC, thanh tiến trình san hô, và kế thừa stylesheet chuẩn + thư viện hình ảnh 16 slot từ kỹ năng chị em open-design-landing.",
-    "pl": "Tworzy jednoplikową prezentację w języku wizualnym Atelier Zero (ciepłe papierowe tło, kursywne akcenty szeryfowe, koralowe kropki końcowe, surrealistyczne kolaże). Z poziomą paginacją w stylu magazynu (←/→, kółko, przesuwanie), paskiem chrome z marką i licznikiem slajdów, siatką podglądu ESC, koralowym paskiem postępu i dziedziczy kanoniczny arkusz stylów + bibliotekę 16 obrazów z siostrzanej umiejętności open-design-landing.",
-    "id": "Membuat deck slide file tunggal dalam bahasa visual Atelier Zero (latar belakang kertas hangat, penekanan serif miring, titik akhir karang, pelat kolase surreal). Dengan paginasi geser horizontal gaya majalah (←/→, roda, geser), strip chrome dengan tanda merek dan penghitung slide, grid ikhtisar ESC, progress bar karang, dan mewarisi stylesheet kanonikal + pustaka gambar 16 slot dari skill saudara open-design-landing.",
-    "nl": "Produceert een enkel-bestand slide deck in de Atelier Zero visuele taal (warm papieren achtergrond, cursieve serif nadruk, koraalkleurige eindpunten, surrealistische collage platen). Met horizontale magazine-stijl swipe paginering (←/→, wiel, vegen), chrome strip met merkteken en slide teller, ESC overzichtsraster, koralen voortgangsbalk, en erft de canonieke stylesheet + 16-slot afbeeldingsbibliotheek van de zuster-skill open-design-landing.",
-    "ar": "ينتج عرض شرائح بملف واحد بلغة Atelier Zero البصرية (خلفية ورقية دافئة، تأكيدات serif مائلة، نقاط نهاية مرجانية، لوحات كولاج سريالية). مع ترقيم أفقي بنمط المجلات (←/→، عجلة، تمرير)، شريط chrome بعلامة تجارية وعداد شرائح، شبكة نظرة عامة ESC، شريط تقدم مرجاني، ويرث ورقة الأنماط القياسية + مكتبة صور 16 فتحة من المهارة الشقيقة open-design-landing.",
-    "tr": "Atelier Zero görsel dilinde (sıcak kağıt arkaplan, italik serif vurgu, mercan rengi bitiş noktaları, sürreal kolaj levhaları) tek dosyalı slayt sunumu üretir. Yatay dergi tarzı kaydırmalı sayfalama (←/→, tekerlek, kaydırma), marka işareti ve slayt sayacı ile chrome şerit, ESC genel bakış ızgarası, mercan rengi ilerleme çubuğu ve kardeş beceri open-design-landing'den kanonik stil sayfası + 16 yuvalı görsel kütüphanesini miras alır.",
-    "uk": "Створює однофайлову презентацію в візуальній мові Atelier Zero (теплий паперовий фон, курсивні засічки для акценту, коралові завершальні точки, сюрреалістичні колажі). З горизонтальною журнальною пагінацією (←/→, колесо миші, свайп), хромованою смугою з логотипом та лічильником слайдів, оглядовою сіткою по ESC, кораловим прогрес-баром та успадковує стилі + бібліотеку з 16 зображень від споріднного навику open-design-landing.",
-    "en": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill."
+    "en": "Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.",
+    "zh-CN": "像会讲故事的创始人一样写品牌故事稿——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像会讲故事的创始人一样写品牌故事稿——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -64,7 +35,18 @@
     "editorial-slides",
     "atelier-zero-deck",
     "open-design-deck",
-    "open-design-landing-deck"
+    "open-design-landing-deck",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "consulting-delivery",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "launch",
+    "campaign",
+    "pipeline",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -85,13 +67,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Build me an 11-slide pitch deck for \"Lumen Field\", a focus-soundscape studio. Cover with hero plate, two section dividers, two product content slides with bullets, a stats slide showing 12 soundscapes / 4 presets / 1 daily ritual, a customer quote, a closing CTA, and an end card. Reuse the open-design-landing image library.",
-        "zh-CN": "使用这个插件完成以下任务：Build me an 11-slide pitch deck for \"Lumen Field\", a focus-soundscape studio. Cover with hero plate, two section dividers, two product content slides with bullets, a stats slide showing 12 soundscapes / 4 presets / 1 daily ritual, a customer quote, a closing CTA, and an end card. Reuse the open-design-landing image library."
+        "en": "Create \"Write a Brand-Story Deck like a Founder Storyteller\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Audience: partners, press, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像会讲故事的创始人一样写品牌故事稿。像会讲故事的创始人一样写品牌故事稿——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Open Design Landing Deck"
+          "title": "Write a Brand-Story Deck like a Founder Storyteller",
+          "title_i18n": {
+            "en": "Write a Brand-Story Deck like a Founder Storyteller",
+            "zh-CN": "像会讲故事的创始人一样写品牌故事稿",
+            "zh-TW": "像会讲故事的创始人一样写品牌故事稿"
+          }
         }
       ]
     },
@@ -126,6 +113,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "marketing-gtm"
   }
 }

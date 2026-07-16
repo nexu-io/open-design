@@ -82,7 +82,9 @@ export function MemoryToast({ onOpenMemory }: Props) {
   const detail = toast
     ? toast.source === 'llm'
       ? `(${toast.count} · LLM)`
-      : `(${toast.count})`
+      : toast.source === 'annotation'
+        ? `(${toast.count} · annotations)`
+        : `(${toast.count})`
     : '';
   const clickHint = toast ? t('settings.memoryToastClickHint') : '';
 

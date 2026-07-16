@@ -24,6 +24,7 @@
     "en": "Wireframe Sketch"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A hand-drawn wireframe exploration — graph-paper background, marker / pencil tone, multiple tab labels for variants, sticky-note annotations, scribbled chart placeholders, hatched fills. Reads like a designer's whiteboard before any pixels are committed. Use when the brief asks for \"wireframe\", \"sketch wireframe\", \"hand-drawn\", \"lo-fi\", \"whiteboard\", \"草稿\", or \"手绘原型\".",
   "description_i18n": {
     "zh-CN": "手绘风格的线框图，包含方格纸背景、马克笔/铅笔质感、多标签页变体、便签注释、图表占位符和阴影填充。适用于「线框图」「草图线框」「手绘」「低保真」「白板」「草稿」「手绘原型」等需求。",

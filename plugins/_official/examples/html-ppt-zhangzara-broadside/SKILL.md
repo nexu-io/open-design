@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-broadside
+en_name: "Write a Product-Launch Announcement like a PR & Comms Director"
+zh_name: "像公关传播总监一样写产品发布公告"
 description: |
-  Broadside — Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack. Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements.
+  Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Built as a decision-grade marketing & GTM deck for press, community, prospects.
+en_description: |
+  Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Built as a decision-grade marketing & GTM deck for press, community, prospects.
+zh_description: |
+  像公关传播总监一样写产品发布公告——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-broadside"
 triggers:
-  - "broadside"
-  - "zhangzara-broadside"
-  - "editorial"
-  - "dramatic"
-  - "graphic"
-  - "punchy"
-  - "brand manifesto"
-  - "founder vision deck"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write a Product-Launch Announcement like a PR & Comms Director"
+  - "像公关传播总监一样写产品发布公告"
+  - "launch"
+  - "campaign"
+  - "pipeline"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/broadside"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Write a Product-Launch Announcement like a PR & Comms Director\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Audience: press, community, prospects. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Broadside

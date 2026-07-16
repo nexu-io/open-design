@@ -3,7 +3,7 @@
 // Plugins home section — UI contract.
 //
 // The section renders artifact-kind filters for the starter grid:
-// Prototype / Live Artifact / Slides / Image / Video / HyperFrames / Audio.
+// Slides / Prototype / Live Artifact / Image / Video / HyperFrames / Audio.
 // Prototype, Slides, Image, and Video expose a second row of scene buckets;
 // the smaller Live Artifact, HyperFrames, and Audio slices stay flat. Saved is an
 // orthogonal user collection override, and sparse buckets should fall
@@ -27,6 +27,9 @@ function makePlugin(overrides: {
   featured?: boolean;
   mode?: string;
   kind?: 'scenario' | 'atom';
+  preview?: Record<string, unknown>;
+  assets?: string[];
+  exampleOutputs?: Array<{ path: string; title?: string }>;
 }): InstalledPluginRecord {
   return {
     id: overrides.id,
@@ -47,7 +50,10 @@ function makePlugin(overrides: {
       od: {
         kind: overrides.kind ?? 'scenario',
         ...(overrides.mode ? { mode: overrides.mode } : {}),
+        ...(overrides.preview ? { preview: overrides.preview } : {}),
         ...(overrides.featured ? { featured: true } : {}),
+        ...(overrides.assets ? { context: { assets: overrides.assets } } : {}),
+        ...(overrides.exampleOutputs ? { useCase: { exampleOutputs: overrides.exampleOutputs } } : {}),
       },
     },
     fsPath: '/tmp',
@@ -101,6 +107,7 @@ function pluginIds(): Array<string | null> {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -124,7 +131,7 @@ const sample: InstalledPluginRecord[] = [
     tags: ['live-artifacts'],
   }),
   makePlugin({ id: 'example-live-artifact', mode: 'prototype', tags: ['live-artifact'] }),
-  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['pitch-deck'], featured: true }),
+  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['fundraising-pitch'], featured: true }),
   makePlugin({ id: 'image-logo', mode: 'image', tags: ['logo'] }),
   makePlugin({ id: 'video-short', mode: 'video', tags: ['short-form'] }),
   makePlugin({ id: 'video-cinematic', mode: 'video', tags: ['cinematic'] }),
@@ -134,14 +141,72 @@ const sample: InstalledPluginRecord[] = [
 ];
 
 describe('PluginsHomeSection (community gallery)', () => {
-  it('keeps gallery tiles free of inline Use actions — Use lives in the detail modal', () => {
-    renderSection(sample, { cardLayout: 'gallery' });
+  it('caps the initial gallery render so template loading does not mount the full catalog at once', () => {
+    class MockIntersectionObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+      takeRecords = () => [];
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+    const manyPlugins = Array.from({ length: 30 }, (_value, index) =>
+      makePlugin({
+        id: `prototype-gallery-${index + 1}`,
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
 
-    // The tile itself stays a pure preview: name button opens details,
-    // ↗ opens the example page. Use / Use with query are detail-modal
-    // affordances only.
+    renderSection(manyPlugins, {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+    });
+
+    expect(pluginIds()).toHaveLength(12);
+    expect(screen.getByRole('list').querySelector('.plugins-home__load-more-sentinel')).toBeTruthy();
+  });
+
+  it('surfaces gallery tile actions without restoring the heavier split Use menu', () => {
+    const onUse = vi.fn();
+    const onDuplicate = vi.fn();
+    const onOpenDetails = vi.fn();
+    renderSection([
+      makePlugin({
+        id: 'prototype-dashboard',
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+      makePlugin({
+        id: 'image-logo',
+        mode: 'image',
+        tags: ['logo'],
+        preview: { type: 'image', entry: './final/logo.png', poster: './final/logo.png' },
+      }),
+    ], {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+      onUse,
+      onDuplicate,
+      onOpenDetails,
+    });
+
+    // The tile overlay exposes direct actions, but keeps the richer
+    // split-menu affordance in the detail modal/rich management surface.
     expect(screen.getByTestId('plugins-home-details-prototype-dashboard')).toBeTruthy();
-    expect(screen.queryByTestId('plugins-home-use-prototype-dashboard')).toBeNull();
+    fireEvent.click(screen.getByTestId('plugins-home-use-prototype-dashboard'));
+    expect(onUse).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'prototype-dashboard' }),
+      'use',
+    );
+    expect(onOpenDetails).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('plugins-home-duplicate-prototype-dashboard'));
+    expect(onDuplicate).toHaveBeenCalledWith(expect.objectContaining({ id: 'prototype-dashboard' }));
+    expect(onOpenDetails).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('plugins-home-duplicate-image-logo')).toBeNull();
+
     expect(screen.queryByTestId('plugins-home-use-menu-prototype-dashboard')).toBeNull();
     expect(screen.queryByTestId('plugins-home-use-with-query-prototype-dashboard')).toBeNull();
   });
@@ -149,7 +214,17 @@ describe('PluginsHomeSection (community gallery)', () => {
   it('keeps the inline Use menu on the rich management layout (PluginsView)', () => {
     renderSection(sample, { cardLayout: 'rich' });
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     expect(screen.getByTestId('plugins-home-use-prototype-dashboard')).toBeTruthy();
+  });
+
+  it('hides All and keeps Slides selected on the lightweight gallery layout', () => {
+    renderSection(sample, { cardLayout: 'gallery' });
+
+    expect(screen.queryByTestId('plugins-home-pill-category-all')).toBeNull();
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
   });
 });
 
@@ -163,7 +238,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the artifact category row and the default Prototype scene row', () => {
+  it('renders the artifact category row and the default Slides scene row', () => {
     renderSection();
 
     expect(screen.getByTestId('plugins-home-row-category')).toBeTruthy();
@@ -180,10 +255,8 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-export')).toBeNull();
 
-    expect(screen.getByTestId('plugins-home-row-subcategory-prototype')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-business-dashboards')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-developer-tools')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-row-subcategory-deck')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-deck-fundraising-pitch')).toBeTruthy();
   });
 
   it('filters Video separately from HyperFrames', () => {
@@ -227,6 +300,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('saves a plugin, updates the Saved chip, and shows a toast', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
 
     expect(screen.getByTestId('plugins-home-save-prototype-dashboard').textContent).toContain('Saved');
@@ -309,6 +383,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('Saved chip overrides the category selection and shows only saved plugins', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
     fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));
@@ -343,5 +418,57 @@ describe('PluginsHomeSection (category bar)', () => {
       'video-cinematic',
       'video-short',
     ]);
+  });
+});
+
+describe('PluginsHomeSection (sort toggle)', () => {
+  // Distinct timestamps so "newest" produces an observable re-order:
+  // visual appeal would lead with the poster-preview tile, freshness
+  // leads with the most recently updated record.
+  const timestamped: InstalledPluginRecord[] = [
+    {
+      ...makePlugin({
+        id: 'shiny-but-old',
+        mode: 'image',
+        tags: ['logo'],
+        preview: { type: 'image', entry: './final/logo.png', poster: './final/logo.png' },
+      }),
+      installedAt: 100,
+      updatedAt: 100,
+    },
+    {
+      ...makePlugin({ id: 'plain-but-fresh', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 300,
+      updatedAt: 300,
+    },
+    {
+      ...makePlugin({ id: 'plain-and-mid', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 200,
+      updatedAt: 200,
+    },
+  ];
+
+  it('defaults to hot and re-ranks by freshness when Newest is picked', () => {
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    // Hot (default): the poster-preview tile outranks the text-only ones.
+    expect(pluginIds()[0]).toBe('shiny-but-old');
+    expect(screen.getByTestId('plugins-home-sort-hot').getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('remembers the picked order across remounts', () => {
+    const first = renderSection(timestamped, { preferDefaultFacet: false });
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+    first.unmount();
+
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
   });
 });

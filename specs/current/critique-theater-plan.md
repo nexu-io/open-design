@@ -1916,9 +1916,9 @@ git commit -m "feat(web,daemon): Settings toggle Critique Theater (beta)"
 
 ### Adapter test matrix and pass criteria
 
-The conformance harness runs against every adapter listed `status: production` in `docs/agent-adapters.md`. v1 production adapters: `claude-code`, `codex`, `cursor-agent`, `gemini-cli`, `devin`, `opencode`, `qwen-code`, `copilot-cli`, `hermes-acp`, `kimi-acp`, `pi-rpc`, `kiro-acp`, plus the `byok-proxy` fallback. Adapters in `status: experimental` are run nightly but do not block the per-adapter green badge.
+The conformance harness runs against every adapter listed `status: production` in `docs/agent-adapters.md`. v1 production adapters: `claude-code`, `codex`, `cursor-agent`, `gemini-cli`, `devin`, `opencode`, `qwen-code`, `copilot-cli`, `hermes-acp`, `kimi-acp`, `pi-rpc`, `kiro-acp`, plus the `byok-proxy` fallback. Adapters in `status: experimental` are run prerelease but do not block the per-adapter green badge.
 
-**Brief templates** (10 templates × 13 adapters = 130 runs per nightly cycle):
+**Brief templates** (10 templates × 13 adapters = 130 runs per prerelease cycle):
 
 | Template | Skill | Stresses |
 | --- | --- | --- |
@@ -1933,7 +1933,7 @@ The conformance harness runs against every adapter listed `status: production` i
 | `t09_cjk_copy` | social-carousel | Japanese copy, exercises i18n in copy review |
 | `t10_three_round_grind` | dating-web | brief that empirically requires all 3 rounds to converge |
 
-**Pass criteria per adapter:** ≥ 90% of the 10 brief templates complete with `critique_status='shipped'` within `totalTimeoutMs`, and ≥ 95% of those parse cleanly (zero `MalformedBlockError`, `OversizeBlockError`, or `MissingArtifactError`). Any adapter that drops under either threshold for two consecutive nightly cycles is automatically marked `critique:degraded` with TTL = 24 hours; the operator gets one alert per adapter at the first failure.
+**Pass criteria per adapter:** ≥ 90% of the 10 brief templates complete with `critique_status='shipped'` within `totalTimeoutMs`, and ≥ 95% of those parse cleanly (zero `MalformedBlockError`, `OversizeBlockError`, or `MissingArtifactError`). Any adapter that drops under either threshold for two consecutive prerelease cycles is automatically marked `critique:degraded` with TTL = 24 hours; the operator gets one alert per adapter at the first failure.
 
 **Retry budget:** any single template that emits `critique.degraded` is retried once with the same brief and adapter. Two consecutive `degraded` runs count as one failure for the rate calculation. Templates that emit `critique.interrupted` due to user action do not count toward conformance (interrupts are user-initiated, not adapter regressions).
 

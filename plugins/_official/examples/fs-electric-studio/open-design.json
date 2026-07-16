@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-fs-electric-studio",
-  "title": "Electric Studio",
+  "title": "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE",
   "title_i18n": {
-    "en": "Electric Studio",
-    "zh-CN": "钴蓝工作室"
+    "en": "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE",
+    "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案",
+    "zh-TW": "像一线企业客户 AE 一样写 B2B SaaS 销售提案"
   },
   "version": "1.0.0",
-  "description": "Bold, clean split-panel HTML decks: white panel over cobalt #4361ee, brand marks in the corners, a dark accent bar on the panel edge, quote typography as the hero element, all-Manrope (800/400), confident restrained spacing. Fixed 1920x1080 stage scaled uniformly to any viewport, zero dependencies. Based on zarazhangrui/frontend-slides electric-studio (STYLE_PRESETS section 2).",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
   "description_i18n": {
-    "en": "Bold, clean split-panel HTML decks: white panel over cobalt #4361ee, brand marks in the corners, a dark accent bar on the panel edge, quote typography as the hero element, all-Manrope (800/400), confident restrained spacing. Fixed 1920x1080 stage scaled uniformly to any viewport, zero dependencies. Based on zarazhangrui/frontend-slides electric-studio (STYLE_PRESETS section 2).",
-    "zh-CN": "大胆干净的上下分割面板 HTML 幻灯片：白色面板 × 钴蓝 #4361ee 面板，四角 brand marks，面板接缝处深色 accent bar，引文排印作为主视觉，全 Manrope（800/400），克制自信的留白。固定 1920x1080 舞台等比缩放适配任意视口，零依赖单文件。Based on zarazhangrui/frontend-slides electric-studio (STYLE_PRESETS section 2)。"
+    "en": "Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
+    "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -32,7 +35,15 @@
     "bold",
     "manrope",
     "web",
-    "ppt"
+    "ppt",
+    "sales",
+    "renewal",
+    "customer",
+    "fs-electric-studio",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -45,7 +56,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "sales",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -54,16 +65,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create an Electric Studio {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, as a {{density}} deck. Output one self-contained single-file HTML deck with zero dependencies (all CSS/JS inline, no build step, no external JS libraries, icons as inline SVG, charts as pure CSS). The Electric Studio theme is LOCKED - start from this plugin's example.html seed and replace content only; never redesign. Hard rules: (1) Fixed 16:9 stage - author every slide on a 1920x1080 canvas inside .deck-viewport > .deck-stage and scale the whole stage uniformly with one transform (factor = min(innerWidth/1920, innerHeight/1080), centered with letterbox); never reflow content per device, no responsive breakpoints inside slides; keep the seed's full viewport-base.css block and the entire SlidePresentation controller script verbatim (keyboard arrows/Space/PageUp/PageDown/Home/End, debounced wheel, touch swipe, #/<index> hash routing, page counter chrome fixed outside the scaled stage). (2) Each page is one <section class=\"slide\"> switched via .active/.visible classes toggling visibility/opacity/pointer-events - never display:none. (3) Locked design tokens, all in :root and nowhere else: --bg-dark:#0a0a0a; --bg-white:#ffffff; --accent-blue:#4361ee; --text-dark:#0a0a0a; --text-light:#ffffff; soft variants --text-dark-soft:rgba(10,10,10,.58), --text-light-soft:rgba(255,255,255,.72); hairlines --line-dark:rgba(10,10,10,.14), --line-light:rgba(255,255,255,.28); --blue-soft:rgba(67,97,238,.10). No other hues - no gradients, no purple, no warm accents. (4) Locked typography: Manrope only (Google Fonts, weights 400/500/800); display type is Manrope 800 with tight negative letter-spacing (-0.025em to -0.035em); body is 400/500; kickers and marks are 800 uppercase with wide tracking. Never substitute another typeface. (5) Locked layout system - every slide is a vertical two-panel split (.split > .panel-white + .edge-bar + .panel-blue): white panel above, cobalt #4361ee panel below, with a 14px dark #0a0a0a accent bar (.edge-bar) on the panel seam; vary only the split ratio per master (50/50 title, shallow-top dividers/closings with the blue panel dominant, deep-top content slides with a blue takeaway strip). Brand marks sit in the four corners of every slide (.mark-tl/.mark-tr/.mark-bl/.mark-br): cobalt chip + wordmark top-left, section label top-right, deck label bottom-left, NN / NN page mark bottom-right; marks over white are dark, marks over blue are light. (6) Quote typography is the hero visual language: at least one quote-hero slide with an oversized cobalt ldquo mark and Manrope 800 statement type around 92px; no photography, no illustrations - type, flat panels, and the cobalt chip are the only decoration; keep spacing confident and restrained. (7) Compose slides from the seed's masters: title (50/50 statement), agenda (numbered rows on blue), section divider (outlined giant number on cobalt), bullets (ticks on white + takeaway strip on blue), big stat (oversized cobalt number), quote hero, comparison (white panel = their way vs blue panel = our way), 2x2 principle grid on cobalt, pure-CSS bar chart (cobalt bars, scaleY entrance), closing (blue dominant statement). (8) Motion: entrances only via .reveal elements staggered with transition-delay (~0.1s steps) when the slide gains .visible; single easing cubic-bezier(0.16,1,0.3,1); animate only transform and opacity; prefers-reduced-motion support stays. (9) No scrolling, no overflow; split content into more slides instead of shrinking type; low-density speaker-led decks get one idea per slide with 1-3 bullets, high-density reading-first decks get structured grids with max 4-6 cards.",
-        "zh-CN": "用 Electric Studio（钴蓝工作室）锁定主题为 {{audience}} 创作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}，{{density}}）：零依赖单文件 HTML，固定 1920x1080 舞台等比缩放；每页都是「白上 × 钴蓝 #4361ee 下」的上下分割面板，面板接缝 14px 深色 accent bar，四角 brand marks（钴蓝色块 + 字标 / 章节 / 页码），全 Manrope（display 800 紧排印、正文 400/500），引文排印为主视觉，无照片无插画、仅平面色块与排印装饰。从插件内 example.html 种子出发，保留舞台缩放系统、SlidePresentation 导航脚本与 :root token 原样，只替换内容；禁止引入规格外的颜色和字体。完整硬性规格以英文 prompt 为准。"
+        "en": "Create \"Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Audience: economic buyer, design VP, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案。像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Voltaic Studio - Electric Studio capabilities deck",
+          "title": "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE",
           "title_i18n": {
-            "en": "Voltaic Studio - Electric Studio capabilities deck",
-            "zh-CN": "Voltaic Studio · 钴蓝工作室能力介绍演示"
+            "en": "Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE",
+            "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案",
+            "zh-TW": "像一线企业客户 AE 一样写 B2B SaaS 销售提案"
           }
         }
       ]
@@ -153,6 +165,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "b2b-sales"
   }
 }

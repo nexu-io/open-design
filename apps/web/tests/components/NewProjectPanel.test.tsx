@@ -795,6 +795,30 @@ describe('NewProjectPanel working directory picker', () => {
     expect(await screen.findByText(/Couldn't open the folder picker/i)).toBeTruthy();
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
+
+  it('surfaces browser picker daemon failures with localized copy and native details', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockRejectedValue(new Error('Could not open folder picker: zenity is not installed'));
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
+
+    expect(await screen.findByText('Could not open folder picker')).toBeTruthy();
+    expect(await screen.findByText('zenity is not installed')).toBeTruthy();
+    expect(screen.queryByText('Could not open folder picker: zenity is not installed')).toBeNull();
+    expect(mockedOpenFolderDialog).toHaveBeenCalledWith({ throwOnError: true });
+  });
 });
 
 describe('NewProjectPanel folder import feedback', () => {
@@ -968,5 +992,123 @@ describe('NewProjectPanel template deletion', () => {
 
     resolveDelete(true);
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
+});
+
+describe('NewProjectPanel start-from rail', () => {
+  const deckTemplate: SkillSummary = {
+    id: 'html-ppt-pitch-deck',
+    name: 'Pitch deck',
+    description: 'Investor pitch deck template',
+    mode: 'deck',
+    surface: 'web',
+    previewType: 'html',
+    designSystemRequired: true,
+    defaultFor: [],
+    triggers: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: '',
+    aggregatesExamples: false,
+  };
+  const prototypeTemplate: SkillSummary = {
+    id: 'saas-landing',
+    name: 'SaaS landing',
+    description: 'SaaS landing page template',
+    mode: 'prototype',
+    surface: 'web',
+    previewType: 'html',
+    designSystemRequired: true,
+    defaultFor: [],
+    triggers: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: '',
+    aggregatesExamples: false,
+  };
+  const deckSkill: SkillSummary = {
+    id: 'simple-deck',
+    name: 'Simple deck',
+    description: 'Default deck skill',
+    mode: 'deck',
+    surface: 'web',
+    previewType: 'html',
+    designSystemRequired: true,
+    defaultFor: ['deck'],
+    triggers: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: '',
+    aggregatesExamples: false,
+  };
+
+  function renderPanel(onCreate = vi.fn()) {
+    render(
+      <NewProjectPanel
+        skills={[...skills, deckSkill]}
+        designTemplates={[deckTemplate, prototypeTemplate]}
+        designSystems={designSystems}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+    return onCreate;
+  }
+
+  it('shows a Blank-first rail scoped to the tab mode and defaults create to the tab skill', () => {
+    const onCreate = renderPanel();
+
+    const blank = screen.getByTestId('newproj-start-blank');
+    expect(blank.getAttribute('aria-checked')).toBe('true');
+    // Blank card renders before any template card inside the rail.
+    const row = blank.parentElement!;
+    expect(row.firstElementChild).toBe(blank);
+    // Prototype tab only offers prototype-mode templates.
+    expect(screen.getByTestId('newproj-start-saas-landing')).toBeTruthy();
+    expect(screen.queryByTestId('newproj-start-html-ppt-pitch-deck')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('create-project'));
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ skillId: 'prototype-skill' }),
+    );
+  });
+
+  it('routes create through the picked design template', () => {
+    const onCreate = renderPanel();
+
+    fireEvent.click(screen.getByTestId('newproj-start-saas-landing'));
+    expect(
+      screen.getByTestId('newproj-start-saas-landing').getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(
+      screen.getByTestId('newproj-start-blank').getAttribute('aria-checked'),
+    ).toBe('false');
+
+    fireEvent.click(screen.getByTestId('create-project'));
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ skillId: 'saas-landing' }),
+    );
+  });
+
+  it('resets to Blank when switching tabs so a pick never leaks across scenarios', () => {
+    const onCreate = renderPanel();
+
+    fireEvent.click(screen.getByTestId('newproj-start-saas-landing'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Slide deck' }));
+
+    // Deck tab shows its own rail: blank first, deck templates only.
+    expect(
+      screen.getByTestId('newproj-start-blank').getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(screen.getByTestId('newproj-start-html-ppt-pitch-deck')).toBeTruthy();
+    expect(screen.queryByTestId('newproj-start-saas-landing')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('create-project'));
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ skillId: 'simple-deck' }),
+    );
   });
 });

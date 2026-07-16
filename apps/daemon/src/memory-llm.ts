@@ -43,6 +43,7 @@
 // — produces a record in `memory-extractions.ts` so the settings panel
 // can show running / skipped / success / failed states in real time.
 
+import { MEMORY_TYPES } from '@open-design/contracts';
 import {
   composeMemoryBody,
   listMemoryEntries,
@@ -59,10 +60,11 @@ import {
   markSuccess,
   markFailed,
 } from './memory-extractions.js';
-import { resolveProviderConfig } from './media-config.js';
-import { AIHUBMIX_APP_CODE } from './aihubmix.js';
+import { resolveProviderConfig } from './media/config.js';
+import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   applyAgentLaunchEnv,
@@ -71,7 +73,7 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -103,6 +105,39 @@ Type rules:
 - feedback: corrections / preferences about how to work ("don't add comments unless asked")
 - project: ongoing initiatives, deadlines, why-decisions; usually time-bounded
 - reference: pointers to external systems (Linear projects, Slack channels, dashboards)`;
+
+// Specialised system prompt for the annotation distiller. The user just
+// reviewed a generated design artifact and left inline marks — comments,
+// highlights, or drawn strokes — on specific elements. We turn the durable
+// signal in those marks into `feedback` (a standing preference) and `rule`
+// (an enforceable, checkable constraint) memory so the next generation honors
+// it without the user re-explaining. The output shape matches the generic
+// extractor so the same parser/writer pipeline applies.
+const ANNOTATION_SYSTEM_PROMPT = `You are a memory distiller for a personal AI design assistant.
+
+The user just reviewed a generated design artifact and left inline annotations — comments, highlights, or drawn marks — each attached to a specific element. Your job is to distill any STANDING design preference or constraint the user is expressing, so future generations honor it without the user repeating themselves.
+
+Only extract a fact when the annotation expresses a durable preference that should apply to FUTURE work — never a one-off tweak to this single element.
+- "make THIS button green" → one-off, do NOT remember.
+- "always use the brand green for primary actions" / a complaint they clearly keep making → durable, remember.
+- "too busy" / "太花了" as a recurring critique → remember as feedback about visual density / decoration.
+
+Generalize the wording so it is not tied to this one element, page, or run.
+
+Output STRICT JSON in this exact shape — nothing else, no prose, no markdown fences:
+{
+  "entries": [
+    { "type": "feedback|rule", "name": "short title (≤ 60 chars)", "description": "one-line summary (≤ 140 chars)", "body": "the remembered preference/rule" }
+  ]
+}
+
+If nothing is durable, return: {"entries": []}
+
+Type rules:
+- feedback: a preference about how to work or what the user likes/dislikes ("keep decoration minimal — at most two accent colors").
+- rule: an enforceable, checkable constraint. The body MUST be exactly two lines:
+  Assertion: <what must always hold in the output>
+  Check: <how to verify it on a rendered artifact>`;
 
 // Provider defaults are centralised so the override path and the
 // auto-pick path can't drift apart. When the user picks "Custom →
@@ -454,6 +489,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // big chat model (gpt-4o, claude-sonnet-4-5) silently turns into a
   // cheap haiku/mini call. The caller can opt into using the chat
   // model verbatim by setting `chatProvider.model`.
+  //
+  // Keyless BYOK (local vLLM / Ollama / openai-compatible servers with
+  // `requiresApiKey: false`) is also valid — the web app explicitly
+  // marks it via `requiresApiKey: false` on the snapshot. We must
+  // enter the BYOK branch in that case too because the alternative
+  // paths below all require an env / media-config key and would fall
+  // back to unrelated OpenAI credentials (the gpt-4o-mini default this
+  // hook exists to avoid), defeating the BYOK guarantee.
   if (
     chatProvider
     && chatProvider.provider
@@ -461,13 +504,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   ) {
     const apiKey =
       typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
-    if (apiKey) {
+    const allowKeyless = chatProvider.requiresApiKey === false;
+    if (apiKey || allowKeyless) {
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
         (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
         || defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
-      // the override path above.
+      // the override path above. (Azure is never keyless.)
       if (chatProvider.provider !== 'azure' || baseUrl) {
         const explicitModel =
           typeof chatProvider.model === 'string' && chatProvider.model.trim()
@@ -485,6 +529,10 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
                 || PROVIDER_DEFAULTS.azure.apiVersion
               : '',
           credentialSource: 'chat-byok',
+          // Preserve the keyless signal for the HTTP call layer so it
+          // omits the Authorization header instead of sending `Bearer `
+          // (empty) which the local server would reject.
+          ...(allowKeyless ? { requiresApiKey: false } : {}),
         };
       }
     }
@@ -681,7 +729,14 @@ async function callOpenAI(provider, system, user) {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${provider.apiKey}`,
+          // Keyless BYOK endpoints (local vLLM / Ollama / openai-compatible
+          // servers marked with `requiresApiKey: false`) accept requests
+          // without an Authorization header — sending `Bearer ` (empty)
+          // would cause some servers to reject the call. Only attach the
+          // header when we actually have a key.
+          ...(provider.apiKey
+            ? { authorization: `Bearer ${provider.apiKey}` }
+            : {}),
           // AIHubMix routes through this same OpenAI-compatible path but wants
           // the fixed APP-Code attribution header on every request.
           ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
@@ -993,7 +1048,10 @@ function parseEntries(rawText) {
     }
   }
   const list = Array.isArray(parsed?.entries) ? parsed.entries : [];
-  const validTypes = new Set(['user', 'feedback', 'project', 'reference']);
+  // Accept every type the shared contract knows about — including the new
+  // `profile` / `rule` buckets — so an LLM that proposes a verified rule or a
+  // profile fact isn't silently discarded here.
+  const validTypes = new Set(MEMORY_TYPES);
   return list
     .filter(
       (e) =>
@@ -1025,6 +1083,46 @@ function toMemoryDraft(candidate) {
   };
 }
 
+// Duplicate-turn de-duplication for chat ('llm') extraction. The daemon fires
+// the extractor from a run's child-close hook, so a turn that is re-fed —
+// retried, re-posted, or re-ground during a long build — re-enters here with the
+// same (conversation, user message, rendered reply). A failed/out-of-credits
+// attempt yields an empty reply, so the whole re-fire storm shares one signature
+// and collapses to a single pass. The signature is keyed by conversation, so an
+// identical message+reply in a different conversation is still examined, and it
+// is recorded only AFTER a provider call succeeds (see collectProposedEntries) —
+// a failed or no-provider attempt must not permanently mark a turn as seen. The
+// set is bounded, and process-lifetime only: a restart is a fine reason to
+// re-examine a turn.
+const RECENT_LLM_TURN_LIMIT = 256;
+const recentLlmTurnSignatures = new Set();
+
+function llmTurnSignature(conversationKey, userMessage, assistantMessage) {
+  // JSON-encode the parts so the (conversation, message, reply) boundaries are
+  // unambiguous without a separator byte the content itself could contain.
+  return createHash('sha256')
+    .update(JSON.stringify([
+      String(conversationKey ?? ''),
+      String(userMessage ?? ''),
+      String(assistantMessage ?? ''),
+    ]))
+    .digest('hex');
+}
+
+function rememberLlmTurnSignature(signature) {
+  recentLlmTurnSignatures.add(signature);
+  if (recentLlmTurnSignatures.size > RECENT_LLM_TURN_LIMIT) {
+    // Evict the oldest (insertion order) so the working set stays bounded.
+    const oldest = recentLlmTurnSignatures.values().next().value;
+    if (oldest !== undefined) recentLlmTurnSignatures.delete(oldest);
+  }
+}
+
+// Test-only — reset the duplicate-turn de-dup set so specs start from a clean slate.
+export function __resetMemoryTurnDedupeForTests() {
+  recentLlmTurnSignatures.clear();
+}
+
 async function collectProposedEntries(dataDir, input, options) {
   const projectRoot = options?.projectRoot ?? null;
   const chatAgentId = options?.chatAgentId ?? null;
@@ -1053,6 +1151,34 @@ async function collectProposedEntries(dataDir, input, options) {
   if (userMessage.length === 0) {
     recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+  }
+
+  // Duplicate-turn gate — skip BEFORE picking a provider so no LLM call is spent
+  // re-mining a turn already extracted. The daemon fires this from the run's
+  // child-close hook, which re-runs on every retry / re-fed attempt of the same
+  // turn (a long out-of-credits build re-analyzed one turn dozens of times). A
+  // failed attempt has an empty reply, so its (conversation, message, "")
+  // signature is identical across the storm and collapses to a single pass.
+  // Deliberately NOT gated on retryAttemptCount: a turn that only succeeds on a
+  // retry produces its reply on that attempt, and must still be mined. The
+  // signature is recorded only AFTER a successful provider call (below), so a
+  // failed or no-provider extraction never permanently marks the turn as seen.
+  //
+  // Gate is scoped to a REAL conversation id. Callers that don't thread one —
+  // e.g. the BYOK/API-mode `/api/memory/extract` post-turn path — get no
+  // de-dup at all, because an empty fallback key would be shared across every
+  // such caller and collapse identical (message, reply) pairs from unrelated
+  // conversations into a single skipped extraction. The chat close hook that
+  // caused the re-fire storm always passes `run.conversationId`, so its
+  // protection is preserved.
+  const conversationKey =
+    typeof options?.conversationId === 'string' ? options.conversationId : '';
+  let turnSignature = null;
+  if (extractionKind === 'llm' && conversationKey) {
+    turnSignature = llmTurnSignature(conversationKey, userMessage, input?.assistantMessage);
+    if (recentLlmTurnSignatures.has(turnSignature)) {
+      return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+    }
   }
 
   const provider = await pickProvider(
@@ -1140,6 +1266,10 @@ async function collectProposedEntries(dataDir, input, options) {
     return { status: 'failed', attemptId, proposed: [], existingEntries };
   }
   markProposed(attemptId, proposed.length);
+  // Provider call succeeded (even an empty extraction) — now safe to remember
+  // this turn so identical re-fires skip. Recording here, not before the call,
+  // means a failed / no-provider attempt can still be retried for this turn.
+  if (turnSignature) rememberLlmTurnSignature(turnSignature);
   return { status: 'ok', attemptId, proposed, existingEntries };
 }
 
@@ -1157,6 +1287,75 @@ export async function suggestWithLLM(dataDir, input, options) {
   });
 
   return suggestions;
+}
+
+// Build the distiller payload from a turn's annotations. Each annotation is
+// the user's words plus enough target context (what element, its current
+// copy, the mark intent) for the model to judge whether the critique is a
+// one-off or a standing preference. The typed message that rode along with
+// the annotations is appended as extra context.
+function renderAnnotationPayload(annotations, userMessage) {
+  const parts = [
+    'The user reviewed a generated design artifact and left these inline annotations:',
+  ];
+  annotations.forEach((a, index) => {
+    parts.push('');
+    parts.push(`Annotation ${index + 1}:`);
+    parts.push(`- comment: ${String(a.comment || '').trim()}`);
+    if (a.label) parts.push(`- target element: ${String(a.label).trim()}`);
+    if (a.currentText) {
+      parts.push(`- target current text: ${String(a.currentText).trim().slice(0, 240)}`);
+    }
+    if (a.selectionKind) parts.push(`- selection kind: ${a.selectionKind}`);
+    if (a.intent) parts.push(`- mark intent: ${a.intent}`);
+    if (a.markKind) parts.push(`- mark kind: ${a.markKind}`);
+  });
+  const trimmedMessage = String(userMessage || '').trim();
+  if (trimmedMessage.length > 0) {
+    parts.push('');
+    parts.push('The message the user sent alongside the annotations:');
+    parts.push(trimmedMessage.slice(0, 2000));
+  }
+  parts.push('');
+  parts.push(
+    'Return ONLY the JSON object described in the system prompt — no prose, no fences.',
+  );
+  return parts.join('\n');
+}
+
+// Auto-distill preview annotations (comments / highlights / drawn marks) into
+// durable `feedback` and `rule` memory. This is the automatic half of the
+// "interaction → memory" loop: instead of waiting for the agent to propose a
+// rule and the user to click Keep, every review turn that carries inline
+// feedback is mined in the background and written straight to the store
+// (auto-keep), de-duped against existing entries. Reuses extractWithLLM so the
+// provider selection, memory toggles, dedup, index linking, and the batched
+// `extract` change event (which drives the "Memory updated" toast) all apply.
+//
+// `input.annotations` is the turn's comment-attachment list; only annotations
+// carrying a non-empty user comment are mined (a bare highlight with no words
+// has no durable signal to distill). Returns the written entries.
+export async function distillAnnotationsToMemory(dataDir, input, options) {
+  const annotations = Array.isArray(input?.annotations) ? input.annotations : [];
+  const withComment = annotations.filter(
+    (a) => a && typeof a.comment === 'string' && a.comment.trim().length > 0,
+  );
+  if (withComment.length === 0) return [];
+  const payload = renderAnnotationPayload(withComment, input?.userMessage);
+  return extractWithLLM(
+    dataDir,
+    { userMessage: payload, assistantMessage: input?.assistantMessage },
+    {
+      ...options,
+      systemPrompt: ANNOTATION_SYSTEM_PROMPT,
+      source: 'annotation',
+      kind: 'annotation',
+      // The distiller only deals in durable preferences/constraints — never
+      // let it spawn project/reference/user noise from a design critique.
+      candidateFilter: (candidate) =>
+        candidate.type === 'feedback' || candidate.type === 'rule',
+    },
+  );
 }
 
 export async function extractWithLLM(dataDir, input, options) {

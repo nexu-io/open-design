@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-huashu-annual-letter",
-  "title": "Annual Letter",
+  "title": "Write an Annual Founder's Letter like a Mission-Driven CEO",
   "title_i18n": {
-    "en": "Annual Letter",
-    "zh-CN": "年度信笺"
+    "en": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+    "zh-CN": "像使命驱动的 CEO 一样写年度公开信",
+    "zh-TW": "像使命驱动的 CEO 一样写年度公开信"
   },
   "version": "1.0.0",
-  "description": "Stripe-annual-letter style single-file HTML decks: cream #FBFAF8 paper with a single Stripe-purple #635BFF accent, serif prose paragraphs at a 65ch publication measure, inline data cards embedded in the running text, and oversized tabular display-number anchor pages — the 'editorial longform' letter genre, prose flow instead of bullets. Based on alchaincyf/huashu-design editorial-longform (design-styles.md 安静派 · Editorial Longform).",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.",
   "description_i18n": {
-    "en": "Stripe-annual-letter style single-file HTML decks: cream #FBFAF8 paper with a single Stripe-purple #635BFF accent, serif prose paragraphs at a 65ch publication measure, inline data cards embedded in the running text, and oversized tabular display-number anchor pages — the 'editorial longform' letter genre, prose flow instead of bullets. Based on alchaincyf/huashu-design editorial-longform (design-styles.md 安静派 · Editorial Longform).",
-    "zh-CN": "Stripe 年度信流派的单文件 HTML 幻灯片：奶白 #FBFAF8 纸面 + 单一 Stripe 紫 #635BFF 点睛，衬线散文体段落控制在 65ch 出版物行宽，内联数据卡嵌进正文流，超大 tabular display 数字锚点页穿插——「散文流 + 内联数据卡」的年度信文体，用段落而不是 bullet 说话。Based on alchaincyf/huashu-design editorial-longform（design-styles.md 安静派 · 杂志编辑长文流）。"
+    "en": "Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.",
+    "zh-CN": "像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -31,7 +34,15 @@
     "longform",
     "serif",
     "stripe-style",
-    "huashu"
+    "huashu",
+    "board",
+    "strategy",
+    "business-review",
+    "huashu-annual-letter",
+    "corporate-strategy",
+    "board-pre-read-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -44,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "strategy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -53,16 +64,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create an annual-letter style {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Annual Letter (editorial longform) system from huashu-design: a fixed 1920×1080 canvas auto-scaled to the viewport; cream paper #FBFAF8 background on every page with deep-ink text and exactly ONE accent color, Stripe purple #635BFF, used at most 3 touches per page; Newsreader + Noto Serif SC display headings and Source Serif prose, Inter for small labels and captions, all numerals tabular (font-variant-numeric: tabular-nums). Pages read like a published letter, not a slide template: a letterhead strip top (publication name left, issue/date right, hairline rule), a footer hairline (section name left, author meta right), and body content drawn from the locked layout enumeration — cover masthead page, letter contents page, salutation/prose page with drop cap, giant display-number anchor page (180–280px tabular numeral in purple), prose-with-inline-data-cards page (metric cards embedded beside or inside the running text), minimal SVG chart page (single purple line, no chartjunk), full-bleed quote page, metrics-panorama card grid, and a signed closing page. Prose paragraphs stay at the publication measure (max-width ≈ 65ch, ~980px on the 1920 canvas), body serif ≥ 24px, line-height ≥ 1.85; write flowing prose sentences, never bullet lists, and let inline data cards carry the numbers. No dark slides — rhythm comes from density alternation (prose page → display-number page → whitespace/quote page). Build a single self-contained HTML file by copying example.html and replacing content only — keep its design tokens, navigation script (←/→/Space keys, #/N hash routing, click zones, counter pill) and chrome intact; never introduce colors or fonts outside the spec, no gradients, no emoji icons, inline SVG only, zero external JS. Use the user's real content and real numbers; missing data gets an honest placeholder comment, never invented statistics. Chinese copy uses 「」 quotes.",
-        "zh-CN": "用「年度信笺」（huashu-design 杂志编辑长文流）体系，为 {{audience}} 写一封关于 {{topic}} 的 {{deckType}}，页数 {{slideCount}}：1920×1080 固定画布自适应缩放；每页奶白 #FBFAF8 纸底 + 深墨正文，全 deck 只有一个点睛色 Stripe 紫 #635BFF（每页最多 3 处）；Newsreader + Noto Serif SC 衬线大标题、Source Serif 散文正文、Inter 小标签，数字一律 tabular。版式从锁定枚举取用：刊头封面、信之纲目、信首散文页（首字下沉）、超大 display 数字锚点页、散文+内联数据卡页、极简 SVG 图表页、整页引语页、数据全景卡片网格、署名结尾页。散文段落控制在 65ch 出版物行宽（1920 画布上约 980px），正文衬线 ≥24px、行高 ≥1.85；用连贯散文而不是 bullet，数字交给内联数据卡。全亮色无深色页，节奏靠密度交替。从 example.html 复制出单个自包含 HTML、只换内容——保留设计 token、导航脚本（←/→/空格、#/N hash、点击翻页、页码胶囊）和页面框架；禁止引入规格外的颜色和字体、禁渐变、禁 emoji 图标、图表纯内联 SVG、零外部 JS。用用户真实内容与真实数字，缺数据用诚实占位注释，不编造；中文用「」引号。其余细节遵循 en 规格。"
+        "en": "Create \"Write an Annual Founder's Letter like a Mission-Driven CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Audience: community, contributors, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像使命驱动的 CEO 一样写年度公开信。像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Annual Letter",
+          "title": "Write an Annual Founder's Letter like a Mission-Driven CEO",
           "title_i18n": {
-            "en": "Annual Letter",
-            "zh-CN": "年度信笺"
+            "en": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+            "zh-CN": "像使命驱动的 CEO 一样写年度公开信",
+            "zh-TW": "像使命驱动的 CEO 一样写年度公开信"
           }
         }
       ]
@@ -141,6 +153,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "corporate-strategy"
   }
 }

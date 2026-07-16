@@ -1,0 +1,216 @@
+name: backport-automerge
+# Auto-merge a clean backport PR once its CI is green — and ping Feishu if its CI fails.
+#
+# release/v* is protected (PR required) but has no required status check and no merge queue,
+# so neither GitHub auto-merge nor enqueuePullRequest applies. Instead we react to ci.yml
+# finishing for a backport-* branch:
+#   - CI success + clean (non-draft) PR  -> squash-merge it (App token, so the push to
+#     release/* re-triggers notify-release-feishu / the nightly).
+#   - CI failure                         -> Feishu ping for manual follow-up.
+#   - conflict (draft PR)                -> left for a human; release-gate blocks the release
+#                                           until it lands.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write   # github-actions[bot] approves the bot's own clean backport (Approve step)
+
+jobs:
+  followup:
+    # Only react to CI that ran for a *pull request* on a backport-* branch — never a push or
+    # manual dispatch — so a non-PR run can't reach the App-token / Feishu steps below.
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' && startsWith(github.event.workflow_run.head_branch, 'backport-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Checkout trusted repository history
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Resolve the backport PR for this run
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # Authoritative run -> PR association from GitHub (populated for same-repo PRs; empty
+          # for forks, which we never auto-merge anyway).
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+          # Pick the run's own PR that targets a release/* branch at exactly the SHA CI ran on —
+          # bound to workflow_run.pull_requests, not a branch-name guess.
+          num="$(printf '%s' "$RUN_PRS" | jq -r --arg sha "$HEAD_SHA" \
+                  '[.[] | select(.base.ref | startswith("release/v")) | select(.head.sha == $sha)][0].number // empty')"
+          if [ -z "$num" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Run has no associated release/* PR at $HEAD_SHA — skipping"
+            exit 0
+          fi
+          row="$(gh pr view "$num" --repo "$REPO" \
+                  --json number,baseRefName,baseRefOid,isDraft,title,body,author,isCrossRepository,headRefOid)"
+          # "Pristine" = the backport's cumulative diff is patch-equivalent to the source PR's
+          # reviewed merge commit on main. Do NOT trust commit author/committer identity here:
+          # those are plain git headers, and a collaborator can forge github-actions[bot]'s
+          # committer email on an otherwise human-pushed commit. GitHub API-created commits are
+          # unsigned in this path, and korthout's legitimate cherry-picks are unsigned too, so
+          # signature fields cannot prove bot provenance either. Bound what auto-merge can land
+          # instead: if a human pushes a conflict resolution, CI fix, or malicious extra change,
+          # the cumulative patch-id differs from the source PR's already-reviewed main diff and
+          # pristine=false; the PR then falls back to human review.
+          body="$(printf '%s' "$row" | jq -r '.body // ""')"
+          source_num="$(printf '%s\n' "$body" | sed -nE 's/.*Backport of #([0-9]+) .*/\1/p' | head -n 1)"
+          source_merge=""
+          source_base=""
+          source_state=""
+          source_merged_at=""
+          backport_base=""
+          if [ -n "$source_num" ]; then
+            source="$(gh pr view "$source_num" --repo "$REPO" \
+                        --json state,mergedAt,mergeCommit,baseRefName 2>/dev/null || true)"
+            if [ -n "$source" ]; then
+              source_state="$(printf '%s' "$source" | jq -r '.state // ""')"
+              source_merged_at="$(printf '%s' "$source" | jq -r '.mergedAt // ""')"
+              source_base="$(printf '%s' "$source" | jq -r '.baseRefName // ""')"
+              source_merge="$(printf '%s' "$source" | jq -r '.mergeCommit.oid // ""')"
+            fi
+          fi
+
+          base_oid="$(printf '%s' "$row" | jq -r '.baseRefOid')"
+          head_oid="$(printf '%s' "$row" | jq -r '.headRefOid')"
+          source_patch_id=""
+          backport_patch_id=""
+          if [ -n "$source_merge" ] \
+            && [ "$source_state" = "MERGED" ] \
+            && [ -n "$source_merged_at" ] \
+            && [ "$source_base" = "main" ] \
+            && [ -n "$base_oid" ] \
+            && [ -n "$head_oid" ]; then
+            git fetch --no-tags origin \
+              "+refs/heads/$(printf '%s' "$row" | jq -r '.baseRefName'):refs/remotes/origin/$(printf '%s' "$row" | jq -r '.baseRefName')" \
+              "+refs/pull/$num/head:refs/remotes/pull/$num/head"
+            backport_base="$(git merge-base "$base_oid" "$head_oid" 2>/dev/null || true)"
+            if [ -n "$backport_base" ]; then
+              source_patch_id="$(git diff --binary "$source_merge^" "$source_merge" | git patch-id --verbatim | awk '{print $1}')"
+              backport_patch_id="$(git diff --binary "$backport_base" "$head_oid" | git patch-id --verbatim | awk '{print $1}')"
+            fi
+          fi
+          if [ -n "$source_patch_id" ] && [ "$source_patch_id" = "$backport_patch_id" ]; then
+            pristine=true
+          else
+            pristine=false
+            echo "Backport PR #$num is not patch-equivalent to source PR #${source_num:-unknown}; skipping auto-merge"
+          fi
+          {
+            echo "found=true"
+            echo "number=$(printf '%s' "$row" | jq -r .number)"
+            echo "base=$(printf '%s' "$row" | jq -r .baseRefName)"
+            echo "draft=$(printf '%s' "$row" | jq -r .isDraft)"
+            echo "title=$(printf '%s' "$row" | jq -r .title)"
+            echo "author=$(printf '%s' "$row" | jq -r '.author.login')"
+            echo "cross=$(printf '%s' "$row" | jq -r '.isCrossRepository')"
+            echo "head_oid=$head_oid"
+            echo "pristine=$pristine"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Approve the clean backport (release bot, CI green)
+        # release/v* requires 1 approving review. The diff was already reviewed + approved on
+        # main; this is a mechanical, conflict-free cherry-pick by the release bot with green CI.
+        # Approve as github-actions[bot] — a DIFFERENT identity than the App that authored the PR
+        # (an author can't approve its own PR) — under the SAME bot-identity + SHA + CI gates as
+        # the merge below, so only the release bot's own verified backports are auto-approved.
+        # pristine == 'true' is critical here: it means the release-branch diff is patch-equivalent
+        # to the reviewed source PR merge commit on main. If a human resolved a conflict or fixed
+        # CI with a different diff, pristine is false and this skips — that code must get a real
+        # human review.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$NUM" --repo "$REPO" --approve \
+            --body "Auto-approved: clean cherry-pick by the release bot of code already reviewed on main, CI green. (release/v* requires one approval.)"
+
+      - name: Auto-merge clean backport on green CI
+        # Guards (release/v* has no required checks, so this workflow IS the gate):
+        #  - author == the release bot and same-repo (not a fork) — so a stranger can't get a
+        #    branch named backport-* auto-merged with the App token.
+        #  - PR head == the exact SHA CI passed on (head_oid == workflow_run.head_sha), and
+        #    --match-head-commit re-checks at merge time — so a commit pushed after CI went
+        #    green is never merged untested.
+        #  - pristine == 'true' — the backport cumulative diff is patch-equivalent to the source
+        #    PR merge commit that was reviewed on main. Once the branch's net diff differs from the
+        #    reviewed-on-main code, we fall back to human review.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+          BASE: ${{ steps.pr.outputs.base }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "CI green on $HEAD_SHA — squash-merging clean backport PR #$NUM into $BASE"
+          gh pr merge "$NUM" --repo "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"
+
+      - name: Notify Feishu on failed backport CI
+        # Same identity gates as the merge step: only ping for a genuine bot backport from the
+        # same repo, so a fork / non-bot PR named backport-* can't spam the release group.
+        # The head_oid == workflow_run.head_sha gate matches the approve/merge steps: a stale
+        # failed run can finish after the PR head advanced, and should not page about a SHA that is
+        # no longer the PR head. Page on failure and timed_out, but not cancelled: force-pushes can
+        # cancel superseded PR runs as part of normal backport iteration.
+        if: ${{ steps.pr.outputs.found == 'true' && steps.pr.outputs.author == 'app/open-design-release-bot' && steps.pr.outputs.cross == 'false' && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') }}
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NUM: ${{ steps.pr.outputs.number }}
+          BASE: ${{ steps.pr.outputs.base }}
+          TITLE: ${{ steps.pr.outputs.title }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          python3 - <<'PY'
+          import os, time, hmac, hashlib, base64, json, urllib.request
+          wh = os.environ.get("FEISHU_WEBHOOK", "")
+          if not wh:
+              raise SystemExit(0)
+          secret = os.environ.get("FEISHU_SIGN_SECRET", "")
+          text = (f"⚠️ backport PR #{os.environ['NUM']} CI {os.environ.get('CONCLUSION','failed')}（目标 {os.environ['BASE']}）\n"
+                  f"{os.environ.get('TITLE','')}\n需要人工跟进：{os.environ.get('RUN_URL','')}")
+          body = {"msg_type": "text", "content": {"text": text}}
+          if secret:
+              ts = str(int(time.time()))
+              sign = base64.b64encode(hmac.new(f"{ts}\n{secret}".encode(), b"", hashlib.sha256).digest()).decode()
+              body = {"timestamp": ts, "sign": sign, **body}
+          req = urllib.request.Request(wh, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req).read().decode())
+          PY

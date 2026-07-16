@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Neon Grid — outrun to the horizon</title>
+<!--
+  Self-contained WebGL2 synthwave grid. A fullscreen fragment shader projects
+  a perspective floor grid scrolling toward a banded retro sun, with a starfield
+  sky and neon glow — no textures, no build step. Open Design renders this in
+  "powered preview" mode because it calls getContext('webgl2'); the opaque
+  preview sandbox cannot run the GPU stack.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0a0620; overflow: hidden; font-family: 'Albert Sans', system-ui, -apple-system, sans-serif; color: #fdf2ff; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; padding: 6vw; pointer-events: none; z-index: 2; }
+  .kicker { font-size: clamp(12px, 1.2vw, 15px); letter-spacing: 0.42em; text-transform: uppercase; color: #63fe13; margin: 0 0 18px; font-weight: 600; }
+  h1 { margin: 0; font-size: clamp(38px, 8vw, 112px); line-height: 0.92; font-weight: 800; letter-spacing: -0.03em; max-width: 12ch; text-shadow: 0 2px 40px rgba(0,0,0,0.55); }
+  p.sub { margin: 22px 0 0; font-size: clamp(15px, 1.6vw, 20px); max-width: 44ch; color: rgba(253,242,255,0.74); }
+  .badge { position: fixed; top: 6vw; right: 6vw; z-index: 2; pointer-events: none; font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(253,242,255,0.6); border: 1px solid rgba(253,242,255,0.2); padding: 8px 14px; border-radius: 999px; backdrop-filter: blur(6px); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="badge" id="fps">GPU · WebGL2</div>
+<div class="overlay">
+  <p class="kicker">Neon Grid</p>
+  <h1>Outrun to the horizon.</h1>
+  <p class="sub">A perspective floor grid scrolling into a banded retro sun, under a neon starfield — a whole synthwave scene from one fragment shader.</p>
+</div>
+<script type="text/javascript">
+(() => {
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+  const fpsEl = document.getElementById('fps');
+  if (!gl) { fpsEl.textContent = 'WebGL2 unavailable'; return; }
+
+  const vert = `#version 300 es
+  in vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+
+  const frag = `#version 300 es
+  precision highp float;
+  out vec4 o;
+  uniform vec2 res;
+  uniform float t;
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+
+  void main(){
+    vec2 uv = (gl_FragCoord.xy - 0.5*res) / res.y;   // y up, centered
+    vec3 col;
+    float horizon = 0.02;
+
+    if (uv.y > horizon){
+      // ---- Sky: gradient + retro banded sun + stars ----
+      float sky = uv.y - horizon;
+      col = mix(vec3(0.35,0.06,0.42), vec3(0.05,0.02,0.14), clamp(sky*1.6,0.0,1.0));
+      // Sun: circle centered above horizon, with horizontal cut bands.
+      vec2 sc = vec2(uv.x, uv.y - 0.30);
+      float sd = length(sc) - 0.26;
+      float bands = smoothstep(0.0, 0.02, sin((uv.y-horizon)*90.0));   // scanline cuts
+      float lower = smoothstep(0.02, 0.0, uv.y - 0.30);                // cuts only on lower half
+      float sunMask = smoothstep(0.01, -0.01, sd);
+      float cut = 1.0 - lower*(1.0-bands);
+      vec3 sun = mix(vec3(1.0,0.85,0.2), vec3(1.0,0.25,0.55), clamp((0.30-uv.y)/0.5+0.5,0.0,1.0));
+      col = mix(col, sun, sunMask*cut);
+      col += vec3(1.0,0.4,0.6) * smoothstep(0.26,0.0,length(sc)) * 0.25;  // sun glow
+      // Stars in the upper sky.
+      vec2 g = floor(uv*vec2(60.0,60.0));
+      float star = step(0.986, hash(g)) * smoothstep(0.2,0.7,sky);
+      col += vec3(0.9,0.95,1.0) * star * (0.6 + 0.4*sin(t*3.0 + hash(g)*30.0));
+    } else {
+      // ---- Floor: perspective grid scrolling toward the horizon ----
+      float depth = horizon - uv.y;               // >0 below horizon
+      float z = 0.14 / depth;                     // perspective: far = small depth
+      float x = uv.x * z;                         // world x widens with distance
+      float scroll = t * 1.6;
+      // Grid lines: distance to nearest cell edge in x and z.
+      vec2 gv = vec2(x, z + scroll);
+      vec2 gf = abs(fract(gv) - 0.5);
+      float lw = 0.018 * z;                       // lines thin with distance
+      float line = 1.0 - smoothstep(0.0, lw, min(gf.x, gf.y));
+      // Fade the grid into the horizon haze.
+      float fade = smoothstep(0.0, 0.5, depth) * exp(-z*0.08);
+      vec3 grid = mix(vec3(0.10,0.90,0.95), vec3(0.85,0.15,0.75), clamp(z*0.05,0.0,1.0));
+      col = vec3(0.03,0.01,0.08);
+      col += grid * line * fade * 1.4;
+      col += vec3(0.6,0.1,0.5) * exp(-depth*6.0) * 0.5;   // hot horizon band
+    }
+    col = pow(col, vec3(0.85));
+    o = vec4(col, 1.0);
+  }`;
+
+  function compile(type, src){
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const uRes = gl.getUniformLocation(prog, 'res');
+  const uT = gl.getUniformLocation(prog, 't');
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (w === canvas.width && h === canvas.height) return;
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  let frames = 0, acc = 0, last = 0;
+  const start = (typeof performance !== 'undefined' ? performance.now() : 0);
+  function tick(now){
+    resize();
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uT, (now - start) / 1000);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    frames++; acc += now - last; last = now;
+    if (acc > 500){ fpsEl.textContent = 'GPU · WebGL2 · ' + Math.round(frames * 1000 / acc) + 'fps'; frames = 0; acc = 0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

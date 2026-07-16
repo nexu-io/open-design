@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import { detectAcpModels, DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
@@ -31,6 +33,16 @@ Follow these rules:
 
 6. **Language**: Match the language of the user's prompt.`;
 
+/** Resolve Reasonix's home directory, respecting REASONIX_HOME if already set. */
+function reasonixHome(): string {
+  if (process.env.REASONIX_HOME) return process.env.REASONIX_HOME;
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'reasonix');
+  }
+  return path.join(os.homedir(), '.reasonix');
+}
+
 export const reasonixAgentDef = {
     id: 'reasonix',
     name: 'DeepSeek Reasonix',
@@ -45,24 +57,14 @@ export const reasonixAgentDef = {
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
-    // Reasonix ships an ACP (Agent Client Protocol) mode via `reasonix acp`
-    // that speaks NDJSON JSON-RPC over stdio — the same wire format Hermes,
-    // Kimi, Kilo, Kiro, and Vibe use. This avoids the Windows CreateProcess
-    // ~32 KB command-line limit entirely: the prompt travels as a JSON-RPC
-    // message body through stdin, not as a positional argv entry.
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
-    // reasonix 1.x (Go rewrite) expects MCP env as `{"KEY":"val"}` map,
-    // not the `[{name, value}]` array shape that Hermes/Kimi/Vibe use.
-    // The 0.x TypeScript releases accepted the array form; ≥1.0 needs map.
     acpMcpEnvFormat: 'map',
-    // Inject design instructions into Reasonix's system prompt via env var.
-    // Reasonix's ACP code reads REASONIX_ACP_SYSTEM_APPEND and appends it
-    // to the code system prompt, so the model sees both coding + design rules.
     env: {
       REASONIX_ACP_SYSTEM_APPEND: DESIGN_INSTRUCTIONS,
+      REASONIX_HOME: reasonixHome(),
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,

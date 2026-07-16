@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-product-launch",
-  "title": "Html Ppt Product Launch",
+  "title": "Pitch a Team Rollout like a Strategic Account Executive",
   "title_i18n": {
-    "zh-CN": "Html Ppt 产品发布",
-    "zh-TW": "Html Ppt 產品發表",
-    "ja": "Html Ppt 製品ローンチ",
-    "ko": "Html Ppt 제품 출시",
-    "de": "Html Ppt Produkteinführung",
-    "fr": "Html Ppt Lancement de produit",
-    "ru": "Html Ppt Запуск продукта",
-    "es": "Html Ppt Lanzamiento de producto",
-    "pt-BR": "Html Ppt Lançamento de produto",
-    "it": "Html Ppt Lancio prodotto",
-    "vi": "Html Ppt Ra mắt sản phẩm",
-    "pl": "Html Ppt Premiera produktu",
-    "id": "Html Ppt Peluncuran Produk",
-    "nl": "Html Ppt Productlancering",
-    "ar": "Html Ppt إطلاق المنتج",
-    "tr": "Html Ppt Ürün Lansmanı",
-    "uk": "Html Ppt Запуск продукту",
-    "en": "Html Ppt Product Launch"
+    "en": "Pitch a Team Rollout like a Strategic Account Executive",
+    "zh-CN": "像战略客户 AE 一样推动团队落地",
+    "zh-TW": "像战略客户 AE 一样推动团队落地"
   },
   "version": "0.1.0",
-  "description": "Launch keynote deck — dark hero + light content, warm orange→peach accent, feature cards, pricing tiers, CTA. Use when announcing a product, launching a feature, or doing a keynote-style reveal.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.",
   "description_i18n": {
-    "zh-CN": "发布主题演示文稿 — 深色主视觉 + 浅色内容，暖橙到桃色强调色，功能卡片，价格层级，行动号召。适用于产品发布、功能上线或主题演讲式揭晓。",
-    "zh-TW": "發表主題簡報 — 深色主視覺 + 淺色內容，暖橘到桃色強調色，功能卡片，價格層級，行動呼籲。適用於產品發表、功能上線或主題演講式揭曉。",
-    "ja": "ローンチ基調講演デッキ — ダークヒーロー + ライトコンテンツ、ウォームオレンジ→ピーチアクセント、機能カード、価格階層、CTA。製品発表、機能ローンチ、基調講演スタイルの発表に使用。",
-    "ko": "출시 키노트 덱 — 다크 히어로 + 라이트 콘텐츠, 따뜻한 오렌지→피치 액센트, 기능 카드, 가격 등급, CTA. 제품 발표, 기능 출시 또는 키노트 스타일 공개 시 사용.",
-    "de": "Launch-Keynote-Deck — dunkler Hero + heller Content, warme Orange→Pfirsich-Akzente, Feature-Karten, Preisstufen, CTA. Für Produktankündigungen, Feature-Launches oder Keynote-Präsentationen.",
-    "fr": "Deck de keynote de lancement — hero sombre + contenu clair, accent orange chaud→pêche, cartes de fonctionnalités, niveaux de tarification, CTA. À utiliser pour annoncer un produit, lancer une fonctionnalité ou faire une présentation de type keynote.",
-    "ru": "Презентация запуска — тёмный hero + светлый контент, тёплые оранжево-персиковые акценты, карточки функций, тарифные планы, CTA. Используйте для анонса продукта, запуска функций или презентаций в стиле keynote.",
-    "es": "Presentación de lanzamiento — hero oscuro + contenido claro, acento naranja cálido→melocotón, tarjetas de características, niveles de precios, CTA. Úsalo para anunciar un producto, lanzar una función o hacer una presentación tipo keynote.",
-    "pt-BR": "Deck de keynote de lançamento — hero escuro + conteúdo claro, acento laranja quente→pêssego, cards de recursos, níveis de preço, CTA. Use ao anunciar um produto, lançar um recurso ou fazer uma apresentação estilo keynote.",
-    "it": "Deck keynote di lancio — hero scuro + contenuto chiaro, accento arancione caldo→pesca, card di funzionalità, livelli di prezzo, CTA. Da usare per annunciare un prodotto, lanciare una funzionalità o fare una presentazione in stile keynote.",
-    "vi": "Bộ trình chiếu ra mắt — hero tối + nội dung sáng, điểm nhấn cam ấm→đào, thẻ tính năng, bậc giá, CTA. Sử dụng khi công bố sản phẩm, ra mắt tính năng hoặc thuyết trình kiểu keynote.",
-    "pl": "Prezentacja premiery — ciemny hero + jasna treść, ciepły akcent pomarańczowo-brzoskwiniowy, karty funkcji, poziomy cenowe, CTA. Użyj do ogłoszenia produktu, premiery funkcji lub prezentacji w stylu keynote.",
-    "id": "Deck keynote peluncuran — hero gelap + konten terang, aksen oranye hangat→persik, kartu fitur, tingkat harga, CTA. Gunakan saat mengumumkan produk, meluncurkan fitur, atau presentasi gaya keynote.",
-    "nl": "Lancering keynote deck — donkere hero + lichte content, warme oranje→perzik accent, feature cards, prijsniveaus, CTA. Gebruik bij productaankondigingen, feature launches of keynote-stijl presentaties.",
-    "ar": "عرض تقديمي للإطلاق — بطل داكن + محتوى فاتح، لون برتقالي دافئ→خوخي، بطاقات الميزات، مستويات الأسعار، CTA. استخدمه عند الإعلان عن منتج أو إطلاق ميزة أو تقديم عرض بأسلوب keynote.",
-    "tr": "Lansman sunum destesi — koyu hero + açık içerik, sıcak turuncu→şeftali vurgusu, özellik kartları, fiyatlandırma seviyeleri, CTA. Ürün duyurusu, özellik lansmanı veya keynote tarzı tanıtım için kullanın.",
-    "uk": "Презентація запуску — темний hero + світлий контент, теплі помаранчево-персикові акценти, картки функцій, тарифні плани, CTA. Використовуйте для анонсу продукту, запуску функцій або презентацій у стилі keynote.",
-    "en": "Launch keynote deck — dark hero + light content, warm orange→peach accent, feature cards, pricing tiers, CTA. Use when announcing a product, launching a feature, or doing a keynote-style reveal."
+    "en": "Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.",
+    "zh-CN": "像战略客户 AE 一样推动团队落地——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像战略客户 AE 一样推动团队落地——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,19 @@
     "launch-deck",
     "feature-reveal",
     "launch-slides",
-    "untitled"
+    "untitled",
+    "product",
+    "roadmap",
+    "architecture",
+    "html-ppt-product-launch",
+    "product-and-technical-management",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +58,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "sales",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +66,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Make a product-launch keynote deck in HTML using the html-ppt-product-launch full-deck template (dark hero, warm orange accent, feature cards, pricing tiers). Confirm: product name + tagline, the 3 key features, and pricing tiers — then write the deck.",
-        "zh-CN": "使用这个插件完成以下任务：Make a product-launch keynote deck in HTML using the html-ppt-product-launch full-deck template (dark hero, warm orange accent, feature cards, pricing tiers). Confirm: product name + tagline, the 3 key features, and pricing tiers — then write the deck."
+        "en": "Create \"Pitch a Team Rollout like a Strategic Account Executive\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Audience: design team lead, IT. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像战略客户 AE 一样推动团队落地。像战略客户 AE 一样推动团队落地——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Product Launch"
+          "title": "Pitch a Team Rollout like a Strategic Account Executive",
+          "title_i18n": {
+            "en": "Pitch a Team Rollout like a Strategic Account Executive",
+            "zh-CN": "像战略客户 AE 一样推动团队落地",
+            "zh-TW": "像战略客户 AE 一样推动团队落地"
+          }
         }
       ]
     },
@@ -117,6 +105,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "b2b-sales"
   }
 }

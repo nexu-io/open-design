@@ -14,7 +14,7 @@
 - ⚡ **Lighter, faster landing.** Hero decorations route through Image Resizing for ~92% smaller payloads. (#3523) Thanks `@lefarcen`.
 - 🔒 **Security.** Resolved a vulnerable `tmp` transitive dependency. (#3379) Thanks `@gateway`.
 
-> 📥 **Download:** assets for `open-design-v0.10.0` are built by the nightly pipeline and publish to GitHub Releases and `releases.open-design.ai` — macOS arm64/Intel `.dmg`, Windows x64 installer — when the build completes.
+> 📥 **Download:** assets for `open-design-v0.10.0` are built by the prerelease pipeline and publish to GitHub Releases and `releases.open-design.ai` — macOS arm64/Intel `.dmg`, Windows x64 installer — when the build completes.
 
 ## ✨ Added
 

@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-huashu-sparkline-arc",
-  "title": "Narrative Sparkline",
+  "title": "Write a Revenue-Driver Story like a Board-Level Finance Partner",
   "title_i18n": {
-    "en": "Narrative Sparkline",
-    "zh-CN": "叙事波形"
+    "en": "Write a Revenue-Driver Story like a Board-Level Finance Partner",
+    "zh-CN": "像董事会级财务伙伴一样写收入驱动分析",
+    "zh-TW": "像董事会级财务伙伴一样写收入驱动分析"
   },
   "version": "1.0.0",
-  "description": "Duarte-style narrative sparkline decks: one oscillating SVG bézier waveform spanning the full 1920×1080 canvas, brand-orange (#FF6B2C) turning-point annotations, greyed ghost comparison lines, stroke-dashoffset progressive reveal, mono hairline chrome, Inter + Geist Mono. Built for change narratives, before/after contrasts, and data story arcs. Based on https://github.com/alchaincyf/huashu-design narrative-sparkline (references/design-styles.md · 中性派 · Sparkline叙事波形), generated from spec into a full multi-section deck.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
   "description_i18n": {
-    "en": "Duarte-style narrative sparkline decks: one oscillating SVG bézier waveform spanning the full 1920×1080 canvas, brand-orange (#FF6B2C) turning-point annotations, greyed ghost comparison lines, stroke-dashoffset progressive reveal, mono hairline chrome, Inter + Geist Mono. Built for change narratives, before/after contrasts, and data story arcs. Based on https://github.com/alchaincyf/huashu-design narrative-sparkline (references/design-styles.md · 中性派 · Sparkline叙事波形), generated from spec into a full multi-section deck.",
-    "zh-CN": "Duarte 流派叙事波形幻灯片：横贯 1920×1080 全屏的 SVG 贝塞尔振荡波形线、品牌橙 #FF6B2C 转折点标注、灰化对照波形、stroke-dashoffset 逐步 reveal、等宽字 hairline 信息条，Inter + Geist Mono 双字体。适合变革叙事、before/after 对照与数据故事弧线。基于花叔 huashu-design 的 narrative-sparkline 规格（design-styles.md 中性派 · Sparkline叙事波形）按 spec 生成完整多章节 deck。"
+    "en": "Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
+    "zh-CN": "像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -32,7 +35,20 @@
     "data-storytelling",
     "duarte",
     "minimal",
-    "huashu"
+    "huashu",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "huashu-sparkline-arc",
+    "marketing-and-gtm",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -45,7 +61,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "finance",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -54,16 +70,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a Duarte-style narrative-sparkline {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Narrative Sparkline system (based on huashu-design references/design-styles.md · Sparkline叙事波形): a fixed 1920×1080 canvas auto-scaled to the viewport; white pages plus at most 2-3 near-black (#0E0E0C) pages (the solo-line page and the closing); 56px mono hairline chrome strips top and bottom (Geist Mono 11px uppercase tracked labels, orange `/` separator, orange right-hand label, orange `P.NN` page marker); the two-font system Inter (headlines 900/-4px tracking, body 19px/1.8) + Geist Mono (all labels, annotations, and tabular numerals) loaded via one Google Fonts @import; exactly one accent #FF6B2C — the brand orange — reserved for turning points, annotation dots, key glyphs and single punctuation marks inside headlines, with greyed ghost lines (#C9C7C2, solid or 2/10 dashed) as the comparison voice. The visual skeleton of every page is an SVG sparkline: full-bleed `.spark` SVGs with smooth cubic-bézier paths (preserveAspectRatio='none' for the line layer, a second non-scaled SVG layer for annotation dots and text so circles stay round); annotation points = orange dot + soft halo (+ optional ring for the inflection) + mono uppercase label; progressive reveal via pathLength='1' + stroke-dasharray:1 + stroke-dashoffset animated to 0 when the slide becomes `.active`, with staggered d1/d2/d3 segment delays and p1…p5 dot fade-ins. Draw layouts from the locked enumeration: cover (waveform under a giant statement headline with what-is/turn/new-bliss dots) / contents hung on the waveform / what-is low flat grey waveform with a dashed industry ghost line + stat strip / turning-point giant mono numeral + V-shaped inflection with ringed orange dot / before-after stacked contrast waveforms (grey top, orange bottom) / dark solo-line page (one orange line, one annotation, one big number) / evidence waveform with 4 labelled value dots + mini-sparkline summary strip / roadmap with three progressively-revealed segments + phase columns / quote page with orange SVG quote marks and a ghost waveline footer / dark closing where the curve climbs out of the top-right edge. No emoji, no gradients, no shadows, no second accent color, no chart libraries — every chart is a hand-written inline SVG path. Build a single self-contained HTML file by copying example.html and replacing content only — keep its design tokens, chrome strips, sparkline/reveal CSS, and navigation script (←/→/Space keys, #/N hash routing, click zones, counter pill) intact. Use the user's real numbers and real turning-point dates, never lorem ipsum or invented data; Chinese copy uses 「」 quotes; replace all fictional 澈流/CHELIU demo content.",
-        "zh-CN": "用「叙事波形」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}（页数 {{slideCount}}）：1920×1080 固定画布、横贯全屏的 SVG 贝塞尔振荡波形线作为每页视觉骨架、品牌橙 #FF6B2C 只标转折点与标注圆点、灰化对照波形 #C9C7C2、stroke-dashoffset 逐段 reveal、上下 56px 等宽字 hairline 信息条、Inter + Geist Mono 双字体。版式从封面/挂线目录/现状低位波形/巨数转折/上下对照波形/黑底孤线/四标注证据/逐段路线/引语/爬出画面的结尾枚举中取用，白页为主、深页最多 2-3 张。从 example.html 复制出单文件、只换内容，保留 token、信息条、波形 reveal CSS 和导航脚本；用真实数据与真实转折日期、替换全部「澈流」演示内容。完整规格以英文版为准（follow the en query above）。"
+        "en": "Create \"Write a Revenue-Driver Story like a Board-Level Finance Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Audience: board, finance leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像董事会级财务伙伴一样写收入驱动分析。像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Narrative Sparkline",
+          "title": "Write a Revenue-Driver Story like a Board-Level Finance Partner",
           "title_i18n": {
-            "en": "Narrative Sparkline",
-            "zh-CN": "叙事波形"
+            "en": "Write a Revenue-Driver Story like a Board-Level Finance Partner",
+            "zh-CN": "像董事会级财务伙伴一样写收入驱动分析",
+            "zh-TW": "像董事会级财务伙伴一样写收入驱动分析"
           }
         }
       ]
@@ -142,6 +159,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "data-finance"
   }
 }

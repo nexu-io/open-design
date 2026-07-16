@@ -354,6 +354,7 @@ my-plugin/
 - `compat.*`：指向继承格式文件的相对路径。loader 会把它们的内容合并进 [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts) 组装出的 OD prompt stack。
 - `specVersion`：解释此 manifest 时使用的 Open Design 插件规范版本。它独立于插件 `version`，并会冻结到 apply snapshot，便于 replay。
 - `version`：插件包自身版本。只要行为、元数据、pipeline、inputs 或随包 assets 出现用户需要审计的变化，就应该 bump。
+- `publishedAt`：可选的 ISO 8601 时间戳，表示插件首次发布到所在目录（catalog）的时间。Community 画廊的"最新"排序对 bundled 目录记录以它为准，这样新装环境也能得到真实的时间序（本地安装时间戳在首次启动整批种子时会全部并列）；用户自行安装的插件不受该字段影响，仍按本地安装/更新时间排序。第一方 bundled 插件必填（由 `e2e/tests/plugin-published-at.test.ts` 保障）；写入创作时间，后续修改不要挪动它。
 - `title_i18n` / `description_i18n`：可选本地化展示元数据。`title` 和 `description` 保持英文 fallback；UI 会按请求 locale、基础语言、英文、首个可用值的顺序解析。
 - `od.kind`：registry 里的分类（`skill` / `scenario` / `atom` / `bundle`）。
 - `od.taskKind`：四类产品场景之一（`new-generation` / `code-migration` / `figma-migration` / `tune-collab`，§1「四类产品场景」）。决定 marketplace filter、初始 inputs 模板、推荐 pipeline 起点。

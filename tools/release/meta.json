@@ -1,0 +1,7 @@
+{
+  "toolName": "tools-release",
+  "packageName": "@open-design/tools-release",
+  "buildCommand": "pnpm --filter @open-design/tools-release build",
+  "distEntries": ["dist/index.mjs"],
+  "inputs": ["src", "resources", "scripts", "meta.json", "package.json", "esbuild.config.mjs", "tsconfig.json"]
+}

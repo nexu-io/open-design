@@ -1,28 +1,36 @@
 ---
 name: open-design-landing-deck
-description: >
-  Produce a single-file slide deck in the Atelier Zero visual language
-  (warm-paper background, italic-serif emphasis spans, coral terminating
-  dots, surreal collage plates) — Open Design's brand deck recipe.
-  The deck uses **horizontal magazine-style swipe pagination** (←/→,
-  wheel, swipe), a per-slide chrome strip with brand mark and slide
-  counter, an ESC overview grid, a coral progress bar, and inherits
-  the canonical stylesheet + 16-slot image library from the sister
-  `open-design-landing` skill.
+en_name: "Write a Brand-Story Deck like a Founder Storyteller"
+zh_name: "像会讲故事的创始人一样写品牌故事稿"
+description: |
+  Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
+en_description: |
+  Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
+zh_description: |
+  像会讲故事的创始人一样写品牌故事稿——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "open-design-landing-deck"
 triggers:
-  - slide deck
-  - 演示文稿
-  - pitch deck
-  - keynote
-  - editorial slides
-  - atelier zero deck
-  - open design deck
-  - open design landing deck
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write a Brand-Story Deck like a Founder Storyteller"
+  - "像会讲故事的创始人一样写品牌故事稿"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 od:
-  category: brand-deck
   surface: web
   mode: deck
-  scenario: marketing
   featured: 2
   audience: founders pitching, conference talks, internal reviews
   tone: editorial, restrained, premium
@@ -34,6 +42,9 @@ od:
     requires:
       - typographic-rhythm
       - pixel-discipline
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Write a Brand-Story Deck like a Founder Storyteller\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Audience: partners, press, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 inputs:
   - id: brand
     label: Brand identity (shared across slides)

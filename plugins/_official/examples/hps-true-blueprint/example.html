@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OPEN DESIGN · The Blueprint — True Blueprint deck</title>
+<title>Present an Engineering Blueprint like a Principal Architect - Product management</title>
 <style>
 /* hps-true-blueprint :: webfonts (Google Fonts @import only — no other external deps) */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;0,800;1,400&display=swap');
@@ -188,44 +188,44 @@ code,kbd,pre,samp{font-family:var(--font-mono)}
 
   <!-- 1 · layout: cover (drawing sheet with title block) -->
   <section class="slide" data-title="Cover">
-    <p class="kicker">// The open-source, local, agent-driven design platform</p>
-    <h1 class="h1 anim-rise-in">Open Design<br><span class="gradient-text">The Blueprint</span></h1>
-    <p class="lede">From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, drawn on your own machine.</p>
+    <p class="kicker">// Engineering review · Product management</p>
+    <h1 class="h1 anim-rise-in">Present an Engineering<br><span class="gradient-text">Blueprint like a Principal Architect</span></h1>
+    <p class="lede">Decision brief for the eng org: how the sandbox, the sidecar, and the daemon fit together, what the invariants are, and the one irreversible step we're asking every team to sign off on this sprint.</p>
     <div class="title-block mt-l anim-fade-up">
-      <div>DWG NO.<b>OD-2026-001</b></div>
-      <div>LICENSE<b class="annot">APACHE-2.0</b></div>
-      <div>KEYS<b>BYOK</b></div>
-      <div>DATE<b>2026-06-11</b></div>
+      <div>DWG NO.<b>OD-ARCH-014</b></div>
+      <div>DECISION<b class="annot">SIDECAR-ONLY IPC</b></div>
+      <div>OWNER<b>Platform</b></div>
+      <div>DATE<b>2026-07-09</b></div>
     </div>
-    <div class="notes">Cover styled as a drawing sheet: title block bottom-left carries drawing number, license, key policy and date. The whole deck is one engineering document — github.com/nexu-io/open-design.</div>
+    <div class="notes">Cover styled as a drawing sheet: title block bottom-left carries the drawing number, the decision under review, the owning team and the review date. The whole deck is one engineering document to be read before the review meeting.</div>
   </section>
 
   <!-- 2 · layout: toc (drawing index) -->
   <section class="slide" data-title="Index">
     <p class="kicker">// Sheet index</p>
-    <h2 class="h2">Three sheets in this set</h2>
+    <h2 class="h2">Three sheets before we vote</h2>
     <div class="grid g3 mt-l anim-stagger-list">
-      <div class="card card-accent"><h4 class="h4">SHT 01 · Why open</h4><p class="dim">Why frontier AI design needed opening, and how one desktop plane wires agents to artifacts.</p></div>
-      <div class="card card-accent"><h4 class="h4">SHT 02 · Numbers</h4><p class="dim">Stars, contributors, plugins, and design systems — community figures, open to audit.</p></div>
-      <div class="card card-accent"><h4 class="h4">SHT 03 · Workflow</h4><p class="dim">From idea to delivery in four phases, and the delta against the closed cloud alternative.</p></div>
+      <div class="card card-accent"><h4 class="h4">SHT 01 · The pain</h4><p class="dim">Why three plugin teams already asked for a back door around the daemon, and what that costs us.</p></div>
+      <div class="card card-accent"><h4 class="h4">SHT 02 · Tradeoffs</h4><p class="dim">Direct daemon access vs sidecar-only IPC, compared on latency, audit coverage, and blast radius.</p></div>
+      <div class="card card-accent"><h4 class="h4">SHT 03 · Recommendation</h4><p class="dim">The rollout, the CI gate that makes the rule self-enforcing, and how we measure it held.</p></div>
     </div>
-    <div class="notes">Table of contents framed as a sheet index — each card is one section of the drawing set.</div>
+    <div class="notes">Table of contents framed as a sheet index — each card is one section of the drawing set, ordered so the pain justifies the tradeoff analysis before the recommendation lands.</div>
   </section>
 
   <!-- 3 · layout: section-divider -->
-  <section class="slide" data-title="Sheet 01 · Why open">
+  <section class="slide" data-title="Sheet 01 · The pain">
     <span class="section-num">01</span>
     <p class="eyebrow">Sheet one</p>
-    <h2 class="h2">Open by design,<br>local by default</h2>
+    <h2 class="h2">Agents keep finding<br>the back door</h2>
     <div class="divider-accent mt-m"></div>
-    <div class="notes">Section divider: outline-stroked giant number bottom-right, drawn with text-stroke in the ink color so it reads as a construction line.</div>
+    <div class="notes">Section divider: outline-stroked giant number bottom-right, drawn with text-stroke in the ink color so it reads as a construction line. Sets up the pain: exception requests are already happening.</div>
   </section>
 
   <!-- 4 · layout: arch-diagram (inline SVG schematic — no libraries) -->
   <section class="slide" data-title="Architecture">
     <p class="kicker">// SHT 01 · system schematic</p>
-    <h2 class="h2">One desktop, three domains</h2>
-    <svg class="mt-m" viewBox="0 0 980 330" width="100%" style="max-width:980px" role="img" aria-label="Open Design schematic: your idea feeding the Open Design desktop plane, fanning out to prototypes, slides and pages, and HTML video over design memory">
+    <h2 class="h2">One door in, three daemon surfaces</h2>
+    <svg class="mt-m" viewBox="0 0 980 330" width="100%" style="max-width:980px" role="img" aria-label="Open Design schematic: the agent sandbox reaching the sidecar broker, which fans out to the daemon's projects, artifacts, and skills APIs">
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0L10 5L0 10z" fill="#aee1ff"/>
@@ -234,140 +234,140 @@ code,kbd,pre,samp{font-family:var(--font-mono)}
       <g font-family="'JetBrains Mono',monospace" font-size="13" letter-spacing="1">
         <!-- input -->
         <rect x="20" y="125" width="170" height="80" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
-        <text x="105" y="160" fill="#e8f3ff" text-anchor="middle" font-weight="700">YOUR IDEA</text>
-        <text x="105" y="182" fill="#b8d4f0" text-anchor="middle" font-size="11">one sentence · BYOK</text>
-        <!-- open design plane -->
+        <text x="105" y="160" fill="#e8f3ff" text-anchor="middle" font-weight="700">AGENT SANDBOX</text>
+        <text x="105" y="182" fill="#b8d4f0" text-anchor="middle" font-size="11">isolated · no fs, no db</text>
+        <!-- sidecar -->
         <rect x="300" y="100" width="240" height="130" fill="rgba(255,255,255,.07)" stroke="#ffffff" stroke-width="2" rx="2"/>
-        <text x="420" y="145" fill="#ffffff" text-anchor="middle" font-weight="800" font-size="16">OPEN DESIGN</text>
-        <text x="420" y="170" fill="#b8d4f0" text-anchor="middle" font-size="11">desktop · daemon · sandbox</text>
-        <text x="420" y="192" fill="#ffd27a" text-anchor="middle" font-size="11">21 agents · 129 design systems</text>
+        <text x="420" y="145" fill="#ffffff" text-anchor="middle" font-weight="800" font-size="16">SIDECAR</text>
+        <text x="420" y="170" fill="#b8d4f0" text-anchor="middle" font-size="11">the only broker in or out</text>
+        <text x="420" y="192" fill="#ffd27a" text-anchor="middle" font-size="11">validates · forwards · logs</text>
         <!-- domains -->
         <rect x="700" y="20"  width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
-        <text x="790" y="50" fill="#e8f3ff" text-anchor="middle" font-weight="700">PROTOTYPES</text>
-        <text x="790" y="72" fill="#b8d4f0" text-anchor="middle" font-size="11">mobile &amp; web · hi-fi</text>
+        <text x="790" y="50" fill="#e8f3ff" text-anchor="middle" font-weight="700">PROJECTS API</text>
+        <text x="790" y="72" fill="#b8d4f0" text-anchor="middle" font-size="11">RUNTIME_DATA_DIR owner</text>
         <rect x="700" y="128" width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
-        <text x="790" y="158" fill="#e8f3ff" text-anchor="middle" font-weight="700">SLIDES &amp; PAGES</text>
-        <text x="790" y="180" fill="#b8d4f0" text-anchor="middle" font-size="11">decks · live artifacts</text>
+        <text x="790" y="158" fill="#e8f3ff" text-anchor="middle" font-weight="700">ARTIFACTS API</text>
+        <text x="790" y="180" fill="#b8d4f0" text-anchor="middle" font-size="11">daemon-owned storage</text>
         <rect x="700" y="236" width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
-        <text x="790" y="266" fill="#e8f3ff" text-anchor="middle" font-weight="700">HTML VIDEO</text>
-        <text x="790" y="288" fill="#b8d4f0" text-anchor="middle" font-size="11">HyperFrames · MP4</text>
+        <text x="790" y="266" fill="#e8f3ff" text-anchor="middle" font-weight="700">SKILLS &amp; PLUGINS</text>
+        <text x="790" y="288" fill="#b8d4f0" text-anchor="middle" font-size="11">registry · state</text>
         <!-- connectors -->
         <path d="M190 165 H292" stroke="#aee1ff" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
         <path d="M540 140 C620 130 630 70 692 60"  stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
         <path d="M540 165 H692" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
         <path d="M540 195 C620 205 630 263 692 272" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
-        <!-- annotation / dimension line (anchored to the plane box, label kept clear of the domain rects) -->
+        <!-- annotation / dimension line (anchored to the sidecar box, label kept clear of the domain rects) -->
         <path d="M420 230 V300 H290" stroke="#ffd27a" stroke-width="1" fill="none"/>
-        <text x="20" y="304" fill="#ffd27a" font-size="11">design memory — every choice compounds</text>
+        <text x="20" y="304" fill="#ffd27a" font-size="11">every request logged — one broker, one audit trail</text>
       </g>
     </svg>
-    <div class="notes">Architecture schematic drawn as pure inline SVG: dashed component boxes, ice-blue connector lines with arrowheads, one amber annotation as the dimension line. No diagram libraries.</div>
+    <div class="notes">Architecture schematic drawn as pure inline SVG: dashed component boxes, ice-blue connector lines with arrowheads, one amber annotation as the dimension line. The point of the diagram: the sandbox has exactly one path to the daemon's three surfaces.</div>
   </section>
 
   <!-- 5 · layout: two-column + spec table -->
   <section class="slide" data-title="Design rules">
-    <p class="kicker">// SHT 01 · general notes</p>
-    <h2 class="h2">General notes</h2>
+    <p class="kicker">// SHT 01 · invariants at risk</p>
+    <h2 class="h2">Four rules the exception would break</h2>
     <div class="grid g2 mt-l">
       <div>
-        <p class="lede">Every capability on this sheet obeys four construction rules. Anything that cannot is redrawn until it can.</p>
+        <p class="lede">Every daemon-facing capability obeys four invariants today. A direct-access back door breaks all four at once, not just the one a team asks for.</p>
         <ul class="check mt-m">
-          <li>Desktop-native — local files, Figma, and repos readable in place</li>
-          <li>Plug in agents, don't rebuild them — your CLIs already work</li>
-          <li>It learns your taste — every choice becomes design memory</li>
-          <li>Open all the way down — fork, self-host, ship commercially</li>
+          <li>Sidecar is the only broker in or out — no direct daemon socket from agent code</li>
+          <li>Every daemon data path derives from one resolved RUNTIME_DATA_DIR</li>
+          <li>Sidecar process stamps carry exactly five fields — app, mode, namespace, ipc, source</li>
+          <li>App business logic never imports another app's private internals directly</li>
         </ul>
       </div>
       <div class="card card-soft">
         <table class="spec-table">
-          <tr><td>Agents</td><td><b>21 coding agents</b> — auto-detected from PATH</td></tr>
-          <tr><td>Systems</td><td><b>129 design systems</b> — GitHub, Figma, or local</td></tr>
-          <tr><td>Keys</td><td><b>Full-stack BYOK</b> — plus 14 media providers</td></tr>
-          <tr><td>License</td><td><b>Apache-2.0</b> — commercial use allowed</td></tr>
+          <tr><td>Exceptions asked</td><td><b>3 plugin teams</b> — past two sprints</td></tr>
+          <tr><td>Latency claimed</td><td><b>~40ms/call</b> — never independently measured</td></tr>
+          <tr><td>Audit coverage if granted</td><td><b>0%</b> — direct calls bypass the sidecar log</td></tr>
+          <tr><td>Rollback cost</td><td><b>~3 weeks</b> — full IPC path rewrite per team</td></tr>
         </table>
       </div>
     </div>
-    <div class="notes">Two-column layout: rules as a checklist on the left, a dashed spec table on the right — the table reads like a materials schedule on a real drawing.</div>
+    <div class="notes">Two-column layout: invariants as a checklist on the left, a dashed spec table on the right quantifying the cost of the requested exception — reads like a materials schedule on a real drawing.</div>
   </section>
 
   <!-- 6 · layout: section-divider -->
-  <section class="slide" data-title="Sheet 02 · Numbers">
+  <section class="slide" data-title="Sheet 02 · Options">
     <span class="section-num">02</span>
     <p class="eyebrow">Sheet two</p>
-    <h2 class="h2">Numbers,<br>open to audit</h2>
+    <h2 class="h2">Two paths,<br>one clears the bar</h2>
     <div class="divider-accent mt-m"></div>
-    <div class="notes">Second divider. Same construction-line number device.</div>
+    <div class="notes">Second divider. Same construction-line number device — introduces the two options under review.</div>
   </section>
 
   <!-- 7 · layout: kpi-grid -->
-  <section class="slide" data-title="Community figures">
-    <p class="kicker">// SHT 02 · community figures, open to audit</p>
-    <h2 class="h2">The numbers on the plate</h2>
+  <section class="slide" data-title="Sidecar-only, scored">
+    <p class="kicker">// SHT 02 · sidecar-only IPC, scored against the status quo</p>
+    <h2 class="h2">What sidecar-only actually costs us</h2>
     <div class="grid g4 mt-l anim-stagger-list">
-      <div class="card kpi"><div class="num annot">60K+</div><div class="lbl">GitHub stars — open source under Apache-2.0</div></div>
-      <div class="card kpi"><div class="num">300+</div><div class="lbl">contributors building the platform together</div></div>
-      <div class="card kpi"><div class="num">217+</div><div class="lbl">plugins in the community catalog</div></div>
-      <div class="card kpi"><div class="num">129</div><div class="lbl">design systems ready to import and reuse</div></div>
+      <div class="card kpi"><div class="num annot">+2ms</div><div class="lbl">added latency per call from sidecar validation</div></div>
+      <div class="card kpi"><div class="num">100%</div><div class="lbl">of daemon calls covered by one audit trail</div></div>
+      <div class="card kpi"><div class="num">1</div><div class="lbl">attack surface — one IPC socket, not N direct sockets</div></div>
+      <div class="card kpi"><div class="num">0</div><div class="lbl">daemon internals imported by app code today</div></div>
     </div>
-    <div class="notes">KPI grid: four community figures. The amber number marks the headline — 60K+ GitHub stars on an Apache-2.0 codebase.</div>
+    <div class="notes">KPI grid: four measured costs and benefits of enforcing sidecar-only IPC. The amber number is the true cost — 2ms — set against three near-total wins.</div>
   </section>
 
   <!-- 8 · layout: chart-bar (hatched CSS bars — no chart library) -->
-  <section class="slide" data-title="Plugin catalog">
-    <p class="kicker">// SHT 02 · plugins by artifact type (demo split of 217+)</p>
-    <h2 class="h2">Where the plugins go</h2>
+  <section class="slide" data-title="Risk of the exception">
+    <p class="kicker">// SHT 02 · cost of granting direct daemon access, scored 0-100</p>
+    <h2 class="h2">Where the risk concentrates</h2>
     <div class="bar-chart">
-      <div class="bar hot" style="height:88%"><em>84</em><span>slides</span></div>
-      <div class="bar" style="height:60%"><em>56</em><span>prototypes</span></div>
-      <div class="bar" style="height:48%"><em>43</em><span>posters</span></div>
-      <div class="bar" style="height:38%"><em>34</em><span>video</span></div>
+      <div class="bar hot" style="height:88%"><em>92</em><span>blast radius</span></div>
+      <div class="bar" style="height:74%"><em>78</em><span>audit gaps</span></div>
+      <div class="bar" style="height:58%"><em>61</em><span>rollback risk</span></div>
+      <div class="bar" style="height:14%"><em>12</em><span>latency saved</span></div>
     </div>
-    <p class="dim mt-l" style="margin-top:60px">Demo split of the 217+ plugin catalog. Slides lead — and every type ships as <span class="annot">real, runnable files</span>.</p>
-    <div class="notes">Bar chart rebuilt with hatched CSS bars — cross-hatching is the blueprint way to fill an area. The amber hatched bar is the largest artifact type. Values are an illustrative demo split of the 217+ catalog.</div>
+    <p class="dim mt-l" style="margin-top:60px">Direct access buys ~12 points of latency and costs 70+ points of <span class="annot">audit and blast-radius risk</span>. The exception doesn't clear the bar.</p>
+    <div class="notes">Bar chart rebuilt with hatched CSS bars. The amber hatched bar is the worst-scoring dimension — blast radius — set against the tiny latency win the exception would actually buy.</div>
   </section>
 
   <!-- 9 · layout: section-divider + process-steps combined sheet -->
-  <section class="slide" data-title="Sheet 03 · Workflow">
-    <p class="kicker">// SHT 03 · from idea to delivery</p>
-    <h2 class="h2">Idea to delivery in four phases</h2>
+  <section class="slide" data-title="Sheet 03 · Rollout">
+    <p class="kicker">// SHT 03 · recommendation, rollout in four phases</p>
+    <h2 class="h2">Land the rule in one sprint</h2>
     <div class="grid g4 mt-l steps anim-stagger-list">
-      <div class="card"><h4 class="h4">Start</h4><p class="dim">Describe your goal in one sentence, or start from a template or plugin.</p></div>
-      <div class="card"><h4 class="h4">Direct</h4><p class="dim">Pick the visual direction — palette, type, and spacing flow into generation.</p></div>
-      <div class="card"><h4 class="h4">Generate</h4><p class="dim">The agent reads full context and produces real runnable files in a sandbox.</p></div>
-      <div class="card"><h4 class="h4">Ship</h4><p class="dim">Hand off to engineering, or film it with HyperFrames. Every choice becomes memory.</p></div>
+      <div class="card"><h4 class="h4">Freeze</h4><p class="dim">No new direct-daemon exceptions merge after this review. Existing three stay on notice.</p></div>
+      <div class="card"><h4 class="h4">Migrate</h4><p class="dim">Route all three exception requests through the sidecar broker within the sprint.</p></div>
+      <div class="card"><h4 class="h4">Enforce</h4><p class="dim">CI gate fails any PR that imports daemon internals outside the sidecar boundary.</p></div>
+      <div class="card"><h4 class="h4">Measure</h4><p class="dim">Audit-coverage dashboard tracked weekly for one quarter; report back at the next review.</p></div>
     </div>
-    <div class="notes">Process steps with bracketed [01]–[04] counters, like detail callouts on a drawing. The memory phase folds into Ship: every choice becomes context for the next run.</div>
+    <div class="notes">Process steps with bracketed [01]–[04] counters, like detail callouts on a drawing. This is the recommendation: freeze, migrate, enforce via CI, then measure for a full quarter.</div>
   </section>
 
   <!-- 10 · layout: comparison -->
-  <section class="slide" data-title="Closed vs open">
+  <section class="slide" data-title="Option comparison">
     <p class="kicker">// SHT 03 · revision delta</p>
-    <h2 class="h2">Closed cloud vs Open Design</h2>
+    <h2 class="h2">Direct access vs sidecar-only IPC</h2>
     <div class="grid g2 mt-l">
       <div class="card card-soft">
-        <p class="eyebrow" style="color:var(--bad)">Claude Design — closed cloud</p>
-        <h3 class="h3">Locked &amp; metered</h3>
-        <ul class="check"><li>One model, no agent choice</li><li>No self-hosting, no BYOK</li><li>~$500 a month, cloud-only</li></ul>
+        <p class="eyebrow" style="color:var(--bad)">Option A — grant the exception</p>
+        <h3 class="h3">Direct daemon access</h3>
+        <ul class="check"><li>Bypasses the sidecar's single audit trail</li><li>Three separate sockets, three separate blast radii</li><li>~3 weeks to unwind per team if reverted</li></ul>
       </div>
       <div class="card card-accent">
-        <p class="eyebrow" style="color:var(--good)">Open Design — this drawing</p>
-        <h3 class="h3">Open &amp; local</h3>
-        <ul class="check"><li>21 coding agents, BYOK throughout</li><li>Runs on your machine, Apache-2.0</li><li>~$73 a month — over 80% less</li></ul>
+        <p class="eyebrow" style="color:var(--good)">Option B — this recommendation</p>
+        <h3 class="h3">Sidecar-only IPC</h3>
+        <ul class="check"><li>One broker, one audit trail, every call logged</li><li>+2ms measured cost, no team has hit a real ceiling</li><li>CI gate makes the rule self-enforcing going forward</li></ul>
       </div>
     </div>
-    <div class="notes">Comparison: the closed cloud incumbent vs Open Design. April 2026: Claude Design proved an LLM can truly design — Open Design sets that capability free. Semantic good/bad tokens stay within the locked palette — coral and mint read as redline annotations.</div>
+    <div class="notes">Comparison: the exception the three teams are asking for vs the standing rule. Semantic good/bad tokens stay within the locked palette — coral and mint read as redline annotations.</div>
   </section>
 
   <!-- 11 · layout: big-quote + thanks -->
   <section class="slide center" data-title="Sign-off">
-    <p class="quote anim-fade-up">"Frontier AI design,<br>back on <span class="annot">every creator's desk.</span>"</p>
-    <p class="eyebrow mt-l">— open · local · agent-native</p>
+    <p class="quote anim-fade-up">"One broker,<br>one audit trail, <span class="annot">no exceptions.</span>"</p>
+    <p class="eyebrow mt-l">— the irreversible step this review asks for</p>
     <div class="row wrap mt-l" style="gap:8px;justify-content:center">
-      <span class="pill pill-accent">github.com/nexu-io/open-design</span>
-      <span class="pill">download · macOS / Windows</span>
-      <span class="pill">← → navigate</span>
+      <span class="pill pill-accent">sign off: sidecar-only IPC, no exceptions</span>
+      <span class="pill">CI gate ships next sprint</span>
+      <span class="pill">audit-coverage review — quarterly</span>
     </div>
-    <div class="notes">Closer doubles as the sign-off block: the mission as a pull quote, the GitHub CTA stamped as an amber pill. Star the repo, download for macOS or Windows.</div>
+    <div class="notes">Closer doubles as the sign-off block: the invariant as a pull quote, the ask stamped as an amber pill. This is the one decision every function in the room needs to leave agreeing on.</div>
   </section>
 
 </div>
@@ -446,5 +446,6 @@ code,kbd,pre,samp{font-family:var(--font-mono)}
   focusDeck();
 })();
 </script>
+
 </body>
 </html>

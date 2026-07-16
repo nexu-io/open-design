@@ -164,6 +164,59 @@ describe('deck bridge — nested slide markup (#1530)', () => {
     expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 4 });
   });
 
+  it('prevents framework decks from handling one keyboard event on both window and document', async () => {
+    const bodyHtml = `
+      <div class="deck-stage" id="deck-stage">
+        <section class="slide">One</section>
+        <section class="slide">Two</section>
+        <section class="slide">Three</section>
+      </div>
+    `;
+    const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      deck: true,
+    });
+    const script = extractDeckBridgeScript(srcdoc);
+    const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+    });
+    const win = dom.window;
+    Object.defineProperty(win, 'parent', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+
+    const slides = Array.from(win.document.querySelectorAll('.slide'));
+    let active = 0;
+    function paint() {
+      slides.forEach((slide, index) => {
+        slide.toggleAttribute('hidden', index !== active);
+      });
+    }
+    function go(index: number) {
+      active = Math.max(0, Math.min(slides.length - 1, index));
+      paint();
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      go(active + 1);
+    }
+    win.addEventListener('keydown', onKey, true);
+    win.document.addEventListener('keydown', onKey, true);
+    paint();
+
+    const evaluate = new win.Function(script);
+    evaluate.call(win);
+    win.document.body.dispatchEvent(new win.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    }));
+
+    expect(active).toBe(1);
+  });
+
   it('scrolls documentElement when body looks horizontally scrollable in a sandboxed Simple Deck', async () => {
     const { win, parentPostMessage } = setupDeckBridge(`
       <style>

@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-xhs-pastel-card",
-  "title": "Html Ppt Xhs Pastel Card",
+  "title": "Write a Personal Manifesto Talk like a Narrative Podcast Producer",
   "title_i18n": {
-    "zh-CN": "Html Ppt Xhs 柔和马卡龙卡片",
-    "zh-TW": "Html Ppt Xhs 柔和馬卡龍卡片",
-    "ja": "Html Ppt Xhs パステルカード",
-    "ko": "Html Ppt Xhs 파스텔 카드",
-    "de": "Html Ppt Xhs Pastell-Karte",
-    "fr": "Html Ppt Xhs Carte Pastel",
-    "ru": "Html Ppt Xhs Пастельная карточка",
-    "es": "Html Ppt Xhs Tarjeta Pastel",
-    "pt-BR": "Html Ppt Xhs Cartão Pastel",
-    "it": "Html Ppt Xhs Scheda Pastello",
-    "vi": "Html Ppt Xhs Thẻ Pastel",
-    "pl": "Html Ppt Xhs Karta Pastelowa",
-    "id": "Html Ppt Xhs Kartu Pastel",
-    "nl": "Html Ppt Xhs Pastelkaart",
-    "ar": "Html Ppt Xhs بطاقة الباستيل",
-    "tr": "Html Ppt Xhs Pastel Kart",
-    "uk": "Html Ppt Xhs Пастельна картка",
-    "en": "Html Ppt Xhs Pastel Card"
+    "en": "Write a Personal Manifesto Talk like a Narrative Podcast Producer",
+    "zh-CN": "像叙事播客制作人一样写个人宣言演讲",
+    "zh-TW": "像叙事播客制作人一样写个人宣言演讲"
   },
   "version": "0.1.0",
-  "description": "柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，\"杂志、手作、不太科技\"的感觉。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.",
   "description_i18n": {
-    "zh-CN": "柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，'杂志、手作、不太科技'的感觉。",
-    "zh-TW": "柔和馬卡龍慢生活 deck — 奶油 #fef8f1 底 + 三個柔光 blob、Playfair 斜體襯線 display 標題混 sans 正文、28px 圓角馬卡龍卡片（桃 / 薄荷 / 天 / 紫 / 檸 / 玫）、Playfair 斜體 01-04 序號、SVG donut 圖、chip+page 頂欄。適合生活方式 / 個人成長 / 慢生活 / 情緒類內容，『雜誌、手作、不太科技』的感覺。",
-    "ja": "柔らかなマカロンカラーのスローライフ deck — クリーム #fef8f1 背景 + 3つのソフトブロブ、Playfair イタリック serif display タイトル + sans 本文、28px 角丸マカロンカード（ピーチ / ミント / スカイ / パープル / レモン / ローズ）、Playfair イタリック 01-04 番号、SVG ドーナツ図、chip+page トップバー。ライフスタイル / 個人成長 / スローライフ / エモーショナルコンテンツに最適、『雑誌、手作り、テックすぎない』雰囲気。",
-    "ko": "부드러운 마카롱 슬로우 라이프 deck — 크림 #fef8f1 배경 + 3개의 소프트 blob、Playfair 이탤릭 serif display 제목 + sans 본문、28px 라운드 마카롱 카드（피치 / 민트 / 스카이 / 퍼플 / 레몬 / 로즈）、Playfair 이탤릭 01-04 번호、SVG 도넛 차트、chip+page 상단바. 라이프스타일 / 개인 성장 / 슬로우 라이프 / 감성 콘텐츠에 적합하며, '매거진, 핸드메이드, 덜 테크한' 느낌.",
-    "de": "Sanftes Macaron Slow-Life-Deck mit cremefarbenem #fef8f1 Hintergrund, drei Softlight-Blobs, Playfair-Italic-Serif-Display-Titeln + Sans-Bodytext, 28px abgerundete Macaron-Karten in sechs Farben, SVG-Donut-Diagrammen und Chip+Page-Topbar. Ideal für Lifestyle, persönliches Wachstum und emotionale Inhalte mit ‚Magazin, handgemacht, nicht zu technisch'-Ästhetik.",
-    "fr": "Deck slow life macaron doux avec fond crème #fef8f1, trois blobs lumière douce, titres display Playfair italic serif + corps sans, cartes macaron arrondies 28px en six couleurs, diagrammes donut SVG et barre supérieure chip+page. Idéal pour lifestyle, développement personnel et contenu émotionnel avec une esthétique 'magazine, fait main, pas trop tech'.",
-    "ru": "Нежный макарон slow-life дек с кремовым фоном #fef8f1, тремя мягкими блобами, заголовками Playfair italic serif display + текстом sans, закругленными карточками 28px в шести цветах макарон, SVG donut-диаграммами и верхней панелью chip+page. Подходит для контента о стиле жизни, личностном росте и эмоций с эстетикой 'журнал, ручная работа, не слишком техно'.",
-    "es": "Deck slow life macaron suave con fondo crema #fef8f1, tres blobs de luz suave, títulos display Playfair italic serif + cuerpo sans, tarjetas macaron redondeadas de 28px en seis colores, gráficos donut SVG y barra superior chip+page. Ideal para lifestyle, crecimiento personal y contenido emocional con estética 'revista, hecho a mano, no muy tech'.",
-    "pt-BR": "Deck slow life macaron suave com fundo creme #fef8f1, três blobs de luz suave, títulos display Playfair italic serif + corpo sans, cartões macaron arredondados de 28px em seis cores, gráficos donut SVG e barra superior chip+page. Ideal para lifestyle, crescimento pessoal e conteúdo emocional com estética 'revista, feito à mão, não muito tech'.",
-    "it": "Deck slow life macaron delicato con sfondo crema #fef8f1, tre blob di luce soffusa, titoli display Playfair italic serif + corpo sans, schede macaron arrotondate da 28px in sei colori, grafici donut SVG e barra superiore chip+page. Ideale per lifestyle, crescita personale e contenuti emozionali con estetica 'rivista, fatto a mano, non troppo tech'.",
-    "vi": "Deck slow life macaron mềm mại với nền kem #fef8f1, ba blob ánh sáng mềm, tiêu đề display Playfair italic serif + nội dung sans, thẻ macaron bo tròn 28px với sáu màu, biểu đồ donut SVG và thanh trên chip+page. Phù hợp cho nội dung lifestyle, phát triển bản thân và cảm xúc với phong cách 'tạp chí, thủ công, không quá công nghệ'.",
-    "pl": "Miękki makaronikowy deck slow life z kremowym tłem #fef8f1, trzema miękkimi blobami, tytułami display Playfair italic serif + tekstem sans, zaokrąglonymi kartami makaronik 28px w sześciu kolorach, wykresami donut SVG i górnym paskiem chip+page. Idealny dla lifestyle, rozwoju osobistego i treści emocjonalnych z estetyką 'magazyn, ręcznie robione, nie za bardzo tech'.",
-    "id": "Deck slow life macaron lembut dengan latar krim #fef8f1, tiga blob cahaya lembut, judul display Playfair italic serif + isi sans, kartu macaron bulat 28px dalam enam warna, grafik donut SVG, dan bar atas chip+page. Cocok untuk konten lifestyle, pertumbuhan pribadi, dan emosional dengan estetika 'majalah, buatan tangan, tidak terlalu tech'.",
-    "nl": "Zachte macaron slow-life deck met crème achtergrond #fef8f1, drie zachte lichtblobs, Playfair italic serif display titels + sans body, 28px afgeronde macaronkaarten in zes kleuren, SVG donut-grafieken en chip+page topbalk. Ideaal voor lifestyle, persoonlijke groei en emotionele content met 'magazine, handgemaakt, niet te tech' esthetiek.",
-    "ar": "تصميم حياة بطيئة ماكارون ناعم بخلفية كريمية #fef8f1، ثلاثة blobs ضوئية ناعمة، عناوين display Playfair مائلة serif + نص sans، بطاقات ماكارون دائرية 28px بستة ألوان، رسوم donut SVG وشريط علوي chip+page. مثالي لمحتوى نمط الحياة والنمو الشخصي والعاطفي بجمالية 'مجلة، يدوي الصنع، ليس تقنياً جداً'.",
-    "tr": "Krem #fef8f1 arka planlı, üç yumuşak ışık blob'u, Playfair italic serif display başlıklar + sans gövde, altı renkte 28px yuvarlak macaron kartlar, SVG donut grafikleri ve chip+page üst çubuğu ile yumuşak macaron slow life deck. Yaşam tarzı, kişisel gelişim ve duygusal içerik için ideal, 'dergi, el yapımı, fazla teknolojik değil' estetiği.",
-    "uk": "Ніжний макарон slow-life дек з кремовим фоном #fef8f1, трьома м'якими блобами, заголовками Playfair italic serif display + текстом sans, закругленими картками 28px у шести кольорах макарон, SVG donut-діаграмами та верхньою панеллю chip+page. Підходить для контенту про стиль життя, особистісний ріст та емоції з естетикою 'журнал, ручна робота, не надто техно'.",
-    "en": "柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，\"杂志、手作、不太科技\"的感觉。"
+    "en": "A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.",
+    "zh-CN": "像叙事播客制作人一样写个人宣言演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像叙事播客制作人一样写个人宣言演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -61,7 +32,19 @@
     "macaron",
     "lifestyle",
     "slow-living",
-    "untitled"
+    "untitled",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "html-ppt-xhs-pastel-card",
+    "marketing-and-gtm",
+    "life",
+    "travel-photo-essay-deck",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -82,13 +65,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-xhs-pastel-card template to create a slow-living themed carousel. Use a cream background, macaron rounded cards, Playfair italic numbering, and a donut chart. First ask me for the theme (rest, pause, self-care, etc.) and 5-7 points I want to say.",
-        "zh-CN": "用 html-ppt-xhs-pastel-card 模板做一份慢生活主题图文。奶油底 + 马卡龙圆角卡片 + Playfair 斜体序号 + donut 图。先告诉我主题（休息 / 暂停 / 自我照顾…）和 5-7 个想说的点。"
+        "en": "Create \"Write a Personal Manifesto Talk like a Narrative Podcast Producer\" as a decision-grade Life & story deck in this template's own visual system. Subject: A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Audience: community, talk audience. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像叙事播客制作人一样写个人宣言演讲。像叙事播客制作人一样写个人宣言演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Xhs Pastel Card"
+          "title": "Write a Personal Manifesto Talk like a Narrative Podcast Producer",
+          "title_i18n": {
+            "en": "Write a Personal Manifesto Talk like a Narrative Podcast Producer",
+            "zh-CN": "像叙事播客制作人一样写个人宣言演讲",
+            "zh-TW": "像叙事播客制作人一样写个人宣言演讲"
+          }
         }
       ]
     },
@@ -116,6 +104,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "life"
   }
 }

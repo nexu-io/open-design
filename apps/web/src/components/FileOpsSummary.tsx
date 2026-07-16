@@ -39,12 +39,14 @@ const OP_LABEL_KEY: Record<FileOpKind, keyof Dict> = {
   read: 'tool.read',
   write: 'tool.write',
   edit: 'tool.edit',
+  delete: 'tool.delete',
 };
 
 const OP_BADGE_GLYPH: Record<FileOpKind, string> = {
   read: 'R',
   write: 'W',
   edit: 'E',
+  delete: 'D',
 };
 
 export function FileOpsSummary({
@@ -69,6 +71,7 @@ export function FileOpsSummary({
   const summaryParts: string[] = [];
   if (counts.write > 0) summaryParts.push(`${t('tool.write')} ${counts.write}`);
   if (counts.edit > 0) summaryParts.push(`${t('tool.edit')} ${counts.edit}`);
+  if (counts.delete > 0) summaryParts.push(`${t('tool.delete')} ${counts.delete}`);
   if (counts.read > 0) summaryParts.push(`${t('tool.read')} ${counts.read}`);
 
   return (
@@ -124,6 +127,7 @@ function FileOpRow({
   const t = useT();
   const canOpen =
     !!onRequestOpenFile &&
+    !entry.ops.includes('delete') &&
     (projectFileNames ? projectFileNames.has(entry.path) : true);
   return (
     <li

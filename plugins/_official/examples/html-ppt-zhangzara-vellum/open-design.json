@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-vellum",
-  "title": "Html Ppt Zhangzara Vellum",
+  "title": "Deliver a Humanities Research Lecture like a Tenured Art Historian",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Vellum",
-    "zh-TW": "Html Ppt Zhangzara Vellum",
-    "ja": "Html Ppt Zhangzara Vellum",
-    "ko": "Html Ppt Zhangzara Vellum",
-    "de": "Html Ppt Zhangzara Vellum",
-    "fr": "Html Ppt Zhangzara Vellum",
-    "ru": "Html Ppt Zhangzara Vellum",
-    "es": "Html Ppt Zhangzara Vellum",
-    "pt-BR": "Html Ppt Zhangzara Vellum",
-    "it": "Html Ppt Zhangzara Vellum",
-    "vi": "Html Ppt Zhangzara Vellum",
-    "pl": "Html Ppt Zhangzara Vellum",
-    "id": "Html Ppt Zhangzara Vellum",
-    "nl": "Html Ppt Zhangzara Vellum",
-    "ar": "Html Ppt Zhangzara Vellum",
-    "tr": "Html Ppt Zhangzara Vellum",
-    "uk": "Html Ppt Zhangzara Vellum",
-    "en": "Html Ppt Zhangzara Vellum"
+    "en": "Deliver a Humanities Research Lecture like a Tenured Art Historian",
+    "zh-CN": "像终身教授一样做人文研究讲座",
+    "zh-TW": "像终身教授一样做人文研究讲座"
   },
   "version": "0.1.0",
-  "description": "Vellum — Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic. Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder reflections.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Built as a decision-grade academic research deck for faculty, graduate seminar.",
   "description_i18n": {
-    "zh-CN": "Vellum — 深海军蓝画布搭配暖黄色斜体 Cormorant 衬线字体和单一灰蓝色强调。静谧学术美学，适用于研究报告、白皮书、学术简报、政策文件、咨询交付物、长篇社论、创始人思考等需要学术、文学和智性氛围的内容。",
-    "zh-TW": "Vellum — 深海軍藍畫布搭配暖黃色斜體 Cormorant 襯線字體和單一灰藍色強調。靜謐學術美學，適用於研究報告、白皮書、學術簡報、政策文件、諮詢交付物、長篇社論、創辦人思考等需要學術、文學和智性氛圍的內容。",
-    "ja": "Vellum — 深いネイビーのキャンバスに暖かみのある黄色のイタリック Cormorant セリフ体と単一のダスティティールアクセント。静かで学術的な美学。研究論文、ホワイトペーパー、学術・政策ブリーフ、アドバイザリー成果物、長文記事、創業者の考察など、学術的で文学的、知的な印象を与えたいコンテンツに最適。",
-    "ko": "Vellum — 따뜻한 노란색 이탤릭 Cormorant 세리프와 단일 더스티 틸 액센트가 있는 짙은 네이비 캔버스. 조용하고 학구적인 미학. 연구 종합, 백서, 학술 및 정책 브리프, 자문 결과물, 장문 에디토리얼, 창업자 회고록 등 학술적이고 문학적이며 지적인 느낌이 필요한 콘텐츠에 적합합니다.",
-    "de": "Vellum — Tiefes Marineblau mit warmgelben kursiven Cormorant-Serifen und einem einzelnen staubigen Türkis-Akzent. Eine ruhige, gelehrte Ästhetik. Ideal für Forschungssynthesen, Whitepapers, akademische und politische Briefings, Beratungsunterlagen, lange redaktionelle Beiträge und Gründerreflexionen.",
-    "fr": "Vellum — Toile bleu marine profond avec empattements Cormorant italiques jaune chaud et un seul accent turquoise poussiéreux. Une esthétique calme et érudite. Idéal pour les synthèses de recherche, livres blancs, notes académiques et politiques, livrables de conseil, pièces éditoriales longues et réflexions de fondateurs.",
-    "ru": "Vellum — Темно-синий холст с теплым желтым курсивом Cormorant с засечками и одним пыльно-бирюзовым акцентом. Тихая, академическая эстетика. Идеален для научных обзоров, белых книг, академических и политических брифингов, консалтинговых материалов, длинных редакционных статей и размышлений основателей.",
-    "es": "Vellum — Lienzo azul marino profundo con serifas Cormorant en cursiva amarillo cálido y un único acento turquesa polvoriento. Una estética tranquila y erudita. Ideal para síntesis de investigación, informes técnicos, documentos académicos y políticos, entregables de consultoría, piezas editoriales largas y reflexiones de fundadores.",
-    "pt-BR": "Vellum — Tela azul-marinho profundo com serifas Cormorant itálicas amarelo-quentes e um único acento turquesa empoeirado. Uma estética tranquila e erudita. Ideal para sínteses de pesquisa, white papers, briefings acadêmicos e políticos, entregas de consultoria, peças editoriais longas e reflexões de fundadores.",
-    "it": "Vellum — Tela blu navy profondo con grazie Cormorant corsive giallo caldo e un singolo accento turchese polveroso. Un'estetica tranquilla e accademica. Ideale per sintesi di ricerca, white paper, briefing accademici e politici, deliverable di consulenza, pezzi editoriali lunghi e riflessioni dei fondatori.",
-    "vi": "Vellum — Canvas xanh navy đậm với chữ serif Cormorant nghiêng màu vàng ấm và một điểm nhấn xanh ngọc nhạt. Phong cách học thuật yên tĩnh. Lý tưởng cho tổng hợp nghiên cứu, bạch thư, tóm tắt học thuật và chính sách, tài liệu tư vấn, bài xã luận dài và suy ngẫm của người sáng lập.",
-    "pl": "Vellum — Głęboko granatowe płótno z ciepłożółtymi kursywowymi szeryfami Cormorant i pojedynczym pylistym turkusowym akcentem. Spokojna, akademicka estetyka. Idealne do syntez badawczych, białych ksiąg, raportów akademickich i politycznych, materiałów doradczych, długich tekstów redakcyjnych i refleksji założycieli.",
-    "id": "Vellum — Kanvas biru navy dalam dengan serif Cormorant miring kuning hangat dan aksen teal berdebu tunggal. Estetika tenang dan akademis. Ideal untuk sintesis riset, white paper, briefing akademik dan kebijakan, deliverable konsultasi, artikel editorial panjang, dan refleksi pendiri.",
-    "nl": "Vellum — Diep marineblauw canvas met warmgele cursieve Cormorant schreefletters en een enkel stoffig teal accent. Een rustige, academische esthetiek. Ideaal voor onderzoekssyntheses, whitepapers, academische en beleidsbriefings, adviesdeliverables, lange redactionele stukken en oprichtingsreflecties.",
-    "ar": "Vellum — لوحة زرقاء داكنة عميقة مع خطوط Cormorant المائلة بلون أصفر دافئ ولكنة واحدة باللون الأزرق المخضر الباهت. جمالية هادئة وأكاديمية. مثالي لتوليفات الأبحاث والأوراق البيضاء والملخصات الأكاديمية والسياسية ومخرجات الاستشارات والمقالات التحريرية الطويلة وتأملات المؤسسين.",
-    "tr": "Vellum — Sıcak sarı italik Cormorant serifleri ve tek tozlu deniz mavisi vurgusuyla derin lacivert tuval. Sessiz, akademik bir estetik. Araştırma sentezleri, teknik raporlar, akademik ve politika özetleri, danışmanlık çıktıları, uzun editöryal yazılar ve kurucu düşünceleri için ideal.",
-    "uk": "Vellum — Глибоке темно-синє полотно з теплим жовтим курсивом Cormorant із засічками та єдиним пильно-бірюзовим акцентом. Тиха, академічна естетика. Ідеально підходить для синтезу досліджень, білих паперів, академічних і політичних брифінгів, консалтингових матеріалів, довгих редакційних статей і роздумів засновників.",
-    "en": "Vellum — Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic. Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder reflections."
+    "en": "A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Built as a decision-grade academic research deck for faculty, graduate seminar.",
+    "zh-CN": "像终身教授一样做人文研究讲座——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像终身教授一样做人文研究讲座——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,18 @@
     "white-paper-or-longform-report",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-vellum",
+    "academic-research",
+    "academic-review-deck",
+    "research",
+    "grant",
+    "review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +61,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "research",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +69,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Vellum — Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic. Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder",
-        "zh-CN": "使用这个插件完成以下任务：Vellum — Deep navy canvas with warm-yellow italic Cormorant serifs and a single dusty teal accent. A quiet, scholarly aesthetic. Anything that should feel scholarly, literary, and quietly intelligent: research synthesis, white papers, academic and policy briefs, advisory deliverables, longform editorial pieces, founder"
+        "en": "Create \"Deliver a Humanities Research Lecture like a Tenured Art Historian\" as a decision-grade Academic research deck in this template's own visual system. Subject: A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. Audience: faculty, graduate seminar. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming.",
+        "zh-CN": "像终身教授一样做人文研究讲座。像终身教授一样做人文研究讲座——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。 主题：A humanities lecture: how Renaissance linear perspective reshaped early cartography — sources, argument, and evidence. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Vellum"
+          "title": "Deliver a Humanities Research Lecture like a Tenured Art Historian",
+          "title_i18n": {
+            "en": "Deliver a Humanities Research Lecture like a Tenured Art Historian",
+            "zh-CN": "像终身教授一样做人文研究讲座",
+            "zh-TW": "像终身教授一样做人文研究讲座"
+          }
         }
       ]
     },
@@ -121,6 +108,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "academic-research"
   }
 }

@@ -56,6 +56,11 @@ interface BufferedSafetyEvent {
 // memory footprint trivial.
 const MAX_BUFFER_SIZE = 50;
 
+// PostHog's exception ingestion requires a `platform` on each stack frame.
+// Mirrors the value posthog-js stamps so our hand-built events pass the
+// same server-side processing. See `buildExceptionList`.
+const FRAME_PLATFORM = 'web:javascript';
+
 let context: ExceptionTrackingContext | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
@@ -75,6 +80,15 @@ export function clearExceptionTrackingContext(): void {
   // until the page unloads — no key, nowhere to send them, but also
   // nothing leaks.
   context = null;
+}
+
+// Patches only the appVersion field on an existing context. Safe to call
+// mid-session when the real version arrives after boot (e.g. /api/version
+// resolves after the initial '0.0.0' placeholder). No-op if context hasn't
+// been set yet.
+export function patchExceptionTrackingAppVersion(version: string): void {
+  if (!context || !version) return;
+  context = { ...context, appVersion: version };
 }
 
 // Called once at app boot. Idempotent — repeated calls are no-ops.
@@ -113,12 +127,62 @@ interface CaptureMetadata {
   handled?: boolean;
 }
 
+// Generic "the fetch could not complete" wordings across engines. As an
+// uncaught exception these carry no URL and no status, so they're
+// uninformative on their own — but we only suppress them in the packaged
+// runtime (see `isIgnorableNoise`), never the web app.
+const FETCH_FAILURE_MESSAGES = new Set([
+  'Failed to fetch', // Chromium (Electron, Chrome)
+  'Load failed', // WebKit (Safari)
+  'NetworkError when attempting to fetch resource.', // Firefox
+]);
+
+// A frame originates in packaged desktop app code when its (pre-scrub) path
+// is either:
+//   - served from the `od://` scheme — the packaged renderer, all platforms;
+//   - a `file://` path inside the macOS app bundle, i.e. it contains
+//     `.app/Contents/Resources` (source-mapped frames; scrub.ts rewrites
+//     these for privacy — see `scrubFilePath`). We match the bundle marker
+//     rather than a channel-specific app name so `Open Design Beta.app` /
+//     `Open Design Preview.app` builds are covered too.
+function isPackagedFramePath(path: string): boolean {
+  return path.startsWith('od://') || path.includes('.app/Contents/Resources');
+}
+
+// True when the exception originated in packaged desktop app code. We key off
+// the stack origin rather than `window.location` so the decision is tied to
+// where the failing call actually ran, and so it's deterministic to test.
+function originatesInPackagedApp(list: Array<Record<string, unknown>>): boolean {
+  const stacktrace = list[0]?.stacktrace as
+    | { frames?: Array<Record<string, unknown>> }
+    | undefined;
+  const frames = stacktrace?.frames ?? [];
+  return frames.some((frame) => {
+    const path = typeof frame.abs_path === 'string' ? frame.abs_path : frame.filename;
+    return typeof path === 'string' && isPackagedFramePath(path);
+  });
+}
+
+// Fetch failures are environmental noise ONLY in the packaged app, where the
+// renderer constantly polls the local daemon and a momentary gap (daemon
+// restart, boot race, navigation/unmount abort, offline blip) makes
+// `Failed to fetch` ~90% of all captured exceptions — pure churn that buries
+// real bugs. We scope the drop to that runtime deliberately: in a normal
+// web context the very same TypeError can be the only signal of a broken
+// `/api/*` deployment or a CORS/TLS regression, so it must stay captured.
+function isIgnorableNoise(list: Array<Record<string, unknown>>): boolean {
+  const value = list[0]?.value;
+  if (typeof value !== 'string' || !FETCH_FAILURE_MESSAGES.has(value)) return false;
+  return originatesInPackagedApp(list);
+}
+
 function captureException(
   error: unknown,
   fallbackMessage: string,
   metadata: CaptureMetadata = {},
 ): void {
   const list = buildExceptionList(error, fallbackMessage, metadata);
+  if (isIgnorableNoise(list)) return;
   const scrubbed = scrubExceptionList(list);
   const properties: Record<string, unknown> = {
     $exception_list: scrubbed,
@@ -197,10 +261,81 @@ function dispatch(item: BufferedSafetyEvent): void {
       // auth surface; cookies are irrelevant and sending them would just
       // add CORS preflight friction.
       credentials: 'omit',
+    }).catch(() => {
+      // Swallow the async rejection too. The synchronous try/catch below
+      // only guards against fetch throwing on a malformed argument; the
+      // returned promise rejects separately when the beacon can't reach
+      // PostHog (offline, ingest down). Left unhandled, that rejection is
+      // itself scooped up by the `unhandledrejection` listener above and
+      // re-reported as a `Failed to fetch` $exception — a self-amplifying
+      // loop where our own telemetry transport manufactures telemetry.
     });
   } catch {
     // best-effort: safety telemetry must never propagate
   }
+}
+
+// Frame-level source-map correlation.
+//
+// `@posthog/cli sourcemap inject` (run from tools/pack/src/web-sourcemaps.ts
+// on every packaged build) bakes a unique chunk id into each browser chunk
+// and the matching id into the .map it uploads to PostHog. At load time each
+// injected chunk registers `globalThis._posthogChunkIds[<its Error().stack>] =
+// <chunkId>`. Symbolication then requires that chunk id to ride along on each
+// captured frame: packaged chunks load over the `od://` scheme, which PostHog
+// cannot fetch a `.map` from, so the chunk id is the ONLY correlation key.
+//
+// posthog-js stamps it natively, but we set `capture_exceptions: false` and
+// hand-build exceptions here, so we must replicate the stamping or every
+// packaged frame ships un-symbolicatable (observed in prod: 100% of frames
+// failed with "had no source url or chunk id"). This mirrors
+// @posthog/core error-tracking/chunk-ids.ts so the filename→chunkId map is
+// identical to what the uploaded maps were injected against.
+type ChunkIdMap = Record<string, string>;
+
+let cachedRegistry: ChunkIdMap | undefined;
+let cachedFilenameChunkIds: ChunkIdMap | undefined;
+let cachedRegistryKeyCount = -1;
+
+function getFilenameToChunkIdMap(): ChunkIdMap {
+  const registry = (globalThis as { _posthogChunkIds?: ChunkIdMap })._posthogChunkIds;
+  if (!registry) return {};
+  const keys = Object.keys(registry);
+  // Chunks register lazily as they load, so the registry grows over the
+  // session. Rebuild only when it changes (same identity + same size = hit).
+  if (
+    cachedFilenameChunkIds &&
+    cachedRegistry === registry &&
+    keys.length === cachedRegistryKeyCount
+  ) {
+    return cachedFilenameChunkIds;
+  }
+  const map: ChunkIdMap = {};
+  for (const stackKey of keys) {
+    const chunkId = registry[stackKey];
+    if (!chunkId) continue;
+    // The registry key is an Error().stack captured inside the injected chunk.
+    // Key the chunk id on the frame where that Error was constructed — the
+    // chunk's own file. @posthog/core scans its stackParser output (which it
+    // reverses to oldest-first) from the end, i.e. the NEWEST frame; parseStack
+    // here keeps Error.stack's native newest-first order, so the newest frame
+    // is frames[0]. Take the first frame with a filename. A registration stack
+    // is typically multi-frame (the injected IIFE sits above webpack
+    // require/loader frames), so picking the wrong end would key the id onto a
+    // runtime-chunk filename and leave the real chunk with no entry.
+    const frames = parseStack(stackKey, {});
+    for (const frame of frames) {
+      const filename = frame?.filename;
+      if (typeof filename === 'string' && filename) {
+        map[filename] = chunkId;
+        break;
+      }
+    }
+  }
+  cachedRegistry = registry;
+  cachedRegistryKeyCount = keys.length;
+  cachedFilenameChunkIds = map;
+  return map;
 }
 
 function buildExceptionList(
@@ -216,7 +351,30 @@ function buildExceptionList(
       ? error
       : fallbackMessage;
   const stack = isError && typeof error.stack === 'string' ? error.stack : '';
-  const frames = parseStack(stack, metadata);
+  const chunkIds = getFilenameToChunkIdMap();
+  // Stamp `platform` on every frame. PostHog's exception ingestion treats
+  // it as a required field (it selects the symbolication / issue-grouping
+  // strategy per frame); a frame without it fails the exceptions pipeline
+  // with "missing field platform" and the whole event is dropped
+  // server-side — which is why 100% of our hand-built `$exception` events
+  // were failing to ingest. posthog-js stamps the same value on each frame;
+  // we replicate it because client.ts sets `capture_exceptions: false` and
+  // this module is the sole browser-exception transport.
+  //
+  // Also stamp `chunk_id` when the frame's chunk registered one (see
+  // `getFilenameToChunkIdMap`). Without it, packaged `od://` frames carry no
+  // source URL PostHog can fetch, so the uploaded sourcemap can never be
+  // matched and every frame stays minified — the reason production stacks
+  // showed `?:?` despite the tools-pack sourcemap upload succeeding.
+  const frames = parseStack(stack, metadata).map((frame) => {
+    const filename = typeof frame.filename === 'string' ? frame.filename : undefined;
+    const chunkId = filename ? chunkIds[filename] : undefined;
+    return {
+      ...frame,
+      platform: FRAME_PLATFORM,
+      ...(chunkId ? { chunk_id: chunkId } : {}),
+    };
+  });
   return [
     {
       type,

@@ -6,6 +6,7 @@ import {
   velaLogout,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { openExternalUrl } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import {
   amrHandoffDeviceId,
@@ -44,6 +45,7 @@ interface AmrLoginPillProps {
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
   iconOnlySignOut?: boolean;
+  onSignInStarted?: () => void;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
 
@@ -76,11 +78,11 @@ export interface AmrAccountControlProps {
   consoleUrl?: string;
   iconOnlySignOut?: boolean;
   showCancelSignInAction?: boolean;
-  // Device-authorization details surfaced while signing in, so the user can
-  // complete login manually when the browser did not auto-open (see
-  // parseVelaLoginActivation in the daemon's vela.ts).
+  // Activation URL surfaced while signing in, so the user can re-open the
+  // sign-in page when the browser did not auto-open. The URL already carries
+  // the device code (see parseVelaLoginActivation in the daemon's vela.ts), so
+  // no separate code needs to be shown.
   activationUrl?: string;
-  userCode?: string;
   browserOpenFailed?: boolean;
   onSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
   onSignOut?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -125,7 +127,6 @@ export function AmrAccountControl({
   iconOnlySignOut = false,
   showCancelSignInAction = false,
   activationUrl,
-  userCode,
   browserOpenFailed = false,
   onSignIn,
   onSignOut,
@@ -136,10 +137,6 @@ export function AmrAccountControl({
   cancelSignInDisabled = false,
 }: AmrAccountControlProps) {
   const { t } = useI18n();
-  const [codeCopied, setCodeCopied] = useState(false);
-  useEffect(() => {
-    setCodeCopied(false);
-  }, [activationUrl, userCode]);
   const isSignedIn = status === 'signed-in';
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
@@ -259,31 +256,6 @@ export function AmrAccountControl({
             >
               {t('settings.amrActivationOpen')}
             </a>
-            {userCode ? (
-              <button
-                type="button"
-                className="amr-login-activation__code"
-                onClick={() => {
-                  // Guard explicitly: in runtimes without the async clipboard
-                  // API, copying is a no-op rather than a thrown click handler.
-                  const clipboard = navigator.clipboard;
-                  if (!clipboard) return;
-                  void clipboard.writeText(userCode).then(
-                    () => setCodeCopied(true),
-                    () => {},
-                  );
-                }}
-                aria-label={t('settings.amrActivationCopyCode')}
-                title={t('settings.amrActivationCopyCode')}
-              >
-                <span className="amr-login-activation__code-value">{userCode}</span>
-                <span className="amr-login-activation__code-action">
-                  {codeCopied
-                    ? t('settings.amrActivationCopied')
-                    : t('settings.amrActivationCopy')}
-                </span>
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -308,6 +280,7 @@ export function AmrLoginPill({
   revealPendingCancelAction = false,
   showConsoleAction = false,
   iconOnlySignOut = false,
+  onSignInStarted,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
@@ -488,6 +461,7 @@ export function AmrLoginPill({
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
       setPending('login');
+      onSignInStarted?.();
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
             metricsConsent,
@@ -517,6 +491,7 @@ export function AmrLoginPill({
       analytics.track,
       installationId,
       metricsConsent,
+      onSignInStarted,
       startPolling,
       t,
     ],
@@ -578,6 +553,7 @@ export function AmrLoginPill({
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.stopPropagation();
+      event.preventDefault();
       const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
         metricsConsent,
       });
@@ -586,11 +562,16 @@ export function AmrLoginPill({
         resolvedDeviceId: getResolvedDeviceId(),
         installationId,
       });
-      event.currentTarget.href = attributedAmrUrl(
+      const url = attributedAmrUrl(
         amrConsoleUrlForProfile(status?.profile),
         attribution,
         deviceId,
       );
+      event.currentTarget.href = url;
+      // This link deliberately stops propagation to avoid re-selecting its
+      // agent card, so App's document-level first-party bridge cannot see it.
+      // Open the final, attributed URL directly to mint the browser bridge.
+      void openExternalUrl(url);
     },
     [analytics.track, installationId, metricsConsent, status?.profile],
   );
@@ -638,7 +619,6 @@ export function AmrLoginPill({
         showCancelSignInAction={revealPendingCancelAction && loginInFlight}
         cancelSignInDisabled={cancelInFlight}
         activationUrl={activeLoginActivationStatus?.activationUrl}
-        userCode={activeLoginActivationStatus?.userCode}
         browserOpenFailed={activeLoginActivationStatus?.browserOpenFailed}
         onSignIn={handleLogin}
         onSignOut={handleLogout}

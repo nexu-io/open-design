@@ -18,10 +18,11 @@ describe('SessionModeToggle', () => {
     fireEvent.click(screen.getByTestId('session-mode-trigger'));
 
     expect(screen.getByRole('menuitemradio', { name: /Design mode/i }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('menuitemradio', { name: /Plan mode/i }).getAttribute('aria-checked')).toBe('false');
     expect(screen.getByRole('menuitemradio', { name: /Ask mode/i }).getAttribute('aria-checked')).toBe('false');
   });
 
-  it('switches mode from the menu', () => {
+  it('switches into the lightweight Ask mode from the menu', () => {
     const onChange = vi.fn();
     render(<SessionModeToggle mode="design" onChange={onChange} />);
 
@@ -32,10 +33,39 @@ describe('SessionModeToggle', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
+  it('switches mode from the menu', () => {
+    const onChange = vi.fn();
+    render(<SessionModeToggle mode="design" onChange={onChange} />);
+
+    fireEvent.click(screen.getByTestId('session-mode-trigger'));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Plan mode/i }));
+
+    expect(onChange).toHaveBeenCalledWith('plan');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('tags each mode with its expected usage/cost', () => {
+    render(<SessionModeToggle mode="design" onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('session-mode-trigger'));
+
+    // Every option in the menu carries a usage tier so modes can be compared.
+    const menu = screen.getByRole('menu');
+    expect(menu.textContent).toContain('Light');
+    expect(menu.textContent).toContain('Standard');
+    expect(menu.textContent).toContain('Heavy');
+
+    // The description card explains the active mode's usage expectation.
+    const card = screen.getByRole('tooltip');
+    expect(card.textContent).toContain('Typical usage');
+    expect(card.textContent).toContain('Generates files and multimodal media');
+    expect(screen.getByRole('img', { name: 'Typical usage: Heavy' })).toBeTruthy();
+  });
+
   it('shows localized guidance only after opening the menu', () => {
     render(
       <I18nProvider initial="zh-CN">
-        <SessionModeToggle mode="chat" onChange={vi.fn()} />
+        <SessionModeToggle mode="plan" onChange={vi.fn()} />
       </I18nProvider>,
     );
 
@@ -45,8 +75,8 @@ describe('SessionModeToggle', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
 
     fireEvent.click(trigger);
-    expect(screen.getByRole('tooltip').textContent).toContain('Ask 模式');
-    expect(screen.getByRole('tooltip').textContent).toContain('总结这份稿子，并指出还缺什么。');
+    expect(screen.getByRole('tooltip').textContent).toContain('规划模式');
+    expect(screen.getByRole('tooltip').textContent).toContain('先生成一份逐页 PPT 大纲。');
 
     const designOption = screen.getByRole('menuitemradio', { name: /设计模式/i });
     fireEvent.pointerEnter(designOption);

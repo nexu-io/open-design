@@ -10,12 +10,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
-import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
+import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
 const execFileAsync = promisify(execFile);
@@ -34,6 +34,7 @@ const verifyCoreOnly = smokeProfile === 'core';
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
+const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -82,25 +83,25 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    const amrCard = document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__card');
-    const alternativeCards = Array.from(document.querySelectorAll('.onboarding-view__alternatives .onboarding-view__card'));
-    const localCard = alternativeCards[0] ?? null;
-    const byokCard = alternativeCards[1] ?? null;
+    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
+    // secondary runtime links) replaces the old selectable runtime cards.
+    const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
+    const secondaryLinks = Array.from(
+      document.querySelectorAll('.onboarding-cloud__secondary'),
+    );
+    const localLink = secondaryLinks[0] ?? null;
+    const byokLink = secondaryLinks[1] ?? null;
+    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
     const setupPanel = document.querySelector('.onboarding-view__setup-panel');
-    const selectedCard = document.querySelector('.onboarding-view__card.is-selected');
 
     return {
-      amrCardVisible: amrCard instanceof HTMLElement,
-      amrModelPickerVisible: Boolean(document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')),
-      amrSelected: amrCard?.getAttribute('aria-pressed') === 'true',
-      byokCardVisible: byokCard instanceof HTMLElement,
-      byokSelected: byokCard?.getAttribute('aria-pressed') === 'true',
+      backVisible: backToCloud instanceof HTMLElement,
+      byokLinkVisible: byokLink instanceof HTMLElement,
+      cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
       inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localCardVisible: localCard instanceof HTMLElement,
-      localSelected: localCard?.getAttribute('aria-pressed') === 'true',
+      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      selectedText: selectedCard?.textContent?.trim() ?? null,
       setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
@@ -235,20 +236,19 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-type OnboardingRuntime = 'amr' | 'local' | 'byok';
+// The redesigned connect step exposes the two alternative runtimes as
+// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
+// not a selectable link).
+type OnboardingRuntime = 'local' | 'byok';
 
 type PackagedOnboardingEvalValue = {
-  amrCardVisible: boolean;
-  amrModelPickerVisible: boolean;
-  amrSelected: boolean;
-  byokCardVisible: boolean;
-  byokSelected: boolean;
+  backVisible: boolean;
+  byokLinkVisible: boolean;
+  cloudSignInVisible: boolean;
   href: string;
   inputCount: number;
-  localCardVisible: boolean;
-  localSelected: boolean;
+  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  selectedText: string | null;
   setupPanelVisible: boolean;
   text: string | null;
   title: string;
@@ -269,7 +269,7 @@ macDescribe('packaged mac runtime smoke', () => {
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
-    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
+    let payloadFixture: ToolsServeUpdaterFixture | null = null;
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
@@ -289,15 +289,18 @@ macDescribe('packaged mac runtime smoke', () => {
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
         if (updateMetadataUrl != null && updateMetadataUrl !== '') {
+          assertUpdateVersionPresent('mac', updateVersion);
           applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
         } else {
+          assertToolsServeFixtureEnabled('mac', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
-          payloadFixture = await startPackagedPayloadUpdateFixture({
+          payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
             platform: 'mac',
             version: localPayload.targetVersion,
+            workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
         }
@@ -493,38 +496,40 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
         snapshot.onboardingVisible &&
-        snapshot.amrCardVisible &&
-        snapshot.localCardVisible &&
-        snapshot.byokCardVisible,
-        'fresh packaged onboarding runtime choices',
+        snapshot.cloudSignInVisible &&
+        snapshot.localLinkVisible &&
+        snapshot.byokLinkVisible,
+        'fresh packaged onboarding cloud sign-in landing',
       );
       expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
-      expect(initial.amrCardVisible).toBe(true);
-      expect(initial.localCardVisible).toBe(true);
-      expect(initial.byokCardVisible).toBe(true);
+      expect(initial.cloudSignInVisible).toBe(true);
+      expect(initial.localLinkVisible).toBe(true);
+      expect(initial.byokLinkVisible).toBe(true);
 
+      // Expand the BYOK panel from the landing, then collapse back via Back.
       await clickPackagedOnboardingRuntime('byok');
       const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.byokSelected && snapshot.setupPanelVisible && snapshot.inputCount > 0,
+        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
         'packaged onboarding BYOK setup panel',
       );
-      expect(byok.byokSelected).toBe(true);
       expect(byok.setupPanelVisible).toBe(true);
 
+      // The secondary links only live on the landing, so Back before Local.
+      await clickPackagedOnboardingBack();
       await clickPackagedOnboardingRuntime('local');
       const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.localSelected && snapshot.setupPanelVisible,
+        (snapshot) => snapshot.setupPanelVisible,
         'packaged onboarding Local CLI setup panel',
       );
-      expect(local.localSelected).toBe(true);
       expect(local.setupPanelVisible).toBe(true);
 
-      await clickPackagedOnboardingRuntime('amr');
-      const amr = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.amrSelected && !snapshot.setupPanelVisible,
-        'packaged onboarding AMR selection',
+      // Back once more lands on the cloud sign-in surface for the screenshot.
+      await clickPackagedOnboardingBack();
+      const landing = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
+        'packaged onboarding cloud sign-in landing after Back',
       );
-      expect(amr.amrSelected).toBe(true);
+      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -533,10 +538,10 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-mac-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        amr,
         byok,
         health,
         initial,
+        landing,
         local,
         namespace,
         screenshot: 'screenshots/open-design-mac-onboarding-smoke.png',
@@ -1453,6 +1458,18 @@ function resolveFallbackUpdateBuildJsonPath(): string | null {
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'mac-tools-pack-update-build.json');
 }
 
+function assertToolsServeFixtureEnabled(platformName: string, value: string | null): void {
+  if (value === 'tools-serve') return;
+  throw new Error(
+    `full packaged ${platformName} payload smoke requires explicit tools-serve fixture; set OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE=tools-serve or provide OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL`,
+  );
+}
+
+function assertUpdateVersionPresent(platformName: string, value: string | null): asserts value is string {
+  if (value != null && value.length > 0) return;
+  throw new Error(`full packaged ${platformName} payload smoke requires an explicit update target version with external update metadata`);
+}
+
 async function readLatestMacYmlVersion(latestMacYmlPath: string): Promise<string | null> {
   const latestMacYml = await readFile(resolveFromWorkspace(latestMacYmlPath), 'utf8').catch(() => null);
   if (latestMacYml == null) return null;
@@ -1975,6 +1992,14 @@ async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promi
   }
 }
 
+async function clickPackagedOnboardingBack(): Promise<void> {
+  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
+  const value = inspect.eval?.value;
+  if (!isRecord(value) || value.clicked !== true) {
+    throw new Error(`failed to click packaged onboarding back: ${formatUnknown(value)}`);
+  }
+}
+
 async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
@@ -2111,19 +2136,34 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
 }
 
 function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  const selector =
-    runtime === 'amr'
-      ? '.onboarding-view__amr-cloud-card .onboarding-view__card'
-      : `.onboarding-view__alternatives .onboarding-view__card:nth-child(${runtime === 'local' ? 1 : 2})`;
+  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
+  // [1] BYOK. Clicking one expands its setup panel.
+  const index = runtime === 'local' ? 0 : 1;
   return `
     (async () => {
-      const target = document.querySelector(${JSON.stringify(selector)});
+      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
+      const target = links[${index}] ?? null;
       if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-card', runtime: ${JSON.stringify(runtime)} };
+        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
       }
       target.click();
       await new Promise((resolve) => setTimeout(resolve, 250));
       return { clicked: true, runtime: ${JSON.stringify(runtime)} };
+    })()
+  `;
+}
+
+function clickPackagedOnboardingBackExpression(): string {
+  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
+  return `
+    (async () => {
+      const target = document.querySelector('.onboarding-view__back-to-cloud');
+      if (!(target instanceof HTMLElement)) {
+        return { clicked: false, reason: 'missing-back' };
+      }
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { clicked: true };
     })()
   `;
 }
@@ -2137,17 +2177,13 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.amrCardVisible !== 'boolean') return null;
-  if (typeof value.amrModelPickerVisible !== 'boolean') return null;
-  if (typeof value.amrSelected !== 'boolean') return null;
-  if (typeof value.byokCardVisible !== 'boolean') return null;
-  if (typeof value.byokSelected !== 'boolean') return null;
+  if (typeof value.backVisible !== 'boolean') return null;
+  if (typeof value.byokLinkVisible !== 'boolean') return null;
+  if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
   if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localCardVisible !== 'boolean') return null;
-  if (typeof value.localSelected !== 'boolean') return null;
+  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (value.selectedText != null && typeof value.selectedText !== 'string') return null;
   if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;

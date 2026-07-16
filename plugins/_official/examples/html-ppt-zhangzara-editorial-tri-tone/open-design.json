@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-editorial-tri-tone",
-  "title": "Html Ppt Zhangzara Editorial Tri Tone",
+  "title": "Build an Editorial Design System like a Magazine Art Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Editorial Tri Tone",
-    "zh-TW": "Html Ppt Zhangzara Editorial Tri Tone",
-    "ja": "Html Ppt Zhangzara Editorial Tri Tone",
-    "ko": "Html Ppt Zhangzara Editorial Tri Tone",
-    "de": "Html Ppt Zhangzara Editorial Tri Tone",
-    "fr": "Html Ppt Zhangzara Editorial Tri Tone",
-    "ru": "Html Ppt Zhangzara Editorial Tri Tone",
-    "es": "Html Ppt Zhangzara Editorial Tri Tone",
-    "pt-BR": "Html Ppt Zhangzara Editorial Tri Tone",
-    "it": "Html Ppt Zhangzara Editorial Tri Tone",
-    "vi": "Html Ppt Zhangzara Editorial Tri Tone",
-    "pl": "Html Ppt Zhangzara Editorial Tri Tone",
-    "id": "Html Ppt Zhangzara Editorial Tri Tone",
-    "nl": "Html Ppt Zhangzara Editorial Tri Tone",
-    "ar": "Html Ppt Zhangzara Editorial Tri Tone",
-    "tr": "Html Ppt Zhangzara Editorial Tri Tone",
-    "uk": "Html Ppt Zhangzara Editorial Tri Tone",
-    "en": "Html Ppt Zhangzara Editorial Tri Tone"
+    "en": "Build an Editorial Design System like a Magazine Art Director",
+    "zh-CN": "像杂志艺术总监一样搭建编辑设计系统",
+    "zh-TW": "像杂志艺术总监一样搭建编辑设计系统"
   },
   "version": "0.1.0",
-  "description": "Editorial Tri-Tone — Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif. Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Built as a decision-grade design craft deck for editorial & design team.",
   "description_i18n": {
-    "zh-CN": "Editorial Tri-Tone — 三色编辑系统：灰粉色、芥末奶油色和深勃艮第酒红色，采用 Bricolage + Instrument Serif 字体。适用于时尚杂志风格的内容：编辑提案、时尚品牌演示、生活方式媒体、艺术指导评审。",
-    "zh-TW": "Editorial Tri-Tone — 三色編輯系統：灰粉色、芥末奶油色和深勃艮第酒紅色，採用 Bricolage + Instrument Serif 字體。適用於時尚雜誌風格的內容：編輯提案、時尚品牌簡報、生活風格媒體、藝術指導評審。",
-    "ja": "Editorial Tri-Tone — 3色エディトリアルシステム：ダスティピンク、マスタードクリーム、ディープバーガンディを Bricolage + Instrument Serif で構成。ファッション誌風のコンテンツに最適：編集企画、ファッションブランドデッキ、ライフスタイルメディア、アートディレクションレビュー。",
-    "ko": "Editorial Tri-Tone — 3색 에디토리얼 시스템: 더스티 핑크, 머스타드 크림, 딥 버건디를 Bricolage + Instrument Serif로 구성. 패션 매거진 스타일 콘텐츠에 적합: 에디토리얼 기획안, 패션 브랜드 덱, 라이프스타일 미디어, 아트 디렉션 리뷰.",
-    "de": "Editorial Tri-Tone — Dreifarbiges Redaktionssystem: Staubrosa, Senfcreme und Tiefburgund in Bricolage + Instrument Serif. Ideal für Modemagazin-Layouts: Redaktionspräsentationen, Fashion-Brand-Decks, Lifestyle-Medien, Art-Direction-Reviews.",
-    "fr": "Editorial Tri-Tone — Système éditorial à trois couleurs : rose poudré, crème moutarde et bordeaux profond, en Bricolage + Instrument Serif. Idéal pour les mises en page de magazines de mode : pitchs éditoriaux, decks de marques de mode, médias lifestyle, revues de direction artistique.",
-    "ru": "Editorial Tri-Tone — Трёхцветная редакционная система: пыльно-розовый, горчично-кремовый и глубокий бордовый в шрифтах Bricolage + Instrument Serif. Для контента в стиле модных журналов: редакционные презентации, деки модных брендов, лайфстайл-медиа, арт-дирекшн ревью.",
-    "es": "Editorial Tri-Tone — Sistema editorial de tres colores: rosa polvo, crema mostaza y burdeos profundo, con Bricolage + Instrument Serif. Ideal para contenido estilo revista de moda: presentaciones editoriales, decks de marcas de moda, medios de lifestyle, revisiones de dirección de arte.",
-    "pt-BR": "Editorial Tri-Tone — Sistema editorial de três cores: rosa empoeirado, creme mostarda e bordô profundo, em Bricolage + Instrument Serif. Ideal para conteúdo estilo revista de moda: pitches editoriais, decks de marcas de moda, mídia lifestyle, revisões de direção de arte.",
-    "it": "Editorial Tri-Tone — Sistema editoriale a tre colori: rosa tenue, crema senape e bordeaux intenso, in Bricolage + Instrument Serif. Ideale per contenuti in stile magazine di moda: pitch editoriali, deck di brand fashion, media lifestyle, revisioni di art direction.",
-    "vi": "Editorial Tri-Tone — Hệ thống biên tập ba màu: hồng bụi, kem mù tạt và đỏ burgundy đậm, dùng Bricolage + Instrument Serif. Phù hợp cho nội dung phong cách tạp chí thời trang: bản trình bày biên tập, bộ deck thương hiệu thời trang, truyền thông phong cách sống, đánh giá art direction.",
-    "pl": "Editorial Tri-Tone — System edytorski w trzech kolorach: zakurzony róż, kremowa musztarda i głęboki burgund, w Bricolage + Instrument Serif. Idealny do treści w stylu magazynów modowych: prezentacje edytorskie, decki marek modowych, media lifestyle, recenzje art direction.",
-    "id": "Editorial Tri-Tone — Sistem editorial tiga warna: dusty pink, mustard cream, dan deep burgundy, dengan Bricolage + Instrument Serif. Cocok untuk konten bergaya majalah fashion: pitch editorial, deck brand fashion, media lifestyle, tinjauan art direction.",
-    "nl": "Editorial Tri-Tone — Driekleuren redactioneel systeem: stoffig roze, mostercrème en diep bordeaux, in Bricolage + Instrument Serif. Ideaal voor content in modetijdschriftstijl: redactionele pitches, modemerken decks, lifestyle media, art direction reviews.",
-    "ar": "Editorial Tri-Tone — نظام تحريري بثلاثة ألوان: وردي داكن، كريمي خردلي، وبورجوندي عميق، باستخدام Bricolage + Instrument Serif. مثالي للمحتوى بأسلوب مجلات الموضة: عروض تحريرية، عروض العلامات التجارية للأزياء، وسائط نمط الحياة، مراجعات التوجيه الفني.",
-    "tr": "Editorial Tri-Tone — Üç renkli editoryal sistem: soluk pembe, hardal krem ve koyu bordo, Bricolage + Instrument Serif ile. Moda dergisi tarzı içerikler için ideal: editoryal sunumlar, moda markası desteleri, yaşam tarzı medyası, sanat yönetimi incelemeleri.",
-    "uk": "Editorial Tri-Tone — Трикольорова редакційна система: пильно-рожевий, гірчично-кремовий та глибокий бордовий у Bricolage + Instrument Serif. Для контенту в стилі модних журналів: редакційні презентації, деки модних брендів, лайфстайл-медіа, огляди арт-дирекції.",
-    "en": "Editorial Tri-Tone — Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif. Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews."
+    "en": "A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Built as a decision-grade design craft deck for editorial & design team.",
+    "zh-CN": "像杂志艺术总监一样搭建编辑设计系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像杂志艺术总监一样搭建编辑设计系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,19 @@
     "fashion-brand-deck",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-editorial-tri-tone",
+    "marketing-and-gtm",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Editorial Tri-Tone — Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif. Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews.",
-        "zh-CN": "使用这个插件完成以下任务：Editorial Tri-Tone — Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif. Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews."
+        "en": "Create \"Build an Editorial Design System like a Magazine Art Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. Audience: editorial & design team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像杂志艺术总监一样搭建编辑设计系统。像杂志艺术总监一样搭建编辑设计系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：A type-and-color system for a culture magazine relaunch — the grid, the tri-tone palette, and the layout kit. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Editorial Tri Tone"
+          "title": "Build an Editorial Design System like a Magazine Art Director",
+          "title_i18n": {
+            "en": "Build an Editorial Design System like a Magazine Art Director",
+            "zh-CN": "像杂志艺术总监一样搭建编辑设计系统",
+            "zh-TW": "像杂志艺术总监一样搭建编辑设计系统"
+          }
         }
       ]
     },
@@ -122,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

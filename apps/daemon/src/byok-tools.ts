@@ -16,8 +16,8 @@ import path from 'node:path';
 import { writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { assertExternalAssetUrl, assertAndFetchExternalAsset } from './connectionTest.js';
-import { resolveProviderConfig } from './media-config.js';
-import { IMAGE_MODELS } from './media-models.js';
+import { resolveProviderConfig } from './media/config.js';
+import { IMAGE_MODELS } from './media/models.js';
 import { ensureProject } from './projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -29,7 +29,7 @@ import {
   aihubmixGeminiImageBytes,
   classifyAIHubMixModel,
   AIHUBMIX_IMAGE_ASPECT_TO_SIZE,
-} from './aihubmix.js';
+} from './integrations/aihubmix.js';
 import {
   aihubmixMediaRegistry,
   buildVideoRequest,
@@ -446,9 +446,10 @@ export interface BYOKToolContext {
    *  semantics. */
   videoPollIntervalMs?: number;
   /** Optional per-request init copied from the live chat turn. Used to
-   *  forward the current proxy dispatcher into every upstream/download
-   *  fetch the BYOK tool executor performs. */
-  requestInit?: Pick<RequestInit, 'dispatcher'>;
+   *  forward the current proxy dispatcher AND the client-cancellation
+   *  signal into every upstream/download fetch the BYOK tool executor
+   *  performs, so a disconnected client stops the tool loop's paid work. */
+  requestInit?: Pick<RequestInit, 'dispatcher' | 'signal'>;
 }
 
 export interface ImageToolResult {

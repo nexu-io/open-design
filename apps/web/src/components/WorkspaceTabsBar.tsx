@@ -418,6 +418,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
+  const previousOnboardingCompletedRef = useRef(onboardingCompleted);
+  const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
   const draggingTabIdRef = useRef<string | null>(null);
   const dragHapticTargetRef = useRef<string | null>(null);
@@ -492,26 +494,57 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
 
+  useEffect(() => {
+    if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
+      resetEntryToHomeAfterOnboardingRef.current = true;
+    }
+    previousOnboardingCompletedRef.current = onboardingCompleted;
+  }, [onboardingCompleted]);
+
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
   // finish path uniformly — last-step Continue and any future route that
   // navigates away while leaving the entry tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
+    // Don't rewrite the tab back to 'home' while the user is *still* on the
+    // onboarding route — a previously-completed user who re-opens /onboarding
+    // should keep the "Onboarding" tab label, not flip to "Home". The rewrite
+    // still fires the moment they navigate away (onboardingActive turns false).
+    if (onboardingActive) return;
+    const resetDesignSystemsEntry =
+      resetEntryToHomeAfterOnboardingRef.current && route.kind === 'project';
+    if (resetDesignSystemsEntry) {
+      resetEntryToHomeAfterOnboardingRef.current = false;
+    }
     setState((current) => {
-      if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
+      if (!current.tabs.some((tab) =>
+        tab.kind === 'entry' &&
+        (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems')),
+      )) {
         return current;
       }
       return normalizeTabsState({
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.kind === 'entry' && tab.view === 'onboarding'
+          tab.kind === 'entry' &&
+          (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems'))
             ? { ...tab, view: 'home' }
             : tab,
         ),
       });
     });
-  }, [onboardingCompleted]);
+  }, [onboardingCompleted, onboardingActive, route.kind]);
+
+  // Close the Search-tabs popover whenever onboarding becomes active. The
+  // trigger button is hidden during onboarding, so a popover left open across
+  // a route flip to /onboarding (e.g. browser back/forward, which bypasses
+  // activateTab/createNewTab) would otherwise float over the first-run flow
+  // with no visible control to dismiss it. The portal is also gated on
+  // !onboardingActive below so it never renders for the frame before this runs.
+  useEffect(() => {
+    if (onboardingActive) setTabsMenuOpen(false);
+  }, [onboardingActive]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
@@ -982,6 +1015,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         </button>
       </div>
       <div className="workspace-tabs-actions" ref={menuRef}>
+        {onboardingActive ? null : (
         <button
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
@@ -995,7 +1029,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         >
           <Icon name="search" size={15} />
         </button>
-        {tabsMenuOpen && typeof document !== 'undefined'
+        )}
+        {tabsMenuOpen && !onboardingActive && typeof document !== 'undefined'
           ? createPortal(
               <div
                 className="workspace-tabs-popover"
@@ -1160,6 +1195,8 @@ function displayTabFor(
     tasks: t('entry.navTasks'),
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
+    library: 'Library',
+    brands: t('entry.navBrands'),
     integrations: t('entry.navIntegrations'),
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
@@ -1169,6 +1206,8 @@ function displayTabFor(
     tasks: 'kanban',
     plugins: 'grid',
     'design-systems': 'blocks',
+    library: 'image',
+    brands: 'blocks',
     integrations: 'link',
   };
   return {

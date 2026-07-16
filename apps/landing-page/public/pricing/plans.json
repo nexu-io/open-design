@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "overageDeployPriceUsd": 2,
+  "tiers": [
+    {
+      "tier": "plus",
+      "rank": 1,
+      "recommended": false,
+      "monthly": {
+        "priceUsd": 20,
+        "introPriceUsd": 16,
+        "grantUsd": 20
+      },
+      "yearly": {
+        "priceUsd": 168,
+        "discountPct": 30,
+        "grantUsd": 240
+      },
+      "deployLimit": 3
+    },
+    {
+      "tier": "pro",
+      "rank": 2,
+      "recommended": true,
+      "monthly": {
+        "priceUsd": 100,
+        "introPriceUsd": 70,
+        "grantUsd": 100
+      },
+      "yearly": {
+        "priceUsd": 720,
+        "discountPct": 40,
+        "grantUsd": 1200
+      },
+      "deployLimit": 20
+    },
+    {
+      "tier": "max",
+      "rank": 3,
+      "recommended": false,
+      "monthly": {
+        "priceUsd": 200,
+        "introPriceUsd": 120,
+        "grantUsd": 200
+      },
+      "yearly": {
+        "priceUsd": 1176,
+        "discountPct": 51,
+        "grantUsd": 2400
+      },
+      "deployLimit": 50
+    }
+  ]
+}

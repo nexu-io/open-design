@@ -1298,6 +1298,62 @@ describe('buildTracePayload', () => {
     });
   });
 
+  it('nests agent diagnostics under agent-call without requiring message content', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-agent-diagnostics',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          timingMarks: {
+            modelCallStartAt: 1_700_000_000_420,
+          },
+        },
+        agentEvents: [
+          {
+            id: 'diagnostic-acp_artifact_text_suppression-0',
+            name: 'agent-diagnostic:acp_artifact_text_suppression',
+            timestamp: 1_700_000_003_000,
+            input: { source: 'amr', event_type: 'diagnostic' },
+            output: {
+              name: 'acp_artifact_text_suppression',
+              source: 'acp-json-rpc',
+              reason: 'artifact_echo',
+              suppressed_chars: 4096,
+              opened_blocks: 1,
+              closed_blocks: 1,
+            },
+            metadata: {
+              diagnostic_name: 'acp_artifact_text_suppression',
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:acp_artifact_text_suppression'),
+    ).toMatchObject({
+      parentObservationId: 'run-agent-diagnostics-phase-agent-call',
+      input: {
+        source: 'amr',
+        event_type: 'diagnostic',
+      },
+      output: {
+        name: 'acp_artifact_text_suppression',
+        source: 'acp-json-rpc',
+        reason: 'artifact_echo',
+        suppressed_chars: 4096,
+        opened_blocks: 1,
+        closed_blocks: 1,
+      },
+      metadata: {
+        diagnostic_name: 'acp_artifact_text_suppression',
+      },
+    });
+  });
+
   it('emits cost and performance diagnostics for cost governance', () => {
     const batch = buildTracePayload(
       makeCtx({

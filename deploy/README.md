@@ -14,13 +14,15 @@ Before starting:
    cp .env.example .env
    ```
 
-2. Generate a secure token:
+2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `OPEN_DESIGN_DISABLE_API_AUTH=1`):
 
    ```bash
    openssl rand -hex 32
    ```
 
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+3. Open `.env` in your editor and choose one auth mode:
+   - default: paste the token into `OD_API_TOKEN=`
+   - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
 
 Then pull and start the service:
 
@@ -31,6 +33,13 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
 `ghcr.io/nexu-io/od:<version>` to pin a supported release.
+
+The published `ghcr.io/nexu-io/od` package must be public for anonymous
+`docker pull`, Docker Compose, and Dokploy installs to work. If GHCR returns an
+authentication or access-denied error for this image, an organization maintainer
+must open GitHub -> Packages -> `od` -> Package settings and change visibility
+to Public. GitHub treats that as a one-way visibility change for container
+packages, so confirm the package is intended to stay public before switching it.
 
 Defaults:
 
@@ -47,12 +56,24 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be
-allowed to call `/api`:
+proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
+be allowed to call `/api`:
 
 ```bash
 OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
+
+If the reverse proxy already authenticates every request and you do not want it
+to inject `Authorization: Bearer <OD_API_TOKEN>` upstream, set:
+
+```bash
+OPEN_DESIGN_DISABLE_API_AUTH=1
+```
+
+Use this only for trusted deployments where the daemon is reachable strictly
+through that authenticated proxy. It disables daemon-side bearer enforcement for
+all `/api/*` requests, so direct access to the daemon must remain blocked. The
+Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
 
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
@@ -62,6 +83,75 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od@sha256:<digest> docker compose up -d --no-b
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
+
+## Linux: mounting host agent CLIs
+
+On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,
+…) into the container without rebuilding the image. The override file
+`docker-compose.linux.yml` is already loaded automatically by `install.sh` on
+Linux; it switches to `network_mode: host` and adds the CLI mounts.
+
+**1. Build the local image** (adds `libc6-compat` so glibc-linked CLIs run on Alpine):
+
+```bash
+docker build -t open-design-local -f deploy/Dockerfile.local .
+```
+
+**2. Point `.env` at the local image:**
+
+```bash
+OPEN_DESIGN_IMAGE=open-design-local
+```
+
+**3. Edit `docker-compose.linux.yml`** to match your CLI install paths, then start:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
+```
+
+Common install paths:
+
+| CLI | Default path |
+|-----|-------------|
+| Claude Code | `~/.local/bin/claude` (symlink) + `~/.local/share/claude` (binaries) |
+| opencode | `~/.opencode/bin/opencode` |
+| Codex | `~/.local/bin/codex` |
+
+The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
+configuration needed. For a CLI installed in a non-standard path, add a volume
+and prepend its directory to `PATH` in `docker-compose.linux.yml`, then restart:
+
+```yaml
+environment:
+  PATH: /mnt/host-mycli:/mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+volumes:
+  - /opt/mycli/bin:/mnt/host-mycli:ro
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
+```
+
+If a CLI fails with `symbol not found` or relocation errors despite `libc6-compat`,
+the compose file mounts `/lib/x86_64-linux-gnu` and `/lib64` from the host read-only,
+which provides full glibc for the most demanding binaries. These paths are **amd64-only**;
+on arm64 replace them with `/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro`.
+
+**Upgrading from a previous install:** if you previously ran the container as a different
+user (e.g. `node`, uid 1000), the data volume may need an ownership fix before the daemon
+can write to it:
+
+```bash
+docker run --rm -v open-design_open_design_data:/data alpine chown -R 1001:1001 /data
+```
+
+Pass provider API keys via `.env`:
+
+```bash
+DEEPSEEK_API_KEY=sk-…
+ANTHROPIC_API_KEY=sk-ant-…
+OPENAI_API_KEY=sk-…
+```
 
 If you install Codex inside an unprivileged Linux container and it fails while
 creating its `workspace-write` sandbox, opt into Codex's full-access mode for

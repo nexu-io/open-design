@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import { Icon, type IconName } from './Icon';
 import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
@@ -37,8 +38,20 @@ import {
 } from '../providers/registry';
 import { notifyConnectorsChanged } from './connectors-events';
 import { hasConnectorStatusChanges } from './connectors-state';
+import { MemoryProfilePanel } from './MemoryProfilePanel';
+import { MemoryHooksPanel, type MemoryHookKey } from './MemoryHooksPanel';
 
-const TYPES: MemoryType[] = ['user', 'feedback', 'project', 'reference'];
+// All manually-selectable memory types. `profile` (the structured singleton)
+// and `rule` (verified checks the POST loop enforces) join the original four
+// so the editor type-picker and the saved-memory filter pills surface them.
+const TYPES: MemoryType[] = [
+  'profile',
+  'user',
+  'feedback',
+  'project',
+  'reference',
+  'rule',
+];
 
 interface DraftEntry {
   id?: string;
@@ -175,6 +188,9 @@ async function fetchMemoryList(): Promise<MemoryListResponse> {
     return {
       enabled: true,
       chatExtractionEnabled: true,
+      profileEnabled: true,
+      rewriteEnabled: true,
+      verifyEnabled: true,
       rootDir: '',
       index: '',
       entries: [],
@@ -241,13 +257,17 @@ async function setMemoryEnabled(enabled: boolean): Promise<boolean> {
   return resp.ok;
 }
 
-async function setMemoryChatExtractionEnabled(
-  chatExtractionEnabled: boolean,
+// Patch a single per-hook config flag. The PATCH parser merges any subset of
+// { chatExtractionEnabled, profileEnabled, rewriteEnabled, verifyEnabled } so
+// the hooks panel can flip one flag without re-sending the others.
+async function patchMemoryConfigFlag(
+  flag: MemoryHookKey,
+  value: boolean,
 ): Promise<boolean> {
   const resp = await fetch('/api/memory/config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatExtractionEnabled }),
+    body: JSON.stringify({ [flag]: value }),
   });
   return resp.ok;
 }
@@ -687,7 +707,7 @@ function extractionCardMeta(
 }
 
 type FlashKind = 'created' | 'saved' | 'deleted' | 'indexSaved' | 'pathCopied';
-type MemoryTab = 'manual' | 'chat' | 'connected';
+type MemoryTab = 'profile' | 'manual' | 'chat' | 'connected';
 
 interface MemorySectionProps {
   onOpenConnectors?: () => void;
@@ -704,6 +724,11 @@ export function MemorySection({
   const logoTheme = useResolvedTheme();
   const [enabled, setEnabled] = useState(true);
   const [chatExtractionEnabled, setChatExtractionEnabled] = useState(true);
+  // The three new per-hook flags (default-on). They live alongside the
+  // existing chat-extraction flag and are surfaced through MemoryHooksPanel.
+  const [profileEnabled, setProfileEnabled] = useState(true);
+  const [rewriteEnabled, setRewriteEnabled] = useState(true);
+  const [verifyEnabled, setVerifyEnabled] = useState(true);
   const [rootDir, setRootDir] = useState('');
   const [index, setIndex] = useState('');
   const [indexDraft, setIndexDraft] = useState<string | null>(null);
@@ -715,7 +740,10 @@ export function MemorySection({
   const [busy, setBusy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | MemoryType>('all');
-  const [activeTab, setActiveTab] = useState<MemoryTab>('manual');
+  const [topTab, setTopTab] = useState<'memories' | 'how'>('memories');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<MemoryTab>('profile');
   // Brief inline confirmation after a manual save/create/delete. The
   // form vanishes on success and the existing list re-renders, but
   // those signals are subtle — a 1.8s pill makes "your click did
@@ -725,6 +753,7 @@ export function MemorySection({
   );
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorNameRef = useRef<HTMLInputElement | null>(null);
+  const recordsRef = useRef<HTMLElement | null>(null);
   const editingTarget = editing?.id ?? (editing ? 'new' : null);
   // Recent LLM-extraction attempts, newest first. Driven by a one-shot
   // fetch on mount + live SSE updates merged by id so phase transitions
@@ -809,10 +838,12 @@ export function MemorySection({
 
   const TYPE_LABEL: Record<MemoryType, string> = useMemo(
     () => ({
+      profile: t('settings.memoryTypeProfile'),
       user: t('settings.memoryTypeUser'),
       feedback: t('settings.memoryTypeFeedback'),
       project: t('settings.memoryTypeProject'),
       reference: t('settings.memoryTypeReference'),
+      rule: t('settings.memoryTypeRule'),
     }),
     [t],
   );
@@ -824,6 +855,9 @@ export function MemorySection({
     ]);
     setEnabled(list.enabled);
     setChatExtractionEnabled(list.chatExtractionEnabled !== false);
+    setProfileEnabled(list.profileEnabled !== false);
+    setRewriteEnabled(list.rewriteEnabled !== false);
+    setVerifyEnabled(list.verifyEnabled !== false);
     setRootDir(list.rootDir);
     setIndex(list.index);
     setEntries(list.entries);
@@ -1055,6 +1089,9 @@ export function MemorySection({
   const startEdit = useCallback(async (id: string) => {
     const entry = await fetchMemoryEntry(id);
     if (!entry) return;
+    setTopTab('memories');
+    setAddModalOpen(true);
+    setActiveTab('manual');
     setEditing({
       id: entry.id,
       name: entry.name,
@@ -1065,6 +1102,9 @@ export function MemorySection({
   }, []);
 
   const startNew = useCallback(() => {
+    setTopTab('memories');
+    setAddModalOpen(true);
+    setActiveTab('manual');
     setEditing({ ...EMPTY_DRAFT });
   }, []);
 
@@ -1330,6 +1370,7 @@ export function MemorySection({
       if (entry) {
         await reload();
         setEditing(null);
+        setAddModalOpen(false);
         fireFlash(wasNew ? 'created' : 'saved');
       }
     } finally {
@@ -1353,11 +1394,36 @@ export function MemorySection({
     await setMemoryEnabled(next);
   }, []);
 
-  const onToggleChatExtraction = useCallback(async (next: boolean) => {
-    setChatExtractionEnabled(next);
-    const ok = await setMemoryChatExtractionEnabled(next);
-    if (!ok) setChatExtractionEnabled((current) => !current);
-  }, []);
+  // Map each hook key to its setter so a single optimistic-set + rollback path
+  // covers all four toggles.
+  const HOOK_SETTERS: Record<MemoryHookKey, (fn: (cur: boolean) => boolean) => void> = {
+    profileEnabled: setProfileEnabled,
+    rewriteEnabled: setRewriteEnabled,
+    verifyEnabled: setVerifyEnabled,
+    chatExtractionEnabled: setChatExtractionEnabled,
+  };
+
+  const onToggleHook = useCallback(
+    async (key: MemoryHookKey, next: boolean) => {
+      const setter = HOOK_SETTERS[key];
+      setter(() => next);
+      const ok = await patchMemoryConfigFlag(key, next);
+      if (!ok) setter((current) => !current);
+    },
+    // HOOK_SETTERS references stable useState setters, so the deps are empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const hookFlags = useMemo<Record<MemoryHookKey, boolean>>(
+    () => ({
+      profileEnabled,
+      rewriteEnabled,
+      verifyEnabled,
+      chatExtractionEnabled,
+    }),
+    [profileEnabled, rewriteEnabled, verifyEnabled, chatExtractionEnabled],
+  );
 
   const onSaveIndex = useCallback(async () => {
     if (indexDraft === null) return;
@@ -1402,16 +1468,16 @@ export function MemorySection({
 	    icon: IconName;
 	  }> = [
 	    {
+	      id: 'profile',
+	      label: t('settings.memoryProfileTab'),
+	      caption: t('settings.memoryProfileTabCaption'),
+	      icon: 'home',
+	    },
+	    {
 	      id: 'manual',
 	      label: 'Add manually',
 	      caption: 'Write a fact or preference',
 	      icon: 'edit',
-	    },
-	    {
-	      id: 'chat',
-	      label: 'Learn from chats',
-	      caption: 'Capture useful context',
-	      icon: 'history',
 	    },
 	    {
 	      id: 'connected',
@@ -1426,7 +1492,6 @@ export function MemorySection({
 	      <div className="library-card-info">
 	        <div className="library-card-title-row">
 	          <span className="library-card-name">{entry.name}</span>
-	          <span className="library-card-badge">{entry.id}</span>
 	        </div>
 	        <div className="library-card-desc">
 	          {entry.description || '—'}
@@ -1558,13 +1623,15 @@ export function MemorySection({
     );
   };
 
+  const modalHost = typeof document === 'undefined' ? null : document.body;
+
   return (
     <>
       <section
         className={`settings-section settings-section-card memory-create-section${enabled ? '' : ' is-disabled'}`}
       >
-      <div className="section-head">
-        <div>
+      <div className="section-head memory-control-head">
+        <div className="memory-control-copy">
           <h3 className="memory-title-row">
             <span>{t('settings.memory')}</span>
             {/*
@@ -1599,18 +1666,68 @@ export function MemorySection({
           </h3>
           <p className="hint">{t('settings.memoryDescription')}</p>
         </div>
-        <label
-          className="toggle-switch"
-          title={t('settings.memoryEnableLabel')}
-          aria-label={t('settings.memoryEnableLabel')}
-        >
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => onToggleEnabled(e.target.checked)}
-          />
-          <span className="toggle-slider" />
-        </label>
+        <div className="memory-header-actions">
+          <div
+            className="memory-top-tabs"
+            role="tablist"
+            aria-label={t('settings.memory')}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={topTab === 'memories'}
+              className={`memory-top-tab${topTab === 'memories' ? ' active' : ''}`}
+              onClick={() => setTopTab('memories')}
+            >
+              {t('settings.memoryTabMemories')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={topTab === 'how'}
+              className={`memory-top-tab${topTab === 'how' ? ' active' : ''}`}
+              onClick={() => setTopTab('how')}
+            >
+              {t('settings.memoryTabHow')}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="memory-icon-action"
+            onClick={() => {
+              setTopTab('memories');
+              setAddModalOpen(true);
+            }}
+            title={t('settings.memoryAddDisclosure')}
+            aria-label={t('settings.memoryAddDisclosure')}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+          <button
+            type="button"
+            className="memory-icon-action"
+            onClick={() => {
+              setTopTab('memories');
+              setAdvancedModalOpen(true);
+            }}
+            title="Advanced"
+            aria-label="Advanced"
+          >
+            <Icon name="settings" size={15} />
+          </button>
+          <label
+            className="toggle-switch"
+            title={t('settings.memoryEnableLabel')}
+            aria-label={t('settings.memoryEnableLabel')}
+          >
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => onToggleEnabled(e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </label>
+        </div>
       </div>
 
       {!enabled ? (
@@ -1626,6 +1743,67 @@ export function MemorySection({
           {t('settings.memoryNoProviderBannerBody')}
         </div>
       ) : null}
+
+      {topTab === 'how' ? (
+        <div className="memory-how-panel">
+          <div className="memory-auto-flow">
+            <span>Onboarding</span>
+            <Icon name="chevron-right" size={13} />
+            <span>Brand context</span>
+            <Icon name="chevron-right" size={13} />
+            <span>Chat signals</span>
+            <Icon name="chevron-right" size={13} />
+            <strong>Saved memory</strong>
+          </div>
+          <p className="memory-how-copy">
+            Memory is gathered automatically from profile setup, project and
+            brand extraction, connected apps, and useful facts learned during
+            chats. The saved list below is the review surface; everything else
+            stays quiet unless you open Add or Advanced.
+          </p>
+          <MemoryHooksPanel
+            enabled={enabled}
+            flags={hookFlags}
+            onToggle={onToggleHook}
+          />
+        </div>
+      ) : null}
+
+      {modalHost && addModalOpen ? createPortal(
+      <div
+        className="memory-action-modal-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setAddModalOpen(false);
+          }
+        }}
+      >
+        <div
+          className="memory-action-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="memory-add-modal-title"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="memory-action-modal-head">
+            <div>
+              <h3 id="memory-add-modal-title">
+                {t('settings.memoryAddDisclosure')}
+              </h3>
+              <p>{t('settings.memoryAddDisclosureHint')}</p>
+            </div>
+            <button
+              type="button"
+              className="memory-action-modal-close"
+              onClick={() => setAddModalOpen(false)}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="memory-action-modal-body">
 
       <div
         className="memory-source-tabs"
@@ -1652,6 +1830,12 @@ export function MemorySection({
           </button>
         ))}
       </div>
+
+      {activeTab === 'profile' ? (
+        <div className="memory-tab-panel memory-profile-tab-panel">
+          <MemoryProfilePanel enabled={enabled} />
+        </div>
+      ) : null}
 
       {activeTab === 'manual' ? (
         <div className="memory-tab-panel memory-manual-panel">
@@ -1863,39 +2047,6 @@ export function MemorySection({
             </div>
           ) : null}
 
-        </div>
-      ) : null}
-
-      {activeTab === 'chat' ? (
-        <div className="memory-tab-panel">
-          <div className="memory-source-summary">
-            <span className="memory-block-icon">
-              <Icon name="history" size={15} />
-            </span>
-            <div>
-              <h4>Learn from chats</h4>
-              <p className="hint">
-                OpenDesign can learn preferences and project facts from future
-                chat turns.
-              </p>
-            </div>
-            <label
-              className="memory-source-toggle memory-chat-learning-toggle"
-              title="Learn from chat conversations"
-            >
-              <span>{chatExtractionEnabled ? 'On' : 'Off'}</span>
-              <span className="toggle-switch toggle-switch-sm">
-                <input
-                  type="checkbox"
-                  aria-label="Learn from chat conversations"
-                  checked={chatExtractionEnabled}
-                  onChange={(e) => onToggleChatExtraction(e.target.checked)}
-                  disabled={!enabled}
-                />
-                <span className="toggle-slider" />
-              </span>
-            </label>
-          </div>
         </div>
       ) : null}
 
@@ -2172,9 +2323,17 @@ export function MemorySection({
         </div>
       ) : null}
 
+          </div>
+        </div>
+      </div>,
+      modalHost,
+      ) : null}
+
       </section>
 
-      <section className="settings-section settings-section-card memory-records-section">
+      {topTab === 'memories' ? (
+      <>
+      <section ref={recordsRef} className="settings-section settings-section-card memory-records-section">
         <div className="memory-management-panel">
           <div className="memory-subsection-head">
             <div>
@@ -2258,78 +2417,6 @@ export function MemorySection({
             </div>
           </div>
 
-          {treeFolders.length > 0 ? (
-            <details className="library-group memory-collapsible-card" open>
-              <summary className="memory-details-summary">
-                <span className="memory-details-title">Memory tree</span>
-                <span className="filter-pill-count">{memoryTree.length}</span>
-              </summary>
-              <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                {treeFolders.map((folder) => {
-                  const children = treeChildren.get(folder.id) ?? [];
-                  return (
-                    <div
-                      key={folder.id}
-                      className="library-card"
-                      style={{ alignItems: 'stretch' }}
-                    >
-                      <div className="library-card-info" style={{ width: '100%' }}>
-                        <div className="library-card-title-row">
-                          <span className="library-card-name">{folder.name}</span>
-                          <span className="library-card-badge">{folder.path}</span>
-                        </div>
-                        <div className="library-card-desc">
-                          {children.length} {children.length === 1 ? 'node' : 'nodes'}
-                        </div>
-                        {children.length > 0 ? (
-                          <ul
-                            style={{
-                              display: 'grid',
-                              gap: 6,
-                              margin: '8px 0 0',
-                              padding: 0,
-                              listStyle: 'none',
-                            }}
-                          >
-                            {children.map((child) => (
-                              <li
-                                key={child.id}
-                                className="memory-tree-child-row"
-                              >
-                                <span style={{ minWidth: 0 }}>
-                                  <span className="library-card-name">{child.name}</span>{' '}
-                                  <span className="library-card-badge">{child.id}</span>
-                                  {child.description ? (
-                                    <span
-                                      className="library-card-desc"
-                                      style={{ display: 'block' }}
-                                    >
-                                      {child.description}
-                                    </span>
-                                  ) : null}
-                                </span>
-                                <div className="memory-card-actions">
-                                  <button
-                                    type="button"
-                                    className="ghost library-card-action"
-                                    onClick={() => startEdit(child.id)}
-                                    title={t('settings.memoryEdit')}
-                                  >
-                                    <Icon name="edit" size={14} />
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
-          ) : null}
-
           <div className="library-content memory-unified-list">
             {unifiedMemoryCount === 0 ? (
               /*
@@ -2362,11 +2449,39 @@ export function MemorySection({
         </div>
       </section>
 
-      <section className="settings-section settings-section-card memory-advanced-section">
-        <details className="memory-advanced">
-          <summary className="memory-details-summary">
-            <span className="memory-details-title">Advanced</span>
-          </summary>
+      {modalHost && advancedModalOpen ? createPortal(
+      <div
+        className="memory-action-modal-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setAdvancedModalOpen(false);
+          }
+        }}
+      >
+        <div
+          className="memory-action-modal memory-action-modal--advanced"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="memory-advanced-modal-title"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="memory-action-modal-head">
+            <div>
+              <h3 id="memory-advanced-modal-title">Advanced</h3>
+              <p>Inspect or edit the underlying memory index.</p>
+            </div>
+            <button
+              type="button"
+              className="memory-action-modal-close"
+              onClick={() => setAdvancedModalOpen(false)}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="memory-action-modal-body memory-advanced-modal-body">
           <p className="memory-advanced-hint">
             Inspect or edit the underlying memory index.
           </p>
@@ -2433,9 +2548,89 @@ export function MemorySection({
                 </div>
               </div>
             </details>
+            {treeFolders.length > 0 ? (
+              <details className="library-group memory-advanced-card">
+                <summary className="memory-details-summary">
+                  <span className="memory-details-title">Memory tree</span>
+                  <span className="filter-pill-count">{memoryTree.length}</span>
+                </summary>
+                <p className="memory-advanced-hint">
+                  Technical view of the same saved memories. Most users only
+                  need the saved-memory list above.
+                </p>
+                <div className="memory-tree-advanced">
+                  {treeFolders.map((folder) => {
+                    const children = treeChildren.get(folder.id) ?? [];
+                    return (
+                      <div
+                        key={folder.id}
+                        className="library-card"
+                        style={{ alignItems: 'stretch' }}
+                      >
+                        <div className="library-card-info" style={{ width: '100%' }}>
+                          <div className="library-card-title-row">
+                            <span className="library-card-name">{folder.name}</span>
+                            <span className="library-card-badge">{folder.path}</span>
+                          </div>
+                          <div className="library-card-desc">
+                            {children.length} {children.length === 1 ? 'node' : 'nodes'}
+                          </div>
+                          {children.length > 0 ? (
+                            <ul
+                              style={{
+                                display: 'grid',
+                                gap: 6,
+                                margin: '8px 0 0',
+                                padding: 0,
+                                listStyle: 'none',
+                              }}
+                            >
+                              {children.map((child) => (
+                                <li
+                                  key={child.id}
+                                  className="memory-tree-child-row"
+                                >
+                                  <span style={{ minWidth: 0 }}>
+                                    <span className="library-card-name">{child.name}</span>{' '}
+                                    <span className="library-card-badge">{child.id}</span>
+                                    {child.description ? (
+                                      <span
+                                        className="library-card-desc"
+                                        style={{ display: 'block' }}
+                                      >
+                                        {child.description}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <div className="memory-card-actions">
+                                    <button
+                                      type="button"
+                                      className="ghost library-card-action"
+                                      onClick={() => startEdit(child.id)}
+                                      title={t('settings.memoryEdit')}
+                                    >
+                                      <Icon name="edit" size={14} />
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            ) : null}
           </div>
-        </details>
-      </section>
+          </div>
+        </div>
+      </div>,
+      modalHost,
+      ) : null}
+      </>
+      ) : null}
     </>
   );
 }

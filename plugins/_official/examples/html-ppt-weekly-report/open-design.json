@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-weekly-report",
-  "title": "Html Ppt Weekly Report",
+  "title": "Write a Weekly Growth Review like a Head of Analytics",
   "title_i18n": {
-    "zh-CN": "Html Ppt 周报",
-    "zh-TW": "Html Ppt 週報",
-    "ja": "Html Ppt 週報",
-    "ko": "Html Ppt 주간 보고서",
-    "de": "Html Ppt Wochenbericht",
-    "fr": "Rapport Hebdomadaire Html Ppt",
-    "ru": "Html Ppt Недельный отчет",
-    "es": "Informe Semanal Html Ppt",
-    "pt-BR": "Relatório Semanal Html Ppt",
-    "it": "Report Settimanale Html Ppt",
-    "vi": "Báo Cáo Tuần Html Ppt",
-    "pl": "Raport Tygodniowy Html Ppt",
-    "id": "Laporan Mingguan Html Ppt",
-    "nl": "Html Ppt Weekrapport",
-    "ar": "تقرير أسبوعي Html Ppt",
-    "tr": "Html Ppt Haftalık Rapor",
-    "uk": "Html Ppt Тижневий звіт",
-    "en": "Html Ppt Weekly Report"
+    "en": "Write a Weekly Growth Review like a Head of Analytics",
+    "zh-CN": "像分析负责人一样写每周增长复盘",
+    "zh-TW": "像分析负责人一样写每周增长复盘"
   },
   "version": "0.1.0",
-  "description": "Team weekly / status-update deck — corporate clarity, 8-cell KPI grid, shipped list, 8-week bar chart, next-week table. Use for 周报, business reviews, team status updates, and exec dashboards.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.",
   "description_i18n": {
-    "zh-CN": "团队周报/状态更新幻灯片 — 企业级清晰展示，8格KPI网格，已完成任务列表，8周柱状图，下周计划表。适用于周报、业务回顾、团队状态更新和高管仪表板。",
-    "zh-TW": "團隊週報/狀態更新簡報 — 企業級清晰展示，8格KPI網格，已完成任務清單，8週長條圖，下週計畫表。適用於週報、業務審查、團隊狀態更新和主管儀表板。",
-    "ja": "チーム週報/ステータス更新デッキ — 企業向けの明確な表示、8セルKPIグリッド、完了リスト、8週間棒グラフ、翌週テーブル。週報、ビジネスレビュー、チームステータス更新、役員ダッシュボードに最適。",
-    "ko": "팀 주간/상태 업데이트 덱 — 기업용 명확한 표시, 8셀 KPI 그리드, 완료 목록, 8주 막대 차트, 다음 주 테이블. 주간 보고서, 비즈니스 리뷰, 팀 상태 업데이트 및 임원 대시보드에 사용하세요.",
-    "de": "Team-Wochenbericht / Status-Update-Präsentation — klare Unternehmensdarstellung, 8-Zellen-KPI-Raster, Erledigtenliste, 8-Wochen-Balkendiagramm, Nächste-Woche-Tabelle. Für Wochenberichte, Geschäftsreviews, Teamstatus-Updates und Executive-Dashboards.",
-    "fr": "Rapport hebdomadaire / mise à jour de statut d'équipe — clarté d'entreprise, grille KPI 8 cellules, liste des réalisations, graphique à barres 8 semaines, tableau semaine prochaine. Pour rapports hebdomadaires, revues d'affaires, mises à jour d'équipe et tableaux de bord exécutifs.",
-    "ru": "Еженедельный отчёт команды / обновление статуса — корпоративная ясность, сетка KPI из 8 ячеек, список завершённых задач, столбчатая диаграмма на 8 недель, таблица на следующую неделю. Для еженедельных отчётов, бизнес-обзоров, обновлений статуса команды и исполнительных панелей.",
-    "es": "Presentación semanal / actualización de estado del equipo — claridad corporativa, cuadrícula KPI de 8 celdas, lista de entregables, gráfico de barras de 8 semanas, tabla de la próxima semana. Para informes semanales, revisiones de negocio, actualizaciones de estado del equipo y paneles ejecutivos.",
-    "pt-BR": "Apresentação semanal / atualização de status da equipe — clareza corporativa, grade KPI de 8 células, lista de entregas, gráfico de barras de 8 semanas, tabela da próxima semana. Use para relatórios semanais, revisões de negócios, atualizações de status da equipe e dashboards executivos.",
-    "it": "Presentazione settimanale / aggiornamento stato del team — chiarezza aziendale, griglia KPI a 8 celle, elenco consegnati, grafico a barre 8 settimane, tabella settimana prossima. Per report settimanali, revisioni aziendali, aggiornamenti di stato del team e dashboard esecutive.",
-    "vi": "Bản trình bày báo cáo tuần / cập nhật trạng thái nhóm — rõ ràng cho doanh nghiệp, lưới KPI 8 ô, danh sách đã hoàn thành, biểu đồ cột 8 tuần, bảng tuần tới. Dùng cho báo cáo tuần, đánh giá kinh doanh, cập nhật trạng thái nhóm và dashboard điều hành.",
-    "pl": "Prezentacja tygodniowa / aktualizacja statusu zespołu — przejrzystość korporacyjna, siatka KPI 8 komórek, lista zrealizowanych, wykres słupkowy 8 tygodni, tabela przyszłego tygodnia. Do raportów tygodniowych, przeglądów biznesowych, aktualizacji statusu zespołu i dashboardów zarządu.",
-    "id": "Presentasi mingguan / pembaruan status tim — kejelasan korporat, grid KPI 8 sel, daftar yang dikirim, grafik batang 8 minggu, tabel minggu depan. Untuk laporan mingguan, tinjauan bisnis, pembaruan status tim, dan dashboard eksekutif.",
-    "nl": "Team weekrapport / statusupdate presentatie — bedrijfsduidelijkheid, 8-cellen KPI-raster, verzonden lijst, 8-weken staafdiagram, volgende week tabel. Te gebruiken voor weekrapporten, bedrijfsreviews, teamstatusupdates en executive dashboards.",
-    "ar": "عرض تقديمي أسبوعي للفريق / تحديث الحالة — وضوح مؤسسي، شبكة KPI من 8 خلايا، قائمة المنجزات، مخطط شريطي لـ 8 أسابيع، جدول الأسبوع القادم. للتقارير الأسبوعية ومراجعات الأعمال وتحديثات حالة الفريق ولوحات المعلومات التنفيذية.",
-    "tr": "Ekip haftalık / durum güncelleme sunumu — kurumsal netlik, 8 hücreli KPI ızgarası, teslim listesi, 8 haftalık çubuk grafik, gelecek hafta tablosu. Haftalık raporlar, iş incelemeleri, ekip durum güncellemeleri ve yönetici panelleri için kullanın.",
-    "uk": "Тижнева презентація команди / оновлення статусу — корпоративна ясність, сітка KPI з 8 комірок, список виконаного, стовпчикова діаграма на 8 тижнів, таблиця наступного тижня. Для тижневих звітів, бізнес-оглядів, оновлень статусу команди та виконавчих панелей.",
-    "en": "Team weekly / status-update deck — corporate clarity, 8-cell KPI grid, shipped list, 8-week bar chart, next-week table. Use for 周报, business reviews, team status updates, and exec dashboards."
+    "en": "Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.",
+    "zh-CN": "像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,17 @@
     "status-update",
     "team-report",
     "business-review",
-    "wbr"
+    "wbr",
+    "board",
+    "strategy",
+    "html-ppt-weekly-report",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +56,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "operations",
+    "scenario": "finance",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +64,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-weekly-report template to generate a weekly report deck (7 pages). First ask me four things: this week's date range, 3-5 core KPI numbers, shipped/completed items, and next week's plans and risks. Then fill the template with the 8-week bar chart and next-week table.",
-        "zh-CN": "用 html-ppt-weekly-report 模板生成一份周报（7 页）。先问我四件事：本周时间范围、3-5 个核心 KPI 数字、本周已发布 / 已完成的事项、下周计划与风险。然后用模板填好 8 周柱状图和下周表格。"
+        "en": "Create \"Write a Weekly Growth Review like a Head of Analytics\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Audience: growth & product team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像分析负责人一样写每周增长复盘。像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Weekly Report"
+          "title": "Write a Weekly Growth Review like a Head of Analytics",
+          "title_i18n": {
+            "en": "Write a Weekly Growth Review like a Head of Analytics",
+            "zh-CN": "像分析负责人一样写每周增长复盘",
+            "zh-TW": "像分析负责人一样写每周增长复盘"
+          }
         }
       ]
     },
@@ -117,6 +103,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "data-finance"
   }
 }

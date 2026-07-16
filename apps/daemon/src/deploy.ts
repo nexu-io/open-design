@@ -1399,8 +1399,11 @@ export function analyzeDeployPlan(input: {
   // begin with an optional BOM, then any number of HTML comments and
   // whitespace, then the doctype. Built via `new RegExp` so the BOM
   // appears as an explicit U+FEFF escape rather than a literal
-  // zero-width character in the regex source.
-  if (!new RegExp('^\\uFEFF?\\s*(?:<!--[\\s\\S]*?-->\\s*)*<!doctype\\s+html', 'i').test(source)) {
+  // zero-width character in the regex source. The comment body is
+  // tempered (`(?:[^-]|-(?!->))*`) rather than a lazy `[\s\S]*?` so each
+  // comment matches deterministically — a lazy body inside the outer `*`
+  // backtracks 2^n ways on a comment-only prolog with no doctype (ReDoS).
+  if (!new RegExp('^\\uFEFF?\\s*(?:<!--(?:[^-]|-(?!->))*-->\\s*)*<!doctype\\s+html', 'i').test(source)) {
     pushUnique(acc, {
       code: 'no-doctype',
       path: entryPath,

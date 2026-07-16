@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-scatterbrain",
-  "title": "Html Ppt Zhangzara Scatterbrain",
+  "title": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Scatterbrain",
-    "zh-TW": "Html Ppt Zhangzara Scatterbrain",
-    "ja": "Html Ppt Zhangzara Scatterbrain",
-    "ko": "Html Ppt Zhangzara Scatterbrain",
-    "de": "Html Ppt Zhangzara Scatterbrain",
-    "fr": "Html Ppt Zhangzara Scatterbrain",
-    "ru": "Html Ppt Zhangzara Scatterbrain",
-    "es": "Html Ppt Zhangzara Scatterbrain",
-    "pt-BR": "Html Ppt Zhangzara Scatterbrain",
-    "it": "Html Ppt Zhangzara Scatterbrain",
-    "vi": "Html Ppt Zhangzara Scatterbrain",
-    "pl": "Html Ppt Zhangzara Scatterbrain",
-    "id": "Html Ppt Zhangzara Scatterbrain",
-    "nl": "Html Ppt Zhangzara Scatterbrain",
-    "ar": "Html Ppt Zhangzara Scatterbrain",
-    "tr": "Html Ppt Zhangzara Scatterbrain",
-    "uk": "Html Ppt Zhangzara Scatterbrain",
-    "en": "Html Ppt Zhangzara Scatterbrain"
+    "en": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+    "zh-CN": "像作品集出众的设计学生一样讲毕业设计",
+    "zh-TW": "像作品集出众的设计学生一样讲毕业设计"
   },
   "version": "0.1.0",
-  "description": "Scatterbrain — Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack. Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.",
   "description_i18n": {
-    "zh-CN": "Scatterbrain — 便利贴风格设计：柔和色便签纸、Caveat 手写字体、Shrikhand 和 Zilla Slab 字体组合。适合设计师白板场景：头脑风暴、工作坊、创意机构简介、设计思维研讨、创意提案、艺术指导评审。",
-    "zh-TW": "Scatterbrain — 便利貼風格設計：粉彩便條紙、Caveat 手寫字型、Shrikhand 和 Zilla Slab 字型堆疊。適合設計師白板情境：腦力激盪、工作坊、創意機構簡報、設計思維會議、創意提案、藝術指導審查。",
-    "ja": "Scatterbrain — 付箋インスパイア：パステルカラーの付箋、Caveat 手書きフォント、Shrikhand と Zilla Slab タイプスタック。デザイナーのホワイトボードシーン向け：ブレスト、ワークショップ、クリエイティブエージェンシー資料、デザイン思考セッション、アイデア提案、アートディレクションレビュー。",
-    "ko": "Scatterbrain — 포스트잇 스타일: 파스텔 톤 메모지, Caveat 손글씨체, Shrikhand 및 Zilla Slab 폰트 스택. 디자이너 화이트보드 분위기: 브레인스토밍, 워크숍, 크리에이티브 에이전시 소개, 디자인 씽킹 세션, 아이디어 피칭, 아트 디렉션 리뷰.",
-    "de": "Scatterbrain — Post-it-inspiriert: pastellfarbene Haftnotizen, Caveat-Handschrift, Shrikhand und Zilla Slab Schriftstack. Für Designer-Whiteboards: Brainstormings, Workshops, Kreativagentur-Präsentationen, Design-Thinking-Sessions, Ideation-Pitches, Art-Direction-Reviews.",
-    "fr": "Scatterbrain — Inspiré Post-it : notes adhésives pastel, écriture manuscrite Caveat, pile typographique Shrikhand et Zilla Slab. Pour tableaux blancs de designers : brainstormings, ateliers, présentations d'agence créative, sessions design thinking, pitchs d'idéation, revues de direction artistique.",
-    "ru": "Scatterbrain — в стиле стикеров: пастельные заметки, рукописный шрифт Caveat, стек шрифтов Shrikhand и Zilla Slab. Для дизайнерских досок: мозговые штурмы, воркшопы, презентации креативных агентств, дизайн-мышление, питчи идей, арт-ревью.",
-    "es": "Scatterbrain — Inspirado en Post-it: notas adhesivas en tonos pastel, escritura Caveat, pila tipográfica Shrikhand y Zilla Slab. Para pizarras de diseñadores: lluvia de ideas, talleres, credenciales de agencias creativas, sesiones de design thinking, pitches de ideación, revisiones de dirección de arte.",
-    "pt-BR": "Scatterbrain — Inspirado em Post-it: notas adesivas em tons pastéis, escrita Caveat, pilha tipográfica Shrikhand e Zilla Slab. Para quadros brancos de designers: brainstorms, workshops, apresentações de agências criativas, sessões de design thinking, pitches de ideação, revisões de direção de arte.",
-    "it": "Scatterbrain — Ispirato ai Post-it: note adesive pastello, scrittura Caveat, stack tipografico Shrikhand e Zilla Slab. Per lavagne di designer: brainstorming, workshop, credenziali di agenzie creative, sessioni di design thinking, pitch di ideazione, revisioni di art direction.",
-    "vi": "Scatterbrain — Lấy cảm hứng từ Post-it: giấy note màu pastel, chữ viết tay Caveat, bộ font Shrikhand và Zilla Slab. Cho bảng trắng thiết kế: brainstorm, workshop, giới thiệu công ty sáng tạo, phiên design thinking, trình bày ý tưởng, đánh giá art direction.",
-    "pl": "Scatterbrain — Inspirowany Post-it: pastelowe karteczki samoprzylepne, pismo odręczne Caveat, stos fontów Shrikhand i Zilla Slab. Do tablic projektowych: burze mózgów, warsztaty, prezentacje agencji kreatywnych, sesje design thinking, pitche ideacji, przeglądy art direction.",
-    "id": "Scatterbrain — Terinspirasi Post-it: catatan tempel pastel, tulisan tangan Caveat, tumpukan tipografi Shrikhand dan Zilla Slab. Untuk papan tulis desainer: brainstorming, workshop, kredensial agensi kreatif, sesi design thinking, pitching ideasi, review art direction.",
-    "nl": "Scatterbrain — Post-it-geïnspireerd: pastelkleurige plakbriefjes, Caveat-handschrift, Shrikhand en Zilla Slab lettertype-stack. Voor ontwerpers-whiteboards: brainstorms, workshops, creatieve-bureaudocumentatie, design-thinking-sessies, ideeënpitches, art-direction-reviews.",
-    "ar": "Scatterbrain — مستوحى من Post-it: ملاحظات لاصقة بألوان الباستيل، خط Caveat اليدوي، مجموعة خطوط Shrikhand و Zilla Slab. للوحات المصممين: العصف الذهني، ورش العمل، عروض الوكالات الإبداعية، جلسات التفكير التصميمي، عروض الأفكار، مراجعات الإخراج الفني.",
-    "tr": "Scatterbrain — Post-it esinli: pastel renkli yapışkan notlar, Caveat el yazısı, Shrikhand ve Zilla Slab yazı tipi yığını. Tasarımcı beyaz tahtaları için: beyin fırtınası, atölyeler, yaratıcı ajans sunumları, tasarım düşüncesi oturumları, fikir sunumları, sanat yönetimi incelemeleri.",
-    "uk": "Scatterbrain — у стилі стікерів: пастельні клейкі нотатки, рукописний шрифт Caveat, стек шрифтів Shrikhand і Zilla Slab. Для дизайнерських дошок: мозкові штурми, воркшопи, презентації креативних агентств, сесії дизайн-мислення, пітчі ідей, арт-рев'ю.",
-    "en": "Scatterbrain — Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack. Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews."
+    "en": "A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.",
+    "zh-CN": "像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,19 @@
     "creative-agency-credentials",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-scatterbrain",
+    "student-coursework",
+    "senior-capstone-defense-deck",
+    "education",
+    "coursework",
+    "defense",
+    "academic",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +63,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "education",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +71,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Scatterbrain — Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack. Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews.",
-        "zh-CN": "使用这个插件完成以下任务：Scatterbrain — Post-it inspired: pastel sticky notes, Caveat handwriting, Shrikhand and Zilla Slab type stack. Anything that should feel like a designer's whiteboard: brainstorms, workshops, creative-agency credentials, design-thinking sessions, ideation pitches, art-direction reviews."
+        "en": "Create \"Pitch a Graduation Design Project like a Portfolio-Ready Design Student\" as a decision-grade Student coursework deck in this template's own visual system. Subject: A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Audience: crit panel, faculty. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds.",
+        "zh-CN": "像作品集出众的设计学生一样讲毕业设计。像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。 主题：A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Scatterbrain"
+          "title": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+          "title_i18n": {
+            "en": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+            "zh-CN": "像作品集出众的设计学生一样讲毕业设计",
+            "zh-TW": "像作品集出众的设计学生一样讲毕业设计"
+          }
         }
       ]
     },
@@ -122,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "student-coursework"
   }
 }

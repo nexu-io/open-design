@@ -24,6 +24,7 @@
     "uk": "Рідкий фон-герой"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
   "description": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
   "description_i18n": {
     "en": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",

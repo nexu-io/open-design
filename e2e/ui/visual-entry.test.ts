@@ -1,7 +1,9 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { openNewProjectModal } from '@/playwright/rail';
+import { T } from '@/timeouts';
 import {
   captureVisual,
+  captureVisualTarget,
   configureVisualPage,
   gotoVisualHome,
   scrollVisualLocatorIntoStableView,
@@ -11,32 +13,36 @@ import {
   waitForVisualProjects,
 } from '@/playwright/visual';
 
-test('[P2] captures the onboarding runtime selection surface', async ({ page }) => {
+test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
     config: {
       onboardingCompleted: false,
-      agentId: 'amr',
-      agentModels: { amr: { model: 'deepseek-v4-flash', reasoning: 'default' } },
     },
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  // The connect step opens on the cloud sign-in landing. Local CLI and BYOK
+  // remain available as secondary paths from the same first screen.
   await expect(
-    page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i }),
+    page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
+  ).toBeVisible({ timeout: T.medium });
+  await expect(
+    page.getByRole('button', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
-  await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
   await expect(
-    page
-      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
-      .getByRole('button'),
-  ).toContainText(
-    'DeepSeek V4 Flash',
-  );
+    page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Bring your own key|自己的模型 Key/i }),
+  ).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-onboarding-runtime');
+  await captureVisual(page, 'visual-onboarding-cloud');
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {
@@ -51,7 +57,7 @@ test('[P2] captures the visual home harness', async ({ page }) => {
 });
 
 test('[P2] captures the home plugin catalog surface', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
 
   await configureVisualPage(page);
   await gotoVisualHome(page);
@@ -111,10 +117,13 @@ test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
   await card.hover();
   await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
   await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
-  await page.locator('.template-share-trigger').click();
-  await expect(page.locator('.template-share-popover[role="menu"]')).toBeVisible();
+  const trigger = page.locator('.template-share-trigger');
+  await trigger.click();
+  const popover = page.locator('.template-share-popover[role="menu"]');
+  await expect(popover).toBeVisible();
 
   await captureVisual(page, 'visual-plugin-share-menu');
+  await captureVisualTarget(page, 'visual-plugin-share-menu-popover', [trigger, popover]);
 });
 
 test('[P2] captures the home context picker surface', async ({ page }) => {
@@ -122,10 +131,13 @@ test('[P2] captures the home context picker surface', async ({ page }) => {
   await gotoVisualHome(page);
 
   await page.getByTestId('home-hero-input').fill('@visual');
-  await expect(page.getByTestId('home-hero-plugin-picker')).toBeVisible();
+  const input = page.getByTestId('home-hero-input');
+  const picker = page.getByTestId('home-hero-plugin-picker');
+  await expect(picker).toBeVisible();
   await expect(page.getByRole('option', { name: /Prototype Starter/i })).toBeVisible();
 
   await captureVisual(page, 'visual-home-context-picker');
+  await captureVisualTarget(page, 'visual-home-context-picker-popover', [input, picker]);
 });
 
 test('[P2] captures the home staged attachment surface', async ({ page }) => {
@@ -147,6 +159,9 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   await gotoVisualHome(page);
 
   const home = page.getByTestId('entry-view-home');
+  await home.getByTestId('plugins-home-pill-category-prototype').click();
+  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-prototype-starter"]');
+  await expect(card).toBeVisible();
   await home.getByTestId('plugins-home-details-visual-prototype-starter').click({ force: true });
   await expect(page.getByRole('dialog', { name: /Prototype Starter details/i })).toBeVisible();
   await page.getByTestId('plugin-details-use-visual-prototype-starter').click();
@@ -171,7 +186,11 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   // PreviewModal (aria-label "Deck Writer preview"), not the scenario
   // detail's "... details" dialog. Match on the plugin name only.
   await expect(page.getByRole('dialog', { name: /Deck Writer/i })).toBeVisible();
-  await page.getByTestId('plugin-details-use-visual-deck-writer-menu').click();
+  const trigger = page.getByTestId('plugin-details-use-visual-deck-writer-menu');
+  await trigger.click();
+  const menu = page.locator('.ds-modal-primary-action-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await captureVisualTarget(page, 'visual-plugin-use-menu-popover', [trigger, menu]);
   await page.getByTestId('plugin-details-use-with-query-visual-deck-writer').click();
   // use-with-query now seeds the rendered preset text (placeholders filled in),
   // not the raw `{{...}}` query — matching the example-prompt card path.
@@ -181,13 +200,12 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
 });
 
 test('[P2] captures the new project modal surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-name')).toBeVisible();
 
   await captureVisual(page, 'visual-new-project-modal');

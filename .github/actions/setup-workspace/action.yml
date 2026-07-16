@@ -10,10 +10,42 @@ inputs:
     description: pnpm version to install
     required: false
     default: '10.33.2'
+  runner-labels:
+    description: JSON array of labels selected for this job's runs-on value
+    required: false
+    default: '[]'
 
 runs:
   using: composite
   steps:
+    - name: Detect persistent pnpm store
+      id: persistent-pnpm-store
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        case "$RUNNER_LABELS_JSON" in
+          *'"od-persistent-ci"'*) persistent_enabled=true ;;
+          *) persistent_enabled=false ;;
+        esac
+
+        if [ "$persistent_enabled" = "true" ]; then
+          if [ -z "${OPEN_DESIGN_CI_CACHE:-}" ]; then
+            echo "runner-labels contains od-persistent-ci, but OPEN_DESIGN_CI_CACHE is not set" >&2
+            exit 1
+          fi
+          store_dir="$OPEN_DESIGN_CI_CACHE/pnpm-store"
+          mkdir -p "$store_dir"
+          {
+            echo "NPM_CONFIG_STORE_DIR=$store_dir"
+            echo "npm_config_store_dir=$store_dir"
+          } >> "$GITHUB_ENV"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "path=$store_dir" >> "$GITHUB_OUTPUT"
+        else
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v6.0.8
       with:
@@ -31,6 +63,7 @@ runs:
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
     - name: Cache pnpm store
+      if: ${{ steps.persistent-pnpm-store.outputs.enabled != 'true' }}
       uses: actions/cache@v5.0.5
       with:
         path: ${{ steps.pnpm-store.outputs.path }}

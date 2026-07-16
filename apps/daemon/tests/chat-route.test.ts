@@ -20,9 +20,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
+  resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
   startServer,
   validateCodexGeneratedImagesDir,
@@ -240,6 +243,66 @@ process.exit(0);
     );
   });
 
+  it('marks OpenCode tool-only runs failed when no assistant output is produced', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-tool-only-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-tool-only-session',
+  part: {
+    tool: 'Read',
+    callID: 'call-read-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ file: 'src/app.ts' }),
+      output: 'file contents',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 0 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'read the file and summarize it',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('"type":"tool_use"');
+        expect(body).toContain('"type":"tool_result"');
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('Agent completed without producing any output');
+        expect(body).toContain('"status":"failed"');
+        expect(body).not.toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ conversationId: string | null; status: string; exitCode: number | null }>;
+        };
+
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          conversationId,
+          status: 'failed',
+          exitCode: 0,
+        });
+      },
+    );
+  });
+
   it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
@@ -295,11 +358,252 @@ process.stdin.on('end', () => {
           };
         };
 
-        expect(parsed.permission?.external_directory).toMatchObject({
-          [effectiveCwd]: 'allow',
-          [`${effectiveCwd}/*`]: 'allow',
-          [`${effectiveCwd}/**`]: 'allow',
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const cwdAliases = new Set([effectiveCwd]);
+        if (effectiveCwd.startsWith('/private/var/')) {
+          cwdAliases.add(effectiveCwd.replace(/^\/private\/var\//, '/var/'));
+        }
+        const allowedCwd = [...cwdAliases].find(
+          (cwd) =>
+            externalDirectory[cwd] === 'allow' &&
+            externalDirectory[`${cwd}/*`] === 'allow' &&
+            externalDirectory[`${cwd}/**`] === 'allow',
+        );
+        expect(allowedCwd).toBeTruthy();
+      },
+    );
+  });
+
+  it('passes BYOK provider config to the daemon-backed OpenCode runtime', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-config-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const keyFile = join(markerDir, 'byok-key.txt');
+    const argsFile = join(markerDir, 'args.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK OpenCode fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(keyFile)}, process.env.OPEN_DESIGN_BYOK_API_KEY || '');
+  fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'byok-opencode-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'byok-opencode',
+            projectId,
+            message: 'hello',
+            model: 'deepseek-v4-flash',
+            byokProvider: {
+              protocol: 'senseaudio',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://api.senseaudio.cn',
+            },
+          }),
         });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('byok-opencode-ok');
+
+        expect(await fsp.readFile(keyFile, 'utf8')).toBe('sk-test-byok');
+        expect(JSON.parse(await fsp.readFile(argsFile, 'utf8'))).toEqual([
+          'run',
+          '--format',
+          'json',
+          '-m',
+          'open-design-byok/deepseek-v4-flash',
+        ]);
+        const parsed = JSON.parse(await fsp.readFile(envFile, 'utf8')) as {
+          provider?: Record<string, {
+            npm?: string;
+            options?: Record<string, unknown>;
+            models?: Record<string, unknown>;
+          }>;
+        };
+        const provider = parsed.provider?.['open-design-byok'];
+        expect(provider).toMatchObject({
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://api.senseaudio.cn',
+            apiKey: '{env:OPEN_DESIGN_BYOK_API_KEY}',
+          },
+        });
+        expect(provider?.models?.['deepseek-v4-flash']).toEqual({
+          name: 'deepseek-v4-flash',
+          limit: {
+            context: 128_000,
+            output: 16_384,
+          },
+        });
+        expect(JSON.stringify(parsed)).not.toContain('sk-test-byok');
+      },
+    );
+  });
+
+  it('passes keyless BYOK provider config without auth fields to OpenCode', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-keyless-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const keyFile = join(markerDir, 'byok-key.txt');
+    const argsFile = join(markerDir, 'args.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK keyless OpenCode fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(keyFile)}, process.env.OPEN_DESIGN_BYOK_API_KEY || '');
+  fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'byok-opencode-keyless-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'byok-opencode',
+            projectId,
+            message: 'hello',
+            model: 'model',
+            byokProvider: {
+              protocol: 'openai',
+              apiKey: '',
+              baseUrl: 'http://127.0.0.1:8000/v1',
+              requiresApiKey: false,
+            },
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('byok-opencode-keyless-ok');
+
+        expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
+        expect(JSON.parse(await fsp.readFile(argsFile, 'utf8'))).toEqual([
+          'run',
+          '--format',
+          'json',
+          '-m',
+          'open-design-byok/model',
+        ]);
+        const rawConfig = await fsp.readFile(envFile, 'utf8');
+        const parsed = JSON.parse(rawConfig) as {
+          provider?: Record<string, {
+            npm?: string;
+            options?: Record<string, unknown>;
+            models?: Record<string, unknown>;
+          }>;
+        };
+        const provider = parsed.provider?.['open-design-byok'];
+        expect(provider).toMatchObject({
+          npm: '@ai-sdk/openai',
+          options: {
+            baseURL: 'http://127.0.0.1:8000/v1',
+          },
+        });
+        expect(provider?.options).not.toHaveProperty('apiKey');
+        expect(rawConfig).not.toContain('OPEN_DESIGN_BYOK_API_KEY');
+      },
+    );
+  });
+
+  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-isolation-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const keyFile = join(markerDir, 'byok-key.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK isolation fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(keyFile)}, process.env.OPEN_DESIGN_BYOK_API_KEY || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'opencode-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'hello',
+            model: 'deepseek-v4-flash',
+            byokProvider: {
+              protocol: 'senseaudio',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://api.senseaudio.cn',
+            },
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('opencode-ok');
+        expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
+        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
+        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
       },
     );
   });
@@ -432,6 +736,62 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message pin tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-failed-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Failed assistant pin fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        assistantMessageId,
+        message: 'fail before spawn',
+      }),
+    });
+    const body = await response.text();
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    let lastStatus: string | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const sqlite = new Database(dbFile, { readonly: true });
+      try {
+        const row = sqlite
+          .prepare(`SELECT run_status FROM messages WHERE id = ?`)
+          .get(assistantMessageId) as { run_status: string | null } | undefined;
+        lastStatus = row?.run_status ?? null;
+        if (lastStatus && lastStatus !== 'queued' && lastStatus !== 'running') break;
+      } finally {
+        sqlite.close();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(lastStatus).toBe('failed');
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
@@ -540,7 +900,7 @@ child.on('exit', (code, signal) => {
   });
 
   it('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
-    // Red spec for the packaged-nightly "AMR model the selected model is not
+    // Red spec for the packaged-prerelease "AMR model the selected model is not
     // available from Vela" report: the run preflight used to do a fresh,
     // blocking `vela model list` (authoritative remote catalog) on EVERY run
     // and fail-close the run whenever that single call timed out / errored —
@@ -2063,6 +2423,54 @@ process.exit(0);
     );
   });
 
+  it('fails plain-stream runs when stdout artifact persistence fails', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('<artifact identifier="blocked" type="text/html" title="Blocked"><!doctype html><html><body>Name to confirm</body></html></artifact>\\n');
+process.exit(0);
+`,
+      async () => {
+        const projectId = `plain-artifact-fail-${randomUUID()}`;
+        const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: projectId, name: 'Plain artifact failure' }),
+        });
+        expect(createProjectResponse.ok).toBe(true);
+
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            projectId,
+            message: 'emit blocked artifact',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('plain-stream artifact');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
     await withFakeAgent(
       'agy',
@@ -2186,6 +2594,63 @@ process.exit(0);
         expect(eventsBody).toContain('event: error');
         expect(eventsBody).toContain('Qoder authentication expired');
         expect(eventsBody).not.toContain('event: agent\\ndata: {"type":"error"');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('marks reasoning-only stream runs failed when no assistant output is produced', async () => {
+    const reasoningLine = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'I should inspect the project before answering.',
+          },
+        ],
+      },
+    });
+    const resultLine = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      usage: { input_tokens: 1, output_tokens: 0 },
+    });
+
+    await withFakeAgent(
+      'qodercli',
+      `
+console.log(${JSON.stringify(reasoningLine)});
+console.log(${JSON.stringify(resultLine)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'think but do not answer',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(
+          eventsResponse,
+          'Agent completed without producing any output',
+        );
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('"type":"thinking_delta"');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('Agent completed without producing any output');
+        expect(eventsBody).not.toContain('"status":"succeeded"');
         expect(statusBody.status).toBe('failed');
       },
     );
@@ -2521,6 +2986,273 @@ process.stdin.on('end', () => {
       }
     }
   });
+
+  it('latches intent signals on the conversation so a signal-free later turn keeps the deck framework', async () => {
+    // Red spec for specs/current/intent-signal-cache-hotfix.md §3 case 6 (R2).
+    // History is trimmed on agent switch (scopeHistoryToAgent) and
+    // non-transcript clients never resend prior turns, so a deck signal that
+    // fired on turn 1 must persist on the conversation row — recomputing it
+    // from the scanned text alone lets it flip OFF again and re-sends the
+    // ~17K stable block in both directions.
+    const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for intent-signal latch tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Intent signal latch fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const createConversationResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(createConversationResponse.ok).toBe(true);
+    const { conversation } = await createConversationResponse.json() as {
+      conversation: { id: string };
+    };
+    const conversationId = conversation.id;
+
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-intent-latch-'));
+    tempDirs.push(captureDir);
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+});
+`,
+        async () => {
+          const runTurn = async (
+            turn: { message: string; currentPrompt: string },
+            capturePath: string,
+          ): Promise<string> => {
+            process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+            const response = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentId: 'opencode',
+                projectId,
+                conversationId,
+                message: turn.message,
+                currentPrompt: turn.currentPrompt,
+              }),
+            });
+            expect(response.status).toBe(202);
+            const { runId } = await response.json() as { runId: string };
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return readFileSync(capturePath, 'utf8');
+          };
+
+          // Turn 1 mentions a deck in the user's own words → framework present.
+          const deckBrief = '帮我做一份路演材料，先出内容大纲';
+          const turn1Prompt = await runTurn(
+            { message: `## user\n${deckBrief}`, currentPrompt: deckBrief },
+            join(captureDir, 'turn1.txt'),
+          );
+          expect(turn1Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // Turn 2 carries no deck vocabulary and a trimmed transcript
+          // (agent-switch trim / non-transcript client): the latched
+          // conversation signal must keep the framework present.
+          const followUp = '把主色调调亮一点';
+          const turn2Prompt = await runTurn(
+            { message: `## user\n${followUp}`, currentPrompt: followUp },
+            join(captureDir, 'turn2.txt'),
+          );
+          expect(turn2Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // The latch is persisted on the conversation row.
+          const dbFile = resolve(process.env.OD_DATA_DIR as string, 'app.sqlite');
+          const sqlite = new Database(dbFile, { readonly: true });
+          try {
+            const row = sqlite
+              .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+              .get(conversationId) as { intentSignalsJson: string | null } | undefined;
+            expect(row?.intentSignalsJson).toBeTruthy();
+            expect(JSON.parse(row?.intentSignalsJson ?? '{}')).toMatchObject({ deck: true });
+          } finally {
+            sqlite.close();
+          }
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+      }
+    }
+  });
+
+  it('uses a project design system in sandboxed chat runs without an explicit run designSystemId', async () => {
+    const projectId = `project-ds-${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Project DS fixture',
+        designSystemId: 'default',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.ok).toBe(true);
+
+    const conversationId = `conv-${randomUUID()}`;
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Active design system') ? 'has-active-design-system' : 'missing-active-design-system',
+    prompt.includes('Treat the following DESIGN.md as authoritative') ? 'has-design-system-contract' : 'missing-design-system-contract',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            message: 'draft a branded artifact',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-active-design-system');
+        expect(body).toContain('has-design-system-contract');
+        expect(body).not.toContain('missing-active-design-system');
+        expect(body).not.toContain('missing-design-system-contract');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = await runsResponse.json() as {
+          runs: Array<{
+            designSystemId: string | null;
+            designSystemRequestedId: string | null;
+            designSystemSelectionSource: string | null;
+            designSystemDigest: string | null;
+            promptCache?: { hit: boolean; missReason: string | null };
+          }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          designSystemId: 'default',
+          designSystemRequestedId: 'default',
+          designSystemSelectionSource: 'project',
+          promptCache: { hit: false, missReason: 'new-session' },
+        });
+        expect(runsBody.runs[0]?.designSystemDigest).toMatch(/^[a-f0-9]{64}$/);
+      },
+    );
+  });
+
+  it('keeps requested design systems separate from missing injected design systems', async () => {
+    const missingDesignSystemId = `missing-ds-${randomUUID()}`;
+    const projectId = `project-missing-ds-${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Missing project DS fixture',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.ok).toBe(true);
+
+    const conversationId = `conv-${randomUUID()}`;
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Active design system') ? 'has-active-design-system' : 'missing-active-design-system',
+    prompt.includes('Treat the following DESIGN.md as authoritative') ? 'has-design-system-contract' : 'missing-design-system-contract',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            designSystemId: missingDesignSystemId,
+            message: 'draft a branded artifact',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('missing-design-system-contract');
+        expect(body).not.toContain('has-design-system-contract');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = await runsResponse.json() as {
+          runs: Array<{
+            designSystemId: string | null;
+            designSystemRequestedId: string | null;
+            designSystemSelectionSource: string | null;
+            designSystemDigest: string | null;
+          }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          designSystemId: null,
+          designSystemRequestedId: missingDesignSystemId,
+          designSystemSelectionSource: 'none',
+          designSystemDigest: null,
+        });
+      },
+    );
+  });
 });
 
 describe('daemon run creation during shutdown', () => {
@@ -2759,6 +3491,89 @@ describe('chat prompt helpers', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('resolves design-system selection precedence for run prompt composition', () => {
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: 'request-ds',
+      pluginDesignSystemId: 'plugin-ds',
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'request-ds', source: 'request' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      pluginDesignSystemId: 'plugin-ds',
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'plugin-ds', source: 'plugin' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'default-ds', source: 'app-default' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      appDefaultDesignSystemId: 'default-ds',
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
+  });
+
+  it('extracts the primary design-system id from a plugin snapshot', () => {
+    expect(designSystemIdFromPluginSnapshot({
+      resolvedContext: {
+        items: [
+          { kind: 'skill', id: 'landing' },
+          { kind: 'design-system', id: 'secondary' },
+          { kind: 'design-system', id: 'primary', primary: true },
+        ],
+      },
+    })).toBe('primary');
+
+    expect(designSystemIdFromPluginSnapshot({
+      resolvedContext: {
+        items: [
+          { kind: 'design-system', id: 'fallback' },
+        ],
+      },
+    })).toBe('fallback');
+
+    expect(designSystemIdFromPluginSnapshot({ resolvedContext: { items: [] } })).toBeNull();
+  });
+
+  it('describes stable prompt cache hits and miss reasons', () => {
+    expect(describeStablePromptCache({
+      isResuming: false,
+      storedStablePromptHash: null,
+      currentStableHash: 'hash-a',
+    })).toEqual({
+      stablePromptHash: 'hash-a',
+      hit: false,
+      missReason: 'new-session',
+    });
+
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-a',
+    })).toEqual({
+      stablePromptHash: 'hash-a',
+      hit: true,
+      missReason: null,
+    });
+
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'stable-prompt-changed',
+    });
   });
 
   it('grants Codex the canonical validated generated_images dir', () => {

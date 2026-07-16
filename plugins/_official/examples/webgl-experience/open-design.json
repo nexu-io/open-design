@@ -1,0 +1,128 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-experience",
+  "title": "WebGL Experience",
+  "title_i18n": {
+    "zh-CN": "WebGL 体验",
+    "zh-TW": "WebGL 體驗",
+    "ja": "WebGL エクスペリエンス",
+    "ko": "WebGL 경험",
+    "de": "WebGL-Erlebnis",
+    "fr": "Expérience WebGL",
+    "ru": "WebGL-опыт",
+    "es": "Experiencia WebGL",
+    "pt-BR": "Experiência WebGL",
+    "it": "Esperienza WebGL",
+    "vi": "Trải nghiệm WebGL",
+    "pl": "Doświadczenie WebGL",
+    "id": "Pengalaman WebGL",
+    "nl": "WebGL-ervaring",
+    "ar": "تجربة WebGL",
+    "tr": "WebGL Deneyimi",
+    "uk": "WebGL-досвід",
+    "en": "WebGL Experience"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
+  "description": "Build a full-screen, real-time WebGL/WebGL2 experience — animated shaders, 3D scenes, generative visuals, particle fields — that runs live on the GPU. Trigger when the user asks for a WebGL, shader, 3D, generative, GPU, or real-time visual experience.",
+  "description_i18n": {
+    "zh-CN": "构建全屏、实时的 WebGL/WebGL2 体验——动画着色器、3D 场景、生成式视觉、粒子场——在 GPU 上实时运行。当用户需要 WebGL、着色器、3D、生成式、GPU 或实时视觉效果时触发。",
+    "zh-TW": "建立全螢幕、即時的 WebGL/WebGL2 體驗——動畫著色器、3D 場景、生成式視覺、粒子場——在 GPU 上即時執行。當使用者需要 WebGL、著色器、3D、生成式、GPU 或即時視覺效果時觸發。",
+    "ja": "フルスクリーンのリアルタイム WebGL/WebGL2 体験（アニメーションシェーダー、3D シーン、ジェネラティブビジュアル、パーティクル）を GPU 上でライブに構築します。WebGL、シェーダー、3D、ジェネラティブ、GPU、リアルタイムビジュアルの要望で起動。",
+    "ko": "GPU에서 실시간으로 실행되는 전체 화면 WebGL/WebGL2 경험(애니메이션 셰이더, 3D 장면, 제너러티브 비주얼, 파티클)을 구축합니다. WebGL, 셰이더, 3D, 제너러티브, GPU, 실시간 비주얼 요청 시 트리거됩니다.",
+    "de": "Erstellen Sie ein bildschirmfüllendes Echtzeit-WebGL/WebGL2-Erlebnis — animierte Shader, 3D-Szenen, generative Visuals, Partikelfelder — das live auf der GPU läuft. Wird ausgelöst bei WebGL-, Shader-, 3D-, generativen, GPU- oder Echtzeit-Visual-Anfragen.",
+    "fr": "Créez une expérience WebGL/WebGL2 plein écran en temps réel — shaders animés, scènes 3D, visuels génératifs, champs de particules — exécutée en direct sur le GPU. Déclenché pour toute demande WebGL, shader, 3D, générative, GPU ou visuel temps réel.",
+    "ru": "Создайте полноэкранный WebGL/WebGL2-опыт в реальном времени — анимированные шейдеры, 3D-сцены, генеративная графика, поля частиц — работающий на GPU. Срабатывает при запросах WebGL, шейдеров, 3D, генеративной или реального времени графики.",
+    "es": "Crea una experiencia WebGL/WebGL2 a pantalla completa en tiempo real — shaders animados, escenas 3D, visuales generativos, campos de partículas — ejecutada en vivo en la GPU. Se activa ante solicitudes de WebGL, shader, 3D, generativo, GPU o visual en tiempo real.",
+    "pt-BR": "Crie uma experiência WebGL/WebGL2 em tela cheia e em tempo real — shaders animados, cenas 3D, visuais generativos, campos de partículas — executada ao vivo na GPU. Acionado em pedidos de WebGL, shader, 3D, generativo, GPU ou visual em tempo real.",
+    "it": "Crea un'esperienza WebGL/WebGL2 a schermo intero in tempo reale — shader animati, scene 3D, visual generativi, campi di particelle — eseguita dal vivo sulla GPU. Si attiva per richieste WebGL, shader, 3D, generative, GPU o visual in tempo reale.",
+    "vi": "Xây dựng trải nghiệm WebGL/WebGL2 toàn màn hình theo thời gian thực — shader động, cảnh 3D, hình ảnh sinh tạo, trường hạt — chạy trực tiếp trên GPU. Kích hoạt khi người dùng cần WebGL, shader, 3D, sinh tạo, GPU hoặc hình ảnh thời gian thực.",
+    "pl": "Zbuduj pełnoekranowe doświadczenie WebGL/WebGL2 w czasie rzeczywistym — animowane shadery, sceny 3D, wizualizacje generatywne, pola cząstek — działające na żywo na GPU. Uruchamiane przy prośbach o WebGL, shader, 3D, generatywne, GPU lub wizualizacje w czasie rzeczywistym.",
+    "id": "Bangun pengalaman WebGL/WebGL2 layar penuh secara real-time — shader animasi, adegan 3D, visual generatif, medan partikel — yang berjalan langsung di GPU. Terpicu saat pengguna meminta WebGL, shader, 3D, generatif, GPU, atau visual real-time.",
+    "nl": "Bouw een schermvullende, real-time WebGL/WebGL2-ervaring — geanimeerde shaders, 3D-scènes, generatieve visuals, deeltjesvelden — die live op de GPU draait. Wordt geactiveerd bij WebGL-, shader-, 3D-, generatieve, GPU- of real-time visuele verzoeken.",
+    "ar": "أنشئ تجربة WebGL/WebGL2 بملء الشاشة وفي الوقت الفعلي — ظلّالات متحركة ومشاهد ثلاثية الأبعاد ومرئيات توليدية وحقول جسيمات — تعمل مباشرة على وحدة معالجة الرسوميات. تُفعّل عند طلب WebGL أو الظلّالات أو الأبعاد الثلاثية أو التوليدي أو المرئيات الفورية.",
+    "tr": "GPU üzerinde canlı çalışan tam ekran, gerçek zamanlı bir WebGL/WebGL2 deneyimi — animasyonlu shader'lar, 3D sahneler, üretken görseller, parçacık alanları — oluşturun. WebGL, shader, 3D, üretken, GPU veya gerçek zamanlı görsel istekleriyle tetiklenir.",
+    "uk": "Створіть повноекранний WebGL/WebGL2-досвід у реальному часі — анімовані шейдери, 3D-сцени, генеративна графіка, поля частинок — що працює наживо на GPU. Спрацьовує на запити WebGL, шейдерів, 3D, генеративної чи графіки реального часу.",
+    "en": "Build a full-screen, real-time WebGL/WebGL2 experience — animated shaders, 3D scenes, generative visuals, particle fields — that runs live on the GPU. Trigger when the user asks for a WebGL, shader, 3D, generative, GPU, or real-time visual experience."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-experience",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "webgl",
+    "webgl2",
+    "shader",
+    "3d",
+    "generative",
+    "gpu",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a full-screen, real-time WebGL2 experience for {{subject}} — animated shaders, 3D scenes, generative visuals — that runs live on the GPU as a single self-contained index.html.",
+        "zh-CN": "为{{subject}}构建一个全屏、实时的 WebGL2 体验——动画着色器、3D 场景、生成式视觉——作为单个自包含的 index.html，在 GPU 上实时运行。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "subject",
+        "label": "What should it show?",
+        "type": "text",
+        "required": false,
+        "default": "a flowing generative aurora field",
+        "placeholder": "e.g. a raymarched 3D hero, a plasma field, a particle galaxy"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

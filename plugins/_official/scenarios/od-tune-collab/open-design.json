@@ -24,6 +24,7 @@
     "uk": "Тюнінг і співпраця (типовий сценарій)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T14:52:59Z",
   "description": "Default reference pipeline for the tune-collab taskKind.",
   "description_i18n": {
     "en": "Default reference pipeline for the tune-collab taskKind.",

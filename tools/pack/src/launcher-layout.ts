@@ -10,6 +10,7 @@ import {
   type LauncherVersionPaths,
 } from "@open-design/launcher-proto";
 import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { ToolPackConfig, ToolPackPlatform } from "./config.js";
 
@@ -30,27 +31,12 @@ export type ToolPackLauncherPayloadLayout = {
   versionPaths: LauncherVersionPaths;
 };
 
-function channelFromVersion(version: string | undefined): LauncherChannel | null {
-  if (version == null || version.length === 0) return null;
-  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return "beta";
-  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return "preview";
-  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(version)) return "nightly";
-  return null;
-}
-
-function channelFromNamespace(namespace: string): LauncherChannel | null {
-  const lower = namespace.toLowerCase();
-  if (namespace === SIDECAR_DEFAULTS.namespace || /^release-stable(?:-|$)/.test(lower)) return "stable";
-  if (/^release-beta(?:-|$)/.test(lower)) return "beta";
-  if (/^release-preview(?:-|$)/.test(lower)) return "preview";
-  if (/^release-nightly(?:-|$)/.test(lower)) return "nightly";
-  return null;
-}
-
 export function resolveToolPackLauncherChannel(
   config: Pick<ToolPackConfig, "appVersion" | "namespace">,
 ): LauncherChannel {
-  return channelFromVersion(config.appVersion) ?? channelFromNamespace(config.namespace) ?? "stable";
+  return releaseChannelFromVersion(config.appVersion)
+    ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace)
+    ?? "stable";
 }
 
 export function resolveToolPackLauncherRoot(

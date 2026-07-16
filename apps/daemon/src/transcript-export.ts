@@ -74,6 +74,22 @@ type PersistedAgentEvent =
   | { kind: 'thinking'; text: string }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'diagnostic';
+      name: string;
+      source?: string;
+      elapsedMs?: number;
+      reason?: string;
+      suppressedChars?: number;
+      suppressedChunks?: number;
+      openedBlocks?: number;
+      closedBlocks?: number;
+      fileCount?: number;
+      files?: string[];
+      pendingCandidateChars?: number;
+      suppressing?: boolean;
+      shape?: Record<string, unknown>;
+    }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
   | { kind: 'raw'; line: string };
 

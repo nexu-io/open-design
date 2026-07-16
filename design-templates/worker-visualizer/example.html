@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Worker Visualizer — Particle Field</title>
+<!--
+  Self-contained Web Worker demo. A background worker integrates a 12,000-body
+  swirling particle simulation and writes positions into a SharedArrayBuffer;
+  the main thread only reads + draws. Open Design renders this in "powered
+  preview" mode because it calls `new Worker(...)` and `SharedArrayBuffer` —
+  the opaque preview sandbox blocks both. If SharedArrayBuffer is unavailable
+  the worker transfers a plain buffer instead, so it degrades gracefully.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0a0b10; overflow: hidden; font-family: 'Albert Sans', system-ui, -apple-system, sans-serif; color: #eef1f7; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud {
+    position: fixed; top: 5vw; left: 5vw; z-index: 2; pointer-events: none;
+  }
+  .kicker { font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; color: #63fe13; margin: 0 0 12px; font-weight: 600; }
+  h1 { margin: 0; font-size: clamp(30px, 5.5vw, 68px); line-height: 0.95; font-weight: 800; letter-spacing: -0.02em; }
+  .stats {
+    position: fixed; bottom: 5vw; left: 5vw; z-index: 2; pointer-events: none;
+    display: flex; gap: 28px; font-variant-numeric: tabular-nums;
+  }
+  .stat b { display: block; font-size: clamp(20px, 2.6vw, 34px); font-weight: 700; }
+  .stat span { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(238,241,247,0.55); }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="hud">
+  <p class="kicker">Worker Visualizer</p>
+  <h1>Compute off the<br>main thread.</h1>
+</div>
+<div class="stats">
+  <div class="stat"><b id="count">—</b><span>Particles</span></div>
+  <div class="stat"><b id="mode">—</b><span>Transport</span></div>
+  <div class="stat"><b id="fps">—</b><span>Render fps</span></div>
+</div>
+<script type="text/javascript">
+(() => {
+  const N = 12000;
+  const canvas = document.getElementById('view');
+  const ctx = canvas.getContext('2d');
+  const useSAB = typeof SharedArrayBuffer !== 'undefined' && self.crossOriginIsolated === true;
+  document.getElementById('count').textContent = N.toLocaleString();
+  document.getElementById('mode').textContent = useSAB ? 'SharedArrayBuffer' : 'postMessage';
+
+  // The worker body — integrates positions/velocities each tick. With a
+  // SharedArrayBuffer the main thread reads the same memory (zero-copy); the
+  // fallback posts a transferable copy every frame.
+  const workerSrc = `
+    let N = 0, pos = null, vel = null, shared = false;
+    self.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === 'init') {
+        N = d.N; shared = d.shared;
+        if (shared) { pos = new Float32Array(d.pos); }
+        else { pos = new Float32Array(N*2); }
+        vel = new Float32Array(N*2);
+        for (let i=0;i<N;i++){
+          const a = (i/N)*Math.PI*2, r = 0.15 + 0.85*Math.random();
+          pos[i*2]   = Math.cos(a)*r; pos[i*2+1] = Math.sin(a)*r;
+          vel[i*2]   = -Math.sin(a)*0.002; vel[i*2+1] = Math.cos(a)*0.002;
+        }
+        if (shared) step(); else self.postMessage({type:'frame', pos: pos.buffer.slice(0)}, [pos.buffer.slice(0)]);
+      }
+    };
+    function step(){
+      // Swirl toward center + tangential curl — cheap but visually rich.
+      for (let i=0;i<N;i++){
+        const x = pos[i*2], y = pos[i*2+1];
+        const d2 = x*x + y*y + 0.02;
+        const inv = 1.0 / Math.sqrt(d2);
+        const ax = (-x*inv)*0.0016 + (-y)*0.004*inv;
+        const ay = (-y*inv)*0.0016 + ( x)*0.004*inv;
+        vel[i*2]   = vel[i*2]*0.995 + ax;
+        vel[i*2+1] = vel[i*2+1]*0.995 + ay;
+        pos[i*2]   += vel[i*2];
+        pos[i*2+1] += vel[i*2+1];
+      }
+      if (shared) { setTimeout(step, 8); }
+      else { self.postMessage({type:'frame', pos: pos.buffer.slice(0)}); setTimeout(step, 8); }
+    }
+    self.onmessage2 = null;`;
+
+  const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })));
+
+  let view = new Float32Array(N * 2);
+  let sharedPos = null;
+  if (useSAB) {
+    const sab = new SharedArrayBuffer(N * 2 * 4);
+    sharedPos = new Float32Array(sab);
+    worker.postMessage({ type: 'init', N, shared: true, pos: sab });
+  } else {
+    worker.postMessage({ type: 'init', N, shared: false });
+    worker.onmessage = (e) => { if (e.data.type === 'frame') view = new Float32Array(e.data.pos); };
+  }
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(canvas.clientWidth * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  const fpsEl = document.getElementById('fps');
+  let frames = 0, acc = 0, last = performance.now();
+  function draw(now){
+    const w = canvas.width, h = canvas.height, s = Math.min(w, h) * 0.46;
+    ctx.fillStyle = 'rgba(10,11,16,0.28)';
+    ctx.fillRect(0, 0, w, h);
+    const src = useSAB ? sharedPos : view;
+    ctx.fillStyle = '#63fe13';
+    ctx.globalAlpha = 0.85;
+    for (let i = 0; i < N; i++){
+      const x = w*0.5 + src[i*2] * s;
+      const y = h*0.5 + src[i*2+1] * s;
+      ctx.fillRect(x, y, 1.6, 1.6);
+    }
+    ctx.globalAlpha = 1;
+    frames++; acc += now - last; last = now;
+    if (acc > 500){ fpsEl.textContent = Math.round(frames*1000/acc); frames = 0; acc = 0; }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

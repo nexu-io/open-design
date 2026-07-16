@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-simple-deck",
-  "title": "Simple Deck",
+  "title": "Write an Operating Review like a Disciplined COO",
   "title_i18n": {
-    "zh-CN": "简易幻灯片",
-    "zh-TW": "簡易投影片",
-    "ja": "シンプルデッキ",
-    "ko": "심플 덱",
-    "de": "Simple Deck",
-    "fr": "Simple Deck",
-    "ru": "Simple Deck",
-    "es": "Simple Deck",
-    "pt-BR": "Simple Deck",
-    "it": "Simple Deck",
-    "vi": "Simple Deck",
-    "pl": "Simple Deck",
-    "id": "Simple Deck",
-    "nl": "Simple Deck",
-    "ar": "Simple Deck",
-    "tr": "Simple Deck",
-    "uk": "Simple Deck",
-    "en": "Simple Deck"
+    "en": "Write an Operating Review like a Disciplined COO",
+    "zh-CN": "像克制的 COO 一样写经营复盘",
+    "zh-TW": "像克制的 COO 一样写经营复盘"
   },
   "version": "0.1.1",
-  "description": "Single-file horizontal-swipe HTML deck. Built by copying the seed `assets/template.html` (which carries the proven 5-rule iframe nav script) and pasting slide layouts from `references/layouts.md`. Pitch decks, product overviews, study material — when you don't need the magazine aesthetic of `magazine-web-ppt`.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Built as a decision-grade corporate strategy deck for leadership team.",
   "description_i18n": {
-    "zh-CN": "单文件横向滑动 HTML 幻灯片。复制种子文件 assets/template.html（内含经过验证的 5 行 iframe 导航脚本）并粘贴 references/layouts.md 中的幻灯片布局即可。适用于路演、产品介绍、学习资料等场景——当你不需要 magazine-web-ppt 的杂志风格时。",
-    "zh-TW": "單檔案橫向滑動 HTML 投影片。複製種子檔案 assets/template.html（內含經過驗證的 5 行 iframe 導航腳本）並貼上 references/layouts.md 中的投影片版面配置即可。適用於提案簡報、產品概覽、學習教材等場景——當你不需要 magazine-web-ppt 的雜誌風格時。",
-    "ja": "単一ファイルの横スワイプ HTML デッキ。assets/template.html（実績のある 5 行の iframe ナビゲーションスクリプトを含む）をコピーし、references/layouts.md からスライドレイアウトを貼り付けて構築します。ピッチデッキ、製品概要、学習資料など、magazine-web-ppt のマガジン風デザインが不要な場合に最適。",
-    "ko": "단일 파일 가로 스와이프 HTML 덱. assets/template.html(검증된 5줄 iframe 내비게이션 스크립트 포함)을 복사하고 references/layouts.md에서 슬라이드 레이아웃을 붙여넣어 제작합니다. 피치 덱, 제품 개요, 학습 자료 등 magazine-web-ppt의 매거진 스타일이 필요하지 않을 때 사용하세요.",
-    "de": "Horizontales HTML-Deck in einer Datei. Erstellt durch Kopieren von assets/template.html (mit bewährtem 5-Zeilen-iframe-Navigationsskript) und Einfügen von Folienlayouts aus references/layouts.md. Für Pitch-Decks, Produktübersichten, Lernmaterial – wenn Sie die Magazin-Ästhetik von magazine-web-ppt nicht benötigen.",
-    "fr": "Deck HTML à défilement horizontal dans un seul fichier. Construit en copiant assets/template.html (qui contient le script de navigation iframe éprouvé de 5 lignes) et en collant les mises en page de références/layouts.md. Pour pitchs, présentations produit, supports d'étude – quand vous n'avez pas besoin de l'esthétique magazine de magazine-web-ppt.",
-    "ru": "Однофайловая HTML-презентация с горизонтальной прокруткой. Создается копированием assets/template.html (с проверенным 5-строчным скриптом навигации iframe) и вставкой макетов слайдов из references/layouts.md. Для питчей, обзоров продуктов, учебных материалов — когда не нужна журнальная эстетика magazine-web-ppt.",
-    "es": "Presentación HTML de deslizamiento horizontal en un solo archivo. Creado copiando assets/template.html (con el probado script de navegación iframe de 5 líneas) y pegando diseños de diapositivas desde references/layouts.md. Para pitch decks, resúmenes de productos, material de estudio: cuando no necesitas la estética de revista de magazine-web-ppt.",
-    "pt-BR": "Deck HTML de deslize horizontal em arquivo único. Criado copiando assets/template.html (com script de navegação iframe comprovado de 5 linhas) e colando layouts de slides de references/layouts.md. Para pitch decks, visões gerais de produtos, material de estudo — quando você não precisa da estética de revista do magazine-web-ppt.",
-    "it": "Deck HTML a scorrimento orizzontale in singolo file. Costruito copiando assets/template.html (con lo script di navigazione iframe testato di 5 righe) e incollando i layout delle slide da references/layouts.md. Per pitch deck, panoramiche prodotto, materiale di studio — quando non serve l'estetica magazine di magazine-web-ppt.",
-    "vi": "Bộ trình chiếu HTML vuốt ngang trong một tệp duy nhất. Xây dựng bằng cách sao chép assets/template.html (chứa script điều hướng iframe 5 dòng đã được kiểm chứng) và dán các bố cục slide từ references/layouts.md. Dành cho pitch deck, giới thiệu sản phẩm, tài liệu học tập — khi bạn không cần phong cách tạp chí của magazine-web-ppt.",
-    "pl": "Pozioma prezentacja HTML w jednym pliku. Tworzona przez skopiowanie assets/template.html (ze sprawdzonym 5-liniowym skryptem nawigacji iframe) i wklejenie układów slajdów z references/layouts.md. Do pitch decków, przeglądów produktów, materiałów edukacyjnych — gdy nie potrzebujesz magazynowej estetyki magazine-web-ppt.",
-    "id": "Deck HTML geser horizontal dalam satu file. Dibuat dengan menyalin assets/template.html (yang memuat skrip navigasi iframe 5-baris terbukti) dan menempelkan tata letak slide dari references/layouts.md. Untuk pitch deck, ringkasan produk, materi belajar — saat Anda tidak memerlukan estetika majalah dari magazine-web-ppt.",
-    "nl": "Horizontaal swipe HTML-deck in één bestand. Gebouwd door assets/template.html te kopiëren (met bewezen 5-regelige iframe-navigatiescript) en slide-layouts uit references/layouts.md te plakken. Voor pitch decks, productoverzichten, studiemateriaal — wanneer je de magazine-esthetiek van magazine-web-ppt niet nodig hebt.",
-    "ar": "عرض تقديمي HTML بالتمرير الأفقي في ملف واحد. يتم إنشاؤه بنسخ assets/template.html (الذي يحتوي على سكريبت التنقل iframe المُثبت من 5 أسطر) ولصق تخطيطات الشرائح من references/layouts.md. لعروض الأعمال والمنتجات والمواد الدراسية — عندما لا تحتاج إلى جمالية المجلة من magazine-web-ppt.",
-    "tr": "Tek dosyalı yatay kaydırmalı HTML sunumu. assets/template.html dosyasını (kanıtlanmış 5 satırlık iframe navigasyon scripti içerir) kopyalayarak ve references/layouts.md'den slayt düzenlerini yapıştırarak oluşturulur. Pitch deck'ler, ürün tanıtımları, çalışma materyalleri için — magazine-web-ppt'nin dergi estetiğine ihtiyacınız olmadığında.",
-    "uk": "Однофайлова HTML-презентація з горизонтальним свайпом. Створюється копіюванням assets/template.html (з перевіреним 5-рядковим скриптом навігації iframe) та вставкою макетів слайдів із references/layouts.md. Для пітчів, оглядів продуктів, навчальних матеріалів — коли не потрібна журнальна естетика magazine-web-ppt.",
-    "en": "Single-file horizontal-swipe HTML deck. Built by copying the seed `assets/template.html` (which carries the proven 5-rule iframe nav script) and pasting slide layouts from `references/layouts.md`. Pitch decks, product overviews, study material — when you don't need the magazine aesthetic of `magazine-web-ppt`."
+    "en": "Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Built as a decision-grade corporate strategy deck for leadership team.",
+    "zh-CN": "像克制的 COO 一样写经营复盘——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像克制的 COO 一样写经营复盘——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -60,7 +31,18 @@
     "slides",
     "ppt",
     "presentation",
-    "untitled"
+    "untitled",
+    "roadmap",
+    "architecture",
+    "simple-deck",
+    "product-and-technical-management",
+    "corporate-strategy",
+    "board-pre-read-deck",
+    "strategy",
+    "board",
+    "business-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -73,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "strategy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -81,13 +63,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a premium product-studio {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}: a crisp narrative arc, executive-grade pacing, refined typography, strong visual hierarchy, and spacious investor-ready polish. Speaker notes: {{speakerNotes}}. Use {{designSystem}} as the design-system direction. Build a single-file horizontal-swipe HTML deck by copying `assets/template.html` and pasting slide layouts from `references/layouts.md`.",
-        "zh-CN": "用高端产品工作室的完成度，为 {{audience}} 做一套 {{deckType}}，主题是 {{topic}}，页数为 {{slideCount}}：叙事线清晰、节奏高级、排版克制、视觉层级强，像可以直接拿去高管汇报或投资人会议的成品。演讲者备注：{{speakerNotes}}。设计系统方向使用 {{designSystem}}。复制 `assets/template.html` 并从 `references/layouts.md` 粘贴版面，构建单文件横向滑动 HTML deck。"
+        "en": "Create \"Write an Operating Review like a Disciplined COO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. Audience: leadership team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像克制的 COO 一样写经营复盘。像克制的 COO 一样写经营复盘——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's operating review: growth, burn, and the concrete path to sustainability without losing the open ethos. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Simple Deck"
+          "title": "Write an Operating Review like a Disciplined COO",
+          "title_i18n": {
+            "en": "Write an Operating Review like a Disciplined COO",
+            "zh-CN": "像克制的 COO 一样写经营复盘",
+            "zh-TW": "像克制的 COO 一样写经营复盘"
+          }
         }
       ]
     },
@@ -190,6 +177,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "corporate-strategy"
   }
 }

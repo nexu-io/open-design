@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "Open Design Web Clipper"
+  },
+  "extensionDescription": {
+    "message": "페이지, 디자인 시스템, 스크린샷, 이미지, Figma 가져오기 JSON을 Open Design Library에 저장합니다."
+  }
+}

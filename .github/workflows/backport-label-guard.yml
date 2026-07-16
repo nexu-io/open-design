@@ -1,0 +1,43 @@
+name: backport-label-guard
+# Anyone with triage+ can apply any label (GitHub has no per-label permission), so guard here:
+# when someone applies a backport label, verify they have write+ permission (this includes
+# outside collaborators granted write). If not, remove the label and comment. Removing a label
+# fires the "unlabeled" event, not "labeled", so there is no loop.
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    if: startsWith(github.event.label.name, 'backport ') && github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Verify labeler permission
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          ACTOR: ${{ github.event.sender.login }}
+          LABEL: ${{ github.event.label.name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          perm=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq '.permission' 2>/dev/null || echo none)
+          case "$perm" in
+            admin|maintain|write)
+              echo "Authorized: $ACTOR ($perm)";;
+            *)
+              echo "Unauthorized: $ACTOR ($perm), removing label"
+              gh pr edit "$PR" --repo "$REPO" --remove-label "$LABEL"
+              gh pr comment "$PR" --repo "$REPO" --body "ℹ️ The \`$LABEL\` label requires write permission or above (@$ACTOR currently has \`$perm\`), so it was removed automatically. Please ask a maintainer to confirm whether this should ship in the current release."
+              ;;
+          esac

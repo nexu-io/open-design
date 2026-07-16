@@ -23,6 +23,7 @@ const BOOT_DEFAULTS = {
   has_available_configure_cli: false,
   configure_type: 'unknown' as const,
   configure_availability: 'unknown' as const,
+  runtime_type: 'none' as const,
   cli_runnable: false,
   byok_runnable: false,
   amr_runnable: false,
@@ -34,6 +35,7 @@ describe('deriveConfigureGlobals', () => {
       has_available_configure_cli: false,
       configure_type: 'none',
       configure_availability: 'unknown',
+      runtime_type: 'none',
       cli_runnable: false,
       byok_runnable: false,
       amr_runnable: false,
@@ -53,6 +55,7 @@ describe('deriveConfigureGlobals', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'available',
+      runtime_type: 'local_cli',
       cli_runnable: true,
       byok_runnable: false,
       amr_runnable: false,
@@ -74,6 +77,15 @@ describe('deriveConfigureGlobals', () => {
     });
   });
 
+  it('runtime_type follows api mode over a stale remembered amr agentId', () => {
+    // Switching AMR → BYOK only flips config.mode; config.agentId can stay
+    // 'amr'. The active runtime is BYOK, so runtime_type must be 'byok', not
+    // 'amr_cloud'. Regression for the AMR→Use-API funnel mislabel.
+    expect(
+      deriveConfigureGlobals({ mode: 'api', agentId: 'amr', byokConfigured: true }).runtime_type,
+    ).toBe('byok');
+  });
+
   it('reports byok when an api-mode user has saved credentials', () => {
     expect(
       deriveConfigureGlobals({
@@ -85,6 +97,7 @@ describe('deriveConfigureGlobals', () => {
       has_available_configure_cli: false,
       configure_type: 'byok',
       configure_availability: 'available',
+      runtime_type: 'byok',
       cli_runnable: false,
       byok_runnable: true,
       amr_runnable: false,
@@ -128,6 +141,7 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
       has_available_configure_cli: false,
       configure_type: 'none',
       configure_availability: 'unavailable',
+      runtime_type: 'none',
       cli_runnable: false,
       byok_runnable: false,
       amr_runnable: false,
@@ -145,6 +159,7 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'available',
+      runtime_type: 'local_cli',
       cli_runnable: true,
       byok_runnable: false,
       amr_runnable: false,
@@ -181,6 +196,7 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'unavailable',
+      runtime_type: 'local_cli',
       cli_runnable: true,
       byok_runnable: false,
       amr_runnable: false,
@@ -204,6 +220,7 @@ describe('deriveConfigureGlobals — AMR', () => {
       has_available_configure_cli: false,
       configure_type: 'none',
       configure_availability: 'available',
+      runtime_type: 'amr_cloud',
       cli_runnable: false,
       byok_runnable: false,
       amr_runnable: false,
@@ -222,6 +239,7 @@ describe('deriveConfigureGlobals — AMR', () => {
       has_available_configure_cli: false,
       configure_type: 'amr',
       configure_availability: 'available',
+      runtime_type: 'amr_cloud',
       cli_runnable: false,
       byok_runnable: false,
       amr_runnable: true,
@@ -251,6 +269,7 @@ describe('deriveConfigureGlobals — AMR', () => {
       has_available_configure_cli: false,
       configure_type: 'amr',
       configure_availability: 'available',
+      runtime_type: 'amr_cloud',
       cli_runnable: false,
       byok_runnable: false,
       amr_runnable: true,
@@ -282,6 +301,7 @@ describe('deriveConfigureGlobals — independent runnable flags', () => {
       has_available_configure_cli: true,
       configure_type: 'both',
       configure_availability: 'available',
+      runtime_type: 'local_cli',
       // … but the independent flags do not.
       cli_runnable: true,
       byok_runnable: true,
@@ -324,6 +344,7 @@ describe('setConfigureGlobals (web client)', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'available',
+      runtime_type: 'local_cli',
       cli_runnable: true,
       byok_runnable: false,
       amr_runnable: false,
@@ -332,6 +353,7 @@ describe('setConfigureGlobals (web client)', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'available',
+      runtime_type: 'local_cli',
       cli_runnable: true,
       byok_runnable: false,
       amr_runnable: false,
@@ -344,6 +366,7 @@ describe('setConfigureGlobals (web client)', () => {
         has_available_configure_cli: true,
         configure_type: 'both',
         configure_availability: 'available',
+        runtime_type: 'local_cli',
         cli_runnable: true,
         byok_runnable: true,
         amr_runnable: false,

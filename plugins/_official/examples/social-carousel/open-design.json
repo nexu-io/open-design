@@ -24,6 +24,7 @@
     "en": "Social Carousel"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A three-card social-media carousel laid out as 1080×1080 squares — three cinematic, on-brand panels with display headlines that connect across the series (\"onwards.\" → \"to the next one.\" → \"looking ahead.\"). Each card has a brand mark, a number / total, a caption, and a \"loop\" affordance. Use when the brief asks for a \"carousel post\", \"social carousel\", \"Instagram carousel\", \"LinkedIn series\", \"X thread cards\", or \"三连发\".",
   "description_i18n": {
     "zh-CN": "三张 1080×1080 方形社交媒体轮播卡片——三个富有电影感和品牌调性的面板，配有连贯的展示标题（'往前走。' → '到下一个。' → '展望未来。'）。每张卡片包含品牌标识、序号/总数、说明文字和'循环'提示。适用于'轮播帖子'、'社交媒体轮播'、'Instagram 轮播'、'LinkedIn 系列'、'X 系列卡片'或'三连发'等需求。",

@@ -24,6 +24,7 @@
     "en": "Social Media Matrix Tracker Template"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Social Media Matrix Tracker template. Use when users ask for a cinematic, data-dense social media analytics dashboard with multi-platform metrics, interactive charts, hover insights, range compare, and dark/light theme switching in a single HTML artifact.",
   "description_i18n": {
     "zh-CN": "社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。适用于需要电影级、数据密集型社交媒体分析仪表板的场景，支持多平台指标、交互式图表、悬停洞察、范围对比和深浅主题切换，单个 HTML 文件即可实现。",

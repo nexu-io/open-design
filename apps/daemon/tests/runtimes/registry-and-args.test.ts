@@ -136,7 +136,7 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
     withPlatform('darwin', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-      assert.deepEqual(args.slice(0, 11), [
+      assert.deepEqual(args.slice(0, 9), [
         'exec',
         '--json',
         '--skip-git-repo-check',
@@ -144,8 +144,6 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
         'workspace-write',
         '-c',
         'sandbox_workspace_write.network_access=true',
-        '-c',
-        'default_permissions=":workspace"',
         '--disable',
         'plugins',
       ]);
@@ -174,10 +172,7 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
           args.includes('-c'),
           true,
         );
-        assert.equal(
-          args.includes('default_permissions=":workspace"'),
-          true,
-        );
+        assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
       });
     }
   });
@@ -198,7 +193,7 @@ test('codex args use danger-full-access sandbox on WSL because workspace-write s
         '--sandbox',
         'danger-full-access',
       ]);
-      assert.equal(args.includes('default_permissions=":workspace"'), true);
+      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
     });
   });
 });
@@ -275,7 +270,7 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
         args.includes('sandbox_workspace_write.network_access=true'),
         false,
       );
-      assert.equal(args.includes('default_permissions=":workspace"'), true);
+      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
     });
   });
 });

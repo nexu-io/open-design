@@ -6,15 +6,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 const posthogCapture = vi.hoisted(() => vi.fn());
 const posthogShutdown = vi.hoisted(() => vi.fn(async () => undefined));
-
-vi.mock('posthog-node', () => ({
-  PostHog: vi.fn(function PostHogMock() {
+const posthogCtor = vi.hoisted(() =>
+  vi.fn(function PostHogMock(_key: string, _options?: Record<string, unknown>) {
     return {
       capture: posthogCapture,
       on: vi.fn(),
       shutdown: posthogShutdown,
     };
   }),
+);
+
+vi.mock('posthog-node', () => ({
+  PostHog: posthogCtor,
 }));
 
 describe('analytics telemetry environment', () => {
@@ -29,6 +32,24 @@ describe('analytics telemetry environment', () => {
       env: 'local_development',
       key: 'phc_test',
     });
+  });
+
+  it('enables GeoIP so daemon events get user country from their real IP', async () => {
+    // posthog-node defaults disableGeoip:true (it assumes a datacenter
+    // deployment). The daemon runs on the user's own machine, so its
+    // ingestion IP is the user's real public IP and country enrichment is
+    // accurate — the service must explicitly opt back in or every
+    // daemon-emitted event lands in the null-country bucket.
+    posthogCtor.mockClear();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-geoip-'));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test', OD_TELEMETRY_ENV: 'local_development' },
+    });
+
+    expect(posthogCtor).toHaveBeenCalledTimes(1);
+    expect(posthogCtor.mock.calls[0]?.[1]).toMatchObject({ disableGeoip: false });
   });
 
   it('stamps daemon PostHog captures with env', async () => {

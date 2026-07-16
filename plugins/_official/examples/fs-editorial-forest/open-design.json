@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-fs-editorial-forest",
-  "title": "Editorial Forest",
+  "title": "Art-Direct an Annual Report like a Magazine Creative Director",
   "title_i18n": {
-    "en": "Editorial Forest",
-    "zh-CN": "林间编辑部"
+    "en": "Art-Direct an Annual Report like a Magazine Creative Director",
+    "zh-CN": "像杂志创意总监一样艺术指导年度报告",
+    "zh-TW": "像杂志创意总监一样艺术指导年度报告"
   },
   "version": "1.0.0",
-  "description": "Quiet, literary single-file HTML decks: deep forest green #2e4a2a, dusty pink #e89cb1, and warm cream #efe7d4 paper set in Source Serif 4 with JetBrains Mono kickers, on a fixed 1920x1080 stage that scales to any viewport. Mixed light/dark scheme with an 8-slide quarterly-review rhythm. Based on zarazhangrui/beautiful-html-templates editorial-forest.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Built as a decision-grade design craft deck for brand stakeholders, exec audience.",
   "description_i18n": {
-    "en": "Quiet, literary single-file HTML decks: deep forest green #2e4a2a, dusty pink #e89cb1, and warm cream #efe7d4 paper set in Source Serif 4 with JetBrains Mono kickers, on a fixed 1920x1080 stage that scales to any viewport. Mixed light/dark scheme with an 8-slide quarterly-review rhythm. Based on zarazhangrui/beautiful-html-templates editorial-forest.",
-    "zh-CN": "林间编辑部：安静、文学气质的单文件 HTML 幻灯片 —— 森林绿 #2e4a2a × 尘粉 #e89cb1 × 暖奶油 #efe7d4 纸面，Source Serif 4 衬线排印配 JetBrains Mono 标签，固定 1920x1080 舞台等比缩放适配任意视口，明暗混排的 8 页季评节奏。移植自 zarazhangrui/beautiful-html-templates 的 editorial-forest 模板。"
+    "en": "Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Built as a decision-grade design craft deck for brand stakeholders, exec audience.",
+    "zh-CN": "像杂志创意总监一样艺术指导年度报告——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像杂志创意总监一样艺术指导年度报告——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -30,7 +33,20 @@
     "forest-green",
     "serif",
     "presentation",
-    "ppt"
+    "ppt",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "fs-editorial-forest",
+    "marketing-and-gtm",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -43,7 +59,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -52,16 +68,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a quiet, literary {{deckType}} for {{audience}} about {{topic}} ({{slideCount}}) in the locked Editorial Forest theme. Output one self-contained single-file HTML deck with zero external JS dependencies: start from this plugin's example.html seed and keep its inline <deck-stage> runtime script, :root design-token block, Google Fonts <link>, and every layout skin verbatim - replace only the slide content. Hard rules, all locked: (1) Tokens - the only colors are --green #2e4a2a, --green-deep #243a21, --green-lite #3a5a36, --pink #e89cb1, --pink-deep #d27e96, --cream #efe7d4, --cream-2 #e6dcc4, --ink #1a1a17, plus rgba(239,231,212,0.18) for chart grid lines; no gradients, no shadows, no white/black surfaces, no colors outside this set. (2) Fonts - Source Serif 4 (display weight 500, tracking -0.02em) for all headings and body, JetBrains Mono (uppercase, letter-spacing 0.12-0.18em) for kickers, numbers, captions, and axes; never any other typeface. (3) Fixed 16:9 stage - every slide is one <section class=\"...\" data-screen-label=\"NN Label\"> authored at exactly 1920x1080 with overflow hidden, a direct child of <deck-stage aspect=\"1920/1080\" no-rail>; the inlined runtime scales the stage uniformly (factor = min(viewportW/1920, viewportH/1080), letterboxed, recomputed on resize); never reflow per device, never add responsive breakpoints inside slides. (4) Navigation comes from the runtime: arrow keys, Space, PgUp/PgDn, Home/End, number keys, and #<n> hash deep-link restore/write-back; inactive slides stay mounted and hidden via visibility/opacity, never display:none. (5) Compose slides only from the seed's master pages, alternating canvases (never more than two same-tone slides in a row): .cover (green, circular monogram, 220px serif title, mono footline), .agenda (cream 5-tile mosaic with t-green/t-pink/t-cream/t-greenLite tiles), .statement (pink, 140px serif quote + mono attribution), .two-col (cream, green figure panel + narrative + 3-col dl.meta), .data (green, pure-CSS grouped bar chart with pink/cream bars), .framework (cream, four step cards: outline / pinkfill / fill / outline), .stats (green, three 220px pink KPI numerals over a pink rule), .summary (green, 220px pink closing word + 3-column takeaways); reuse masters for longer decks. (6) Signature devices stay: mono uppercase paired labels on every top edge, 2px rule lines above meta/KPI/summary rows, 6-8px radius cards with 2-2.5px borders, sentence-case headlines that end in a period. (7) Charts are pure CSS/HTML (percentage-height bars); icons and figures are inline SVG stroked in token colors; no Chart.js, no mermaid, no remote images. (8) No scrolling, no overflow, no overlapping panels - split content into more slides instead of shrinking type; keep the voice literary, warm, and low-pressure.",
-        "zh-CN": "用林间编辑部（Editorial Forest）主题为 {{audience}} 创作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}）：零外部 JS 依赖的单文件 HTML，从插件内 example.html 种子出发，原样保留内联 deck-stage 运行时、:root 设计 token 与全部版式皮肤，只替换内容。锁定规格：森林绿 #2e4a2a × 尘粉 #e89cb1 × 暖奶油 #efe7d4 限定色板（禁止任何规格外颜色/渐变/阴影）；Source Serif 4 + JetBrains Mono 双字体；固定 1920x1080 舞台等比缩放、键盘导航与 hash 路由；从 cover/agenda/statement/two-col/data/framework/stats/summary 八种母版组页并保持明暗混排节奏；图表纯 CSS、图形内联 SVG；不溢出不滚动，内容多就加页。完整硬性规格以英文 prompt 为准。"
+        "en": "Create \"Art-Direct an Annual Report like a Magazine Creative Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Audience: brand stakeholders, exec audience. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像杂志创意总监一样艺术指导年度报告。像杂志创意总监一样艺术指导年度报告——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Larkspur Press - Spring Review 2026 (Editorial Forest seed)",
+          "title": "Art-Direct an Annual Report like a Magazine Creative Director",
           "title_i18n": {
-            "en": "Larkspur Press - Spring Review 2026 (Editorial Forest seed)",
-            "zh-CN": "Larkspur Press 春季季评 2026 · 林间编辑部种子"
+            "en": "Art-Direct an Annual Report like a Magazine Creative Director",
+            "zh-CN": "像杂志创意总监一样艺术指导年度报告",
+            "zh-TW": "像杂志创意总监一样艺术指导年度报告"
           }
         }
       ]
@@ -134,6 +151,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

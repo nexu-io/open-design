@@ -24,6 +24,7 @@
     "en": "Trading Analysis Dashboard Template"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Professional trading analysis dashboard template (single-file HTML) with light/dark theme switch, dense market panels, chart interactions, demo/live playback, and command palette behavior. Use when users ask for a Wall-Street-style analytics terminal, trading cockpit, or high-tech financial dashboard template with realistic data layout.",
   "description_i18n": {
     "zh-CN": "专业交易分析仪表板模板（单文件 HTML），包含明暗主题切换、密集市场面板、图表交互、演示/实时回放和命令面板功能。适用于华尔街风格分析终端、交易驾驶舱或高科技金融仪表板模板需求。",

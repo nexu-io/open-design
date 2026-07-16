@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-retro-windows",
-  "title": "Html Ppt Zhangzara Retro Windows",
+  "title": "Deliver a Security-Awareness Training like a CISO Enablement Team",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara 复古 Windows",
-    "zh-TW": "Html Ppt Zhangzara 復古 Windows",
-    "ja": "Html Ppt Zhangzara レトロ Windows",
-    "ko": "Html Ppt Zhangzara 레트로 Windows",
-    "de": "Html Ppt Zhangzara Retro Windows",
-    "fr": "Html Ppt Zhangzara Rétro Windows",
-    "ru": "Html Ppt Zhangzara Ретро Windows",
-    "es": "Html Ppt Zhangzara Retro Windows",
-    "pt-BR": "Html Ppt Zhangzara Retrô Windows",
-    "it": "Html Ppt Zhangzara Retro Windows",
-    "vi": "Html Ppt Zhangzara Retro Windows",
-    "pl": "Html Ppt Zhangzara Retro Windows",
-    "id": "Html Ppt Zhangzara Retro Windows",
-    "nl": "Html Ppt Zhangzara Retro Windows",
-    "ar": "Html Ppt Zhangzara ريترو Windows",
-    "tr": "Html Ppt Zhangzara Retro Windows",
-    "uk": "Html Ppt Zhangzara Ретро Windows",
-    "en": "Html Ppt Zhangzara Retro Windows"
+    "en": "Deliver a Security-Awareness Training like a CISO Enablement Team",
+    "zh-CN": "像 CISO 赋能团队一样做安全意识培训",
+    "zh-TW": "像 CISO 赋能团队一样做安全意识培训"
   },
   "version": "0.1.0",
-  "description": "Retro Windows — Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia. Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Built as a decision-grade professional training deck for all employees.",
   "description_i18n": {
-    "zh-CN": "Windows 95 风格界面：灰色标题栏、MS Sans Serif 字体、像素排版，满满的怀旧感。适用于复古游戏、Y2K 美学品牌、90 年代风格作品集、科技史演讲及刻意复古的演示文稿。",
-    "zh-TW": "Windows 95 風格介面：灰色標題列、MS Sans Serif 字型、像素排版，滿滿的懷舊感。適用於復古遊戲、Y2K 美學品牌、90 年代風格作品集、科技史演講及刻意復古的簡報。",
-    "ja": "Windows 95スタイル：グレーのタイトルバー、MS Sans Serif、ピクセルタイポグラフィでノスタルジックな雰囲気を演出。レトロゲーム、Y2K美学ブランド、90年代風ポートフォリオ、テック史プレゼン、意図的にレトロなデッキに最適。",
-    "ko": "Windows 95 스타일: 회색 타이틀 바, MS Sans Serif, 픽셀 타이포그래피로 향수를 자극합니다. 레트로 게임, Y2K 감성 브랜드, 90년대 느낌의 포트폴리오, 기술사 발표, 의도적으로 복고풍인 프레젠테이션에 적합합니다.",
-    "de": "Windows 95-Look: graue Titelleisten, MS Sans Serif, Pixel-Typografie – pure Nostalgie. Ideal für Retro-Gaming, Y2K-Ästhetik-Marken, 90er-Portfolio, Tech-Geschichte-Vorträge und bewusst nostalgische Präsentationen.",
-    "fr": "Style Windows 95 : barres de titre grises, MS Sans Serif, typographie pixel, nostalgie totale. Parfait pour le gaming rétro, les marques esthétiques Y2K, les portfolios années 90, les présentations tech-historiques et les decks délibérément nostalgiques.",
-    "ru": "Стиль Windows 95: серые заголовки окон, MS Sans Serif, пиксельная типографика, полная ностальгия. Для ретро-игр, брендов в эстетике Y2K, портфолио в стиле 90-х, докладов по истории технологий и намеренно ностальгических презентаций.",
-    "es": "Estilo Windows 95: barras de título grises, MS Sans Serif, tipografía píxel, pura nostalgia. Ideal para gaming retro, marcas estética Y2K, portafolios con vibra noventera, charlas sobre historia tech y presentaciones intencionalmente nostálgicas.",
-    "pt-BR": "Visual Windows 95: barras de título cinzas, MS Sans Serif, tipografia pixel, nostalgia total. Perfeito para games retrô, marcas estética Y2K, portfólios anos 90, palestras sobre história tech e apresentações intencionalmente nostálgicas.",
-    "it": "Stile Windows 95: barre del titolo grigie, MS Sans Serif, tipografia pixel, pura nostalgia. Ideale per gaming retrò, brand estetici Y2K, portfolio anni '90, presentazioni sulla storia tech e deck intenzionalmente nostalgici.",
-    "vi": "Phong cách Windows 95: thanh tiêu đề xám, MS Sans Serif, kiểu chữ pixel, hoài niệm trọn vẹn. Phù hợp với game retro, thương hiệu thẩm mỹ Y2K, portfolio phong cách thập niên 90, thuyết trình lịch sử công nghệ và bài thuyết trình hoài cổ.",
-    "pl": "Styl Windows 95: szare paski tytułowe, MS Sans Serif, typografia pikselowa, pełna nostalgia. Idealne do retro gamingu, marek z estetyką Y2K, portfolio z klimatem lat 90., prezentacji o historii technologii i celowo nostalgicznych slajdów.",
-    "id": "Gaya Windows 95: bilah judul abu-abu, MS Sans Serif, tipografi piksel, nostalgia penuh. Cocok untuk gaming retro, brand estetika Y2K, portofolio nuansa 90-an, presentasi sejarah teknologi, dan deck yang sengaja nostalgia.",
-    "nl": "Windows 95-stijl: grijze titelbalken, MS Sans Serif, pixeltypografie, pure nostalgie. Perfect voor retrogaming, Y2K-esthetiek merken, portfolio's met jaren 90-vibe, tech-geschiedenis presentaties en bewust nostalgische decks.",
-    "ar": "أسلوب Windows 95: أشرطة عنوان رمادية، MS Sans Serif، طباعة بكسل، حنين كامل. مثالي للألعاب الريترو، علامات جمالية Y2K، ملفات أعمال بطابع التسعينيات، عروض تاريخ التقنية، وعروض تقديمية حنينية متعمدة.",
-    "tr": "Windows 95 stili: gri başlık çubukları, MS Sans Serif, piksel tipografi, tam nostalji. Retro oyunlar, Y2K estetik markalar, 90'lar temalı portföyler, teknoloji tarihi sunumları ve bilerek nostaljik sunumlar için ideal.",
-    "uk": "Стиль Windows 95: сірі заголовки вікон, MS Sans Serif, піксельна типографіка, повна ностальгія. Для ретро-ігор, брендів естетики Y2K, портфоліо в стилі 90-х, доповідей про історію технологій та навмисно ностальгічних презентацій.",
-    "en": "Retro Windows — Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia. Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks."
+    "en": "An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Built as a decision-grade professional training deck for all employees.",
+    "zh-CN": "像 CISO 赋能团队一样做安全意识培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像 CISO 赋能团队一样做安全意识培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,19 @@
     "y2k-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-retro-windows",
+    "professional-training",
+    "employee-onboarding-deck",
+    "education",
+    "training-deck",
+    "workshop",
+    "course-module",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "education",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Retro Windows — Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia. Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks.",
-        "zh-CN": "使用这个插件完成以下任务：Retro Windows — Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia. Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks."
+        "en": "Create \"Deliver a Security-Awareness Training like a CISO Enablement Team\" as a decision-grade Professional training deck in this template's own visual system. Subject: An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Audience: all employees. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day.",
+        "zh-CN": "像 CISO 赋能团队一样做安全意识培训。像 CISO 赋能团队一样做安全意识培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Retro Windows"
+          "title": "Deliver a Security-Awareness Training like a CISO Enablement Team",
+          "title_i18n": {
+            "en": "Deliver a Security-Awareness Training like a CISO Enablement Team",
+            "zh-CN": "像 CISO 赋能团队一样做安全意识培训",
+            "zh-TW": "像 CISO 赋能团队一样做安全意识培训"
+          }
         }
       ]
     },
@@ -121,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "professional-training"
   }
 }

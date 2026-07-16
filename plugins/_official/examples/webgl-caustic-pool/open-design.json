@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-caustic-pool",
+  "title": "Caustic Pool",
+  "title_i18n": {
+    "zh-CN": "水面焦散",
+    "zh-TW": "水面焦散",
+    "ja": "コースティック・プール",
+    "ko": "코스틱 풀",
+    "de": "Kaustik-Pool",
+    "fr": "Bassin de caustiques",
+    "ru": "Каустический бассейн",
+    "es": "Piscina de cáusticas",
+    "pt-BR": "Piscina de cáusticas",
+    "en": "Caustic Pool"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
+  "description": "A self-contained WebGL2 hero: animated water caustics woven from domain-warped ripples; click the water to drop a ripple. No meshes, no textures.",
+  "description_i18n": {
+    "zh-CN": "自包含 WebGL2 主视觉：由域扭曲涟漪织成的动态水面焦散；点击水面掉涟漪。无网格、无贴图。",
+    "zh-TW": "自包含 WebGL2 主視覺：由域扭曲漣漪織成的動態水面焦散；點擊水面掉漣漪。無網格、無貼圖。",
+    "en": "A self-contained WebGL2 hero: animated water caustics woven from domain-warped ripples; click the water to drop a ripple. No meshes, no textures."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-caustic-pool",
+  "tags": [
+    "example",
+    "first-party",
+    "hero",
+    "webgl",
+    "webgl2",
+    "shader",
+    "caustics",
+    "water",
+    "generative",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a self-contained WebGL2 hero of animated water caustics from domain-warped ripples, with a click-to-ripple interaction.",
+        "zh-CN": "构建自包含 WebGL2 主视觉：域扭曲涟漪织成的动态水面焦散，点击掉涟漪。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -10,17 +10,23 @@
  *   want on a thumbnail-dense site that's expected to feel responsive.
  *
  * Behavior:
- *   On script load, every `<img data-precise-src>` and `<video[data-precise-load]>`
- *   in the document is observed with rootMargin 300px for images and 600px
- *   for videos. When the element crosses that threshold the script swaps
- *   `data-precise-src` → `src` (also handles `data-precise-srcset` →
- *   `srcset`) and stops observing.
+ *   On script load, every `<img data-precise-src>`, `<video[data-precise-load]>`,
+ *   and `[data-precise-bg]` (background-image) element is observed. When it
+ *   crosses the threshold the script swaps `data-precise-src` → `src` (also
+ *   `data-precise-srcset` → `srcset`), or `data-precise-bg` →
+ *   `style.background-image`, and stops observing.
  *
- *   For elements added dynamically after first paint (currently none, but
- *   the contributor wire could expand to images later) we additionally run
- *   a MutationObserver against `document.body` that attaches new candidates
- *   to the same IntersectionObserver instances. Shared observers keep us
- *   well under one observer per element.
+ *   The image root margin is a prop (`imgRootMargin`). Catalog pages default
+ *   to a generous two-viewport pre-load so fast scrolls through 90+ thumbnail
+ *   rows keep art ready; the homepage passes a much smaller margin so its
+ *   heavy below-the-fold art (the ~800KB of full-bleed section backdrops and
+ *   product shots) does NOT join the initial burst and starve the hero LCP of
+ *   bandwidth.
+ *
+ *   For elements added dynamically after first paint (e.g. the contributor
+ *   wire) a MutationObserver against `document.body` attaches new candidates
+ *   to the same IntersectionObserver instances. Shared observers keep us well
+ *   under one observer per element.
  *
  *   `prefers-reduced-motion` and missing IntersectionObserver both fall
  *   back to immediate eager loading so the page stays accessible.
@@ -29,19 +35,20 @@
  *   - `pages/index.astro` (homepage; not under sub-page-layout)
  *   - `_components/sub-page-layout.astro` (every other page)
  */
+interface Props {
+  imgRootMargin?: string;
+}
+// Two laptop viewports of pre-load by default (catalog pages); the homepage
+// overrides this with a tighter margin — see the doc comment above.
+const { imgRootMargin = '1500px 0px' } = Astro.props;
 ---
 
-<script is:inline>
+<script is:inline define:vars={{ imgRootMargin }}>
   (() => {
     const IMG_SELECTOR = 'img[data-precise-src]';
     const VIDEO_SELECTOR = 'video[data-precise-load]';
-    // 1500px is roughly two laptop viewports of pre-load: enough that
-    // a fast scroll through long catalogs (e.g. /skills/instructions/
-    // with 90+ rows of typographic fallback cards) keeps thumbnails
-    // ready instead of holding placeholders until each row settles.
-    // Trade-off: a slightly larger Cloudflare CDN burst on initial
-    // load — acceptable because every preview is a small static PNG.
-    const IMG_ROOT_MARGIN = '1500px 0px';
+    const BG_SELECTOR = '[data-precise-bg]';
+    const IMG_ROOT_MARGIN = imgRootMargin;
     const VIDEO_ROOT_MARGIN = '600px 0px';
 
     const swapImage = (img) => {
@@ -55,6 +62,18 @@
         img.src = src;
         delete img.dataset.preciseSrc;
       }
+    };
+
+    // Background-image counterpart: full-bleed section backdrops (often on a
+    // `::before` pseudo-element) load eagerly the moment the element is in the
+    // render tree — viewport-independent — so off-screen backdrops are pulled
+    // into the initial burst. We can't set a pseudo-element's background from
+    // JS, so the CSS gates the `background-image` behind a `.precise-bg-in`
+    // class; adding it when the element nears the viewport is what triggers the
+    // fetch, freeing that bandwidth for the LCP hero until then.
+    const swapBg = (el) => {
+      el.classList.add('precise-bg-in');
+      delete el.dataset.preciseBg;
     };
 
     const swapVideo = (video) => {
@@ -73,6 +92,7 @@
 
     const eagerFallback = () => {
       for (const img of document.querySelectorAll(IMG_SELECTOR)) swapImage(img);
+      for (const el of document.querySelectorAll(BG_SELECTOR)) swapBg(el);
       for (const v of document.querySelectorAll(VIDEO_SELECTOR)) swapVideo(v);
     };
 
@@ -83,11 +103,14 @@
       return;
     }
 
+    // Images and background elements share one observer / margin; dispatch by
+    // attribute (checked before the swap deletes it).
     const imgObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          swapImage(entry.target);
+          if (entry.target.hasAttribute('data-precise-bg')) swapBg(entry.target);
+          else swapImage(entry.target);
           imgObserver.unobserve(entry.target);
         }
       },
@@ -107,6 +130,7 @@
 
     const attach = (root) => {
       for (const img of root.querySelectorAll(IMG_SELECTOR)) imgObserver.observe(img);
+      for (const el of root.querySelectorAll(BG_SELECTOR)) imgObserver.observe(el);
       for (const v of root.querySelectorAll(VIDEO_SELECTOR)) videoObserver.observe(v);
     };
 
@@ -119,6 +143,7 @@
           for (const node of m.addedNodes) {
             if (node.nodeType !== 1) continue;
             if (node.matches && node.matches(IMG_SELECTOR)) imgObserver.observe(node);
+            else if (node.matches && node.matches(BG_SELECTOR)) imgObserver.observe(node);
             else if (node.matches && node.matches(VIDEO_SELECTOR)) videoObserver.observe(node);
             else if (node.querySelectorAll) attach(node);
           }

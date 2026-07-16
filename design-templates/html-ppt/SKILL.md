@@ -1,24 +1,34 @@
 ---
 name: html-ppt
-description: HTML PPT Studio — author professional static HTML presentations in many styles, layouts, and animations, all driven by templates. Use when the user asks for a presentation, PPT, slides, keynote, deck, slideshow, "幻灯片", "演讲稿", "做一份 PPT", "做一份 slides", a reveal-style HTML deck, a 小红书 图文, or any kind of multi-slide pitch/report/sharing document that should look tasteful and be usable with keyboard navigation. Triggers include keywords like "presentation", "ppt", "slides", "deck", "keynote", "reveal", "slideshow", "幻灯片", "演讲稿", "分享稿", "小红书图文", "talk slides", "pitch deck", "tech sharing", "technical presentation".
+en_name: "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead"
+zh_name: "像一线咨询 AI 行业负责人一样讲清行业 AI"
+description: |
+  For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query "consulting-final-deck", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.
+en_description: |
+  For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query "consulting-final-deck", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.
+zh_description: |
+  咨询/客户交付场景：围绕 core query「consulting-final-deck」把粗糙材料整理成“像一线咨询 AI 行业负责人一样讲清行业 AI”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt"
 triggers:
-  - "ppt"
-  - "deck"
-  - "slides"
-  - "presentation"
-  - "keynote"
-  - "reveal"
-  - "slideshow"
-  - "幻灯片"
-  - "演讲稿"
-  - "分享稿"
-  - "talk slides"
-  - "pitch deck"
-  - "tech sharing"
-  - "technical presentation"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead"
+  - "像一线咨询 AI 行业负责人一样讲清行业 AI"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -27,7 +37,8 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt 做一份 12 页的 HTML PPT。先帮我确认三件事：内容/页数/受众、主题（从 36 套里推荐 2-3 个）、起点全 deck 模板（pitch-deck / tech-sharing / weekly-report / xhs-post / presenter-mode-reveal 任选一个），对齐之后再开始写 slides。"
+  scenario: "strategy"
+  example_prompt: "Create \"Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead\" as a Consulting delivery deck in the Html Ppt visual system. Scene: consulting-final-deck. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # html-ppt — HTML PPT Studio
@@ -54,7 +65,7 @@ One command, no build. Pure static HTML/CSS/JS with only CDN webfonts.
 - **Keyboard runtime** (`assets/runtime.js`) — arrows, T (theme), A (anim), F/O, **S (presenter mode: magnetic-card popup with CURRENT / NEXT / SCRIPT / TIMER cards)**, N (notes drawer), R (reset timer in presenter)
 - **FX runtime** (`assets/animations/fx-runtime.js`) — auto-inits `[data-fx]` on slide enter, cleans up on leave
 - **Showcase decks** for themes / layouts / animations / full-decks gallery
-- **Headless Chrome render script** for PNG export
+- **Managed Chromium render script** for PNG export
 
 ## When to use
 
@@ -214,15 +225,20 @@ html-ppt/
 │   └── single-page/*.html         (31 layout files with demo data)
 ├── scripts/
 │   ├── new-deck.sh                (scaffold a deck from deck.html)
-│   └── render.sh                  (headless Chrome → PNG)
+│   └── render.sh                  (managed Chromium → PNG)
 └── examples/demo-deck/            (complete working deck)
 ```
 
 ## Rendering to PNG
 
-`scripts/render.sh` wraps headless Chrome at
-`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. For multi-slide
-capture, runtime.js exposes `#/N` deep-links, and render.sh iterates 1..N.
+`scripts/render.sh` uses Playwright's managed Chromium renderer. Do not call the
+user's installed Google Chrome directly for PNG export, especially on macOS
+desktop builds where Crashpad/profile permissions can abort Chrome before a
+screenshot is written. If the managed renderer fails once, surface that error
+and stop instead of retrying alternate Chrome launch commands.
+
+For multi-slide capture, runtime.js exposes `#/N` deep-links, and render.sh
+iterates 1..N.
 
 ```bash
 ./scripts/render.sh templates/single-page/kpi-grid.html        # single page
