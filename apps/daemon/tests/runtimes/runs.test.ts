@@ -738,6 +738,49 @@ describe('run event log persistence', () => {
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
   });
 
+  it('recovers authoritative terminal artifact evidence after service restart', async () => {
+    const first = createRunsWithLog(tmpDir);
+    const delivered = first.create({ projectId: 'p1', conversationId: 'c1' });
+    delivered.artifactCount = 1;
+    first.finish(delivered, 'succeeded', 0, null);
+    const noResult = first.create({ projectId: 'p1', conversationId: 'c1' });
+    noResult.artifactCount = 0;
+    first.finish(noResult, 'succeeded', 0, null);
+
+    const deliveredLog = path.join(tmpDir, delivered.id, 'events.jsonl');
+    const noResultLog = path.join(tmpDir, noResult.id, 'events.jsonl');
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(deliveredLog) && fs.existsSync(noResultLog)) {
+        const deliveredText = fs.readFileSync(deliveredLog, 'utf8');
+        const noResultText = fs.readFileSync(noResultLog, 'utf8');
+        if (deliveredText.includes('"event":"end"') && noResultText.includes('"event":"end"')) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const restarted = createRunsWithLog(tmpDir);
+    expect(restarted.get(delivered.id)).toBeNull();
+    expect(restarted.readPersistedStatus(delivered.id)).toMatchObject({
+      id: delivered.id,
+      status: 'succeeded',
+      artifactCount: 1,
+      exitCode: 0,
+    });
+    expect(restarted.readPersistedStatus(noResult.id)).toMatchObject({
+      id: noResult.id,
+      status: 'succeeded',
+      artifactCount: 0,
+      exitCode: 0,
+    });
+  });
+
+  it('does not read missing, malformed, or traversal-shaped historical run ids', () => {
+    const runs = createRunsWithLog(tmpDir);
+    expect(runs.readPersistedStatus('missing-run')).toBeNull();
+    expect(runs.readPersistedStatus('../outside')).toBeNull();
+    expect(runs.readPersistedStatus('')).toBeNull();
+  });
+
   it('persists native session recovery diagnostics in the run event log', async () => {
     const runs = createRunsWithLog(tmpDir);
     const run = runs.create({ projectId: 'p1' });

@@ -3519,6 +3519,7 @@ export function ProjectView({
           message.runStatus === 'failed' &&
           !!message.runId &&
           hasGenericDisconnectFailureEvent(message);
+        const reconcilingHistoricalDelivery = shouldReconcileHistoricalDesignDelivery(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
         const needsFullReplay =
@@ -3586,7 +3587,13 @@ export function ProjectView({
           // For other message states (phantom running rows with no runId),
           // fall through to the original mark-failed behaviour and seal the
           // runId so we don't loop indefinitely.
-          if (spuriouslyFailedPending) {
+          if (reconcilingHistoricalDelivery) {
+            // Historical delivery repair is opportunistic. If neither the
+            // in-memory run nor durable terminal log is available, preserve
+            // the persisted verdict instead of turning it into a process
+            // failure or retrying forever.
+            completedReattachRunsRef.current.add(runId);
+          } else if (spuriouslyFailedPending) {
             const attempts = transientFailedRetriesRef.current.get(runId) ?? 0;
             if (attempts >= MAX_TRANSIENT_RETRIES) {
               // Cap reached — treat as authoritative completion so we stop retrying.
@@ -9299,6 +9306,7 @@ export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (message.role !== 'assistant') return false;
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
+  if (shouldReconcileHistoricalDesignDelivery(message)) return true;
   // A daemon can persist terminal success before the browser finishes its
   // project-file refresh. Reattach once even when prose already exists so the
   // delivery invariant can confirm a file or downgrade the turn after reload.
@@ -9312,6 +9320,23 @@ export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
     return false;
   }
   return !(message.producedFiles?.length);
+}
+
+export function shouldReconcileHistoricalDesignDelivery(message: ChatMessage): boolean {
+  if (
+    message.role !== 'assistant'
+    || message.sessionMode !== 'design'
+    || message.runStatus !== 'succeeded'
+    || message.resultDeliveryState !== 'no_result'
+  ) {
+    return false;
+  }
+  return (message.events ?? []).some(
+    (event) =>
+      event.kind === 'status'
+      && event.label === 'error'
+      && event.code === 'ARTIFACT_NOT_FOUND',
+  );
 }
 
 function textContentFromAgentEvents(events?: AgentEvent[]): string {
@@ -9571,7 +9596,12 @@ function applyDesignDeliveryOutcome(
   persistenceError?: string,
 ): ChatMessage {
   if (outcome === 'delivered') {
-    return { ...message, resultDeliveryState: 'delivered' };
+    const repaired = removeErrorStatusEvent(
+      message,
+      DESIGN_RESULT_MISSING_DETAIL,
+      'ARTIFACT_NOT_FOUND',
+    );
+    return { ...repaired, resultDeliveryState: 'delivered' };
   }
   if (outcome !== 'no_result' && outcome !== 'delivery_failed') return message;
   const detail =

@@ -989,6 +989,142 @@ describe('ProjectView conversation run isolation', () => {
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
+  it('repairs a historical false no-result verdict from durable artifact evidence', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I updated the existing design.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          { kind: 'text', text: 'I updated the existing design.' },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const repaired = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(repaired).toBeTruthy();
+      expect(repaired?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a');
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves a genuine historical zero-output verdict', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I could not create a deliverable.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          { kind: 'text', text: 'I could not create a deliverable.' },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 0,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a');
+      const delivered = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(delivered).toBeUndefined();
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('leaves historical no-result state untouched when durable evidence is unavailable', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I could not create a deliverable.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          { kind: 'text', text: 'I could not create a deliverable.' },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a'));
+    const rewrittenAsFailed = saveMessage.mock.calls
+      .map((call) => call[2] as ChatMessage)
+      .find(
+        (message) =>
+          message.id === succeededAssistant.id
+          && message.runStatus === 'failed',
+      );
+    expect(rewrittenAsFailed).toBeUndefined();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
   it('trusts the daemon artifact count when browser file reconciliation misses delivered output', async () => {
     conversationAMessages = [
       {
