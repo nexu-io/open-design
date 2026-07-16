@@ -1096,7 +1096,7 @@ function injectParentPrintReadyCache(doc: string, nonce: string): string {
 // no margins, scroll-snap and horizontal flex disabled. `!important` guards
 // override skill-specific styles that pin the deck to `display: flex` /
 // `overflow: hidden` for on-screen swiping.
-const DECK_PRINT_CSS = `
+export const DECK_PRINT_CSS = `
 @media print {
   @page { size: 1920px 1080px; margin: 0; }
   html, body {
@@ -1121,6 +1121,9 @@ const DECK_PRINT_CSS = `
   .ppt-slide,
   .ppt-slide:not(.active) {
     display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
     flex: none !important;
     width: 1920px !important;
     height: 1080px !important;
