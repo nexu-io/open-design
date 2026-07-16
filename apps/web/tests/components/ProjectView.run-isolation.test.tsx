@@ -955,6 +955,12 @@ describe('ProjectView conversation run isolation', () => {
             name: 'Write',
             input: { file_path: 'index.html', content: '<!doctype html>' },
           },
+          {
+            kind: 'tool_result',
+            toolUseId: 'write-1',
+            isError: false,
+            content: 'Wrote 1 file to index.html',
+          },
         ],
         preTurnFileNames: [],
         producedFiles: undefined,
