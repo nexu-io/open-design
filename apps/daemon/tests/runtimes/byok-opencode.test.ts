@@ -1,13 +1,42 @@
 import { describe, expect, it } from 'vitest';
 
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
   opencodeByokModelId,
 } from '../../src/runtimes/byok-opencode.js';
+import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
 describe('byok-opencode runtime config', () => {
+  it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
+    agentCapabilities.delete('byok-opencode');
+    expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
+    expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
+      '--dangerously-skip-permissions': 'skipPermissions',
+    });
+    expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
+      'run',
+      '--format',
+      'json',
+    ]);
+
+    agentCapabilities.set('byok-opencode', { skipPermissions: true });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--dangerously-skip-permissions',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');

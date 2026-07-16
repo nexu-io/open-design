@@ -603,6 +603,12 @@ export function EntryShell({
   // §7.1). Cleared as soon as the user takes any concrete entry (spec §7.4).
   const [onboardingRec, setOnboardingRec] = useState<Recommendation | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
+  // Entry views share this element, so route changes must not inherit the previous view's offset.
+  useLayoutEffect(() => {
+    const scrollContainer = entryMainScrollRef.current;
+    if (!scrollContainer) return;
+    scrollContainer.scrollTop = 0;
+  }, [view]);
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
     ? t('entry.discordOnlineLabel', {

@@ -2761,10 +2761,17 @@ export function SettingsDialog({
       model: '',
     },
     {
-      id: 'siliconflow',
-      title: '硅基流动',
+      id: 'siliconflow-cn',
+      title: 'SiliconFlow (CN)',
       protocol: 'openai',
       baseUrl: 'https://api.siliconflow.cn/v1',
+      model: 'deepseek-ai/DeepSeek-V3.1',
+    },
+    {
+      id: 'siliconflow-global',
+      title: 'SiliconFlow (Global)',
+      protocol: 'openai',
+      baseUrl: 'https://api.siliconflow.com/v1',
       model: 'deepseek-ai/DeepSeek-V3.1',
     },
     {

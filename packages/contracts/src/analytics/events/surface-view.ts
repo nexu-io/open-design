@@ -89,6 +89,22 @@ export interface RunFailedToastSurfaceViewProps {
   run_id: string | null;
 }
 
+// Preview-workspace status feedback for Design-mode runs. This exposure is
+// intentionally separate from `run_finished`: that event records the daemon
+// outcome, while this one measures whether the user actually saw the delivery
+// confirmation or recovery path.
+export interface PreviewRunStatusSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'preview_run_status';
+  element: 'run_status_bar';
+  status: 'generating' | 'verifying' | 'succeeded' | 'failed';
+  delivery_state?: 'delivered' | 'no_result' | 'delivery_failed';
+  project_id: string;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id?: string;
+}
+
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -197,6 +213,7 @@ export interface StudioOnboardingHintSurfaceViewProps {
 
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
+  | PreviewRunStatusSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps

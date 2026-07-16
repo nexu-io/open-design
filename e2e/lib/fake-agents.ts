@@ -216,6 +216,10 @@ async function emitRun(promptText) {
     ], 'end_turn');
     return;
   }
+  if (promptText.includes('Edit the existing deterministic smoke artifact through the managed project alias')) {
+    await emitManagedAliasArtifactEditRun(promptText);
+    return;
+  }
   if (promptText.includes('Edit the existing deterministic smoke artifact')) {
     await emitExistingArtifactEditRun(promptText);
     return;
@@ -385,6 +389,62 @@ async function emitExistingArtifactEditRun(promptText) {
     throw new Error('fake artifact edit write failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 500));
   }
   emitSuccess('Updated real-daemon-smoke.html in place with a deterministic follow-up edit.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitManagedAliasArtifactEditRun(promptText) {
+  if (agentId !== 'claude') {
+    throw new Error('managed-project alias edit fixture requires the Claude fake runtime');
+  }
+  const projectId = process.env.OD_PROJECT_ID || projectIdFromPrompt(promptText);
+  if (!projectId) {
+    throw new Error('managed-project alias edit fixture requires OD_PROJECT_ID');
+  }
+  const fileName = 'real-daemon-smoke.html';
+  const content = '<!doctype html><html><body><main><h1 data-od-id="smoke-title">Real Daemon Smoke Edited</h1><p>Edited in place through a managed-project alias.</p></main></body></html>';
+  await writeFileFs(join(projectDir(promptText), fileName), content, 'utf8');
+
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-managed-alias-write',
+      content: [{
+        type: 'tool_use',
+        id: 'toolu-managed-alias-write',
+        name: 'Write',
+        input: {
+          file_path: '.od/projects/' + projectId + '/' + fileName,
+          content,
+        },
+      }],
+    },
+  });
+  writeJson({
+    type: 'user',
+    message: {
+      content: [{
+        type: 'tool_result',
+        tool_use_id: 'toolu-managed-alias-write',
+        content: 'Updated ' + fileName,
+      }],
+    },
+  });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-managed-alias-summary',
+      content: [{ type: 'text', text: 'Updated ' + fileName + ' in place.' }],
+    },
+  });
+  writeJson({
+    type: 'result',
+    usage: { input_tokens: 1, output_tokens: 1 },
+    total_cost_usd: 0,
+    duration_ms: 1,
+    stop_reason: 'end_turn',
+  });
   process.exitCode = 0;
   exitSoon(0);
 }

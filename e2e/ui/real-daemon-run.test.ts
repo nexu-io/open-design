@@ -178,7 +178,7 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
 
 test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
   await page.goto('/');
-  await createProject(page, 'Daemon artifact edit smoke');
+  await createProject(page, 'Daemon artifact edit smoke', 'claude');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
@@ -186,7 +186,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 
-  await sendPrompt(page, 'Edit the existing deterministic smoke artifact');
+  await sendPrompt(page, 'Edit the existing deterministic smoke artifact through the managed project alias');
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, EDITED_GENERATED_HEADING);
   const files = await listProjectFiles(page, projectId);
@@ -200,12 +200,39 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
       return assistantMessages.map((message) => ({
         runStatus: message.runStatus ?? null,
         producedFiles: message.producedFiles?.map((file) => file.name) ?? [],
+        traceObjectFiles: message.traceObjectFiles?.map((file) => file.name) ?? [],
+        resultDeliveryState: message.resultDeliveryState ?? null,
       }));
     }, { timeout: 15_000 })
     .toContainEqual({
       runStatus: 'succeeded',
-      producedFiles: [GENERATED_FILE],
+      producedFiles: [],
+      traceObjectFiles: [GENERATED_FILE],
+      resultDeliveryState: 'delivered',
     });
+  await expect(runErrorCard(page)).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const editedHeading = artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]');
+  await expect(editedHeading).toBeVisible();
+  await editedHeading.click();
+  await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
+  const fontSizeInput = page
+    .locator('.manual-edit-modal .cc-section')
+    .filter({ hasText: 'TYPOGRAPHY' })
+    .locator('.cc-row')
+    .filter({ hasText: 'Size' })
+    .locator('input');
+  await fontSizeInput.fill('52');
+  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await page.getByRole('button', { name: 'Versions' }).click();
+  const versionsDialog = page.getByRole('dialog', { name: 'Versions' });
+  await expect(versionsDialog).toBeVisible();
+  await expect(versionsDialog).toContainText('3 versions');
+  await expect(versionsDialog.getByRole('option')).toHaveCount(3);
 });
 
 test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
@@ -1113,6 +1140,8 @@ async function listConversationMessages(
       runStatus?: string;
       events?: Array<{ kind: string }>;
       producedFiles?: Array<{ name: string }>;
+      traceObjectFiles?: Array<{ name: string }>;
+      resultDeliveryState?: string;
     }>;
   };
   return body.messages;

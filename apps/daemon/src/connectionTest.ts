@@ -1831,6 +1831,7 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
 
 const OPENCODE_OUTDATED_CLI_DETAIL =
   'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
 
 function openCodeOutdatedCliDetail(output: string): string | null {
   const value = output.toLowerCase();
@@ -1842,6 +1843,23 @@ function openCodeOutdatedCliDetail(output: string): string | null {
   return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
     ? OPENCODE_OUTDATED_CLI_DETAIL
     : null;
+}
+
+function openCodeProviderConnectivityDetail(output: string): string | null {
+  for (const rawLine of output.split(/\r?\n/u)) {
+    const line = rawLine.replace(/\s+/gu, ' ').trim();
+    if (!line) continue;
+    const match = /\bCannot connect to API:[^"'`\r\n]+/iu.exec(line) ??
+      /\bUnable to connect[^"'`\r\n]+/iu.exec(line) ??
+      /\bWas there a typo in the url or port\?/iu.exec(line);
+    if (!match) continue;
+    const detail = match[0].trim();
+    const boundedDetail = detail.length > OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH
+      ? `${detail.slice(0, OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH - 3).trimEnd()}...`
+      : detail;
+    return `OpenCode reported a provider connectivity failure before the connection test timed out: ${boundedDetail}`;
+  }
+  return null;
 }
 
 interface AgentSpawnHandle {
@@ -2200,6 +2218,23 @@ async function testAgentConnectionInternal(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
+    if (kind === 'timeout' && input.agentId === 'opencode') {
+      const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
+      const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
+      if (providerDetail) {
+        const detail = redactSecrets(providerDetail);
+        console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
+        return {
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail,
+          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
+        };
+      }
+    }
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,

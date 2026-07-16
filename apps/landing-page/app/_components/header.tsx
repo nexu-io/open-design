@@ -208,14 +208,16 @@ export function Header({
         </button>
         <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
-            {/* Product — the Open Design products. The trigger lights up only
-                for its own family; every other section maps to its own
-                trigger below, so a sub-page never marks Product by accident.
-                It is a <button> (not a link) so it never navigates — Product
-                used to bounce to the homepage — but its dropdown is revealed
-                by the SAME pure-CSS :hover / :focus-within rule as the hub
-                menus, so it works with no JS (first paint / script failure)
-                and on touch (tapping focuses the button → :focus-within). */}
+            {/* Product — a mega menu whose columns are top-level categories:
+                the Open Design product family and the Agent catalog today,
+                with room to add more (e.g. Feature) as its own column later.
+                The trigger is a <button> (not a link) so it never navigates —
+                Product used to bounce to the homepage — but its panel is
+                revealed by the SAME pure-CSS :hover / :focus-within rule as
+                the hub menus, so it works with no JS (first paint / script
+                failure) and on touch (tapping focuses the button →
+                :focus-within). It lights up for the whole product family AND
+                for /agents/ pages now that Agent lives inside it. */}
             <li className='has-dropdown'>
               <button
                 type='button'
@@ -224,7 +226,8 @@ export function Header({
                   (active === 'product' ||
                   active === 'home' ||
                   active === 'html-anything' ||
-                  active === 'html-video'
+                  active === 'html-video' ||
+                  active === 'agent'
                     ? ' is-active'
                     : '')
                 }
@@ -232,28 +235,64 @@ export function Header({
                 {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </button>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.product}>
-                <li>
-                  <a href={href('/')}>
-                    <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.openDesignBlurb}</span>
-                  </a>
+              <ul
+                className='nav-dropdown nav-dropdown-mega'
+                aria-label={productMenuCopy.product}
+              >
+                {/* Products column — the Open Design product family. Names
+                    only (no blurbs): keeps the column compact and aligned
+                    with the Agent column, and avoids per-locale width blowups
+                    from long descriptions. */}
+                <li className='nav-mega-col'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.product}</span>
+                  <ul className='nav-mega-list'>
+                    <li>
+                      <a href={href('/')}>
+                        <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href={href('/html-anything/')}
+                        className={active === 'html-anything' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a href={href('/html-video/')}>
+                        <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                      </a>
+                    </li>
+                  </ul>
                 </li>
-                <li>
+                {/* Agent column — the coding agents each with a dedicated
+                    design page. The column header links to the /agents/ hub
+                    (the old top-level Agent tab's target). The list caps its
+                    own height and scrolls so 21 rows never run the panel
+                    off-screen; the shorter Products column stays static. */}
+                <li className='nav-mega-col nav-mega-col-agent'>
                   <a
-                    href={href('/html-anything/')}
-                    className={active === 'html-anything' ? 'is-active' : undefined}
+                    href={href('/agents/')}
+                    className={
+                      'nav-mega-col-head' + (active === 'agent' ? ' is-active' : '')
+                    }
                   >
-                    <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.htmlAnythingBlurb}</span>
+                    {productMenuCopy.agent}
                   </a>
+                  <ul className='nav-mega-list nav-mega-list-scroll'>
+                    {AGENTS.map((agent) => (
+                      <li key={agent.route}>
+                        <a href={href(`/agents/${agent.route}/`)}>
+                          <span className='dropdown-name'>{agent.name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
-                <li>
-                  <a href={href('/html-video/')}>
-                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.htmlVideoBlurb}</span>
-                  </a>
-                </li>
+                {/* Future category columns (e.g. Feature) drop in here as
+                    another <li className='nav-mega-col'> with its own head +
+                    list; the panel widens automatically. */}
               </ul>
             </li>
 
@@ -305,32 +344,6 @@ export function Header({
                       <span className='dropdown-name'>
                         {getSolutionPageCopy(locale, key).breadcrumb}
                       </span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </li>
-
-            {/* Agent — the coding agents with a dedicated design page. The
-                top-level link goes to the /agents/ hub. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/agents/')}
-                className={active === 'agent' ? 'is-active' : undefined}
-              >
-                {productMenuCopy.agent}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              {/* 21 coding-agent rows — reuse the tall-dropdown height cap so
-                  the panel scrolls instead of running off short viewports. */}
-              <ul
-                className='nav-dropdown nav-dropdown-solution'
-                aria-label={productMenuCopy.agent}
-              >
-                {AGENTS.map((agent) => (
-                  <li key={agent.route}>
-                    <a href={href(`/agents/${agent.route}/`)}>
-                      <span className='dropdown-name'>{agent.name}</span>
                     </a>
                   </li>
                 ))}

@@ -266,9 +266,10 @@ const DECK_INTENT_SIGNAL =
  * Whether the outgoing user request reads as a slide-deck brief. Gates the
  * ~20K maybe-deck framework injection for freeform (kind=other / no
  * metadata) projects: those runs previously carried the full framework on
- * every turn "just in case". Must be fed the SAME text the agent will see
- * (for transcript-resending agents that includes prior turns, so a deck
- * mention anywhere in the conversation keeps the framework present).
+ * every turn "just in case". Feed it USER-AUTHORED text only (see
+ * `extractUserAuthoredSignalText`) — assistant turns in a packed transcript
+ * offer deck vocabulary the user never chose; conversation persistence is
+ * the latch's job (`latchConversationIntentSignals`), not the scanner's.
  * Callers that cannot supply the request text should pass undefined to
  * `freeformDeckSignal`, which preserves the legacy always-inject behavior.
  */
@@ -323,6 +324,110 @@ export function detectMediaIntentSignal(
   return texts.some(
     (text) => typeof text === 'string' && MEDIA_INTENT_SIGNAL.test(text),
   );
+}
+
+// Genuine transcript turn boundaries are exactly these lines: the web
+// transcript builder writes `## <role>` verbatim and escapes any interior
+// look-alike line (`escapeTranscriptRoleDelimiters`,
+// apps/web/src/providers/daemon.ts), so an unescaped marker line in a packed
+// message is always a real boundary.
+const TRANSCRIPT_USER_MARKER = '## user';
+const TRANSCRIPT_ASSISTANT_MARKER = '## assistant';
+const TRANSCRIPT_CONTEXT_WARNING_MARKER = '## context warning';
+
+// A packed transcript (buildDaemonTranscript, apps/web/src/providers/
+// daemon.ts) always starts with a role marker or the context-warning header,
+// and always carries the latest user turn. Both properties are required
+// before treating a message as a transcript: a plain prompt that merely
+// QUOTES `## user` mid-text (the quote is not the first content line) must
+// keep whole-text scanning — dropping the text before the quote would
+// silence the very request the signals exist to detect.
+function isPackedTranscriptShape(lines: string[]): boolean {
+  if (!lines.includes(TRANSCRIPT_USER_MARKER)) return false;
+  const firstContent = lines.find((line) => line.trim().length > 0);
+  return (
+    firstContent === TRANSCRIPT_USER_MARKER ||
+    firstContent === TRANSCRIPT_ASSISTANT_MARKER ||
+    firstContent === TRANSCRIPT_CONTEXT_WARNING_MARKER
+  );
+}
+// Mirrors the repo's accepted form-answer header grammar — the shared parser
+// in packages/contracts/src/artifacts/od-card.ts (parseFormAnswers) accepts
+// em-dash / hyphen / colon separators and the bare `[form answers]` header,
+// case-insensitively; the CLI docs show the hyphen form. Narrowing must fire
+// for every variant or CLI/manual form-answer turns re-enter the echoed-label
+// false-positive path. Grammar parity is pinned by
+// tests/prompts/intent-signal-user-text.test.ts.
+const FORM_ANSWERS_HEADER = /^\s*\[form answers(?:\s*[—\-:]\s*[^\]]+)?\]\s*$/i;
+const FORM_ANSWERS_ANSWER_LINE = /^\s*-\s+[^:]*:\s*(.*)$/;
+
+// `formatFormAnswers` (apps/web/src/artifacts/question-form.ts) echoes each
+// question as `- <question label>: <value>`. The label is the FORM's copy,
+// not the user's words — the real task-type form carries "For slide decks,
+// include speaker notes?" — so only the value part of each answer line may
+// feed the intent scan. Whether a gated block is introduced is decided by
+// what the user actually answered, not by what the form offered.
+function narrowFormAnswerSignalText(body: string): string {
+  const lines = body.split('\n');
+  const firstContent = lines.find((line) => line.trim().length > 0);
+  if (!firstContent || !FORM_ANSWERS_HEADER.test(firstContent)) return body;
+  return lines
+    .map((line) => {
+      if (FORM_ANSWERS_HEADER.test(line)) return '';
+      const answer = FORM_ANSWERS_ANSWER_LINE.exec(line);
+      return answer ? answer[1] ?? '' : line;
+    })
+    .join('\n');
+}
+
+/**
+ * Reduce an outgoing request message to the text the USER actually authored,
+ * for intent-signal scanning. The three intent signals gate stable-region
+ * prompt blocks, and for transcript-resending clients `message` embeds the
+ * full packed conversation — assistant turns included. Assistant copy (most
+ * damagingly the turn-1 discovery form's own option copy: «幻灯 / 路演»,
+ * "Slide deck / pitch", «iOS / Android / 响应式») must never flip a signal:
+ * every flip changes the stable instruction hash and re-sends the whole
+ * stable block on resume.
+ *
+ * - Packed transcript (contains `## user` / `## assistant` marker lines):
+ *   returns only the bodies of `## user` sections; `## assistant` sections
+ *   and the leading `## context warning` block are dropped entirely.
+ * - Plain message (no role markers): returned unchanged (legacy whole-scan).
+ * - `[form answers — <id>]` blocks in either shape are narrowed to the value
+ *   part of each `- label: value` line (see narrowFormAnswerSignalText).
+ */
+export function extractUserAuthoredSignalText(
+  message: string | null | undefined,
+): string {
+  if (typeof message !== 'string' || message.length === 0) return '';
+  // Marker lines are compared with any trailing CR stripped so CRLF
+  // transcripts parse identically to the LF ones the web builder emits.
+  const lines = message.split('\n').map((line) =>
+    line.endsWith('\r') ? line.slice(0, -1) : line,
+  );
+  if (!isPackedTranscriptShape(lines)) {
+    return narrowFormAnswerSignalText(message);
+  }
+  const userSections: string[][] = [];
+  // null = dropped region: pre-marker text (`## context warning` included)
+  // and `## assistant` sections.
+  let currentUserSection: string[] | null = null;
+  for (const line of lines) {
+    if (line === TRANSCRIPT_USER_MARKER) {
+      currentUserSection = [];
+      userSections.push(currentUserSection);
+      continue;
+    }
+    if (line === TRANSCRIPT_ASSISTANT_MARKER) {
+      currentUserSection = null;
+      continue;
+    }
+    currentUserSection?.push(line);
+  }
+  return userSections
+    .map((sectionLines) => narrowFormAnswerSignalText(sectionLines.join('\n')))
+    .join('\n\n');
 }
 
 export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');

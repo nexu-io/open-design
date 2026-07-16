@@ -812,6 +812,19 @@
   color: var(--text);
   min-height: 1.5em;
 }
+.df-useful-info-auxiliary {
+  opacity: 0.72;
+}
+.df-useful-info-auxiliary .df-useful-info-head {
+  color: var(--text-faint);
+}
+.df-useful-info-auxiliary .df-useful-info-label {
+  color: var(--text-faint);
+}
+.df-useful-info-auxiliary .df-useful-info-tip {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .df-tip-link {
   color: inherit;
   text-decoration: underline;

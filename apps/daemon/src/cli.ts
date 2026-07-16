@@ -63,6 +63,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'surface',
   'model',
   'prompt',
+  'prompt-file',
   'output',
   'aspect',
   'length',
@@ -901,10 +902,16 @@ async function runMediaGenerate(rawArgs) {
     process.exit(2);
   }
 
+  // Long-form media prompts (detailed image/video descriptions, program-
+  // generated prompts) arrive via --prompt-file <path|-> (stdin) per the CLI
+  // contract; readPromptFromFlags prefers an inline --prompt and otherwise reads
+  // the file/stdin, matching od run / od brand / od automation.
+  const prompt = await readPromptFromFlags(flags);
+
   const body = {
     surface,
     model: flags.model,
-    prompt: flags.prompt,
+    prompt,
     output: flags.output,
     aspect: flags.aspect,
     voice: flags.voice,
@@ -1195,6 +1202,7 @@ Required:
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
+  --prompt-file <path|->     Read the prompt from a file, or - for stdin (for long-form prompts).
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
   --length <seconds>        Video length.

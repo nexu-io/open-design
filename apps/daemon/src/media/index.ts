@@ -1046,7 +1046,7 @@ function codexImagegenMissingOutputError(threadDir: string, stdout: string): Err
     );
   }
   return new Error(
-    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    `Codex imagegen completed but did not write an ig_* or call_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
   );
 }
 
@@ -1065,9 +1065,13 @@ async function readCodexGeneratedImage(
     }
     throw err;
   }
+  const supportedImagePattern = /\.(?:png|jpe?g|webp)$/i;
   const match = entries
-    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
-    .sort()[0];
+    .filter((name) => /^ig_/i.test(name) && supportedImagePattern.test(name))
+    .sort()[0]
+    ?? entries
+      .filter((name) => /^call_/i.test(name) && supportedImagePattern.test(name))
+      .sort()[0];
   if (!match) {
     throw codexImagegenMissingOutputError(threadDir, stdout);
   }

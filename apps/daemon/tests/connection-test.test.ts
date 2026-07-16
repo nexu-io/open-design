@@ -3627,6 +3627,94 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
+    const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+    process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
+    try {
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('ollama/qwen3.5-9b');
+  process.exit(0);
+}
+console.error('Cannot connect to API: Unable to connect. Is the computer able to access the url?');
+console.log('UNRELATED_STDOUT_TAIL_MARKER');
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'opencode',
+            model: 'ollama/qwen3.5-9b',
+          });
+
+          expect(result.ok).toBe(false);
+          expect(result.kind).toBe('upstream_unavailable');
+          expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
+          expect(result.detail).toContain('Cannot connect to API');
+          expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
+          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+          expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
+        },
+      );
+    } finally {
+      if (oldTimeout === undefined) {
+        delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+      } else {
+        process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
+      }
+    }
+  });
+
+  it.each([
+    [
+      'Unable to connect fallback',
+      'Unable to connect. Is the computer able to access the url?',
+      'Unable to connect',
+    ],
+    [
+      'URL typo fallback',
+      'Was there a typo in the url or port?',
+      'Was there a typo in the url or port?',
+    ],
+  ])(
+    'surfaces OpenCode provider connectivity errors from %s before timeout (#4999)',
+    async (_name, stderrLine, expectedDetail) => {
+      const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+      process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
+      try {
+        await withFakeOpenCode(
+          `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('ollama/qwen3.5-9b');
+  process.exit(0);
+}
+console.error(${JSON.stringify(stderrLine)});
+setInterval(() => {}, 1000);
+`,
+          async () => {
+            const result = await testAgentConnection({
+              agentId: 'opencode',
+              model: 'ollama/qwen3.5-9b',
+            });
+
+            expect(result.ok).toBe(false);
+            expect(result.kind).toBe('upstream_unavailable');
+            expect(result.detail).toContain(expectedDetail);
+            expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+          },
+        );
+      } finally {
+        if (oldTimeout === undefined) {
+          delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+        } else {
+          process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
+        }
+      }
+    },
+  );
+
   it('launches Kimi connection tests without the legacy acp positional arg', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');

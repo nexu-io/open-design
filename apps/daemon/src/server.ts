@@ -24,6 +24,7 @@ import {
   detectDeckIntentSignal,
   detectMediaIntentSignal,
   detectPlatformIntentSignal,
+  extractUserAuthoredSignalText,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
@@ -328,6 +329,7 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
+import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -523,6 +525,7 @@ import {
   insertRoutineRun,
   insertScheduledRoutineRun,
   insertTemplate,
+  latchConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
   listProjectsAwaitingInput,
@@ -2423,6 +2426,23 @@ export async function startServer({
     console.warn(`[plugins] snapshot GC startup sweep failed: ${(err)?.message ?? err}`);
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
+
+  // Memory hygiene: one-time removal of entries the retired chat
+  // auto-extraction pipelines wrote (regex-pack artifacts + chat-form
+  // residue in user_profile). Marker-gated inside, so this is a no-op on
+  // every boot after the first. Best-effort — memory cleanup must never
+  // block the daemon from serving.
+  try {
+    const memoryCleanup = await runAutoExtractionCleanup(RUNTIME_DATA_DIR);
+    if (memoryCleanup.ran && (memoryCleanup.deletedIds.length > 0 || memoryCleanup.profilePruned)) {
+      console.log(
+        `[memory] auto-extraction cleanup removed ${memoryCleanup.deletedIds.length} entr(y/ies)`
+        + `${memoryCleanup.profilePruned ? ' and pruned user_profile to canonical fields' : ''}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[memory] auto-extraction cleanup failed:', err);
+  }
 
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
@@ -4533,6 +4553,35 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
+    // Intent signals gate stable-region prompt blocks, so every flip changes
+    // stableInstructionFingerprint and re-sends the whole stable block on
+    // resume. Two rules keep flips down to genuine activations only:
+    //   1. Scan user-authored text only — for transcript-resending agents
+    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      discovery form's own options, delivery summaries) must never flip
+    //      a signal the user did not express.
+    //   2. Latch detections onto the conversation (monotonic ON), so a
+    //      history trim on agent switch or a non-transcript client cannot
+    //      flip a previously seen signal back OFF.
+    // OD_INTENT_SIGNAL_MODE=legacy restores the pre-hotfix whole-text,
+    // unlatched scan.
+    const legacyIntentSignalScan = process.env.OD_INTENT_SIGNAL_MODE === 'legacy';
+    const intentSignalTexts = legacyIntentSignalScan
+      ? [message, currentPrompt]
+      : [
+          extractUserAuthoredSignalText(message),
+          extractUserAuthoredSignalText(currentPrompt),
+        ];
+    const freshIntentSignals = {
+      deck: detectDeckIntentSignal(...intentSignalTexts),
+      media: detectMediaIntentSignal(...intentSignalTexts),
+      platform: detectPlatformIntentSignal(...intentSignalTexts),
+    };
+    const intentSignals =
+      !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
+        ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
+        : freshIntentSignals;
+
     const {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
@@ -4555,13 +4604,13 @@ export async function startServer({
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
-        // Scan the same text the agent will receive (transcript-resending
-        // agents carry prior turns inside `message`), so a deck mention
-        // anywhere in the visible conversation keeps the freeform
-        // maybe-deck framework injected.
-        freeformDeckSignal: detectDeckIntentSignal(message, currentPrompt),
-        mediaHintSignal: detectMediaIntentSignal(message, currentPrompt),
-        platformHintSignal: detectPlatformIntentSignal(message, currentPrompt),
+        // User-authored-only, conversation-latched detections (see the
+        // intentSignals block above): a deck mention in the user's own words
+        // anywhere in the conversation keeps the freeform maybe-deck
+        // framework injected for the conversation's whole life.
+        freeformDeckSignal: intentSignals.deck,
+        mediaHintSignal: intentSignals.media,
+        platformHintSignal: intentSignals.platform,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -6444,10 +6493,38 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      //
+      // Also normalize the BYOK provider shape: web side sends
+      // `{ protocol, ... }` via the chat body as `byokProvider`,
+      // but memory-llm.pickProvider expects `{ provider, ... }`
+      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
+      // same mapping the web pre-turn path does (ProjectView.tsx
+      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      const memoryChatProvider: {
+        provider?: string;
+        apiKey?: string;
+        baseUrl?: string;
+        apiVersion?: string;
+        model?: string;
+        requiresApiKey?: boolean;
+      } | null = byokProvider
+        ? {
+            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
+            apiKey: (byokProvider as { apiKey?: string }).apiKey,
+            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
+            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            model: (byokProvider as { model?: string }).model,
+            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+          }
+        : null;
       const memoryOptions = {
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Forward the per-call BYOK provider snapshot so pickProvider()
+        // can run "Same as chat" extraction against the user's actual
+        // provider/endpoint/model instead of falling back to defaults.
+        chatProvider: memoryChatProvider,
         // Scope the extractor's duplicate-turn de-dup to this conversation, so a
         // re-fired turn collapses but an identical (message, reply) in another
         // conversation is still examined.

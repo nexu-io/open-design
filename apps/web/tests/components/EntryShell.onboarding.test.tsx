@@ -354,6 +354,49 @@ describe('EntryShell design systems view', () => {
   });
 });
 
+describe('EntryShell route scroll isolation', () => {
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  function entryScrollContainer(): HTMLElement {
+    const scrollContainer = document.querySelector('.entry-main--scroll');
+    expect(scrollContainer).toBeInstanceOf(HTMLElement);
+    if (!(scrollContainer instanceof HTMLElement)) {
+      throw new Error('entry scroll container not found');
+    }
+    return scrollContainer;
+  }
+
+  it('resets the shared scroll offset when navigating from Home to Projects', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    renderHome();
+
+    const scrollContainer = entryScrollContainer();
+    scrollContainer.scrollTop = 280;
+    fireEvent.click(screen.getByTestId('entry-nav-projects'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view-projects').getAttribute('data-active')).toBe('true');
+    });
+    expect(scrollContainer.scrollTop).toBe(0);
+  });
+
+  it('resets the shared scroll offset when navigating from Projects to Home', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    renderHome({}, '/projects');
+
+    const scrollContainer = entryScrollContainer();
+    scrollContainer.scrollTop = 360;
+    fireEvent.click(screen.getByTestId('entry-nav-home'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view-home').getAttribute('data-active')).toBe('true');
+    });
+    expect(scrollContainer.scrollTop).toBe(0);
+  });
+});
+
 describe('EntryShell new project rail', () => {
   it('creates a blank project directly from the rail plus', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'false');

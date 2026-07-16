@@ -354,24 +354,6 @@ export const SearchableModelSelect = forwardRef<
                       <span className="model-select-searchable__option-copy">
                         <span className="model-select-searchable__option-label">
                           <span id={optionLabelId}>{option.label}</span>
-                          {showUpgradeLock ? (
-                            <button
-                              type="button"
-                              className="model-select-searchable__option-lock-inline od-tooltip"
-                              data-testid="model-option-upgrade-lock"
-                              id={optionDisabledId}
-                              data-tooltip={disabledHint ?? undefined}
-                              data-tooltip-placement="top"
-                              title={disabledHint ?? undefined}
-                              aria-label={disabledHint ?? undefined}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onDisabledOptionUpgrade?.(option);
-                              }}
-                            >
-                              <Icon name="lock" size={13} />
-                            </button>
-                          ) : null}
                         </span>
                         {costLabel ? (
                           <span
@@ -390,13 +372,35 @@ export const SearchableModelSelect = forwardRef<
                           </span>
                         ) : null}
                       </span>
-                      {tagLabel ? (
-                        <span
-                          className="model-select-searchable__option-badge"
-                          data-tag={tag}
-                          id={optionTagId}
-                        >
-                          {tagLabel}
+                      {showUpgradeLock || tagLabel ? (
+                        <span className="model-select-searchable__option-affordances">
+                          {showUpgradeLock ? (
+                            <button
+                              type="button"
+                              className="model-select-searchable__option-lock-inline od-tooltip"
+                              data-testid="model-option-upgrade-lock"
+                              id={optionDisabledId}
+                              data-tooltip={disabledHint ?? undefined}
+                              data-tooltip-placement="top"
+                              title={disabledHint ?? undefined}
+                              aria-label={disabledHint ?? undefined}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDisabledOptionUpgrade?.(option);
+                              }}
+                            >
+                              <Icon name="lock" size={13} />
+                            </button>
+                          ) : null}
+                          {tagLabel ? (
+                            <span
+                              className="model-select-searchable__option-badge"
+                              data-tag={tag}
+                              id={optionTagId}
+                            >
+                              {tagLabel}
+                            </span>
+                          ) : null}
                         </span>
                       ) : null}
                     </span>
