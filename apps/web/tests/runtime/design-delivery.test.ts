@@ -35,7 +35,12 @@ describe('resolveDesignDeliveryOutcome', () => {
     ).toBe('report_only');
   });
 
-  it('requires file delivery once the turn attempted to write project files', () => {
+  it('treats a successful edit-only turn as delivered even without new project files (#5753)', () => {
+    // When the agent edits (or deletes) an existing project file in design
+    // mode and the run succeeds, the file mutation itself is the delivery.
+    // Requiring a *new* project file here surfaces the false-negative
+    // "without producing a deliverable project file" toast when the user is
+    // already looking at the freshly edited file in the preview pane.
     for (const attempt of [
       { kind: 'tool_use' as const, id: 'w-1', name: 'Write', input: { file_path: 'index.html' } },
       { kind: 'tool_use' as const, id: 'e-1', name: 'Edit', input: { file_path: 'index.html' } },
@@ -50,7 +55,7 @@ describe('resolveDesignDeliveryOutcome', () => {
           producedFileCount: 0,
           traceObjectFileCount: 0,
         }),
-      ).toBe('no_result');
+      ).toBe('delivered');
     }
   });
 

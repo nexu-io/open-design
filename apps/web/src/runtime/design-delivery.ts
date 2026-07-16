@@ -80,15 +80,16 @@ export function resolveDesignDeliveryOutcome(
   if (isIntermediateDesignTurn(input.content, input.events)) {
     return 'awaiting_input';
   }
+  if (input.persistenceFailed) return 'delivery_failed';
   if (
     input.producedFileCount > 0 ||
     input.traceObjectFileCount > 0 ||
     input.persistenceSucceeded ||
-    hasLiveArtifactDelivery(input.events)
+    hasLiveArtifactDelivery(input.events) ||
+    hasFileMutationToolUse(input.events)
   ) {
     return 'delivered';
   }
-  if (input.persistenceFailed) return 'delivery_failed';
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }
