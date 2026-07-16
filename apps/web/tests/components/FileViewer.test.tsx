@@ -755,6 +755,77 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
   });
 
+  it('promotes large HTML files to the srcDoc path when the routing preview shows sandbox-unsafe scripts', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      size: 3 * 1024 * 1024,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Imported app',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const previewText = '<!doctype html><html><head><script src="./app.js"></script></head>';
+    let fullHtml = `${previewText}<body><main>Imported filesystem app</main></body></html>`;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.startsWith('/api/projects/project-1/text-preview/index.html')) {
+        return new Response(JSON.stringify({
+          text: previewText,
+          poweredPreview: { required: false, reasons: [] },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/projects/project-1/raw/index.html')) {
+        return new Response(fullHtml, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      if (url === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files: [file] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Imported filesystem app');
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/text-preview/index.html'), { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/raw/index.html?cacheBust='), {});
+
+    fullHtml = `${previewText}<body><main>Updated filesystem app</main></body></html>`;
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: file.mtime + 1 }}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Updated filesystem app');
+    });
+  });
+
   it('evicts least-recent inactive preview iframes once the pool exceeds its limit', () => {
     function Harness({ activeKey }: { activeKey: string | null }) {
       return (

@@ -138,6 +138,7 @@ import {
   upsertSpeakerNotesInHtml,
 } from '../runtime/speaker-notes';
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
   htmlNeedsPoweredPreview,
@@ -292,6 +293,18 @@ const POWERED_PREVIEW_ALLOW =
   'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
 const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
 const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
+type HtmlSourceLoadMode = 'full' | 'routing-preview';
+
+function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean {
+  if (!source) return false;
+  return (
+    htmlNeedsSandboxShim(source) ||
+    htmlNeedsFocusGuard(source) ||
+    htmlNeedsRedirectGuard(source) ||
+    hasTweaksTemplate(source)
+  );
+}
+
 const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   {
     id: 'desktop',
@@ -6806,7 +6819,11 @@ function HtmlViewer({
       // switches but before the effect has run.
     }
     let cancelled = false;
-    if (shouldDeferPassivePreviewSource && sourceRef.current !== null) {
+    if (
+      shouldDeferPassivePreviewSource &&
+      sourceRef.current !== null &&
+      !previewTextNeedsFullSourceForSafeInline(sourceRef.current)
+    ) {
       setRoutingSource(sourceRef.current);
       sourceEverLoadedRef.current = true;
       return () => {
@@ -6825,15 +6842,30 @@ function HtmlViewer({
       ? fetchProjectFileTextPreview(projectId, file.name, {
           limit: HTML_ROUTING_TEXT_PREVIEW_LIMIT,
           cacheBustKey,
-        }).then((preview) => ({
-          text: preview?.text ?? null,
-          poweredPreviewRequired: preview?.poweredPreview.required === true,
-        }))
+        }).then(async (preview) => {
+          const previewText = preview?.text ?? null;
+          if (previewTextNeedsFullSourceForSafeInline(previewText)) {
+            const fullText = await fetchProjectFileText(projectId, file.name, { cacheBustKey });
+            if (fullText !== null) {
+              return {
+                text: fullText,
+                poweredPreviewRequired: preview?.poweredPreview.required === true,
+                sourceLoadMode: 'full' as HtmlSourceLoadMode,
+              };
+            }
+          }
+          return {
+            text: previewText,
+            poweredPreviewRequired: preview?.poweredPreview.required === true,
+            sourceLoadMode: 'routing-preview' as HtmlSourceLoadMode,
+          };
+        })
       : fetchProjectFileText(projectId, file.name, { cacheBustKey }).then((text) => ({
-          text,
-          poweredPreviewRequired: false,
-        }));
-    void loadText.then(({ text, poweredPreviewRequired }) => {
+        text,
+        poweredPreviewRequired: false,
+        sourceLoadMode: 'full' as HtmlSourceLoadMode,
+      }));
+    void loadText.then(({ text, poweredPreviewRequired, sourceLoadMode }) => {
       if (cancelled) return;
       setServerPoweredPreviewRequired(poweredPreviewRequired);
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
@@ -6880,7 +6912,7 @@ function HtmlViewer({
       sourceEverLoadedRef.current = true;
       lastGoodSourceForRoutingRef.current = text;
       setRoutingSource(text);
-      if (shouldDeferPassivePreviewSource) {
+      if (sourceLoadMode === 'routing-preview') {
         sourceRef.current = null;
       } else {
         setSource(text);
