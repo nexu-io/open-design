@@ -285,6 +285,84 @@ describe('resolveMacosLoginShellPath', () => {
     });
   });
 
+  it.each([
+    '/bin/csh',
+    '/bin/tcsh',
+  ])('loads %s login profiles without its incompatible -l flag', async (shell) => {
+    const calls: Array<{ args: string[]; command: string; options: object }> = [];
+
+    const shellPath = await resolveMacosLoginShellPath({
+      basePath: '/usr/bin:/bin',
+      env: {
+        PATH: '/usr/bin:/bin',
+        SHELL: shell,
+      },
+      exec: async (command, args, options) => {
+        calls.push({ command, args, options });
+        return {
+          stdout: '_OPEN_DESIGN_PATH_/custom/bin:/usr/bin:/bin_OPEN_DESIGN_PATH_',
+        };
+      },
+      platform: 'darwin',
+    });
+
+    expect(shellPath).toBe('/custom/bin:/usr/bin:/bin');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: shell,
+      args: ['-c', expect.stringContaining('source /etc/csh.login')],
+    });
+    expect(calls[0]?.args[1]).toContain('/usr/bin/printf');
+  });
+
+  it('uses fish-compatible flags for an interactive login-shell probe', async () => {
+    const calls: Array<{ args: string[]; command: string }> = [];
+
+    await resolveMacosLoginShellPath({
+      basePath: '/usr/bin:/bin',
+      env: {
+        PATH: '/usr/bin:/bin',
+        SHELL: '/opt/homebrew/bin/fish',
+      },
+      exec: async (command, args) => {
+        calls.push({ command, args });
+        return {
+          stdout: '_OPEN_DESIGN_PATH_/custom/bin:/usr/bin:/bin_OPEN_DESIGN_PATH_',
+        };
+      },
+      platform: 'darwin',
+    });
+
+    expect(calls).toEqual([{
+      command: '/opt/homebrew/bin/fish',
+      args: [
+        '--interactive',
+        '--login',
+        '--command',
+        expect.stringContaining('/usr/bin/printf'),
+      ],
+    }]);
+  });
+
+  it('falls back without launching an unsupported shell', async () => {
+    let called = false;
+    const value = await resolveMacosLoginShellPath({
+      basePath: '/custom/bin:/usr/bin',
+      env: {
+        PATH: '/custom/bin:/usr/bin',
+        SHELL: '/usr/local/bin/nu',
+      },
+      exec: async () => {
+        called = true;
+        return { stdout: '' };
+      },
+      platform: 'darwin',
+    });
+
+    expect(value).toBe('/custom/bin:/usr/bin');
+    expect(called).toBe(false);
+  });
+
   it('falls back to the inherited PATH when the login-shell probe fails', async () => {
     await expect(resolveMacosLoginShellPath({
       basePath: '/usr/bin:/bin',

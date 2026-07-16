@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 
@@ -333,9 +333,13 @@ const PACKAGED_POSIX_SYSTEM_BINS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as
 
 const LOGIN_SHELL_PATH_MARKER = "_OPEN_DESIGN_PATH_";
 const LOGIN_SHELL_PATH_COMMAND =
-  `command printf '${LOGIN_SHELL_PATH_MARKER}%s${LOGIN_SHELL_PATH_MARKER}' "$PATH"; exit`;
+  `/usr/bin/printf '${LOGIN_SHELL_PATH_MARKER}%s${LOGIN_SHELL_PATH_MARKER}' "$PATH"`;
+const CSH_LOGIN_SHELL_PATH_COMMAND =
+  `if (-r /etc/csh.login) source /etc/csh.login; ` +
+  `if (-r "$HOME/.login") source "$HOME/.login"; ${LOGIN_SHELL_PATH_COMMAND}`;
 const LOGIN_SHELL_PATH_MAX_BUFFER = 256 * 1024;
 const LOGIN_SHELL_PATH_TIMEOUT_MS = 3_000;
+const POSIX_LOGIN_SHELLS = new Set(["bash", "dash", "ksh", "sh", "zsh"]);
 
 type MacosLoginShellExecOptions = {
   encoding: "utf8";
@@ -357,6 +361,23 @@ export type MacosLoginShellPathOptions = {
   exec?: MacosLoginShellExec;
   platform?: NodeJS.Platform;
 };
+
+function resolveMacosLoginShellArgs(shell: string): string[] | null {
+  const shellName = basename(shell);
+  if (POSIX_LOGIN_SHELLS.has(shellName)) {
+    return ["-ilc", LOGIN_SHELL_PATH_COMMAND];
+  }
+  if (shellName === "fish") {
+    return ["--interactive", "--login", "--command", LOGIN_SHELL_PATH_COMMAND];
+  }
+  if (shellName === "csh" || shellName === "tcsh") {
+    // tcsh requires -l to be the only option, which makes it incompatible
+    // with -c. Its normal non-login startup loads cshrc; source the two
+    // additional login profiles explicitly before the bounded PATH probe.
+    return ["-c", CSH_LOGIN_SHELL_PATH_COMMAND];
+  }
+  return null;
+}
 
 async function execMacosLoginShell(
   command: string,
@@ -384,9 +405,12 @@ export async function resolveMacosLoginShellPath(
   if ((input.platform ?? process.platform) !== "darwin") return basePath;
 
   const shell = env.SHELL?.trim() || "/bin/zsh";
+  const shellArgs = resolveMacosLoginShellArgs(shell);
+  if (shellArgs == null) return basePath;
+
   const run = input.exec ?? execMacosLoginShell;
   try {
-    const { stdout } = await run(shell, ["-ilc", LOGIN_SHELL_PATH_COMMAND], {
+    const { stdout } = await run(shell, shellArgs, {
       encoding: "utf8",
       env: {
         ...env,
