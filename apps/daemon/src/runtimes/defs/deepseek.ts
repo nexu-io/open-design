@@ -7,9 +7,7 @@ export const deepseekAgentDef = {
     // The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and
     // delegates to a sibling TUI runtime binary at exec time. Upstream also
     // ships the same dispatcher as `codewhale` after the CodeWhale rename
-    // (issue #2983). The companion `deepseek-tui` / `codewhale-tui` runtime
-    // is not probed here — it does not accept the argv shape `buildArgs`
-    // produces (`exec --auto <prompt>`).
+    // (issue #2983).
     bin: 'deepseek',
     fallbackBins: ['codewhale'],
     versionArgs: ['--version'],
@@ -22,20 +20,23 @@ export const deepseekAgentDef = {
       { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
     ],
-    // `--auto` enables agentic mode with auto-approval — the daemon runs
-    // every CLI without a TTY, so the interactive approval prompt would
-    // hang the run. Streaming is plain text on stdout (tool calls go to
-    // stderr); skipping `--json` keeps deltas streaming live instead of
-    // batched into one trailing summary object at end-of-turn.
+    // `--auto` enables agentic mode with auto-approval.
+    // We pass `--input-format stream-json` and `--output-format stream-json`
+    // to establish the end-to-end stdin contract, allowing the prompt to be
+    // piped safely without hitting Windows ENAMETOOLONG limits.
     buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['exec', '--auto'];
+      const args = [
+        'exec', 
+        '--auto', 
+        '--input-format', 'stream-json', 
+        '--output-format', 'stream-json'
+      ];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
-      // The prompt is intentionally omitted from argv to prevent Windows 
-      // ENAMETOOLONG crashes and is instead streamed via stdin.
       return args;
     },
     promptViaStdin: true,
-    streamFormat: 'plain',
+    promptInputFormat: 'stream-json',
+    streamFormat: 'deepseek-stream-json',
 } satisfies RuntimeAgentDef;
