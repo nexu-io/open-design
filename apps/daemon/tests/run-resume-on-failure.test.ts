@@ -32,6 +32,8 @@ type RunStatus = {
   errorCode: string | null;
   eventsLogPath: string;
   resumable?: boolean;
+  failureCategory?: string | null;
+  failureDetail?: string | null;
   nativeSessionRecovery?: {
     agentId: string | null;
     state: string;
@@ -194,6 +196,47 @@ describe('resume-on-failure runtime', () => {
     expect(failed.status).toBe('failed');
     expect(failed.resumable).not.toBe(true);
   });
+
+  it('does not resume a provider 404 after a committed tool block', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-resume-client-error-bin-'));
+    const { bin: fakeOpenCode, argsLogPath } = await writeClientErrorOpenCode(
+      binDir,
+      'opencode-client-error',
+    );
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'opencode',
+      agentCliEnv: { opencode: { OPENCODE_BIN: fakeOpenCode } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+
+    const failed = await sendRunAndWait(started.url, conversationId, 'opencode');
+    expect(failed.status).toBe('failed');
+    expect(failed).toMatchObject({
+      failureCategory: 'upstream_unavailable',
+      failureDetail: 'upstream_client_error',
+    });
+    expect(failed.resumable).not.toBe(true);
+
+    const nextTurn = await sendRunAndWait(started.url, conversationId, 'opencode');
+    expect(nextTurn.status).toBe('succeeded');
+
+    const attempts = await readArgs(argsLogPath);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).not.toContain('-s');
+    expect(attempts[1]).not.toContain('-s');
+  });
 });
 
 function snapshotEnv(): Record<string, string | undefined> {
@@ -321,6 +364,63 @@ setTimeout(() => process.exit(1), 20);
   return { bin };
 }
 
+// Fake OpenCode CLI: the first invocation captures a session and commits a
+// tool block before a provider 404; the next invocation succeeds. Records argv
+// so the test can prove the invalid provider session was not persisted/resumed.
+async function writeClientErrorOpenCode(
+  dir: string,
+  name: string,
+): Promise<{ bin: string; argsLogPath: string }> {
+  const bin = path.join(dir, name);
+  const counterPath = path.join(dir, `${name}-attempts`);
+  const argsLogPath = path.join(dir, `${name}-args.jsonl`);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const counterPath = ${JSON.stringify(counterPath)};
+const argsLogPath = ${JSON.stringify(argsLogPath)};
+const sessionID = 'ses_provider_404_committed';
+if (process.argv.includes('--version')) { console.log('1.17.7'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('opencode run [message..]'); process.exit(0); }
+if (process.argv[2] === 'models') { console.log('test/provider-model'); process.exit(0); }
+let attempts = 0;
+try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
+fs.writeFileSync(counterPath, String(attempts + 1));
+fs.appendFileSync(argsLogPath, JSON.stringify(process.argv.slice(2)) + '\\n');
+console.log(JSON.stringify({ type: 'step_start', sessionID, part: { type: 'step-start' } }));
+if (attempts === 0) {
+  console.log(JSON.stringify({
+    type: 'tool_use',
+    sessionID,
+    part: {
+      type: 'tool',
+      callID: 'tool_provider_404',
+      tool: 'Bash',
+      state: { status: 'completed', input: '{"command":"echo committed"}', output: 'committed' }
+    }
+  }));
+  console.log(JSON.stringify({
+    type: 'error',
+    sessionID,
+    error: {
+      name: 'APIError',
+      data: { message: 'Not Found: 404 page not found', statusCode: 404, isRetryable: false }
+    }
+  }));
+  setTimeout(() => process.exit(0), 20);
+} else {
+  console.log(JSON.stringify({ type: 'text', sessionID, part: { type: 'text', text: 'Started fresh.' } }));
+  console.log(JSON.stringify({
+    type: 'step_finish',
+    sessionID,
+    part: { type: 'step-finish', tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 }
+  }));
+  setTimeout(() => process.exit(0), 20);
+}
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, argsLogPath };
+}
+
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {
   const response = await fetch(`${url}/api/app-config`, {
     method: 'PUT',
@@ -351,7 +451,11 @@ async function createConversation(url: string): Promise<string> {
   return `${projectId}::${projectBody.conversationId}`;
 }
 
-async function sendRunAndWait(url: string, encoded: string): Promise<RunStatus> {
+async function sendRunAndWait(
+  url: string,
+  encoded: string,
+  agentId = 'claude',
+): Promise<RunStatus> {
   const [projectId, conversationId] = encoded.split('::');
   const assistantMessageId = `assistant_resume_${randomUUID()}`;
   const runResponse = await fetch(`${url}/api/runs`, {
@@ -367,7 +471,7 @@ async function sendRunAndWait(url: string, encoded: string): Promise<RunStatus> 
       conversationId,
       assistantMessageId,
       clientRequestId: `client_resume_${randomUUID()}`,
-      agentId: 'claude',
+      agentId,
       message: 'please do the task',
       currentPrompt: 'please do the task',
     }),
