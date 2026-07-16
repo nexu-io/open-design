@@ -133,6 +133,148 @@ type CreatorPerformanceProjectState = {
   failed: boolean;
 };
 
+// CW-05 发布表现总览：只读聚合。总览仅比较各项目 published release 的最新快照，
+// 复用既有 Release/Performance/Content 状态，不新增 API，也不含任何写操作。
+const PERFORMANCE_OVERVIEW_METRIC_KEYS = ['views', 'likes', 'comments'] as const;
+type PerformanceOverviewMetricKey = (typeof PERFORMANCE_OVERVIEW_METRIC_KEYS)[number];
+
+type PerformanceOverviewPlatformFilter = 'all' | CreatorReleasePlatform;
+const PERFORMANCE_OVERVIEW_PLATFORM_FILTERS: PerformanceOverviewPlatformFilter[] = [
+  'all',
+  'bilibili',
+  'youtube',
+  'xiaohongshu',
+  'other',
+];
+const PERFORMANCE_OVERVIEW_PLATFORM_FILTER_LABELS: Record<PerformanceOverviewPlatformFilter, string> = {
+  all: 'All',
+  bilibili: 'Bilibili',
+  youtube: 'YouTube',
+  xiaohongshu: 'Xiaohongshu',
+  other: 'Other',
+};
+
+type PerformanceOverviewSortKey = 'latest' | PerformanceOverviewMetricKey;
+const PERFORMANCE_OVERVIEW_SORTS: Array<{ key: PerformanceOverviewSortKey; label: string }> = [
+  { key: 'latest', label: 'Latest snapshot' },
+  { key: 'views', label: 'Views' },
+  { key: 'likes', label: 'Likes' },
+  { key: 'comments', label: 'Comments' },
+];
+
+type PerformanceOverviewMetricCell = {
+  // latest 缺失 → undefined，显示 "-" 且不显示增量；数值 0 是有效值不按缺失处理。
+  latest: number | undefined;
+  // 仅当 latest 与 previous 均为数字时才有增量；否则 undefined（不伪造增量）。
+  delta: number | undefined;
+};
+
+type PerformanceOverviewRow = {
+  projectId: string;
+  projectName: string;
+  releaseId: string;
+  releaseTitle: string;
+  platform: CreatorReleasePlatform;
+  contentTitle: string;
+  publishedAt: string | undefined;
+  latestCapturedAt: string | undefined; // undefined = 无快照
+  hasSnapshot: boolean;
+  metrics: Record<PerformanceOverviewMetricKey, PerformanceOverviewMetricCell>;
+};
+
+// 复制快照数组后按 capturedAt 降序排序；capturedAt 相同时用 snapshot id 次级降序。
+// 不信任 API 顺序，也不原地修改传入数组。
+function sortReleaseSnapshotsDescending(
+  snapshots: CreatorPerformanceSnapshot[],
+): CreatorPerformanceSnapshot[] {
+  return [...snapshots].sort((left, right) => {
+    if (left.capturedAt !== right.capturedAt) return left.capturedAt < right.capturedAt ? 1 : -1;
+    return left.id < right.id ? 1 : -1;
+  });
+}
+
+// 归一化平台：无法归入前三项的（含未来未知值）统一归入 Other。
+function normalizePerformanceOverviewPlatform(
+  platform: CreatorReleasePlatform,
+): CreatorReleasePlatform {
+  return platform === 'bilibili' || platform === 'youtube' || platform === 'xiaohongshu'
+    ? platform
+    : 'other';
+}
+
+// 单指标：latest 与相邻 previous 均为数字才计算绝对增量。0 是有效值。
+function computePerformanceOverviewMetric(
+  latest: CreatorPerformanceSnapshot | undefined,
+  previous: CreatorPerformanceSnapshot | undefined,
+  key: PerformanceOverviewMetricKey,
+): PerformanceOverviewMetricCell {
+  const latestValue = latest?.metrics[key];
+  if (typeof latestValue !== 'number') return { latest: undefined, delta: undefined };
+  const previousValue = previous?.metrics[key];
+  const delta = typeof previousValue === 'number' ? latestValue - previousValue : undefined;
+  return { latest: latestValue, delta };
+}
+
+// 增量文本：正 "+N"、负 "-N"、零 "0"。不计算百分比/增长率。
+function formatPerformanceOverviewDelta(delta: number): string {
+  return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+// 降序比较且缺失值恒后置；同时用于字符串（ISO 时间）与数字。
+function comparePerformanceOverviewDescending(
+  left: string | number | undefined,
+  right: string | number | undefined,
+): number {
+  const leftMissing = left === undefined;
+  const rightMissing = right === undefined;
+  if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+  if (leftMissing || rightMissing) return 0;
+  if (left < right) return 1;
+  if (left > right) return -1;
+  return 0;
+}
+
+// 排序：主键降序 + 缺失后置；次级确定性排序为 最新快照时间 → release 标题 → release id。
+function comparePerformanceOverviewRows(
+  left: PerformanceOverviewRow,
+  right: PerformanceOverviewRow,
+  sortKey: PerformanceOverviewSortKey,
+): number {
+  const primary = sortKey === 'latest'
+    ? comparePerformanceOverviewDescending(left.latestCapturedAt, right.latestCapturedAt)
+    : comparePerformanceOverviewDescending(left.metrics[sortKey].latest, right.metrics[sortKey].latest);
+  if (primary !== 0) return primary;
+  const byCapturedAt = comparePerformanceOverviewDescending(left.latestCapturedAt, right.latestCapturedAt);
+  if (byCapturedAt !== 0) return byCapturedAt;
+  if (left.releaseTitle !== right.releaseTitle) return left.releaseTitle < right.releaseTitle ? -1 : 1;
+  if (left.releaseId !== right.releaseId) return left.releaseId < right.releaseId ? -1 : 1;
+  return 0;
+}
+
+// 只读渲染单个指标单元格：缺失显示 "-"；有值显示数值，并在存在增量时附带带符号增量。
+function renderPerformanceOverviewMetricCell(cell: PerformanceOverviewMetricCell): ReactElement {
+  if (cell.latest === undefined) {
+    return <span className="creator-performance-overview__muted">-</span>;
+  }
+  const deltaTone = cell.delta === undefined
+    ? null
+    : cell.delta > 0
+      ? 'up'
+      : cell.delta < 0
+        ? 'down'
+        : 'flat';
+  return (
+    <span className="creator-performance-overview__metric">
+      <span className="creator-performance-overview__value">{cell.latest}</span>
+      {cell.delta !== undefined && deltaTone ? (
+        <span className={`creator-performance-overview__delta creator-performance-overview__delta--${deltaTone}`}>
+          {formatPerformanceOverviewDelta(cell.delta)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
   | { kind: 'edit'; routine: Routine }
@@ -536,6 +678,9 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
   const [performanceCapturedAt, setPerformanceCapturedAt] = useState('');
   const [performanceNote, setPerformanceNote] = useState('');
   const [performanceSaving, setPerformanceSaving] = useState(false);
+  // CW-05 发布表现总览：平台筛选与排序仅影响视图，不修改底层数据。
+  const [performanceOverviewPlatformFilter, setPerformanceOverviewPlatformFilter] = useState<PerformanceOverviewPlatformFilter>('all');
+  const [performanceOverviewSort, setPerformanceOverviewSort] = useState<PerformanceOverviewSortKey>('latest');
   const [creatorContentTaskId, setCreatorContentTaskId] = useState('');
   const [creatorStoryboardMediaAssetId, setCreatorStoryboardMediaAssetId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -643,6 +788,75 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         return left.id < right.id ? 1 : -1;
       });
   }, [creatorReleaseEdit, selectedPerformance]);
+
+  // CW-05 发布表现总览：跨已加载项目聚合所有 published release 的最新表现。
+  // 项目级失败隔离：某项目 Release 或 Performance 任一失败/缺失，则该项目整体不进入
+  // 总览（禁止不完整聚合）。Content 缺失不排除 release，仅回退显示 contentId。
+  const performanceOverviewRows = useMemo<PerformanceOverviewRow[]>(() => {
+    const rows: PerformanceOverviewRow[] = [];
+    for (const project of entryProjects) {
+      const releaseState = creatorReleaseProjectData.find((value) => value.projectId === project.id);
+      if (!releaseState || releaseState.failed) continue;
+      const performanceState = creatorPerformanceProjectData.find((value) => value.projectId === project.id);
+      if (!performanceState || performanceState.failed) continue;
+      const contentState = creatorContentProjectData.find((value) => value.projectId === project.id);
+      const contentProjects = contentState && !contentState.failed ? contentState.data.contentProjects : [];
+      for (const release of releaseState.data.releasePackages) {
+        // 仅 published 进入总览；draft/ready/archived 不进入。
+        if (release.status !== 'published') continue;
+        const contentEntry = contentProjects.find((candidate) => candidate.id === release.contentId);
+        const contentTitle = contentEntry ? contentEntry.title : release.contentId;
+        const snapshots = sortReleaseSnapshotsDescending(
+          performanceState.data.snapshots.filter((snapshot) => snapshot.releaseId === release.id),
+        );
+        const latest = snapshots[0];
+        const previous = snapshots[1];
+        rows.push({
+          projectId: project.id,
+          projectName: project.name,
+          releaseId: release.id,
+          releaseTitle: release.title,
+          platform: release.platform,
+          contentTitle,
+          publishedAt: release.publishedAt,
+          latestCapturedAt: latest ? latest.capturedAt : undefined,
+          hasSnapshot: latest !== undefined,
+          metrics: {
+            views: computePerformanceOverviewMetric(latest, previous, 'views'),
+            likes: computePerformanceOverviewMetric(latest, previous, 'likes'),
+            comments: computePerformanceOverviewMetric(latest, previous, 'comments'),
+          },
+        });
+      }
+    }
+    return rows;
+  }, [entryProjects, creatorReleaseProjectData, creatorPerformanceProjectData, creatorContentProjectData]);
+
+  // 平台筛选 + 排序仅作用于视图副本，不修改底层聚合结果。
+  const visiblePerformanceOverviewRows = useMemo<PerformanceOverviewRow[]>(() => {
+    const filtered = performanceOverviewRows.filter((row) => {
+      if (performanceOverviewPlatformFilter === 'all') return true;
+      return normalizePerformanceOverviewPlatform(row.platform) === performanceOverviewPlatformFilter;
+    });
+    return [...filtered].sort((left, right) => comparePerformanceOverviewRows(left, right, performanceOverviewSort));
+  }, [performanceOverviewRows, performanceOverviewPlatformFilter, performanceOverviewSort]);
+
+  // CW-05 P1：可见的项目级降级提示计数。
+  // 统计当前已加载项目中，Release 或 Performance 任一状态 failed === true 的项目数；
+  // 同一项目两个接口都失败只计一次（Set 去重）。
+  // 数据尚未加载（两个状态都还不存在）时不得误报失败，因此仅当 release 与
+  // performance 状态均存在（即 refresh 已就该项目发起请求）时才计入。
+  const performanceOverviewUnavailableCount = useMemo<number>(() => {
+    const unavailable = new Set<string>();
+    for (const project of entryProjects) {
+      const releaseState = creatorReleaseProjectData.find((value) => value.projectId === project.id);
+      const performanceState = creatorPerformanceProjectData.find((value) => value.projectId === project.id);
+      // 两个状态都尚未加载 → 跳过，避免把「还在加载」误报为「失败」。
+      if (!releaseState || !performanceState) continue;
+      if (releaseState.failed || performanceState.failed) unavailable.add(project.id);
+    }
+    return unavailable.size;
+  }, [entryProjects, creatorReleaseProjectData, creatorPerformanceProjectData]);
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -2188,6 +2402,98 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                   </div>
                   );
                 })() : <p className="creator-list__desc">Select a release to edit its package.</p>}
+              </div>
+            )}
+          </section>
+
+          <section className="creator-performance-overview" aria-labelledby="creator-performance-overview-title">
+            <div className="creator-performance-overview__head">
+              <div>
+                <h3 id="creator-performance-overview-title" className="creator-performance-overview__title">Performance overview</h3>
+                <span className="creator-performance-overview__meta">Published releases across loaded projects (read-only)</span>
+              </div>
+              <div className="creator-performance-overview__controls">
+                <div className="creator-performance-overview__filter" role="group" aria-label="Performance overview platform filter">
+                  {PERFORMANCE_OVERVIEW_PLATFORM_FILTERS.map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className="creator-performance-overview__filter-button"
+                      aria-pressed={performanceOverviewPlatformFilter === filter}
+                      onClick={() => setPerformanceOverviewPlatformFilter(filter)}
+                    >
+                      {PERFORMANCE_OVERVIEW_PLATFORM_FILTER_LABELS[filter]}
+                    </button>
+                  ))}
+                </div>
+                <label className="creator-performance-overview__sort">
+                  Sort by
+                  <select
+                    aria-label="Performance overview sort"
+                    value={performanceOverviewSort}
+                    onChange={(event) => setPerformanceOverviewSort(event.target.value as PerformanceOverviewSortKey)}
+                  >
+                    {PERFORMANCE_OVERVIEW_SORTS.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            {performanceOverviewUnavailableCount > 0 ? (
+              <p
+                className="creator-performance-overview__unavailable"
+                role="status"
+                data-testid="creator-performance-overview-unavailable"
+              >
+                {performanceOverviewUnavailableCount === 1
+                  ? 'Performance overview unavailable for 1 project.'
+                  : `Performance overview unavailable for ${performanceOverviewUnavailableCount} projects.`}
+              </p>
+            ) : null}
+            {visiblePerformanceOverviewRows.length === 0 ? (
+              <p className="creator-performance-overview__empty">
+                {performanceOverviewUnavailableCount > 0
+                  ? 'No available published releases to compare yet.'
+                  : 'No published releases to compare yet.'}
+              </p>
+            ) : (
+              <div className="creator-performance-overview__scroll">
+                <table className="creator-performance-overview__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Release</th>
+                      <th scope="col">Platform</th>
+                      <th scope="col">Content</th>
+                      <th scope="col">Published</th>
+                      <th scope="col">Latest snapshot</th>
+                      <th scope="col">Views</th>
+                      <th scope="col">Likes</th>
+                      <th scope="col">Comments</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePerformanceOverviewRows.map((row) => (
+                      <tr key={row.releaseId} className="creator-performance-overview__row" data-release-id={row.releaseId}>
+                        <th scope="row" className="creator-performance-overview__release">
+                          <span className="creator-performance-overview__release-title">{row.releaseTitle}</span>
+                          <span className="creator-performance-overview__release-project">{row.projectName}</span>
+                        </th>
+                        <td>{row.platform}</td>
+                        <td>{row.contentTitle}</td>
+                        <td>{row.publishedAt ? row.publishedAt : <span className="creator-performance-overview__muted">-</span>}</td>
+                        <td>
+                          {row.hasSnapshot && row.latestCapturedAt
+                            ? row.latestCapturedAt
+                            : <span className="creator-performance-overview__muted">No performance snapshots</span>}
+                        </td>
+                        <td>{renderPerformanceOverviewMetricCell(row.metrics.views)}</td>
+                        <td>{renderPerformanceOverviewMetricCell(row.metrics.likes)}</td>
+                        <td>{renderPerformanceOverviewMetricCell(row.metrics.comments)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>
