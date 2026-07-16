@@ -99,6 +99,7 @@ describe('streamViaDaemon', () => {
       conversationId: 'conversation-1',
     });
 
+    expect(handlers.onArtifactCount).toHaveBeenCalledWith(2);
     expect(published).toEqual([{
       runId: 'run-artifact-success',
       projectId: 'project-1',
@@ -2214,6 +2215,7 @@ function createDaemonHandlers() {
   return {
     ...createStreamHandlers(),
     onAgentEvent: vi.fn(),
+    onArtifactCount: vi.fn(),
   };
 }
 
