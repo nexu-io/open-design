@@ -1628,8 +1628,13 @@ function PluginImportModal({
     (kind === 'zip' && zipFile !== null) ||
     (kind === 'folder' && folderFiles.length > 0);
 
+  function requestClose() {
+    if (working) return;
+    onClose();
+  }
+
   return (
-    <div className="plugins-import-modal__backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="plugins-import-modal__backdrop" role="presentation" onMouseDown={requestClose}>
       <section
         className="plugins-import-modal"
         role="dialog"
@@ -1645,7 +1650,8 @@ function PluginImportModal({
           <button
             type="button"
             className="plugins-import-modal__close"
-            onClick={onClose}
+            onClick={requestClose}
+            disabled={working}
             aria-label="Close import dialog"
           >
             <Icon name="close" size={16} />
@@ -1763,8 +1769,9 @@ function PluginImportModal({
                 area: 'import_modal',
                 element: 'cancel',
               });
-              onClose();
+              requestClose();
             }}
+            disabled={working}
           >
             Cancel
           </button>

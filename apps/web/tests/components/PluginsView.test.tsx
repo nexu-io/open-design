@@ -781,6 +781,39 @@ describe('PluginsView', () => {
     expect(await within(dialog).findByText('GitHub import failed.')).toBeTruthy();
   });
 
+  it('keeps the import dialog open while a request is pending', async () => {
+    let resolveImport: ((outcome: PluginInstallOutcome) => void) | undefined;
+    mockedInstallPluginSource.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveImport = resolve;
+      }),
+    );
+
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Import a plugin' });
+    fireEvent.change(within(dialog).getByLabelText('GitHub, archive, or marketplace source'), {
+      target: { value: 'github:example/missing-plugin' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => expect(mockedInstallPluginSource)
+      .toHaveBeenCalledWith('github:example/missing-plugin'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close import dialog' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    fireEvent.mouseDown(dialog.parentElement!);
+    expect(screen.getByRole('dialog', { name: 'Import a plugin' })).toBe(dialog);
+
+    resolveImport?.({
+      ok: false,
+      warnings: [],
+      log: [],
+      message: 'GitHub import failed.',
+    });
+    expect(await within(dialog).findByText('GitHub import failed.')).toBeTruthy();
+  });
+
   it('confirms a plugin share action before starting the GitHub repo task', async () => {
     mockedListPlugins.mockResolvedValue([
       makePlugin('official-plugin', 'bundled', 'bundled'),
