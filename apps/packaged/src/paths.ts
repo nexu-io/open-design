@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isAbsolute, join, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 import { APP_KEYS, normalizeNamespace } from "@open-design/sidecar-proto";
 
@@ -16,7 +16,7 @@ export type PackagedNamespacePaths = {
   electronUserDataRoot: string;
   headlessIdentityPath: string;
   /**
-   * Channel-root directory â€” one level above the `namespaces/` parent. The
+   * Channel-root directory â€? one level above the `namespaces/` parent. The
    * daemon writes `installation.json` here so installationId survives any
    * reset of the namespace-scoped data subtree (namespace churn between
    * packaged versions, future per-namespace data wipes, etc.). See
@@ -42,6 +42,28 @@ function expandHomePrefix(raw: string): string {
   return raw;
 }
 
+/**
+ * Platform-correct check for whether a resolved `OD_DATA_DIR` value is an
+ * absolute path.
+ *
+ * Accepts an explicit `platform` argument so the packaged path contract can be
+ * unit-tested without mutating the global `process.platform`. That matters on
+ * Windows: `node:path` binds `isAbsolute` to the host platform at module-load
+ * time, so faking `process.platform` does NOT change which implementation runs
+ * and previously let cross-platform assertions pass on the wrong branch.
+ *
+ * - `win32`: accepts drive-absolute (`C:\...`) and UNC (`\\server\share`) paths.
+ * - `linux` / `darwin`: accepts POSIX-absolute (`/abs`) paths only and rejects
+ *   `C:\...` and `\\server\share` (treated as relative).
+ * - Relative paths are rejected on every platform.
+ */
+export function isPackagedDataDirAbsolute(
+  value: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === "win32" ? win32.isAbsolute(value) : posix.isAbsolute(value);
+}
+
 function getScopedPackagedDataRootNamespace(raw: string): string | null {
   const parts = raw.replace(/[\\/]+$/g, "").split(/[\\/]+/);
   const last = parts.length - 1;
@@ -58,9 +80,7 @@ function resolvePackagedDataRoot(
   const odDataDir = env.OD_DATA_DIR?.trim();
   if (odDataDir) {
     const expanded = expandHomePrefix(odDataDir);
-    const isAbs = process.platform === "win32"
-      ? win32.isAbsolute(expanded)
-      : isAbsolute(expanded);
+    const isAbs = isPackagedDataDirAbsolute(expanded);
     if (!isAbs) {
       throw new PackagedPathAccessError(
         [
@@ -106,7 +126,7 @@ export function resolvePackagedNamespacePaths(
   const namespaceRoot = join(config.namespaceBaseRoot, normalizedNamespace);
   const dataRoot = resolvePackagedDataRoot(config, normalizedNamespace, env);
   // Channel root = parent of the `namespaces/` directory. With the default
-  // packaged layout this resolves to `<electronApp.userData>` â€” e.g.
+  // packaged layout this resolves to `<electronApp.userData>` â€? e.g.
   // `~/Library/Application Support/Open Design Prerelease/` on mac. Custom
   // `namespaceBaseRoot` overrides (tests, multi-namespace deployments)
   // still get a usable parent here.

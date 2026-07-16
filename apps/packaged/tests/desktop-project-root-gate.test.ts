@@ -13,7 +13,7 @@
  *      and `openPath(projectId)` must only forward projects whose
  *      resolvedDir came from the trusted-picker flow.
  */
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -25,6 +25,40 @@ import {
   isOpenPathAllowedForProject,
   signDesktopImportToken,
 } from "@open-design/desktop/main";
+
+// Capability probe: can this host create directory symlinks? On Windows the
+// "Create symbolic links" privilege is frequently absent, so `symlinkSync`
+// with the `"dir"` type throws EPERM. We probe once at module load and skip the
+// two directory-symlink security tests when the privilege is unavailable —
+// never disguising the gap as a product pass, never deleting the coverage.
+let canCreateDirSymlink = false;
+try {
+  const probeRoot = mkdtempSync(path.join(tmpdir(), "od-symlink-probe-"));
+  try {
+    const probeTarget = path.join(probeRoot, "target");
+    mkdirSync(probeTarget);
+    const probeLink = path.join(probeRoot, "link");
+    symlinkSync(probeTarget, probeLink, "dir");
+    canCreateDirSymlink = true;
+  } finally {
+    rmSync(probeRoot, { recursive: true, force: true });
+  }
+} catch {
+  canCreateDirSymlink = false;
+}
+
+/**
+ * Registers a directory-symlink security test. Runs normally when the host can
+ * create directory symlinks; otherwise it is explicitly skipped with a reason
+ * so the capability gap is visible rather than silently green.
+ */
+function dirSymlinkSecurityTest(title: string, fn: () => Promise<void>) {
+  if (canCreateDirSymlink) {
+    it(title, fn);
+  } else {
+    it.skip(`${title} [SKIP: Windows directory symlink privilege unavailable]`, fn);
+  }
+}
 
 let tempRoot = "";
 
@@ -73,7 +107,7 @@ describe("validateExistingDirectory", () => {
     if (result.ok) expect(result.resolved).toBe(await realpath(tempRoot));
   });
 
-  it("realpath-resolves symlinks so attackers cannot register one path and reach another", async () => {
+  dirSymlinkSecurityTest("realpath-resolves symlinks so attackers cannot register one path and reach another", async () => {
     const realDir = path.join(tempRoot, "real");
     await mkdir(realDir);
     const linkDir = path.join(tempRoot, "link");
@@ -95,7 +129,7 @@ describe("validateExistingDirectory", () => {
     if (!result.ok) expect(result.reason).toMatch(/application bundles/i);
   });
 
-  it("rejects symlinks whose realpath resolves to a .app bundle", async () => {
+  dirSymlinkSecurityTest("rejects symlinks whose realpath resolves to a .app bundle", async () => {
     // Defense in depth: a renderer or malicious project metadata
     // could try to launder a `.app` bundle via a symlink whose name
     // doesn't end in `.app`. The realpath check before the suffix

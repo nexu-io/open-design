@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";
 import { PackagedPathAccessError } from "../src/errors.js";
-import { resolvePackagedNamespacePaths } from "../src/paths.js";
+import { isPackagedDataDirAbsolute, resolvePackagedNamespacePaths } from "../src/paths.js";
 
 function stubPlatform(value: NodeJS.Platform): () => void {
   const original = process.platform;
@@ -201,24 +201,22 @@ describe("resolvePackagedNamespacePaths", () => {
     expect(err.message).toMatch(/absolute path/);
   });
 
-  it("rejects Windows-style OD_DATA_DIR values on non-Windows hosts so the absolute-path guard is platform-correct", () => {
-    const config = fakeConfig();
-    const restore = stubPlatform("linux");
-    try {
-      expect(
-        () =>
-          resolvePackagedNamespacePaths(config, config.namespace, {
-            OD_DATA_DIR: "C:\\Users\\Fred\\OD",
-          }),
-      ).toThrow(PackagedPathAccessError);
-      expect(
-        () =>
-          resolvePackagedNamespacePaths(config, config.namespace, {
-            OD_DATA_DIR: "\\\\server\\share",
-          }),
-      ).toThrow(PackagedPathAccessError);
-    } finally {
-      restore();
-    }
+  it("rejects Windows-style OD_DATA_DIR values under a Linux platform so the absolute-path guard is platform-correct", () => {
+    // Test the pure helper with an explicit platform so the assertion does not
+    // depend on mutating the global process.platform (unreliable on Windows:
+    // node:path binds isAbsolute to the host platform at module-load time).
+    // Covers real Windows semantics (drive + UNC accepted) and explicit Linux
+    // input (drive + UNC rejected, POSIX-absolute accepted).
+    expect(isPackagedDataDirAbsolute("C:\\Users\\Fred\\OD", "win32")).toBe(true);
+    expect(isPackagedDataDirAbsolute("\\\\server\\share", "win32")).toBe(true);
+    expect(isPackagedDataDirAbsolute("/Users/fred/OD", "win32")).toBe(true);
+
+    expect(isPackagedDataDirAbsolute("C:\\Users\\Fred\\OD", "linux")).toBe(false);
+    expect(isPackagedDataDirAbsolute("\\\\server\\share", "linux")).toBe(false);
+    expect(isPackagedDataDirAbsolute("/Users/fred/OD", "linux")).toBe(true);
+
+    // Relative paths are rejected on every platform.
+    expect(isPackagedDataDirAbsolute("project/.od", "win32")).toBe(false);
+    expect(isPackagedDataDirAbsolute("project/.od", "linux")).toBe(false);
   });
 });
