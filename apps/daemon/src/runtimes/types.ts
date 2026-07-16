@@ -125,7 +125,7 @@ export type RuntimeAgentDef = {
   // as an Anthropic user message (so tool_result blocks can later be
   // injected into the same stdin without re-spawning the child). Only
   // honored for adapters that also set `promptViaStdin: true`.
-  promptInputFormat?: 'text' | 'stream-json';
+  promptInputFormat?: 'text' | 'stream-json' | 'deepseek-stream-json';
   eventParser?: string;
   env?: Record<string, string>;
   listModels?: RuntimeListModels;

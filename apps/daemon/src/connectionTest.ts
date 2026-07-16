@@ -633,7 +633,6 @@ const SAMPLE_MAX_CHARS = 120;
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
 const SMOKE_PROMPT = 'Reply with only: ok';
-
 function formatPromptForAgentStdin(
   def: Pick<RuntimeAgentDef, 'promptInputFormat'>,
   prompt: string,
@@ -646,6 +645,11 @@ function formatPromptForAgentStdin(
         role: 'user',
         content: [{ type: 'text', text: prompt }],
       },
+    })}\n`;
+  } else if (promptInputFormat === 'deepseek-stream-json') {
+    return `${JSON.stringify({
+      type: 'user',
+      content: prompt,
     })}\n`;
   }
   return prompt;
