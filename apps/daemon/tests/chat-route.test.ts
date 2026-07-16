@@ -2987,6 +2987,122 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('latches intent signals on the conversation so a signal-free later turn keeps the deck framework', async () => {
+    // Red spec for specs/current/intent-signal-cache-hotfix.md §3 case 6 (R2).
+    // History is trimmed on agent switch (scopeHistoryToAgent) and
+    // non-transcript clients never resend prior turns, so a deck signal that
+    // fired on turn 1 must persist on the conversation row — recomputing it
+    // from the scanned text alone lets it flip OFF again and re-sends the
+    // ~17K stable block in both directions.
+    const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for intent-signal latch tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Intent signal latch fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const createConversationResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(createConversationResponse.ok).toBe(true);
+    const { conversation } = await createConversationResponse.json() as {
+      conversation: { id: string };
+    };
+    const conversationId = conversation.id;
+
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-intent-latch-'));
+    tempDirs.push(captureDir);
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+});
+`,
+        async () => {
+          const runTurn = async (
+            turn: { message: string; currentPrompt: string },
+            capturePath: string,
+          ): Promise<string> => {
+            process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+            const response = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentId: 'opencode',
+                projectId,
+                conversationId,
+                message: turn.message,
+                currentPrompt: turn.currentPrompt,
+              }),
+            });
+            expect(response.status).toBe(202);
+            const { runId } = await response.json() as { runId: string };
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return readFileSync(capturePath, 'utf8');
+          };
+
+          // Turn 1 mentions a deck in the user's own words → framework present.
+          const deckBrief = '帮我做一份路演材料，先出内容大纲';
+          const turn1Prompt = await runTurn(
+            { message: `## user\n${deckBrief}`, currentPrompt: deckBrief },
+            join(captureDir, 'turn1.txt'),
+          );
+          expect(turn1Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // Turn 2 carries no deck vocabulary and a trimmed transcript
+          // (agent-switch trim / non-transcript client): the latched
+          // conversation signal must keep the framework present.
+          const followUp = '把主色调调亮一点';
+          const turn2Prompt = await runTurn(
+            { message: `## user\n${followUp}`, currentPrompt: followUp },
+            join(captureDir, 'turn2.txt'),
+          );
+          expect(turn2Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // The latch is persisted on the conversation row.
+          const dbFile = resolve(process.env.OD_DATA_DIR as string, 'app.sqlite');
+          const sqlite = new Database(dbFile, { readonly: true });
+          try {
+            const row = sqlite
+              .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+              .get(conversationId) as { intentSignalsJson: string | null } | undefined;
+            expect(row?.intentSignalsJson).toBeTruthy();
+            expect(JSON.parse(row?.intentSignalsJson ?? '{}')).toMatchObject({ deck: true });
+          } finally {
+            sqlite.close();
+          }
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+      }
+    }
+  });
+
   it('uses a project design system in sandboxed chat runs without an explicit run designSystemId', async () => {
     const projectId = `project-ds-${randomUUID()}`;
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
