@@ -1,0 +1,19 @@
+{
+  "candidateId": "451098bc-2bf8-4861-b57e-4af7fdadb973",
+  "projectId": "brand-perplexity-5883f5",
+  "runId": "f587d819-0b00-46c9-b74a-091217ecaa78",
+  "conversationId": "30ec869d-e880-49b5-97d4-09da8e7b7981",
+  "provenance": {
+    "summary": "Detected from SKILL.md after a successful run.",
+    "detectedAt": 1784328014452
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 550,
+      "copied": true
+    }
+  ]
+}
