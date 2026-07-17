@@ -166,6 +166,7 @@ export type DesktopUpdaterDeps = {
   openPath?: (path: string) => Promise<string>;
   processExecPath?: string;
   processPid?: number;
+  removeLauncherPayloadRoot?: (path: string) => Promise<void>;
   spawnDetached?: SpawnInstallerHelper;
 };
 
@@ -178,6 +179,11 @@ export type LauncherPayloadExtractInput = {
 
 type DesktopUpdaterLogger = Pick<Console, "error" | "warn"> & Partial<Pick<Console, "info">>;
 type DetachedProcess = { unref(): void };
+type LauncherPayloadCleanupTrigger = "activate" | "prepare-existing" | "prepare-promoted";
+type LauncherPayloadCleanupFailure = {
+  error: NonNullable<LauncherCleanupEntry["error"]>;
+  version: string;
+};
 type SpawnInstallerHelper = (
   command: string,
   args: string[],
@@ -1275,6 +1281,9 @@ async function prepareLauncherPayloadRelease(input: {
   activeRelease: LoadedRelease;
   config: DesktopUpdaterConfig;
   extractLauncherPayloadArchive: (extractInput: LauncherPayloadExtractInput) => Promise<void>;
+  logger: DesktopUpdaterLogger;
+  now: () => Date;
+  removeLauncherPayloadRoot: (path: string) => Promise<void>;
 }): Promise<void> {
   if (input.config.launcherRoot == null || input.config.launcherRuntimePath == null || input.config.namespace == null) {
     throw new Error("launcher payload prepare requires launcher root, runtime path, and namespace");
@@ -1303,22 +1312,35 @@ async function prepareLauncherPayloadRelease(input: {
       if (!existingVersion.isDirectory() || existingVersion.isSymbolicLink()) {
         throw new Error(`launcher payload version root is not a plain directory: ${versionPaths.versionRoot}`);
       }
+      let existingVersionValid = false;
       try {
         await assertPreparedLauncherPayloadRelease({
           config: input.config,
           root: versionPaths.versionRoot,
           version: input.activeRelease.ref.version,
         });
-        await cleanupLauncherPayloadRoots(versionPaths, new Set([
-          input.activeRelease.ref.version,
-          ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
-          ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
-        ]));
-        return;
+        existingVersionValid = true;
       } catch {
         // Keep the existing version root intact until the replacement staging
         // payload has fully validated. If validation fails below, the old root
         // remains available for forensic inspection or a later retry.
+      }
+      if (existingVersionValid) {
+        await cleanupLauncherPayloadRoots({
+          config: input.config,
+          currentRuntime,
+          keepVersions: new Set([
+            input.activeRelease.ref.version,
+            ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
+            ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
+          ]),
+          logger: input.logger,
+          now: input.now,
+          removeLauncherPayloadRoot: input.removeLauncherPayloadRoot,
+          trigger: "prepare-existing",
+          versionPaths,
+        });
+        return;
       }
     }
 
@@ -1340,11 +1362,20 @@ async function prepareLauncherPayloadRelease(input: {
     await rm(versionPaths.versionRoot, { force: true, recursive: true });
     await rename(stagingRoot, versionPaths.versionRoot);
     promoted = true;
-    await cleanupLauncherPayloadRoots(versionPaths, new Set([
-      input.activeRelease.ref.version,
-      ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
-      ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
-    ]));
+    await cleanupLauncherPayloadRoots({
+      config: input.config,
+      currentRuntime,
+      keepVersions: new Set([
+        input.activeRelease.ref.version,
+        ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
+        ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
+      ]),
+      logger: input.logger,
+      now: input.now,
+      removeLauncherPayloadRoot: input.removeLauncherPayloadRoot,
+      trigger: "prepare-promoted",
+      versionPaths,
+    });
   } catch (error) {
     if (!promoted) await rm(stagingRoot, { force: true, recursive: true }).catch(() => undefined);
     throw error;
@@ -1354,7 +1385,9 @@ async function prepareLauncherPayloadRelease(input: {
 async function activatePreparedLauncherPayloadRelease(input: {
   activeRelease: LoadedRelease;
   config: DesktopUpdaterConfig;
+  logger: DesktopUpdaterLogger;
   now: () => Date;
+  removeLauncherPayloadRoot: (path: string) => Promise<void>;
 }): Promise<LauncherRuntimeDescriptor> {
   if (input.config.launcherRoot == null || input.config.launcherRuntimePath == null || input.config.namespace == null) {
     throw new Error("launcher payload activate requires launcher root, runtime path, and namespace");
@@ -1395,23 +1428,185 @@ async function activatePreparedLauncherPayloadRelease(input: {
     updatedAt: input.now().toISOString(),
   };
   await writeJson(input.config.launcherRuntimePath, nextRuntime);
-  await cleanupLauncherPayloadRoots(versionPaths, new Set([
-    nextActive.version,
-    ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
-    ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
-    ...(nextRuntime.lastSuccessful == null ? [] : [nextRuntime.lastSuccessful.version]),
-  ]));
+  await cleanupLauncherPayloadRoots({
+    config: input.config,
+    currentRuntime: nextRuntime,
+    keepVersions: new Set([
+      nextActive.version,
+      ...(currentRuntime.active == null ? [] : [currentRuntime.active.version]),
+      ...(currentRuntime.lastSuccessful == null ? [] : [currentRuntime.lastSuccessful.version]),
+      ...(nextRuntime.lastSuccessful == null ? [] : [nextRuntime.lastSuccessful.version]),
+    ]),
+    logger: input.logger,
+    now: input.now,
+    removeLauncherPayloadRoot: input.removeLauncherPayloadRoot,
+    trigger: "activate",
+    versionPaths,
+  });
   return nextRuntime;
 }
 
-async function cleanupLauncherPayloadRoots(versionPaths: ReturnType<typeof resolveLauncherVersionPaths>, keepVersions: ReadonlySet<string>): Promise<void> {
-  await rm(versionPaths.stagingRoot, { force: true, recursive: true });
-  const entries = await readdir(versionPaths.versionsRoot, { withFileTypes: true }).catch(() => []);
-  await Promise.all(entries.map(async (entry) => {
-    if (!entry.isDirectory()) return;
-    if (keepVersions.has(entry.name)) return;
-    await rm(join(versionPaths.versionsRoot, entry.name), { force: true, recursive: true });
-  }));
+function launcherCleanupErrorFrom(error: unknown): NonNullable<LauncherCleanupEntry["error"]> {
+  const code = (error as NodeJS.ErrnoException).code;
+  return launcherCleanupError(
+    typeof code === "string" && code.length > 0 ? code : "launcher-cleanup-failed",
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+function launcherRuntimeGenerationForVersion(runtime: LauncherRuntimeDescriptor, version: string): number {
+  return Math.max(
+    ...(runtime.active?.version === version ? [runtime.active.generation] : []),
+    ...(runtime.lastSuccessful?.version === version ? [runtime.lastSuccessful.generation] : []),
+    0,
+  );
+}
+
+async function readLauncherCleanupDescriptor(
+  config: DesktopUpdaterConfig,
+  cleanupPath: string,
+): Promise<LauncherCleanupDescriptor | null> {
+  try {
+    return validateLauncherCleanupDescriptor(
+      await readJsonStrict<LauncherCleanupDescriptor>(cleanupPath),
+      { channel: config.channel, namespace: config.namespace ?? "" },
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function writeDeferredLauncherCleanupFailures(input: {
+  cleanup: LauncherCleanupDescriptor | null;
+  config: DesktopUpdaterConfig;
+  currentRuntime: LauncherRuntimeDescriptor;
+  failures: LauncherPayloadCleanupFailure[];
+  nowIso: string;
+  path: string;
+}): Promise<void> {
+  const versions = new Map((input.cleanup?.versions ?? []).map((entry) => [entry.version, entry] as const));
+  for (const failure of input.failures) {
+    const existing = versions.get(failure.version);
+    if (existing?.state === "retained") continue;
+    versions.set(failure.version, {
+      error: failure.error,
+      generation: existing?.generation ?? launcherRuntimeGenerationForVersion(input.currentRuntime, failure.version),
+      reason: "cleanup-failed",
+      state: "cleanup-deferred",
+      updatedAt: input.nowIso,
+      version: failure.version,
+    });
+  }
+  const next: LauncherCleanupDescriptor = {
+    channel: input.config.channel,
+    currentVersion: input.cleanup?.currentVersion ?? input.config.currentVersion,
+    namespace: input.config.namespace ?? "",
+    updatedAt: input.nowIso,
+    version: LAUNCHER_SCHEMA_VERSION,
+    versions: [...versions.values()].sort((left, right) => (
+      compareLauncherVersions(left.version, right.version) || left.version.localeCompare(right.version)
+    )),
+  };
+  await writeJson(input.path, next);
+}
+
+async function cleanupLauncherPayloadRoots(input: {
+  config: DesktopUpdaterConfig;
+  currentRuntime: LauncherRuntimeDescriptor;
+  keepVersions: ReadonlySet<string>;
+  logger: DesktopUpdaterLogger;
+  now: () => Date;
+  removeLauncherPayloadRoot: (path: string) => Promise<void>;
+  trigger: LauncherPayloadCleanupTrigger;
+  versionPaths: ReturnType<typeof resolveLauncherVersionPaths>;
+}): Promise<void> {
+  const { config, currentRuntime, keepVersions, logger, now, removeLauncherPayloadRoot, trigger, versionPaths } = input;
+  await rm(versionPaths.stagingRoot, { force: true, recursive: true }).catch((error: unknown) => {
+    const cleanupError = launcherCleanupErrorFrom(error);
+    logger.warn("[open-design updater] failed post-commit launcher staging cleanup", {
+      error: cleanupError.message,
+      errorCode: cleanupError.code,
+      event: "launcher-payload-cleanup",
+      path: versionPaths.stagingRoot,
+      trigger,
+    });
+  });
+
+  let cleanup: LauncherCleanupDescriptor | null;
+  try {
+    cleanup = await readLauncherCleanupDescriptor(config, versionPaths.cleanupPath);
+  } catch (error) {
+    const cleanupError = launcherCleanupErrorFrom(error);
+    logger.warn("[open-design updater] skipped post-commit launcher cleanup because cleanup state is invalid", {
+      error: cleanupError.message,
+      errorCode: cleanupError.code,
+      event: "launcher-payload-cleanup",
+      path: versionPaths.cleanupPath,
+      trigger,
+    });
+    return;
+  }
+
+  const retainedVersions = new Set([
+    ...keepVersions,
+    ...(cleanup?.versions.filter((entry) => entry.state === "retained").map((entry) => entry.version) ?? []),
+  ]);
+  let entries;
+  try {
+    entries = await readdir(versionPaths.versionsRoot, { withFileTypes: true });
+  } catch (error) {
+    const cleanupError = launcherCleanupErrorFrom(error);
+    logger.warn("[open-design updater] failed to scan launcher payload versions after commit", {
+      error: cleanupError.message,
+      errorCode: cleanupError.code,
+      event: "launcher-payload-cleanup",
+      path: versionPaths.versionsRoot,
+      trigger,
+    });
+    return;
+  }
+
+  const failures: LauncherPayloadCleanupFailure[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || retainedVersions.has(entry.name)) continue;
+    const path = join(versionPaths.versionsRoot, entry.name);
+    try {
+      await removeLauncherPayloadRoot(path);
+    } catch (error) {
+      const cleanupError = launcherCleanupErrorFrom(error);
+      failures.push({ error: cleanupError, version: entry.name });
+      logger.warn("[open-design updater] deferred launcher payload cleanup", {
+        error: cleanupError.message,
+        errorCode: cleanupError.code,
+        event: "launcher-payload-cleanup",
+        path,
+        trigger,
+        version: entry.name,
+      });
+    }
+  }
+  if (failures.length === 0) return;
+
+  try {
+    await writeDeferredLauncherCleanupFailures({
+      cleanup,
+      config,
+      currentRuntime,
+      failures,
+      nowIso: now().toISOString(),
+      path: versionPaths.cleanupPath,
+    });
+  } catch (error) {
+    const cleanupError = launcherCleanupErrorFrom(error);
+    logger.warn("[open-design updater] failed to persist deferred launcher payload cleanup", {
+      error: cleanupError.message,
+      errorCode: cleanupError.code,
+      event: "launcher-payload-cleanup",
+      path: versionPaths.cleanupPath,
+      trigger,
+    });
+  }
 }
 
 async function ensureOwnedSubdir(root: string, name: string): Promise<string> {
@@ -2074,7 +2269,7 @@ async function runUpdateReleaseLifecycle(input: {
   });
 }
 
-function launcherCleanupError(code: string, message: string): LauncherCleanupEntry["error"] {
+function launcherCleanupError(code: string, message: string): NonNullable<LauncherCleanupEntry["error"]> {
   return { code, message };
 }
 
@@ -2391,6 +2586,9 @@ export function createDesktopUpdater(
   const openPath = deps.openPath ?? (async () => "openPath is not available");
   const processPid = deps.processPid ?? process.pid;
   const extractLauncherPayloadArchive = deps.extractLauncherPayloadArchive ?? defaultExtractLauncherPayloadArchive;
+  const removeLauncherPayloadRoot = deps.removeLauncherPayloadRoot ?? (async (path) => {
+    await rm(path, { force: true, recursive: true });
+  });
   const spawnDetached: SpawnInstallerHelper = deps.spawnDetached ?? ((command, args, options) => spawn(command, args, options));
   const launchInstallerAfterQuit = deps.launchInstallerAfterQuit ?? ((input) => (
     config.platform === "win32"
@@ -2542,6 +2740,9 @@ export function createDesktopUpdater(
         activeRelease: release,
         config,
         extractLauncherPayloadArchive,
+        logger,
+        now,
+        removeLauncherPayloadRoot,
       });
       return null;
     } catch (prepareError) {
@@ -3043,7 +3244,9 @@ export function createDesktopUpdater(
         await activatePreparedLauncherPayloadRelease({
           activeRelease,
           config,
+          logger,
           now,
+          removeLauncherPayloadRoot,
         });
         const relaunch = await requestPayloadRelaunch(opened.root.realRoot);
         if (relaunch.error != null && relaunch.error.length > 0) {

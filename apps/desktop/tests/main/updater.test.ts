@@ -291,6 +291,36 @@ async function writeReleaseFixture(root: string, key: string, channel: FixtureCh
   return releaseDir;
 }
 
+async function writeLauncherPayloadFixture(destinationRoot: string, version: string): Promise<void> {
+  await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+  await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+  await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+  await writeFile(join(destinationRoot, "manifest.json"), `${JSON.stringify({
+    channel: "beta",
+    entry: {
+      cwd: "payload",
+      executable: "payload/Open Design.exe",
+    },
+    namespace: "release-beta-win",
+    payloadRoot: "payload",
+    platform: "win32",
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    version,
+  })}\n`);
+}
+
+function failLauncherPayloadRemovalForVersion(version: string): (path: string) => Promise<void> {
+  return async (path) => {
+    if (basename(path) === version) {
+      throw Object.assign(
+        new Error(`EPERM: operation not permitted, rm '${join(path, "payload", "opencode.exe")}'`),
+        { code: "EPERM" },
+      );
+    }
+    await rm(path, { force: true, recursive: true });
+  };
+}
+
 describe("desktop updater", () => {
   it("derives installer observation summary paths from safe flow ids only", () => {
     const root = makeRoot();
@@ -614,6 +644,217 @@ describe("desktop updater", () => {
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.1"))).toBe(true);
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "0.9.0-beta.1"))).toBe(false);
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "updates", "staging"))).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("defers locked old launcher cleanup without blocking prepare or re-extracting the promoted payload", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design locked cleanup payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.2",
+    });
+    const launcherPaths = resolveLauncherPaths({
+      channel: "beta",
+      namespace: "release-beta-win",
+      root,
+    });
+    const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    let extractCount = 0;
+    const createUpdater = (removeLauncherPayloadRoot?: (path: string) => Promise<void>) => createDesktopUpdater({
+      arch: "x64",
+      currentVersion: "1.0.0-beta.1",
+      downloadRoot: join(root, "updates"),
+      env: {
+        ...updaterEnv(fixture.metadataUrl, "win32"),
+        [DESKTOP_UPDATE_ENV.CHANNEL]: DESKTOP_UPDATE_CHANNELS.BETA,
+        [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.1",
+      },
+      launcherLaunchPath,
+      launcherRoot: root,
+      launcherRuntimePath: launcherPaths.runtimePath,
+      namespace: "release-beta-win",
+      source: SIDECAR_SOURCES.PACKAGED,
+    }, {
+      extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+        extractCount += 1;
+        await writeLauncherPayloadFixture(destinationRoot, "1.0.0-beta.2");
+      },
+      logger,
+      ...(removeLauncherPayloadRoot == null ? {} : { removeLauncherPayloadRoot }),
+    });
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.1"), { recursive: true });
+      await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload"), { recursive: true });
+      await writeFile(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload", "opencode.exe"), "locked");
+      await mkdir(launcherPaths.stateRoot, { recursive: true });
+      await writeFile(launcherPaths.runtimePath, `${JSON.stringify({
+        active: { generation: 1, version: "1.0.0-beta.1" },
+        channel: "beta",
+        lastSuccessful: { generation: 1, version: "1.0.0-beta.1" },
+        namespace: "release-beta-win",
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      })}\n`);
+      await writeFile(launcherPaths.cleanupPath, `${JSON.stringify({
+        channel: "beta",
+        currentVersion: "1.0.0-beta.1",
+        namespace: "release-beta-win",
+        updatedAt: "2026-07-15T00:00:00.000Z",
+        version: LAUNCHER_SCHEMA_VERSION,
+        versions: [
+          {
+            generation: 1,
+            reason: "current-bound-package",
+            state: "retained",
+            updatedAt: "2026-07-15T00:00:00.000Z",
+            version: "1.0.0-beta.1",
+          },
+          {
+            generation: 0,
+            reason: "cleanup-failed",
+            removedAt: "2026-07-15T00:00:00.000Z",
+            state: "cleanup-removed",
+            updatedAt: "2026-07-15T00:00:00.000Z",
+            version: "0.9.0-beta.1",
+          },
+        ],
+      })}\n`);
+
+      const lockedUpdater = createUpdater(failLauncherPayloadRemovalForVersion("1.0.0-beta.0"));
+      const checked = await lockedUpdater.checkForUpdates();
+
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.error).toBeUndefined();
+      expect(extractCount).toBe(1);
+      expect(fixture.artifactRequests()).toBe(1);
+      expect(existsSync(join(launcherPaths.versionsRoot, "1.0.0-beta.2", "manifest.json"))).toBe(true);
+      expect(JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 1, version: "1.0.0-beta.1" },
+        lastSuccessful: { generation: 1, version: "1.0.0-beta.1" },
+      });
+      const deferred = JSON.parse(await readFile(launcherPaths.cleanupPath, "utf8")) as {
+        versions: Array<{ error?: { code?: string; message?: string }; reason: string; state: string; version: string }>;
+      };
+      expect(deferred.versions.find((entry) => entry.version === "1.0.0-beta.0")).toMatchObject({
+        error: { code: "EPERM", message: expect.stringContaining("opencode.exe") },
+        reason: "cleanup-failed",
+        state: "cleanup-deferred",
+      });
+      expect(deferred.versions.find((entry) => entry.version === "1.0.0-beta.1")).toMatchObject({
+        reason: "current-bound-package",
+        state: "retained",
+      });
+      expect(deferred.versions.find((entry) => entry.version === "0.9.0-beta.1")).toMatchObject({
+        reason: "cleanup-failed",
+        state: "cleanup-removed",
+      });
+
+      const rechecked = await lockedUpdater.checkForUpdates();
+      expect(rechecked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(rechecked.error).toBeUndefined();
+      expect(extractCount).toBe(1);
+      expect(fixture.artifactRequests()).toBe(1);
+
+      const restored = await createUpdater().status();
+      const cleaned = JSON.parse(await readFile(launcherPaths.cleanupPath, "utf8")) as {
+        versions: Array<{ state: string; version: string }>;
+      };
+      expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(restored.error).toBeUndefined();
+      expect(extractCount).toBe(1);
+      expect(fixture.artifactRequests()).toBe(1);
+      expect(existsSync(join(launcherPaths.versionsRoot, "1.0.0-beta.0"))).toBe(false);
+      expect(cleaned.versions.find((entry) => entry.version === "1.0.0-beta.0")).toMatchObject({
+        state: "cleanup-removed",
+      });
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps launcher activation successful when unrelated old-version cleanup is deferred", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design activation cleanup payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.2",
+    });
+    const launcherPaths = resolveLauncherPaths({
+      channel: "beta",
+      namespace: "release-beta-win",
+      root,
+    });
+    const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    let extractCount = 0;
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.1"), { recursive: true });
+      await mkdir(launcherPaths.stateRoot, { recursive: true });
+      await writeFile(launcherPaths.runtimePath, `${JSON.stringify({
+        active: { generation: 1, version: "1.0.0-beta.1" },
+        channel: "beta",
+        lastSuccessful: { generation: 1, version: "1.0.0-beta.1" },
+        namespace: "release-beta-win",
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      })}\n`);
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        currentVersion: "1.0.0-beta.1",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CHANNEL]: DESKTOP_UPDATE_CHANNELS.BETA,
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.1",
+        },
+        launcherLaunchPath,
+        launcherRoot: root,
+        launcherRuntimePath: launcherPaths.runtimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          extractCount += 1;
+          await writeLauncherPayloadFixture(destinationRoot, "1.0.0-beta.2");
+        },
+        logger,
+        removeLauncherPayloadRoot: failLauncherPayloadRemovalForVersion("1.0.0-beta.0"),
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload"), { recursive: true });
+      await writeFile(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload", "opencode.exe"), "locked");
+
+      const installed = await updater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.error).toBeUndefined();
+      expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
+      expect(extractCount).toBe(1);
+      expect(JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 2, version: "1.0.0-beta.2" },
+        lastSuccessful: { generation: 1, version: "1.0.0-beta.1" },
+      });
+      const cleanup = JSON.parse(await readFile(launcherPaths.cleanupPath, "utf8")) as {
+        versions: Array<{ error?: { code?: string; message?: string }; state: string; version: string }>;
+      };
+      expect(cleanup.versions.find((entry) => entry.version === "1.0.0-beta.0")).toMatchObject({
+        error: { code: "EPERM", message: expect.stringContaining("opencode.exe") },
+        state: "cleanup-deferred",
+      });
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
