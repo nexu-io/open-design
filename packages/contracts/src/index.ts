@@ -11,6 +11,7 @@ export * from './api/creator-content.js';
 export * from './api/creator-workbench.js';
 export * from './api/creator-media-assets.js';
 export * from './api/creator-release-package.js';
+export * from './api/creator-backup.js';
 export * from './api/creator-performance-snapshot.js';
 export * from './api/community.js';
 export * from './api/context.js';
