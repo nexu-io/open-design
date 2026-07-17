@@ -1118,9 +1118,40 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
           conversationFallbackBound = true;
+          if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
+            meta.assistantMessageId = randomUUID();
+          }
         }
       } catch (err) {
         console.warn('[runs] mcp conversation fallback failed', err);
+      }
+    }
+    // Persistence of the user turn must happen for both resolved paths:
+    // an explicit `conversationId` (e.g. external callers and Studio's own
+    // /api/runs flow that follows a client-side PUT) and the auto-resolved
+    // default conversation. We upsert by a deterministic id keyed to the
+    // run so the client-side PUT and this server-side insert converge on
+    // the same row when both fire, instead of producing two user rows.
+    if (
+      typeof meta.conversationId === 'string' &&
+      meta.conversationId &&
+      typeof meta.message === 'string' &&
+      meta.message.trim().length > 0
+    ) {
+      try {
+        const userMessageId =
+          typeof meta.userMessageId === 'string' && meta.userMessageId
+            ? meta.userMessageId
+            : `user-${meta.assistantMessageId ?? randomUUID()}`;
+        upsertMessage(db, meta.conversationId, {
+          id: userMessageId,
+          role: 'user',
+          content: meta.message,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        });
+      } catch (err) {
+        console.warn('[runs] user message persistence failed', err);
       }
     }
     const conversationSession =
@@ -2368,6 +2399,34 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
     meta.requestFingerprint = runRequestFingerprint(meta);
+    // /api/chat takes a self-contained `message + (projectId) + (conversationId)`
+    // payload. Unlike /api/runs it has no auto-resolved fallback path; the
+    // caller always supplies the conversation. Persist the user turn here so
+    // the conversation row lands with at least one user message before the
+    // assistant placeholder is pinned and streamed — Studio then sees a
+    // populated transcript and the messageCount matches /api/runs parity.
+    if (
+      typeof meta.conversationId === 'string' &&
+      meta.conversationId &&
+      typeof meta.message === 'string' &&
+      meta.message.trim().length > 0
+    ) {
+      try {
+        const userMessageId =
+          typeof meta.userMessageId === 'string' && meta.userMessageId
+            ? meta.userMessageId
+            : `user-${meta.assistantMessageId ?? randomUUID()}`;
+        upsertMessage(db, meta.conversationId, {
+          id: userMessageId,
+          role: 'user',
+          content: meta.message,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        });
+      } catch (err) {
+        console.warn('[chat] user message persistence failed', err);
+      }
+    }
     const creation = design.runs.createOrReuse(meta);
     if (creation.kind === 'conflict') {
       return sendApiError(

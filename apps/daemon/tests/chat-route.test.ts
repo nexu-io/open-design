@@ -805,6 +805,99 @@ process.stdin.on('end', () => {
     }
   });
 
+  // ── 2×2 regression: explicit conversationId → user message persistence ──────
+  // Issue #5811 — external callers passing an explicit `conversationId` to
+  // `/api/runs` or `/api/chat` got 0 user messages persisted because the
+  // upsertMessage call only ran in the auto-resolve (no conversationId) path.
+
+  async function assertUserMessagePersisted(
+    label: string,
+    route: 'runs' | 'chat',
+  ): Promise<void> {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for #5811 regression tests');
+    }
+    const projectId = `proj-5811-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: `5811-${label}` }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    // Use the auto-created conversation from project creation.
+    const conversationsResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations`,
+    );
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'hello from 5811' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const url = route === 'runs' ? '/api/runs' : '/api/chat';
+        const response = await fetch(`${baseUrl}${url}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            message: 'user turn for 5811',
+          }),
+        });
+        expect(response.ok).toBe(true);
+
+        // Wait for the run to finish and read messages.
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+        const msgResponse = await fetch(
+          `${baseUrl}/api/projects/${projectId}/conversations/${conversationId}/messages`,
+        );
+        expect(msgResponse.ok).toBe(true);
+        const msgBody = await msgResponse.json() as {
+          messages: Array<{ role: string; content: string }>;
+        };
+
+        expect(
+          msgBody.messages,
+          `${route} with explicit conversationId should persist at least user + assistant message`,
+        ).toHaveLength(2);
+        expect(msgBody.messages[0]).toMatchObject({
+          role: 'user',
+          content: 'user turn for 5811',
+        });
+      },
+    );
+  }
+
+  it.runIf(process.env.OD_DATA_DIR)(
+    'persists user message on /api/runs with explicit conversationId (#5811)',
+    async () => {
+      await assertUserMessagePersisted('runs-explicit', 'runs');
+    },
+  );
+
+  it.runIf(process.env.OD_DATA_DIR)(
+    'persists user message on /api/chat with explicit conversationId (#5811)',
+    async () => {
+      await assertUserMessagePersisted('chat-explicit', 'chat');
+    },
+  );
+
   it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for assistant message pin tests');
