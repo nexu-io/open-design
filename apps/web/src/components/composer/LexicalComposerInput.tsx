@@ -165,7 +165,11 @@ export interface LexicalComposerInputProps {
   ): boolean;
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
-  comboboxAria?: { activeId: string | null; expanded: boolean };
+  comboboxAria?: {
+    activeId: string | null;
+    controlsId?: string;
+    expanded: boolean;
+  };
   title?: string;
   // Test hook for the contenteditable host. Defaults to the project
   // composer's id; HomeHero overrides it so its own tests/selectors keep
@@ -777,7 +781,7 @@ export const LexicalComposerInput = forwardRef<
               title={title ?? placeholder}
               role="combobox"
               aria-expanded={comboboxAria?.expanded ? 'true' : 'false'}
-              aria-controls="mention-listbox"
+              aria-controls={comboboxAria?.controlsId ?? 'mention-listbox'}
               {...(comboboxAria?.activeId
                 ? { 'aria-activedescendant': comboboxAria.activeId }
                 : {})}

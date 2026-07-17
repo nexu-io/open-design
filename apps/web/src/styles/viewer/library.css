@@ -366,7 +366,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  padding: 5px;
+  padding: 0;
   /* removed: position, bottom, left, right, margin-bottom, fixed max-height, z-index */
 }
 .slash-popover-head {
@@ -374,14 +374,28 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 5px 7px 7px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
-  margin-bottom: 4px;
   font-size: 10px;
   font-weight: 600;
   color: var(--text-soft);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+.slash-popover-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.slash-popover-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
 }
 .slash-popover-hint {
   font-size: 10px;
@@ -389,6 +403,31 @@
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
+}
+.slash-popover-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding: 5px;
+  scroll-padding-block: 5px;
+}
+.slash-popover-empty {
+  padding: 24px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+.slash-section-label {
+  padding: 8px 8px 4px;
+  color: var(--text-soft);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .slash-item {
   display: flex;
@@ -398,11 +437,11 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 8px 9px;
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
   font: inherit;
-  min-height: 34px;
+  min-height: 40px;
   transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .slash-item:hover { background: var(--bg-subtle); }
@@ -425,20 +464,37 @@
   margin-top: 1px;
 }
 .slash-item-body { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.slash-item-row { display: flex; align-items: baseline; gap: 8px; }
+.slash-item-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .slash-item-label {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-strong);
   background: transparent;
   padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .slash-item-arg {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.slash-item-desc { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+.slash-item-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* --- CJK (Chinese / Korean) Comfort Pass --- */
 :lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ko) {

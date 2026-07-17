@@ -1454,6 +1454,60 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('staged-contexts').textContent).toContain('recovered.txt');
   });
 
+  it('keeps the slash palette navigable and describes MCP commands accurately', async () => {
+    servers = [
+      {
+        id: 'zeta-tools',
+        label: 'Zeta Tools',
+        transport: 'stdio',
+        enabled: true,
+        command: 'zeta-mcp',
+      },
+      {
+        id: 'render-lab',
+        label: 'Higgsfield Video',
+        transport: 'stdio',
+        enabled: true,
+        command: 'render-lab-mcp',
+      },
+    ];
+
+    renderComposer();
+    await flushMounts();
+    await typeAndSettle('/');
+
+    const popover = await screen.findByTestId('slash-popover');
+    expect(popover.querySelector('.slash-popover-results')).toBeTruthy();
+    expect(screen.getByTestId('slash-command-count').textContent).toBe('3');
+    expect(screen.queryByText('Toggle, adopt, or jump to pet settings.')).toBeNull();
+
+    const optionText = screen.getAllByRole('option').map((option) => option.textContent ?? '');
+    expect(optionText[0]).toContain('/mcp');
+    expect(optionText[1]).toContain('/mcp render-lab');
+    expect(optionText[2]).toContain('/mcp zeta-tools');
+    expect(optionText[1]).toContain('Third-party tools for your coding agent.');
+    expect(screen.getByTestId('chat-composer-input').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('chat-composer-input').getAttribute('aria-controls')).toBe('slash-listbox');
+    expect(screen.getByTestId('chat-composer-input').getAttribute('aria-activedescendant')).toBe('slash-opt-0');
+
+    await typeAndSettle('/higgsfield');
+    await waitFor(() => {
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+      expect(screen.getByRole('option').textContent).toContain('/mcp render-lab');
+    });
+  });
+
+  it('keeps the slash palette open with useful feedback when no command matches', async () => {
+    renderComposer();
+    await flushMounts();
+    await typeAndSettle('/missing-command');
+
+    expect(await screen.findByTestId('slash-popover')).toBeTruthy();
+    expect(screen.getByText('No results for “missing-command”.')).toBeTruthy();
+    expect(screen.getByTestId('chat-composer-input').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('chat-composer-input').getAttribute('aria-activedescendant')).toBeNull();
+  });
+
   // The sliders "tools" popover (Official / My plugins switch, plugin search)
   // and the standalone "@" mention trigger button were removed from the
   // composer; plugins/skills/MCP are now reached via typed @-mentions and the

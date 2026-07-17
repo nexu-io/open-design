@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Fragment,
   forwardRef,
   useCallback,
   useEffect,
@@ -169,6 +170,10 @@ interface SlashCommand {
   argHint?: string;
   // Icon glyph from the project Icon set.
   icon: 'sparkles' | 'eye' | 'sliders';
+  // Additional searchable metadata that should not inflate the visible label.
+  searchText?: string;
+  // Server shortcuts are visually grouped below the primary commands.
+  section?: 'mcp';
 }
 
 type DesignToolboxResourceKind =
@@ -853,30 +858,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // ready for an argument.
     const slashCommands = useMemo<SlashCommand[]>(() => {
       const list: SlashCommand[] = [];
-      // External MCP servers — `/mcp` opens settings, `/mcp <id>` inserts a
-      // prompt-side hint nudging the model to use that server's tools. The
-      // hint flows through to the agent verbatim; the daemon already wired
-      // the MCP config into the agent's launch so the tools are callable.
-      if (onOpenMcpSettings) {
-        list.push({
-          id: 'mcp',
-          label: '/mcp',
-          insert: '/mcp ',
-          descKey: 'pet.slashPet',
-          icon: 'sliders',
-          argHint: 'open settings · <server-id> to insert hint',
-        });
-      }
-      for (const s of enabledMcpServers) {
-        list.push({
-          id: `mcp-${s.id}`,
-          label: `/mcp ${s.id}`,
-          insert: `Use the \`${s.id}\` MCP server tools. `,
-          descKey: 'pet.slashPet',
-          icon: 'sparkles',
-          argHint: s.label || s.transport,
-        });
-      }
       if (researchAvailable) {
         list.push({
           id: 'search',
@@ -887,6 +868,39 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           argHint: t('pet.slashSearchArg'),
         });
       }
+      // External MCP servers — `/mcp` opens settings, `/mcp <id>` inserts a
+      // prompt-side hint nudging the model to use that server's tools. The
+      // hint flows through to the agent verbatim; the daemon already wired
+      // the MCP config into the agent's launch so the tools are callable.
+      if (onOpenMcpSettings) {
+        list.push({
+          id: 'mcp',
+          label: '/mcp',
+          insert: '/mcp ',
+          descKey: 'mcpClient.subtitle',
+          icon: 'sliders',
+          argHint: 'open settings · <server-id> to insert hint',
+        });
+      }
+      const sortedMcpServers = [...enabledMcpServers].sort((a, b) =>
+        (a.label || a.id).localeCompare(b.label || b.id),
+      );
+      for (const s of sortedMcpServers) {
+        const displayHint =
+          s.label && s.label.toLocaleLowerCase() !== s.id.toLocaleLowerCase()
+            ? s.label
+            : s.transport.toUpperCase();
+        list.push({
+          id: `mcp-${s.id}`,
+          label: `/mcp ${s.id}`,
+          insert: `Use the \`${s.id}\` MCP server tools. `,
+          descKey: 'mcpClient.subtitle',
+          icon: 'sparkles',
+          argHint: displayHint,
+          searchText: `${s.id} ${s.label ?? ''} ${s.transport}`,
+          section: 'mcp',
+        });
+      }
       return list;
     }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
 
@@ -894,8 +908,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!slash) return [] as SlashCommand[];
       const q = slash.q.toLowerCase();
       if (!q) return slashCommands;
-      return slashCommands.filter((c) => c.label.toLowerCase().includes(q));
-    }, [slash, slashCommands]);
+      return slashCommands.filter((c) =>
+        [c.label, c.argHint, c.searchText, t(c.descKey)]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      );
+    }, [slash, slashCommands, t]);
 
     function pickSlash(cmd: SlashCommand) {
       if (!slash) return;
@@ -2218,21 +2238,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function handlePopoverKey(
       key: 'ArrowDown' | 'ArrowUp' | 'Tab' | 'Enter' | 'Escape',
     ): boolean {
-      if (slash && filteredSlash.length > 0) {
-        if (key === 'ArrowDown') {
-          setSlashIndex((i) => (i + 1) % filteredSlash.length);
-          return true;
-        }
-        if (key === 'ArrowUp') {
-          setSlashIndex(
-            (i) => (i - 1 + filteredSlash.length) % filteredSlash.length,
-          );
-          return true;
-        }
-        if (key === 'Tab' || key === 'Enter') {
-          const safe = Math.min(slashIndex, filteredSlash.length - 1);
-          pickSlash(filteredSlash[safe]!);
-          return true;
+      if (slash) {
+        if (filteredSlash.length > 0) {
+          if (key === 'ArrowDown') {
+            setSlashIndex((i) => (i + 1) % filteredSlash.length);
+            return true;
+          }
+          if (key === 'ArrowUp') {
+            setSlashIndex(
+              (i) => (i - 1 + filteredSlash.length) % filteredSlash.length,
+            );
+            return true;
+          }
+          if (key === 'Tab' || key === 'Enter') {
+            const safe = Math.min(slashIndex, filteredSlash.length - 1);
+            pickSlash(filteredSlash[safe]!);
+            return true;
+          }
         }
         if (key === 'Escape') {
           setSlash(null);
@@ -2744,11 +2766,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onTrigger={handleEditorTrigger}
               onEnterSend={() => void submit()}
               onPasteFiles={handlePasteFiles}
-              popoverOpen={Boolean(mention) || Boolean(slash && filteredSlash.length > 0)}
+              popoverOpen={Boolean(mention) || Boolean(slash)}
               onPopoverKey={handlePopoverKey}
               comboboxAria={{
-                expanded: Boolean(mention),
-                activeId: mention ? `mention-opt-${mentionIndex}` : null,
+                expanded: Boolean(mention) || Boolean(slash),
+                controlsId: slash ? 'slash-listbox' : 'mention-listbox',
+                activeId: mention
+                  ? `mention-opt-${mentionIndex}`
+                  : slash && filteredSlash.length > 0
+                    ? `slash-opt-${Math.min(slashIndex, filteredSlash.length - 1)}`
+                    : null,
               }}
             />
             {placeholderScenarios.length > 0 ? (
@@ -2789,11 +2816,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           </CaretFloatingLayer>
           <CaretFloatingLayer
             caret={caretRect}
-            open={Boolean(slash && filteredSlash.length > 0)}
+            open={Boolean(slash)}
             boundaryRef={composerRootRef}
           >
             <SlashPopover
               commands={filteredSlash}
+              query={slash?.q ?? ''}
               activeIndex={Math.min(slashIndex, filteredSlash.length - 1)}
               onPick={pickSlash}
               onHover={(i) => setSlashIndex(i)}
@@ -5201,62 +5229,99 @@ function ImportItem({
 
 function SlashPopover({
   commands,
+  query,
   activeIndex,
   onPick,
   onHover,
   t,
 }: {
   commands: SlashCommand[];
+  query: string;
   activeIndex: number;
   onPick: (cmd: SlashCommand) => void;
   onHover: (index: number) => void;
   t: TranslateFn;
 }) {
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  const activeCommandId = commands[activeIndex]?.id ?? null;
+
+  useEffect(() => {
+    if (!activeCommandId) return;
+    const active = resultsRef.current?.querySelector<HTMLElement>(
+      '[role="option"][aria-selected="true"]',
+    );
+    active?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeCommandId]);
+
   return (
     <div
       className="slash-popover"
       data-testid="slash-popover"
+      id="slash-listbox"
       role="listbox"
       aria-label={t('pet.slashPopoverAria')}
     >
       <div className="slash-popover-head">
-        <span>{t('pet.slashPopoverTitle')}</span>
+        <span className="slash-popover-title">
+          <span>{t('pet.slashPopoverTitle')}</span>
+          <span className="slash-popover-count" data-testid="slash-command-count">
+            {commands.length}
+          </span>
+        </span>
         <span className="slash-popover-hint">{t('pet.slashPopoverHint')}</span>
       </div>
-      {commands.map((cmd, idx) => {
-        const active = idx === activeIndex;
-        return (
-          <button
-            key={cmd.id}
-            id={`slash-opt-${idx}`}
-            type="button"
-            role="option"
-            aria-selected={active}
-            className={`slash-item${active ? ' active' : ''}`}
-            onMouseDown={(e) => {
-              // Prevent the textarea from losing focus before the click
-              // handler fires — otherwise selectionStart resets and the
-              // pick replacement targets the wrong substring.
-              e.preventDefault();
-            }}
-            onMouseEnter={() => onHover(idx)}
-            onClick={() => onPick(cmd)}
-          >
-            <span className="slash-item-icon" aria-hidden>
-              <Icon name={cmd.icon} size={13} />
-            </span>
-            <span className="slash-item-body">
-              <span className="slash-item-row">
-                <code className="slash-item-label">{cmd.label}</code>
-                {cmd.argHint ? (
-                  <span className="slash-item-arg">{cmd.argHint}</span>
+      <div className="slash-popover-results" ref={resultsRef}>
+        {commands.length === 0 ? (
+          <div className="slash-popover-empty">
+            {t('chat.mentionNoResults', { query })}
+          </div>
+        ) : (
+          commands.map((cmd, idx) => {
+            const active = idx === activeIndex;
+            const startsMcpSection =
+              cmd.section === 'mcp' && commands[idx - 1]?.section !== 'mcp';
+            return (
+              <Fragment key={cmd.id}>
+                {startsMcpSection ? (
+                  <div className="slash-section-label">{t('mcpClient.title')}</div>
                 ) : null}
-              </span>
-              <span className="slash-item-desc">{t(cmd.descKey)}</span>
-            </span>
-          </button>
-        );
-      })}
+                <button
+                  id={`slash-opt-${idx}`}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`slash-item${active ? ' active' : ''}`}
+                  onMouseDown={(e) => {
+                    // Prevent the textarea from losing focus before the click
+                    // handler fires — otherwise selectionStart resets and the
+                    // pick replacement targets the wrong substring.
+                    e.preventDefault();
+                  }}
+                  onMouseEnter={() => onHover(idx)}
+                  onClick={() => onPick(cmd)}
+                >
+                  <span className="slash-item-icon" aria-hidden>
+                    <Icon name={cmd.icon} size={13} />
+                  </span>
+                  <span className="slash-item-body">
+                    <span className="slash-item-row">
+                      <code className="slash-item-label">{cmd.label}</code>
+                      {cmd.argHint ? (
+                        <span className="slash-item-arg" title={cmd.argHint}>
+                          {cmd.argHint}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="slash-item-desc" title={t(cmd.descKey)}>
+                      {t(cmd.descKey)}
+                    </span>
+                  </span>
+                </button>
+              </Fragment>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
