@@ -671,6 +671,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       typeof meta.conversationId === 'string' && meta.conversationId
         ? getConversation(db, meta.conversationId)
         : null;
+    // A run may only attach to a conversation owned by its own project. Without
+    // this guard a request pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins its messages and native session under
+    // B — corrupting B's chat history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (
+      conversationSession &&
+      typeof meta.projectId === 'string' &&
+      meta.projectId &&
+      conversationSession.projectId !== meta.projectId
+    ) {
+      return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+    }
     meta.sessionMode =
       meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
         ? normalizeConversationSessionMode(meta.sessionMode)
@@ -1474,6 +1487,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     );
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+    }
+    // A chat run may only attach to a conversation owned by its own project.
+    // Without this guard, pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins messages and the native session under
+    // B — corrupting B's history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId &&
+        typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      const chatConversation = getConversation(db, requestBody.conversationId);
+      if (chatConversation && chatConversation.projectId !== requestBody.projectId) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
     }
     const meta = {
       ...requestBody,
