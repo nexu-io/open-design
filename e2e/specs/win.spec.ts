@@ -409,6 +409,7 @@ winDescribe('packaged windows runtime smoke', () => {
     let rollback: RollbackEvidence | undefined;
     let offline: OfflineEvidence | undefined;
     let beforeDataFingerprint: ContentFingerprint | null = null;
+    let beforeDataFingerprints: ContentFingerprint[] | null = null;
     try {
       await measureSmokeStep(timings, 'pre-clean uninstall', async () => {
         await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
@@ -492,11 +493,18 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
       else expect(value.health.version).toEqual(expect.any(String));
-      // G7: capture a real content fingerprint of the isolated dataRoot BEFORE the upgrade.
+
+      const fingerprintPaths = resolveDataRootFingerprintPaths(dataRoot, namespaceRoot);
       if (!verifyCoreOnly) {
-        beforeDataFingerprint = await measureSmokeStep(timings, 'dataRoot fingerprint before update', async () =>
-          computeContentFingerprint(resolveDataRootFingerprintPaths(dataRoot, namespaceRoot)),
+        // G7 requires observable content in every allowlisted root. Seed only the
+        // isolated CI namespace, never a user data directory.
+        await measureSmokeStep(timings, 'seed release-gate data roots', async () =>
+          seedReleaseGateData(fingerprintPaths),
         );
+        beforeDataFingerprint = await measureSmokeStep(timings, 'dataRoot fingerprint before update', async () =>
+          computeContentFingerprint(fingerprintPaths),
+        );
+        beforeDataFingerprints = await Promise.all(fingerprintPaths.map((path) => computeContentFingerprint([path])));
       }
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
@@ -513,7 +521,31 @@ winDescribe('packaged windows runtime smoke', () => {
         await report.report.save('screenshots/open-design-win-before-update.png', await readFile(preUpdateScreenshotPath));
       }
 
-      if (!verifyCoreOnly) {
+      if (!verifyCoreOnly && beforeDataFingerprint != null) {
+        // G8 and G9 must run while the original version is still active. A
+        // successful update would otherwise make a same-version metadata file
+        // look like a rollback without downloading anything.
+        if (payloadFixture) {
+          rollback = await runChecksumMismatchRollbackScenario({
+            fixture: payloadFixture,
+            scenario: updateScenario,
+            dataRoot,
+            namespaceRoot,
+            beforeFingerprint: beforeDataFingerprint.fingerprint,
+            oldVersion: updateScenario.expectedCurrentVersion,
+          });
+        }
+        offline = await runMetadataUnreachableScenario({
+          dataRoot,
+          namespaceRoot,
+          scenario: updateScenario,
+          beforeFingerprint: beforeDataFingerprint.fingerprint,
+        });
+
+        // Restore the normal fixture before exercising the successful update.
+        if (payloadFixture) {
+          applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
+        }
         payloadUpdate = await measureSmokeStep(timings, 'payload update acceptance', async () =>
           runPayloadUpdateAcceptance({
             expectedVersion: expectedPayloadUpdateVersion,
@@ -524,17 +556,20 @@ winDescribe('packaged windows runtime smoke', () => {
 
       // ---- G7: real content fingerprint AFTER upgrade, compared to before ----
       // ---- G8/G9: real failure-path scenarios (full profile only) ----
-      if (!verifyCoreOnly && beforeDataFingerprint) {
-        const fingerprintPaths = resolveDataRootFingerprintPaths(dataRoot, namespaceRoot);
+      if (!verifyCoreOnly && beforeDataFingerprint && beforeDataFingerprints) {
+        const beforeDirs = beforeDataFingerprints;
         const afterCombined = await measureSmokeStep(timings, 'dataRoot fingerprint after update', async () =>
           computeContentFingerprint(fingerprintPaths),
         );
-        const beforeDirs = await Promise.all(fingerprintPaths.map((p) => computeContentFingerprint([p])));
         const afterDirs = await Promise.all(fingerprintPaths.map((p) => computeContentFingerprint([p])));
-        const measured = beforeDirs.some((d) => d.fileCount > 0) || afterDirs.some((d) => d.fileCount > 0);
+        const measured = beforeDirs.every((fingerprint) => fingerprint.fileCount > 0) &&
+          afterDirs.every((fingerprint) => fingerprint.fileCount > 0);
+        const dirsConsistent = beforeDirs.every((before, index) =>
+          before.fingerprint === afterDirs[index]?.fingerprint,
+        );
         dataRootIntegrity = {
           measured,
-          consistent: measured && beforeDataFingerprint.fingerprint === afterCombined.fingerprint,
+          consistent: measured && dirsConsistent && beforeDataFingerprint.fingerprint === afterCombined.fingerprint,
           before: beforeDataFingerprint,
           after: afterCombined,
           dirs: fingerprintPaths.map((p, i) => ({
@@ -544,34 +579,6 @@ winDescribe('packaged windows runtime smoke', () => {
             consistent: beforeDirs[i]?.fingerprint === afterDirs[i]?.fingerprint,
           })),
         };
-
-        // G9: real metadata-unreachable scenario — installed app must still start healthy.
-        try {
-          offline = await runMetadataUnreachableScenario({
-            dataRoot,
-            namespaceRoot,
-            scenario: updateScenario,
-            beforeFingerprint: beforeDataFingerprint.fingerprint,
-          });
-        } catch {
-          offline = { exercised: false, ok: false, metadataUnreachable: false };
-        }
-
-        // G8: real checksum-mismatch rollback scenario — old version stays healthy, data intact.
-        try {
-          if (payloadFixture) {
-            rollback = await runChecksumMismatchRollbackScenario({
-              fixture: payloadFixture,
-              scenario: updateScenario,
-              dataRoot,
-              namespaceRoot,
-              beforeFingerprint: beforeDataFingerprint.fingerprint,
-              oldVersion: expectedPayloadUpdateVersion ?? updateScenario.expectedCurrentVersion,
-            });
-          }
-        } catch {
-          rollback = { exercised: false, ok: false };
-        }
       }
 
       if (verifyReinstallWhileRunning && verifyCoreOnly) {
@@ -1694,6 +1701,13 @@ function normalizeOptionalEnv(value: string | undefined): string | null {
   return normalized == null || normalized.length === 0 ? null : normalized;
 }
 
+async function seedReleaseGateData(paths: string[]): Promise<void> {
+  await Promise.all(paths.map(async (root, index) => {
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, '.cw10-release-gate.json'), `${JSON.stringify({ gate: 'CW-10', root: index })}\n`, 'utf8');
+  }));
+}
+
 /**
  * G9 — real metadata-unreachable scenario. Points the updater at an unreachable
  * metadata endpoint; the already-installed app must still start and stay healthy,
@@ -1707,6 +1721,9 @@ async function runMetadataUnreachableScenario(opts: {
 }): Promise<OfflineEvidence> {
   const deadUrl = 'http://127.0.0.1:1/metadata.json';
   applyPackagedUpdateEnv(process.env, opts.scenario, deadUrl, { openDryRun: false });
+  const checked = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'check']);
+  const metadataUnreachable = checked.update?.state === 'error' && checked.update.error?.code === 'metadata-unreachable';
+  expect(metadataUnreachable).toBe(true);
   await runToolsPackJson('stop');
   await runToolsPackJson('start');
   const inspect = await waitForHealthyDesktop();
@@ -1717,8 +1734,8 @@ async function runMetadataUnreachableScenario(opts: {
   ).fingerprint;
   return {
     exercised: true,
-    ok: healthy && afterFingerprint === opts.beforeFingerprint,
-    metadataUnreachable: true,
+    ok: metadataUnreachable && healthy && afterFingerprint === opts.beforeFingerprint,
+    metadataUnreachable,
     beforeFingerprint: opts.beforeFingerprint,
     afterFingerprint,
   };
@@ -1746,27 +1763,34 @@ async function runChecksumMismatchRollbackScenario(opts: {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(tampered);
   });
-  await new Promise<void>((resolveListen) => server.listen(0, () => resolveListen()));
-  const address = server.address();
-  const port = typeof address === 'object' && address ? address.port : 0;
-  const tamperedUrl = `http://127.0.0.1:${port}/metadata.json`;
-  applyPackagedUpdateEnv(process.env, opts.scenario, tamperedUrl, { openDryRun: false });
-  await runPayloadUpdateAcceptance({ expectedVersion: opts.oldVersion }).catch(() => undefined);
-  const inspect = await waitForHealthyDesktop();
-  const health = assertHealthEvalValue(inspect.eval?.value);
-  const stillOld = health.health.version === opts.oldVersion;
-  const healthy = inspect.status?.state === 'running' && health.health.ok === true;
-  const afterFingerprint = (
-    await computeContentFingerprint(resolveDataRootFingerprintPaths(opts.dataRoot, opts.namespaceRoot))
-  ).fingerprint;
-  server.close();
-  return {
-    exercised: true,
-    ok: healthy && stillOld && afterFingerprint === opts.beforeFingerprint,
-    scenario: 'checksum-mismatch',
-    oldVersion: opts.oldVersion,
-    failureCode: 'checksum-mismatch',
-    beforeFingerprint: opts.beforeFingerprint,
-    afterFingerprint,
-  };
+  try {
+    await new Promise<void>((resolveListen) => server.listen(0, () => resolveListen()));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const tamperedUrl = `http://127.0.0.1:${port}/metadata.json`;
+    applyPackagedUpdateEnv(process.env, opts.scenario, tamperedUrl, { openDryRun: false });
+
+    const downloaded = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'download']);
+    const checksumMismatch = downloaded.update?.state === 'error' && downloaded.update.error?.code === 'checksum-mismatch';
+    expect(checksumMismatch).toBe(true);
+
+    const inspect = await waitForHealthyDesktop();
+    const health = assertHealthEvalValue(inspect.eval?.value);
+    const stillOld = health.health.version === opts.oldVersion;
+    const healthy = inspect.status?.state === 'running' && health.health.ok === true;
+    const afterFingerprint = (
+      await computeContentFingerprint(resolveDataRootFingerprintPaths(opts.dataRoot, opts.namespaceRoot))
+    ).fingerprint;
+    return {
+      exercised: true,
+      ok: checksumMismatch && healthy && stillOld && afterFingerprint === opts.beforeFingerprint,
+      scenario: 'checksum-mismatch',
+      oldVersion: opts.oldVersion,
+      failureCode: 'checksum-mismatch',
+      beforeFingerprint: opts.beforeFingerprint,
+      afterFingerprint,
+    };
+  } finally {
+    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+  }
 }

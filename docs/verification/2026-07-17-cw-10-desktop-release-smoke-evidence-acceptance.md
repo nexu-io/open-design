@@ -25,9 +25,10 @@
   - 指纹发散 → **`FAIL`**（理由："dataRoot or backups/creator content diverged across upgrade"）。
   - 内容指纹 `computeContentFingerprint` 与遍历顺序无关、与绝对路径无关、与 mtime 无关（仅依赖 `相对路径 + 文件大小 + 内容 SHA-256`）。
 - **P1 — Windows full profile 真实执行 G8 / G9 失败路径**（`e2e/specs/win.spec.ts`）：
-  - **G8（checksum-mismatch 回滚）**：取 fixture 真实 metadata，篡改其 `payloadSha256` 为 `deadbeef…`，由本地 HTTP server（`createServer`，端口 0）对外提供；套用篡改后 metadata URL，跑真实 `runPayloadUpdateAcceptance`；断言**旧版本仍健康、dataRoot 指纹不变** → `rollback.exercised = true`。
-  - **G9（metadata 不可达离线启动）**：把 updater 指向 `http://127.0.0.1:1/metadata.json`（不可达），停止再启动已安装应用；断言**应用仍健康启动、dataRoot 指纹不变** → `offline.exercised = true, metadataUnreachable = true`。
-  - 两者均包裹 `try/catch`，仅在 `!verifyCoreOnly && beforeDataFingerprint` 时执行；仅用 runner fixture HTTP server + CI 临时目录，**无任何 mock PASS**。
+  - **G8（checksum-mismatch 保持旧版本）**：在成功升级前，取 fixture 真实 metadata，篡改其 `payloadSha256` 为 `deadbeef…`，由本地 HTTP server（`createServer`，端口 0）对外提供；通过真实 `tools-pack inspect --update-action download` 触发下载，必须观察到 `update.error.code === "checksum-mismatch"`。随后断言**原版本仍健康、dataRoot 指纹不变**；不吞掉失败路径错误。
+  - **G9（metadata 不可达离线启动）**：在成功升级前把 updater 指向 `http://127.0.0.1:1/metadata.json`（不可达），通过真实 `tools-pack inspect --update-action check` 触发检查并断言 `update.error.code === "metadata-unreachable"`，再停止并启动已安装应用，断言**应用仍健康启动、dataRoot 指纹不变**。
+  - **G7（真实可观察内容）**：在升级前仅向 CI 临时命名空间的五个 Creator 存储目录和 `backups/creator` 写入种子文件，分别保存六个指纹；成功升级后逐项比对，任何缺失或发散均不得 PASS。
+  - 三者仅在 `!verifyCoreOnly && beforeDataFingerprint` 时执行；仅用 runner fixture HTTP server + CI 临时目录，**无任何 mock PASS**。
   - **core profile 或 macOS → G7/G8/G9 一律 `BLOCKED`，附准确理由**（macOS 本轮未实现同等真实测量/失败路径，绝不假称 PASS）。
 - **P2 — 大文件不再整读**（`byteLengthOf` 改用 `statSync(path).size`，不再 `readFileSync` 整个工件）；SHA-256 仍走流式 `createReadStream`。
 - **测试与文档**：新增/更新 29 个聚焦单元测覆盖 G7 未测→BLOCKED、一致→PASS、发散→FAIL、G8/G9 未执行→BLOCKED、真实执行成功→PASS、stat 取大小不整读；更新 Windows smoke 真实失败路径与指纹采集；本验收文档去除"G7 健康即 PASS / CI 预期 PASS 而无可执行失败场景"表述。
