@@ -70,7 +70,7 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
  * succeed. The only path to status === 'done' is a confirmed successful
  * file write/edit/delete. Per PerishCode review on PR #5776.
  */
-function hasNonFailedFileMutation(events: AgentEvent[] | undefined): boolean {
+function hasSuccessfulFileMutation(events: AgentEvent[] | undefined): boolean {
   return (deriveFileOps(events) ?? []).some(
     (entry) =>
       entry.ops.some((op) => op === 'write' || op === 'edit' || op === 'delete') &&
@@ -117,7 +117,7 @@ export function resolveDesignDeliveryOutcome(
     input.traceObjectFileCount > 0 ||
     input.persistenceSucceeded ||
     hasLiveArtifactDelivery(input.events) ||
-    hasNonFailedFileMutation(input.events)
+    hasSuccessfulFileMutation(input.events)
   ) {
     return 'delivered';
   }
