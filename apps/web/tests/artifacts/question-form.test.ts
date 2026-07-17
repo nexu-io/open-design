@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatFormAnswers,
@@ -219,6 +219,66 @@ describe('splitOnQuestionForms', () => {
     }
   });
 
+  it('parses the deliveryFormat/container array payload from Feishu acceptance', () => {
+    const input = [
+      '要的话我可以直接按这张图出 motion overlay。先选一下输出偏好:',
+      '<question-form>',
+      JSON.stringify([
+        {
+          id: 'deliveryFormat',
+          prompt: '导出格式？',
+          type: 'radio',
+          options: [
+            { id: 'mov', label: 'MOV（透明背景，可直接导入剪映 / PR / FCP 叠加）' },
+            { id: 'webm', label: 'WebM（透明背景，适合网页 / 浏览器播放）' },
+            { id: 'preview', label: '预览图 / 预览工程（适合先确认效果）' },
+            { id: 'remotion', label: 'Remotion 工程（适合继续编辑和拼装）' },
+          ],
+        },
+        {
+          id: 'container',
+          prompt: '对话外壳？',
+          type: 'radio',
+          options: [
+            { id: 'none', label: '不要外壳，只要气泡' },
+            { id: 'phone', label: '手机聊天界面' },
+          ],
+        },
+      ]),
+      '</question-form>',
+    ].join('\n');
+
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'form']);
+    const form = out[1]?.kind === 'form' ? out[1].form : null;
+    expect(form?.questions.map((q) => [q.id, q.label, q.type])).toEqual([
+      ['deliveryFormat', '导出格式？', 'radio'],
+      ['container', '对话外壳？', 'radio'],
+    ]);
+    expect(form?.questions[0]?.options?.map((option) => option.value)).toEqual([
+      'mov',
+      'webm',
+      'preview',
+      'remotion',
+    ]);
+  });
+
+  it('normalizes partially missing question fields instead of dropping the form', () => {
+    const out = splitOnQuestionForms(
+      `<question-form>${JSON.stringify([
+        { prompt: 'Pick one', options: ['A', 'B'] },
+        { id: 'notes', type: 'textarea' },
+      ])}</question-form>`,
+    );
+
+    expect(out.map((s) => s.kind)).toEqual(['form']);
+    const form = out[0]?.kind === 'form' ? out[0].form : null;
+    expect(form?.questions).toMatchObject([
+      { id: 'q1', label: 'Pick one', type: 'radio' },
+      { id: 'notes', label: 'notes', type: 'textarea' },
+    ]);
+  });
+
   it('accepts <ask-question> as an alias for <question-form> (#1194)', () => {
     const out = splitOnQuestionForms(`<ask-question id="brief" title="Quick brief">${VALID_BODY}</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['form']);
@@ -239,9 +299,21 @@ describe('splitOnQuestionForms', () => {
     expect(out.map((s) => s.kind)).toEqual(['text']);
   });
 
-  it('keeps malformed JSON bodies as raw text', () => {
+  it('replaces malformed JSON bodies with a safe fallback and diagnostics', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const out = splitOnQuestionForms(`<ask-question>not json</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['text']);
+    expect(out[0]).toMatchObject({
+      kind: 'text',
+      text: 'The assistant sent a question form that could not be rendered. Please ask it to resend the questions.',
+    });
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('<ask-question>');
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('not json');
+    expect(warn).toHaveBeenCalledWith(
+      '[question-form] failed to render inline question form',
+      expect.objectContaining({ reason: 'invalid-json', tagName: 'ask-question' }),
+    );
+    warn.mockRestore();
   });
 
   it('keeps unterminated tags as prose without swallowing trailing text', () => {
