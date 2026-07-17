@@ -3426,6 +3426,32 @@
 .compact-toggle.on .compact-toggle-switch { background: var(--text); }
 .compact-toggle.on .compact-toggle-switch::after { transform: translateX(12px); }
 
+/* Dark-mode visibility for off-state toggles (#5298).
+   The default off-state track uses --border-strong, which in dark mode is
+   #46433c — only ~5% lighter than the --bg-subtle (#252321) panel behind it.
+   That makes the toggle track nearly invisible when the control is off,
+   leaving users unsure whether the setting is enabled. Bump the off-state
+   track to a clearly lighter neutral and outline the thumb so the white
+   knob stays visible against the (now lighter) track. On-state already
+   used --text (#e8e4dc) which is high-contrast, so it is left alone. */
+[data-theme='dark'] .toggle-row-switch,
+[data-theme='dark'] .compact-toggle-switch {
+  background: #6b6862;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+[data-theme='dark'] .toggle-row-switch::after,
+[data-theme='dark'] .compact-toggle-switch::after {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+/* Hovering the row is the only visible affordance when the track is faint,
+   so lift the track slightly on hover to telegraph the interactive state. */
+[data-theme='dark'] .compact-toggle:hover .compact-toggle-switch,
+[data-theme='dark'] .toggle-row:hover .toggle-row-switch {
+  background: #75726c;
+}
+
 /* -------- Template picker (template tab) ---------------------------- */
 .template-list {
   display: flex;
