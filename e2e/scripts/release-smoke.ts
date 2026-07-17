@@ -5,6 +5,13 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createReport } from '../lib/vitest/report.ts';
+import {
+  buildReleaseGatesEvidence,
+  collectArtifactHashes,
+  RELEASE_GATES_EVIDENCE_FILE,
+  RELEASE_GATES_PARTIAL_FILE,
+  type ReleaseGateEvidence,
+} from '../lib/vitest/release-gates-evidence.ts';
 
 type Platform = 'mac' | 'win';
 
@@ -22,6 +29,8 @@ async function main(): Promise<void> {
 
   process.env.OD_PACKAGED_E2E_REPORT_DIR = report.root;
 
+  const profile = resolveProfile(platform);
+
   await report.json('manifest.json', {
     ...(process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL == null
       ? {}
@@ -35,6 +44,7 @@ async function main(): Promise<void> {
     githubRunId: process.env.GITHUB_RUN_ID ?? null,
     namespace,
     platform,
+    ...(profile == null ? {} : { profile }),
     reportPath: report.root,
     screenshot: `screenshots/open-design-${platform}-smoke.png`,
     spec,
@@ -59,8 +69,43 @@ async function main(): Promise<void> {
     timestamp: new Date().toISOString(),
   });
 
+  // --- Release-gate evidence (G6–G10) -------------------------------------
+  // Artifact SHA-256 (G10) comes from the tools-pack build JSON. Gate results
+  // G6–G9 come from the spec, written as a partial when the platform smoke ran.
+  const artifacts = await collectArtifactHashes(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
+  const partialGates = await readPartialGates(report.root);
+  const skipReason =
+    result.exitCode === 0
+      ? `platform smoke skipped (process.platform !== '${platform}')`
+      : `platform smoke did not complete (vitest exit ${result.exitCode})`;
+  const evidence = buildReleaseGatesEvidence({
+    platform,
+    channel: process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL ?? null,
+    releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION ?? null,
+    commit: process.env.GITHUB_SHA ?? null,
+    githubRunId: process.env.GITHUB_RUN_ID ?? null,
+    githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
+    namespace,
+    profile,
+    reportPath: report.root,
+    artifacts,
+    partialGates,
+    skipReason,
+  });
+  await report.json(RELEASE_GATES_EVIDENCE_FILE, evidence);
+
   if (result.exitCode !== 0) {
     process.exitCode = result.exitCode;
+  }
+}
+
+async function readPartialGates(reportRoot: string): Promise<Record<string, ReleaseGateEvidence> | null> {
+  const path = join(reportRoot, RELEASE_GATES_PARTIAL_FILE);
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as Record<string, ReleaseGateEvidence>;
+  } catch {
+    return null;
   }
 }
 
@@ -125,6 +170,11 @@ function defaultSpec(platform: Platform): string {
 
 function defaultNamespace(platform: Platform): string {
   return platform === 'mac' ? 'release-beta' : 'release-beta-win';
+}
+
+function resolveProfile(platform: Platform): string | null {
+  if (platform === 'win') return process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? null;
+  return process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? null;
 }
 
 function resolveFromWorkspace(path: string): string {

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import { RELEASE_GATES_PARTIAL_FILE, summarizePackagedReleaseGates } from '@/vitest/release-gates-evidence';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
@@ -595,6 +596,28 @@ winDescribe('packaged windows runtime smoke', () => {
           after: postUpdateHealth,
         },
       });
+      const payloadSummary = 'skipped' in payloadUpdate ? null : (payloadUpdate as PayloadUpdateSummary);
+      await report.report.json(
+        RELEASE_GATES_PARTIAL_FILE,
+        summarizePackagedReleaseGates({
+          platform: 'win',
+          installOk: Boolean(install?.installerPath && install?.installDir),
+          startOk: Boolean(start?.pid && start?.status),
+          payloadUpdateExercised: payloadSummary !== null,
+          payloadUpdateOk: payloadSummary !== null && payloadSummary.health.health?.ok === true,
+          dataRootPreserved: null,
+          rollbackExercised: false,
+          rollbackOk: null,
+          offlineStartExercised: false,
+          offlineStartOk: null,
+          evidence: {
+            namespace,
+            installDir: install?.installDir,
+            releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION ?? null,
+            payloadUpdateExercised: payloadSummary !== null,
+          },
+        }),
+      );
       printLifecycleTimings('install lifecycle timings', install.lifecycleTimings);
       printLifecycleTimings('uninstall lifecycle timings', uninstall.lifecycleTimings);
       passed = true;

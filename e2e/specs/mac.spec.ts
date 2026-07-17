@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import { RELEASE_GATES_PARTIAL_FILE, summarizePackagedReleaseGates } from '@/vitest/release-gates-evidence';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
   applyPackagedUpdateEnv,
@@ -442,6 +443,28 @@ macDescribe('packaged mac runtime smoke', () => {
           install: updateInstall,
         },
       });
+      const payloadSummary = 'skipped' in updateInstall ? null : (updateInstall as NonNullable<MacInspectResult['update']>);
+      await report.report.json(
+        RELEASE_GATES_PARTIAL_FILE,
+        summarizePackagedReleaseGates({
+          platform: 'mac',
+          installOk: Boolean(install?.installedAppPath && install?.dmgPath),
+          startOk: Boolean(start?.pid && start?.status),
+          payloadUpdateExercised: payloadSummary !== null,
+          payloadUpdateOk: payloadSummary !== null && payloadSummary.currentVersion === expectedPayloadUpdateVersion,
+          dataRootPreserved: null,
+          rollbackExercised: false,
+          rollbackOk: null,
+          offlineStartExercised: false,
+          offlineStartOk: null,
+          evidence: {
+            namespace,
+            installedAppPath: install?.installedAppPath,
+            releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION ?? null,
+            payloadUpdateExercised: payloadSummary !== null,
+          },
+        }),
+      );
       passed = true;
     } finally {
       restoreUpdateEnv(updateEnv);
