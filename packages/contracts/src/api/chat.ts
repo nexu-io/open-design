@@ -27,6 +27,35 @@ import type {
 export type RunFailureCategory = TrackingRunFailureCategory;
 export type RunFailureDetail = TrackingRunFailureDetail;
 
+export type AgentActivityKind = 'context_compaction';
+export type AgentActivityPhase = 'started' | 'progress' | 'completed' | 'failed';
+export type AgentActivityTrigger = 'proactive' | 'context_overflow' | 'manual' | 'unknown';
+export type AgentActivityTokenCountSource = 'native' | 'usage_snapshot' | 'estimated' | 'unavailable';
+export type AgentActivityFailureReason =
+  | 'aborted'
+  | 'runtime_error'
+  | 'run_terminated'
+  | 'protocol_error'
+  | 'unknown';
+export type AgentActivityTerminalSource = 'native' | 'run_finalizer';
+export interface AgentActivityObservability {
+  tokenCountSource?: AgentActivityTokenCountSource;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  failureReason?: AgentActivityFailureReason;
+  terminalSource?: AgentActivityTerminalSource;
+}
+export type AgentActivityTiming =
+  | { phase: 'started' | 'progress'; startedAt: number; elapsedMs?: never }
+  | { phase: 'completed' | 'failed'; startedAt?: number; elapsedMs?: number };
+export type PersistedAgentActivityEvent = {
+  kind: 'activity';
+  activity: AgentActivityKind;
+  activityId: string;
+  trigger?: AgentActivityTrigger;
+  detail?: string;
+} & AgentActivityTiming & AgentActivityObservability;
+
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -587,6 +616,7 @@ export type PersistedAgentEvent =
       failureCategory?: RunFailureCategory;
       failureDetail?: RunFailureDetail;
     }
+  | PersistedAgentActivityEvent
   | { kind: 'text'; text: string }
   | { kind: 'conversation_title'; title: string }
   | { kind: 'thinking'; text: string }

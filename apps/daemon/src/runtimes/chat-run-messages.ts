@@ -1,5 +1,11 @@
 import type Database from 'better-sqlite3';
-import type { PersistedAgentEvent } from '@open-design/contracts';
+import type {
+  AgentActivityFailureReason,
+  AgentActivityTerminalSource,
+  AgentActivityTokenCountSource,
+  AgentActivityTrigger,
+  PersistedAgentEvent,
+} from '@open-design/contracts';
 import {
   appendMessageAgentEvent,
   upsertMessage,
@@ -157,6 +163,65 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
             ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
             : undefined;
     return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+  }
+  if (
+    type === 'activity' &&
+    data.activity === 'context_compaction' &&
+    typeof data.activityId === 'string' &&
+    (data.phase === 'started' ||
+      data.phase === 'progress' ||
+      data.phase === 'completed' ||
+      data.phase === 'failed') &&
+    ((data.phase === 'started' || data.phase === 'progress')
+      ? typeof data.startedAt === 'number'
+      : true)
+  ) {
+    const trigger = (
+      data.trigger === 'proactive' ||
+      data.trigger === 'context_overflow' ||
+      data.trigger === 'manual' ||
+      data.trigger === 'unknown'
+    ) ? data.trigger as AgentActivityTrigger : undefined;
+    const tokenCountSource = (
+      data.tokenCountSource === 'native' ||
+      data.tokenCountSource === 'usage_snapshot' ||
+      data.tokenCountSource === 'estimated' ||
+      data.tokenCountSource === 'unavailable'
+    ) ? data.tokenCountSource as AgentActivityTokenCountSource : undefined;
+    const failureReason = (
+      data.failureReason === 'aborted' ||
+      data.failureReason === 'runtime_error' ||
+      data.failureReason === 'run_terminated' ||
+      data.failureReason === 'protocol_error' ||
+      data.failureReason === 'unknown'
+    ) ? data.failureReason as AgentActivityFailureReason : undefined;
+    const terminalSource = (
+      data.terminalSource === 'native' || data.terminalSource === 'run_finalizer'
+    ) ? data.terminalSource as AgentActivityTerminalSource : undefined;
+    const common = {
+      kind: 'activity',
+      activity: 'context_compaction',
+      activityId: data.activityId,
+      ...(trigger ? { trigger } : {}),
+      ...(tokenCountSource ? { tokenCountSource } : {}),
+      ...(typeof data.tokensBefore === 'number' ? { tokensBefore: data.tokensBefore } : {}),
+    } as const;
+    if (data.phase === 'started' || data.phase === 'progress') {
+      return {
+        ...common,
+        phase: data.phase,
+        startedAt: data.startedAt as number,
+      };
+    }
+    return {
+      ...common,
+      phase: data.phase,
+      ...(typeof data.startedAt === 'number' ? { startedAt: data.startedAt } : {}),
+      ...(typeof data.elapsedMs === 'number' ? { elapsedMs: data.elapsedMs } : {}),
+      ...(typeof data.tokensAfter === 'number' ? { tokensAfter: data.tokensAfter } : {}),
+      ...(failureReason ? { failureReason } : {}),
+      ...(terminalSource ? { terminalSource } : {}),
+    };
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };

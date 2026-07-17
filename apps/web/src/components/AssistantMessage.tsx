@@ -86,6 +86,7 @@ import {
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
+import { ContextCompactionActivity } from "./ContextCompactionActivity";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
@@ -908,6 +909,18 @@ function AssistantMessageImpl({
                 block={b}
                 projectId={projectId}
                 onRequestOpenFile={onRequestOpenFile}
+              />
+            );
+          }
+          if (b.kind === "activity") {
+            return (
+              <ContextCompactionActivity
+                key={b.activity.activityId}
+                activity={b.activity}
+                runId={message.runId ?? null}
+                projectId={projectId ?? null}
+                conversationId={conversationId ?? null}
+                renderSource={streaming ? "live_stream" : "persisted_history"}
               />
             );
           }
@@ -3665,7 +3678,8 @@ type Block =
       confidence?: number | undefined;
       draftPath?: string | null | undefined;
     }
-  | { kind: "status"; label: string; detail?: string | undefined };
+  | { kind: "status"; label: string; detail?: string | undefined }
+  | { kind: "activity"; activity: Extract<AgentEvent, { kind: "activity" }> };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
@@ -3732,6 +3746,7 @@ function suppressDuplicateQuestionForms(blocks: Block[]): Block[] {
 
 function buildBlocks(events: AgentEvent[]): Block[] {
   const out: Block[] = [];
+  const activityIndexById = new Map<string, number>();
   const resultByToolId = new Map<
     string,
     Extract<AgentEvent, { kind: "tool_result" }>
@@ -3769,6 +3784,16 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "tool_result") continue;
+    if (ev.kind === "activity" && ev.activity === "context_compaction") {
+      const existingIndex = activityIndexById.get(ev.activityId);
+      if (existingIndex !== undefined) {
+        out[existingIndex] = { kind: "activity", activity: ev };
+      } else {
+        activityIndexById.set(ev.activityId, out.length);
+        out.push({ kind: "activity", activity: ev });
+      }
+      continue;
+    }
     if (ev.kind === "plugin_candidate") {
       out.push({
         kind: "plugin-candidate",

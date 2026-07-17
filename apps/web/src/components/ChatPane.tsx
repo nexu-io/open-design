@@ -766,6 +766,7 @@ function hasVisibleBrandAssistantEvent(event: NonNullable<ChatMessage['events']>
     case 'live_artifact':
     case 'live_artifact_refresh':
     case 'plugin_candidate':
+    case 'activity':
       return true;
     case 'tool_result':
       return false;

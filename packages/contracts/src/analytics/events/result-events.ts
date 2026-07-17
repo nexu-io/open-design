@@ -3,6 +3,13 @@
  * *_result event prop types (run, feedback, settings, packaged).
  */
 import type { TrackingRuntimeType } from '../public-params.js';
+import type {
+  AgentActivityFailureReason,
+  AgentActivityPhase,
+  AgentActivityTerminalSource,
+  AgentActivityTokenCountSource,
+  AgentActivityTrigger,
+} from '../../api/chat.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
@@ -309,6 +316,80 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+  context_compaction_count?: number;
+  context_compaction_completed_count?: number;
+  context_compaction_failed_count?: number;
+  context_compaction_incomplete_count?: number;
+  context_compaction_observability_status?: 'none' | 'complete' | 'incomplete';
+  context_compaction_duration_sample_count?: number;
+  context_compaction_total_duration_ms?: number;
+  context_compaction_max_duration_ms?: number;
+  context_compaction_token_metrics_count?: number;
+  context_compaction_token_count_source?: AgentActivityTokenCountSource;
+  context_compaction_native_terminal_count?: number;
+  context_compaction_finalizer_terminal_count?: number;
+  context_compaction_post_output_seen?: boolean;
+  context_compaction_last_trigger?: AgentActivityTrigger;
+  context_compaction_last_failure_reason?: AgentActivityFailureReason;
+  context_compaction_last_terminal_source?: AgentActivityTerminalSource;
+  context_compaction_last_tokens_before?: number;
+  context_compaction_last_tokens_after?: number;
+  context_compaction_total_tokens_removed?: number;
+  context_compaction_last_reduction_ratio?: number;
+}
+
+export interface AgentContextCompactionBaseProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  run_id: string;
+  project_id: string | null;
+  conversation_id: string | null;
+  agent_id: string | null;
+  runtime_type: string;
+  activity_id: string;
+  trigger: AgentActivityTrigger;
+  token_count_source: AgentActivityTokenCountSource;
+  started_signal_seen: boolean;
+  duration_status: 'measured' | 'unavailable';
+  elapsed_ms?: number;
+  tokens_before?: number;
+  tokens_after?: number;
+  token_delta?: number;
+  tokens_removed?: number;
+  token_reduction_ratio?: number;
+}
+
+export type AgentContextCompactionStartedProps = AgentContextCompactionBaseProps;
+
+export interface AgentContextCompactionCompletedProps extends AgentContextCompactionBaseProps {
+  terminal_source: AgentActivityTerminalSource;
+}
+
+export interface AgentContextCompactionFailedProps extends AgentContextCompactionBaseProps {
+  terminal_source: AgentActivityTerminalSource;
+  failure_reason: AgentActivityFailureReason;
+}
+
+export interface ContextCompactionUiResultProps {
+  page_name: 'chat_panel';
+  area: 'assistant_message';
+  element: 'context_compaction_activity';
+  result: 'visible';
+  activity_id: string;
+  run_id: string | null;
+  project_id: string | null;
+  conversation_id: string | null;
+  event_phase: AgentActivityPhase;
+  rendered_phase: AgentActivityPhase | 'missing';
+  phase_match: boolean;
+  render_source: 'live_stream' | 'persisted_history';
+  elapsed_displayed: boolean;
+  elapsed_ms?: number;
+  active_seen_before_terminal: boolean;
+  reduced_motion: boolean;
+  document_visibility: 'visible' | 'hidden' | 'prerender' | 'unloaded' | 'unknown';
+  component_version: 'v1';
+  time_to_visible_ms?: number;
 }
 
 export interface LangfuseReportResultProps {
@@ -741,4 +822,3 @@ export interface PackagedRuntimeFailedProps {
   source: string;
   platform: string;
 }
-

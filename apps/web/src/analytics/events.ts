@@ -123,6 +123,7 @@ import type {
   PluginImportResultProps,
   RunCreatedProps,
   RunFinishedProps,
+  ContextCompactionUiResultProps,
   FileUploadResultProps,
   ContextLinkResultProps,
   SpeakerNotesSaveResultProps,
@@ -992,6 +993,14 @@ export function trackRunFinished(
   options?: { requestId?: string },
 ): void {
   send(track, 'run_finished', props, options);
+}
+
+export function trackContextCompactionUiResult(
+  track: Track,
+  props: ContextCompactionUiResultProps,
+  options?: { insertId?: string },
+): void {
+  send(track, 'context_compaction_ui_result', props, options);
 }
 
 export function trackFileUploadResult(

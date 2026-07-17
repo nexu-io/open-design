@@ -3904,6 +3904,10 @@ export interface Dict {
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
   'assistant.statusPreparing': string;
+  'assistant.compactionActiveTitle': string;
+  'assistant.compactionActiveDetail': string;
+  'assistant.compactionCompletedTitle': string;
+  'assistant.compactionFailedTitle': string;
   'assistant.statusStarting': string;
   'assistant.statusRequesting': string;
   'assistant.statusThinking': string;

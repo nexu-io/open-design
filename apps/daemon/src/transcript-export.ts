@@ -496,8 +496,8 @@ function coalesceBlocks(events: PersistedAgentEvent[]): Block[] {
         if (ev.label === 'thinking') flush();
         break;
       }
-      // Telemetry: usage, raw — intentional drop, neither contributes
-      // content nor signals a content boundary.
+      // Telemetry: activity, usage, raw — intentional drop, none contributes
+      // model-visible content or signals a content boundary.
       default:
         break;
     }

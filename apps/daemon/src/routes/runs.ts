@@ -83,6 +83,7 @@ import {
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
+import { summarizeContextCompactionRunAnalytics } from '../runtimes/agent-activity-lifecycle.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -1173,6 +1174,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
           artifactWriteSeen: artifactCount > 0 || designSystemCreated || previewModuleCount > 0,
         });
+        const compactionAnalytics = summarizeContextCompactionRunAnalytics(run.events);
         const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
           ? modelIdForTracking(reqBody.model)
           : modelIdForTracking(usageAnalytics.agent_reported_model);
@@ -1217,6 +1219,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             } : {}),
             ...timingAnalytics,
             ...diagnosticsAnalytics,
+            ...compactionAnalytics,
             langfuse_trace_id: run.id,
             ...langfuseDeliveryForAnalytics,
             ...(errorCode ? { error_code: errorCode } : {}),

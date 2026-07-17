@@ -1425,6 +1425,33 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
             : undefined,
     };
   }
+  if (t === 'activity') {
+    const common = {
+      kind: 'activity',
+      activity: data.activity,
+      activityId: data.activityId,
+      ...(data.trigger ? { trigger: data.trigger } : {}),
+      ...(data.detail ? { detail: data.detail } : {}),
+      ...(data.tokenCountSource ? { tokenCountSource: data.tokenCountSource } : {}),
+      ...(typeof data.tokensBefore === 'number' ? { tokensBefore: data.tokensBefore } : {}),
+    } as const;
+    if (data.phase === 'started' || data.phase === 'progress') {
+      return {
+        ...common,
+        phase: data.phase,
+        startedAt: data.startedAt,
+      };
+    }
+    return {
+      ...common,
+      phase: data.phase,
+      ...(typeof data.startedAt === 'number' ? { startedAt: data.startedAt } : {}),
+      ...(typeof data.elapsedMs === 'number' ? { elapsedMs: data.elapsedMs } : {}),
+      ...(typeof data.tokensAfter === 'number' ? { tokensAfter: data.tokensAfter } : {}),
+      ...(data.failureReason ? { failureReason: data.failureReason } : {}),
+      ...(data.terminalSource ? { terminalSource: data.terminalSource } : {}),
+    };
+  }
   if (t === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
   }

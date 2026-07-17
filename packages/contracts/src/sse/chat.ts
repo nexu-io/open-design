@@ -1,5 +1,12 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
-import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
+import type {
+  AgentActivityKind,
+  AgentActivityObservability,
+  AgentActivityTiming,
+  AgentActivityTrigger,
+  RunFailureCategory,
+  RunFailureDetail,
+} from '../api/chat.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -41,6 +48,14 @@ export interface PlainStreamArtifactSsePayload {
   identifier?: string;
   artifactType?: string;
 }
+
+export type AgentActivitySsePayload = {
+  type: 'activity';
+  activity: AgentActivityKind;
+  activityId: string;
+  trigger?: AgentActivityTrigger;
+  detail?: string;
+} & AgentActivityTiming & AgentActivityObservability;
 
 /**
  * Emitted by the daemon on `/api/projects/:id/events` when a new
@@ -105,6 +120,7 @@ export interface ChatSseEndPayload {
 
 export type DaemonAgentPayload =
   | { type: 'status'; label: string; model?: string; ttftMs?: number; detail?: string }
+  | AgentActivitySsePayload
   | { type: 'text_delta'; delta: string }
   | { type: 'conversation_title'; title: string }
   | { type: 'thinking_delta'; delta: string }

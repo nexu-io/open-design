@@ -1042,6 +1042,61 @@ test('attachAcpSession surfaces non-text ACP updates as status progress', () => 
   );
 });
 
+test('attachAcpSession maps structured ACP compaction updates to one activity lifecycle', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'continue the design task',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'context_compaction',
+    status: 'in_progress',
+    trigger: 'proactive',
+    tokenCountSource: 'native',
+    tokensBefore: 120_000,
+    message: 'COMPACT_SUMMARY_CANARY sk-secret-canary',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'context_compaction',
+    status: 'completed',
+    trigger: 'proactive',
+    tokenCountSource: 'native',
+    tokensAfter: 24_000,
+    message: 'COMPACT_SUMMARY_CANARY sk-secret-canary',
+  });
+
+  const activities = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'activity');
+
+  assert.equal(activities.length, 2);
+  assert.equal(activities[0]?.activity, 'context_compaction');
+  assert.equal(activities[0]?.phase, 'started');
+  assert.equal(activities[0]?.trigger, 'proactive');
+  assert.equal(activities[1]?.trigger, 'proactive');
+  assert.equal(activities[1]?.phase, 'completed');
+  assert.equal(activities[0]?.tokenCountSource, 'native');
+  assert.equal(activities[0]?.tokensBefore, 120_000);
+  assert.equal(activities[1]?.tokensBefore, 120_000);
+  assert.equal(activities[1]?.tokensAfter, 24_000);
+  assert.equal(activities[1]?.terminalSource, 'native');
+  assert.equal(activities[0]?.activityId, activities[1]?.activityId);
+  assert.equal(typeof activities[0]?.startedAt, 'number');
+  assert.equal(typeof activities[1]?.elapsedMs, 'number');
+  assert.equal(JSON.stringify(activities).includes('COMPACT_SUMMARY_CANARY'), false);
+  assert.equal(JSON.stringify(activities).includes('sk-secret-canary'), false);
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')

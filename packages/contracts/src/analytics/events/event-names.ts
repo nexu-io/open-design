@@ -19,6 +19,10 @@ export type AnalyticsEventName =
   | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
+  | 'agent_context_compaction_started'
+  | 'agent_context_compaction_completed'
+  | 'agent_context_compaction_failed'
+  | 'context_compaction_ui_result'
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_apply_observed'
@@ -106,4 +110,3 @@ export type TrackingPageName =
 // Alias kept for backwards-compatibility inside the contracts file; v2 wire
 // format uses the field name `page_name` for settings events too.
 export type TrackingSettingsPage = 'settings';
-

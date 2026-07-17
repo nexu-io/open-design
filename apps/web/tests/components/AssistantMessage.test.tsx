@@ -321,6 +321,98 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
   });
 });
 
+describe('AssistantMessage context compaction activity', () => {
+  it('renders an active, timed compaction visualization while the run continues', () => {
+    const startedAt = Date.now() - 5_000;
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          runStatus: 'running',
+          endedAt: undefined,
+          events: [
+            {
+              kind: 'activity',
+              activity: 'context_compaction',
+              activityId: 'compact-1',
+              phase: 'started',
+              trigger: 'context_overflow',
+              startedAt,
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={true}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Compacting context')).toBeTruthy();
+    expect(screen.getByText('Preserving the task, decisions, and recent progress')).toBeTruthy();
+    expect(container.querySelector('[data-compaction-phase="started"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="compaction-context-lines"]')).toBeTruthy();
+  });
+
+  it('collapses a completed compaction into durable history with real elapsed time', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'activity',
+              activity: 'context_compaction',
+              activityId: 'compact-1',
+              phase: 'started',
+              trigger: 'context_overflow',
+              startedAt: 1_700_000_000_000,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'activity',
+              activity: 'context_compaction',
+              activityId: 'compact-1',
+              phase: 'completed',
+              trigger: 'context_overflow',
+              startedAt: 1_700_000_000_000,
+              elapsedMs: 42_000,
+              detail: 'COMPACT_SUMMARY_CANARY sk-secret-canary',
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Context compacted')).toBeTruthy();
+    expect(screen.getByText('42s')).toBeTruthy();
+    expect(screen.queryByText(/COMPACT_SUMMARY_CANARY/)).toBeNull();
+    expect(screen.queryByText(/sk-secret-canary/)).toBeNull();
+  });
+
+  it('does not show a fake zero duration for a completion-only protocol event', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'activity',
+              activity: 'context_compaction',
+              activityId: 'compact-completion-only',
+              phase: 'completed',
+              trigger: 'proactive',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Context compacted')).toBeTruthy();
+    expect(screen.queryByText('0s')).toBeNull();
+  });
+
+});
+
 describe('AssistantMessage thinking blocks', () => {
   it('does not render an empty thinking block for whitespace-only thinking deltas', () => {
     const { container } = render(

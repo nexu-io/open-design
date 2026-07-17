@@ -7,7 +7,11 @@
  * connectionTest.ts and server.ts (via the acp/ barrel).
  */
 import path from 'node:path';
-import type { ExecutionProfile } from '@open-design/contracts';
+import type {
+  AgentActivityTokenCountSource,
+  AgentActivityTrigger,
+  ExecutionProfile,
+} from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -85,6 +89,43 @@ export interface AttachAcpSessionOptions {
   onCliReady?: () => void;
   onSessionInit?: () => void;
 }
+
+function acpCompactionTokenMetrics(update: JsonObject): {
+  tokenCountSource?: AgentActivityTokenCountSource;
+  tokensBefore?: number;
+  tokensAfter?: number;
+} {
+  const count = (value: unknown) => (
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? Math.floor(value)
+      : undefined
+  );
+  const tokensBefore = count(update.tokensBefore);
+  const tokensAfter = count(update.tokensAfter);
+  const explicitSource = update.tokenCountSource;
+  const tokenCountSource: AgentActivityTokenCountSource | undefined =
+    explicitSource === 'native'
+      || explicitSource === 'usage_snapshot'
+      || explicitSource === 'estimated'
+      || explicitSource === 'unavailable'
+      ? explicitSource
+      : tokensBefore !== undefined || tokensAfter !== undefined
+        ? 'native'
+        : undefined;
+  return {
+    ...(tokenCountSource ? { tokenCountSource } : {}),
+    ...(tokensBefore !== undefined ? { tokensBefore } : {}),
+    ...(tokensAfter !== undefined ? { tokensAfter } : {}),
+  };
+}
+
+function acpCompactionTrigger(update: JsonObject): AgentActivityTrigger {
+  const value = update.trigger ?? update.reason;
+  return value === 'proactive' || value === 'context_overflow' || value === 'manual' || value === 'unknown'
+    ? value
+    : 'context_overflow';
+}
+
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
  * drives the full JSON-RPC conversation from handshake to prompt completion.
@@ -152,6 +193,14 @@ export function attachAcpSession({
   let emittedVisibleTextChunk = false;
   let emittedToolCall = false;
   let emittedConcreteToolEvent = false;
+  let contextCompactionSequence = 0;
+  let activeContextCompaction: {
+    activityId: string;
+    startedAt: number;
+    trigger: AgentActivityTrigger;
+    tokenCountSource?: AgentActivityTokenCountSource;
+    tokensBefore?: number;
+  } | null = null;
   let emittedTextBuffer = '';
   let rawAcpShapeDiagnosticCount = 0;
   let artifactSuppressionDiagnosticCount = 0;
@@ -519,6 +568,71 @@ export function attachAcpSession({
           failWithPayload(promotedPayload);
           return;
         }
+      }
+      if (update.sessionUpdate === 'context_compaction') {
+        const status = typeof update.status === 'string' ? update.status.toLowerCase() : 'in_progress';
+        const tokenMetrics = acpCompactionTokenMetrics(update);
+        const trigger = acpCompactionTrigger(update);
+        const now = Date.now();
+        const completed = status === 'completed' || status === 'complete' || status === 'succeeded';
+        const failed = status === 'failed' || status === 'error' || status === 'cancelled';
+        if (!activeContextCompaction) {
+          contextCompactionSequence += 1;
+          const activityId = `${sessionId ?? 'acp'}:context-compaction:${contextCompactionSequence}`;
+          if (!completed && !failed) {
+            activeContextCompaction = { activityId, startedAt: now, trigger, ...tokenMetrics };
+          }
+          send('agent', {
+            type: 'activity',
+            activity: 'context_compaction',
+            activityId,
+            phase: completed ? 'completed' : failed ? 'failed' : 'started',
+            trigger,
+            ...(!completed && !failed ? { startedAt: now } : {}),
+            ...tokenMetrics,
+            ...((completed || failed) ? { terminalSource: 'native' } : {}),
+            ...(failed
+              ? { failureReason: status === 'cancelled' ? 'aborted' : 'runtime_error' }
+              : {}),
+          });
+        } else if (completed || failed) {
+          const activity = activeContextCompaction;
+          send('agent', {
+            type: 'activity',
+            activity: 'context_compaction',
+            activityId: activity.activityId,
+            phase: completed ? 'completed' : 'failed',
+            trigger: activity.trigger ?? trigger,
+            startedAt: activity.startedAt,
+            elapsedMs: Math.max(0, now - activity.startedAt),
+            ...(activity.tokenCountSource ? { tokenCountSource: activity.tokenCountSource } : {}),
+            ...(typeof activity.tokensBefore === 'number' ? { tokensBefore: activity.tokensBefore } : {}),
+            ...tokenMetrics,
+            terminalSource: 'native',
+            ...(failed
+              ? { failureReason: status === 'cancelled' ? 'aborted' : 'runtime_error' }
+              : {}),
+          });
+          activeContextCompaction = null;
+        } else {
+          send('agent', {
+            type: 'activity',
+            activity: 'context_compaction',
+            activityId: activeContextCompaction.activityId,
+            phase: 'progress',
+            trigger: activeContextCompaction.trigger ?? trigger,
+            startedAt: activeContextCompaction.startedAt,
+            ...(activeContextCompaction.tokenCountSource
+              ? { tokenCountSource: activeContextCompaction.tokenCountSource }
+              : {}),
+            ...(typeof activeContextCompaction.tokensBefore === 'number'
+              ? { tokensBefore: activeContextCompaction.tokensBefore }
+              : {}),
+            ...tokenMetrics,
+          });
+        }
+        emitAcpRawShapeDiagnostic(update);
+        return;
       }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
         send('agent', {
