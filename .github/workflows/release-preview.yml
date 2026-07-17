@@ -510,6 +510,14 @@ jobs:
           path: ${{ runner.temp }}/release-report/mac_arm64
           if-no-files-found: warn
 
+      - name: Upload mac release-gates evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-mac-smoke-evidence
+          path: ${{ runner.temp }}/release-report/mac_arm64/release-gates-evidence.json
+          if-no-files-found: warn
+
       - name: Prune mac_arm64 tools-pack cache
         continue-on-error: true
         run: bash .github/scripts/release/cache/mac.sh
@@ -1012,6 +1020,14 @@ jobs:
           path: ${{ runner.temp }}\release-report\win_x64
           if-no-files-found: warn
 
+      - name: Upload windows release-gates evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-win-smoke-evidence
+          path: ${{ runner.temp }}\release-report\win_x64\release-gates-evidence.json
+          if-no-files-found: warn
+
       - name: Prune Windows tools-pack cache
         shell: pwsh
         continue-on-error: true
@@ -1318,6 +1334,8 @@ jobs:
 
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
+        env:
+          ARTIFACT_NAME_REGEX: "-release-assets$"
         run: bash .github/scripts/release/github/cleanup-artifacts.sh
 
   cleanup_partial_release_assets:

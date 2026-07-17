@@ -9,6 +9,13 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import {
+  RELEASE_GATES_PARTIAL_FILE,
+  summarizePackagedReleaseGates,
+  type DataRootIntegrity,
+  type OfflineEvidence,
+  type RollbackEvidence,
+} from '@/vitest/release-gates-evidence';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
   applyPackagedUpdateEnv,
@@ -275,6 +282,13 @@ macDescribe('packaged mac runtime smoke', () => {
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let updateStatus: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let passed = false;
+    // Real measurement signals for G7–G9. macOS has no equivalent real
+    // dataRoot fingerprint / failure-path measurement in this remediation, so
+    // these stay BLOCKED (never guessed). The summarize function surfaces an
+    // accurate "not measured / not exercised" reason instead of a false PASS.
+    let dataRootIntegrity: DataRootIntegrity | undefined;
+    let rollback: RollbackEvidence | undefined;
+    let offline: OfflineEvidence | undefined;
     try {
       const install = await runToolsPackJson<MacInstallResult>('install');
       installedAppPath = install.installedAppPath;
@@ -442,6 +456,25 @@ macDescribe('packaged mac runtime smoke', () => {
           install: updateInstall,
         },
       });
+      const payloadSummary = 'skipped' in updateInstall ? null : (updateInstall as NonNullable<MacInspectResult['update']>);
+      await report.report.json(
+        RELEASE_GATES_PARTIAL_FILE,
+        summarizePackagedReleaseGates({
+          platform: 'mac',
+          installOk: Boolean(install?.installedAppPath && install?.dmgPath),
+          startOk: Boolean(start?.pid && start?.status),
+          dataRootIntegrity,
+          rollback,
+          offline,
+          evidence: {
+            namespace,
+            installedAppPath: install?.installedAppPath,
+            releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION ?? null,
+            profile: smokeProfile,
+            payloadUpdateExercised: payloadSummary !== null,
+          },
+        }),
+      );
       passed = true;
     } finally {
       restoreUpdateEnv(updateEnv);
