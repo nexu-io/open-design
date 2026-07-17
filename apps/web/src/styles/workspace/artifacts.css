@@ -3433,7 +3433,14 @@
    leaving users unsure whether the setting is enabled. Bump the off-state
    track to a clearly lighter neutral and outline the thumb so the white
    knob stays visible against the (now lighter) track. On-state already
-   used --text (#e8e4dc) which is high-contrast, so it is left alone. */
+   used --text (#e8e4dc) which is high-contrast, so it is left alone.
+
+   Two selector paths needed because Open Design supports both explicit
+   [data-theme='dark'] AND system dark via @media prefers-color-scheme
+   (the default "system" theme removes data-theme and falls back on the
+   media query in tokens.css). */
+
+/* --- Explicit dark theme --- */
 [data-theme='dark'] .toggle-row-switch,
 [data-theme='dark'] .compact-toggle-switch {
   background: #6b6862;
@@ -3445,11 +3452,30 @@
     0 1px 2px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(0, 0, 0, 0.18);
 }
-/* Hovering the row is the only visible affordance when the track is faint,
-   so lift the track slightly on hover to telegraph the interactive state. */
-[data-theme='dark'] .compact-toggle:hover .compact-toggle-switch,
-[data-theme='dark'] .toggle-row:hover .toggle-row-switch {
+/* Hover: only lift the track when off, or the on-state bright track gets
+   overridden by a higher-specificity hover rule. */
+[data-theme='dark'] .compact-toggle:not(.on):hover .compact-toggle-switch,
+[data-theme='dark'] .toggle-row:not(.on):hover .toggle-row-switch {
   background: #75726c;
+}
+
+/* --- System dark theme (the default — no data-theme attr set) --- */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .toggle-row-switch,
+  html:not([data-theme]) .compact-toggle-switch {
+    background: #6b6862;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+  }
+  html:not([data-theme]) .toggle-row-switch::after,
+  html:not([data-theme]) .compact-toggle-switch::after {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(0, 0, 0, 0.18);
+  }
+  html:not([data-theme]) .compact-toggle:not(.on):hover .compact-toggle-switch,
+  html:not([data-theme]) .toggle-row:not(.on):hover .toggle-row-switch {
+    background: #75726c;
+  }
 }
 
 /* -------- Template picker (template tab) ---------------------------- */
