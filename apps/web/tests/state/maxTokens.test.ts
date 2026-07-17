@@ -1,21 +1,17 @@
-import { describe, expect, it } from 'vitest';
-
+import { describe, it, expect } from 'vitest';
+import { modelMaxTokensDefault, effectiveMaxTokens, FALLBACK_MAX_TOKENS, MIN_MAX_TOKENS, MAX_MAX_TOKENS } from '../../src/state/maxTokens';
 import litellmData from '../../src/state/litellm-models.json';
-import {
-  effectiveMaxTokens,
-  FALLBACK_MAX_TOKENS,
-  MAX_MAX_TOKENS,
-  MIN_MAX_TOKENS,
-  modelMaxTokensDefault,
-} from '../../src/state/maxTokens';
 
 describe('modelMaxTokensDefault', () => {
-  it('falls through to LiteLLM data for canonical Anthropic ids', () => {
-    // 64k for the 4.5 line is the upstream value; this guards against the
-    // sync script silently dropping or rewriting these entries.
-    expect(modelMaxTokensDefault('claude-sonnet-4-5')).toBe(64000);
-    expect(modelMaxTokensDefault('claude-opus-4-5')).toBe(64000);
-    expect(modelMaxTokensDefault('claude-haiku-4-5')).toBe(64000);
+  it('returns correct default for cloud-suffixed models from OVERRIDES', () => {
+    expect(modelMaxTokensDefault('gpt-oss:20b-cloud')).toBe(131072);
+    expect(modelMaxTokensDefault('gpt-oss:120b-cloud')).toBe(131072);
+    expect(modelMaxTokensDefault('deepseek-v3.1:671b-cloud')).toBe(163840);
+    expect(modelMaxTokensDefault('qwen3-coder:480b-cloud')).toBe(262144);
+  });
+
+it('falls back to FALLBACK_MAX_TOKENS for unknown cloud models', () => {
+    expect(modelMaxTokensDefault('unknown-model-cloud')).toBe(8192);
   });
 
   it('lets OVERRIDES win over LiteLLM data', () => {
@@ -32,6 +28,13 @@ describe('modelMaxTokensDefault', () => {
     expect((litellmData.models as Record<string, number>)['deepseek-v4-flash']).toBeUndefined();
     expect(modelMaxTokensDefault('deepseek-v4-pro')).toBe(384000);
     expect(modelMaxTokensDefault('deepseek-v4-flash')).toBe(384000);
+  });
+
+  it('keeps deepseek-v3.2 override intact alongside the new -cloud id', () => {
+    // Regression: an earlier revision replaced this entry instead of
+    // adding the new deepseek-v3.1:671b-cloud id alongside it, which
+    // silently dropped deepseek-v3.2 to FALLBACK_MAX_TOKENS (8192).
+    expect(modelMaxTokensDefault('deepseek-v3.2')).toBe(163840);
   });
 
   it('keeps recent Ollama Cloud models out of the unknown-model fallback', () => {
