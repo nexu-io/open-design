@@ -1,0 +1,19 @@
+{
+  "candidateId": "d03dbf99-8065-4051-b66c-ccf3d73bd7c6",
+  "projectId": "2d5c205f-956c-4532-8363-db8c114e4a73",
+  "runId": "3cc0ffea-1686-43f1-b484-ac30e24f73a5",
+  "conversationId": "d2d7f789-52cf-40c9-9963-9c8056b8207b",
+  "provenance": {
+    "summary": "Detected from inventory-backend-handoff.md after a successful run.",
+    "detectedAt": 1784302181562
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "inventory-backend-handoff.md",
+      "label": "inventory-backend-handoff.md",
+      "size": 17682,
+      "copied": true
+    }
+  ]
+}
