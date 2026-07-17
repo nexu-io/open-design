@@ -105,6 +105,16 @@ function mockTasksViewFetch({
         headers: { 'content-type': 'application/json' },
       });
     }
+    // Creator backup list — the CreatorBackupPanel (rendered inside TasksView)
+    // reads this; return an empty list so the panel loads cleanly in tests
+    // rather than surfacing a 404 as an error alert.
+    const creatorBackupRead = /^\/api\/projects\/([^/]+)\/creator-backups$/.exec(url);
+    if (creatorBackupRead && (!init || init.method === undefined)) {
+      return new Response(JSON.stringify({ backups: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     const releaseListRead = /^\/api\/projects\/([^/]+)\/creator-release-packages$/.exec(url);
     if (releaseListRead && (!init || init.method === undefined)) {
       const projectId = decodeURIComponent(releaseListRead[1]!);

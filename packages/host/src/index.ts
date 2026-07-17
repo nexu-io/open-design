@@ -1,6 +1,57 @@
 import type { ReleaseChannel } from "@open-design/release";
 
 export const OPEN_DESIGN_HOST_GLOBAL = "__od__";
+
+/**
+ * Creator backup restore bridge types.
+ *
+ * Declared locally rather than re-exported from the shared contracts package so
+ * the host package stays independent of the daemon/web contract surface
+ * (enforced by `tests/index.test.ts`). The shapes intentionally mirror the
+ * corresponding packaged/daemon contracts so the IPC boundary stays structurally
+ * compatible.
+ */
+export type CreatorBackupStatus = "pending" | "ready" | "invalid" | "restoring" | "rollback";
+
+export type CreatorBackupSummary = {
+  schemaVersion: number;
+  id: string;
+  createdAt: string;
+  profile: "full";
+  projectIds: string[];
+  fileCount: number;
+  totalSize: number;
+  status: CreatorBackupStatus;
+  validated?: boolean;
+};
+
+export type CreatorBackupProjectIdentity = {
+  id: string;
+  name: string;
+  schemaVersion: number;
+  hash: string;
+};
+
+export type CreatorBackupProjectIdentityReport = {
+  performed: boolean;
+  created: string[];
+  kept: string[];
+  conflicts: string[];
+  reason?: string;
+};
+
+export type RestoreCreatorBackupRequest = {
+  backupId: string;
+};
+
+export type RestoreCreatorBackupResponse = {
+  ok: boolean;
+  backup?: CreatorBackupSummary;
+  error?: string;
+  rolledBack?: boolean;
+  rollbackRemoved?: boolean;
+  projectIdentity?: CreatorBackupProjectIdentityReport;
+};
 export const OPEN_DESIGN_HOST_VERSION = 2;
 
 export const OPEN_DESIGN_HOST_CLIENT_TYPES = Object.freeze({
@@ -266,6 +317,16 @@ export type OpenDesignHostUpdaterResult =
 
 export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
 
+/**
+ * Creator backup / restore bridge. `restoreBackup` is the ONLY surface a
+ * renderer may use to recover a snapshot; it is orchestrated entirely by the
+ * packaged desktop main process (never a daemon HTTP route), and is keyed only
+ * by `backupId` — source/target paths are always derived server-side.
+ */
+export type OpenDesignHostCreatorBridge = {
+  restoreBackup(backupId: string): Promise<RestoreCreatorBackupResponse>;
+};
+
 export type OpenDesignHostBridge = {
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
@@ -299,6 +360,7 @@ export type OpenDesignHostBridge = {
     status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
   };
+  creator?: OpenDesignHostCreatorBridge;
   version: typeof OPEN_DESIGN_HOST_VERSION;
 };
 
@@ -364,6 +426,12 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
     !hasFunction(updater, "quit") ||
     !hasFunction(updater, "subscribe")
   ) {
+    return false;
+  }
+
+  // `creator` is optional; when present it must at least expose restoreBackup.
+  const creator = value.creator;
+  if (creator !== undefined && (!isRecord(creator) || !hasFunction(creator, "restoreBackup"))) {
     return false;
   }
 
@@ -475,6 +543,17 @@ export function getOpenDesignHost(scope: OpenDesignHostGlobalScope = globalThis)
 
 export function isOpenDesignHostAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
   return getOpenDesignHost(scope) != null;
+}
+
+/**
+ * True only when the active host bridge exposes a working creator-backup
+ * restore capability. The web panel uses this to decide whether to render an
+ * enabled Restore action or a read-only "desktop only" state — so a plain web /
+ * dev build never triggers a confirm dialog or a doomed restore call.
+ */
+export function isCreatorBackupRestoreAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
+  const host = getOpenDesignHost(scope);
+  return typeof host?.creator?.restoreBackup === "function";
 }
 
 export function detectOpenDesignHostClientType(scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostClientType | "web" {
@@ -670,5 +749,28 @@ export function subscribeHostUpdater(
     return host.updater.subscribe(listener);
   } catch {
     return () => undefined;
+  }
+}
+
+/**
+ * Restore a Creator backup snapshot. The renderer may only trigger a restore
+ * by `backupId`; the packaged desktop main process derives all paths and
+ * performs the controlled, validated swap. Returns a structured failure
+ * envelope when no host is available or the host build predates creator
+ * backup support.
+ */
+export async function restoreCreatorBackup(
+  backupId: string,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<RestoreCreatorBackupResponse> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return { ok: false, error: "Open Design host is not available" };
+  if (typeof host.creator?.restoreBackup !== "function") {
+    return { ok: false, error: "host does not support creator backup restore" };
+  }
+  try {
+    return await host.creator.restoreBackup(backupId);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

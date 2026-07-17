@@ -87,6 +87,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   EXPORT_ARTIFACT: "export-artifact",
   EXPORT_PDF: "export-pdf",
   MINT_IMPORT_TOKEN: "mint-import-token",
+  RECONCILE_CREATOR_BACKUP_IDENTITIES: "reconcile-creator-backup-identities",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
@@ -455,11 +456,21 @@ export type MintImportTokenResult =
   | { ok: false; code: "DESKTOP_AUTH_INACTIVE"; message: string; retryable: false }
   | { ok: false; code: "DESKTOP_AUTH_PENDING"; message: string; retryable: true };
 
+export type ReconcileCreatorBackupIdentitiesInput = {
+  identities: Array<{ id: string; name: string; schemaVersion: number; hash: string }>;
+};
+
+export type ReconcileCreatorBackupIdentitiesMessage = {
+  input: ReconcileCreatorBackupIdentitiesInput;
+  type: typeof SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES;
+};
+
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
   | RegisterDesktopAuthMessage
-  | MintImportTokenMessage;
+  | MintImportTokenMessage
+  | ReconcileCreatorBackupIdentitiesMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -742,6 +753,24 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
   if (type === SIDECAR_MESSAGES.MINT_IMPORT_TOKEN) {
     assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
     return { input: normalizeMintImportTokenInput(value.input), type };
+  }
+  if (type === SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    const inputValue = assertObject(value.input, "creator backup identity input");
+    assertKnownKeys(inputValue, ["identities"], "creator backup identity input");
+    if (!Array.isArray(inputValue.identities) || inputValue.identities.length === 0) {
+      throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, "creator backup identities are required");
+    }
+    const identities = inputValue.identities.map((identity) => {
+      const entry = assertObject(identity, "creator backup identity");
+      assertKnownKeys(entry, ["hash", "id", "name", "schemaVersion"], "creator backup identity");
+      if (typeof entry.id !== "string" || !entry.id || typeof entry.name !== "string" || !entry.name ||
+        !Number.isInteger(entry.schemaVersion) || typeof entry.hash !== "string" || !/^[a-f0-9]{64}$/.test(entry.hash)) {
+        throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, "invalid creator backup identity");
+      }
+      return { id: entry.id, name: entry.name, schemaVersion: Number(entry.schemaVersion), hash: entry.hash };
+    });
+    return { input: { identities }, type };
   }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }

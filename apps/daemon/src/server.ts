@@ -525,6 +525,7 @@ import { registerCreatorMediaRoutes } from './routes/creator-media.js';
 import { registerCreatorContentRoutes } from './routes/creator-content.js';
 import { registerCreatorReleaseRoutes } from './routes/creator-release.js';
 import { registerCreatorPerformanceRoutes } from './routes/creator-performance.js';
+import { registerCreatorBackupRoutes } from './routes/creator-backup.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -3330,6 +3331,7 @@ export interface StartServerOptions {
 }
 
 export interface StartServerResult {
+  db: unknown;
   url: string;
   server: import('node:http').Server;
   shutdown: () => Promise<void> | void;
@@ -3767,6 +3769,11 @@ export async function startServer({
     projectStore: { getProject },
   });
   registerCreatorPerformanceRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    projectStore: { getProject },
+  });
+  registerCreatorBackupRoutes(app, {
     db,
     paths: { RUNTIME_DATA_DIR },
     projectStore: { getProject },
@@ -9387,6 +9394,7 @@ export async function startServer({
         }
         daemonUrl = url;
         resolve(returnServer ? {
+          db,
           url,
           server,
           shutdown: shutdownDaemonRuns,

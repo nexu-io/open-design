@@ -55,6 +55,7 @@ import {
   type AutomationTemplate,
   type AutomationTemplateKind,
 } from './NewAutomationModal';
+import { CreatorBackupPanel } from './CreatorBackupPanel';
 
 type ProjectSummary = { id: string; name: string };
 type TemplateFilter =
@@ -2351,6 +2352,20 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
               )}
             </section>
           </div>
+
+          <section className="creator-panel creator-backup-panel" aria-labelledby="creator-backup-title">
+            <div className="creator-panel__head">
+              <div>
+                <h3 id="creator-backup-title" className="creator-panel__title">Creator backups</h3>
+                <span className="creator-panel__meta">Local snapshots · restore via desktop</span>
+              </div>
+            </div>
+            {entryProjects.length === 0 ? (
+              <p className="creator-list__desc">Create a project before managing backups.</p>
+            ) : (
+              <CreatorBackupPanel projects={entryProjects} />
+            )}
+          </section>
 
           <section className="creator-panel creator-content-panel" aria-labelledby="creator-content-title">
             <div className="creator-panel__head">

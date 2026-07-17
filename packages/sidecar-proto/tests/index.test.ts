@@ -92,6 +92,26 @@ describe("open-design sidecar contract", () => {
     expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
   });
 
+  it("accepts creator backup identity reconciliation only with a strict payload", () => {
+    const identity = {
+      hash: "a".repeat(64),
+      id: "creator-project-1",
+      name: "Creator project",
+      schemaVersion: 1,
+    };
+    expect(normalizeDaemonSidecarMessage({
+      input: { identities: [identity] },
+      type: SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES,
+    })).toEqual({
+      input: { identities: [identity] },
+      type: SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES,
+    });
+    expect(() => normalizeDaemonSidecarMessage({
+      input: { identities: [{ ...identity, hash: "invalid" }] },
+      type: SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES,
+    })).toThrow(/invalid creator backup identity/i);
+  });
+
   it("rejects malformed mint-import-token payloads", () => {
     expect(() =>
       normalizeDaemonSidecarMessage({

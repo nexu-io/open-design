@@ -12,6 +12,7 @@ import {
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
   type MintImportTokenResult,
+  type ReconcileCreatorBackupIdentitiesMessage,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import {
@@ -30,6 +31,7 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
 } from "../desktop-auth.js";
+import { reconcileProjectIdentities } from "../creator-backup/project-identity.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -205,6 +207,11 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           return { accepted: true };
         case SIDECAR_MESSAGES.MINT_IMPORT_TOKEN:
           return mintImportTokenForCli(request.input.baseDir);
+        case SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES:
+          return reconcileProjectIdentities(
+            serverHandle.db,
+            (request as ReconcileCreatorBackupIdentitiesMessage).input.identities,
+          );
       }
     },
   });
