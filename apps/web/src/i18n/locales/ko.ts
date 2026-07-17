@@ -4351,7 +4351,8 @@ export const ko: Dict = {
   'settings.customInstructionsDesc': 'Open Design이 모든 채팅에서 따르는 고정 지침입니다. 저장된 메모리가 아니며, 사실, 선호 사항, 프로젝트 컨텍스트에는 메모리를 사용하세요.',
   'mcpClient.forwardedToLabel': '전달 대상:',
   'mcpClient.notForwardedToLabel': '전달되지 않는 대상:',
-  'mcpClient.forwardedAcpNote': 'stdio로 표시된 ACP 어댑터는 이 목록에서 stdio MCP 서버만 받습니다. HTTP 및 SSE 항목은 생성 시점에 제외됩니다.',
+  'mcpClient.forwardedAcpStdioNote': 'stdio로 표시된 ACP 어댑터는 이 목록에서 stdio MCP 서버만 받습니다. HTTP 및 SSE 항목은 생성 시점에 제외됩니다.',
+  'mcpClient.forwardedAcpTokenNote': '전체 MCP 지원이 있는 어댑터(Hermes에서 검증됨)는 모든 전송 방식을 받습니다. 구성된 MCP 서버의 OAuth 토큰이 자동으로 전달됩니다.',
   'mcpClient.notForwardedNote': '해당 Agent의 경우 Agent 자체 구성 파일(예: ~/.codex/config.toml, ~/.gemini/settings.json)에서 MCP 서버를 구성하세요. 아래 서버는 거기서 자동으로 사용되지 않습니다.',
 
   // Brands library + extraction

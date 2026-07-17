@@ -4351,7 +4351,8 @@ export const esES: Dict = {
   'settings.customInstructionsDesc': 'Instrucciones fijas que Open Design sigue en cada chat. No son memorias guardadas; usa Memoria para hechos, preferencias y contexto del proyecto.',
   'mcpClient.forwardedToLabel': 'Reenviado a:',
   'mcpClient.notForwardedToLabel': 'No reenviado a:',
-  'mcpClient.forwardedAcpNote': 'Los adaptadores ACP marcados como stdio solo reciben servidores MCP de stdio de esta lista; las entradas HTTP y SSE se descartan en el momento de la creación.',
+  'mcpClient.forwardedAcpStdioNote': 'Los adaptadores ACP marcados como stdio solo reciben servidores MCP de stdio de esta lista; las entradas HTTP y SSE se descartan en el momento de la creación.',
+  'mcpClient.forwardedAcpTokenNote': 'Los adaptadores con soporte MCP completo (verificado en Hermes) reciben todos los transportes; los tokens OAuth para los servidores MCP configurados se reenvían automáticamente.',
   'mcpClient.notForwardedNote': 'Para esos agentes, configura los servidores MCP en el propio archivo de configuración del agente (p. ej. ~/.codex/config.toml, ~/.gemini/settings.json); los servidores de abajo se ignoran de forma silenciosa allí.',
 
   // Brands library + extraction

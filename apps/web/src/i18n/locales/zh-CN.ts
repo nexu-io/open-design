@@ -4739,8 +4739,10 @@ export const zhCN: Dict = {
     "Open Design 在每次对话中都会遵循的固定指令。它们不是保存的记忆；事实、偏好和项目上下文请使用「记忆」。",
   "mcpClient.forwardedToLabel": "已转发给：",
   "mcpClient.notForwardedToLabel": "未转发给：",
-  "mcpClient.forwardedAcpNote":
+  "mcpClient.forwardedAcpStdioNote":
     "标记为 stdio only 的 ACP 适配器只会从此列表接收 stdio 类型的 MCP 服务器；HTTP 和 SSE 条目会在启动时被丢弃。",
+  "mcpClient.forwardedAcpTokenNote":
+    "具有完整 MCP 支持的适配器（已在 Hermes 上验证）接收所有传输方式；已配置 MCP 服务器的 OAuth 令牌会自动转发。",
   "mcpClient.notForwardedNote":
     "对于这些智能体，请在其各自的配置文件中配置 MCP 服务器（例如 ~/.codex/config.toml、~/.gemini/settings.json）；下方的服务器在那里不会生效。",
 

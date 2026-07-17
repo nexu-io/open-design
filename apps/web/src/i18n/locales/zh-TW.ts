@@ -4745,8 +4745,10 @@ export const zhTW: Dict = {
     "Open Design 在每次對話中都會遵循的固定指令。它們不是儲存的記憶；事實、偏好與專案脈絡請使用「記憶」。",
   "mcpClient.forwardedToLabel": "已轉發給：",
   "mcpClient.notForwardedToLabel": "未轉發給：",
-  "mcpClient.forwardedAcpNote":
+  "mcpClient.forwardedAcpStdioNote":
     "標記為 stdio only 的 ACP 介面卡只會從此清單接收 stdio 類型的 MCP 伺服器；HTTP 與 SSE 項目會在啟動時被捨棄。",
+  "mcpClient.forwardedAcpTokenNote":
+    "具有完整 MCP 支援的介面卡（已在 Hermes 上驗證）接收所有傳輸方式；已設定的 MCP 伺服器的 OAuth 權杖會自動轉發。",
   "mcpClient.notForwardedNote":
     "對於這些智慧體，請在其各自的設定檔中設定 MCP 伺服器（例如 ~/.codex/config.toml、~/.gemini/settings.json）；下方的伺服器在那裡不會生效。",
 

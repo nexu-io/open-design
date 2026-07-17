@@ -4351,7 +4351,8 @@ export const id: Dict = {
   'settings.customInstructionsDesc': 'Instruksi tetap yang diikuti Open Design di setiap obrolan. Ini bukan memori tersimpan; gunakan Memori untuk fakta, preferensi, dan konteks proyek.',
   'mcpClient.forwardedToLabel': 'Diteruskan ke:',
   'mcpClient.notForwardedToLabel': 'Tidak diteruskan ke:',
-  'mcpClient.forwardedAcpNote': 'Adaptor ACP yang ditandai stdio hanya menerima server MCP stdio dari daftar ini; entri HTTP dan SSE dibuang saat spawn.',
+  'mcpClient.forwardedAcpStdioNote': 'Adaptor ACP yang ditandai stdio hanya menerima server MCP stdio dari daftar ini; entri HTTP dan SSE dibuang saat spawn.',
+  'mcpClient.forwardedAcpTokenNote': 'Adaptor dengan dukungan MCP penuh (diverifikasi di Hermes) menerima semua transport; token OAuth untuk server MCP yang dikonfigurasi diteruskan secara otomatis.',
   'mcpClient.notForwardedNote': 'Untuk agent tersebut, konfigurasikan server MCP di file konfigurasi agent itu sendiri (mis. ~/.codex/config.toml, ~/.gemini/settings.json); server di bawah ini tidak digunakan di sana tanpa pemberitahuan.',
 
   // Brands library + extraction

@@ -371,36 +371,59 @@ function mergeAuthHeader(
 
 /**
  * Convert user-configured external MCP servers into the ACP `mcpServers`
- * shape that Hermes/Kimi accept (already in use by buildLiveArtifactsMcpServersForAgent).
- * SSE/HTTP servers are dropped — ACP currently models stdio only — but we
- * surface a warning so the UI can hint at it.
+ * shape (already in use by buildLiveArtifactsMcpServersForAgent).
+ *
+ * All three transports (stdio, sse, http) are forwarded. `tokens` is an
+ * optional map of `serverId → bearer access token`, populated by the
+ * daemon's OAuth flow. The bearer is injected as `Authorization: Bearer`
+ * via `mergeAuthHeader`, unless the user pinned a non-empty Authorization
+ * header in the server config.
  */
-export interface AcpMcpServer {
-  type: 'stdio';
-  name: string;
-  command: string;
-  args: string[];
-  env: Array<{ name: string; value: string }>;
-}
+export type AcpMcpServer =
+  | { type: 'stdio'; name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }
+  | { type: 'sse' | 'http'; name: string; url: string; headers: Array<{ name: string; value: string }> };
 
-export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
-  const enabled = servers.filter((s) => s.enabled && s.transport === 'stdio');
+export function buildAcpMcpServers(
+  servers: McpServerConfig[],
+  tokens: Record<string, string> = {},
+): AcpMcpServer[] {
+  const enabled = servers.filter((s) => s.enabled);
   const out: AcpMcpServer[] = [];
   for (const s of enabled) {
-    const envEntries: Array<{ name: string; value: string }> = [];
-    if (s.env) {
-      for (const [name, value] of Object.entries(s.env)) {
-        if (typeof value !== 'string') continue;
-        envEntries.push({ name, value });
+    if (s.transport === 'stdio') {
+      const envEntries: Array<{ name: string; value: string }> = [];
+      if (s.env) {
+        for (const [name, value] of Object.entries(s.env)) {
+          if (typeof value !== 'string') continue;
+          envEntries.push({ name, value });
+        }
       }
+      out.push({
+        type: 'stdio',
+        name: s.id,
+        command: s.command ?? '',
+        args: Array.isArray(s.args) ? [...s.args] : [],
+        env: envEntries,
+      });
+    } else {
+      // sse | http
+      const headers = mergeAuthHeader(
+        s.headers,
+        effectiveMcpAuthMode(s) === 'oauth' ? tokens[s.id] : undefined,
+      );
+      const headerEntries: Array<{ name: string; value: string }> = [];
+      if (headers) {
+        for (const [name, value] of Object.entries(headers)) {
+          headerEntries.push({ name, value });
+        }
+      }
+      out.push({
+        type: s.transport,
+        name: s.id,
+        url: s.url ?? '',
+        headers: headerEntries,
+      });
     }
-    out.push({
-      type: 'stdio',
-      name: s.id,
-      command: s.command ?? '',
-      args: Array.isArray(s.args) ? [...s.args] : [],
-      env: envEntries,
-    });
   }
   return out;
 }

@@ -2221,7 +2221,8 @@ export interface Dict {
   'settings.customInstructionsDesc': string;
   'mcpClient.forwardedToLabel': string;
   'mcpClient.notForwardedToLabel': string;
-  'mcpClient.forwardedAcpNote': string;
+  'mcpClient.forwardedAcpStdioNote': string;
+  'mcpClient.forwardedAcpTokenNote': string;
   'mcpClient.notForwardedNote': string;
   // Bottom-of-rail help menu
   'entry.helpAria': string;

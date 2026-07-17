@@ -352,7 +352,7 @@ describe('sanitizeMcpServer headers', () => {
 });
 
 describe('buildAcpMcpServers', () => {
-  it('drops sse / http servers (ACP descriptor is stdio-only)', () => {
+  it('forwards stdio, sse, and http servers (ACP supports all three transports)', () => {
     const out = buildAcpMcpServers([
       {
         id: 'a',
@@ -364,13 +364,22 @@ describe('buildAcpMcpServers', () => {
         id: 'b',
         transport: 'sse',
         enabled: true,
-        url: 'https://example.com',
+        url: 'https://example.com/sse',
+      },
+      {
+        id: 'c',
+        transport: 'http',
+        enabled: true,
+        url: 'https://example.com/mcp',
       },
     ]);
-    expect(out.map((s) => s.name)).toEqual(['a']);
+    expect(out.map((s) => s.name)).toEqual(['a', 'b', 'c']);
+    expect(out[0]).toMatchObject({ type: 'stdio', command: 'echo' });
+    expect(out[1]).toMatchObject({ type: 'sse', url: 'https://example.com/sse' });
+    expect(out[2]).toMatchObject({ type: 'http', url: 'https://example.com/mcp' });
   });
 
-  it('flattens env to ACP {name,value} array shape', () => {
+  it('flattens env to ACP {name,value} array shape for stdio', () => {
     const out = buildAcpMcpServers([
       {
         id: 'gh',
@@ -388,6 +397,161 @@ describe('buildAcpMcpServers', () => {
       args: ['-y', '@modelcontextprotocol/server-github'],
       env: [{ name: 'TOKEN', value: 'x' }],
     });
+  });
+
+  it('emits url + headers for http servers (headers always present, even if empty)', () => {
+    const out = buildAcpMcpServers([
+      {
+        id: 'higgsfield',
+        transport: 'http',
+        enabled: true,
+        url: 'https://mcp.higgsfield.ai/mcp',
+        headers: { Authorization: 'Bearer abc' },
+      },
+    ]);
+    expect(out[0]).toEqual({
+      type: 'http',
+      name: 'higgsfield',
+      url: 'https://mcp.higgsfield.ai/mcp',
+      headers: [{ name: 'Authorization', value: 'Bearer abc' }],
+    });
+  });
+
+  it('emits empty headers array when no headers are present', () => {
+    const out = buildAcpMcpServers([
+      {
+        id: 'free-api',
+        transport: 'http',
+        enabled: true,
+        url: 'https://api.example.com/mcp',
+      },
+    ]);
+    expect(out[0]).toEqual({
+      type: 'http',
+      name: 'free-api',
+      url: 'https://api.example.com/mcp',
+      headers: [],
+    });
+    expect((out[0] as any).command).toBeUndefined();
+    expect((out[0] as any).env).toBeUndefined();
+  });
+
+  it('injects OAuth bearer token for oauth-mode http servers', () => {
+    const out = buildAcpMcpServers(
+      [
+        {
+          id: 'higgsfield',
+          transport: 'http',
+          enabled: true,
+          url: 'https://mcp.higgsfield.ai/mcp',
+          // authMode defaults to 'oauth' for remote HTTP
+        },
+      ],
+      { higgsfield: 'access-tok-xyz' },
+    );
+    expect((out[0] as any).headers).toEqual([
+      { name: 'Authorization', value: 'Bearer access-tok-xyz' },
+    ]);
+  });
+
+  it('does NOT inject bearer for no-auth http servers', () => {
+    const out = buildAcpMcpServers(
+      [
+        {
+          id: 'figma-use',
+          transport: 'http',
+          enabled: true,
+          authMode: 'none',
+          url: 'http://localhost:38451/mcp',
+        },
+      ],
+      { 'figma-use': 'stale-token' },
+    );
+    expect((out[0] as any).headers).toEqual([]);
+  });
+
+  it('does NOT overwrite a user-pinned Authorization header with the OAuth bearer', () => {
+    const out = buildAcpMcpServers(
+      [
+        {
+          id: 'higgsfield',
+          transport: 'http',
+          enabled: true,
+          url: 'https://mcp.higgsfield.ai/mcp',
+          headers: { authorization: 'Bearer manual-token' },
+        },
+      ],
+      { higgsfield: 'access-tok-xyz' },
+    );
+    expect((out[0] as any).headers).toEqual([
+      { name: 'authorization', value: 'Bearer manual-token' },
+    ]);
+  });
+
+  it('skips disabled servers regardless of transport', () => {
+    const out = buildAcpMcpServers([
+      { id: 'a', transport: 'stdio', enabled: true, command: 'echo' },
+      { id: 'b', transport: 'http', enabled: false, url: 'https://x.com' },
+    ]);
+    expect(out.map((s) => s.name)).toEqual(['a']);
+  });
+});
+
+describe('acpMcpTransports gate', () => {
+  // Simulates the server.ts spawn-time gate: each server is filtered by
+  // whether its transport is in the runtime's acpMcpTransports list.
+  const mixedServers = [
+    { id: 'local', transport: 'stdio' as const, enabled: true, command: 'echo' },
+    { id: 'cloud-sse', transport: 'sse' as const, enabled: true, url: 'https://example.com/sse' },
+    { id: 'cloud-http', transport: 'http' as const, enabled: true, url: 'https://example.com/mcp' },
+  ];
+
+  function gateFor(def: { acpMcpTransports?: ('stdio' | 'sse' | 'http')[] }) {
+    const supportedTransports = def.acpMcpTransports ?? ['stdio'];
+    return buildAcpMcpServers(
+      mixedServers.filter((s) => supportedTransports.includes(s.transport)),
+    );
+  }
+
+  it('forwards all three transports to Hermes (acpMcpTransports = [stdio, sse, http])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio', 'sse', 'http'] });
+    expect(out.map((s) => s.name)).toEqual(['local', 'cloud-sse', 'cloud-http']);
+  });
+
+  it('forwards stdio only to Kimi (acpMcpTransports = [stdio])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio'] });
+    expect(out.map((s) => s.name)).toEqual(['local']);
+    expect(out[0]).toMatchObject({ type: 'stdio' });
+  });
+
+  it('forwards stdio only to Trae CLI (acpMcpTransports = [stdio])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio'] });
+    expect(out.map((s) => s.name)).toEqual(['local']);
+  });
+
+  it('forwards stdio only to Reasonix (acpMcpTransports = [stdio])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio'] });
+    expect(out.map((s) => s.name)).toEqual(['local']);
+  });
+
+  it('falls back to stdio-only when acpMcpTransports is undefined', () => {
+    const out = gateFor({});
+    expect(out.map((s) => s.name)).toEqual(['local']);
+  });
+
+  it('does not gate on mcpDiscovery alone (mature-acp without acpMcpTransports = stdio only)', () => {
+    const out = gateFor({});
+    expect(out.map((s) => s.name)).toEqual(['local']);
+  });
+
+  it('forwards only sse for a partial-capability runtime ([stdio, sse])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio', 'sse'] });
+    expect(out.map((s) => s.name)).toEqual(['local', 'cloud-sse']);
+  });
+
+  it('forwards only http for a partial-capability runtime ([stdio, http])', () => {
+    const out = gateFor({ acpMcpTransports: ['stdio', 'http'] });
+    expect(out.map((s) => s.name)).toEqual(['local', 'cloud-http']);
   });
 });
 

@@ -4351,7 +4351,8 @@ export const hu: Dict = {
   'settings.customInstructionsDesc': 'Rögzített utasítások, amelyeket az Open Design minden csevegésben követ. Ezek nem mentett memóriák; a tényekhez, preferenciákhoz és projektkontextushoz használd a Memóriát.',
   'mcpClient.forwardedToLabel': 'Továbbítva ide:',
   'mcpClient.notForwardedToLabel': 'Nincs továbbítva ide:',
-  'mcpClient.forwardedAcpNote': 'A stdio-ként megjelölt ACP adapterek csak a stdio MCP szervereket kapják meg ebből a listából; a HTTP és SSE bejegyzések indításkor elvetésre kerülnek.',
+  'mcpClient.forwardedAcpStdioNote': 'A stdio-ként megjelölt ACP adapterek csak a stdio MCP szervereket kapják meg ebből a listából; a HTTP és SSE bejegyzések indításkor elvetésre kerülnek.',
+  'mcpClient.forwardedAcpTokenNote': 'A teljes MCP-támogatással rendelkező adapterek (Hermesen ellenőrizve) minden típust megkapnak; a konfigurált MCP-kiszolgálók OAuth-tokenjei automatikusan továbbítódnak.',
   'mcpClient.notForwardedNote': 'Ezekhez az Agentekhez állítsd be az MCP szervereket az Agent saját konfigurációs fájljában (pl. ~/.codex/config.toml, ~/.gemini/settings.json); az alábbi szerverek ott csendben kihasználatlanok maradnak.',
 
   // Brands library + extraction

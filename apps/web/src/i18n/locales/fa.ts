@@ -4346,7 +4346,8 @@ export const fa: Dict = {
   'settings.customInstructionsDesc': 'دستورالعمل‌های ثابتی که Open Design در هر گفت‌وگو از آن‌ها پیروی می‌کند. این‌ها حافظه ذخیره‌شده نیستند؛ برای واقعیت‌ها، ترجیحات و بافت پروژه از حافظه استفاده کنید.',
   'mcpClient.forwardedToLabel': 'ارسال‌شده به:',
   'mcpClient.notForwardedToLabel': 'ارسال‌نشده به:',
-  'mcpClient.forwardedAcpNote': 'آداپتورهای ACP که با stdio علامت‌گذاری شده‌اند فقط سرورهای MCP از نوع stdio را از این فهرست دریافت می‌کنند؛ ورودی‌های HTTP و SSE هنگام راه‌اندازی حذف می‌شوند.',
+  'mcpClient.forwardedAcpStdioNote': 'آداپتورهای ACP که با stdio علامت‌گذاری شده‌اند فقط سرورهای MCP از نوع stdio را از این فهرست دریافت می‌کنند؛ ورودی‌های HTTP و SSE هنگام راه‌اندازی حذف می‌شوند.',
+  'mcpClient.forwardedAcpTokenNote': 'آداپتورهای با پشتیبانی کامل MCP (تأیید‌شده روی Hermes) همهٔ انواع انتقال را دریافت می‌کنند؛ توکن‌های OAuth برای سرورهای MCP پیکربندی‌شده به‌طور خودکار ارسال می‌شوند.',
   'mcpClient.notForwardedNote': 'برای آن Agentها، سرورهای MCP را در فایل پیکربندی خودِ Agent تنظیم کنید (مثلاً ~/.codex/config.toml، ~/.gemini/settings.json)؛ سرورهای زیر در آن‌جا بی‌سروصدا بلااستفاده می‌مانند.',
 
   // Brands library + extraction

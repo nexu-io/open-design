@@ -4351,7 +4351,8 @@ export const fr: Dict = {
   'settings.customInstructionsDesc': 'Instructions fixes qu\'Open Design suit dans chaque conversation. Ce ne sont pas des mémoires enregistrées ; utilisez Mémoire pour les faits, les préférences et le contexte de projet.',
   'mcpClient.forwardedToLabel': 'Transféré vers :',
   'mcpClient.notForwardedToLabel': 'Non transféré vers :',
-  'mcpClient.forwardedAcpNote': 'Les adaptateurs ACP marqués stdio ne reçoivent que les serveurs MCP stdio de cette liste ; les entrées HTTP et SSE sont abandonnées au lancement.',
+  'mcpClient.forwardedAcpStdioNote': 'Les adaptateurs ACP marqués stdio ne reçoivent que les serveurs MCP stdio de cette liste ; les entrées HTTP et SSE sont abandonnées au lancement.',
+  'mcpClient.forwardedAcpTokenNote': 'Les adaptateurs avec support MCP complet (vérifié sur Hermes) reçoivent tous les transports ; les jetons OAuth pour les serveurs MCP configurés sont automatiquement transmis.',
   'mcpClient.notForwardedNote': 'Pour ces agents, configurez les serveurs MCP dans le fichier de configuration propre à l\'agent (par ex. ~/.codex/config.toml, ~/.gemini/settings.json) ; les serveurs ci-dessous y sont inutilisés sans avertissement.',
 
   // Brands library + extraction

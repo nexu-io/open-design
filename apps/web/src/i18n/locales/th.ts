@@ -4351,7 +4351,8 @@ export const th: Dict = {
   'settings.customInstructionsDesc': 'คำสั่งตายตัวที่ Open Design ปฏิบัติตามในทุกการแชต สิ่งเหล่านี้ไม่ใช่หน่วยความจำที่บันทึกไว้ ใช้ Memory สำหรับข้อเท็จจริง ความชอบ และบริบทของโปรเจกต์',
   'mcpClient.forwardedToLabel': 'ส่งต่อไปยัง:',
   'mcpClient.notForwardedToLabel': 'ไม่ได้ส่งต่อไปยัง:',
-  'mcpClient.forwardedAcpNote': 'ACP adapter ที่ทำเครื่องหมาย stdio จะรับเฉพาะเซิร์ฟเวอร์ MCP แบบ stdio จากรายการนี้เท่านั้น รายการ HTTP และ SSE จะถูกตัดทิ้งในเวลาที่ spawn',
+  'mcpClient.forwardedAcpStdioNote': 'ACP adapter ที่ทำเครื่องหมาย stdio จะรับเฉพาะเซิร์ฟเวอร์ MCP แบบ stdio จากรายการนี้เท่านั้น รายการ HTTP และ SSE จะถูกตัดทิ้งในเวลาที่ spawn',
+  'mcpClient.forwardedAcpTokenNote': 'อะแดปเตอร์ที่รองรับ MCP แบบเต็ม (ตรวจสอบแล้วบน Hermes) รับการขนส่งทุกประเภท; โทเค็น OAuth สำหรับเซิร์ฟเวอร์ MCP ที่กำหนดค่าไว้จะถูกส่งต่อโดยอัตโนมัติ',
   'mcpClient.notForwardedNote': 'สำหรับ Agent เหล่านั้น ให้กำหนดค่าเซิร์ฟเวอร์ MCP ในไฟล์ config ของ Agent เอง (เช่น ~/.codex/config.toml, ~/.gemini/settings.json) เซิร์ฟเวอร์ด้านล่างจะไม่ถูกใช้งานที่นั่นโดยไม่มีการแจ้งเตือน',
 
   // Brands library + extraction

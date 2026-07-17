@@ -11375,7 +11375,14 @@ export async function startServer({
       enabledExternalMcp.length > 0 &&
       def.externalMcpInjection === 'acp-merge'
     ) {
-      const acpExternal = buildAcpMcpServers(enabledExternalMcp);
+      // Gate forwarding on `acpMcpTransports` — filter each server by
+      // whether its transport is in the runtime's capability list.
+      // Runtimes without this field fall back to stdio-only.
+      const supportedTransports = def.acpMcpTransports ?? ['stdio'];
+      const acpExternal = buildAcpMcpServers(
+        enabledExternalMcp.filter((s) => supportedTransports.includes(s.transport)),
+        oauthTokensForSpawn,
+      );
       mcpServers.push(...acpExternal);
     }
     // OpenCode: serialise enabled MCP servers into its `mcp` config schema

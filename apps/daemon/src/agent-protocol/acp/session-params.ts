@@ -17,6 +17,8 @@ export interface AcpMcpServerInput {
   command?: unknown;
   args?: unknown;
   env?: unknown;
+  url?: unknown;
+  headers?: unknown;
 }
 /**
  * Options accepted by `buildAcpSessionNewParams` controlling optional MCP
@@ -52,6 +54,27 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
     mcpServers: servers.map((s) => {
+      const rawType = typeof s?.type === 'string' ? s.type : 'stdio';
+
+      // Non-stdio servers (sse/http): emit url + headers, no command/args/env.
+      if (rawType === 'sse' || rawType === 'http') {
+        const rawHeaders = s?.headers;
+        const headers = Array.isArray(rawHeaders)
+          ? rawHeaders
+          : rawHeaders && typeof rawHeaders === 'object' && !Array.isArray(rawHeaders)
+            ? Object.entries(rawHeaders as Record<string, string>).map(
+                ([name, value]) => ({ name, value }),
+              )
+            : [];
+        return {
+          type: rawType,
+          name: typeof s?.name === 'string' ? s.name : '',
+          url: typeof s?.url === 'string' ? s.url : '',
+          headers,
+        };
+      }
+
+      // stdio servers: emit command/args/env as before.
       const rawEnv = s?.env;
       // Already a plain object — pass through in map mode, convert to
       // array in array mode (e.g. live-artifacts MCP from
@@ -61,7 +84,7 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
         rawEnv && typeof rawEnv === 'object' && !Array.isArray(rawEnv);
       if (wantsMap && isPlainObject) {
         return {
-          type: typeof s?.type === 'string' ? s.type : 'stdio',
+          type: 'stdio',
           name: typeof s?.name === 'string' ? s.name : '',
           command: typeof s?.command === 'string' ? s.command : '',
           args: Array.isArray(s?.args) ? s.args : [],
@@ -77,7 +100,7 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
             )
           : envArr;
       return {
-        type: typeof s?.type === 'string' ? s.type : 'stdio',
+        type: 'stdio',
         name: typeof s?.name === 'string' ? s.name : '',
         command: typeof s?.command === 'string' ? s.command : '',
         args: Array.isArray(s?.args) ? s.args : [],

@@ -4351,7 +4351,8 @@ export const uk: Dict = {
   'settings.customInstructionsDesc': 'Незмінні інструкції, яких Open Design дотримується в кожному чаті. Це не збережені спогади; використовуйте Пам’ять для фактів, уподобань і контексту проєкту.',
   'mcpClient.forwardedToLabel': 'Переслано до:',
   'mcpClient.notForwardedToLabel': 'Не переслано до:',
-  'mcpClient.forwardedAcpNote': 'Адаптери ACP, позначені як stdio, отримують із цього списку лише stdio-сервери MCP; записи HTTP та SSE відкидаються під час запуску.',
+  'mcpClient.forwardedAcpStdioNote': 'Адаптери ACP, позначені як stdio, отримують із цього списку лише stdio-сервери MCP; записи HTTP та SSE відкидаються під час запуску.',
+  'mcpClient.forwardedAcpTokenNote': 'Адаптери з повною підтримкою MCP (перевірено на Hermes) отримують усі транспорти; OAuth-токени для налаштованих MCP-серверів пересилаються автоматично.',
   'mcpClient.notForwardedNote': 'Для цих agent налаштуйте сервери MCP у власному файлі конфігурації agent (наприклад, ~/.codex/config.toml, ~/.gemini/settings.json); наведені нижче сервери там мовчки не використовуються.',
 
   // Brands library + extraction

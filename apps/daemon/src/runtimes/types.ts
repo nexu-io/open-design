@@ -167,6 +167,14 @@ export type RuntimeAgentDef = {
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;
   mcpDiscovery?: string;
+  /**
+   * MCP transports this ACP runtime can receive at spawn time. When present,
+   * the daemon gates HTTP/SSE forwarding on this list instead of
+   * `mcpDiscovery`. Runtimes without this field fall back to stdio-only.
+   * Set only on runtimes whose installed implementation is verified to
+   * accept `McpServerHttp` / `McpServerSse` descriptors via ACP.
+   */
+  acpMcpTransports?: ('stdio' | 'sse' | 'http')[];
   // How the daemon forwards the user's `.od/mcp-config.json` external MCP
   // servers to this runtime at spawn time. The shape of the injection
   // is one of three strategies, each of which the server.ts spawn

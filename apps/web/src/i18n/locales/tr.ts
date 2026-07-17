@@ -4351,7 +4351,8 @@ export const tr: Dict = {
   'settings.customInstructionsDesc': 'Open Design\'ın her sohbette izlediği sabit yönergeler. Bunlar kayıtlı bellekler değildir; gerçekler, tercihler ve proje bağlamı için Bellek\'i kullanın.',
   'mcpClient.forwardedToLabel': 'İletildiği yer:',
   'mcpClient.notForwardedToLabel': 'İletilmediği yer:',
-  'mcpClient.forwardedAcpNote': 'stdio olarak işaretlenen ACP adaptörleri bu listeden yalnızca stdio MCP sunucularını alır; HTTP ve SSE girdileri başlatma sırasında düşürülür.',
+  'mcpClient.forwardedAcpStdioNote': 'stdio olarak işaretlenen ACP adaptörleri bu listeden yalnızca stdio MCP sunucularını alır; HTTP ve SSE girdileri başlatma sırasında düşürülür.',
+  'mcpClient.forwardedAcpTokenNote': 'Tam MCP desteğine sahip adaptörler (Hermes\'te doğrulandı) tüm taşıyıcıları alır; yapılandırılmış MCP sunucuları için OAuth belirteçleri otomatik olarak iletilir.',
   'mcpClient.notForwardedNote': 'Bu agent\'lar için MCP sunucularını agent\'ın kendi yapılandırma dosyasında ayarlayın (ör. ~/.codex/config.toml, ~/.gemini/settings.json); aşağıdaki sunucular orada sessizce kullanılmaz.',
 
   // Brands library + extraction

@@ -4351,7 +4351,8 @@ export const ar: Dict = {
   'settings.customInstructionsDesc': 'تعليمات ثابتة يتبعها Open Design في كل محادثة. هذه ليست ذكريات محفوظة؛ استخدم الذاكرة للحقائق والتفضيلات وسياق المشروع.',
   'mcpClient.forwardedToLabel': 'مُمرَّر إلى:',
   'mcpClient.notForwardedToLabel': 'غير مُمرَّر إلى:',
-  'mcpClient.forwardedAcpNote': 'محوِّلات ACP المُعلَّمة بـ stdio تتلقى فقط خوادم MCP من نوع stdio من هذه القائمة؛ تُسقَط إدخالات HTTP وSSE عند بدء التشغيل.',
+  'mcpClient.forwardedAcpStdioNote': 'محوِّلات ACP المُعلَّمة بـ stdio تتلقى فقط خوادم MCP من نوع stdio من هذه القائمة؛ تُسقَط إدخالات HTTP وSSE عند بدء التشغيل.',
+  'mcpClient.forwardedAcpTokenNote': 'المحوِّلات ذات دعم MCP الكامل (تم التحقق على Hermes) تتلقى جميع وسائل النقل؛ تُعاد توجيه رموز OAuth لخوادم MCP المُهيَّأة تلقائيًا.',
   'mcpClient.notForwardedNote': 'بالنسبة إلى تلك الـ Agents، اضبط خوادم MCP في ملف إعدادات الـ Agent الخاص به (مثل ~/.codex/config.toml و~/.gemini/settings.json)؛ الخوادم أدناه غير مستخدمة هناك دون إشعار.',
 
   // Brands library + extraction

@@ -143,6 +143,20 @@ export interface AgentInfo {
     | 'opencode-env-content'
     | 'mimo-env-content';
   /**
+   * MCP discovery mode for the runtime. `'mature-acp'` means the ACP agent
+   * accepts the daemon's stdio live-artifacts MCP descriptor (used by
+   * `buildLiveArtifactsMcpServersForAgent`). This flag alone does NOT
+   * establish support for `McpServerHttp` / `McpServerSse` — see
+   * `acpMcpTransports` for that.
+   */
+  mcpDiscovery?: string;
+  /**
+   * MCP transports this ACP runtime can receive at spawn time. The daemon
+   * gates HTTP/SSE forwarding on this list; the settings UI uses it to
+   * label agents that only accept stdio. Undefined === stdio-only.
+   */
+  acpMcpTransports?: ('stdio' | 'sse' | 'http')[];
+  /**
    * When `false`, the Settings model picker hides the "Custom (fill below)"
    * option and the free-text input. Use this for agents whose CLI doesn't
    * accept a model id (e.g. Antigravity `agy` has no `--model` flag yet —

@@ -4351,7 +4351,8 @@ export const ja: Dict = {
   'settings.customInstructionsDesc': 'Open Design がすべてのチャットで従う固定の指示です。これらは保存されたメモリではありません。事実・好み・プロジェクトのコンテキストには「メモリ」を使用してください。',
   'mcpClient.forwardedToLabel': '転送先：',
   'mcpClient.notForwardedToLabel': '転送されない先：',
-  'mcpClient.forwardedAcpNote': 'stdio only と表示された ACP アダプターは、このリストから stdio タイプの MCP サーバーのみを受け取ります。HTTP と SSE のエントリは起動時に破棄されます。',
+  'mcpClient.forwardedAcpStdioNote': 'stdio only と表示された ACP アダプターは、このリストから stdio タイプの MCP サーバーのみを受け取ります。HTTP と SSE のエントリは起動時に破棄されます。',
+  'mcpClient.forwardedAcpTokenNote': '完全なMCPサポートを備えたアダプター（Hermesで検証済み）はすべてのトランスポートを受信します。設定済みのMCPサーバーのOAuthトークンは自動的に転送されます。',
   'mcpClient.notForwardedNote': 'これらのエージェントについては、各エージェント自身の設定ファイル（例：~/.codex/config.toml、~/.gemini/settings.json）で MCP サーバーを設定してください。以下のサーバーはそこでは使用されません。',
 
   // Brands library + extraction
