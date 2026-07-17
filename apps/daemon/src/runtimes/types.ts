@@ -1,5 +1,9 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
+import type {
+  AgentDiagnostic,
+  AgentModelDiscoveryKind,
+  ModelMetadata,
+} from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -133,6 +137,10 @@ export type RuntimeAgentDef = {
     resolvedBin: string,
     env: RuntimeEnv,
   ) => Promise<RuntimeModelOption[] | null>;
+  // Describes where a model refresh reads from. Adapters with listModels or
+  // fetchModels default to CLI discovery; adapters without either default to
+  // unsupported. Set this when the source needs a more precise description.
+  modelDiscovery?: AgentModelDiscoveryKind;
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;

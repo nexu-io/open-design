@@ -11,6 +11,7 @@ import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import { resolveAmrProfile } from '../integrations/vela.js';
+import type { AgentModelDiscoveryKind } from '@open-design/contracts';
 import {
   buildAuthDiagnostic,
   buildExecutableDiagnostic,
@@ -25,6 +26,13 @@ import type {
   RuntimeModelSource,
   RuntimeModelOption,
 } from './types.js';
+
+export function modelDiscoveryForAgent(
+  def: RuntimeAgentDef,
+): AgentModelDiscoveryKind {
+  if (def.modelDiscovery) return def.modelDiscovery;
+  return def.listModels || def.fetchModels ? 'cli' : 'unsupported';
+}
 
 type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
@@ -291,7 +299,10 @@ function stripFns(
     authProbe,
     ...rest
   } = def;
-  return rest;
+  return {
+    ...rest,
+    modelDiscovery: modelDiscoveryForAgent(def),
+  };
 }
 
 async function safeProbe(
