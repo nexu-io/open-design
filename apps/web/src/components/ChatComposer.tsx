@@ -2239,6 +2239,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       key: 'ArrowDown' | 'ArrowUp' | 'Tab' | 'Enter' | 'Escape',
     ): boolean {
       if (slash) {
+        // Keep the no-results palette visible for discovery, but preserve the
+        // pre-palette behavior for literal slash-prefixed prompts: Enter sends
+        // the text instead of being swallowed by the open combobox.
+        if (filteredSlash.length === 0 && key === 'Enter') {
+          setSlash(null);
+          void submit();
+          return true;
+        }
         if (filteredSlash.length > 0) {
           if (key === 'ArrowDown') {
             setSlashIndex((i) => (i + 1) % filteredSlash.length);

@@ -1508,6 +1508,19 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('chat-composer-input').getAttribute('aria-activedescendant')).toBeNull();
   });
 
+  it('submits literal slash-prefixed text when no command matches', async () => {
+    const onSend = vi.fn();
+    renderComposer({ onSend });
+    await flushMounts();
+    await typeAndSettle('/notacommand');
+
+    expect(await screen.findByText('No results for “notacommand”.')).toBeTruthy();
+    pressEnter();
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[0]).toBe('/notacommand');
+  });
+
   // The sliders "tools" popover (Official / My plugins switch, plugin search)
   // and the standalone "@" mention trigger button were removed from the
   // composer; plugins/skills/MCP are now reached via typed @-mentions and the
