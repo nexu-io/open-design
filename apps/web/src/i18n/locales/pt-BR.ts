@@ -2671,6 +2671,8 @@ export const ptBR: Dict = {
   'fileViewer.saveDisabled': 'Salvar (visualizador somente leitura)',
   'fileViewer.save': 'Salvar',
   'fileViewer.preview': 'Prévia',
+  'fileViewer.previewAssetBlockedTitle': 'Recurso bloqueado',
+  'fileViewer.previewAssetBlockedDetail': '{name} aponta para fora deste projeto. Copie o arquivo para a pasta do projeto e atualize a referência.',
   'fileViewer.source': 'Código-fonte',
   'fileViewer.tweaks': 'Ajustes',
   'fileViewer.tweaksUnavailable': 'Sem painel de ajustes neste artefato',

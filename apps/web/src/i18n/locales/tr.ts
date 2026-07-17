@@ -2671,6 +2671,8 @@ export const tr: Dict = {
   'fileViewer.saveDisabled': 'Kaydet (salt-okunur görüntüleyici)',
   'fileViewer.save': 'Kaydet',
   'fileViewer.preview': 'Önizle',
+  'fileViewer.previewAssetBlockedTitle': 'Varlık engellendi',
+  'fileViewer.previewAssetBlockedDetail': '{name} bu projenin dışını işaret ediyor. Dosyayı proje klasörüne kopyalayın ve referansı güncelleyin.',
   'fileViewer.source': 'Kaynak',
   'fileViewer.tweaks': 'Düzenlemeler',
   'fileViewer.tweaksUnavailable': 'Bu artefaktta düzenleme paneli yok',

@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   htmlHasRootRelativeProjectAssetRefs,
+  isBlockedPreviewAssetResponse,
   normalizeRootRelativeProjectAssetRefs,
   ownerRelativeAssetPath,
+  preflightCheckPreviewAssets,
   resolveRelativeAssetPath,
   rewriteInlinedCssAssetRefs,
   rewriteInlinedScriptAssetRefs,
@@ -244,5 +246,126 @@ describe('rewriteInlinedScriptAssetRefs', () => {
       "const c = '/missing.json';",
     ].join('\n');
     expect(rewriteInlinedScriptAssetRefs(js, 'index.html', files, toRawUrl)).toBe(js);
+  });
+});
+
+describe('isBlockedPreviewAssetResponse', () => {
+  it('identifies symlink-escape 400 responses', () => {
+    expect(
+      isBlockedPreviewAssetResponse(400, {
+        error: { code: 'BAD_REQUEST', message: 'Error: path escapes project dir via symlink' },
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects non-400 statuses', () => {
+    expect(isBlockedPreviewAssetResponse(404, { error: { code: 'BAD_REQUEST', message: 'not found' } })).toBe(false);
+    expect(isBlockedPreviewAssetResponse(403, { error: { code: 'BAD_REQUEST', message: 'forbidden' } })).toBe(false);
+    expect(isBlockedPreviewAssetResponse(200, { error: { code: 'BAD_REQUEST', message: 'symlink' } })).toBe(false);
+  });
+
+  it('rejects non-BAD_REQUEST error codes', () => {
+    expect(
+      isBlockedPreviewAssetResponse(400, {
+        error: { code: 'OTHER', message: 'path escapes project dir via symlink' },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects bodies that lack the symlink message', () => {
+    expect(isBlockedPreviewAssetResponse(400, { error: { code: 'BAD_REQUEST', message: 'other error' } })).toBe(false);
+    expect(isBlockedPreviewAssetResponse(400, { error: { code: 'BAD_REQUEST' } })).toBe(false);
+  });
+
+  it('handles malformed bodies gracefully', () => {
+    expect(isBlockedPreviewAssetResponse(400, null)).toBe(false);
+    expect(isBlockedPreviewAssetResponse(400, {})).toBe(false);
+    expect(isBlockedPreviewAssetResponse(400, 'plain string')).toBe(false);
+  });
+});
+
+describe('preflightCheckPreviewAssets', () => {
+  const files = new Set(['photo.jpg', 'styles.css', 'icon.png']);
+  const symlinkBody = {
+    error: { code: 'BAD_REQUEST', message: 'Error: path escapes project dir via symlink' },
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns blocked assets when raw route returns symlink-escape 400', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.endsWith('/raw/photo.jpg')) {
+        return new Response(JSON.stringify(symlinkBody), { status: 400 });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = '<img src="/photo.jpg" alt="x"><link rel="stylesheet" href="/styles.css">';
+    const blocked = await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl);
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]).toEqual({ projectPath: 'photo.jpg', originalRef: '/photo.jpg' });
+  });
+
+  it('ignores ordinary 404 responses (missing files are not security blocks)', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = '<img src="/missing.png">';
+    const blocked = await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl);
+    expect(blocked).toHaveLength(0);
+  });
+
+  it('returns empty list when no refs match project files', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = '<img src="https://cdn.example.com/x.png">';
+    const blocked = await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl);
+    expect(blocked).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('caps preflight at 32 asset references', async () => {
+    const manyFiles = new Set<string>();
+    for (let i = 0; i < 50; i++) manyFiles.add(`img${i}.png`);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      return new Response(JSON.stringify(symlinkBody), { status: 400 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const refs = Array.from({ length: 50 }, (_, i) => `<img src="/img${i}.png">`).join('');
+    const blocked = await preflightCheckPreviewAssets(refs, 'index.html', manyFiles, toRawUrl);
+    expect(blocked).toHaveLength(32);
+    expect(fetchMock).toHaveBeenCalledTimes(32);
+  });
+
+  it('stops on abort signal', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      controller.abort();
+      throw new DOMException('aborted', 'AbortError');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = '<img src="/photo.jpg"><img src="/styles.css"><img src="/icon.png">';
+    const blocked = await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl, controller.signal);
+    expect(blocked).toHaveLength(0);
+  });
+
+  it('survives network errors without surfacing them', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = '<img src="/photo.jpg">';
+    const blocked = await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl);
+    expect(blocked).toHaveLength(0);
   });
 });

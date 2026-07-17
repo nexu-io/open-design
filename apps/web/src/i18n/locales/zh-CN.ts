@@ -2915,6 +2915,8 @@ export const zhCN: Dict = {
   "fileViewer.saveDisabled": "保存（只读预览）",
   "fileViewer.save": "保存",
   "fileViewer.preview": "预览",
+  "fileViewer.previewAssetBlockedTitle": "资源被阻止",
+  "fileViewer.previewAssetBlockedDetail": "{name} 指向此项目外部。请将文件复制到项目文件夹中并更新引用。",
   "fileViewer.source": "代码",
   "fileViewer.tweaks": "调整",
   "fileViewer.tweaksUnavailable": "此作品中没有调整面板",

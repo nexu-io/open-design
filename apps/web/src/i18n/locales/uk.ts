@@ -2671,6 +2671,8 @@ export const uk: Dict = {
   'fileViewer.saveDisabled': 'Зберегти (переглядач лише для читання)',
   'fileViewer.save': 'Зберегти',
   'fileViewer.preview': 'Попередній перегляд',
+  'fileViewer.previewAssetBlockedTitle': 'Ресурс заблоковано',
+  'fileViewer.previewAssetBlockedDetail': '{name} вказує за межі цього проєкту. Скопіюйте файл у папку проєкту та оновіть посилання.',
   'fileViewer.source': 'Джерело',
   'fileViewer.tweaks': 'Настройки',
   'fileViewer.tweaksUnavailable': 'Немає панелі налаштувань у цьому артефакті',

@@ -2671,6 +2671,8 @@ export const id: Dict = {
   'fileViewer.saveDisabled': 'Tidak ada perubahan untuk disimpan',
   'fileViewer.save': 'Simpan',
   'fileViewer.preview': 'Pratinjau',
+  'fileViewer.previewAssetBlockedTitle': 'Aset diblokir',
+  'fileViewer.previewAssetBlockedDetail': '{name} menunjuk ke luar proyek ini. Salin file ke folder proyek dan perbarui referensi.',
   'fileViewer.source': 'Sumber',
   'fileViewer.tweaks': 'Tweaks',
   'fileViewer.tweaksUnavailable': 'Tidak ada panel tweaks pada artefak ini',

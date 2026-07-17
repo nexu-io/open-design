@@ -2671,6 +2671,8 @@ export const ru: Dict = {
   'fileViewer.saveDisabled': 'Сохранить (только для чтения)',
   'fileViewer.save': 'Сохранить',
   'fileViewer.preview': 'Предпросмотр',
+  'fileViewer.previewAssetBlockedTitle': 'Ресурс заблокирован',
+  'fileViewer.previewAssetBlockedDetail': '{name} указывает за пределы этого проекта. Скопируйте файл в папку проекта и обновите ссылку.',
   'fileViewer.source': 'Исходный код',
   'fileViewer.tweaks': 'Настройки',
   'fileViewer.tweaksUnavailable': 'В этом артефакте нет панели настроек',

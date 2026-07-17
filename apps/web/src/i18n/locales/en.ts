@@ -2685,6 +2685,9 @@ export const en: Dict = {
   'fileViewer.saveDisabled': 'Save (read-only viewer)',
   'fileViewer.save': 'Save',
   'fileViewer.preview': 'Preview',
+  'fileViewer.previewAssetBlockedTitle': 'Asset blocked',
+  'fileViewer.previewAssetBlockedDetail':
+    '{name} points outside this project. Copy the file into the project folder and update the reference.',
   'fileViewer.source': 'Code',
   'fileViewer.tweaks': 'Tweaks',
   'fileViewer.tweaksUnavailable': 'No tweaks panel in this artifact',

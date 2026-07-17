@@ -2671,6 +2671,8 @@ export const hu: Dict = {
   'fileViewer.saveDisabled': 'Mentés (csak olvasható nézet)',
   'fileViewer.save': 'Mentés',
   'fileViewer.preview': 'Előnézet',
+  'fileViewer.previewAssetBlockedTitle': 'Eszköz blokkolva',
+  'fileViewer.previewAssetBlockedDetail': '{name} ezen a projekten kívülre mutat. Másolja a fájlt a projekt mappába, és frissítse a hivatkozást.',
   'fileViewer.source': 'Forrás',
   'fileViewer.tweaks': 'Finomhangolás',
   'fileViewer.tweaksUnavailable': 'Nincs finomhangolási panel ebben az artefaktumban',

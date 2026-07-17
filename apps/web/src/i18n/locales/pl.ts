@@ -2671,6 +2671,8 @@ export const pl: Dict = {
   'fileViewer.saveDisabled': 'Zapisz (widok tylko do odczytu)',
   'fileViewer.save': 'Zapisz',
   'fileViewer.preview': 'Podgląd',
+  'fileViewer.previewAssetBlockedTitle': 'Zasób zablokowany',
+  'fileViewer.previewAssetBlockedDetail': '{name} wskazuje poza ten projekt. Skopiuj plik do folderu projektu i zaktualizuj odniesienie.',
   'fileViewer.source': 'Źródło',
   'fileViewer.tweaks': 'Poprawki',
   'fileViewer.tweaksUnavailable': 'Brak panelu poprawek w tym artefakcie',

@@ -2671,6 +2671,8 @@ export const fa: Dict = {
   'fileViewer.saveDisabled': 'ذخیره (نمایشگر فقط خواندنی)',
   'fileViewer.save': 'ذخیره',
   'fileViewer.preview': 'پیش‌نمایش',
+  'fileViewer.previewAssetBlockedTitle': 'دارایی مسدود شد',
+  'fileViewer.previewAssetBlockedDetail': '{name} به خارج از این پروژه اشاره می‌کند. فایل را در پوشه پروژه کپی کرده و مرجع را به‌روزرسانی کنید.',
   'fileViewer.source': 'منبع',
   'fileViewer.tweaks': 'تنظیمات جزئی',
   'fileViewer.tweaksUnavailable': 'پنل تنظیمات در این مصنوع وجود ندارد',

@@ -2671,6 +2671,8 @@ export const esES: Dict = {
   'fileViewer.saveDisabled': 'Guardar (visor de solo lectura)',
   'fileViewer.save': 'Guardar',
   'fileViewer.preview': 'Vista previa',
+  'fileViewer.previewAssetBlockedTitle': 'Recurso bloqueado',
+  'fileViewer.previewAssetBlockedDetail': '{name} apunta fuera de este proyecto. Copia el archivo en la carpeta del proyecto y actualiza la referencia.',
   'fileViewer.source': 'Código fuente',
   'fileViewer.tweaks': 'Ajustes',
   'fileViewer.tweaksUnavailable': 'Sin panel de ajustes en este artefacto',

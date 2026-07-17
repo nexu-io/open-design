@@ -2671,6 +2671,8 @@ export const ar: Dict = {
   'fileViewer.saveDisabled': 'حفظ (عارض للقراءة فقط)',
   'fileViewer.save': 'حفظ',
   'fileViewer.preview': 'معاينة',
+  'fileViewer.previewAssetBlockedTitle': 'تم رفض المورد',
+  'fileViewer.previewAssetBlockedDetail': '{name} يشير إلى خارج هذا المشروع. انسخ الملف إلى مجلد المشروع وقم بتحديث المرجع.',
   'fileViewer.source': 'المصدر',
   'fileViewer.tweaks': 'تعديلات',
   'fileViewer.tweaksUnavailable': 'لا توجد لوحة تعديلات في هذا العمل',

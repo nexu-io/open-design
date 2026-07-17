@@ -150,8 +150,10 @@ import {
 import {
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
+  preflightCheckPreviewAssets,
   rewriteInlinedCssAssetRefs,
   rewriteInlinedScriptAssetRefs,
+  type BlockedPreviewAsset,
 } from './file-viewer-preview-assets';
 import { resolvePoweredPreviewUrl } from '../runtime/powered-preview';
 import { saveTemplate } from '../state/projects';
@@ -7084,16 +7086,39 @@ function HtmlViewer({
   // below then runs in conservative candidate mode so a clone artifact never
   // flashes through the (unstyled) URL-load path before the list lands.
   const [projectFilePathSet, setProjectFilePathSet] = useState<ReadonlySet<string> | null>(null);
+  // Blocked preview assets detected by preflight check — shows security
+  // warnings instead of silent broken images for symlink escapes.
+  const [blockedPreviewAssets, setBlockedPreviewAssets] = useState<BlockedPreviewAsset[]>([]);
   useEffect(() => {
     let cancelled = false;
     setProjectFilePathSet(null);
+    setBlockedPreviewAssets([]);
     void fetchProjectFiles(projectId).then((files) => {
-      if (!cancelled) setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+      if (!cancelled) {
+        setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+        // Preflight-check HTML preview assets through the raw route to surface
+        // security blocks before the iframe renders broken images. Runs after the
+        // file list lands so asset refs can be confirmed against real project files.
+        if (source && file && file.path) {
+          const abortController = new AbortController();
+          void preflightCheckPreviewAssets(
+            source,
+            file.path,
+            new Set(files.map((entry) => entry.name)),
+            (p) => projectRawUrl(projectId, p),
+            abortController.signal,
+          ).then((blocked) => {
+            if (!cancelled) setBlockedPreviewAssets(blocked);
+          }).catch(() => {
+            // Preflight failure is non-fatal — preview renders normally
+          });
+        }
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.mtime, filesRefreshKey, reloadKey]);
+  }, [source, projectId, file?.path, file?.mtime, filesRefreshKey, reloadKey]);
   const projectRootAssetRefs = useMemo(
     () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
     [source, projectFilePathSet],
@@ -11985,6 +12010,18 @@ function HtmlViewer({
                     toolbarHost={manualEditMode ? null : commentComposerHost}
                   >
                     <div className="artifact-preview-transport-stack">
+                      {blockedPreviewAssets.length > 0 && (
+                        <div className="preview-asset-blocked-notice" role="alert">
+                          <strong>{t('fileViewer.previewAssetBlockedTitle')}</strong>
+                          <ul>
+                            {blockedPreviewAssets.map((asset, i) => (
+                              <li key={i}>
+                                {t('fileViewer.previewAssetBlockedDetail', { name: asset.projectPath })}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {OD_PREVIEW_KEEP_ALIVE ? (
                         <PooledIframe
                           ref={urlPreviewIframeRef}

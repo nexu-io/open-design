@@ -3449,6 +3449,8 @@ export interface Dict {
   'fileViewer.saveDisabled': string;
   'fileViewer.save': string;
   'fileViewer.preview': string;
+  'fileViewer.previewAssetBlockedTitle': string;
+  'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.source': string;
   'fileViewer.tweaks': string;
   'fileViewer.tweaksUnavailable': string;

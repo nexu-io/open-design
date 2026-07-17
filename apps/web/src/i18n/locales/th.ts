@@ -2671,6 +2671,8 @@ export const th: Dict = {
   'fileViewer.saveDisabled': 'ปุ่มเซฟ (ตอนนี้อ่านได้เท่านั้น)',
   'fileViewer.save': 'เซฟด่วน',
   'fileViewer.preview': 'หน้าพรีวิว',
+  'fileViewer.previewAssetBlockedTitle': 'ไฟล์ถูกบล็อก',
+  'fileViewer.previewAssetBlockedDetail': '{name} ชี้ไปยังนอกโปรเจกต์นี้ กรุณาคัดลอกไฟล์ไปไว้ในโฟลเดอร์โปรเจกต์และอัปเดตการอ้างอิง',
   'fileViewer.source': 'ซอร์สไฟล์',
   'fileViewer.tweaks': 'ตั้งปรับแต่ง',
   'fileViewer.tweaksUnavailable': 'ไม่มีพาเนลตั้งปรับแต่งในชิ้นงานนี้',

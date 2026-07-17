@@ -2671,6 +2671,8 @@ export const ko: Dict = {
   'fileViewer.saveDisabled': '저장 (읽기 전용)',
   'fileViewer.save': '저장',
   'fileViewer.preview': '미리보기',
+  'fileViewer.previewAssetBlockedTitle': '에셋 차단됨',
+  'fileViewer.previewAssetBlockedDetail': '{name}이(가) 이 프로젝트 외부를 가리킵니다. 파일을 프로젝트 폴더에 복사하고 참조를 업데이트하세요.',
   'fileViewer.source': '소스 코드',
   'fileViewer.tweaks': '조정 (Tweaks)',
   'fileViewer.tweaksUnavailable': '이 아티팩트에 조정 패널이 없습니다',

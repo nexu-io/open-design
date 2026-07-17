@@ -312,3 +312,83 @@ function confirmedRelativeScriptRef(
   const resolved = resolveRelativeAssetPath(scriptFilePath, ref);
   return resolved && projectFilePaths.has(resolved) ? resolved : null;
 }
+
+/**
+ * Information about a preview asset that was blocked by security policy.
+ * The projectPath is shown to users; the external target is never exposed.
+ */
+export interface BlockedPreviewAsset {
+  /** Project-relative path (e.g. "photo.jpg") — safe to display */
+  projectPath: string;
+  /** Original reference from the HTML source */
+  originalRef: string;
+}
+
+/**
+ * Check if a raw route response indicates a security-blocked preview asset.
+ * Matches HTTP 400 with BAD_REQUEST code and symlink-escape message.
+ */
+export function isBlockedPreviewAssetResponse(
+  status: number,
+  body: unknown,
+): boolean {
+  if (status !== 400) return false;
+  const response = body as { error?: { code?: string; message?: string } } | null;
+  if (!response?.error) return false;
+  return (
+    response.error.code === 'BAD_REQUEST' &&
+    typeof response.error.message === 'string' &&
+    response.error.message.includes('path escapes project dir via symlink')
+  );
+}
+
+/**
+ * Preflight-check HTML preview assets through the raw route to surface
+ * security blocks before the iframe renders broken images.
+ *
+ * Limits checks to MAX_ASSETS (32) to avoid excessive requests.
+ * Ignores ordinary 404s to preserve existing missing-asset behavior.
+ * Supports AbortSignal for cancellation on component unmount.
+ */
+export async function preflightCheckPreviewAssets(
+  html: string,
+  _ownerFilePath: string,
+  projectFilePaths: ReadonlySet<string>,
+  toRawUrl: (projectPath: string) => string,
+  signal?: AbortSignal,
+): Promise<BlockedPreviewAsset[]> {
+  const blocked: BlockedPreviewAsset[] = [];
+  const MAX_ASSETS = 32;
+
+  // Collect confirmed project asset refs (capped)
+  const refs: Array<{ ref: string; projectPath: string }> = [];
+  let collected = 0;
+
+  eachAssetRef(html, (ref) => {
+    if (collected >= MAX_ASSETS) return;
+    const projectPath = rootRelativeProjectAssetPath(ref, projectFilePaths);
+    if (projectPath) {
+      refs.push({ ref, projectPath });
+      collected++;
+    }
+  });
+
+  // Check each asset through the raw route
+  for (const { ref, projectPath } of refs) {
+    if (signal?.aborted) break;
+
+    try {
+      const url = toRawUrl(projectPath);
+      const res = await fetch(url, { signal });
+      const body = await res.json().catch(() => null);
+
+      if (isBlockedPreviewAssetResponse(res.status, body)) {
+        blocked.push({ projectPath, originalRef: ref });
+      }
+    } catch {
+      // Ignore network errors — preserve existing 404 preview behavior
+    }
+  }
+
+  return blocked;
+}

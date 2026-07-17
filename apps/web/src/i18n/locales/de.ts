@@ -2671,6 +2671,8 @@ export const de: Dict = {
   'fileViewer.saveDisabled': 'Speichern (Read-only-Viewer)',
   'fileViewer.save': 'Speichern',
   'fileViewer.preview': 'Vorschau',
+  'fileViewer.previewAssetBlockedTitle': 'Asset blockiert',
+  'fileViewer.previewAssetBlockedDetail': '{name} zeigt außerhalb dieses Projekts. Kopieren Sie die Datei in den Projektordner und aktualisieren Sie die Referenz.',
   'fileViewer.source': 'Quelle',
   'fileViewer.tweaks': 'Feinabstimmungen',
   'fileViewer.tweaksUnavailable': 'Kein Tweaks-Panel in diesem Artefakt',

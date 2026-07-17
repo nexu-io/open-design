@@ -2924,6 +2924,8 @@ export const zhTW: Dict = {
   "fileViewer.saveDisabled": "儲存（唯讀預覽）",
   "fileViewer.save": "儲存",
   "fileViewer.preview": "預覽",
+  "fileViewer.previewAssetBlockedTitle": "資源被阻擋",
+  "fileViewer.previewAssetBlockedDetail": "{name} 指向此專案外部。請將檔案複製到專案資料夾中並更新引用。",
   "fileViewer.source": "程式碼",
   "fileViewer.tweaks": "調整",
   "fileViewer.tweaksUnavailable": "此作品中沒有調整面板",

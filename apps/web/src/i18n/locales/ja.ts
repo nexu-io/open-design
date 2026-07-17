@@ -2671,6 +2671,8 @@ export const ja: Dict = {
   'fileViewer.saveDisabled': '保存（読み取り専用ビューアー）',
   'fileViewer.save': '保存',
   'fileViewer.preview': 'プレビュー',
+  'fileViewer.previewAssetBlockedTitle': 'アセットがブロックされました',
+  'fileViewer.previewAssetBlockedDetail': '{name} はこのプロジェクトの外部を指しています。ファイルをプロジェクトフォルダにコピーし、参照を更新してください。',
   'fileViewer.source': 'ソース',
   'fileViewer.tweaks': '調整',
   'fileViewer.tweaksUnavailable': 'このアーティファクトには調整パネルがありません',

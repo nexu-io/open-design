@@ -2671,6 +2671,8 @@ export const it: Dict = {
   'fileViewer.saveDisabled': 'Salva (visualizzatore in sola lettura)',
   'fileViewer.save': 'Salva',
   'fileViewer.preview': 'Anteprima',
+  'fileViewer.previewAssetBlockedTitle': 'Risorsa bloccata',
+  'fileViewer.previewAssetBlockedDetail': '{name} punta all\'esterno di questo progetto. Copia il file nella cartella del progetto e aggiorna il riferimento.',
   'fileViewer.source': 'Sorgente',
   'fileViewer.tweaks': 'Modifiche',
   'fileViewer.tweaksUnavailable': 'Nessun pannello di modifiche in questo artefatto',
