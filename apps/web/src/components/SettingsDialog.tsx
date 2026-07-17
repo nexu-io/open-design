@@ -60,6 +60,7 @@ import {
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
+import styles from './SettingsDialog.module.css';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -516,6 +517,8 @@ function sanitizeHttpsUrl(url: string | undefined): string | undefined {
 type RescanNotice =
   | { kind: 'success'; count: number }
   | { kind: 'error' };
+
+type AgentModelRefreshStatus = 'idle' | 'running' | 'live' | 'fallback' | 'error';
 
 type TestState =
   | { status: 'idle' }
@@ -1480,6 +1483,9 @@ export function SettingsDialog({
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
+  const [agentModelRefreshById, setAgentModelRefreshById] = useState<
+    Record<string, AgentModelRefreshStatus>
+  >({});
   const [agentTestState, setAgentTestState] = useState<TestState>({
     status: 'idle',
   });
@@ -1661,6 +1667,7 @@ export function SettingsDialog({
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
   const pendingAgentInstallRescanRef = useRef(false);
+  const agentModelRefreshRunningRef = useRef(new Set<string>());
   // Guards the AMR catalog-chase loop so concurrent renders can't start it
   // twice (see the re-detect effect below).
   const amrRescanInFlightRef = useRef(false);
@@ -2081,6 +2088,27 @@ export function SettingsDialog({
       setAgentRescanNotice({ kind: 'error' });
     } finally {
       setAgentRescanRunning(false);
+    }
+  };
+  const handleRefreshAgentModels = async (agentId: string) => {
+    if (agentModelRefreshRunningRef.current.has(agentId)) return;
+    agentModelRefreshRunningRef.current.add(agentId);
+    setAgentModelRefreshById((current) => ({ ...current, [agentId]: 'running' }));
+    try {
+      const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
+      const refreshedAgent = Array.isArray(refreshed)
+        ? refreshed.find((agent) => agent.id === agentId)
+        : undefined;
+      setAgentModelRefreshById((current) => ({
+        ...current,
+        [agentId]: refreshedAgent
+          ? refreshedAgent.modelsSource === 'live' ? 'live' : 'fallback'
+          : 'error',
+      }));
+    } catch {
+      setAgentModelRefreshById((current) => ({ ...current, [agentId]: 'error' }));
+    } finally {
+      agentModelRefreshRunningRef.current.delete(agentId);
     }
   };
   const attributedAmrSettingsUrl = (
@@ -3748,29 +3776,80 @@ export function SettingsDialog({
       ? CUSTOM_MODEL_SENTINEL
       : modelValue;
     const modelSource = selected.modelsSource ?? 'fallback';
+    const modelDiscovery = selected.modelDiscovery ?? 'cli';
+    const modelRefreshStatus = agentModelRefreshById[selected.id] ?? 'idle';
     const modelSourceLabel =
-      modelSource === 'live'
+      modelDiscovery === 'local-config'
+        ? t('settings.modelSourceLocalConfig')
+        : modelSource === 'live'
         ? t('settings.modelSourceLive')
         : t('settings.modelSourceFallback');
-    const modelSourceHint =
-      modelSource === 'live'
+    const modelSourceHint = modelDiscovery === 'unsupported'
+      ? allowCustomModel
+        ? t('settings.modelPickerUnsupportedCustomHint')
+        : t('settings.modelPickerUnsupportedConfiguredHint')
+      : modelDiscovery === 'local-config'
+        ? modelSource === 'live'
+          ? t('settings.modelPickerLocalConfigLiveHint')
+          : t('settings.modelPickerLocalConfigFallbackHint', { agent: selected.name })
+        : modelSource === 'live'
         ? selected.supportsCustomModel === false
           ? t('settings.modelPickerLiveCatalogOnlyHint')
           : t('settings.modelPickerLiveHint')
-        : t('settings.modelPickerFallbackHint');
+        : t('settings.modelPickerCliFallbackHint');
+    const modelRefreshNotice = modelRefreshStatus === 'live'
+      ? modelDiscovery === 'local-config'
+        ? t('settings.modelRefreshLocalConfigLive')
+        : t('settings.modelRefreshLive')
+      : modelRefreshStatus === 'fallback'
+        ? t('settings.modelRefreshFallback')
+        : modelRefreshStatus === 'error'
+          ? t('settings.modelRefreshError')
+          : null;
     return (
       <div className="agent-card-config">
         {hasModels ? (
           <>
             <label className="field">
-              <span className="field-label">
-                {t('settings.modelPicker')}
-                <span
-                  className={`agent-model-source-badge ${modelSource}`}
-                  aria-hidden="true"
-                >
-                  {modelSourceLabel}
+              <span className={`field-label ${styles.modelHeader}`}>
+                <span className={styles.modelLabelMeta}>
+                  {t('settings.modelPicker')}
+                  <span
+                    className={`agent-model-source-badge ${modelSource}`}
+                    aria-hidden="true"
+                  >
+                    {modelSourceLabel}
+                  </span>
                 </span>
+                {modelDiscovery !== 'unsupported' ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={styles.modelRefreshButton}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleRefreshAgentModels(selected.id);
+                    }}
+                    disabled={modelRefreshStatus === 'running'}
+                    title={t(
+                      modelRefreshStatus === 'running'
+                        ? 'settings.modelRefreshRunning'
+                        : 'settings.modelRefreshTitle',
+                    )}
+                    aria-label={t(
+                      modelRefreshStatus === 'running'
+                        ? 'settings.modelRefreshRunning'
+                        : 'settings.modelRefreshTitle',
+                    )}
+                    data-testid={`settings-agent-model-refresh-${selected.id}`}
+                  >
+                    <Icon
+                      name="refresh"
+                      size={14}
+                      className={modelRefreshStatus === 'running' ? 'icon-spin' : undefined}
+                    />
+                  </Button>
+                ) : null}
               </span>
               <div className="agent-model-select-wrap">
                 <SearchableModelSelect
@@ -3836,6 +3915,16 @@ export function SettingsDialog({
             <p className="hint agent-model-row-hint">
               {modelSourceHint}
             </p>
+            {modelRefreshNotice ? (
+              <p
+                className={`${styles.modelRefreshNotice} ${
+                  modelRefreshStatus === 'error' ? styles.error : styles.success
+                }`}
+                role={modelRefreshStatus === 'error' ? 'alert' : 'status'}
+              >
+                {modelRefreshNotice}
+              </p>
+            ) : null}
           </>
         ) : null}
         {customActive ? (
