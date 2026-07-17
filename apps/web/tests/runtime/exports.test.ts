@@ -18,6 +18,7 @@ import {
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsPptx,
+  exportProjectScreenshotPdf,
   exportProjectAsZip,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -777,6 +778,23 @@ describe('binary project/design-system downloads', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/projects/p/export/pdf-image', expect.anything());
     expect(capturedFilename).toBe('deck.pdf');
+  });
+
+  it('passes an explicit layout width through the raster PDF endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('%PDF-fake', { status: 200 })));
+
+    await exportProjectScreenshotPdf({
+      projectId: 'p',
+      fileName: 'responsive.html',
+      deck: false,
+      width: 820,
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/p/export/pdf-image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'responsive.html', deck: false, width: 820 }),
+    });
   });
 
   it('reports 501 (no off-screen renderer) as unavailable, not a semantic error', async () => {

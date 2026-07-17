@@ -100,6 +100,24 @@ describe('buildExportCliRequestBody', () => {
     });
   });
 
+  it('serializes explicit export width for responsive PDF/page exports', () => {
+    expect(buildExportCliRequestBody({ fileName: 'landing.html', format: 'pdf', deck: false, width: 820 })).toEqual({
+      fileName: 'landing.html',
+      deck: false,
+      width: 820,
+    });
+  });
+
+  it('does not serialize width for deck or auto-detected PDF exports', () => {
+    expect(buildExportCliRequestBody({ fileName: 'deck.html', format: 'pdf', deck: true, width: 820 })).toEqual({
+      fileName: 'deck.html',
+      deck: true,
+    });
+    expect(buildExportCliRequestBody({ fileName: 'maybe-deck.html', format: 'pdf', width: 820 })).toEqual({
+      fileName: 'maybe-deck.html',
+    });
+  });
+
   it('rejects conflicting or impossible CLI deck/page modes', () => {
     expect(() => resolveExportCliDeckMode({ format: 'pdf', deck: true, page: true })).toThrow(
       /cannot be combined/,

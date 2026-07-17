@@ -63,7 +63,7 @@ vi.mock('../../src/runtime/exports', async () => {
   };
 });
 
-import { FileViewer } from '../../src/components/FileViewer';
+import { FileViewer, screenshotPdfExportWidth } from '../../src/components/FileViewer';
 
 function htmlFile(): ProjectFile {
   return {
@@ -162,6 +162,36 @@ async function renderVersionDialog(file = htmlFile(), selected: 'current' | 'pri
 function openVersionDownloadMenu(versionDialog: HTMLElement, version = 1) {
   fireEvent.click(within(versionDialog).getByRole('button', { name: `Download Version ${version}` }));
 }
+
+describe('screenshotPdfExportWidth', () => {
+  it('uses fixed preview preset widths for responsive page exports', () => {
+    expect(screenshotPdfExportWidth({ deck: false, viewport: 'tablet' })).toBe(820);
+    expect(screenshotPdfExportWidth({ deck: false, viewport: 'mobile' })).toBe(390);
+  });
+
+  it('omits width for deck exports so slide stage measurement controls aspect ratio', () => {
+    expect(screenshotPdfExportWidth({ deck: true, viewport: 'tablet' })).toBeUndefined();
+  });
+
+  it('uses the active desktop iframe layout width when no fixed preset is selected', () => {
+    const iframe = document.createElement('iframe');
+    Object.defineProperty(iframe, 'contentDocument', {
+      value: { documentElement: { clientWidth: 1120 } },
+    });
+
+    expect(screenshotPdfExportWidth({ deck: false, viewport: 'desktop', iframe })).toBe(1120);
+  });
+
+  it('falls back to the preview canvas width when the desktop iframe cannot be measured', () => {
+    expect(
+      screenshotPdfExportWidth({
+        deck: false,
+        viewport: 'desktop',
+        previewBodySize: { width: 960, height: 640 },
+      }),
+    ).toBe(960);
+  });
+});
 
 describe('FileViewer version download actions', () => {
   afterEach(() => {

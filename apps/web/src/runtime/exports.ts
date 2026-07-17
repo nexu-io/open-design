@@ -905,6 +905,7 @@ export async function exportProjectAsPptx(opts: {
   title?: string;
   format?: 'pptx' | 'pdf';
   deck?: boolean;
+  width?: number;
   versionId?: string;
   // pptx only: produce an editable deck (native shapes/text) instead of a
   // screenshot one (one image per slide).
@@ -927,6 +928,7 @@ export async function exportProjectAsPptx(opts: {
           : typeof opts.deck === 'boolean'
             ? { deck: opts.deck }
             : {}),
+        ...(format === 'pdf' && typeof opts.width === 'number' ? { width: opts.width } : {}),
       }),
     });
   } catch {
@@ -1092,6 +1094,7 @@ export function exportProjectScreenshotPdf(opts: {
   fileName: string;
   title?: string;
   deck?: boolean;
+  width?: number;
   versionId?: string;
 }): Promise<ProjectScreenshotExportResult> {
   return exportProjectAsPptx({ ...opts, format: 'pdf' });

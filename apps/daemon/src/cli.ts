@@ -351,7 +351,7 @@ const SUBCOMMAND_MAP = {
 };
 
 const EXPORT_STRING_FLAGS = new Set([
-  'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',
+  'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file', 'width',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck', 'page', 'no-deck']);
 // EXPORT_FORMATS / EXPORT_IMAGE_FORMATS are the shared contract DTO (single
@@ -373,6 +373,7 @@ Options:
   --format <fmt>           One of: ${EXPORT_FORMATS.join(' | ')} (required)
   --out <path>             Write the file here (defaults to the suggested name)
   --image-format <fmt>     png | jpeg (for --format image)
+  --width <px>             Responsive layout width for --format pdf --page
   --deck                   Treat the artifact as a multi-slide deck
   --page, --no-deck        Treat the artifact as a normal scrollable page
   --title <title>          Title used for metadata / default filename
@@ -383,6 +384,16 @@ Examples:
   od export index.html --project p1 --format pdf --out page.pdf
   od export slide.html --project p1 --format image --image-format png --out slide.png
   od export deck.html --project p1 --format pptx --out deck.pptx`);
+}
+
+function parseExportWidth(value) {
+  if (value == null) return undefined;
+  const raw = String(value).trim();
+  const width = Number(raw);
+  if (!Number.isFinite(width) || width <= 0) {
+    throw new Error('--width must be a positive number of pixels');
+  }
+  return Math.round(width);
 }
 
 async function runExport(args) {
@@ -417,6 +428,17 @@ async function runExport(args) {
     console.error('--image-format is only valid with --format image');
     process.exit(2);
   }
+  let width;
+  try {
+    width = parseExportWidth(flags.width);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(2);
+  }
+  if (width !== undefined && format !== 'pdf') {
+    console.error('--width is only valid with --format pdf');
+    process.exit(2);
+  }
   const base = await cliDaemonBaseUrl(flags);
   // All three formats rasterize through the desktop screenshot renderer so the
   // CLI matches the UI exactly. In particular `pdf` uses `/export/pdf-image`
@@ -436,10 +458,15 @@ async function runExport(args) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
+  if (width !== undefined && deckMode !== false) {
+    console.error('--width is only valid for page PDF exports; pass --page or --no-deck');
+    process.exit(2);
+  }
   const requestBody = buildExportCliRequestBody({
     fileName: file,
     format,
     deck: deckMode,
+    ...(width !== undefined ? { width } : {}),
     ...(format === 'image' && flags['image-format'] ? { imageFormat: flags['image-format'] } : {}),
     ...(flags.title ? { title: flags.title } : {}),
   });

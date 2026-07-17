@@ -6,6 +6,7 @@ export interface ExportCliRequestOptions {
   deck?: boolean;
   imageFormat?: ExportImageFormat;
   title?: string;
+  width?: number;
 }
 
 export interface ExportCliDeckModeOptions {
@@ -37,6 +38,7 @@ export function buildExportCliRequestBody(options: ExportCliRequestOptions): Rec
     // PPTX is deck-only. For PDF/image, omit `deck` unless the caller explicitly
     // chooses deck/page mode so the daemon can still auto-detect by default.
     ...(deck !== undefined ? { deck } : {}),
+    ...(options.format === "pdf" && deck === false && typeof options.width === "number" ? { width: options.width } : {}),
     ...(options.format === "image" && options.imageFormat ? { imageFormat: options.imageFormat } : {}),
     ...(options.title ? { title: options.title } : {}),
   };

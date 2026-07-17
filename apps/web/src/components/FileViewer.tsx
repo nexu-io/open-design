@@ -924,6 +924,33 @@ export function effectivePreviewScale(
   return Math.min(previewScale, fitScale);
 }
 
+function positiveLayoutWidth(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : undefined;
+}
+
+export function screenshotPdfExportWidth(opts: {
+  deck: boolean;
+  viewport: PreviewViewportId;
+  iframe?: HTMLIFrameElement | null;
+  previewBodySize?: PreviewCanvasSize;
+}): number | undefined {
+  if (opts.deck) return undefined;
+  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === opts.viewport);
+  if (preset?.width) return preset.width;
+  const iframe = opts.iframe ?? null;
+  try {
+    const documentWidth = positiveLayoutWidth(iframe?.contentDocument?.documentElement?.clientWidth);
+    if (documentWidth) return documentWidth;
+  } catch {
+    // Cross-origin powered previews may not expose their document. Fall back to
+    // the iframe box, then the preview canvas, so desktop exports still match
+    // the visible layout as closely as the host allows.
+  }
+  return positiveLayoutWidth(iframe?.clientWidth) ?? positiveLayoutWidth(opts.previewBodySize?.width);
+}
+
 type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
 
 export function previewOverlayTransform(
@@ -10129,6 +10156,12 @@ function HtmlViewer({
     const pdfSource = context?.content ?? source ?? '';
     const pdfDeck = deckExportSignalForContext(context);
     if (isOpenDesignHostAvailable()) {
+      const width = screenshotPdfExportWidth({
+        deck: pdfDeck,
+        viewport: previewViewport,
+        iframe: iframeRef.current,
+        previewBodySize,
+      });
       const res = await exportProjectScreenshotPdf({
         projectId,
         fileName: file.name,
@@ -10138,6 +10171,7 @@ function HtmlViewer({
         // the SAME signal, so an artifact exports identically with or without
         // a desktop host (no per-host divergence).
         deck: pdfDeck,
+        ...(width ? { width } : {}),
         ...(context?.versionId ? { versionId: context.versionId } : {}),
       });
       if (res.ok) return;
