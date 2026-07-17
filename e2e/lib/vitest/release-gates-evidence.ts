@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createReadStream } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 /**
  * Machine-readable release-gate evidence for the packaged desktop smoke.
@@ -9,6 +10,14 @@ import { dirname, isAbsolute, resolve } from 'node:path';
  * This module is intentionally platform-agnostic and side-effect free except
  * for hashing files. It is exercised directly by focused unit tests so the
  * evidence structure stays correct without a real Windows/macOS runner.
+ *
+ * Integrity rules (enforced here, never mocked):
+ *  - G7 (dataRoot/backups content preserved across upgrade) requires a REAL
+ *    before/after content fingerprint measurement. `dataRootPreserved: null`
+ *    is NOT a PASS — it is BLOCKED until measured.
+ *  - G8/G9 failure paths are BLOCKED unless the scenario was actually exercised
+ *    with a real failure (bad payload / checksum mismatch / metadata
+ *    unreachable). They can never be asserted PASS without execution.
  */
 
 export type ReleaseGateStatus = 'PASS' | 'FAIL' | 'BLOCKED' | 'N/A';
@@ -46,14 +55,114 @@ export type ReleaseGatesEvidence = {
 
 export const RELEASE_GATE_DEFINITIONS: ReadonlyArray<{ id: string; title: string }> = [
   { id: 'G6', title: 'cold-start install success' },
-  { id: 'G7', title: 'dataRoot + backups/creator preserved and content-identical across upgrade' },
+  { id: 'G7', title: 'dataRoot + backups/creator content-identical across upgrade (measured)' },
   { id: 'G8', title: 'payload/checksum failure -> process-level rollback to prior version, data intact' },
-  { id: 'G9', title: 'metadata unreachable -> installed app still offline-starts' },
+  { id: 'G9', title: 'metadata unreachable -> installed app still offline-starts, data untouched' },
   { id: 'G10', title: 'smoke report records artifact SHA-256 / version / commit / platform / profile' },
 ];
 
 export const RELEASE_GATES_EVIDENCE_FILE = 'release-gates-evidence.json';
 export const RELEASE_GATES_PARTIAL_FILE = 'release-gates-partial.json';
+
+/** Subdirs of the isolated temp dataRoot that must stay content-identical across an upgrade. */
+export const DATA_ROOT_CONTENT_SUBDIRS = [
+  'creator-workbench',
+  'creator-media',
+  'creator-content',
+  'creator-release',
+  'creator-performance',
+] as const;
+
+/** Creator backup root, a sibling of `data` under the namespace root (per CW-09 path model). */
+export const BACKUPS_CREATOR_RELATIVE = 'backups/creator';
+
+/** Resolve the 6 paths that G7 fingerprints before/after an upgrade. */
+export function resolveDataRootFingerprintPaths(dataRoot: string, namespaceRoot: string): string[] {
+  const contentPaths = DATA_ROOT_CONTENT_SUBDIRS.map((name) => join(dataRoot, name));
+  const backupsCreator = join(namespaceRoot, BACKUPS_CREATOR_RELATIVE);
+  return [...contentPaths, backupsCreator];
+}
+
+export type ContentFingerprint = {
+  algorithm: 'sha256-content-tree-v1';
+  /** Stable across traversal order, absolute path, and mtime. Depends only on
+   *  (relative path, size, file content sha256) of every file under each root. */
+  fingerprint: string;
+  rootCount: number;
+  dirCount: number;
+  fileCount: number;
+  /** Roots that did not exist at measurement time. */
+  missing: string[];
+};
+
+/**
+ * Compute a stable, order-independent, path-independent, mtime-independent
+ * content fingerprint over each provided root. Only CI temp namespaces should
+ * be passed. Nonexistent roots are recorded in `missing` rather than throwing.
+ */
+export async function computeContentFingerprint(roots: string[]): Promise<ContentFingerprint> {
+  const combined = createHash('sha256');
+  let rootCount = 0;
+  let dirCount = 0;
+  let fileCount = 0;
+  const missing: string[] = [];
+
+  for (const [index, root] of roots.entries()) {
+    if (!existsSync(root)) {
+      missing.push(root);
+      continue;
+    }
+    const entries: Array<{ rel: string; size: number; contentSha: string }> = [];
+    await walkContent(root, root, entries);
+    // Order-independent within a tree: sort by relative path.
+    entries.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+    const rootHash = createHash('sha256');
+    for (const entry of entries) {
+      rootHash.update(entry.rel);
+      rootHash.update('\0');
+      rootHash.update(String(entry.size));
+      rootHash.update('\0');
+      rootHash.update(entry.contentSha);
+      rootHash.update('\0');
+      if (entry.rel.endsWith('/')) dirCount += 1;
+      else fileCount += 1;
+    }
+    rootCount += 1;
+    // Root-stable: include the index so two roots with colliding relative paths
+    // cannot merge. The index is constant across before/after measurements.
+    combined.update(String(index));
+    combined.update('\0');
+    combined.update(rootHash.digest('hex'));
+    combined.update('\0');
+  }
+
+  return {
+    algorithm: 'sha256-content-tree-v1',
+    fingerprint: combined.digest('hex'),
+    rootCount,
+    dirCount,
+    fileCount,
+    missing,
+  };
+}
+
+async function walkContent(root: string, base: string, out: Array<{ rel: string; size: number; contentSha: string }>): Promise<void> {
+  const info = await stat(root);
+  if (info.isDirectory()) {
+    const names = await readdir(root);
+    for (const name of names) {
+      await walkContent(join(root, name), base, out);
+    }
+  } else if (info.isFile()) {
+    // Relative path inside the root -> path-independent across machines.
+    const rel = relative(base, root).split(sepSafe()).join('/');
+    out.push({ rel, size: info.size, contentSha: await computeFileSha256(root) });
+  }
+}
+
+function sepSafe(): RegExp | string {
+  return process.platform === 'win32' ? /[\\/]/ : '/';
+}
 
 /** Stream a file's SHA-256 so large installers/payloads never load fully into memory. */
 export function computeFileSha256(path: string): Promise<string> {
@@ -66,9 +175,11 @@ export function computeFileSha256(path: string): Promise<string> {
   });
 }
 
+/** Size on disk only — never reads the file body (P2: avoid loading large artifacts into memory). */
 function byteLengthOf(path: string): number {
   try {
-    return readFileSync(path).byteLength;
+    const info = statSync(path);
+    return info.isFile() ? info.size : 0;
   } catch {
     return 0;
   }
@@ -77,7 +188,7 @@ function byteLengthOf(path: string): number {
 /**
  * Read the tools-pack build JSON and produce SHA-256 for every artifact path it
  * references (installer / payload / portableZip). Missing files are skipped so
- * a dry-run or partial build never throws.
+ * a dry-run or partial build never throws. Sizes come from stat, never a full read.
  */
 export async function collectArtifactHashes(
   buildJsonPath: string | undefined,
@@ -114,20 +225,49 @@ export async function collectArtifactHashes(
   return hashes;
 }
 
+// ---- Real measurement signals (never guessed) ----
+
+export type DataRootIntegrity = {
+  /** Whether before/after fingerprints were actually computed. */
+  measured: boolean;
+  /** Fingerprints equal across upgrade. */
+  consistent: boolean;
+  before?: ContentFingerprint | undefined;
+  after?: ContentFingerprint | undefined;
+  /** Per-subdir before/after fingerprints and whether each stayed consistent. */
+  dirs: Array<{ name: string; before?: string | undefined; after?: string | undefined; consistent: boolean }>;
+};
+
+export type RollbackEvidence = {
+  exercised: boolean;
+  /** Old version stayed healthy and data fingerprint unchanged. */
+  ok: boolean;
+  scenario?: 'bad-payload' | 'checksum-mismatch';
+  oldVersion?: string;
+  newVersion?: string;
+  failureCode?: string;
+  beforeFingerprint?: string;
+  afterFingerprint?: string;
+};
+
+export type OfflineEvidence = {
+  exercised: boolean;
+  ok: boolean;
+  metadataUnreachable: boolean;
+  beforeFingerprint?: string;
+  afterFingerprint?: string;
+};
+
 export type PackagedSmokeSignals = {
   platform: 'mac' | 'win';
   installOk: boolean;
   startOk: boolean;
-  payloadUpdateExercised: boolean;
-  payloadUpdateOk: boolean;
-  /** null = not measured; true = preserved; false = diverged */
-  dataRootPreserved: boolean | null;
-  rollbackExercised: boolean;
-  /** null = not exercised; true = rolled back to prior version with data intact */
-  rollbackOk: boolean | null;
-  offlineStartExercised: boolean;
-  /** null = not exercised; true = offline-start succeeded */
-  offlineStartOk: boolean | null;
+  /** G7: real before/after content-fingerprint measurement across upgrade. */
+  dataRootIntegrity?: DataRootIntegrity | undefined;
+  /** G8: real bad-payload / checksum-mismatch rollback scenario. */
+  rollback?: RollbackEvidence | undefined;
+  /** G9: real metadata-unreachable offline-start scenario. */
+  offline?: OfflineEvidence | undefined;
   evidence?: Record<string, unknown>;
 };
 
@@ -140,8 +280,9 @@ function gate(id: string, status: ReleaseGateStatus, reason?: string, evidence?:
  * Map real smoke signals to G6–G9. G10 (artifact hashes/metadata) is filled in
  * by the orchestrator, so it is intentionally omitted here.
  *
- * Failure-path gates (G8/G9) are honestly BLOCKED unless the corresponding
- * scenario was actually exercised — we never mock a PASS.
+ * Failure-path gates (G8/G9) and the data-preservation gate (G7) are honestly
+ * BLOCKED unless the corresponding evidence was actually produced — we never
+ * mock a PASS.
  */
 export function summarizePackagedReleaseGates(signals: PackagedSmokeSignals): Record<string, ReleaseGateEvidence> {
   const gates: Record<string, ReleaseGateEvidence> = {};
@@ -150,35 +291,72 @@ export function summarizePackagedReleaseGates(signals: PackagedSmokeSignals): Re
     ? gate('G6', 'PASS', undefined, signals.evidence)
     : gate('G6', 'FAIL', 'install or start did not succeed', signals.evidence);
 
-  if (signals.payloadUpdateExercised) {
-    if (signals.dataRootPreserved === true) {
-      gates.G7 = gate('G7', 'PASS', undefined, signals.evidence);
-    } else if (signals.dataRootPreserved === false) {
-      gates.G7 = gate('G7', 'FAIL', 'dataRoot or backups/creator diverged across upgrade', signals.evidence);
-    } else {
-      // upgrade ran but content-preservation was not measured in this profile
-      gates.G7 = signals.payloadUpdateOk
-        ? gate('G7', 'PASS', 'upgrade succeeded and post-update health ok; content-preservation hash not measured in this profile', signals.evidence)
-        : gate('G7', 'FAIL', 'payload update failed', signals.evidence);
-    }
+  const integrity = signals.dataRootIntegrity;
+  if (!integrity || !integrity.measured) {
+    // Not measured -> BLOCKED. Crucially this is NOT a PASS (P0 fix).
+    gates.G7 = gate('G7', 'BLOCKED', 'dataRoot + backups/creator content-integrity not measured across upgrade in this profile', signals.evidence);
+  } else if (integrity.consistent) {
+    gates.G7 = gate('G7', 'PASS', undefined, {
+      ...signals.evidence,
+      measured: true,
+      consistent: true,
+      beforeFingerprint: integrity.before?.fingerprint,
+      afterFingerprint: integrity.after?.fingerprint,
+      dirs: integrity.dirs,
+    });
   } else {
-    gates.G7 = gate('G7', 'BLOCKED', 'no upgrade exercised in this smoke profile', signals.evidence);
+    gates.G7 = gate('G7', 'FAIL', 'dataRoot or backups/creator content diverged across upgrade', {
+      ...signals.evidence,
+      measured: true,
+      consistent: false,
+      beforeFingerprint: integrity.before?.fingerprint,
+      afterFingerprint: integrity.after?.fingerprint,
+      dirs: integrity.dirs,
+    });
   }
 
-  if (signals.rollbackExercised) {
-    gates.G8 = signals.rollbackOk === true
-      ? gate('G8', 'PASS', undefined, signals.evidence)
-      : gate('G8', 'FAIL', 'payload/checksum failure did not roll back to prior version with data intact', signals.evidence);
+  const rollback = signals.rollback;
+  if (!rollback || !rollback.exercised) {
+    gates.G8 = gate('G8', 'BLOCKED', 'failure-path (bad-payload/checksum-mismatch) scenario not exercised in this profile', signals.evidence);
+  } else if (rollback.ok) {
+    gates.G8 = gate('G8', 'PASS', undefined, {
+      ...signals.evidence,
+      scenario: rollback.scenario,
+      oldVersion: rollback.oldVersion,
+      newVersion: rollback.newVersion,
+      failureCode: rollback.failureCode,
+      beforeFingerprint: rollback.beforeFingerprint,
+      afterFingerprint: rollback.afterFingerprint,
+    });
   } else {
-    gates.G8 = gate('G8', 'BLOCKED', 'failure-path scenario not exercised (requires bad-payload run via update metadata URL)', signals.evidence);
+    gates.G8 = gate('G8', 'FAIL', 'payload/checksum failure did not roll back to prior version with data intact', {
+      ...signals.evidence,
+      scenario: rollback.scenario,
+      oldVersion: rollback.oldVersion,
+      newVersion: rollback.newVersion,
+      failureCode: rollback.failureCode,
+      beforeFingerprint: rollback.beforeFingerprint,
+      afterFingerprint: rollback.afterFingerprint,
+    });
   }
 
-  if (signals.offlineStartExercised) {
-    gates.G9 = signals.offlineStartOk === true
-      ? gate('G9', 'PASS', undefined, signals.evidence)
-      : gate('G9', 'FAIL', 'installed app did not offline-start when metadata was unreachable', signals.evidence);
+  const offline = signals.offline;
+  if (!offline || !offline.exercised) {
+    gates.G9 = gate('G9', 'BLOCKED', 'metadata-unreachable scenario not exercised in this profile', signals.evidence);
+  } else if (offline.ok) {
+    gates.G9 = gate('G9', 'PASS', undefined, {
+      ...signals.evidence,
+      metadataUnreachable: offline.metadataUnreachable,
+      beforeFingerprint: offline.beforeFingerprint,
+      afterFingerprint: offline.afterFingerprint,
+    });
   } else {
-    gates.G9 = gate('G9', 'BLOCKED', 'metadata-unreachable scenario not exercised', signals.evidence);
+    gates.G9 = gate('G9', 'FAIL', 'installed app did not offline-start when metadata was unreachable', {
+      ...signals.evidence,
+      metadataUnreachable: offline.metadataUnreachable,
+      beforeFingerprint: offline.beforeFingerprint,
+      afterFingerprint: offline.afterFingerprint,
+    });
   }
 
   return gates;

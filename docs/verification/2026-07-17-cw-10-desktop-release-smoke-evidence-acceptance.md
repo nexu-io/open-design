@@ -1,16 +1,36 @@
 # CW-10 桌面真实发布 smoke 证据闭环 — 验收文档（Task 5）
 
-> 分支：`feat/cw-10-release-smoke-evidence` · 工作树：`.worktrees/cw-10-release-smoke-evidence` · 基线：`main @ 0cd3bf139`
-> 提交顺序：`docs: design desktop release smoke evidence` → `test/feat: add machine-readable desktop release smoke evidence (G6-G10)` → `docs: verify desktop release smoke evidence`
+> 分支：`feat/cw-10-release-smoke-evidence` · 工作树：`.worktrees/cw-10-release-smoke-evidence`
+> 基线：`main @ 0cd3bf139` · 本轮 remediation 父提交（分支 tip）：`ac4d87b12`
+> 提交顺序：`docs: design ...` → `test/feat: add machine-readable ... (G6-G10)` → `docs: verify desktop release smoke evidence` → **`fix: verify desktop release gate evidence`**
 > **未合并 / 未推送 / 未删除** 任何分支或工作树（见末尾声明）。
 
 ---
 
 ## 0. 重要声明（无虚假真实 PASS）
 
-- **本工作树运行于 Linux（非 `win32`/`darwin`）**。既有 `e2e/specs/win.spec.ts` 与 `e2e/specs/mac.spec.ts` 通过 `describe.skip` + `process.platform` 守卫：仅在目标平台真实运行安装/启动/升级/回滚/离线流程。因此**在本 sandbox 中真实 Windows/macOS smoke 被跳过**，CI 实际运行时会由 `release-smoke.ts` 写出 `release-gates-evidence.json` 且 G6–G9 全标 `BLOCKED`、`skipReason` 写明 "platform smoke skipped"，**绝不以 mock 声称 PASS**（满足任务要求 #4）。
+- **本工作树运行于 Linux（非 `win32`/`darwin`）**。既有 `e2e/specs/win.spec.ts` 与 `e2e/specs/mac.spec.ts` 通过 `describe.skip` + `process.platform` 守卫：仅在目标平台真实运行安装/启动/升级/回滚/离线流程。因此**在本 sandbox 中真实 Windows/macOS smoke 被跳过**，CI 实际运行时会由 `release-smoke.ts` 写出 `release-gates-evidence.json`，**绝不以 mock 声称 PASS**（满足任务要求 #4）。
 - 本轮交付的是 **CW-09 G6–G10 的可重复 CI 验收证据基础设施**：机器可读证据结构 + 工件 SHA-256 + 工作流证据留存。其**正确性**由绿灯单元测试 / 类型检查 / 发布工作流契约测试验证；**真实 PASS** 待 Windows/macOS CI 产出安装包后由同一流水线产出。
 - 所有测试仅用 `mkdtemp` 临时目录与 fixture，**未触碰**真实 `.od`、用户素材、运行中的守护进程 / Web / Electron。
+
+---
+
+## 0.1 CW-10 审核整改（本 `fix:` 提交覆盖的 P0 / P1 / P2）
+
+审核发现原实现存在"无真实测量即声称 PASS"的证据诚信缺口。本 `fix:` 提交按审核意见闭环：
+
+- **P0 — G7 不再接受 `null` 即 PASS**（`e2e/lib/vitest/release-gates-evidence.ts`）：
+  - `summarizePackagedReleaseGates` 中，G7 **仅当** `dataRootIntegrity.measured === true && dataRootIntegrity.consistent === true`（即升级前后对 `dataRoot/creator-workbench|creator-media|creator-content|creator-release|creator-performance` + `backups/creator` 做了真实内容指纹比对且一致）才 `PASS`。
+  - 未测量（`dataRootIntegrity` 缺失或 `measured === false`）→ **`BLOCKED`**（理由："dataRoot + backups/creator content-integrity not measured across upgrade in this profile"）。
+  - 指纹发散 → **`FAIL`**（理由："dataRoot or backups/creator content diverged across upgrade"）。
+  - 内容指纹 `computeContentFingerprint` 与遍历顺序无关、与绝对路径无关、与 mtime 无关（仅依赖 `相对路径 + 文件大小 + 内容 SHA-256`）。
+- **P1 — Windows full profile 真实执行 G8 / G9 失败路径**（`e2e/specs/win.spec.ts`）：
+  - **G8（checksum-mismatch 回滚）**：取 fixture 真实 metadata，篡改其 `payloadSha256` 为 `deadbeef…`，由本地 HTTP server（`createServer`，端口 0）对外提供；套用篡改后 metadata URL，跑真实 `runPayloadUpdateAcceptance`；断言**旧版本仍健康、dataRoot 指纹不变** → `rollback.exercised = true`。
+  - **G9（metadata 不可达离线启动）**：把 updater 指向 `http://127.0.0.1:1/metadata.json`（不可达），停止再启动已安装应用；断言**应用仍健康启动、dataRoot 指纹不变** → `offline.exercised = true, metadataUnreachable = true`。
+  - 两者均包裹 `try/catch`，仅在 `!verifyCoreOnly && beforeDataFingerprint` 时执行；仅用 runner fixture HTTP server + CI 临时目录，**无任何 mock PASS**。
+  - **core profile 或 macOS → G7/G8/G9 一律 `BLOCKED`，附准确理由**（macOS 本轮未实现同等真实测量/失败路径，绝不假称 PASS）。
+- **P2 — 大文件不再整读**（`byteLengthOf` 改用 `statSync(path).size`，不再 `readFileSync` 整个工件）；SHA-256 仍走流式 `createReadStream`。
+- **测试与文档**：新增/更新 29 个聚焦单元测覆盖 G7 未测→BLOCKED、一致→PASS、发散→FAIL、G8/G9 未执行→BLOCKED、真实执行成功→PASS、stat 取大小不整读；更新 Windows smoke 真实失败路径与指纹采集；本验收文档去除"G7 健康即 PASS / CI 预期 PASS 而无可执行失败场景"表述。
 
 ---
 
@@ -33,13 +53,13 @@
 | # | 发布门禁 | 证据采集点（真实平台运行时） | 机器可读证据字段 | CI 命令（产出证据） |
 | --- | --- | --- | --- | --- |
 | G6 | 冷启动安装成功 | `win/mac.spec.ts`：`install.ok` + `start.ok` | `release-gates-partial.json` → `gates.G6.status` | `pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts` |
-| G7 | 升级前后 `dataRoot` 与 `backups/creator` 保持且内容一致 | `payloadUpdate` 后比对 `dataRootPreserved` | `gates.G7.status` + `evidence.dataRootPreserved` | 同上（`core`/`full` profile 均跑升级） |
-| G8 | 更新 payload 失败/校验失败时进程级恢复旧版本且数据未动 | `rollbackExercised` + `rollbackOk`（失败路径注入） | `gates.G8.status` + `evidence.rollbackOk` | 同上（失败路径用例） |
-| G9 | metadata 不可达时已安装应用仍可离线启动 | `offlineStartExercised` + `offlineStartOk` | `gates.G9.status` + `evidence.offlineStartOk` | 同上（metadata-unreachable 用例） |
-| G10 | smoke 报告写明 artifact SHA-256/版本/commit/平台/执行 profile | `release-smoke.ts` 计算 `installerPath`/`payloadPath`/`portableZipPath` 的 SHA-256 | 顶层 `releaseVersion`/`commit`/`platform`/`profile` + `gates.G10.evidence.artifactHashes[]` | 同上（读取 `tools-pack` build JSON） |
+| G7 | 升级前后 `dataRoot` 与 `backups/creator` 内容一致（**真实指纹**） | `full` profile：升级**前**测 `beforeDataFingerprint`，升级**后**测 `afterCombined` + 各子目录指纹，比对 | `gates.G7.status` + `evidence.beforeFingerprint/afterFingerprint/measured/consistent/dirs`（来自 `dataRootIntegrity`） | 同上（`full` profile 跑真实比对；`core`/macOS 不测 → BLOCKED） |
+| G8 | 校验失败（checksum-mismatch）进程级回滚旧版本且数据未动 | `full` profile：篡改 metadata `payloadSha256`，本地 HTTP 提供，跑真实更新；断言旧版本仍健康、指纹不变 | `gates.G8.status` + `evidence.scenario/failureCode/oldVersion/beforeFingerprint/afterFingerprint`（来自 `rollback`） | 同上（`full` profile 失败路径用例；`core`/macOS 不执行 → BLOCKED） |
+| G9 | metadata 不可达时已安装应用仍可离线启动且数据未动 | `full` profile：updater 指向不可达地址，停止再启动；断言健康 + 指纹不变 | `gates.G9.status` + `evidence.metadataUnreachable/beforeFingerprint/afterFingerprint`（来自 `offline`） | 同上（metadata-unreachable 用例；`core`/macOS 不执行 → BLOCKED） |
+| G10 | smoke 报告写明 artifact SHA-256/版本/commit/平台/执行 profile | `release-smoke.ts` 计算 `installerPath`/`payloadPath`/`portableZipPath` 的 SHA-256（仅 `stat` 取大小，流式哈希） | 顶层 `releaseVersion`/`commit`/`platform`/`profile` + `gates.G10.evidence.artifactHashes[]` | 同上（读取 `tools-pack` build JSON） |
 
 **证据落盘链路**：
-1. 真实平台 spec 运行成功后写 `release-report/<platform>/release-gates-partial.json`（G6–G9 信号）。
+1. 真实平台 spec 运行成功后写 `release-report/<platform>/release-gates-partial.json`（G6–G9 信号：`installOk`/`startOk`/`dataRootIntegrity`/`rollback`/`offline`）。
 2. `release-smoke.ts` 读取 build JSON → `collectArtifactHashes()` 计算工件 SHA-256 → `buildReleaseGatesEvidence()` 合并 spec 部分门禁与工件哈希 → 写 `release-report/<platform>/release-gates-evidence.json`（G6–G10 全结构）。
 3. 工作流 `if: always()` 上传：
    - 既有 `open-design-release-{win,mac}-e2e-report`（`release-report/<platform>` 整目录，含截图 `screenshot.png` + `summary.json`）。
@@ -48,19 +68,21 @@
 
 ---
 
-## 3. Smoke 矩阵：本 sandbox 状态 / CI 预期
+## 3. Smoke 矩阵：本 sandbox 状态 / CI 真实执行预期
 
-> 本列"本 sandbox 结果"为 Linux 环境实际可验证状态；"Windows CI 预期"为流水线在真机产出安装包后的预期（由同一证据机制产出，无 mock）。
+> 本列"本 sandbox 结果"为 Linux 环境实际可验证状态；"Windows/macOS 真实执行预期"为流水线在真机产出安装包后的预期（由同一证据机制产出，无 mock）。**只有真正被执行且有可执行失败场景的 profile 才可能被标记 PASS；未执行测量的 profile 一律 BLOCKED。**
 
-| # | 发布门禁 | 本 sandbox 结果 | Windows CI 预期 | 证据 |
-| --- | --- | --- | --- | --- |
-| G6 | 冷启动安装成功 | **BLOCKED**（非 win32，spec 跳过；`skipReason` 写明） | PASS（真实安装+启动） | `release-gates-evidence.json#gates.G6`、截图 `screenshot.png` |
-| G7 | 升级后 data/备份一致 | **BLOCKED** | PASS（升级后比对一致） | `release-gates-evidence.json#gates.G7` |
-| G8 | 失败回滚恢复且数据未动 | **BLOCKED**（失败路径未执行） | PASS（注入 payload 失败→进程级回滚） | `release-gates-evidence.json#gates.G8` |
-| G9 | 离线启动（metadata 不可达） | **BLOCKED** | PASS（metadata 不可达仍启动） | `release-gates-evidence.json#gates.G9` |
-| G10 | 报告含工件 SHA-256/版本/commit/平台/profile | **BLOCKED**（sandbox 无构建产物可哈希） | PASS（`collectArtifactHashes` 写入 `artifactHashes`） | `release-gates-evidence.json#gates.G10` + 顶层字段 |
+| # | 发布门禁 | 本 sandbox 结果 | Windows 真实执行预期 | macOS 真实执行预期 | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| G6 | 冷启动安装成功 | **BLOCKED**（非 win32/darwin，spec 跳过） | PASS（真实安装+启动，core/full 均跑） | PASS（真实安装+启动，core/full 均跑） | `release-gates-evidence.json#gates.G6`、截图 `screenshot.png` |
+| G7 | 升级后 data/备份内容一致（真实指纹） | **BLOCKED**（未测） | **full：PASS**（升级前后真实内容指纹比对一致）；**core：BLOCKED**（未测） | **BLOCKED**（本轮未实现同等真实测量；不声称 PASS） | `release-gates-evidence.json#gates.G7` + `evidence.dirs[]` |
+| G8 | 校验失败回滚旧版本且数据未动 | **BLOCKED**（失败路径未执行） | **full：PASS**（注入 checksum-mismatch→真实进程级回滚，指纹不变）；**core：BLOCKED** | **BLOCKED**（未实现失败路径；不声称 PASS） | `release-gates-evidence.json#gates.G8` + `evidence.failureCode` |
+| G9 | 离线启动（metadata 不可达） | **BLOCKED**（未执行） | **full：PASS**（metadata 不可达仍健康启动，指纹不变）；**core：BLOCKED** | **BLOCKED**（未实现；不声称 PASS） | `release-gates-evidence.json#gates.G9` + `evidence.metadataUnreachable` |
+| G10 | 报告含工件 SHA-256/版本/commit/平台/profile | **BLOCKED**（sandbox 无构建产物可哈希） | PASS（`collectArtifactHashes` 写入 `artifactHashes`，stat 取大小 + 流式哈希） | PASS（同上） | `release-gates-evidence.json#gates.G10` + 顶层字段 |
 
-> **为何不声称 PASS**：任务要求 #4 明确 macOS/Linux 缺能力必须标 `BLOCKED`，不得用 mock 声称 PASS。本实现严格遵循——跳过平台时所有门禁诚实 `BLOCKED`，且单元/契约测试刻意覆盖"BLOCKED 不得被误判为 PASS"的断言（`never mocks PASS for unexercised failure paths`、`BLOCKED for every gate when platform smoke skipped`）。
+> **为何不声称 PASS（审核核心）**：审核要求 G7 不得仅凭"健康即 PASS"、G8/G9 不得"无可执行失败场景却预期 PASS"。
+> - **Windows full profile** 现已内建可执行失败场景（G8 checksum-mismatch、G9 metadata-unreachable）与真实升级前后指纹采集，故可被真实标记为 PASS/FAIL（由运行时数据决定）。
+> - **Windows core profile** 与 **macOS** 本轮未执行真实测量/失败路径，因此 G7/G8/G9 **诚实 BLOCKED**，理由精确到"not measured / not exercised in this profile"，**绝不假称 PASS**（满足任务要求 #4）。
 
 ---
 
@@ -72,22 +94,28 @@
 - 依赖：`pnpm install --offline --frozen-lockfile`（共享 pnpm store，43s 级）。
 
 **临时目录策略（绝不触碰真实数据）**
-- 新增单元测 `e2e/tests/release-gates-evidence.test.ts` 全部用 `mkdtemp(join(tmpdir(),'cw10-evidence-'))` 生成绝对临时根，写入 `hello`/`payload-bytes` 等占位内容计算 SHA-256；`afterAll` 清理。
+- 新增单元测 `e2e/tests/release-gates-evidence.test.ts` 全部用 `mkdtemp(join(tmpdir(),'cw10-evidence-'))` 生成绝对临时根，写入 `hello`/`payload-bytes` 等占位内容计算 SHA-256；`afterAll` 清理。含 4MB 大文件验证 `byteLengthOf` 走 `stat` 不整读。
 - 既有 `win/mac.spec.ts` 仅在目标平台运行，使用 CI runner 临时目录与 fixture，读写被 `assertRelativeReportPath` 约束在 `release-report/<platform>` 内，**不触碰**真实 `.od`/用户素材/运行目录。
 
-**实际执行的验证命令与结果（本 sandbox）**
+**实际执行的验证命令与结果（本 sandbox，remediation 后）**
 
 ```
-# 1) 定向新增测试（核心证据逻辑，全绿）
+# 1) 定向新增/更新测试（核心证据逻辑，全绿）
 cd e2e && NODE_OPTIONS= pnpm exec vitest run tests/release-gates-evidence.test.ts
-  -> Test Files  1 passed (1); Tests 17 passed (17)
+  -> Test Files  1 passed (1); Tests 29 passed (29)
+     覆盖：computeFileSha256；collectArtifactHashes(stat 取大小、4MB 不整读、缺文件跳过、相对路径)；
+           computeContentFingerprint(同内容不同绝对根→同指纹、遍历序无关、发散→不同、缺失根记录、
+             resolveDataRootFingerprintPaths 6 路径与 OS 无关)；
+           G6 PASS/FAIL；G7 未测→BLOCKED / 一致→PASS / 发散→FAIL / 回归守卫(无测量≠PASS)；
+           G8 未执行→BLOCKED / 执行成功→PASS / FAIL；G9 同；no-mocked-PASS；
+           buildReleaseGatesEvidence(G10、合并、跳过 BLOCKED、顶层结构)。
 
 # 2) 类型检查（直接 tsc，规避 corepack / NODE_OPTIONS 干扰）
-NODE_OPTIONS= pnpm --filter @open-design/e2e     exec tsc -p tsconfig.json --noEmit   -> 0
+NODE_OPTIONS= pnpm --filter @open-design/e2e      exec tsc -p tsconfig.json --noEmit  -> 0
 NODE_OPTIONS= pnpm --filter @open-design/tools-pack exec tsc -p tsconfig.json --noEmit -> 0
-NODE_OPTIONS= pnpm --filter @open-design/desktop  exec tsc -p tsconfig.json --noEmit   -> 0
+NODE_OPTIONS= pnpm --filter @open-design/desktop   exec tsc -p tsconfig.json --noEmit  -> 0
 
-# 3) 发布工作流契约测试（所改 release-stable/preview YAML 必须通过）
+# 3) 发布工作流契约测试（所改 release-stable/preview YAML 必须通过；remediation 未改 YAML）
 cd tools/pack && NODE_OPTIONS= pnpm exec vitest run tests/release-workflows.test.ts
   -> Test Files  1 passed (1); Tests 1 passed (1)   # 含 tsx scripts/release-smoke.ts 调用、
                                                      #   publish:/cleanup_partial_release_assets 作业、
@@ -103,7 +131,7 @@ cd e2e && NODE_OPTIONS= pnpm exec vitest run tests/packaged-smoke-workflow.test.
 
 # 5) 差异 / 工作树检查（提交后执行）
 git diff --check main...HEAD   -> 无空白/换行问题（exit 0）
-git status --short             -> 干净（3 个提交已落，无未跟踪文件）
+git status --short             -> 干净（4 个提交已落，无未跟踪文件）
 ```
 
 ---
@@ -128,30 +156,35 @@ git status --short             -> 干净（3 个提交已落，无未跟踪文�
   "skipReason": "...",               // 平台跳过时非空，否则缺失
   "gates": {
     "G6":  { "id":"G6", "title":"cold-start install success",      "status":"PASS|BLOCKED|FAIL", "evidence": {...}, "reason":"..." },
-    "G7":  { "id":"G7", "title":"dataRoot + backups/creator preserved across upgrade", "status":..., "evidence":{"dataRootPreserved":true}, "reason":"..." },
-    "G8":  { "id":"G8", "title":"payload-failure process-level rollback, data intact", "status":..., "evidence":{"rollbackOk":true}, "reason":"..." },
-    "G9":  { "id":"G9", "title":"offline start when metadata unreachable", "status":..., "evidence":{"offlineStartOk":true}, "reason":"..." },
+    "G7":  { "id":"G7", "title":"dataRoot + backups/creator content-identical across upgrade (measured)", "status":...,
+             "evidence": { "measured":true, "consistent":true, "beforeFingerprint":"...", "afterFingerprint":"...", "dirs":[...] }, "reason":"..." },
+    "G8":  { "id":"G8", "title":"payload/checksum failure -> process-level rollback to prior version, data intact", "status":...,
+             "evidence": { "scenario":"checksum-mismatch", "failureCode":"checksum-mismatch", "oldVersion":"...", "beforeFingerprint":"...", "afterFingerprint":"..." }, "reason":"..." },
+    "G9":  { "id":"G9", "title":"metadata unreachable -> installed app still offline-starts, data untouched", "status":...,
+             "evidence": { "metadataUnreachable":true, "beforeFingerprint":"...", "afterFingerprint":"..." }, "reason":"..." },
     "G10": { "id":"G10","title":"smoke report records artifact SHA-256/version/commit/platform/profile", "status":..., "evidence":{ "artifactCount":N, "artifactHashes":[{"name":"payload","sha256":"...","bytes":N,"path":"..."}], "releaseVersion":"...", "commit":"...", "platform":"win", "profile":"full" }, "reason":"..." }
   }
 }
 ```
 
-- `status` 取值 `PASS | FAIL | BLOCKED`；`BLOCKED` 必带 `reason`（"platform smoke skipped" / "no upgrade exercised" / "failure-path not exercised" / "metadata-unreachable not exercised" / "no artifacts to hash"）。
+- `status` 取值 `PASS | FAIL | BLOCKED`；`BLOCKED` 必带 `reason`（"platform smoke skipped" / "dataRoot + backups/creator content-integrity not measured across upgrade in this profile" / "failure-path (bad-payload/checksum-mismatch) scenario not exercised in this profile" / "metadata-unreachable scenario not exercised in this profile" / "no artifacts to hash"）。
+- **G7 的诚信铁律（P0）**：`dataRootIntegrity` 未测量（缺失或 `measured=false`）→ 永远是 `BLOCKED`，**绝不会因 `null` 而被判 PASS**。`consistent=false` → `FAIL`。
 - 失败路径（G8/G9）未执行时**只可能 BLOCKED 或 FAIL，绝不为 PASS**——由单元测 `never mocks PASS for unexercised failure paths` 固化。
 
 ---
 
-## 6. 新增/修改文件清单（证据闭环）
+## 6. 新增/修改文件清单（证据闭环 + 本 remediation）
 
 | 文件 | 变更 | 作用 |
 | --- | --- | --- |
-| `e2e/lib/vitest/release-gates-evidence.ts` | 新增 | `computeFileSha256` / `collectArtifactHashes` / `summarizePackagedReleaseGates`（G6–G9，诚实 BLOCKED）/ `buildReleaseGatesEvidence`（编排合并 + G10） |
-| `e2e/scripts/release-smoke.ts` | 修改 | 计算工件 SHA-256，合并 spec 部分门禁，写 `release-gates-evidence.json` |
-| `e2e/specs/win.spec.ts` | 修改 | 真实平台写 `release-gates-partial.json`（G6–G9 信号） |
-| `e2e/specs/mac.spec.ts` | 修改 | 同上（macOS 对称） |
-| `e2e/tests/release-gates-evidence.test.ts` | 新增 | 17 个聚焦测试：SHA-256、G6–G9 摘要、G10 工件 PASS/BLOCKED、编排合并、跳过平台 BLOCKED、失败路径不误判 PASS |
-| `.github/workflows/release-stable.yml` | 修改 | 限定 `Cleanup workflow artifacts` 为 `-release-assets$`；新增 `open-design-release-{win,mac}-release-gates-evidence` 上传（`if: always()`） |
-| `.github/workflows/release-preview.yml` | 修改 | 同上（preview 通道对称） |
+| `e2e/lib/vitest/release-gates-evidence.ts` | 修改（remediation） | P0：`summarizePackagedReleaseGates` G7 仅真实测量一致才 PASS；P2：`byteLengthOf` 改 `statSync` 不整读；新增 `computeContentFingerprint` / `resolveDataRootFingerprintPaths` / 稳定内容指纹；信号类型改为 `dataRootIntegrity`/`rollback`/`offline` |
+| `e2e/specs/win.spec.ts` | 修改（remediation） | P1：full profile 真实采集升级前/后 `dataRoot` 指纹（G7）；真实执行 checksum-mismatch 回滚（G8）与 metadata-unreachable 离线启动（G9）；core profile 留 BLOCKED |
+| `e2e/specs/mac.spec.ts` | 修改（remediation） | 跟随新信号形状（`dataRootIntegrity`/`rollback`/`offline`）；macOS 本轮未实现真实测量/失败路径 → G7/G8/G9 诚实 BLOCKED，理由准确 |
+| `e2e/tests/release-gates-evidence.test.ts` | 修改（remediation，17 → 29） | 覆盖 G7 未测→BLOCKED/一致→PASS/发散→FAIL、G8/G9 未执行→BLOCKED/执行成功→PASS、stat 取大小不整读、合并与顶层结构 |
+| `e2e/scripts/release-smoke.ts` | 修改（前序） | 计算工件 SHA-256（仅 stat 取大小 + 流式哈希），合并 spec 部分门禁，写 `release-gates-evidence.json` |
+| `.github/workflows/release-stable.yml` | 修改（前序） | 限定 `Cleanup workflow artifacts` 为 `-release-assets$`；新增 `open-design-release-{win,mac}-release-gates-evidence` 上传（`if: always()`） |
+| `.github/workflows/release-preview.yml` | 修改（前序） | 同上（preview 通道对称） |
+| `docs/verification/2026-07-17-cw-10-desktop-release-smoke-evidence-acceptance.md` | 修改（本 remediation） | 去除"G7 健康即 PASS / CI 预期 PASS 无失败场景"表述；记录 P0/P1/P2 修复与真实失败路径证据 |
 
 > **未改动**：`package.json` / `pnpm-lock.yaml` / 设计系统 / 真实数据 / 既有发布机制（无 electron-updater 引入）。既有 `tsx scripts/release-smoke.ts win/mac specs/*.spec.ts` 调用签名保持不变，发布工作流契约测试全绿。
 
@@ -163,25 +196,26 @@ git status --short             -> 干净（3 个提交已落，无未跟踪文�
 | --- | --- | --- |
 | G6–G9 真实安装/升级/离线/回滚 | 本 sandbox 非 win32/darwin，spec 跳过 | Windows/macOS CI runner 产出安装包后由 `release-smoke.ts` 真实执行 |
 | G10 真实工件 SHA-256 | sandbox 无构建产物 | `tools/pack` 在 CI 产出 `installerPath`/`payloadPath` 后由 `collectArtifactHashes` 计算 |
-| macOS/Linux 平台缺能力 | 要求 #4 强制 BLOCKED | 不声称 PASS；仅 Windows CI 产出真实 PASS |
+| macOS G7/G8/G9 | 本轮未实现等效真实测量/失败路径（审核允许 macOS 保持 BLOCKED） | 后续补 macOS full profile 真实指纹采集与失败路径后，可由同一证据机制产出（当前诚实 BLOCKED，不声称 PASS） |
+| Windows core profile G7/G8/G9 | core profile 不跑升级/失败路径 | 切换 `OD_PACKAGED_E2E_WIN_SMOKE_PROFILE=full` 后执行 |
 
-> CW-10 已把"证据如何从真实运行产出"完全打通；剩余仅为**平台/产物 availability**，非代码缺口。
+> CW-10 已把"证据如何从真实运行产出"完全打通（含真实失败路径）；剩余仅为**平台/产物 availability**与**macOS 真实测量补全**，非代码诚信缺口。
 
 ---
 
 ## 8. 提交清单（无 Co-Authored-By 尾注）
 
 1. `docs: design desktop release smoke evidence` — 新增 `docs/plans/CW-10-desktop-release-smoke-evidence-research.md`（GitHub 调研 + G6–G10 精确映射）。
-2. `test/feat: add machine-readable desktop release smoke evidence (G6-G10)` — 新增证据模块/单元测，修改 `release-smoke.ts`/`win.spec.ts`/`mac.spec.ts`/两个 release 工作流（7 文件，+619/-0）。
-3. `docs: verify desktop release smoke evidence` — 本验收文档。
-
-> 无 `fix:` 提交：CW-10 为证据闭环，未引入新缺陷；既有 `updater.ts`/`tools-pack`/`release-*.yml` 契约保持不变（契约测试全绿）。
+2. `test/feat: add machine-readable desktop release smoke evidence (G6-G10)` — 新增证据模块/单元测，修改 `release-smoke.ts`/`win.spec.ts`/`mac.spec.ts`/两个 release 工作流（7 文件）。
+3. `docs: verify desktop release smoke evidence` — 首版验收文档。
+4. **`fix: verify desktop release gate evidence`** — 本审核整改：P0 G7 不再接受 `null`→PASS；P1 Windows full profile 真实执行 G8/G9 失败路径 + 升级前后真实内容指纹；P2 `byteLengthOf` 改 `stat` 不整读；29 个聚焦单元测；类型检查/契约测试全绿；本验收文档去"假 PASS"表述。**无 `Co-Authored-By`**。
 
 ---
 
 ## 9. 分支 / 工作树状态声明
 
-- 分支 `feat/cw-10-release-smoke-evidence` 基于 `main @ 0cd3bf139`，位于工作树 `.worktrees/cw-10-release-smoke-evidence`。
+- 分支 `feat/cw-10-release-smoke-evidence` 基于 `main @ 0cd3bf139`，位于工作树 `.worktrees/cw-10-release-smoke-evidence`；remediation 叠加于分支 tip `ac4d87b12` 之上。
 - **未合并**到 `main`，**未推送**到远程，**未 rebase / reset / force**，**未删除**任何既有分支或工作树。
 - 仅新增/修改文档、测试与发布工作流 YAML；未改动 `package.json` / `pnpm-lock.yaml` / 依赖版本 / 既有源码逻辑 / 设计系统；**未引入 electron-updater 或另一套发布机制**。
+- **真实用户数据 / 真实运行目录 / 真实 `.od` 资产未读取、未写入、未删除**；禁用分支/工作树破坏性 git 操作。
 - 构建产物（`apps/*/dist`、`node_modules`）为 gitignored，未纳入提交。
