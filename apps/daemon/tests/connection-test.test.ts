@@ -16,6 +16,7 @@ import {
   mergeNoProxyWithLoopbackDefaults,
   proxyDispatcherRequestInit,
   redactSecrets,
+  resolveOpenAIConnectionTestRunProviderPackage,
   resolveConnectionTestTimeoutMs,
   testAgentConnection,
   testProviderConnection,
@@ -1795,15 +1796,8 @@ describe('POST /api/test/connection provider mode', () => {
       'fetch',
       passThroughOrUpstream(() =>
         jsonResponse({
-          choices: [
-            {
-              message: {
-                role: 'assistant',
-                content:
-                  "There's an issue with the selected model (abcde). It may not exist.",
-              },
-            },
-          ],
+          output_text:
+            "There's an issue with the selected model (abcde). It may not exist.",
         }),
       ),
     );
@@ -2260,11 +2254,9 @@ describe('POST /api/test/connection provider mode', () => {
     }
   });
 
-  it('keeps max_tokens for legacy OpenAI connection tests', async () => {
+  it('uses max_output_tokens for native OpenAI connection tests', async () => {
     const fetchMock = passThroughOrUpstream(() =>
-      jsonResponse({
-        choices: [{ message: { role: 'assistant', content: 'ok' } }],
-      }),
+      jsonResponse({ output_text: 'ok' }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -2285,12 +2277,16 @@ describe('POST /api/test/connection provider mode', () => {
       ([input]) => !String(input).startsWith(baseUrl),
     );
     expect(upstream).toBeDefined();
+    expect(String(upstream?.[0])).toBe('https://api.openai.com/v1/responses');
     const [, upstreamInit] = upstream!;
     expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
       model: 'gpt-4o',
-      max_tokens: 100,
-      stream: false,
+      input: 'Reply with only: ok',
+      max_output_tokens: 100,
     });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_tokens',
+    );
     expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
       'max_completion_tokens',
     );
@@ -2335,6 +2331,82 @@ describe('POST /api/test/connection provider mode', () => {
     expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
       'max_completion_tokens',
     );
+  });
+
+  it('binds non-OpenAI openai-protocol connection tests to the BYOK OpenCode compatible route', async () => {
+    expect(resolveOpenAIConnectionTestRunProviderPackage({
+      protocol: 'openai',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      apiKey: 'moonshot-key',
+      model: 'kimi-k2.7-code',
+    })).toBe('@ai-sdk/openai-compatible');
+
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.moonshot.cn/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'kimi-k2.7-code', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.moonshot.cn/v1',
+        apiKey: 'moonshot-key',
+        model: 'kimi-k2.7-code',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => String(input) === 'https://api.moonshot.cn/v1/chat/completions',
+    );
+    expect(upstream).toBeDefined();
+  });
+
+  it('binds native OpenAI connection tests to the BYOK OpenCode responses route', async () => {
+    expect(resolveOpenAIConnectionTestRunProviderPackage({
+      protocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'openai-key',
+      model: 'gpt-5.5',
+    })).toBe('@ai-sdk/openai');
+
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.openai.com/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'gpt-5.5', object: 'model' }],
+        });
+      }
+      return jsonResponse({ output_text: 'ok' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'openai-key',
+        model: 'gpt-5.5',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => String(input) === 'https://api.openai.com/v1/responses',
+    );
+    expect(upstream).toBeDefined();
   });
 
   it('keeps max_tokens for Azure gpt-4o connection tests on the default deployment path', async () => {
