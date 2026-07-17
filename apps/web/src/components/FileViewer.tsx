@@ -977,11 +977,31 @@ export function previewOverlayTransform(
 function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
+  options?: { isDeck?: boolean },
 ): CSSProperties & Record<string, string | number> {
   if (viewport === 'desktop') {
+    if (options?.isDeck) {
+      // For deck/slide previews the iframe renders at a fixed canvas size and
+      // zoom is optical-only, so the shell must keep the full canvas size and
+      // let `transform: scale()` actually scale it. Using `width: 100/scale%`
+      // here would cancel out the scale (an algebraic inverse), leaving the
+      // slide visually stuck at 100% regardless of the zoom value. The outer
+      // `.comment-frame-clip` already clips overflow for zoom-in.
+      return {
+        width: '100%',
+        height: '100%',
+        transform: `scale(${previewScale})`,
+        transformOrigin: '0 0',
+      };
+    }
+    // For non-deck HTML previews (the auto-fit / reflow flow described in #5751)
+    // the inverse-percentage trick is intentional browser-zoom semantics: the
+    // layout box grows by 1/scale so content reflows, then `transform: scale()`
+    // shrinks it back to fit the clip. This lets zoom-out show more content
+    // instead of just optically shrinking the same layout.
     return {
-      width: '100%',
-      height: '100%',
+      width: `${100 / previewScale}%`,
+      height: `${100 / previewScale}%`,
       transform: `scale(${previewScale})`,
       transformOrigin: '0 0',
     };
@@ -3675,7 +3695,7 @@ function FileVersionManagerModal({
                     style={previewViewportStyle(previewViewport, 1, previewFrameSize, { canvasPadding: 24 })}
                   >
                     <div className="preview-frame-clip">
-                      <div style={previewScaleShellStyle(previewViewport, 1)}>
+                      <div style={previewScaleShellStyle(previewViewport, 1, { isDeck: isDeckPreview })}>
                         <iframe
                           ref={versionPreviewIframeRef}
                           title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
@@ -12118,7 +12138,7 @@ function HtmlViewer({
                   style={
                     manualEditMode
                       ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
-                      : previewScaleShellStyle(previewViewport, previewScale)
+                      : previewScaleShellStyle(previewViewport, previewScale, { isDeck: effectiveDeck })
                   }
                 >
                   <PreviewDrawOverlay
