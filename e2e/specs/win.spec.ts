@@ -1721,11 +1721,14 @@ async function runMetadataUnreachableScenario(opts: {
 }): Promise<OfflineEvidence> {
   const deadUrl = 'http://127.0.0.1:1/metadata.json';
   applyPackagedUpdateEnv(process.env, opts.scenario, deadUrl, { openDryRun: false });
+  // The desktop updater reads its environment at process start. Restart after
+  // changing metadata URL so this IPC action exercises the unreachable server,
+  // rather than the prior fixture inherited by the running process.
+  await runToolsPackJson('stop');
+  await runToolsPackJson('start');
   const checked = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'check']);
   const metadataUnreachable = checked.update?.state === 'error' && checked.update.error?.code === 'metadata-unreachable';
   expect(metadataUnreachable).toBe(true);
-  await runToolsPackJson('stop');
-  await runToolsPackJson('start');
   const inspect = await waitForHealthyDesktop();
   const health = assertHealthEvalValue(inspect.eval?.value);
   const healthy = inspect.status?.state === 'running' && health.health.ok === true;
@@ -1769,6 +1772,10 @@ async function runChecksumMismatchRollbackScenario(opts: {
     const port = typeof address === 'object' && address ? address.port : 0;
     const tamperedUrl = `http://127.0.0.1:${port}/metadata.json`;
     applyPackagedUpdateEnv(process.env, opts.scenario, tamperedUrl, { openDryRun: false });
+    // As above, the updater process inherits its configuration on launch.
+    // Restart first, then request download over its IPC endpoint.
+    await runToolsPackJson('stop');
+    await runToolsPackJson('start');
 
     const downloaded = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'download']);
     const checksumMismatch = downloaded.update?.state === 'error' && downloaded.update.error?.code === 'checksum-mismatch';

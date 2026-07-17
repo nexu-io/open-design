@@ -25,8 +25,8 @@
   - 指纹发散 → **`FAIL`**（理由："dataRoot or backups/creator content diverged across upgrade"）。
   - 内容指纹 `computeContentFingerprint` 与遍历顺序无关、与绝对路径无关、与 mtime 无关（仅依赖 `相对路径 + 文件大小 + 内容 SHA-256`）。
 - **P1 — Windows full profile 真实执行 G8 / G9 失败路径**（`e2e/specs/win.spec.ts`）：
-  - **G8（checksum-mismatch 保持旧版本）**：在成功升级前，取 fixture 真实 metadata，篡改其 `payloadSha256` 为 `deadbeef…`，由本地 HTTP server（`createServer`，端口 0）对外提供；通过真实 `tools-pack inspect --update-action download` 触发下载，必须观察到 `update.error.code === "checksum-mismatch"`。随后断言**原版本仍健康、dataRoot 指纹不变**；不吞掉失败路径错误。
-  - **G9（metadata 不可达离线启动）**：在成功升级前把 updater 指向 `http://127.0.0.1:1/metadata.json`（不可达），通过真实 `tools-pack inspect --update-action check` 触发检查并断言 `update.error.code === "metadata-unreachable"`，再停止并启动已安装应用，断言**应用仍健康启动、dataRoot 指纹不变**。
+  - **G8（checksum-mismatch 保持旧版本）**：在成功升级前，取 fixture 真实 metadata，篡改其 `payloadSha256` 为 `deadbeef…`，由本地 HTTP server（`createServer`，端口 0）对外提供；更新环境变量后先重启桌面进程（updater 只在进程启动时读取配置），再通过真实 `tools-pack inspect --update-action download` 触发下载，必须观察到 `update.error.code === "checksum-mismatch"`。随后断言**原版本仍健康、dataRoot 指纹不变**；不吞掉失败路径错误。
+  - **G9（metadata 不可达离线启动）**：在成功升级前把 updater 指向 `http://127.0.0.1:1/metadata.json`（不可达），重启桌面进程使其继承该 URL，通过真实 `tools-pack inspect --update-action check` 触发检查并断言 `update.error.code === "metadata-unreachable"`，再验证该离线启动的应用仍健康、dataRoot 指纹不变。
   - **G7（真实可观察内容）**：在升级前仅向 CI 临时命名空间的五个 Creator 存储目录和 `backups/creator` 写入种子文件，分别保存六个指纹；成功升级后逐项比对，任何缺失或发散均不得 PASS。
   - 三者仅在 `!verifyCoreOnly && beforeDataFingerprint` 时执行；仅用 runner fixture HTTP server + CI 临时目录，**无任何 mock PASS**。
   - **core profile 或 macOS → G7/G8/G9 一律 `BLOCKED`，附准确理由**（macOS 本轮未实现同等真实测量/失败路径，绝不假称 PASS）。
