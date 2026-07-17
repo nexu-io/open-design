@@ -1149,6 +1149,35 @@ describe('TasksView page shell', () => {
     expect(screen.queryByLabelText('Your automations')).toBeNull();
   });
 
+  it('zero-project workspace: creator switch is stable, bounded, and loop-free', async () => {
+    mockTasksViewFetch();
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TasksView />);
+    expect(await screen.findByLabelText('Your automations')).toBeTruthy();
+
+    const beforeSwitch = fetchMock.mock.calls.length;
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const dashboard = await screen.findByTestId('creator-dashboard', undefined, { timeout: 10000 });
+    expect(within(dashboard).getByRole('heading', { name: 'Creator workbench' })).toBeTruthy();
+
+    // Remain on the heavy creator surface; a residual refresh loop would
+    // inflate fetch calls here.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(fetchMock.mock.calls.length - beforeSwitch).toBe(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Automations/i }));
+    expect(await screen.findByLabelText('Your automations')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(fetchMock.mock.calls.length - beforeSwitch).toBe(0);
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Maximum update depth'),
+    );
+    errorSpy.mockRestore();
+  });
+
   it('shows the empty state and opens the create modal from it', async () => {
     mockTasksViewFetch();
 

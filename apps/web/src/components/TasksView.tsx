@@ -1045,8 +1045,21 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     [templates, templateFilter],
   );
 
+  // `entryProjects` is re-created on every render when the caller omits the
+  // prop (the default `[]` is a fresh array literal each call). Depending the
+  // `refresh` callback on the raw array identity therefore made it a new
+  // function every render, which re-ran the mount effect `void refresh()` on
+  // every render and produced an unbounded refresh loop (pegging CPU / never
+  // settling once the heavy Creator workbench rendered). Read the latest value
+  // through a ref and key the callback on a stable string derived from the
+  // project ids instead, so the effect runs once per distinct project set and
+  // surface switches trigger no extra fetch.
+  const entryProjectsRef = useRef(entryProjects);
+  entryProjectsRef.current = entryProjects;
+  const entryProjectKey = entryProjects.map((project) => project.id).join('|');
   const refresh = useCallback(async (): Promise<{ proposalRefreshFailed: boolean }> => {
     let proposalRefreshFailed = false;
+    const projects = entryProjectsRef.current;
     try {
       const templateRequest = fetch('/api/automation-templates')
         .then(async (res) => {
@@ -1081,7 +1094,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       } else {
         setCreatorRuns([]);
       }
-      const creatorData = await Promise.all(entryProjects.map(async (project) => {
+      const creatorData = await Promise.all(projects.map(async (project) => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-workbench`);
           if (!response.ok) return null;
@@ -1095,7 +1108,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         projectId: string;
         data: CreatorWorkbenchProjectData;
       } => value !== null));
-      const creatorMediaData = await Promise.all(entryProjects.map(async (project): Promise<CreatorMediaProjectState> => {
+      const creatorMediaData = await Promise.all(projects.map(async (project): Promise<CreatorMediaProjectState> => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-media-assets`);
           if (!response.ok) return { projectId: project.id, data: { roots: [], assets: [], taskLinks: [] }, failed: true };
@@ -1113,7 +1126,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         }
       }));
       setCreatorMediaProjectData(creatorMediaData);
-      const creatorContentData = await Promise.all(entryProjects.map(async (project): Promise<CreatorContentProjectState> => {
+      const creatorContentData = await Promise.all(projects.map(async (project): Promise<CreatorContentProjectState> => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-content`);
           if (!response.ok) return { projectId: project.id, data: { contentProjects: [] }, failed: true };
@@ -1128,7 +1141,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
         }
       }));
       setCreatorContentProjectData(creatorContentData);
-      const creatorReleaseData = await Promise.all(entryProjects.map(async (project): Promise<CreatorReleaseProjectState> => {
+      const creatorReleaseData = await Promise.all(projects.map(async (project): Promise<CreatorReleaseProjectState> => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-release-packages`);
           if (!response.ok) return { projectId: project.id, data: { releasePackages: [] }, failed: true };
@@ -1145,7 +1158,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setCreatorReleaseProjectData(creatorReleaseData);
       // 按项目独立加载 performance 快照；单项目失败仅降级该项目的 Performance 区域，
       // 不影响 Tasks、Media、Content 或 Release 面板。
-      const creatorPerformanceData = await Promise.all(entryProjects.map(async (project): Promise<CreatorPerformanceProjectState> => {
+      const creatorPerformanceData = await Promise.all(projects.map(async (project): Promise<CreatorPerformanceProjectState> => {
         try {
           const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/creator-performance-snapshots`);
           if (!response.ok) return { projectId: project.id, data: { snapshots: [] }, failed: true };
@@ -1173,7 +1186,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       setLoading(false);
     }
     return { proposalRefreshFailed };
-  }, [entryProjects]);
+  }, [entryProjectKey]);
 
   useEffect(() => {
     void refresh();
