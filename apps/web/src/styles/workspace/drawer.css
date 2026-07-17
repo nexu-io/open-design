@@ -759,6 +759,13 @@
 .live-artifact-card:hover {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--border-strong));
 }
+.project-thumb {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  container-type: inline-size;
+}
 .project-thumb::before,
 .project-thumb::after {
   display: none;
@@ -775,9 +782,9 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 250%;
-  height: 250%;
-  transform: scale(0.4);
+  width: 1280px;
+  height: 720px;
+  transform: scale(calc(100cqw / 1280px));
   transform-origin: top left;
   border: 0;
   background: var(--bg-panel);
