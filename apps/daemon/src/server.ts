@@ -3331,6 +3331,7 @@ export interface StartServerOptions {
 }
 
 export interface StartServerResult {
+  db: unknown;
   url: string;
   server: import('node:http').Server;
   shutdown: () => Promise<void> | void;
@@ -9393,6 +9394,7 @@ export async function startServer({
         }
         daemonUrl = url;
         resolve(returnServer ? {
+          db,
           url,
           server,
           shutdown: shutdownDaemonRuns,

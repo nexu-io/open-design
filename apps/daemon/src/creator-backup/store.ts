@@ -61,6 +61,13 @@ export interface CreateCreatorBackupOptions {
   appVersion?: string;
   /** Controlled namespace the snapshot lives under. Derived when omitted. */
   namespace?: string;
+  /**
+   * Reads the minimal project identity (id + name) for a project id through the
+   * daemon's controlled project store. Supplied by the caller (the route) so
+   * this store stays decoupled from the DB layer. Missing projects resolve to
+   * null and are skipped.
+   */
+  identityProvider?: (projectId: string) => { id: string; name: string } | null;
 }
 
 // ---- validation helpers -------------------------------------------------
@@ -93,6 +100,32 @@ function assertBackupId(backupId: string): string {
 
 function sha256(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Build the minimal project-identity payloads from an injected provider
+ * (supplied by the caller so this store stays DB-free). Each entry carries a
+ * SHA-256 over `${id}\n${name}` for tamper detection. Missing projects are
+ * skipped.
+ */
+function captureProjectIdentitiesFrom(
+  identityProvider: ((projectId: string) => { id: string; name: string } | null) | undefined,
+  projectIds: string[],
+): import('@open-design/contracts').CreatorBackupProjectIdentity[] {
+  const out: import('@open-design/contracts').CreatorBackupProjectIdentity[] = [];
+  if (!identityProvider) return out;
+  for (const projectId of projectIds) {
+    const minimal = identityProvider(projectId);
+    if (!minimal || typeof minimal.id !== 'string' || !minimal.id) continue;
+    const name = typeof minimal.name === 'string' ? minimal.name : minimal.id;
+    out.push({
+      id: minimal.id,
+      name,
+      schemaVersion: 1,
+      hash: createHash('sha256').update(`${minimal.id}\n${name}`).digest('hex'),
+    });
+  }
+  return out;
 }
 
 // ---- path derivation ----------------------------------------------------
@@ -359,6 +392,13 @@ export async function createCreatorBackup(
     const namespace = options.namespace ?? resolveCreatorBackupNamespace(dataDir);
     const manifest = buildManifest(backupId, files, options, namespace);
     manifest.projectIds = [projectId];
+    // Capture minimal project identity (id + name only) for re-establishing
+    // the Creator project association on restore. Never copies working-dir
+    // paths, credentials, asset bodies, or unrelated project data.
+    manifest.projectIdentities = captureProjectIdentitiesFrom(
+      options.identityProvider,
+      [projectId],
+    );
 
     await fsp.writeFile(path.join(tempDir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 

@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import type { StartServerOptions } from './server.js';
 
 type StartedServer = {
+  db: unknown;
   server: Server;
   url: string;
   shutdown?: () => Promise<void>;

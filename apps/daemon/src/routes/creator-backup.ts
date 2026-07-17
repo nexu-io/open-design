@@ -17,6 +17,7 @@ import {
   listCreatorBackups,
   validateCreatorBackup,
 } from '../creator-backup/store.js';
+import { readProjectIdentity } from '../creator-backup/project-identity.js';
 
 export interface RegisterCreatorBackupRoutesDeps {
   paths: { RUNTIME_DATA_DIR: string };
@@ -79,6 +80,17 @@ export function registerCreatorBackupRoutes(app: Express, deps: RegisterCreatorB
       const backup = await createCreatorBackup(RUNTIME_DATA_DIR, req.params.id, {
         ...(typeof body.note === 'string' && body.note.trim() ? { note: body.note.trim() } : {}),
         ...(body.profile === 'full' ? { profile: 'full' } : {}),
+        // Read minimal project identity through the controlled DB API so the
+        // snapshot can re-establish the Creator project association on restore.
+        // Best-effort: an identity read failure must NOT fail the whole snapshot
+        // (identity is optional metadata; the file capture still proceeds).
+        identityProvider: (projectId: string) => {
+          try {
+            return readProjectIdentity(deps.db, projectId);
+          } catch {
+            return null;
+          }
+        },
       });
       res.status(201).json({ backup });
     } catch (error) {
@@ -99,4 +111,5 @@ export function registerCreatorBackupRoutes(app: Express, deps: RegisterCreatorB
       res.status((error as { status?: number }).status ?? 400).json({ error: errorMessage(error) });
     }
   });
+
 }

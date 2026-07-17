@@ -67,6 +67,12 @@ export type PackagedSidecarHandle = {
   close(): Promise<void>;
   daemon: DaemonStatusSnapshot;
   web: WebStatusSnapshot;
+  /**
+   * Stop a SINGLE sidecar (used by creator-backup freeze to halt the daemon
+   * and await its exit) without tearing down the rest of the group. Throws if
+   * the process cannot be stopped.
+   */
+  closeApp(app: AppKey): Promise<void>;
 };
 
 type ManagedSidecarChild = {
@@ -473,7 +479,13 @@ async function spawnSidecarChild(options: {
   return { app: options.app, child, ipcPath, logHandle, logPath };
 }
 
-async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+/**
+ * Stop a single managed sidecar child, awaiting CONFIRMED process exit.
+ * Sends SHUTDOWN over IPC, waits for the exit, then force-stops if needed.
+ * Throws if the process cannot be stopped — callers (e.g. the creator-backup
+ * freeze) rely on this to guarantee the daemon is not writing during a swap.
+ */
+async function stopManagedSidecar(child: ManagedSidecarChild): Promise<void> {
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
   try {
@@ -482,13 +494,34 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
     // Fall through to process cleanup.
   }
 
-  if (!(await waitForProcessExit(child.child.pid, 5000))) {
-    await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
-    await stopProcesses([child.child.pid]);
+  if (await waitForProcessExit(child.child.pid, 5000)) {
+    await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
+    await child.logHandle.close().catch(() => undefined);
+    return;
   }
 
-  await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
+  await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
+  await stopProcesses([child.child.pid]);
+  if (await waitForProcessExit(child.child.pid, 5000)) {
+    await appendLifecycleLog(`[open-design packaged] force-stopped app=${child.app} pid=${child.child.pid ?? "unknown"}`);
+    await child.logHandle.close().catch(() => undefined);
+    return;
+  }
+
   await child.logHandle.close().catch(() => undefined);
+  throw new Error(`failed to stop ${child.app} sidecar (pid=${child.child.pid})`);
+}
+
+/** Robust close used by the group `close()` — best-effort, never throws. */
+async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+  try {
+    await stopManagedSidecar(child);
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      child.logPath,
+      `[open-design packaged] close failed app=${child.app} pid=${child.child.pid ?? "unknown"}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /** Options needed to spawn (or re-spawn) only the daemon sidecar. */
@@ -560,42 +593,52 @@ export async function restartPackagedDaemon(
   return status;
 }
 
+/** Options for spawning (or re-spawning) the full daemon + web sidecar group. */
+export type StartPackagedSidecarsOptions = {
+  appVersion: string | null;
+  amrProfile: string | null;
+  daemonCliEntry: string | null;
+  daemonSidecarEntry: string | null;
+  electronNodeCommand: string | null;
+  nodeCommand: string | null;
+  telemetryRelayUrl: string | null;
+  posthogKey: string | null;
+  posthogHost: string | null;
+  /**
+   * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
+   * runtime is being started in this packaged process group. The
+   * Electron entry passes `true`; `headless.ts` passes `false` so the
+   * daemon's import-folder gate stays dormant in headless mode where
+   * there is no `shell.openPath` surface and no client to register a
+   * secret. Required (no default) so a future packaged caller cannot
+   * silently regress the gate by omitting it.
+   */
+  requireDesktopAuth: boolean;
+  webSidecarEntry: string | null;
+  webStandaloneRoot: string | null;
+  webOutputMode: PackagedWebOutputMode;
+  /**
+   * Fixed web port to bind. Defaults to `"0"` (random). A creator-backup
+   * restore re-spawns the group and passes the OLD web port here so the
+   * already-loaded renderer keeps its URL and simply reconnects to the new
+   * daemon through the new web sidecar.
+   */
+  webPort?: string;
+  /**
+   * Boot-progress hook, fired at each sidecar bring-up boundary: the
+   * `"-spawning"` edge just before a child is spawned, and the `"-ready"`
+   * edge once it reports a usable URL. The Electron entry forwards these to
+   * the splash status line so a slow cold boot shows which phase is underway
+   * (and visibly advances the step counter the moment each long native wait
+   * clears) instead of a frozen frame; headless callers omit it.
+   */
+  onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
+};
+
 export async function startPackagedSidecars(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   paths: PackagedNamespacePaths,
-  options: {
-    appVersion: string | null;
-    amrProfile: string | null;
-    daemonCliEntry: string | null;
-    daemonSidecarEntry: string | null;
-    electronNodeCommand: string | null;
-    nodeCommand: string | null;
-    telemetryRelayUrl: string | null;
-    posthogKey: string | null;
-    posthogHost: string | null;
-    /**
-     * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
-     * runtime is being started in this packaged process group. The
-     * Electron entry passes `true`; `headless.ts` passes `false` so the
-     * daemon's import-folder gate stays dormant in headless mode where
-     * there is no `shell.openPath` surface and no client to register a
-     * secret. Required (no default) so a future packaged caller cannot
-     * silently regress the gate by omitting it.
-     */
-    requireDesktopAuth: boolean;
-    webSidecarEntry: string | null;
-    webStandaloneRoot: string | null;
-    webOutputMode: PackagedWebOutputMode;
-    /**
-     * Boot-progress hook, fired at each sidecar bring-up boundary: the
-     * `"-spawning"` edge just before a child is spawned, and the `"-ready"`
-     * edge once it reports a usable URL. The Electron entry forwards these to
-     * the splash status line so a slow cold boot shows which phase is underway
-     * (and visibly advances the step counter the moment each long native wait
-     * clears) instead of a frozen frame; headless callers omit it.
-     */
-    onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
-  },
+  options: StartPackagedSidecarsOptions,
 ): Promise<PackagedSidecarHandle> {
   await mkdir(paths.namespaceRoot, { recursive: true });
   await mkdir(paths.cacheRoot, { recursive: true });
@@ -622,7 +665,7 @@ export async function startPackagedSidecars(
       entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
-        [SIDECAR_ENV.WEB_PORT]: "0",
+        [SIDECAR_ENV.WEB_PORT]: options.webPort ?? "0",
         ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
         OD_WEB_OUTPUT_MODE: options.webOutputMode,
         PORT: "0",
@@ -645,12 +688,26 @@ export async function startPackagedSidecars(
     return {
       daemon: daemonStatus,
       web: webStatus,
+      /**
+       * Stop a SINGLE sidecar (used by creator-backup freeze to halt the
+       * daemon and await its exit) without tearing down the rest of the
+       * group. Throws if the process cannot be stopped, so the caller can
+       * treat a failed freeze as fatal. The stopped child is removed from the
+       * managed list so the later full `close()` skips it.
+       */
+      async closeApp(app: AppKey) {
+        const idx = children.findIndex((child) => child.app === app);
+        if (idx === -1) return;
+        const [child] = children.splice(idx, 1);
+        await stopManagedSidecar(child);
+      },
       async close() {
         for (const child of [...children].reverse()) {
           await closeManagedChild(child).catch((error: unknown) => {
             console.error(`failed to close packaged ${child.app} sidecar`, error);
           });
         }
+        children.length = 0;
       },
     };
   } catch (error) {
@@ -659,4 +716,42 @@ export async function startPackagedSidecars(
     }
     throw error;
   }
+}
+
+/**
+ * Re-spawn the FULL daemon + web sidecar group after a creator-backup restore,
+ * replacing the managed handle so the desktop main process (and the loaded
+ * renderer) reuses the new sidecars.
+ *
+ * Correctness (P0-3):
+ *   - The OLD handle is closed first, so the old daemon AND old web are
+ *     confirmed exited before the new group comes up (no orphan processes).
+ *   - The web sidecar is re-spawned on the SAME port the old web used, so the
+ *     already-loaded renderer keeps its URL and reconnects to the new daemon
+ *     through the new web sidecar (the new web is launched with the new daemon
+ *     port).
+ *   - The new handle is registered via `handleRef.set`, and its `close()` shuts
+ *     the new children down on app exit.
+ *
+ * `deps.spawnSidecars` is injectable so the behavior is unit-testable without
+ * spawning real processes.
+ */
+export async function restartPackagedSidecars(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  paths: PackagedNamespacePaths,
+  options: StartPackagedSidecarsOptions,
+  handleRef: { get(): PackagedSidecarHandle | null; set(handle: PackagedSidecarHandle): void },
+  deps: { spawnSidecars?: typeof startPackagedSidecars } = {},
+): Promise<{ daemonUrl: string }> {
+  const old = handleRef.get();
+  const oldWebPort = old?.web?.url != null ? extractPort(old.web.url) : "0";
+  if (old) {
+    await old.close();
+  }
+  const spawnSidecars = deps.spawnSidecars ?? startPackagedSidecars;
+  const fresh = await spawnSidecars(runtime, paths, { ...options, webPort: oldWebPort });
+  handleRef.set(fresh);
+  const daemonUrl = fresh.daemon.url;
+  if (!daemonUrl) throw new Error("daemon did not expose a url after restart");
+  return { daemonUrl };
 }

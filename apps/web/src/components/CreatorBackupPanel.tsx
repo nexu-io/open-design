@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Button } from '@open-design/components';
-import { restoreCreatorBackup } from '@open-design/host';
+import { isCreatorBackupRestoreAvailable, restoreCreatorBackup } from '@open-design/host';
 import type { CreatorBackupSummary } from '@open-design/contracts';
 
 type ProjectOption = { id: string; name: string };
@@ -41,6 +41,13 @@ export function CreatorBackupPanel({ projects }: CreatorBackupPanelProps): React
   const [validatingNote, setValidatingNote] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreNote, setRestoreNote] = useState<string | null>(null);
+
+  // Capability check: restore is only available through the packaged desktop
+  // host bridge. In a plain web / dev build there is no `creator.restoreBackup`,
+  // so we must NOT show a working Restore action (and never pop a confirm
+  // dialog or fire a doomed restore call). The host global is stable for the
+  // session, so evaluate once.
+  const [canRestore] = useState<boolean>(() => isCreatorBackupRestoreAvailable());
 
   // Keep a selection valid if the available projects resolve after first paint.
   useEffect(() => {
@@ -117,7 +124,7 @@ export function CreatorBackupPanel({ projects }: CreatorBackupPanelProps): React
   }, [projectId, validatingId, loadBackups]);
 
   const restoreBackup = useCallback(async (backupId: string) => {
-    if (!projectId || restoringId) return;
+    if (!canRestore || !projectId || restoringId) return;
     const confirmed =
       typeof window.confirm === 'function'
         ? window.confirm('Restore this backup? Current Creator metadata will be replaced; a rollback snapshot is saved automatically.')
@@ -135,7 +142,7 @@ export function CreatorBackupPanel({ projects }: CreatorBackupPanelProps): React
     } finally {
       setRestoringId(null);
     }
-  }, [projectId, restoringId, loadBackups]);
+  }, [canRestore, projectId, restoringId, loadBackups]);
 
   const sorted = [...backups].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
@@ -169,6 +176,11 @@ export function CreatorBackupPanel({ projects }: CreatorBackupPanelProps): React
       {error ? <p className="creator-list__desc creator-backup__error" role="alert">{error}</p> : null}
       {restoreNote ? <p className="creator-list__desc creator-backup__note">{restoreNote}</p> : null}
       {validatingNote ? <p className="creator-list__desc creator-backup__note">{validatingNote}</p> : null}
+      {!canRestore ? (
+        <p className="creator-list__desc creator-backup__note">
+          仅桌面应用可执行恢复（Restore）；当前环境为只读。
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="creator-list__desc">Loading backups…</p>
@@ -195,15 +207,27 @@ export function CreatorBackupPanel({ projects }: CreatorBackupPanelProps): React
                 >
                   {validatingId === backup.id ? 'Validating…' : 'Validate'}
                 </Button>
-                <Button
-                  variant="ghost"
-                  className="creator-list__action"
-                  disabled={restoringId === backup.id}
-                  aria-label={`Restore backup ${backup.id}`}
-                  onClick={() => void restoreBackup(backup.id)}
-                >
-                  {restoringId === backup.id ? 'Restoring…' : 'Restore'}
-                </Button>
+                {canRestore ? (
+                  <Button
+                    variant="ghost"
+                    className="creator-list__action"
+                    disabled={restoringId === backup.id}
+                    aria-label={`Restore backup ${backup.id}`}
+                    onClick={() => void restoreBackup(backup.id)}
+                  >
+                    {restoringId === backup.id ? 'Restoring…' : 'Restore'}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    className="creator-list__action"
+                    disabled
+                    aria-label={`Restore backup ${backup.id} (desktop only)`}
+                    title="仅桌面应用可恢复"
+                  >
+                    Restore
+                  </Button>
+                )}
               </div>
             </li>
           ))}

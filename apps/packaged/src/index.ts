@@ -1,6 +1,7 @@
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
@@ -11,6 +12,7 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
+import { requestJsonIpc } from "@open-design/sidecar";
 import { applyOsLocaleSwitch, createSplashWindow, setSplashStage } from "@open-design/desktop/main";
 import type { RestoreCreatorBackupRequest } from "@open-design/host";
 import { readProcessStamp } from "@open-design/platform";
@@ -34,8 +36,13 @@ import {
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
-import { restartPackagedDaemon, startPackagedSidecars } from "./sidecars.js";
-import { createCreatorBackupDaemonControl, restoreCreatorBackup } from "./restore.js";
+import { restartPackagedSidecars, startPackagedSidecars } from "./sidecars.js";
+import {
+  createCreatorBackupDaemonControl,
+  createSingleFlightRestore,
+  restoreCreatorBackup,
+  type RestoreCreatorBackupResponse,
+} from "./restore.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
@@ -201,29 +208,59 @@ async function main(): Promise<void> {
       setSplashStage(splash.window, stage);
     },
   };
-  const sidecars = await startPackagedSidecars(runtime, paths, sidecarOptions);
+  let sidecars = await startPackagedSidecars(runtime, paths, sidecarOptions);
 
   // Creator backup restore is orchestrated here, in the packaged main process.
-  // The daemon is frozen (graceful shutdown) during the live-file swap and
-  // re-spawned afterwards so it reloads the restored Creator metadata.
-  const daemonIpcPath = resolveAppIpcPath({
-    app: APP_KEYS.DAEMON,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace,
-  });
+  // The daemon is frozen (graceful shutdown + confirmed exit) during the
+  // live-file swap and the FULL daemon + web group is re-spawned afterwards so
+  // the web renderer reconnects to the restored Creator metadata.
   const creatorBackupDaemonControl = createCreatorBackupDaemonControl({
-    daemonIpcPath,
-    // Re-spawn the daemon sidecar and refresh the handle's status snapshot so
-    // the web renderer reconnects to the new daemon URL after the data swap.
-    restartDaemon: async () => {
-      const status = await restartPackagedDaemon(runtime, paths, sidecarOptions);
-      sidecars.daemon = status;
-      return;
+    // Freeze = stop the daemon sidecar and await CONFIRMED exit. Throws if it
+    // cannot be stopped, so the engine aborts before touching any live file
+    // (P0-2). Only the daemon is halted; the web sidecar stays up.
+    stopDaemon: async () => {
+      if (sidecars == null) throw new Error("sidecars not started");
+      await sidecars.closeApp(APP_KEYS.DAEMON);
+    },
+    // Restart = re-spawn the FULL daemon + web group, reuse the old web port so
+    // the loaded renderer keeps its URL, and replace the managed handle (P0-3).
+    restartSidecars: async () => {
+      const { daemonUrl } = await restartPackagedSidecars(runtime, paths, sidecarOptions, {
+        get: () => sidecars,
+        set: (handle) => {
+          sidecars = handle;
+        },
+      });
+      return daemonUrl;
+    },
+    // Reconcile minimal project identities through the daemon's private
+    // sidecar socket. This is deliberately not a renderer-reachable HTTP route.
+    restoreProjectIdentities: async (identities) => {
+      const daemonIpcPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      });
+      return await requestJsonIpc<NonNullable<RestoreCreatorBackupResponse["projectIdentity"]>>(
+        daemonIpcPath,
+        { input: { identities }, type: SIDECAR_MESSAGES.RECONCILE_CREATOR_BACKUP_IDENTITIES },
+        { timeoutMs: 5_000 },
+      );
     },
   });
-  const creatorBackup = {
-    restore: (request: RestoreCreatorBackupRequest) =>
+
+  // Serialize restores: the data dir is shared, so a second concurrent restore
+  // is rejected rather than racing the first (P0-2.5).
+  const restoreWithLock = createSingleFlightRestore(
+    (request: RestoreCreatorBackupRequest) =>
       restoreCreatorBackup({ dataDir: paths.dataRoot, daemonControl: creatorBackupDaemonControl }, request),
+    (): RestoreCreatorBackupResponse => ({
+      ok: false,
+      error: "a restore is already in progress; concurrent restores are rejected",
+    }),
+  );
+  const creatorBackup = {
+    restore: (request: RestoreCreatorBackupRequest) => restoreWithLock(request),
   };
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal

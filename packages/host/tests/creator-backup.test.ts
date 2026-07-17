@@ -10,7 +10,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { isOpenDesignHostBridge, restoreCreatorBackup } from "../src/index.js";
+import {
+  isCreatorBackupRestoreAvailable,
+  isOpenDesignHostBridge,
+  restoreCreatorBackup,
+} from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
 import type {
   CreatorBackupSummary,
@@ -50,8 +54,9 @@ describe("isOpenDesignHostBridge creator namespace", () => {
   });
 
   it("rejects a bridge whose creator member is missing restoreBackup", () => {
-    const candidate = createMockOpenDesignHost() as OpenDesignHostBridge & { creator: Record<string, unknown> };
-    candidate.creator = {};
+    const candidate = createMockOpenDesignHost() as OpenDesignHostBridge;
+    // Intentionally present-but-incomplete creator member (no restoreBackup).
+    (candidate as { creator: unknown }).creator = {};
     expect(isOpenDesignHostBridge(candidate)).toBe(false);
   });
 });
@@ -100,5 +105,31 @@ describe("restoreCreatorBackup host helper", () => {
     const response = await restoreCreatorBackup("bk-1");
     expect(response.ok).toBe(false);
     expect(response.error).toContain("not available");
+  });
+});
+
+describe("isCreatorBackupRestoreAvailable (P2-1 capability gate)", () => {
+  it("is true when the host bridge exposes creator.restoreBackup", () => {
+    const uninstall = installMockOpenDesignHost({
+      host: { creator: { restoreBackup: async () => ({ ok: true, backup: summaryFor("bk-1") }) } },
+    });
+    try {
+      expect(isCreatorBackupRestoreAvailable()).toBe(true);
+    } finally {
+      uninstall();
+    }
+  });
+
+  it("is false when the host is installed but has no creator namespace", () => {
+    const uninstall = installMockOpenDesignHost({ host: {} });
+    try {
+      expect(isCreatorBackupRestoreAvailable()).toBe(false);
+    } finally {
+      uninstall();
+    }
+  });
+
+  it("is false when no host is installed (plain web / dev build)", () => {
+    expect(isCreatorBackupRestoreAvailable()).toBe(false);
   });
 });

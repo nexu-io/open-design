@@ -25,6 +25,21 @@ export type CreatorBackupSummary = {
   validated?: boolean;
 };
 
+export type CreatorBackupProjectIdentity = {
+  id: string;
+  name: string;
+  schemaVersion: number;
+  hash: string;
+};
+
+export type CreatorBackupProjectIdentityReport = {
+  performed: boolean;
+  created: string[];
+  kept: string[];
+  conflicts: string[];
+  reason?: string;
+};
+
 export type RestoreCreatorBackupRequest = {
   backupId: string;
 };
@@ -33,6 +48,9 @@ export type RestoreCreatorBackupResponse = {
   ok: boolean;
   backup?: CreatorBackupSummary;
   error?: string;
+  rolledBack?: boolean;
+  rollbackRemoved?: boolean;
+  projectIdentity?: CreatorBackupProjectIdentityReport;
 };
 export const OPEN_DESIGN_HOST_VERSION = 2;
 
@@ -525,6 +543,17 @@ export function getOpenDesignHost(scope: OpenDesignHostGlobalScope = globalThis)
 
 export function isOpenDesignHostAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
   return getOpenDesignHost(scope) != null;
+}
+
+/**
+ * True only when the active host bridge exposes a working creator-backup
+ * restore capability. The web panel uses this to decide whether to render an
+ * enabled Restore action or a read-only "desktop only" state — so a plain web /
+ * dev build never triggers a confirm dialog or a doomed restore call.
+ */
+export function isCreatorBackupRestoreAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
+  const host = getOpenDesignHost(scope);
+  return typeof host?.creator?.restoreBackup === "function";
 }
 
 export function detectOpenDesignHostClientType(scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostClientType | "web" {

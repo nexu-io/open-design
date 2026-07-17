@@ -7,9 +7,10 @@ import { CreatorBackupPanel } from '../../src/components/CreatorBackupPanel';
 
 vi.mock('@open-design/host', () => ({
   restoreCreatorBackup: vi.fn(),
+  isCreatorBackupRestoreAvailable: vi.fn(() => true),
 }));
 
-import { restoreCreatorBackup } from '@open-design/host';
+import { isCreatorBackupRestoreAvailable, restoreCreatorBackup } from '@open-design/host';
 
 const projects = [{ id: 'project-1', name: 'Demo Project' }];
 
@@ -39,6 +40,7 @@ function backupSummary(overrides: Partial<Record<string, unknown>> = {}) {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -130,5 +132,23 @@ describe('CreatorBackupPanel', () => {
     fireEvent.click(restoreButton);
     await waitFor(() => expect(restoreCreatorBackup).toHaveBeenCalledWith('creator-backup:abc'));
     expect(await screen.findByText(/daemon not available/)).toBeTruthy();
+  });
+
+  it('degrades to read-only when restore is unavailable (non-desktop / web build)', async () => {
+    vi.mocked(isCreatorBackupRestoreAvailable).mockReturnValue(false);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    const confirmSpy = vi.mocked(globalThis.confirm as unknown as ReturnType<typeof vi.fn>);
+    fetchMock.mockResolvedValue(jsonResponse(200, { backups: [backupSummary({ validated: true })] }));
+    render(<CreatorBackupPanel projects={projects} />);
+    // No enabled Restore action: the button rendered is the disabled "desktop only" variant.
+    const disabled = await screen.findAllByRole('button', { name: 'Restore backup creator-backup:abc (desktop only)' });
+    expect(disabled.length).toBeGreaterThan(0);
+    const disabledButton = disabled[0]!;
+    expect(disabledButton.hasAttribute('disabled')).toBe(true);
+    expect(await screen.findByText(/仅桌面应用可执行恢复/)).toBeTruthy();
+    // Clicking the disabled button does nothing: no bridge call, no confirm dialog.
+    fireEvent.click(disabledButton);
+    expect(restoreCreatorBackup).not.toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
   });
 });

@@ -38,6 +38,31 @@ export interface CreatorBackupFile {
   sha256: string;
 }
 
+/**
+ * Minimal project identity captured inside a backup snapshot. Only the stable
+ * `id` and human `name` are stored — never working-dir paths, credentials,
+ * asset bodies, or unrelated project data. `hash` is a SHA-256 over
+ * `${id}\n${name}` so a tampered identity payload is detectable.
+ */
+export interface CreatorBackupProjectIdentity {
+  id: string;
+  name: string;
+  schemaVersion: number;
+  hash: string;
+}
+
+/** Outcome of reconciling minimal project identities during a restore. */
+export interface CreatorBackupProjectIdentityReport {
+  performed: boolean;
+  /** Ids that were (re)created because no project record existed. */
+  created: string[];
+  /** Ids that already existed and were kept as-is (compatible). */
+  kept: string[];
+  /** Ids whose existing record disagreed (e.g. different name) and were kept unchanged. */
+  conflicts: string[];
+  reason?: string;
+}
+
 /** Manifest stored at the root of every backup snapshot. */
 export interface CreatorBackupManifest {
   schemaVersion: CreatorBackupSchemaVersion;
@@ -52,6 +77,8 @@ export interface CreatorBackupManifest {
   profile: CreatorBackupProfile;
   /** Project ids whose Creator metadata this snapshot covers (minimal identity reference). */
   projectIds: string[];
+  /** Minimal project identity captured at backup time (id + name only), used to re-establish the Creator project association on restore. */
+  projectIdentities?: CreatorBackupProjectIdentity[];
   files: CreatorBackupFile[];
   /** Total number of files in the snapshot. */
   fileCount: number;
@@ -127,4 +154,10 @@ export interface RestoreCreatorBackupResponse {
   ok: boolean;
   backup?: CreatorBackupSummary;
   error?: string;
+  /** True when the live data was rolled back to its pre-restore state. */
+  rolledBack?: boolean;
+  /** True when the rollback safety snapshot was removed (system is consistent). */
+  rollbackRemoved?: boolean;
+  /** Report from any project-identity reconciliation performed during restore. */
+  projectIdentity?: CreatorBackupProjectIdentityReport;
 }
