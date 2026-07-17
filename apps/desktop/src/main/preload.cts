@@ -13,6 +13,8 @@ import type {
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
+  RestoreCreatorBackupRequest,
+  RestoreCreatorBackupResponse,
 } from '@open-design/host';
 
 const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
@@ -239,6 +241,19 @@ const capture = {
   },
 };
 
+// Creator backup restore is orchestrated only by the packaged desktop main
+// process and is keyed solely by backupId — the renderer may never name a
+// filesystem path. See apps/packaged/src/restore.ts.
+const creator = {
+  restoreBackup: async (backupId: string): Promise<RestoreCreatorBackupResponse> => {
+    try {
+      return await ipcRenderer.invoke('creator:restore-backup', { backupId } as RestoreCreatorBackupRequest);
+    } catch (error) {
+      return { ok: false, error: reasonFromError(error) };
+    }
+  },
+};
+
 function invokeUpdater(
   action: 'check' | 'download' | 'install' | 'status',
   options?: OpenDesignHostUpdaterActionOptions,
@@ -304,6 +319,7 @@ const hostBridge = {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
   },
+  creator,
   updater,
 } satisfies OpenDesignHostBridge;
 

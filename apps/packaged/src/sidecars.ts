@@ -491,6 +491,75 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   await child.logHandle.close().catch(() => undefined);
 }
 
+/** Options needed to spawn (or re-spawn) only the daemon sidecar. */
+export type PackagedDaemonSpawnOptions = {
+  appVersion: string | null;
+  amrProfile: string | null;
+  daemonCliEntry: string | null;
+  daemonSidecarEntry: string | null;
+  electronNodeCommand: string | null;
+  nodeCommand: string | null;
+  requireDesktopAuth: boolean;
+  telemetryRelayUrl: string | null;
+  posthogKey: string | null;
+  posthogHost: string | null;
+};
+
+async function spawnDaemonSidecar(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  paths: PackagedNamespacePaths,
+  options: PackagedDaemonSpawnOptions,
+): Promise<{ child: ManagedSidecarChild; status: DaemonStatusSnapshot & { url: string } }> {
+  const daemon = await spawnSidecarChild({
+    app: APP_KEYS.DAEMON,
+    entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+    env: buildPackagedDaemonSpawnEnv(paths, {
+      appVersion: options.appVersion,
+      amrProfile: options.amrProfile,
+      daemonCliEntry: options.daemonCliEntry,
+      legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+      requireDesktopAuth: options.requireDesktopAuth,
+      telemetryRelayUrl: options.telemetryRelayUrl,
+      posthogKey: options.posthogKey,
+      posthogHost: options.posthogHost,
+    }),
+    electronNodeCommand: options.electronNodeCommand,
+    nodeCommand: options.nodeCommand,
+    paths,
+    runtime,
+  });
+  const status = await waitForStatus<DaemonStatusSnapshot>(
+    daemon.ipcPath,
+    (snapshot) => snapshot.url != null,
+    resolveDaemonStatusTimeoutMs(),
+    // Race the IPC polling against the daemon child's exit. Without
+    // this, a daemon that throws at startup (LegacyMigrationError on
+    // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
+    // marker write failure) leaves the packaged app waiting the full
+    // 30-minute migration budget for a process that already died.
+    { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
+  );
+  if (status.url == null) throw new Error("daemon did not report a URL");
+  // The throw above guarantees a non-null URL for every caller; narrow the
+  // return so consumers (e.g. extractPort) don't have to re-assert it.
+  return { child: daemon, status: status as DaemonStatusSnapshot & { url: string } };
+}
+
+/**
+ * Re-spawn ONLY the daemon sidecar (used by creator-backup restore to bring
+ * the daemon back up after its data dir is swapped). The new daemon binds a
+ * fresh random port, so callers should treat the returned status' URL as
+ * authoritative and prompt an app restart if the renderer cannot reconnect.
+ */
+export async function restartPackagedDaemon(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  paths: PackagedNamespacePaths,
+  options: PackagedDaemonSpawnOptions,
+): Promise<DaemonStatusSnapshot> {
+  const { status } = await spawnDaemonSidecar(runtime, paths, options);
+  return status;
+}
+
 export async function startPackagedSidecars(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   paths: PackagedNamespacePaths,
@@ -542,37 +611,9 @@ export async function startPackagedSidecars(
 
   try {
     options.onPhase?.("daemon-spawning");
-    const daemon = await spawnSidecarChild({
-      app: APP_KEYS.DAEMON,
-      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
-      env: buildPackagedDaemonSpawnEnv(paths, {
-        appVersion: options.appVersion,
-        amrProfile: options.amrProfile,
-        daemonCliEntry: options.daemonCliEntry,
-        legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
-        requireDesktopAuth: options.requireDesktopAuth,
-        telemetryRelayUrl: options.telemetryRelayUrl,
-        posthogKey: options.posthogKey,
-        posthogHost: options.posthogHost,
-      }),
-      electronNodeCommand: options.electronNodeCommand,
-      nodeCommand: options.nodeCommand,
-      paths,
-      runtime,
-    });
-    children.push(daemon);
-    const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
-      daemon.ipcPath,
-      (status) => status.url != null,
-      resolveDaemonStatusTimeoutMs(),
-      // Race the IPC polling against the daemon child's exit. Without
-      // this, a daemon that throws at startup (LegacyMigrationError on
-      // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
-      // marker write failure) leaves the packaged app waiting the full
-      // 30-minute migration budget for a process that already died.
-      { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
-    );
-    if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    const daemon = await spawnDaemonSidecar(runtime, paths, options);
+    children.push(daemon.child);
+    const daemonStatus = daemon.status;
     options.onPhase?.("daemon-ready");
 
     options.onPhase?.("web-spawning");

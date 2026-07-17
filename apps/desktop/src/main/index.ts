@@ -36,6 +36,7 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
+import type { RestoreCreatorBackupRequest, RestoreCreatorBackupResponse } from "@open-design/host";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
@@ -153,6 +154,15 @@ export type DesktopMainOptions = {
     launcherRoot?: string | null;
     launcherPayloadExtractorPath?: string | null;
     launcherRuntimePath?: string | null;
+  };
+  /**
+   * Creator backup restore capability, supplied by the packaged entry which
+   * owns the daemon/sidecar lifecycle. Optional so tools-dev / test runtimes
+   * that don't wire the daemon lifecycle can omit it (the IPC handler then
+   * returns a structured "not available").
+   */
+  creatorBackup?: {
+    restore: (request: RestoreCreatorBackupRequest) => Promise<RestoreCreatorBackupResponse>;
   };
 };
 
@@ -818,6 +828,7 @@ export async function runDesktopMain(
     requestQuit: shutdownAndExit,
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
+    creatorBackup: options.creatorBackup,
     updater,
     windowTitle: options.windowTitle,
   });

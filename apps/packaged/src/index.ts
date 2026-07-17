@@ -12,6 +12,7 @@ import {
   resolveAppIpcPath,
 } from "@open-design/sidecar";
 import { applyOsLocaleSwitch, createSplashWindow, setSplashStage } from "@open-design/desktop/main";
+import type { RestoreCreatorBackupRequest } from "@open-design/host";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
@@ -33,7 +34,8 @@ import {
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
-import { startPackagedSidecars } from "./sidecars.js";
+import { restartPackagedDaemon, startPackagedSidecars } from "./sidecars.js";
+import { createCreatorBackupDaemonControl, restoreCreatorBackup } from "./restore.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
@@ -165,7 +167,7 @@ async function main(): Promise<void> {
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const sidecars = await startPackagedSidecars(runtime, paths, {
+  const sidecarOptions = {
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
     daemonCliEntry: activeConfig.daemonCliEntry,
@@ -187,7 +189,7 @@ async function main(): Promise<void> {
     // cold start (Defender scans, native module loads) never reads as a hang.
     // Both the "spawning" and "ready" edges are mapped so the step counter
     // advances the instant each long native wait clears.
-    onPhase(phase) {
+    onPhase(phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") {
       const stage =
         phase === "daemon-spawning"
           ? "engine"
@@ -198,7 +200,31 @@ async function main(): Promise<void> {
               : "interfaceReady";
       setSplashStage(splash.window, stage);
     },
+  };
+  const sidecars = await startPackagedSidecars(runtime, paths, sidecarOptions);
+
+  // Creator backup restore is orchestrated here, in the packaged main process.
+  // The daemon is frozen (graceful shutdown) during the live-file swap and
+  // re-spawned afterwards so it reloads the restored Creator metadata.
+  const daemonIpcPath = resolveAppIpcPath({
+    app: APP_KEYS.DAEMON,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace,
   });
+  const creatorBackupDaemonControl = createCreatorBackupDaemonControl({
+    daemonIpcPath,
+    // Re-spawn the daemon sidecar and refresh the handle's status snapshot so
+    // the web renderer reconnects to the new daemon URL after the data swap.
+    restartDaemon: async () => {
+      const status = await restartPackagedDaemon(runtime, paths, sidecarOptions);
+      sidecars.daemon = status;
+      return;
+    },
+  });
+  const creatorBackup = {
+    restore: (request: RestoreCreatorBackupRequest) =>
+      restoreCreatorBackup({ dataDir: paths.dataRoot, daemonControl: creatorBackupDaemonControl }, request),
+  };
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
@@ -243,6 +269,7 @@ async function main(): Promise<void> {
       controls.show();
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
+    creatorBackup,
     update: {
       currentVersion: activeConfig.appVersion,
       downloadRoot: paths.updateRoot,

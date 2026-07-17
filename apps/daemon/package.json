@@ -17,6 +17,10 @@
     "./sidecar": {
       "types": "./dist/sidecar/index.d.ts",
       "default": "./dist/sidecar/index.js"
+    },
+    "./creator-backup": {
+      "types": "./dist/creator-backup/store.d.ts",
+      "default": "./dist/creator-backup/store.js"
     }
   },
   "files": [

@@ -17,7 +17,7 @@ import {
   type DesktopExportPdfResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions, RestoreCreatorBackupRequest, RestoreCreatorBackupResponse } from "@open-design/host";
 
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
@@ -398,6 +398,16 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
+  /**
+   * Packaged-main-process creator backup restore capability. The renderer may
+   * only request a restore by `backupId`; the packaged main process derives
+   * every path and performs the controlled, validated, auto-rollbackable swap.
+   * Optional so tools-dev / test runtimes that don't wire the daemon lifecycle
+   * can omit it (the IPC handler then returns a structured "not available").
+   */
+  creatorBackup?: {
+    restore: (request: RestoreCreatorBackupRequest) => Promise<RestoreCreatorBackupResponse>;
+  };
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -1556,6 +1566,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   ipcMain.removeHandler("browser:clear-data");
+  ipcMain.removeHandler("creator:restore-backup");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
   }
@@ -1967,6 +1978,25 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     setTimeout(() => options.requestQuit?.(), 0);
     return { ok: true };
   });
+
+  // Creator backup restore is orchestrated ONLY by the packaged desktop main
+  // process, keyed solely by backupId. The renderer may not name any path; the
+  // main process derives every source/target from the data dir and performs a
+  // controlled, validated, auto-rollbackable swap. Never a daemon HTTP route.
+  ipcMain.handle(
+    "creator:restore-backup",
+    async (event, request: RestoreCreatorBackupRequest): Promise<RestoreCreatorBackupResponse> => {
+      requireMainWindowSender(event);
+      if (options.creatorBackup == null) {
+        return { ok: false, error: "creator backup restore is not available" };
+      }
+      try {
+        return await options.creatorBackup.restore(request);
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
 
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
