@@ -852,12 +852,15 @@ export function HomeView({
       withHomeDesignSystemDefault(options?.inputs, inputFields, selectedDesignSystemTitle),
     );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
+    const rawQueryTemplate = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
     const queryTemplate =
       options?.queryTemplate !== undefined
         ? options.queryTemplate
         : nextPrompt !== undefined && nextPrompt !== null
-        ? null
-        : resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
+        ? rawQueryTemplate && promptMatchesRenderedPluginQuery(rawQueryTemplate, nextPrompt, optimisticInputs)
+          ? rawQueryTemplate
+          : null
+        : rawQueryTemplate;
     const suppressPromptUpdate = options?.suppressPromptUpdate === true;
     const optimisticPrompt =
       nextPrompt !== undefined && nextPrompt !== null
@@ -2630,6 +2633,14 @@ function hydratePluginInputs(
     }
   }
   return next;
+}
+
+function promptMatchesRenderedPluginQuery(
+  template: string,
+  prompt: string,
+  inputs: Record<string, unknown>,
+): boolean {
+  return prompt.trim() === renderPluginBriefTemplate(template, inputs).trim();
 }
 
 const TEMPLATE_INPUT_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
