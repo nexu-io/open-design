@@ -57,23 +57,30 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
 }
 
 /**
- * True when at least one write/edit/delete tool call in the turn has a
- * corresponding non-error tool_result. Derived from `deriveFileOps` which
- * already pairs tool_use ↔ tool_result and assigns per-file status.
+ * True when at least one write/edit/delete tool call in the turn is *not known
+ * to have failed*. Derived from `deriveFileOps` which already pairs tool_use ↔
+ * tool_result and assigns per-file status:
+ *   - 'done'    — paired tool_result, not an error (success)
+ *   - 'running' — no paired tool_result yet (in-flight, or reattach where the
+ *                 result event was dropped from the persisted events)
+ *   - 'error'   — paired tool_result with isError, or a known tool failure
  *
- * Distinguishes a *successful* mutation turn (delivered) from an
- * *attempted-but-failed* mutation turn (no_result / delivery_failed).
- * Before #5753 both cases fell through to no_result; #5753/#5776 flips the
- * successful case to delivered. The original `hasFileMutationToolUse` gate
- * matches any attempt regardless of outcome, which would also flip a
- * fully-failed edit turn to delivered — leaving the preview stale with no
- * error surfaced (PerishCode review on PR #5776).
+ * Treats both 'done' and 'running' as a delivered mutation. The 'running'
+ * case matters on reattach: a completed daemon run whose persisted events lost
+ * the tool_result would regress to no_result under a strict 'done'-only gate,
+ * resurrecting the very #5753 symptom this PR fixes. The only case that falls
+ * through is an *all-errored* edit turn (every mutation has status 'error'),
+ * which must surface a retry affordance rather than silently read as success.
+ *
+ * Per PerishCode review on PR #5776: 'hasFileMutationToolUse' matched any
+ * attempt regardless of outcome and would flip a fully-failed edit turn to
+ * delivered, leaving the preview stale with no error surfaced.
  */
-function hasSuccessfulFileMutation(events: AgentEvent[] | undefined): boolean {
+function hasNonFailedFileMutation(events: AgentEvent[] | undefined): boolean {
   return (deriveFileOps(events) ?? []).some(
     (entry) =>
       entry.ops.some((op) => op === 'write' || op === 'edit' || op === 'delete') &&
-      entry.status === 'done',
+      entry.status !== 'error',
   );
 }
 
@@ -116,7 +123,7 @@ export function resolveDesignDeliveryOutcome(
     input.traceObjectFileCount > 0 ||
     input.persistenceSucceeded ||
     hasLiveArtifactDelivery(input.events) ||
-    hasSuccessfulFileMutation(input.events)
+    hasNonFailedFileMutation(input.events)
   ) {
     return 'delivered';
   }
