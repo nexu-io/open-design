@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 
-import { runConnectorsToolCli } from '../src/tools-connectors-cli.js';
+import { runConnectorsToolCli } from '../src/tools-connectors-cli/index.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
