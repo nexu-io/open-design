@@ -1,17 +1,33 @@
 ---
-import KindPage, {
-  getStaticPaths as getKindStaticPaths,
-} from '../../../../plugins/templates/[kind]/index.astro';
+/*
+ * /<locale>/plugins/templates/<kind>/ — localized artifact-category grids.
+ *
+ * Re-uses the canonical English `[kind]` page for rendering and forwards
+ * the same `categorySlug` prop. We compute the locale × category paths
+ * HERE from `PLUGIN_CATEGORIES` directly, rather than importing the
+ * English page's `getStaticPaths` and re-mapping it.
+ *
+ * Importing a sibling `.astro` PAGE's `getStaticPaths` and re-invoking it
+ * is a fragile Astro pattern: `getStaticPaths` is hoisted/extracted by the
+ * compiler, so the cross-page re-export resolved to zero paths in the CI
+ * (Linux) production build even though it worked in local dev — leaving
+ * every `/<locale>/plugins/templates/<kind>/` URL 404 in production while
+ * the English routes were fine. Deriving the paths from the shared facet
+ * const (the same source the English page's own `getStaticPaths` uses)
+ * makes this route self-contained, mirroring the sibling `[locale]/plugins/
+ * [slug]` wrapper. See PLUGIN_CATEGORIES in `_lib/plugin-facets`.
+ */
+import KindPage from '../../../../plugins/templates/[kind]/index.astro';
+import { PLUGIN_CATEGORIES } from '../../../../../_lib/plugin-facets';
 import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../../i18n';
 
-export async function getStaticPaths() {
-  const basePaths = await getKindStaticPaths();
-  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).flatMap(
-    (locale) =>
-      basePaths.map((p) => ({
-        params: { ...p.params, locale: locale.code },
-        props: p.props,
-      })),
+export function getStaticPaths() {
+  const locales = LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE);
+  return locales.flatMap((locale) =>
+    PLUGIN_CATEGORIES.map((cat) => ({
+      params: { locale: locale.code, kind: cat.slug },
+      props: { categorySlug: cat.slug },
+    })),
   );
 }
 ---

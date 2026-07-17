@@ -489,6 +489,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // big chat model (gpt-4o, claude-sonnet-4-5) silently turns into a
   // cheap haiku/mini call. The caller can opt into using the chat
   // model verbatim by setting `chatProvider.model`.
+  //
+  // Keyless BYOK (local vLLM / Ollama / openai-compatible servers with
+  // `requiresApiKey: false`) is also valid — the web app explicitly
+  // marks it via `requiresApiKey: false` on the snapshot. We must
+  // enter the BYOK branch in that case too because the alternative
+  // paths below all require an env / media-config key and would fall
+  // back to unrelated OpenAI credentials (the gpt-4o-mini default this
+  // hook exists to avoid), defeating the BYOK guarantee.
   if (
     chatProvider
     && chatProvider.provider
@@ -496,13 +504,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   ) {
     const apiKey =
       typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
-    if (apiKey) {
+    const allowKeyless = chatProvider.requiresApiKey === false;
+    if (apiKey || allowKeyless) {
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
         (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
         || defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
-      // the override path above.
+      // the override path above. (Azure is never keyless.)
       if (chatProvider.provider !== 'azure' || baseUrl) {
         const explicitModel =
           typeof chatProvider.model === 'string' && chatProvider.model.trim()
@@ -520,6 +529,10 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
                 || PROVIDER_DEFAULTS.azure.apiVersion
               : '',
           credentialSource: 'chat-byok',
+          // Preserve the keyless signal for the HTTP call layer so it
+          // omits the Authorization header instead of sending `Bearer `
+          // (empty) which the local server would reject.
+          ...(allowKeyless ? { requiresApiKey: false } : {}),
         };
       }
     }
@@ -716,7 +729,14 @@ async function callOpenAI(provider, system, user) {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${provider.apiKey}`,
+          // Keyless BYOK endpoints (local vLLM / Ollama / openai-compatible
+          // servers marked with `requiresApiKey: false`) accept requests
+          // without an Authorization header — sending `Bearer ` (empty)
+          // would cause some servers to reject the call. Only attach the
+          // header when we actually have a key.
+          ...(provider.apiKey
+            ? { authorization: `Bearer ${provider.apiKey}` }
+            : {}),
           // AIHubMix routes through this same OpenAI-compatible path but wants
           // the fixed APP-Code attribution header on every request.
           ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE

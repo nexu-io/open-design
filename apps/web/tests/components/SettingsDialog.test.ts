@@ -221,7 +221,7 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('offers a quit retry after the installer has opened', () => {
+  it('shows installer handoff without claiming that quit failed', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
@@ -249,8 +249,8 @@ describe('SettingsDialog about update control', () => {
       primaryAction: 'quit',
       primaryLabelKey: 'updater.quitButton',
       showReleaseLink: false,
-      statusKey: 'settings.updateQuitFailed',
-      statusTone: 'warning',
+      statusKey: 'updater.opening',
+      statusTone: 'neutral',
     });
   });
 
@@ -263,9 +263,33 @@ describe('SettingsDialog about update control', () => {
     expect(control).toMatchObject({
       primaryAction: 'check',
       primaryLabelKey: 'settings.updateRetry',
-      statusKey: 'settings.updateStatusFailed',
+      statusKey: 'updater.failed',
       statusTone: 'error',
     });
+  });
+
+  it('retries updater errors from the last actionable phase', () => {
+    const downloadRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({ availableVersion: '1.2.3-beta.4', state: 'error' }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+    const installRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({
+          availableVersion: '1.2.3-beta.4',
+          downloadPath: '/tmp/Open Design Beta.dmg',
+          state: 'error',
+        }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+
+    expect(downloadRetry.primaryAction).toBe('download');
+    expect(installRetry.primaryAction).toBe('install');
   });
 
   it('does not offer in-app update actions in development or web-only contexts', () => {
@@ -497,7 +521,7 @@ describe('SettingsDialog API protocol switching', () => {
       deploymentOnlyConfig,
       byokProviderSelectionPatch({
         baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-4o',
+        preferredModels: ['gpt-4o'],
       }, true),
     );
 

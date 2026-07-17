@@ -275,6 +275,27 @@ function isUpstreamClientErrorText(text: string): boolean {
     .test(text);
 }
 
+// OpenCode providers do not consistently preserve HTTP status metadata. Some
+// return only a bare "Not Found" (or an equivalent provider JSON body), which
+// previously fell through to the retryable stream_error close reason. Keep the
+// broad bare-text shapes scoped to BYOK OpenCode so an unrelated agent's local
+// resource/session miss is not reclassified as an upstream provider response.
+function isByokOpenCodeProviderNotFoundText(
+  agentId: string | null | undefined,
+  text: string,
+): boolean {
+  if (agentId !== 'byok-opencode') return false;
+
+  return /(?:^|\n)\s*(?:Not Found|Resource not found|The requested resource was not found)\s*(?=\n|$)/i
+    .test(text) ||
+    /\b(?:404(?:\s+(?:page|route))?\s+not found|resource_not_found_error|the requested resource was not found|Not Found:\s*Not support|NotFoundError)\b/i
+      .test(text) ||
+    /\bopencode (?:session error|event stream):[^\n]*\bNot Found\s*(?=$|\n)/im
+      .test(text) ||
+    /\"(?:detail|message)\"\s*:\s*\"Not Found\"/i.test(text) ||
+    /\bstatusCode[\"']?\s*:\s*404\b/i.test(text);
+}
+
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
@@ -496,7 +517,12 @@ export function isResumableFailure(
   failure: RunFailureClassification | undefined,
 ): boolean {
   if (!failure) return false;
-  if (failure.failure_category === 'upstream_unavailable') return true;
+  if (
+    failure.failure_category === 'upstream_unavailable' &&
+    failure.failure_detail !== 'upstream_client_error'
+  ) {
+    return true;
+  }
   if (
     failure.failure_category === 'timeout' &&
     failure.failure_detail === 'inactivity_timeout'
@@ -540,6 +566,10 @@ export function classifyRunFailure(
   const text = collectFailureText(input);
   const retryableHint = latestRetryable(input.events);
   const amrFailure = classifyAmrAccountFailure(text);
+  const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
+    input.agentId,
+    text,
+  );
 
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
@@ -713,12 +743,15 @@ export function classifyRunFailure(
     errorCode === 'UPSTREAM_UNAVAILABLE' ||
     errorCode === 'AGENT_CONNECTION_DROPPED' ||
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
-    isUpstreamDetailText(text)
+    isUpstreamDetailText(text) ||
+    byokOpenCodeProviderNotFound
   ) {
-    const retryable = retryableHint ?? !isUpstreamClientErrorText(text);
+    const retryable = byokOpenCodeProviderNotFound
+      ? false
+      : retryableHint ?? !isUpstreamClientErrorText(text);
     return classification(
       'upstream_unavailable',
-      upstreamDetail(text),
+      byokOpenCodeProviderNotFound ? 'upstream_client_error' : upstreamDetail(text),
       inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',

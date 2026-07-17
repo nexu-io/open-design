@@ -124,7 +124,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   FileWorkspace: ({
     streaming,
     messages,
-    onRetry,
     onAuthorizeAndRetry,
     onLaunchTerminalAuth,
     onSendBoardCommentAttachments,
@@ -133,7 +132,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   }: {
     streaming: boolean;
     messages?: ChatMessage[];
-    onRetry?: (message: ChatMessage) => void;
     onAuthorizeAndRetry?: (message: ChatMessage) => void;
     onLaunchTerminalAuth?: () => void;
     onSendBoardCommentAttachments: (attachments: unknown[]) => void;
@@ -165,16 +163,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
       failedAssistant?.agentId !== 'amr'
       && failedAssistant?.agentId !== 'antigravity'
       && (errorCode === 'AGENT_AUTH_REQUIRED' || errorCode === 'UNAUTHORIZED' || errorCode === 'RATE_LIMITED');
-    const showRetryAction = Boolean(
-      failedAssistant && onRetry && (
-        errorCode == null
-        || errorCode === 'AMR_INSUFFICIENT_BALANCE'
-        || errorCode === 'UPSTREAM_UNAVAILABLE'
-        || showLaunchTerminalAction
-        || showSwitchToAmrPromotion
-        || (!showAuthorizeAction && !showLaunchTerminalAction)
-      ),
-    );
     return (
       <>
       <output data-testid="workspace-streaming-state">{streaming ? 'streaming' : 'idle'}</output>
@@ -199,17 +187,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
       >
         workspace send
       </button>
-      {showRetryAction ? (
-        <button
-          type="button"
-          data-testid="workspace-retry"
-          onClick={() => {
-            if (failedAssistant && onRetry) onRetry(failedAssistant);
-          }}
-        >
-          retry
-        </button>
-      ) : null}
       {showAuthorizeAction && onAuthorizeAndRetry ? (
         <button
           type="button"
@@ -266,6 +243,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow,
     onNewConversation,
     error,
+    onRetry,
   }: {
     activeConversationId: string | null;
     conversations: Conversation[];
@@ -291,8 +269,20 @@ vi.mock('../../src/components/ChatPane', () => ({
     ) => void;
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
+    onRetry?: (message: ChatMessage) => void;
   }) => {
     const attached = attachedComments ?? [];
+    const retryTarget = [...(messages ?? [])]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === 'assistant'
+          && (
+            message.runStatus === 'failed'
+            || message.resultDeliveryState === 'no_result'
+            || message.resultDeliveryState === 'delivery_failed'
+          ),
+      );
     return (
       <section>
         <output data-testid="active-conversation">{activeConversationId}</output>
@@ -332,6 +322,11 @@ vi.mock('../../src/components/ChatPane', () => ({
             .join('\n')}
         </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
+        {retryTarget && onRetry ? (
+          <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
+            retry
+          </button>
+        ) : null}
         {queuedItems?.map((item, index) => (
           <div key={item.id}>
             <button
@@ -937,13 +932,21 @@ describe('ProjectView conversation run isolation', () => {
     expect(showCompletionNotification).not.toHaveBeenCalled();
   });
 
-  it('downgrades a reloaded terminal Design run with prose but no delivered file', async () => {
+  it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
     conversationAMessages = [
       {
         ...succeededAssistant,
         content: '',
         sessionMode: 'design',
-        events: [{ kind: 'text', text: 'I finished the design.' }],
+        events: [
+          { kind: 'text', text: 'I finished the design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+        ],
         preTurnFileNames: [],
         producedFiles: undefined,
         traceObjectFiles: undefined,
@@ -983,6 +986,54 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('chat-error').textContent).toMatch(
       /finished without producing a deliverable project file/i,
     );
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps a reloaded report-only Design run without file writes on the success path', async () => {
+    // Prose-only turns (image analysis, audits) are legitimate zero-file
+    // Design results (#5714, #5718); reload must not downgrade them.
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [{ kind: 'text', text: 'The hero image contrast is too low.' }],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id && message.producedFiles !== undefined,
+        );
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.resultDeliveryState).toBeUndefined();
+      expect(recoveredMessage?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
@@ -1846,6 +1897,7 @@ describe('ProjectView conversation run isolation', () => {
         baseUrl: 'http://localhost:11434',
         requiresApiKey: false,
         apiVersion: '',
+        model: 'llama3.2',
       },
       model: 'llama3.2',
     }));
@@ -1879,6 +1931,7 @@ describe('ProjectView conversation run isolation', () => {
         baseUrl: 'http://127.0.0.1:8000/v1',
         requiresApiKey: false,
         apiVersion: '',
+        model: 'model',
       },
       model: 'model',
     }));
@@ -1944,7 +1997,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('keeps retry available after a structured AMR insufficient-balance error', async () => {
+  it('keeps Chat retry available after a structured AMR insufficient-balance error', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1975,10 +2028,10 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
@@ -2014,9 +2067,9 @@ describe('ProjectView conversation run isolation', () => {
     renderProjectView();
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
@@ -2067,9 +2120,9 @@ describe('ProjectView conversation run isolation', () => {
       renderProjectView();
 
       await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
-      await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+      await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
-      fireEvent.click(screen.getByTestId('workspace-retry'));
+      fireEvent.click(screen.getByTestId('chat-retry'));
 
       await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
       const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
@@ -2195,7 +2248,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('routes workspace retry and terminal launch recovery for antigravity auth failures', async () => {
+  it('routes Chat retry and terminal launch recovery for antigravity auth failures', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -2237,16 +2290,16 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-launch-terminal')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('workspace-launch-terminal'));
     await waitFor(() => expect(launchAntigravityOauth).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('routes workspace retry and terminal launch recovery for antigravity rate limits', async () => {
+  it('routes Chat retry and terminal launch recovery for antigravity rate limits', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -2288,12 +2341,12 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-launch-terminal')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('workspace-launch-terminal'));
     await waitFor(() => expect(launchAntigravityOauth).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
@@ -2338,7 +2391,7 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
     expect(screen.queryByTestId('workspace-switch-amr')).toBeNull();
     expect(screen.queryByTestId('workspace-authorize')).toBeNull();
     expect(screen.queryByTestId('workspace-launch-terminal')).toBeNull();

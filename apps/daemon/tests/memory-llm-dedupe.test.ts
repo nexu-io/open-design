@@ -60,6 +60,9 @@ describe('memory-llm chat extraction: duplicate-turn gate + reply serialization'
     __resetExtractionsForTests();
     __resetMemoryTurnDedupeForTests();
     await writeMemoryConfig(dataDir, {
+      // Chat auto-extraction defaults OFF product-wide; these specs cover
+      // the extraction mechanics themselves, so opt in explicitly.
+      chatExtractionEnabled: true,
       extraction: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' },
     });
     mockOpenAiOk();

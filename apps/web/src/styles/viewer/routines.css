@@ -149,7 +149,7 @@
 .od-toast.placement-top {
   top: 64px;
   bottom: auto;
-  z-index: 1200;
+  z-index: 1800;
 }
 .project-actions-toast-anchor {
   position: relative;

@@ -6,10 +6,11 @@
  * streaming turns, failed runs, and empty responses.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import * as registry from '../../src/providers/registry';
 import type { ChatMessage, ProjectFile } from '../../src/types';
 
 beforeAll(() => {
@@ -27,10 +28,13 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  vi.restoreAllMocks();
 });
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 function baseMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -357,7 +361,7 @@ describe('AssistantMessage thinking blocks', () => {
 });
 
 describe('AssistantMessage question forms', () => {
-  it('renders repeated question forms as one compact Questions banner in chat', () => {
+  it('renders repeated question forms once as an interactive inline form', () => {
     const firstForm = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -386,7 +390,7 @@ describe('AssistantMessage question forms', () => {
       }),
       '</question-form>',
     ].join('\n');
-    const onOpenQuestions = vi.fn();
+    const onSubmitQuestionForm = vi.fn();
 
     render(
       <AssistantMessage
@@ -400,23 +404,370 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
-        onOpenQuestions={onOpenQuestions}
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
       />,
     );
 
-    const banners = screen.getAllByTestId('questions-banner');
-    expect(banners).toHaveLength(1);
-    fireEvent.click(banners[0]!);
-    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
-      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
-    }));
-    expect(screen.queryByText('Quick brief — tailored')).toBeNull();
-    expect(screen.queryByText('Who is this for?')).toBeNull();
+    expect(screen.getByText('Quick brief — tailored')).toBeTruthy();
+    const audienceInput = document.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product evaluators' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+      expect.stringContaining('- Who is this for?: Product evaluators'),
+    );
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
   });
 
-  it('renders an answered question banner as a disabled, non-clickable done state', () => {
+  it('restores an inline form draft after remounting the conversation', () => {
+    const form = [
+      '<question-form id="draft" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text' }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const props = {
+      message: baseMessage({
+        content: form,
+        events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+      }),
+      streaming: false,
+      projectId: 'proj-1',
+      conversationId: 'conv-1',
+      isLast: true,
+      onSubmitQuestionForm: vi.fn(),
+    };
+    const first = render(<AssistantMessage {...props} />);
+    const draftInput = first.container.querySelector('.qf-input');
+    if (!(draftInput instanceof HTMLInputElement)) throw new Error('expected draft input');
+    fireEvent.change(draftInput, {
+      target: { value: 'Product leaders' },
+    });
+    first.unmount();
+
+    const restored = render(<AssistantMessage {...props} />);
+    const restoredInput = restored.container.querySelector('.qf-input');
+    if (!(restoredInput instanceof HTMLInputElement)) throw new Error('expected restored input');
+    expect(restoredInput.value).toBe('Product leaders');
+  });
+
+  it('submits one answer when the send action is triggered twice', () => {
+    const form = [
+      '<question-form id="single-submit" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text', required: true }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const audienceInput = document.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product leaders' },
+    });
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+
+    expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-enables an inline form when the host blocks its submit before a run starts', async () => {
+    let resolveSubmit: (started: boolean) => void = () => {};
+    const onSubmitQuestionForm = vi.fn(
+      () => new Promise<boolean>((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
+    const form = [
+      '<question-form id="single-submit" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text', required: true }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const audienceInput = container.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product leaders' },
+    });
+    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+    });
+    expect(send.disabled).toBe(true);
+
+    await act(async () => {
+      resolveSubmit(false);
+    });
+
+    await waitFor(() => {
+      expect(send.disabled).toBe(false);
+    });
+    expect(audienceInput.value).toBe('Product leaders');
+  });
+
+  it('uploads file answers before sending their attachment context', async () => {
+    vi.spyOn(registry, 'uploadProjectFiles').mockResolvedValue({
+      uploaded: [
+        {
+          name: 'mood.png',
+          path: 'uploads/mood.png',
+          kind: 'image',
+          size: 4,
+        },
+      ],
+      failed: [],
+    });
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const file = new File(['mood'], 'mood.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+        expect.stringContaining('Uploaded file 1: mood.png -> uploads/mood.png (for: Reference assets)'),
+        [expect.objectContaining({ name: 'mood.png', path: 'uploads/mood.png', order: 0 })],
+        {
+          workspaceItems: [
+            {
+              id: 'file:uploads/mood.png',
+              kind: 'file',
+              label: 'mood.png',
+              path: 'uploads/mood.png',
+            },
+          ],
+        },
+      );
+    });
+  });
+
+  it('rolls back successful inline uploads when the host rejects a send before it starts', async () => {
+    const uploadProjectFilesMock = vi
+      .spyOn(registry, 'uploadProjectFiles')
+      .mockResolvedValue({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+        ],
+        failed: [],
+      });
+    const deleteProjectFileMock = vi.spyOn(registry, 'deleteProjectFile').mockResolvedValue(true);
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const file = new File(['mood'], 'mood.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+    });
+    expect(send.disabled).toBe(false);
+
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(uploadProjectFilesMock).toHaveBeenCalledTimes(2);
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(2);
+    });
+    expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up partial file uploads before retrying an inline answer', async () => {
+    const uploadProjectFilesMock = vi
+      .spyOn(registry, 'uploadProjectFiles')
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+        ],
+        failed: [{ name: 'brief.png', error: 'storage unavailable' }],
+        error: 'storage unavailable',
+      })
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+          {
+            name: 'brief.png',
+            path: 'uploads/brief.png',
+            kind: 'image' as const,
+            size: 5,
+          },
+        ],
+        failed: [],
+      });
+    const deleteProjectFileMock = vi.spyOn(registry, 'deleteProjectFile').mockResolvedValue(true);
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+            multiple: true,
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const mood = new File(['mood'], 'mood.png', { type: 'image/png' });
+    const brief = new File(['brief'], 'brief.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [mood, brief] } });
+
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+    });
+    expect(onSubmitQuestionForm).not.toHaveBeenCalled();
+
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(uploadProjectFilesMock).toHaveBeenCalledTimes(2);
+      expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({ path: 'uploads/mood.png' }),
+          expect.objectContaining({ path: 'uploads/brief.png' }),
+        ],
+        expect.any(Object),
+      );
+    });
+    expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('collapses answered questions into a readable inline summary', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -431,7 +782,6 @@ describe('AssistantMessage question forms', () => {
       '</question-form>',
     ].join('\n');
 
-    const onOpenQuestions = vi.fn();
     render(
       <AssistantMessage
         message={baseMessage({
@@ -445,24 +795,166 @@ describe('AssistantMessage question forms', () => {
         streaming={false}
         projectId="proj-1"
         nextUserContent={'[form answers for discovery]\n- Who is this for?: Product evaluators'}
-        onOpenQuestions={onOpenQuestions}
       />,
     );
 
-    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
-    // Answered: no longer an open affordance — disabled, marked answered, and
-    // clicking it must not re-open the Questions panel.
-    expect(banner.disabled).toBe(true);
-    expect(banner.getAttribute('data-answered')).toBe('true');
-    expect(banner.textContent).toContain('Questions answered');
-    fireEvent.click(banner);
-    expect(onOpenQuestions).not.toHaveBeenCalled();
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.getByText('Questions answered')).toBeTruthy();
+    expect(screen.getByText('Who is this for?')).toBeTruthy();
+    expect(screen.getByText('Product evaluators')).toBeTruthy();
     expect(screen.queryByText('Quick brief — tailored')).toBeNull();
-    expect(screen.queryByText('Who is this for?')).toBeNull();
-    expect(screen.queryByText('Product evaluators')).toBeNull();
   });
 
-  it('keeps an unanswered question banner clickable', () => {
+  it('keeps file names in the answered summary when an upload appendix repeats a question label', () => {
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        nextUserContent={[
+          '[form answers for references]',
+          '- Reference assets: mood.png',
+          '',
+          '[uploaded design files]',
+          '- Reference assets: mood.png -> uploads/mood.png',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.getByText('mood.png')).toBeTruthy();
+  });
+
+  it('keeps selected visual style previews in the answered summary', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine', 'Modern minimal'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={'[form answers for discovery]\n- Visual tone: Editorial / magazine'}
+      />,
+    );
+
+    expect(screen.getByText('Visual tone')).toBeTruthy();
+    expect(screen.getByText('Editorial narrative')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toHaveAttribute(
+      'src',
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-editorial-narrative-v1.webp',
+    );
+  });
+
+  it('normalizes every selected legacy visual style to its preview card', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine', 'Luxury / refined'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={[
+          '[form answers for discovery]',
+          '- Visual tone: Editorial / magazine, Luxury / refined',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Visual tone: Premium pitch' })).toHaveAttribute(
+      'src',
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-premium-pitch-v1.webp',
+    );
+  });
+
+  it('keeps a custom visual style selection alongside preview cards', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={[
+          '[form answers for discovery]',
+          '- Visual tone: Editorial / magazine, Warm Japanese editorial',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toBeTruthy();
+    expect(screen.getByText('Warm Japanese editorial')).toBeTruthy();
+  });
+
+  it('does not recommend next steps on the same turn as an inline question form', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -476,31 +968,67 @@ describe('AssistantMessage question forms', () => {
       }),
       '</question-form>',
     ].join('\n');
+    const questionMessage = baseMessage({
+      content: form,
+      events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+    });
+    const onNextStepPromptAction = vi.fn();
+    const { rerender } = render(
+      <AssistantMessage
+        message={questionMessage}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
 
-    const onOpenQuestions = vi.fn();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+
+    rerender(
+      <AssistantMessage
+        message={questionMessage}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        nextUserContent={'[form answers for discovery]\n- Who is this for?: Product evaluators'}
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+
+    rerender(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
+
+  it('shows an inline loading frame while a form is streaming', () => {
     render(
       <AssistantMessage
         message={baseMessage({
           events: [
             {
               kind: 'text',
-              text: form,
+              text: 'One quick check:\n<question-form id="discovery" title="Quick brief">\n{"questions":[',
             } as ChatMessage['events'][number],
           ],
         })}
-        streaming={false}
+        streaming
         projectId="proj-1"
-        onOpenQuestions={onOpenQuestions}
+        isLast
       />,
     );
 
-    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
-    expect(banner.disabled).toBe(false);
-    expect(banner.getAttribute('data-answered')).toBeNull();
-    fireEvent.click(banner);
-    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
-      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
-    }));
+    expect(screen.getByTestId('question-form-loading')).toBeTruthy();
+    expect(screen.getByText('One quick check:')).toBeTruthy();
   });
 });
 

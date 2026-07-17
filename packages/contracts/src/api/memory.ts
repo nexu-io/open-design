@@ -43,6 +43,17 @@ export const PROFILE_MEMORY_ID = 'user_profile';
 // Listing payload — frontmatter only, no body. The settings panel pulls
 // the full body lazily through `GET /api/memory/:id` when the user
 // opens the preview/edit drawer.
+// Writer provenance persisted in frontmatter `source:`. Entries written
+// before the field existed omit it — treat absence as "unknown", never as
+// "manual".
+export type MemoryEntrySource =
+  | 'heuristic'
+  | 'llm'
+  | 'manual'
+  | 'connector'
+  | 'brand'
+  | 'annotation';
+
 export interface MemoryEntrySummary {
   /** File slug, without the `.md` suffix. e.g., "user_role" or "feedback_tests". */
   id: string;
@@ -52,6 +63,8 @@ export interface MemoryEntrySummary {
   description: string;
   /** Category — drives the filename prefix and the system-prompt section it lands in. */
   type: MemoryType;
+  /** Which pipeline wrote the entry; absent on pre-provenance files. */
+  source?: MemoryEntrySource;
   /** Unix milliseconds — file mtime. */
   updatedAt: number;
 }

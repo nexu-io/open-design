@@ -2544,6 +2544,26 @@
   position: relative;
 }
 
+/* Canvas-local Design delivery feedback. It stays with the workspace while
+   the empty placeholder hands over to an actual file preview, rather than
+   becoming a bottom-of-screen notification. */
+.ws-preview-run-status-slot {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 48px);
+  pointer-events: none;
+  transform: translate(-50%, 116px);
+}
+
+@media (max-width: 640px) {
+  .ws-preview-run-status-slot {
+    max-width: calc(100% - 32px);
+    transform: translate(-50%, 104px);
+  }
+}
+
 .ws-browser-panel {
   display: flex;
   position: absolute;

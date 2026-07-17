@@ -24,6 +24,11 @@ i18n:
       <p><strong>agent 阵容大了一圈。</strong>Aider、Trae CLI、Antigravity、DeepSeek Reasonix 全都进了选择器,给到的是更多<em>真实的</em>本地 agent 路径,而不是一条被钦定的工作流。Aider 拿到了一等公民级的品牌呈现,Trae 通过 ACP 在 yolo 模式下跑,这些新 adapter 让 Open Design 越来越不像「一个 agent 集成」,而更像「agent 们来干活的地方」。模型选择也不再像翻电话本:列表里能直接搜,Settings 和行内切换器共享同一份 BYOK 目录,切模型变得快而不是磨叽。</p>
       <p><strong>skill 变成了一个真正的插件生态。</strong>skill bundle 现在正式毕业成一等公民的 Plugins:在抽屉里看得见、能从 CLI 列出来、在站点上被索引,也更好向用户解释。一套扩展模型、一个库、一种心智模型。官方 GSAP 插件把正经的 web 动画带进了 agent 循环;Research Decision Room 把研究类提示词变成结构化的多角色评审,而不是一长段答案。站点上的插件库现在跟应用内的分类对齐、按各语言原生阅读,插件和模板的详情页也从静态列表变成了能真正动手的发现面——预览、安装、试用、分享。</p>
 
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>登录一次,引擎就已经在那了——不用 CLI,不用满世界找 API key。</figcaption>
+      </figure>
+
       <h2>0.9.0 还带来了什么</h2>
       <p>这个版本很宽。值得拎出来的几块:</p>
       <ul>
@@ -130,6 +135,11 @@ i18n:
       <p><strong>agent の布陣がぐっと大きくなった。</strong>Aider、Trae CLI、Antigravity、DeepSeek Reasonix がすべてセレクターに加わり、唯一の選ばれたワークフローではなく、より多くの<em>本物の</em>ローカル agent の道筋を提供します。Aider は一級市民レベルのブランディングを得て、Trae は ACP 経由で yolo モードで動作します。これらの新しい adapter によって、Open Design は「一つの agent を統合したもの」というより「agent たちが働きに来る場所」へと近づいていきます。モデル選びも電話帳をめくるような感覚ではなくなりました。検索で長いリストを切り抜けられ、共有された BYOK カタログによって Settings とインラインの切り替え器が揃うので、モデルの切り替えはもたつかず速くなります。</p>
       <p><strong>skill が本格的なプラグインエコシステムになった。</strong>skill bundle は正式に一級市民の Plugins へと卒業しました。ドロワーで見え、CLI から一覧でき、サイト上でインデックスされ、ユーザーにも説明しやすくなりました。一つの拡張モデル、一つのライブラリ、一つのメンタルモデルです。公式 GSAP プラグインは本格的な web アニメーションを agent ループの中に持ち込み、Research Decision Room はリサーチ系のプロンプトを、一続きの長い回答ではなく、構造化された複数ロールのレビューへと変えます。サイト上のプラグインライブラリは今やアプリ内の分類と揃い、各言語でネイティブに読めるようになりました。プラグインとテンプレートの詳細ページも、静的な一覧から実際に手を動かせる発見の場へと変わりました——プレビュー、インストール、お試し、共有。</p>
 
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>一度サインインすれば、エンジンはもうそこにある——CLI も、API キー探しも不要。</figcaption>
+      </figure>
+
       <h2>0.9.0 がほかに何をもたらすか</h2>
       <p>このリリースは幅広いものです。取り上げる価値のあるいくつかを。</p>
       <ul>
@@ -182,6 +192,11 @@ i18n:
       <p><strong>Open Design AMR — 공식 AI, 설치하면 바로 거기에.</strong> 예전에 「시작」은 일종의 세금이었습니다. CLI를 설치하고, API 키를 찾아내고, 비밀 키를 붙여넣고, 인증을 테스트하고, 셸과 씨름하고 — 그러고 나서야 비로소 디자인 차례였죠. 0.9.0은 <a href="https://open-design.ai/amr">Open Design AMR</a>을 설치 프로그램 안에 직접 담았습니다. AI 엔진이 앱과 함께 옵니다. 따로 설치할 CLI도, 설정할 API 키도 없습니다. 이제 온보딩은 AMR로 시작하고, 데스크톱에서 로그인은 언제나 클릭 한 번 거리에 있으며, 사용 가능한 모델은 자동으로 최신 상태를 유지하고, 계정과 잔액 상태는 UI 안에 그대로 있습니다. 이미지 첨부도 별도 설정 없이 바로 작동합니다. 한 번 로그인하고, 모델을 고르고, 출발.</p>
       <p><strong>에이전트 라인업이 한층 커졌습니다.</strong> Aider, Trae CLI, Antigravity, DeepSeek Reasonix가 모두 선택기에 들어와, 정해진 단 하나의 워크플로 대신 더 많은 <em>진짜</em> 로컬 에이전트 경로를 제공합니다. Aider는 일급 시민 수준의 브랜드 표현을 받았고, Trae는 ACP를 통해 yolo 모드로 돌아가며, 이 새 어댑터들은 Open Design을 점점 「하나의 에이전트 통합」이 아니라 「에이전트들이 일하러 오는 곳」처럼 느껴지게 합니다. 모델 선택도 더 이상 전화번호부를 넘기는 일 같지 않습니다. 긴 목록도 검색으로 바로 뚫고 들어가고, Settings와 인라인 전환기가 같은 BYOK 카탈로그를 공유해 모델 전환이 굼뜨지 않고 빠릅니다.</p>
       <p><strong>skill이 진짜 플러그인 생태계가 됩니다.</strong> skill 번들이 이제 정식으로 일급 시민 Plugins로 졸업합니다. 서랍에서 보이고, CLI로 나열할 수 있고, 사이트에서 색인되며, 사용자에게 설명하기도 더 쉽습니다. 하나의 확장 모델, 하나의 라이브러리, 하나의 정신 모델. 공식 GSAP 플러그인은 제대로 된 웹 애니메이션을 에이전트 루프 안으로 가져오고, Research Decision Room은 리서치 프롬프트를 한 덩어리의 긴 답변이 아니라 구조화된 다중 역할 리뷰로 바꿉니다. 사이트의 플러그인 라이브러리는 이제 앱 내 분류 체계와 정렬되고 각 언어로 자연스럽게 읽히며, 플러그인과 템플릿 상세 페이지도 정적인 목록에서 진짜로 손을 움직일 수 있는 발견의 공간으로 바뀝니다 — 미리 보기, 설치, 시험, 공유.</p>
+
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>한 번만 로그인하면 엔진은 이미 거기에 있습니다 — CLI도, API 키를 찾아 헤맬 일도 없습니다.</figcaption>
+      </figure>
 
       <h2>0.9.0이 더 가져온 것들</h2>
       <p>이번 릴리스는 폭이 넓습니다. 끌어올려 둘 만한 몇 가지.</p>
@@ -236,6 +251,11 @@ i18n:
       <p><strong>Die Agent-Auswahl wird deutlich größer.</strong> Aider, Trae CLI, Antigravity und DeepSeek Reasonix sind alle in der Auswahl gelandet und geben Erstellenden mehr <em>echte</em> lokale Agent-Pfade statt eines einzigen abgesegneten Workflows. Aider bekommt eine erstklassige Markendarstellung, Trae läuft über ACP im Yolo-Modus, und die neuen Adapter lassen Open Design weniger wie eine einzelne Agent-Integration wirken und mehr wie der Ort, an dem Agents zum Arbeiten kommen. Auch die Modellauswahl fühlt sich nicht mehr wie das Durchblättern eines Telefonbuchs an: Die Suche schneidet durch lange Listen, und ein gemeinsamer BYOK-Katalog hält Settings und den Inline-Umschalter im Einklang, sodass das Wechseln von Modellen schnell statt fummelig ist.</p>
       <p><strong>Skills werden zu einem echten Plugin-Ökosystem.</strong> Skill-Bundles steigen zu erstklassigen Plugins auf: sichtbar in der Schublade, auflistbar über das CLI, auf der Website indexiert und Nutzern leichter zu erklären. Ein Erweiterungsmodell, eine Bibliothek, ein mentales Modell. Das offizielle GSAP-Plugin bringt ernsthafte Web-Animation in die Agent-Schleife, und Research Decision Room verwandelt Recherche-Prompts in strukturierte Reviews mit mehreren Rollen statt einer langen Antwort. Die Plugin-Bibliothek auf der Website spiegelt jetzt die In-App-Taxonomie wider und liest sich nativ über alle Sprachen hinweg, und die Detailseiten für Plugins und Templates werden aus statischen Auflistungen zu einer echten Discovery-Fläche – Vorschau, Installation, Ausprobieren, Teilen.</p>
 
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Einmal anmelden, und die Engine ist schon da – kein CLI, keine API-Key-Schnitzeljagd.</figcaption>
+      </figure>
+
       <h2>Was sonst noch in 0.9.0 kommt</h2>
       <p>Das Release ist breit. Die Teile, die es wert sind, hervorgehoben zu werden:</p>
       <ul>
@@ -288,6 +308,11 @@ i18n:
       <p><strong>Open Design AMR — l'IA officielle, prête dès l'installation.</strong> Démarrer était autrefois un impôt : installer un CLI, dénicher une clé API, coller des secrets, tester l'authentification, se battre avec le shell — et seulement ensuite commencer à concevoir. 0.9.0 embarque <a href="https://open-design.ai/amr">Open Design AMR</a> directement dans l'installateur. Le moteur d'IA arrive avec l'application ; il n'y a plus de CLI ni de clé API séparés à configurer. L'onboarding commence désormais par AMR, la connexion reste à un clic sur le bureau, vos modèles disponibles restent à jour automatiquement, et l'état du compte et du solde s'affiche directement dans l'interface. Les pièces jointes images fonctionnent d'emblée. Connectez-vous une fois, choisissez un modèle, c'est parti.</p>
       <p><strong>Le banc d'agents s'élargit nettement.</strong> Aider, Trae CLI, Antigravity et DeepSeek Reasonix rejoignent tous le sélecteur, offrant aux créateurs davantage de chemins d'agents locaux <em>réels</em> plutôt qu'un unique flux de travail béni. Aider bénéficie d'une présentation de marque de premier ordre, Trae tourne via ACP en mode yolo, et les nouveaux adaptateurs font qu'Open Design ressemble moins à une intégration d'un seul agent et davantage à l'endroit où les agents viennent travailler. Le choix d'un modèle cesse aussi de ressembler à feuilleter un annuaire : la recherche tranche dans les longues listes, et un catalogue BYOK partagé maintient les Settings et le sélecteur en ligne alignés, de sorte que changer de modèle est rapide au lieu d'être fastidieux.</p>
       <p><strong>Les skills deviennent un véritable écosystème de plugins.</strong> Les bundles de skills sont promus au rang de Plugins de premier ordre : visibles dans le tiroir, listables depuis le CLI, indexés sur le site, et plus faciles à expliquer aux utilisateurs. Un seul modèle d'extension, une seule bibliothèque, un seul modèle mental. Le plugin officiel GSAP apporte une vraie animation web dans la boucle de l'agent, et Research Decision Room transforme les prompts de recherche en évaluations structurées multi-rôles au lieu d'une seule longue réponse. La bibliothèque de plugins du site reflète désormais la taxonomie de l'application et se lit nativement dans chaque langue, et les pages de détail des plugins et des templates passent de listes statiques à une véritable surface de découverte — prévisualiser, installer, essayer, partager.</p>
+
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Connectez-vous une fois et le moteur est déjà là — pas de CLI, pas de chasse au trésor pour une clé API.</figcaption>
+      </figure>
 
       <h2>Quoi d'autre arrive dans 0.9.0</h2>
       <p>Cette version est large. Les morceaux qui valent la peine d'être mis en avant :</p>
@@ -342,6 +367,11 @@ i18n:
       <p><strong>Скамейка агентов стала заметно больше.</strong> Aider, Trae CLI, Antigravity и DeepSeek Reasonix — все они добавлены в селектор, давая создателям больше <em>реальных</em> путей локальных агентов вместо одного благословлённого рабочего процесса. Aider получил брендинг первого класса, Trae работает через ACP в режиме yolo, и новые адаптеры делают так, что Open Design всё меньше похож на «одну интеграцию агента» и всё больше на место, куда агенты приходят работать. Выбор модели тоже перестал ощущаться как пролистывание телефонной книги: поиск пробивается сквозь длинные списки, а общий каталог BYOK держит Settings и встроенный переключатель синхронными, так что смена модели стала быстрой, а не возни́стой.</p>
       <p><strong>Навыки превращаются в настоящую экосистему плагинов.</strong> Бандлы навыков выпускаются в Plugins первого класса: видны в выдвижной панели, перечисляются из CLI, индексируются на сайте и проще объясняются пользователям. Одна модель расширений, одна библиотека, одна ментальная модель. Официальный плагин GSAP приносит серьёзную веб-анимацию в цикл агента, а Research Decision Room превращает исследовательские промпты в структурированные многоролевые ревью вместо одного длинного ответа. Библиотека плагинов на сайте теперь отражает внутреннюю таксономию приложения и читается на родном языке для каждой локали, а страницы плагинов и шаблонов превращаются из статичных списков в настоящую поверхность для открытий — превью, установка, проба, шеринг.</p>
 
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Войдите один раз — движок уже на месте: ни CLI, ни поисков API-ключа.</figcaption>
+      </figure>
+
       <h2>Что ещё появилось в 0.9.0</h2>
       <p>Этот релиз широкий. Вот фрагменты, которые стоит вынести вперёд:</p>
       <ul>
@@ -394,6 +424,11 @@ i18n:
       <p><strong>Open Design AMR: IA oficial, lista en el momento en que instalas.</strong> Empezar solía ser un impuesto: instalar un CLI, rastrear una clave API, pegar secretos, probar la autenticación, pelearte con la shell, y solo entonces empezar a diseñar. 0.9.0 incluye <a href="https://open-design.ai/amr">Open Design AMR</a> dentro del instalador. El motor de IA viene con la app; no hay un CLI o una clave API separados que configurar. El onboarding ahora arranca con AMR, el inicio de sesión queda a un clic de distancia en el escritorio, tus modelos disponibles se mantienen al día automáticamente, y el estado de la cuenta y el saldo viven directamente en la interfaz. Los adjuntos de imagen funcionan desde el primer momento. Inicia sesión una vez, elige un modelo, adelante.</p>
       <p><strong>El banco de agentes se hace mucho más grande.</strong> Aider, Trae CLI, Antigravity y DeepSeek Reasonix se unen al selector, ofreciendo a los creadores más rutas <em>reales</em> de agentes locales en lugar de un único flujo de trabajo bendecido. Aider obtiene una presentación de marca de primera clase, Trae se ejecuta sobre ACP en modo yolo, y los nuevos adaptadores hacen que Open Design se sienta menos como una integración de un solo agente y más como el lugar al que los agentes vienen a trabajar. Elegir un modelo también deja de sentirse como hojear una guía telefónica: la búsqueda corta a través de listas largas, y un catálogo BYOK compartido mantiene alineados los Settings y el conmutador en línea, de modo que cambiar de modelo es rápido en vez de engorroso.</p>
       <p><strong>Las skills se convierten en un verdadero ecosistema de plugins.</strong> Los bundles de skills se gradúan a Plugins de primera clase: visibles en el cajón, listables desde el CLI, indexados en el sitio y más fáciles de explicar a los usuarios. Un modelo de extensión, una biblioteca, un modelo mental. El plugin oficial de GSAP trae animación web seria al bucle del agente, y Research Decision Room convierte los prompts de investigación en revisiones estructuradas de múltiples roles en vez de una sola respuesta larga. La biblioteca de plugins en el sitio ahora refleja la taxonomía de la app y se lee de forma nativa en todos los idiomas, y las páginas de detalle de plugins y plantillas pasan de listados estáticos a una verdadera superficie de descubrimiento: previsualizar, instalar, probar, compartir.</p>
+
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Inicia sesión una vez y el motor ya está ahí: sin CLI, sin búsqueda del tesoro por una clave API.</figcaption>
+      </figure>
 
       <h2>Qué más llega en 0.9.0</h2>
       <p>La versión es amplia. Las piezas que vale la pena destacar:</p>
@@ -448,6 +483,11 @@ i18n:
       <p><strong>O banco de agentes fica muito maior.</strong> Aider, Trae CLI, Antigravity e DeepSeek Reasonix entram todos no seletor, dando aos criadores mais caminhos de agentes locais <em>reais</em> em vez de um único fluxo de trabalho abençoado. O Aider ganha branding de primeira classe, o Trae roda sobre ACP em modo yolo, e os novos adapters fazem o Open Design parecer menos uma integração de um agente e mais o lugar onde os agentes vêm trabalhar. Escolher modelos também deixa de parecer rolar uma lista telefônica: a busca corta listas longas, e um catálogo BYOK compartilhado mantém as Settings e o seletor em linha alinhados, de modo que trocar de modelo fica rápido em vez de chato.</p>
       <p><strong>As skills se tornam um ecossistema de plugins de verdade.</strong> Os bundles de skill se formam em Plugins de primeira classe: visíveis na gaveta, listáveis pelo CLI, indexados no site e mais fáceis de explicar aos usuários. Um modelo de extensão, uma biblioteca, um modelo mental. O plugin oficial GSAP traz animação web de verdade para dentro do loop do agente, e o Research Decision Room transforma prompts de pesquisa em avaliações estruturadas com múltiplos papéis em vez de uma resposta longa. A biblioteca de plugins no site agora espelha a taxonomia do aplicativo e é lida nativamente em todos os idiomas, e as páginas de detalhe de plugins e templates deixam de ser listagens estáticas para virar uma superfície de descoberta de verdade — visualizar, instalar, experimentar, compartilhar.</p>
 
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Faça login uma vez e o motor já está ali — sem CLI, sem caça ao tesouro por chave de API.</figcaption>
+      </figure>
+
       <h2>O que mais chega no 0.9.0</h2>
       <p>A versão é ampla. As peças que vale a pena destacar:</p>
       <ul>
@@ -500,6 +540,11 @@ i18n:
       <p><strong>Open Design AMR: l'AI ufficiale, pronta nel momento in cui installi.</strong> Iniziare era una tassa: installare una CLI, dare la caccia a una API key, incollare segreti, testare l'autenticazione, combattere con la shell, e solo allora iniziare a progettare. 0.9.0 include <a href="https://open-design.ai/amr">Open Design AMR</a> dentro l'installer. Il motore AI arriva con l'app; non c'è una CLI separata o una API key da configurare. L'onboarding ora parte da AMR, il login resta a un clic di distanza sul desktop, i tuoi modelli disponibili si mantengono aggiornati automaticamente, e lo stato dell'account e del saldo vive direttamente nell'interfaccia. Gli allegati immagine funzionano fuori dalla scatola. Accedi una volta, scegli un modello, vai.</p>
       <p><strong>La panchina degli agent diventa molto più ampia.</strong> Aider, Trae CLI, Antigravity e DeepSeek Reasonix entrano tutti nel selettore, offrendo ai costruttori più percorsi <em>reali</em> di agent locali invece di un unico flusso di lavoro benedetto. Aider ottiene un branding di prima classe, Trae gira su ACP in modalità yolo, e i nuovi adapter fanno sentire Open Design meno come una singola integrazione di agent e più come il luogo dove gli agent vengono a lavorare. Anche la scelta del modello smette di sembrare lo scorrere di un elenco telefonico: la ricerca taglia attraverso le liste lunghe, e un catalogo BYOK condiviso tiene allineati le Settings e lo switcher inline, così cambiare modello è veloce invece che macchinoso.</p>
       <p><strong>Le skill diventano un vero ecosistema di plugin.</strong> I bundle di skill si diplomano in Plugins di prima classe: visibili nel cassetto, elencabili dalla CLI, indicizzati sul sito e più facili da spiegare agli utenti. Un solo modello di estensione, una sola libreria, un solo modello mentale. Il plugin ufficiale GSAP porta animazioni web serie nel loop dell'agent, e Research Decision Room trasforma i prompt di ricerca in revisioni strutturate multi-ruolo invece di una lunga risposta unica. La libreria di plugin sul sito ora rispecchia la tassonomia in-app e si legge in modo nativo in tutte le lingue, e le pagine di dettaglio di plugin e template passano da elenchi statici a una vera superficie di scoperta: anteprima, installazione, prova, condivisione.</p>
+
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Accedi una volta e il motore è già lì — niente CLI, niente caccia al tesoro per una chiave API.</figcaption>
+      </figure>
 
       <h2>Cos'altro arriva in 0.9.0</h2>
       <p>La release è ampia. I pezzi che vale la pena mettere in primo piano:</p>
@@ -818,6 +863,11 @@ i18n:
       <p><strong>Open Design AMR — resmi yapay zeka, kurar kurmaz hazır.</strong> Başlamak eskiden bir vergiydi: bir CLI kur, bir API anahtarı bul, gizli anahtarları yapıştır, kimlik doğrulamasını test et, shell ile boğuş — ve ancak ondan sonra tasarıma geç. 0.9.0, <a href="https://open-design.ai/amr">Open Design AMR</a>'ı doğrudan kurulum paketinin içinde sunuyor. Yapay zeka motoru uygulamayla birlikte gelir; ayrıca kurulacak bir CLI ya da API anahtarı yoktur. Onboarding artık AMR ile başlıyor, masaüstünde giriş her zaman bir tık uzakta kalıyor, kullanılabilir modelleriniz otomatik olarak güncel kalıyor ve hesap ile bakiye durumu doğrudan arayüzde duruyor. Görsel ekleri kutudan çıkar çıkmaz çalışır. Bir kez giriş yap, bir model seç, başla.</p>
       <p><strong>Agent kadrosu çok daha büyüyor.</strong> Aider, Trae CLI, Antigravity ve DeepSeek Reasonix hepsi seçiciye katılıyor; tek bir kutsanmış iş akışı yerine üreticilere daha fazla <em>gerçek</em> yerel agent yolu sunuyor. Aider birinci sınıf bir markalaşma kazanıyor, Trae yolo modunda ACP üzerinden çalışıyor ve yeni adaptörler Open Design'ı tek bir agent entegrasyonu gibi değil, agentların çalışmaya geldiği yer gibi hissettiriyor. Model seçmek de artık bir telefon rehberini kaydırmak gibi gelmiyor: arama uzun listeleri keser, paylaşılan bir BYOK kataloğu Settings ile satır içi anahtarlayıcıyı hizalı tutar; böylece model değiştirmek didikleyici olmak yerine hızlı olur.</p>
       <p><strong>Skill'ler gerçek bir eklenti ekosistemine dönüşüyor.</strong> Skill paketleri birinci sınıf Plugins olarak mezun oluyor: çekmecede görünür, CLI'dan listelenebilir, sitede indekslenir ve kullanıcılara açıklaması daha kolay. Tek bir uzantı modeli, tek bir kütüphane, tek bir zihinsel model. Resmi GSAP eklentisi ciddi web animasyonunu agent döngüsünün içine getiriyor, Research Decision Room ise araştırma istemlerini tek bir uzun yanıt yerine yapılandırılmış çok rollü incelemelere dönüştürüyor. Sitedeki eklenti kütüphanesi artık uygulama içi sınıflandırmayı yansıtıyor ve diller arası kendi dilinde okunuyor; eklenti ve şablon ayrıntı sayfaları statik listelerden gerçek bir keşif yüzeyine dönüşüyor — önizle, kur, dene, paylaş.</p>
+
+      <figure>
+        <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+        <figcaption>Bir kez giriş yapın, motor zaten orada — CLI yok, API anahtarı avı yok.</figcaption>
+      </figure>
 
       <h2>0.9.0'da başka neler var</h2>
       <p>Bu sürüm geniş. Öne çıkarmaya değer parçalar:</p>

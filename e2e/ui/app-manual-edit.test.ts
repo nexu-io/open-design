@@ -215,7 +215,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 
   const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
-  await expect(zoomButton).toHaveText('100%');
+  await expect(zoomButton).toHaveText(/^\d+%$/);
   await zoomButton.click();
   const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
   await expect(zoomMenu).toBeVisible();

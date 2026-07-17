@@ -38,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   clearExceptionTrackingContext();
   globalThis.fetch = ORIGINAL_FETCH;
+  delete (globalThis as { _posthogChunkIds?: Record<string, string> })._posthogChunkIds;
 });
 
 function lastFetchedBody(): Record<string, unknown> {
@@ -95,6 +96,50 @@ describe('error-tracking', () => {
       $exception_message: 'immediate',
       handled: true,
     });
+  });
+
+  it('stamps chunk_id on frames whose chunk registered one, so PostHog can match the uploaded sourcemap', () => {
+    // Mirror what `@posthog/cli sourcemap inject` registers at chunk load:
+    // key = the chunk's own Error().stack, value = its chunk id. The stack is
+    // multi-frame — the injected IIFE (newest, the chunk itself) sits above a
+    // webpack runtime frame (older) — so the id MUST key onto the newest
+    // frame's file (page-abc.js), not the outermost one. A loop that picked
+    // the wrong end would key it onto webpack-runtime.js and leave page-abc.js
+    // unmatched.
+    (globalThis as { _posthogChunkIds?: Record<string, string> })._posthogChunkIds = {
+      [[
+        'Error',
+        '    at od://app/_next/static/chunks/page-abc.js:1:100',
+        '    at __webpack_require__ (od://app/_next/static/chunks/webpack-runtime.js:2:200)',
+      ].join('\n')]: 'chunk-page-abc',
+    };
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-chunk',
+    });
+
+    const err = new Error('kaboom');
+    // Two frames: the first is from the chunk that registered an id, the
+    // second from a chunk that did not.
+    err.stack = [
+      'Error: kaboom',
+      '    at render (od://app/_next/static/chunks/page-abc.js:42:13)',
+      '    at commit (od://app/_next/static/chunks/framework-xyz.js:7:9)',
+    ].join('\n');
+    reportHandledException(err);
+
+    const body = lastFetchedBody();
+    const list = (body.properties as Record<string, unknown>).$exception_list as Array<{
+      stacktrace?: { frames?: Array<Record<string, unknown>> };
+    }>;
+    const frames = list[0]?.stacktrace?.frames ?? [];
+    const withChunkId = frames.filter((f) => typeof f.chunk_id === 'string');
+    // Exactly the frame from the registered chunk is stamped — and with the
+    // id PostHog will use to locate the uploaded map. No spurious ids leak
+    // onto frames whose chunk never registered one.
+    expect(withChunkId).toHaveLength(1);
+    expect(withChunkId[0]!.chunk_id).toBe('chunk-page-abc');
   });
 
   it('captures unhandledrejection events via the window hook', () => {

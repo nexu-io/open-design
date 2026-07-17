@@ -248,6 +248,72 @@ describe('captureStartupFailure', () => {
     expect(typeof p.env).toBe('string');
   });
 
+  it('labels main-process events production (unset NODE_ENV) so they match daemon events', async () => {
+    // The packaged main process has no NODE_ENV of its own, while the daemon it
+    // spawns runs with NODE_ENV=production. Without this the event reported
+    // `development` — 100% of packaged_runtime_failed were mislabeled dev in
+    // prod and filtered out of the env=production dashboards.
+    const saved = {
+      OD_TELEMETRY_ENV: process.env.OD_TELEMETRY_ENV,
+      OPEN_DESIGN_ENV: process.env.OPEN_DESIGN_ENV,
+      POSTHOG_ENV: process.env.POSTHOG_ENV,
+      LANGFUSE_ENVIRONMENT: process.env.LANGFUSE_ENVIRONMENT,
+      NODE_ENV: process.env.NODE_ENV,
+    };
+    delete process.env.OD_TELEMETRY_ENV;
+    delete process.env.OPEN_DESIGN_ENV;
+    delete process.env.POSTHOG_ENV;
+    delete process.env.LANGFUSE_ENVIRONMENT;
+    delete process.env.NODE_ENV;
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('production');
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('honors an explicit OD_TELEMETRY_ENV override (local smoke test can force dev)', async () => {
+    const savedOd = process.env.OD_TELEMETRY_ENV;
+    process.env.OD_TELEMETRY_ENV = 'development';
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('development');
+    } finally {
+      if (savedOd === undefined) delete process.env.OD_TELEMETRY_ENV;
+      else process.env.OD_TELEMETRY_ENV = savedOd;
+    }
+  });
+
   it('never blocks past the timeout even if fetch hangs forever', async () => {
     // The critical guarantee for "no startup side-effect": a hung (offline)
     // request must not wedge the exit. Race must resolve via the timeout.

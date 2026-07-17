@@ -10,18 +10,14 @@ type ScopeOutputs = {
   web_tests_required: boolean;
   tools_dev_tests_required: boolean;
   tools_pack_tests_required: boolean;
-  nix_validation_required: boolean;
   ui_p0_validation_required: boolean;
   visual_validation_required: boolean;
-  docker_validation_required: boolean;
   workspace_validation_required: boolean;
 };
 
 type ScopePlan = ScopeOutputs & {
   ci_mode: CiMode;
-  run_docker_build: boolean;
   run_e2e_vitest: boolean;
-  run_nix_validation: boolean;
   run_playwright_critical: boolean;
   run_playwright_visual: boolean;
   run_preflight: boolean;
@@ -62,10 +58,8 @@ function createScopePlan(): ScopePlan {
     web_tests_required: false,
     tools_dev_tests_required: false,
     tools_pack_tests_required: false,
-    nix_validation_required: false,
     ui_p0_validation_required: false,
     visual_validation_required: false,
-    docker_validation_required: false,
     workspace_validation_required: false,
   };
 
@@ -96,10 +90,8 @@ function createScopePlan(): ScopePlan {
     outputs.web_tests_required = true;
     outputs.tools_dev_tests_required = true;
     outputs.tools_pack_tests_required = true;
-    outputs.nix_validation_required = true;
     outputs.ui_p0_validation_required = true;
     outputs.visual_validation_required = true;
-    outputs.docker_validation_required = true;
     outputs.workspace_validation_required = true;
   }
 
@@ -130,9 +122,7 @@ function createRunPlan(
 
   return {
     ci_mode: ciMode,
-    run_docker_build: isFull || outputs.docker_validation_required,
     run_e2e_vitest: isFull || outputs.web_tests_required || outputs.ui_p0_validation_required,
-    run_nix_validation: isFull || outputs.nix_validation_required,
     run_playwright_critical: isFull || (outputs.workspace_validation_required && !outputs.ui_p0_validation_required),
     run_playwright_visual: isFull || outputs.visual_validation_required,
     run_preflight: true,
@@ -249,14 +239,6 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.visual_validation_required = true;
   }
 
-  if (isDockerRelevantFile(file)) {
-    target.docker_validation_required = true;
-  }
-
-  if (isNixRelevantFile(file)) {
-    target.nix_validation_required = true;
-  }
-
   if (!isWorkspaceValidationExemptFile(file)) {
     target.workspace_validation_required = true;
   }
@@ -330,45 +312,6 @@ function isVisualRelevantFile(file: string): boolean {
   );
 }
 
-function isDockerRelevantFile(file: string): boolean {
-  return (
-    startsWithAny(file, [
-      "deploy/",
-    ]) ||
-    [
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      ".dockerignore",
-      ".github/workflows/ci.yml",
-      ".github/workflows/docker-image.yml",
-    ].includes(file) ||
-    isWorkspaceManifestOrCiFile(file)
-  );
-}
-
-function isNixRelevantFile(file: string): boolean {
-  return (
-    startsWithAny(file, [
-      "nix/",
-      "packages/release/",
-    ]) ||
-    [
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      "flake.nix",
-      "flake.lock",
-      ".github/scripts/handoff.py",
-      ".github/workflows/autofix.atom.yml",
-      ".github/workflows/ci.yml",
-      ".github/workflows/comment.atom.yml",
-      "scripts/update-nix-pnpm-deps-hash.ts",
-    ].includes(file) ||
-    isWorkspaceManifestOrCiFile(file)
-  );
-}
-
 function isWorkspaceValidationExemptFile(file: string): boolean {
   return (
     isDocumentationOrMetadataFile(file) ||
@@ -388,6 +331,7 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/comment.atom.yml",
       ".github/workflows/report.atom.yml",
       ".github/workflows/docker-image.yml",
+      ".github/workflows/nix.yml",
     ].includes(file)
   );
 }

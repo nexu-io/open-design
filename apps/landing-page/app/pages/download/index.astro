@@ -154,6 +154,9 @@ const jsonLd = [
       </div>
       <h1 class="dl-hero-heading">{page.heading}</h1>
       <p class="dl-hero-lead">{page.lead}</p>
+      <p class="dl-mobile-notice" data-dl-mobile-notice hidden>
+        {page.mobileDesktopNotice}
+      </p>
 
       {/*
        * Static fallback points at the neutral release page, not a specific
@@ -294,6 +297,25 @@ const jsonLd = [
       })();
 
       const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+
+      const ua = (navigator.userAgent || '').toLowerCase();
+      const devicePlatform = (
+        navigator.userAgentData?.platform ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(devicePlatform);
+      const isMobileDevice =
+        /android|iphone|ipad|ipod|mobile/.test(ua) ||
+        navigator.userAgentData?.mobile === true ||
+        isIpadOS;
+      const mobileNotice = document.querySelector('[data-dl-mobile-notice]');
+      const narrowViewport = window.matchMedia('(max-width: 767px)');
+      const syncMobileNotice = () => {
+        if (mobileNotice) mobileNotice.hidden = !(isMobileDevice || narrowViewport.matches);
+      };
+      syncMobileNotice();
+      narrowViewport.addEventListener('change', syncMobileNotice);
 
       // Mirror header-enhancer.astro detection. Returns the matchKey used
       // on each [data-dl-card] plus the asset-name matcher + os label.
@@ -445,6 +467,17 @@ const jsonLd = [
     color: var(--ink-soft, #555);
     max-width: 48ch;
     margin: 12px 0 0;
+  }
+  .dl-mobile-notice {
+    max-width: 42ch;
+    margin: 18px 0 0;
+    padding: 10px 14px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+    border-radius: 10px;
+    background: var(--surface, rgba(255, 255, 255, 0.65));
+    color: var(--ink-soft, #555);
+    font-size: 0.9rem;
+    line-height: 1.5;
   }
   .dl-hero-cta {
     margin-top: 28px;

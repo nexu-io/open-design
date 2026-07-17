@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuestionFormView, parseSubmittedAnswers } from '../../src/components/QuestionForm';
 import type { QuestionForm } from '../../src/artifacts/question-form';
+import { visualStyleCardsForContext } from '../../src/runtime/visual-style-catalog';
 
 const form: QuestionForm = {
   id: 'discovery',
@@ -108,6 +109,70 @@ const selectObjectForm = {
   ],
 } as QuestionForm;
 
+const steppedForm = {
+  id: 'deck-brief',
+  title: 'Confirm the deck brief',
+  questions: [
+    {
+      id: 'audience',
+      label: 'Who will see this deck?',
+      type: 'text',
+      required: true,
+    },
+    {
+      id: 'length',
+      label: 'How detailed should it be?',
+      type: 'radio',
+      required: true,
+      options: [
+        { label: 'Concise · 8 slides', value: '8' },
+        { label: 'Standard · 12 slides', value: '12' },
+      ],
+    },
+    {
+      id: 'constraints',
+      label: 'Anything else to preserve?',
+      type: 'textarea',
+    },
+  ],
+} as QuestionForm;
+
+const steppedFileForm = {
+  id: 'deck-references',
+  title: 'Add deck references',
+  questions: [
+    {
+      id: 'assets',
+      label: 'Reference assets',
+      type: 'file',
+      required: true,
+    },
+    {
+      id: 'notes',
+      label: 'Anything else to preserve?',
+      type: 'textarea',
+    },
+  ],
+} as QuestionForm;
+
+const optionalFinalFileForm = {
+  id: 'deck-reference-upload',
+  title: 'Add an optional reference',
+  questions: [
+    {
+      id: 'goal',
+      label: 'What should the deck explain?',
+      type: 'text',
+      required: true,
+    },
+    {
+      id: 'reference',
+      label: 'Optional reference asset',
+      type: 'file',
+    },
+  ],
+} as QuestionForm;
+
 describe('QuestionFormView', () => {
   afterEach(() => cleanup());
 
@@ -150,6 +215,7 @@ describe('QuestionFormView', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       '[form answers — elevenlabs-voice]\n- Voice: Rachel — american · female [value: 21m00Tcm4TlvDq8ikWAM]',
       { voice: '21m00Tcm4TlvDq8ikWAM' },
+      'submit',
     );
 
     rerender(
@@ -210,6 +276,7 @@ describe('QuestionFormView', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.stringContaining('- Primary surface: Wearable kiosk'),
       { platform: 'Wearable kiosk' },
+      'submit',
     );
   });
 
@@ -362,11 +429,7 @@ describe('QuestionFormView', () => {
     });
   });
 
-  it('marks required fields with the inline indicator even when the footer is hidden', () => {
-    // Panel path (Questions tab): hideInternalSubmit hides the form footer, so
-    // the inline "*" next to a required label is the only per-field cue that a
-    // field is mandatory. A mixed required/optional form must still advertise
-    // which fields block the disabled Continue button.
+  it('uses a readable required marker instead of a red asterisk', () => {
     const mixedForm = {
       id: 'discovery',
       title: 'Quick brief',
@@ -382,10 +445,8 @@ describe('QuestionFormView', () => {
     );
 
     const fields = container.querySelectorAll('.qf-field');
-    const requiredField = fields[0]!;
-    const optionalField = fields[1]!;
-    expect(requiredField.querySelector('.qf-required')?.textContent).toBe('*');
-    expect(optionalField.querySelector('.qf-required')).toBeNull();
+    expect(fields[0]?.querySelector('.qf-required')?.textContent).toBe('required');
+    expect(fields[1]?.querySelector('.qf-required')).toBeNull();
   });
 
   it('submits required select object options with stable values', () => {
@@ -464,6 +525,7 @@ describe('QuestionFormView', () => {
       (container.querySelector('input[type="radio"][value="display"]') as HTMLInputElement)
         ?.checked,
     ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
     expect(container.querySelectorAll('input[type="checkbox"]:checked')).toHaveLength(2);
   });
 
@@ -532,6 +594,10 @@ describe('QuestionFormView', () => {
     const onSubmit = vi.fn();
     render(<QuestionFormView form={nativeDefaultsForm} interactive onSubmit={onSubmit} />);
 
+    const next = screen.getByRole('button', { name: 'Next step' }) as HTMLButtonElement;
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+
     const submit = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
 
@@ -544,6 +610,36 @@ describe('QuestionFormView', () => {
         '- Weight: 0',
       ].join('\n'),
       { accent: '#000000', weight: '0' },
+      'submit',
+    );
+  });
+
+  it('does not offer Skip all when a form contains required questions', () => {
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={richForm} interactive onSubmit={onSubmit} />);
+
+    expect((screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.queryByRole('button', { name: 'Skip all' })).toBeNull();
+    expect(screen.queryByText('Pick what fits. Skip optional fields you don\'t care about — the agent will use sensible defaults.')).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('keeps Skip all for a form containing only optional questions', () => {
+    const onSubmit = vi.fn();
+    const optionalForm = {
+      id: 'optional',
+      title: 'Optional context',
+      questions: [{ id: 'notes', label: 'Anything else?', type: 'text' }],
+    } as QuestionForm;
+    render(<QuestionFormView form={optionalForm} interactive onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip all' }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining('[form answers — optional]'),
+      {},
+      'skip',
     );
   });
 
@@ -589,7 +685,423 @@ describe('QuestionFormView', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       '[form answers — references]\n- Reference assets: mood.png, brief.pdf',
       { assets: ['mood.png', 'brief.pdf'] },
+      'submit',
       [{ questionId: 'assets', questionLabel: 'Reference assets', files: [first, second] }],
     );
+  });
+
+  it('only auto-continues when no required answer is missing', () => {
+    vi.useFakeTimers();
+    try {
+      const optionalSubmit = vi.fn();
+      const optionalForm = {
+        id: 'optional-auto-continue',
+        title: 'Optional context',
+        questions: [{ id: 'notes', label: 'Anything else?', type: 'text' }],
+      } as QuestionForm;
+      const { unmount } = render(
+        <QuestionFormView
+          form={optionalForm}
+          interactive
+          autoContinueAfterTimeout
+          onSubmit={optionalSubmit}
+        />,
+      );
+
+      expect(screen.getByLabelText(/Auto-continues when the timer ends 10:00/)).toBeTruthy();
+      act(() => vi.advanceTimersByTime(10 * 60 * 1000));
+      expect(optionalSubmit).toHaveBeenCalledWith(
+        expect.stringContaining('[form answers — optional-auto-continue]'),
+        { notes: '' },
+        'auto',
+      );
+      unmount();
+
+      const requiredSubmit = vi.fn();
+      render(
+        <QuestionFormView
+          form={richForm}
+          interactive
+          autoContinueAfterTimeout
+          onSubmit={requiredSubmit}
+        />,
+      );
+      expect(screen.queryByLabelText(/Auto-continues when the timer ends 10:00/)).toBeNull();
+      act(() => vi.advanceTimersByTime(10 * 60 * 1000));
+      expect(requiredSubmit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows multi-question forms one step at a time and preserves answers', () => {
+    const onSubmit = vi.fn();
+    const onInteraction = vi.fn();
+    render(
+      <QuestionFormView
+        form={steppedForm}
+        interactive
+        autoContinueAfterTimeout
+        onInteraction={onInteraction}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText('1 / 3').closest('.question-form-head')).toBeTruthy();
+    expect(screen.queryByLabelText(/Auto-continues when the timer ends 10:00/)).toBeNull();
+    expect(screen.getByText('Who will see this deck?')).toBeTruthy();
+    expect(screen.queryByText('How detailed should it be?')).toBeNull();
+    const nextStep = screen.getByRole('button', { name: 'Next step' }) as HTMLButtonElement;
+    expect(nextStep.disabled).toBe(true);
+    expect(nextStep.title).toBe('Fill in the required fields first');
+    expect(screen.getByText('required')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Leadership and product team' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(screen.queryByText('Who will see this deck?')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Standard · 12 slides'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'step_back',
+      questionId: 'length',
+      stepIndex: 2,
+      stepCount: 3,
+    });
+
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(
+      'Leadership and product team',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    expect((screen.getByLabelText('Standard · 12 slides') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Include speaker notes' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining('- Who will see this deck?: Leadership and product team'),
+      {
+        audience: 'Leadership and product team',
+        length: '12',
+        constraints: 'Include speaker notes',
+      },
+      'submit',
+    );
+  });
+
+  it('offers Skip only on optional steps', () => {
+    const onSubmit = vi.fn();
+    const onInteraction = vi.fn();
+    render(
+      <QuestionFormView
+        form={steppedForm}
+        interactive
+        onInteraction={onInteraction}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Leadership and product team' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'step_next',
+      questionId: 'audience',
+      stepIndex: 1,
+      stepCount: 3,
+    });
+
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Concise · 8 slides'));
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'step_skip',
+      questionId: 'constraints',
+      stepIndex: 3,
+      stepCount: 3,
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining('- Anything else to preserve?: (skipped)'),
+      {
+        audience: 'Leadership and product team',
+        length: '8',
+        constraints: '',
+      },
+      'skip',
+    );
+  });
+
+  it('preserves earlier file answers when skipping the final optional step', () => {
+    const onSubmit = vi.fn();
+    const { container } = render(
+      <QuestionFormView form={steppedFileForm} interactive onSubmit={onSubmit} />,
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (!input) throw new Error('expected file input');
+    const reference = new File(['image'], 'mood.png', { type: 'image/png' });
+
+    fireEvent.change(input, { target: { files: [reference] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      [
+        '[form answers — deck-references]',
+        '- Reference assets: mood.png',
+        '- Anything else to preserve?: (skipped)',
+      ].join('\n'),
+      { assets: 'mood.png', notes: '' },
+      'skip',
+      [{ questionId: 'assets', questionLabel: 'Reference assets', files: [reference] }],
+    );
+  });
+
+  it('does not submit files selected on a skipped final optional step', () => {
+    const onSubmit = vi.fn();
+    const { container } = render(
+      <QuestionFormView form={optionalFinalFileForm} interactive onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Product launch' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (!input) throw new Error('expected file input');
+    fireEvent.change(input, {
+      target: { files: [new File(['image'], 'draft.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      [
+        '[form answers — deck-reference-upload]',
+        '- What should the deck explain?: Product launch',
+        '- Optional reference asset: (skipped)',
+      ].join('\n'),
+      { goal: 'Product launch', reference: '' },
+      'skip',
+    );
+  });
+
+  it('renders artifact-aware visual tone cards and honors checkbox selection limits', () => {
+    const onSubmit = vi.fn();
+    render(
+      <QuestionFormView
+        form={{
+          ...checkboxObjectForm,
+          questions: [{ ...checkboxObjectForm.questions[0]!, maxSelections: 2 }],
+        }}
+        interactive
+        visualStyleContext="deck"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText('Editorial narrative')).toBeTruthy();
+    expect(screen.getByText('Product keynote')).toBeTruthy();
+    expect(screen.getByText('Bold storytelling')).toBeTruthy();
+    expect(
+      (screen.getByAltText(
+        'Editorial narrative deck style preview.',
+      ) as HTMLImageElement).getAttribute('src'),
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/deck-editorial-narrative-v1.webp');
+    expect(
+      (screen.getByAltText(
+        'Product keynote deck style preview.',
+      ) as HTMLImageElement).getAttribute('src'),
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/deck-product-keynote-v1.webp');
+    expect(document.querySelector('[data-artifact-type="deck"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Editorial narrative'));
+    fireEvent.click(screen.getByLabelText('Bold storytelling'));
+    expect((screen.getByLabelText('Product keynote') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({
+      tone: ['deck-editorial-narrative', 'deck-bold-storytelling'],
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toContain(
+      'Editorial narrative [value: deck-editorial-narrative]',
+    );
+  });
+
+  it('normalizes legacy visual tone defaults to the submitted card IDs', () => {
+    const onSubmit = vi.fn();
+    render(
+      <QuestionFormView
+        form={{
+          ...checkboxObjectForm,
+          questions: [
+            {
+              ...checkboxObjectForm.questions[0]!,
+              defaultValue: ['editorial', 'luxury'],
+            },
+          ],
+        }}
+        interactive
+        visualStyleContext="deck"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect((screen.getByLabelText('Editorial narrative') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Premium pitch') as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Editorial narrative [value: deck-editorial-narrative], Premium pitch [value: deck-premium-pitch]',
+      ),
+      { tone: ['deck-editorial-narrative', 'deck-premium-pitch'] },
+      'submit',
+    );
+  });
+
+  it('renders restored legacy visual tone answers on their matching cards', () => {
+    render(
+      <QuestionFormView
+        form={checkboxObjectForm}
+        interactive
+        submittedAnswers={{ tone: ['editorial', 'luxury'] }}
+        visualStyleContext="deck"
+      />,
+    );
+
+    expect((screen.getByLabelText('Editorial narrative') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Premium pitch') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('keeps the visual picker compact, shuffles unselected styles, and expands on demand', () => {
+    const galleryForm = {
+      id: 'discovery',
+      title: 'Choose a visual direction',
+      questions: [
+        {
+          id: 'tone',
+          label: 'Visual direction',
+          type: 'radio',
+          required: true,
+          allowCustom: true,
+          options: [
+            { label: 'Editorial / magazine', value: 'editorial' },
+            { label: 'Modern minimal', value: 'minimal' },
+            { label: 'Playful / illustrative', value: 'playful' },
+            { label: 'Tech / utility', value: 'utility' },
+            { label: 'Luxury / refined', value: 'luxury' },
+            { label: 'Human / approachable', value: 'human' },
+          ],
+        },
+      ],
+    } as QuestionForm;
+    const onInteraction = vi.fn();
+    const onSubmit = vi.fn();
+    const { container } = render(
+      <QuestionFormView
+        form={galleryForm}
+        interactive
+        visualStyleContext="deck"
+        onInteraction={onInteraction}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const visibleLabels = () =>
+      Array.from(container.querySelectorAll<HTMLInputElement>('.qf-visual-card input')).map(
+        (input) => input.getAttribute('aria-label'),
+      );
+    const firstPage = visibleLabels();
+    expect(firstPage).toHaveLength(4);
+    expect(screen.queryByLabelText('Custom answer')).toBeNull();
+    expect(screen.queryByText('Refresh')).toBeNull();
+    expect(screen.getByText('+18')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'visual_style_refresh',
+      questionId: 'tone',
+      styleContext: 'deck',
+    });
+    expect(visibleLabels()).toHaveLength(4);
+    expect(visibleLabels()).not.toEqual(firstPage);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View all' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'visual_style_gallery_open',
+      questionId: 'tone',
+      styleContext: 'deck',
+    });
+    const dialog = screen.getByRole('dialog', { name: 'Visual direction' });
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(22);
+    expect(
+      dialog.querySelector(
+        'img[src="https://repo-assets.open-design.ai/style-catalog/v1/deck-editorial-narrative-v1.webp"]',
+      ),
+    ).toBeTruthy();
+    expect(dialog.querySelector('[aria-label="Bento modular"]')).toBeTruthy();
+    expect(visibleLabels()).toHaveLength(4);
+    const customInput = screen.getByLabelText('Custom answer') as HTMLInputElement;
+    fireEvent.change(customInput, { target: { value: 'Warm Japanese editorial' } });
+    expect(customInput.value).toBe('Warm Japanese editorial');
+    expect(container.querySelector('.qf-visual-custom-summary')?.textContent).toContain(
+      'Warm Japanese editorial',
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Business' }));
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'visual_style_category_tab',
+      questionId: 'tone',
+      styleContext: 'deck',
+      categoryId: 'business',
+    });
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(5);
+    expect(dialog.querySelector('[aria-label="Data briefing"]')).toBeTruthy();
+    expect(dialog.querySelector('[aria-label="Premium pitch"]')).toBeTruthy();
+    fireEvent.click(dialog.querySelector('[aria-label="Premium pitch"]')!);
+    expect(onInteraction).toHaveBeenCalledWith({
+      element: 'visual_style_card',
+      questionId: 'tone',
+      styleId: 'deck-premium-pitch',
+      styleContext: 'deck',
+      source: 'gallery',
+    });
+    expect(customInput.value).toBe('');
+    expect(container.querySelector('.qf-visual-custom-summary')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(22);
+
+    fireEvent.click(screen.getByRole('button', { name: /done/i }));
+    expect(screen.queryByRole('dialog', { name: 'Visual direction' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({ tone: 'deck-premium-pitch' });
+    expect(onSubmit.mock.calls[0]?.[0]).toContain(
+      'Premium pitch [value: deck-premium-pitch]',
+    );
+  });
+
+  it('exposes all uploaded style previews for both artifact types', () => {
+    const deckCards = visualStyleCardsForContext('deck');
+    const prototypeCards = visualStyleCardsForContext('prototype');
+
+    expect(deckCards).toHaveLength(22);
+    expect(prototypeCards).toHaveLength(22);
+    expect(deckCards.find((card) => card.value === 'deck-bento')?.preview.src).toBe(
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-bento-v1.webp',
+    );
+    expect(
+      prototypeCards.find((card) => card.value === 'prototype-photojournal')?.preview.src,
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/prototype-photojournal-v1.webp');
   });
 });

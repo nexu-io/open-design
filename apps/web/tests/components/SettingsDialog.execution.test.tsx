@@ -1036,7 +1036,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     selectGatewayPreset('DeepSeek — OpenAI');
 
-    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'deepseek-v4-flash',
+    );
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 
@@ -1078,7 +1080,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.click(within(providerPopover).getByRole('option', { name: 'DeepSeek — Anthropic' }));
 
-    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'deepseek-v4-flash',
+    );
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://api.deepseek.com/anthropic',
     );
@@ -1170,10 +1174,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 28 ms/)).toBeTruthy();
     });
-    const testConnectionCalls = fetchMock.mock.calls.filter(
-      ([input]) => input.toString() === '/api/test/connection',
-    );
-    expect(testConnectionCalls).toHaveLength(1);
+    await waitFor(() => {
+      const testConnectionCalls = fetchMock.mock.calls.filter(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testConnectionCalls).toHaveLength(1);
+    });
   });
 
   it('keeps protocol drafts isolated without leaking API keys between tabs', () => {
@@ -1488,6 +1494,104 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect.objectContaining({
         apiProtocol: 'openai',
         model: 'account-ready-model',
+      }),
+      {},
+    );
+  });
+
+  it('replaces a retired preset with the first provider preference available to the account', async () => {
+    const testedModels: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      const body = JSON.parse(String(init?.body)) as { model?: string };
+      testedModels.push(body.model ?? '');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 7,
+          model: body.model,
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'account-first', label: 'Account First' },
+        { id: 'kimi-k2.6', label: 'Kimi K2.6' },
+      ],
+    });
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-moonshot',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      model: 'kimi-k2-0711-preview',
+      apiProviderBaseUrl: 'https://api.moonshot.cn/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Moonshot' }));
+
+    expect(await screen.findByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'Kimi K2.6 (kimi-k2.6) · From your account',
+    );
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).not.toContain(
+      'account-first',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        model: 'kimi-k2.6',
+      }),
+      {},
+    );
+    await waitFor(() => {
+      expect(testedModels).toEqual(['kimi-k2.6']);
+    });
+  });
+
+  it('does not treat the first upstream model as the default when no preference matches', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'account-first', label: 'Account First' },
+        { id: 'account-second', label: 'Account Second' },
+      ],
+    });
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+
+    expect(await screen.findByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).not.toContain(
+      'account-first',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        model: '',
       }),
       {},
     );
@@ -2231,10 +2335,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect(apiKeyInput.value).toBe('sk-ant-test-provider');
     });
     expect(screen.getByText(en['settings.apiKeyCleaned'])).toBeTruthy();
-    const testConnectionCalls = fetchMock.mock.calls.filter(
-      ([input]) => input.toString() === '/api/test/connection',
-    );
-    expect(testConnectionCalls).toHaveLength(1);
+    await waitFor(() => {
+      const testConnectionCalls = fetchMock.mock.calls.filter(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testConnectionCalls).toHaveLength(1);
+    });
   });
 
   it('lets users retry a failed BYOK connection test without editing the API key', async () => {
@@ -5238,7 +5344,7 @@ describe('SettingsDialog about interactions', () => {
     });
   });
 
-  it('keeps a quit retry action when update install succeeds but quit fails', async () => {
+  it('keeps a quit retry action when update install succeeds but quit throws or fails', async () => {
     const payloadReady = updateStatus({
       artifact: {
         name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
@@ -5265,10 +5371,12 @@ describe('SettingsDialog about interactions', () => {
       },
     });
     const install = vi.fn(async () => installed);
-    const quit = vi.fn(async () => ({
-      ok: false as const,
-      reason: 'desktop quit is not available',
-    }));
+    const quit = vi.fn()
+      .mockRejectedValueOnce(new Error('desktop quit failed'))
+      .mockResolvedValue({
+        ok: false as const,
+        reason: 'desktop quit is not available',
+      });
     restoreOpenDesignHost = installMockOpenDesignHost({
       host: {
         updater: {
@@ -5302,7 +5410,7 @@ describe('SettingsDialog about interactions', () => {
       expect(quit).toHaveBeenCalledTimes(1);
     });
     expect(screen.getByRole('button', { name: en['updater.quitButton'] })).toBeTruthy();
-    expect(screen.getAllByText(en['settings.updateQuitFailed']).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(en['updater.quitFailedTitle']).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: en['updater.quitButton'] }));
 

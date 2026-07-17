@@ -3224,6 +3224,12 @@ export interface Dict {
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;
   'workspace.terminalRestart': string;
+  'previewRunStatus.analyzing': string;
+  'previewRunStatus.generating': string;
+  'previewRunStatus.verifying': string;
+  'previewRunStatus.succeeded': string;
+  'previewRunStatus.failed': string;
+  'previewRunStatus.elapsed': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;

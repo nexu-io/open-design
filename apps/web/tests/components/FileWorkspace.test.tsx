@@ -2068,79 +2068,6 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
-describe('FileWorkspace Questions tab', () => {
-  const discoveryForm = {
-    id: 'discovery',
-    title: 'Quick brief',
-    questions: [
-      {
-        id: 'platform',
-        label: 'Platform',
-        type: 'radio' as const,
-        options: [
-          { label: 'Mobile', value: 'Mobile' },
-          { label: 'Desktop web', value: 'Desktop web' },
-        ],
-        required: true,
-      },
-    ],
-  };
-
-  it('shows the Questions tab while the form is unanswered', () => {
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-        questionForm={discoveryForm}
-      />,
-    );
-
-    expect(screen.getByTestId('questions-tab')).toBeTruthy();
-  });
-
-  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
-    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
-      projectId: 'project-1',
-      projectKind: 'prototype',
-      files: [],
-      liveArtifacts: [],
-      onRefreshFiles: vi.fn(),
-      isDeck: false,
-      tabsState: { tabs: [], active: null },
-      onTabsStateChange: vi.fn(),
-      questionForm: discoveryForm,
-      focusQuestionsRequest: { nonce: 1 },
-    };
-    const { rerender } = render(<FileWorkspace {...baseProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Quick brief')).toBeTruthy();
-    });
-
-    rerender(
-      <FileWorkspace
-        {...baseProps}
-        questionFormSubmittedAnswers={{ platform: 'Mobile' }}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByText('Quick brief')).toBeNull();
-    });
-    expect(screen.getByTestId('questions-tab')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('questions-tab'));
-    expect(screen.getByText('Quick brief')).toBeTruthy();
-    expect(screen.getByText('Mobile')).toBeTruthy();
-  });
-});
-
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');
@@ -3152,4 +3079,105 @@ describe('FileWorkspace empty-project generation contract', () => {
       expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     },
   );
+
+  it('keeps delivery recovery in Chat and leaves a passive failure hint over existing preview files', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('previous-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'delivery-failure',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'no_result',
+            sessionMode: 'design',
+            endedAt: 1_700_000_012_000,
+          },
+        ]}
+      />,
+    );
+
+    const previewStatus = screen.getByTestId('preview-run-status');
+    expect(previewStatus).toHaveTextContent('Delivery needs attention · Retry in Chat');
+    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
+    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status-retry')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status-view-details')).toBeNull();
+    expect(previewStatus).not.toHaveTextContent('Elapsed');
+  });
+
+  it('does not mount main-preview delivery feedback over a browser tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('previous-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['previous-design.html'],
+          active: '__browser__:1',
+          browserTabs: [{ id: '__browser__:1', label: 'Browser', url: 'https://example.com' }],
+        }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'browser-delivery-failure',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'delivery_failed',
+            sessionMode: 'design',
+            endedAt: 1_700_000_012_000,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('design-browser-panel')).toBeTruthy();
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
+  });
+
+  it('keeps a delivered confirmation on the preview canvas after files arrive', () => {
+    const now = 1_700_000_012_500;
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('delivered-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['delivered-design.html'], active: 'delivered-design.html' }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'delivery-succeeded',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'delivered',
+            sessionMode: 'design',
+            startedAt: now - 4_000,
+            endedAt: now - 1_000,
+          },
+        ]}
+      />,
+    );
+
+    const previewStatus = screen.getByTestId('preview-run-status');
+    expect(previewStatus).toHaveTextContent('Design ready');
+    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
+    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
+    expect(previewStatus).not.toHaveAttribute('aria-live');
+    expect(within(previewStatus).getByRole('status')).toHaveTextContent('Design ready');
+    expect(previewStatus.querySelector('[aria-hidden="true"]')).toHaveTextContent('Elapsed 0:03');
+  });
 });

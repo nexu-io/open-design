@@ -9,6 +9,7 @@ import {
   extractTouchedFilePathsFromEvents,
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
+  resolveAgentTouchedFileNames,
 } from '../../src/components/ProjectView';
 import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
@@ -233,9 +234,42 @@ describe('computeTraceObjectFiles', () => {
       { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
     ];
 
-    const files = computeTraceObjectFiles(before, next as never, ['/tmp/existing.html']);
+    const files = computeTraceObjectFiles(before, next as never, ['/tmp/existing.html'], 'project-1');
 
     expect(files).toEqual([]);
+  });
+
+  it('ignores managed-project aliases that belong to a different project', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+    ];
+
+    const files = computeTraceObjectFiles(
+      before,
+      next as never,
+      ['.od/projects/project-2/existing.html'],
+      'project-1',
+    );
+
+    expect(files).toEqual([]);
+  });
+
+  it('includes existing files touched through the current managed-project alias', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+    ];
+    const touchedPaths = ['.od/projects/project-1/existing.html'];
+
+    const files = computeTraceObjectFiles(before, next as never, touchedPaths, 'project-1');
+
+    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+      ['existing.html', 'modified'],
+    ]);
+    expect(resolveAgentTouchedFileNames(touchedPaths, next as never, 'project-1')).toEqual(
+      new Set(['existing.html']),
+    );
   });
 
   it('recovers successful write paths from persisted tool events', () => {
