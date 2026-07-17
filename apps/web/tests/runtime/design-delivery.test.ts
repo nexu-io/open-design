@@ -56,7 +56,7 @@ describe('resolveDesignDeliveryOutcome', () => {
           content: 'I finished the design.',
           events: [
             attempt,
-            { kind: 'tool_result', toolUseId: attempt.id, isError: false },
+            { kind: 'tool_result', toolUseId: attempt.id, isError: false, content: 'Wrote index.html' },
           ],
           producedFileCount: 0,
           traceObjectFileCount: 0,
@@ -85,7 +85,7 @@ describe('resolveDesignDeliveryOutcome', () => {
           content: 'I tried but the tool errored.',
           events: [
             attempt,
-            { kind: 'tool_result', toolUseId: attempt.id, isError: true },
+            { kind: 'tool_result', toolUseId: attempt.id, isError: true, content: 'Edit failed: no match' },
           ],
           producedFileCount: 0,
           traceObjectFileCount: 0,
