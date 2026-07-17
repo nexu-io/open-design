@@ -197,6 +197,10 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       }
       .slide {
         display: flex !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+        transform: none !important;
         position: relative !important;
         inset: auto !important;
         width: 1920px !important;
@@ -204,6 +208,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         page-break-after: always;
         break-after: page;
       }
+      .slide:not(.active) { display: flex !important; }
       .slide:last-child { page-break-after: auto; break-after: auto; }
       .deck-counter, .deck-hint { display: none !important; }
     }

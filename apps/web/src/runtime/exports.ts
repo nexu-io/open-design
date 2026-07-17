@@ -1480,7 +1480,7 @@ function injectParentPrintReadyCache(doc: string, nonce: string): string {
 // no margins, scroll-snap and horizontal flex disabled. `!important` guards
 // override skill-specific styles that pin the deck to `display: flex` /
 // `overflow: hidden` for on-screen swiping.
-const DECK_PRINT_CSS = `
+export const DECK_PRINT_CSS = `
 @media print {
   @page { size: 1920px 1080px; margin: 0; }
   html, body {
@@ -1494,7 +1494,17 @@ const DECK_PRINT_CSS = `
     scroll-snap-type: none !important;
     transform: none !important;
   }
-  .slide, [data-screen-label], section.slide, .deck-slide, .ppt-slide {
+  .slide,
+  .slide:not(.active),
+  [data-screen-label],
+  [data-screen-label]:not(.active),
+  section.slide,
+  section.slide:not(.active),
+  .deck-slide,
+  .deck-slide:not(.active),
+  .ppt-slide,
+  .ppt-slide:not(.active) {
+    display: flex !important;
     flex: none !important;
     width: 1920px !important;
     height: 1080px !important;
@@ -1510,6 +1520,7 @@ const DECK_PRINT_CSS = `
        inactive slides print as blank pages. Force every slide visible (and
        freeze entrance animations) so each becomes a real page. */
     opacity: 1 !important;
+    pointer-events: auto !important;
     visibility: visible !important;
     animation: none !important;
     transition: none !important;

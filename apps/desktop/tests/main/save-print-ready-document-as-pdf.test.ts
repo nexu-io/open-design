@@ -16,6 +16,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  DECK_PRINT_CSS,
   inferPageSize,
   pdfFilenameFromDocument,
   savePrintReadyDocumentAsPdf,
@@ -90,6 +91,14 @@ function createStubTarget(options: StubOptions = {}): {
 }
 
 describe('savePrintReadyDocumentAsPdf', () => {
+  test('deck print CSS overrides inactive-slide hiding for multi-page exports', () => {
+    expect(DECK_PRINT_CSS).toContain('.slide:not(.active)');
+    expect(DECK_PRINT_CSS).toMatch(/\.slide:not\(\.active\)[\s\S]*display:\s*flex\s*!important/);
+    expect(DECK_PRINT_CSS).toMatch(/\.slide:not\(\.active\)[\s\S]*opacity:\s*1\s*!important/);
+    expect(DECK_PRINT_CSS).toMatch(/\.slide:not\(\.active\)[\s\S]*pointer-events:\s*auto\s*!important/);
+    expect(DECK_PRINT_CSS).toMatch(/\.slide:not\(\.active\)[\s\S]*visibility:\s*visible\s*!important/);
+  });
+
   test('writes the rendered PDF to the path chosen in the Save dialog', async () => {
     const pdfBytes = new Uint8Array([9, 8, 7]);
     const { target, written } = createStubTarget({ savePath: '/tmp/deck.pdf', pdfBytes });

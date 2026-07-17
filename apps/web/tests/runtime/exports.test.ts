@@ -1,10 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
   buildDesignHandoffContent,
   buildDesignManifestContent,
+  DECK_PRINT_CSS,
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
   downloadDesignSystemArchive,
@@ -25,6 +29,27 @@ import {
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
 } from '../../src/runtime/exports';
+
+const htmlPptBaseCssPath = fileURLToPath(
+  new URL('../../../../design-templates/html-ppt/assets/base.css', import.meta.url),
+);
+const htmlPptBaseCss = readFileSync(htmlPptBaseCssPath, 'utf8');
+const htmlPptVisibilityCssMatch = htmlPptBaseCss.match(
+  /\.slide\s*\{[\s\S]*?\}\s*\.slide\.is-active\s*\{[\s\S]*?\}/,
+);
+if (!htmlPptVisibilityCssMatch) {
+  throw new Error('html-ppt base.css no longer contains its slide visibility rules');
+}
+const htmlPptVisibilityCss = htmlPptVisibilityCssMatch[0];
+
+function printRulesForDom(css: string): string {
+  const trimmed = css.trim();
+  const openBrace = trimmed.indexOf('{');
+  if (!trimmed.startsWith('@media print') || openBrace < 0 || !trimmed.endsWith('}')) {
+    throw new Error('expected a single @media print stylesheet');
+  }
+  return trimmed.slice(openBrace + 1, -1);
+}
 
 describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
   it('whole-deck capture renders off-screen with no index (stitch all)', () => {
@@ -1103,6 +1128,33 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
     expect(wrapper).toContain('data-deck-print=&quot;injected&quot;');
     expect(wrapper).toContain('page-break-after: always;');
+    expect(wrapper).toContain('.slide:not(.active)');
+    expect(wrapper).toContain('display: flex !important;');
+  });
+
+  it('makes html-ppt inactive slides visible when print CSS is applied', () => {
+    const dom = new JSDOM(`<!doctype html>
+      <html>
+        <head>
+          <style>${htmlPptVisibilityCss}</style>
+          <style>${printRulesForDom(DECK_PRINT_CSS)}</style>
+        </head>
+        <body>
+          <main class="deck">
+            <section class="slide is-active">Active slide</section>
+            <section class="slide">Inactive slide</section>
+          </main>
+        </body>
+      </html>`, { pretendToBeVisual: true });
+    const inactiveSlide = dom.window.document.querySelectorAll<HTMLElement>('.slide')[1];
+
+    expect(inactiveSlide).toBeDefined();
+    const computed = dom.window.getComputedStyle(inactiveSlide!);
+    expect(computed.display).toBe('flex');
+    expect(computed.opacity).toBe('1');
+    expect(computed.pointerEvents).toBe('auto');
+    expect(computed.visibility).toBe('visible');
+    expect(computed.transform).toBe('none');
   });
 
   it('waits for the injected print-ready cache before calling window.print() in the browser fallback', async () => {
@@ -1201,6 +1253,7 @@ describe('sandboxed preview Blob exports', () => {
     expect(printPdfMock).toHaveBeenCalledTimes(1);
     expect(printPdfMock.mock.calls[0]![2]).toEqual({ deck: true });
     expect(printPdfMock.mock.calls[0]![0]).toContain('data-deck-print=&quot;injected&quot;');
+    expect(printPdfMock.mock.calls[0]![0]).toContain('.slide:not(.active)');
   });
 
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
