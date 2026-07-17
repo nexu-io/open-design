@@ -74,6 +74,7 @@ export function minimalAgentDef(
 
 export const amp = requireAgent('amp');
 export const claude = requireAgent('claude');
+export const cline = requireAgent('cline');
 export const codex = requireAgent('codex');
 export const hermes = requireAgent('hermes');
 export const kimi = requireAgent('kimi');

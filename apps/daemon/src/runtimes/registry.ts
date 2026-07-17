@@ -1,6 +1,7 @@
 import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
+import { clineAgentDef } from './defs/cline.js';
 import { devinAgentDef } from './defs/devin.js';
 import { opencodeAgentDef } from './defs/opencode.js';
 import { byokOpenCodeAgentDef } from './defs/byok-opencode.js';
@@ -50,6 +51,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   deepseekAgentDef,
   aiderAgentDef,
   antigravityAgentDef,
+  clineAgentDef,
   reasonixAgentDef,
   codebuddyAgentDef,
   mimoAgentDef,

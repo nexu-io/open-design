@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, cline, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
@@ -117,19 +117,60 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
   assert.equal(withModel.includes('--model'), false);
 });
 
-test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
-  agentCapabilities.set('opencode', { skipPermissions: true });
-  try {
-    const args = opencode.buildArgs('design a dashboard', [], [], {});
-    assert.deepEqual(args, [
-      'run',
-      '--format',
-      'json',
-      '--dangerously-skip-permissions',
-    ]);
-  } finally {
-    agentCapabilities.delete('opencode');
-  }
+test('cline uses headless auto-approve mode with cwd, model, and thinking options', () => {
+  const prompt = 'design a landing page';
+  const args = cline.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'anthropic/claude-sonnet-4-5', reasoning: 'medium' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.equal(cline.bin, 'cline');
+  assert.equal(cline.streamFormat, 'plain');
+  assert.equal(cline.promptViaStdin, true);
+  assert.equal(cline.maxPromptArgBytes, undefined);
+  assert.equal(cline.installUrl, 'https://docs.cline.bot/getting-started/installing-cline');
+  assert.equal(cline.docsUrl, 'https://docs.cline.bot/usage/cli-overview');
+  assert.deepEqual(args, [
+    '--auto-approve',
+    'true',
+    '--cwd',
+    '/tmp/od-project',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
+    '--thinking',
+    'medium',
+  ]);
+  assert.equal(args.includes(prompt), false);
+});
+
+test('cline omits default model and reasoning flags', () => {
+  const args = cline.buildArgs(
+    'short prompt',
+    [],
+    [],
+    { model: 'default', reasoning: 'default' },
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--auto-approve',
+    'true',
+  ]);
+});
+
+test('cline exposes thinking levels so reasoning can round-trip through the UI', () => {
+  assert.ok(cline.reasoningOptions);
+  assert.deepEqual(cline.reasoningOptions.map((option) => option.id), [
+    'default',
+    'none',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+  ]);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
