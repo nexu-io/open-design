@@ -57,30 +57,24 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
 }
 
 /**
- * True when at least one write/edit/delete tool call in the turn is *not known
- * to have failed*. Derived from `deriveFileOps` which already pairs tool_use ↔
- * tool_result and assigns per-file status:
+ * True when at least one write/edit/delete tool call in the turn has a
+ * confirmed non-error tool_result. Derived from `deriveFileOps` which
+ * pairs tool_use ↔ tool_result and assigns per-file status:
  *   - 'done'    — paired tool_result, not an error (success)
- *   - 'running' — no paired tool_result yet (in-flight, or reattach where the
- *                 result event was dropped from the persisted events)
- *   - 'error'   — paired tool_result with isError, or a known tool failure
+ *   - 'running' — no paired tool_result yet (in-flight, or reattach
+ *                 where the result event was dropped)
+ *   - 'error'   — paired tool_result with isError, or a known failure
  *
- * Treats both 'done' and 'running' as a delivered mutation. The 'running'
- * case matters on reattach: a completed daemon run whose persisted events lost
- * the tool_result would regress to no_result under a strict 'done'-only gate,
- * resurrecting the very #5753 symptom this PR fixes. The only case that falls
- * through is an *all-errored* edit turn (every mutation has status 'error'),
- * which must surface a retry affordance rather than silently read as success.
- *
- * Per PerishCode review on PR #5776: 'hasFileMutationToolUse' matched any
- * attempt regardless of outcome and would flip a fully-failed edit turn to
- * delivered, leaving the preview stale with no error surfaced.
+ * Gates on status === 'done' exclusively: a still-running mutation
+ * (no tool_result) must NOT flip delivery, even though it will likely
+ * succeed. The only path to status === 'done' is a confirmed successful
+ * file write/edit/delete. Per PerishCode review on PR #5776.
  */
 function hasNonFailedFileMutation(events: AgentEvent[] | undefined): boolean {
   return (deriveFileOps(events) ?? []).some(
     (entry) =>
       entry.ops.some((op) => op === 'write' || op === 'edit' || op === 'delete') &&
-      entry.status !== 'error',
+      entry.status === 'done',
   );
 }
 
