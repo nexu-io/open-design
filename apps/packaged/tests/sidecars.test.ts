@@ -39,9 +39,18 @@ function slashPath(value: string): string {
 }
 
 describe('resolveDaemonStatusTimeoutMs', () => {
-  it('uses the 35-second baseline budget on non-win32 for normal cold boots', () => {
-    expect(resolveDaemonStatusTimeoutMs({}, 'linux')).toBe(35_000);
+  it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
     expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on linux for AppImage FUSE cold starts', () => {
+    // Every AppImage launch mounts a fresh FUSE squashfs with a cold VFS page
+    // cache, so the daemon demand-pages its bundled node binary through FUSE on
+    // EVERY launch and can blow past the 35s baseline. The prewarm pass cuts the
+    // usual case to a few seconds; the wider budget is the safety net for slow
+    // devices, mirroring the win32 rationale.
+    // https://github.com/nexu-io/open-design/issues/5835
+    expect(resolveDaemonStatusTimeoutMs({}, 'linux')).toBe(90_000);
   });
 
   it('widens the baseline to 90 seconds on win32 for AV-scan-slow first launches', () => {
@@ -53,7 +62,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'linux')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'darwin')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -75,7 +84,8 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     const original = process.env.OD_LEGACY_DATA_DIR;
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
-      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(90_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(35_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
