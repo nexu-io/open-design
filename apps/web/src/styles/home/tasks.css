@@ -559,6 +559,35 @@
   grid-column: 1 / -1;
 }
 
+.creator-backup-panel {
+  margin-top: 12px;
+}
+
+.creator-backup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.creator-backup__controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.creator-backup__controls select {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.creator-backup__error {
+  color: var(--danger, #d23);
+}
+
+.creator-backup__note {
+  color: var(--text-muted);
+}
+
 .creator-content-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
