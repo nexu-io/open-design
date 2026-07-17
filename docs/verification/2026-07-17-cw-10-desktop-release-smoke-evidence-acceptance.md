@@ -210,6 +210,7 @@ git status --short             -> 干净（4 个提交已落，无未跟踪文�
 2. `test/feat: add machine-readable desktop release smoke evidence (G6-G10)` — 新增证据模块/单元测，修改 `release-smoke.ts`/`win.spec.ts`/`mac.spec.ts`/两个 release 工作流（7 文件）。
 3. `docs: verify desktop release smoke evidence` — 首版验收文档。
 4. **`fix: verify desktop release gate evidence`** — 本审核整改：P0 G7 不再接受 `null`→PASS；P1 Windows full profile 真实执行 G8/G9 失败路径 + 升级前后真实内容指纹；P2 `byteLengthOf` 改 `stat` 不整读；29 个聚焦单元测；类型检查/契约测试全绿；本验收文档去"假 PASS"表述。**无 `Co-Authored-By`**。
+5. **`fix: restart desktop before successful upgrade after G8/G9 failure paths`**（独立验收复核 2026-07-18）— P0：G8/G9 助手以坏 URL 重启桌面后，成功升级前必须再以恢复的正常 URL 重启桌面，否则运行中的桌面仍持死链/篡改 URL 导致 `inspect --update-action download` 超时失败。详见 §10。**无 `Co-Authored-By`**。
 
 ---
 
@@ -220,3 +221,26 @@ git status --short             -> 干净（4 个提交已落，无未跟踪文�
 - 仅新增/修改文档、测试与发布工作流 YAML；未改动 `package.json` / `pnpm-lock.yaml` / 依赖版本 / 既有源码逻辑 / 设计系统；**未引入 electron-updater 或另一套发布机制**。
 - **真实用户数据 / 真实运行目录 / 真实 `.od` 资产未读取、未写入、未删除**；禁用分支/工作树破坏性 git 操作。
 - 构建产物（`apps/*/dist`、`node_modules`）为 gitignored，未纳入提交。
+
+---
+
+## 10. 独立验收复核（2026-07-18）
+
+独立复核（不信任先前报告，直接看真实 diff 与运行时调用链）结论：**发现并修复 1 个 P0**，其余 G6–G10 真实 PASS/BLOCKED 条件成立。
+
+### 10.1 复核范围与调用链
+- 运行时：`tools/pack/src/win/lifecycle.ts` —— `inspectPackedWinApp` 对 `updateAction` 走 `requestJsonIpc(stamp.ipc, { type: SIDECAR_MESSAGES.UPDATE })`，确认 `inspect --update-action download/check` 是发往**已运行桌面**的真实 IPC（非独立检查）。
+- 错误码真实性：`apps/desktop/src/main/updater.ts` 真实存在 `createError("checksum-mismatch", …)`（行 1107/2782/2986）与 `createError("metadata-unreachable", …)`（行 2694）；`createError(code, …)` 以首参写入 `error.code`。
+- 环境变量时序：`applyPackagedUpdateEnv` 仅写 `process.env`（不落盘）；桌面 `resolveDesktopUpdaterConfig` 从自身 `process.env` 取值，进程启动即冻结。故改 CLI 的 `process.env` 对**已运行桌面无效**，必须重启桌面生效（即提交 `70196f822` "restart desktop before release gate checks" 的出发点）。
+
+### 10.2 P0：成功升级前缺少重启（运行时链路缺陷）
+- 现象：G8（`checksum-mismatch`）与 G9（`metadata-unreachable`）助手各自 `stop`+`start` 桌面以坏 URL 重启；随后主流程仅把正常 URL 写回 CLI 的 `process.env`，却**未重启桌面**。
+- 后果：`runPayloadUpdateAcceptance` → `waitForDownloadedUpdater` 立即轮询 `inspect --update-action download`，运行中的桌面仍持死链/篡改 URL → `metadata-unreachable` → 120s 超时抛错，整个 full profile 成功升级路径失败。
+- 修复（`e2e/specs/win.spec.ts`）：恢复 URL 后、成功升级前增加 `stop`+`start`，使桌面继承正常 URL；覆盖 `payloadFixture` 与 `updateMetadataUrl` 两种来源。
+- 测试覆盖：该路径属 Windows CI 的 e2e spec 本身（仅 win32 runner 执行）；本 sandbox 以 `tsc --noEmit` 校验类型，29 个单元测与发布工作流契约测全绿。重启时序无法在 Linux 单测复现，以 e2e spec 为覆盖。
+
+### 10.3 其余项确认
+- G7：种子写入 5 个 Creator 数据目录 + `backups/creator`；升级前后分别保存 6 个内容指纹；指纹与绝对路径/mtime/遍历序无关；未测/缺目录/内容不同 → BLOCKED/FAIL 不 PASS。✓
+- G8/G9：真实 IPC + 重启 + 观测 `error.code`，且 `ok` 同时要求错误码、原版本健康、数据指纹不变（非仅凭版本相等判 PASS）。✓
+- G10：`collectArtifactHashes` 流式 SHA-256 + `statSync` 取大小；工作流 `cleanup-artifacts.sh` 仅删 `-release-assets$`，证据与 e2e report 留存。✓
+- macOS：G7/G8/G9 诚实 BLOCKED（信号为 `undefined`）。✓

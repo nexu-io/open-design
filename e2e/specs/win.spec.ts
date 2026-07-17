@@ -542,9 +542,20 @@ winDescribe('packaged windows runtime smoke', () => {
           beforeFingerprint: beforeDataFingerprint.fingerprint,
         });
 
-        // Restore the normal fixture before exercising the successful update.
-        if (payloadFixture) {
-          applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
+        // Restore the normal update source. The G8/G9 helpers each restart the
+        // desktop with a bad metadata URL, so the still-running process holds
+        // that bad URL. Restart once more here with the restored (good) URL so
+        // the desktop inherits it before the real successful upgrade — otherwise
+        // `inspect --update-action download` would hit the dead/tampered server
+        // and the download would time out. (Runtime-chain review: the desktop
+        // reads OD_UPDATE_METADATA_URL from its own process.env at launch, not
+        // from the tools-pack CLI's env, so re-setting the CLI env alone is not
+        // enough.)
+        const restoreMetadataUrl = payloadFixture ? payloadFixture.info.metadataUrl : updateMetadataUrl;
+        if (restoreMetadataUrl != null && restoreMetadataUrl !== '') {
+          applyPackagedUpdateEnv(process.env, updateScenario, restoreMetadataUrl, { openDryRun: false });
+          await runToolsPackJson('stop');
+          await runToolsPackJson('start');
         }
         payloadUpdate = await measureSmokeStep(timings, 'payload update acceptance', async () =>
           runPayloadUpdateAcceptance({
