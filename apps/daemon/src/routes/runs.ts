@@ -37,6 +37,7 @@ import {
   getConversation,
   getProject,
   listConversations,
+  listMessages,
   normalizeConversationSessionMode,
   updateProject,
   upsertMessage,
@@ -1133,6 +1134,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // default conversation. We upsert by a deterministic id keyed to the
     // run so the client-side PUT and this server-side insert converge on
     // the same row when both fire, instead of producing two user rows.
+    //
+    // Skip if the conversation already has a user message — Studio's
+    // client-side PUT path has already persisted one with a random UUID,
+    // and inserting a second row with `user-{assistantMessageId}` would
+    // double-count the user turn and break the messageCount parity this
+    // fix was meant to restore. The zero-message case is exactly what
+    // external callers hit when they POST /api/runs with an explicit
+    // conversationId they created via PUT /api/projects/.../conversations
+    // without a user message body.
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -1140,17 +1150,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       meta.message.trim().length > 0
     ) {
       try {
-        const userMessageId =
-          typeof meta.userMessageId === 'string' && meta.userMessageId
-            ? meta.userMessageId
-            : `user-${meta.assistantMessageId ?? randomUUID()}`;
-        upsertMessage(db, meta.conversationId, {
-          id: userMessageId,
-          role: 'user',
-          content: meta.message,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
-        });
+        const existing = listMessages(db, meta.conversationId);
+        const hasUserMessage = existing.some((message) => message.role === 'user');
+        if (!hasUserMessage) {
+          const userMessageId =
+            typeof meta.userMessageId === 'string' && meta.userMessageId
+              ? meta.userMessageId
+              : `user-${meta.assistantMessageId ?? randomUUID()}`;
+          upsertMessage(db, meta.conversationId, {
+            id: userMessageId,
+            role: 'user',
+            content: meta.message,
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          });
+        }
       } catch (err) {
         console.warn('[runs] user message persistence failed', err);
       }
