@@ -238,30 +238,65 @@ describe('computeTraceObjectFiles', () => {
 
     expect(files).toEqual([]);
   });
+
+  // #5674 / PR #5685: a relative internal storage path
+  // (`.od/projects/<projectId>/...`) must strip its internal prefix and
+  // resolve to the existing root-level project file, instead of falsely
+  // reporting no touched files (which surfaced as ARTIFACT_NOT_FOUND).
   it('resolves internal .od/projects/<id>/ touched paths to the existing project file', () => {
-  const before = ['existing.html'];
+    const before = ['existing.html'];
 
-  const next = [
-    {
-      name: 'existing.html',
-      path: 'existing.html',
-      size: 10,
-      mtime: 2,
-      kind: 'html',
-      mime: 'text/html',
-    },
-  ];
+    const next = [
+      {
+        name: 'existing.html',
+        path: 'existing.html',
+        size: 10,
+        mtime: 2,
+        kind: 'html',
+        mime: 'text/html',
+      },
+    ];
 
-  const files = computeTraceObjectFiles(
-    before,
-    next as never,
-    ['.od/projects/46041b54/existing.html'],
-  );
+    const files = computeTraceObjectFiles(
+      before,
+      next as never,
+      ['.od/projects/46041b54/existing.html'],
+    );
 
-  expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
-    ['existing.html', 'modified'],
-  ]);
-});
+    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+      ['existing.html', 'modified'],
+    ]);
+  });
+
+  // PR #5685 review (PerishCode): agent `file_path` inputs are frequently
+  // absolute, and the internal storage marker can appear embedded anywhere in
+  // an absolute path (e.g. `/home/bryan/projects/open-design/.od/projects/<id>/...`),
+  // not just at the start of a project-relative path. This must resolve to
+  // the same existing project file as the relative form above.
+  it('resolves internal .od/projects/<id>/ touched paths embedded in an absolute path', () => {
+    const before = ['existing.html'];
+
+    const next = [
+      {
+        name: 'existing.html',
+        path: 'existing.html',
+        size: 10,
+        mtime: 2,
+        kind: 'html',
+        mime: 'text/html',
+      },
+    ];
+
+    const files = computeTraceObjectFiles(
+      before,
+      next as never,
+      ['/home/bryan/projects/open-design/.od/projects/46041b54/existing.html'],
+    );
+
+    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+      ['existing.html', 'modified'],
+    ]);
+  });
 
   it('ignores managed-project aliases that belong to a different project', () => {
     const before = ['existing.html'];
