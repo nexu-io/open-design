@@ -501,7 +501,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     return projects
       .filter((project) => !openProjectIds.has(project.id))
       .filter((project) => (project.name.trim() || t('common.untitled')).toLocaleLowerCase().includes(needle))
-      .slice()
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, MAX_SEARCH_RESULTS);
   }, [projects, state.tabs, query, t]);
@@ -1105,7 +1104,9 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
                       );
                     })
                   ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
+                    filteredProjects.length === 0 ? (
+                      <div className="workspace-tabs-empty">No tabs found</div>
+                    ) : null
                   )}
                 </div>
                 {filteredProjects.length > 0 ? (

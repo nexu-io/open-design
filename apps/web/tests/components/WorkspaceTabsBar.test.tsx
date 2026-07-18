@@ -1,7 +1,7 @@
 
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -243,6 +243,21 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       conversationId: null,
       fileName: null,
     });
+  });
+
+  it('excludes projects already open as tabs from the local projects group', async () => {
+    // Alpha is open as the active project tab; Beta is closed. Searching a term
+    // that matches both must list Beta under Local projects but not Alpha —
+    // Alpha already lives in the Open tabs group, so duplicating it would be noise.
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project, projectBeta]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search tabs' }));
+    const input = await screen.findByPlaceholderText('Search tabs');
+    fireEvent.change(input, { target: { value: 'Project' } });
+
+    const localGroup = await screen.findByRole('listbox', { name: 'Local projects' });
+    expect(within(localGroup).getByRole('button', { name: 'Project Beta' })).toBeTruthy();
+    expect(within(localGroup).queryByRole('button', { name: 'Project Alpha' })).toBeNull();
   });
 
   it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
