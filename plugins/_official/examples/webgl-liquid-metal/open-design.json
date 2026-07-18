@@ -24,6 +24,7 @@
     "en": "Liquid Metal"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a full-screen liquid-metal shader — molten chrome ripples with a sweeping specular highlight over an iridescent thin-film palette — rendered at 60fps as a single self-contained index.html.",
   "description_i18n": {
     "zh-CN": "构建一个全屏液态金属 shader——熔融铬面泛起涟漪，扫过的镜面高光叠加在虹彩薄膜色板之上——以 60fps 渲染，作为单个自包含的 index.html。",

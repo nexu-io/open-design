@@ -21,6 +21,10 @@ import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from
 import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
 import {
   composeSystemPrompt,
+  detectDeckIntentSignal,
+  detectMediaIntentSignal,
+  detectPlatformIntentSignal,
+  extractUserAuthoredSignalText,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
@@ -116,6 +120,9 @@ import {
   foldEventIntoRunSideEffectLedger,
   resolveRunProjectKindForAnalytics,
   retryFinalResultForRunStatus,
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
   runRetryEventsForAnalytics,
   runSideEffectsForRun,
   scanRunEventsForFinishedProps,
@@ -322,6 +329,7 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
+import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -517,6 +525,7 @@ import {
   insertRoutineRun,
   insertScheduledRoutineRun,
   insertTemplate,
+  latchConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
   listProjectsAwaitingInput,
@@ -579,6 +588,7 @@ import {
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -1296,6 +1306,7 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
+
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
@@ -2417,6 +2428,23 @@ export async function startServer({
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
 
+  // Memory hygiene: one-time removal of entries the retired chat
+  // auto-extraction pipelines wrote (regex-pack artifacts + chat-form
+  // residue in user_profile). Marker-gated inside, so this is a no-op on
+  // every boot after the first. Best-effort — memory cleanup must never
+  // block the daemon from serving.
+  try {
+    const memoryCleanup = await runAutoExtractionCleanup(RUNTIME_DATA_DIR);
+    if (memoryCleanup.ran && (memoryCleanup.deletedIds.length > 0 || memoryCleanup.profilePruned)) {
+      console.log(
+        `[memory] auto-extraction cleanup removed ${memoryCleanup.deletedIds.length} entr(y/ies)`
+        + `${memoryCleanup.profilePruned ? ' and pruned user_profile to canonical fields' : ''}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[memory] auto-extraction cleanup failed:', err);
+  }
+
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
@@ -2566,6 +2594,13 @@ export async function startServer({
     isLocalSameOrigin,
     resolvedPortRef,
   };
+  const attributionService = registerAttributionRoutes(app, {
+    analytics: analyticsService,
+    appConfig: { readAppConfig },
+    http: httpDeps,
+    paths: { RUNTIME_DATA_DIR },
+    env: process.env,
+  });
   const pathDeps = {
     PROJECT_ROOT,
     PROJECTS_DIR,
@@ -2790,7 +2825,15 @@ export async function startServer({
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
   };
-  const appConfigDeps = { readAppConfig, writeAppConfig };
+  const appConfigDeps = {
+    readAppConfig,
+    writeAppConfig,
+    onAppConfigWritten: () => {
+      void attributionService.processPending().catch((err: unknown) => {
+        console.warn('[attribution] pending claim failed', err);
+      });
+    },
+  };
   const orbitDeps = { orbitService };
   const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
   const researchDeps = { searchResearch, ResearchError };
@@ -3463,6 +3506,9 @@ export async function startServer({
     appliedPluginSnapshotId,
     mediaExecution,
     byokMediaDefaults,
+    freeformDeckSignal,
+    mediaHintSignal,
+    platformHintSignal,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -4024,6 +4070,16 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      freeformDeckSignal,
+      mediaHintSignal,
+      platformHintSignal,
+      // VALIDATION DEFAULT — feat/system-prompt integration branch only.
+      // Slim is the default here so packaged beta builds exercise the
+      // rewritten charter without env plumbing (the packaged sidecar env
+      // allowlist does not forward OD_PROMPT_CORE); OD_PROMPT_CORE=classic
+      // restores the classic stack. main keeps classic as the default —
+      // do NOT carry this flip into a PR against main.
+      promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? undefined : 'slim',
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -4498,6 +4554,35 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
+    // Intent signals gate stable-region prompt blocks, so every flip changes
+    // stableInstructionFingerprint and re-sends the whole stable block on
+    // resume. Two rules keep flips down to genuine activations only:
+    //   1. Scan user-authored text only — for transcript-resending agents
+    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      discovery form's own options, delivery summaries) must never flip
+    //      a signal the user did not express.
+    //   2. Latch detections onto the conversation (monotonic ON), so a
+    //      history trim on agent switch or a non-transcript client cannot
+    //      flip a previously seen signal back OFF.
+    // OD_INTENT_SIGNAL_MODE=legacy restores the pre-hotfix whole-text,
+    // unlatched scan.
+    const legacyIntentSignalScan = process.env.OD_INTENT_SIGNAL_MODE === 'legacy';
+    const intentSignalTexts = legacyIntentSignalScan
+      ? [message, currentPrompt]
+      : [
+          extractUserAuthoredSignalText(message),
+          extractUserAuthoredSignalText(currentPrompt),
+        ];
+    const freshIntentSignals = {
+      deck: detectDeckIntentSignal(...intentSignalTexts),
+      media: detectMediaIntentSignal(...intentSignalTexts),
+      platform: detectPlatformIntentSignal(...intentSignalTexts),
+    };
+    const intentSignals =
+      !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
+        ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
+        : freshIntentSignals;
+
     const {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
@@ -4520,6 +4605,13 @@ export async function startServer({
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+        // User-authored-only, conversation-latched detections (see the
+        // intentSignals block above): a deck mention in the user's own words
+        // anywhere in the conversation keeps the freeform maybe-deck
+        // framework injected for the conversation's whole life.
+        freeformDeckSignal: intentSignals.deck,
+        mediaHintSignal: intentSignals.media,
+        platformHintSignal: intentSignals.platform,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -4617,29 +4709,66 @@ export async function startServer({
             : null;
       return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
     };
-    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
-      if (!run?.id || !run.projectId) return;
-      const artifactBaseline = runArtifactBaselines.peek(run.id);
-      if (!artifactBaseline || artifactBaseline.contended) return;
-      let diff;
-      try {
-        diff = diffRunArtifacts(
-          artifactBaseline.before,
-          snapshotProjectArtifacts(artifactBaseline.cwd),
-        );
-      } catch {
-        return;
+    const resolveRunArtifactOutcomeBeforeFinish = () => {
+      if (!run?.id) return null;
+      if (run.artifactOutcome) return run.artifactOutcome;
+
+      const artifactBaseline = runArtifactBaselines.take(run.id);
+      const fallbackOutcome = () => ({
+        artifactCount: runArtifactCountForRun(run),
+        designSystemCreated: runDesignSystemCreatedForRun(run),
+        previewModuleCount: runPreviewModuleCountForRun(run),
+      });
+      let outcome;
+      if (!artifactBaseline || artifactBaseline.contended) {
+        outcome = fallbackOutcome();
+      } else {
+        try {
+          const diff = diffRunArtifacts(
+            artifactBaseline.before,
+            snapshotProjectArtifacts(artifactBaseline.cwd),
+          );
+          outcome = {
+            artifactCount: diff.touched,
+            artifactsCreated: diff.created,
+            artifactsModified: diff.modified,
+            designSystemCreated: diff.designSystemCreated,
+            previewModuleCount: diff.previewModuleCount,
+            projectRoot: artifactBaseline.cwd,
+            diff,
+          };
+        } catch {
+          outcome = fallbackOutcome();
+        }
       }
+      run.artifactCount = outcome.artifactCount;
+      run.artifactOutcome = outcome;
+      return outcome;
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const outcome = resolveRunArtifactOutcomeBeforeFinish();
+      if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
       await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
-        projectRoot: artifactBaseline.cwd,
-        diff,
+        projectRoot: outcome.projectRoot,
+        diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
         metadata: projectRecord?.metadata,
       });
+    };
+    // Chain onto the run service's terminal chokepoint so startup rejection,
+    // direct cancellation, shutdown, and every explicit finish path all consume
+    // their filesystem baseline before the terminal SSE frame is published.
+    const previousOnFinalize = run.onFinalize;
+    run.onFinalize = () => {
+      try {
+        previousOnFinalize?.();
+      } finally {
+        resolveRunArtifactOutcomeBeforeFinish();
+      }
     };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
@@ -5218,6 +5347,20 @@ export async function startServer({
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
       lifecycle.mark('finalize_start');
+      // Persist the transport-level close mechanism before classifying this
+      // attempt. Runtime fatal/stream signals are only known in the close
+      // handler, and the retry classifier reads this diagnostic to distinguish
+      // them from a generic process exit. Clear the pending value immediately
+      // so a scheduled retry cannot inherit the previous attempt's reason.
+      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
+      design.runs.emit(run, 'diagnostic', {
+        type: 'runtime_close',
+        rpc_close_reason: rpcCloseReason,
+        status,
+        ...(typeof code === 'number' ? { exit_code: code } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      pendingRpcCloseReason = null;
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -5333,14 +5476,6 @@ export async function startServer({
         publishNativeSessionRecoveryMetadata();
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
-      const rpcCloseReason = deriveRpcCloseReason(status, code, signal);
-      design.runs.emit(run, 'diagnostic', {
-        type: 'runtime_close',
-        rpc_close_reason: rpcCloseReason,
-        status,
-        ...(typeof code === 'number' ? { exit_code: code } : {}),
-        ...(signal ? { signal } : {}),
-      });
       if (executionProfile === 'filesystem' && result === 'success' && visibleAssistantText.trim().length === 0) {
         const fileNames = filesystemWriteFileNamesFromRunEvents(run.events);
         if (fileNames.length > 0) {
@@ -5357,7 +5492,6 @@ export async function startServer({
           });
         }
       }
-      pendingRpcCloseReason = null;
       design.runs.finish(run, status, code, signal);
       return false;
     };
@@ -5825,6 +5959,12 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
+        if (!getConversation(db, run.conversationId)) {
+          console.warn(
+            '[sessions] skipped delivered session persistence because the conversation is not persisted',
+          );
+          return;
+        }
         // The id to persist for a create turn: capture-style adapters store the
         // session id the CLI minted and reported on the stream; specify-style
         // adapters store the daemon-minted id they passed to the CLI. A
@@ -6360,10 +6500,38 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      //
+      // Also normalize the BYOK provider shape: web side sends
+      // `{ protocol, ... }` via the chat body as `byokProvider`,
+      // but memory-llm.pickProvider expects `{ provider, ... }`
+      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
+      // same mapping the web pre-turn path does (ProjectView.tsx
+      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      const memoryChatProvider: {
+        provider?: string;
+        apiKey?: string;
+        baseUrl?: string;
+        apiVersion?: string;
+        model?: string;
+        requiresApiKey?: boolean;
+      } | null = byokProvider
+        ? {
+            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
+            apiKey: (byokProvider as { apiKey?: string }).apiKey,
+            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
+            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+            model: (byokProvider as { model?: string }).model,
+            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+          }
+        : null;
       const memoryOptions = {
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Forward the per-call BYOK provider snapshot so pickProvider()
+        // can run "Same as chat" extraction against the user's actual
+        // provider/endpoint/model instead of falling back to defaults.
+        chatProvider: memoryChatProvider,
         // Scope the extractor's duplicate-turn de-dup to this conversation, so a
         // re-fired turn collapses but an identical (message, reply) in another
         // conversation is still examined.
@@ -6864,7 +7032,6 @@ export async function startServer({
         }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
           details: ev.raw ? { raw: ev.raw } : undefined,
-          retryable: false,
         }));
         return;
       }
@@ -7766,7 +7933,11 @@ export async function startServer({
           design.runs.finish(run, 'failed', 1, signal);
           return;
         }
-        persistDeliveredAgentSessionState();
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
+        }
       }
       finishWithRetryDecision(status, code, signal);
       } finally {

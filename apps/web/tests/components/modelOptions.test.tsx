@@ -197,4 +197,47 @@ describe('SearchableModelSelect', () => {
     );
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('keeps upgrade affordances outside the truncating model label', async () => {
+    const longModelLabel = 'gemini-3-flash-preview-with-an-extra-long-provider-suffix';
+
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', default: true },
+          {
+            id: 'google/gemini-3-flash-preview',
+            label: longModelLabel,
+            enabled: false,
+            metadata: { capability: 'standard' },
+          },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        disabledOptionHint={(option) =>
+          option.enabled === false ? 'Upgrade to use' : null
+        }
+        onDisabledOptionUpgrade={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const disabledOption = await screen.findByRole('option', {
+      name: longModelLabel,
+    });
+    const label = disabledOption.querySelector('.model-select-searchable__option-label');
+    const affordances = disabledOption.querySelector(
+      '.model-select-searchable__option-affordances',
+    );
+    const lock = screen.getByTestId('model-option-upgrade-lock');
+    const badge = disabledOption.querySelector('.model-select-searchable__option-badge');
+
+    expect(label?.textContent).toBe(longModelLabel);
+    expect(label?.contains(lock)).toBe(false);
+    expect(affordances?.contains(lock)).toBe(true);
+    expect(affordances?.contains(badge)).toBe(true);
+    expect(disabledOption).toHaveAccessibleName(longModelLabel);
+  });
 });

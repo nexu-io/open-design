@@ -48,6 +48,7 @@ describe('message event persistence', () => {
       content: '',
       runId: 'agent-run-1',
       runStatus: 'running',
+      resultDeliveryState: 'delivery_failed',
       events: [{ kind: 'status', label: 'starting', detail: 'Codex' }],
       startedAt: now,
     });
@@ -69,6 +70,7 @@ describe('message event persistence', () => {
         detail: 'Agent stalled without emitting any new output for 1s.',
       },
     ]);
+    expect(listMessages(db, 'conv-1')[0]?.resultDeliveryState).toBe('delivery_failed');
   });
 
   it('persists explicit message createdAt values on insert', () => {

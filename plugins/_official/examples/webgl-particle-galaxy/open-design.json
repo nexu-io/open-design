@@ -24,6 +24,7 @@
     "en": "Particle Galaxy"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a swirling particle galaxy — tens of thousands of additive-blended GPU points spiraling around a bright core, their orbits solved in the vertex shader — rendered live at 60fps as a single self-contained index.html.",
   "description_i18n": {
     "zh-CN": "构建一个旋转的粒子星系——数万个加法混合的 GPU 点围绕明亮的核心螺旋盘旋，轨道在顶点 shader 中求解——以 60fps 实时渲染，作为单个自包含的 index.html。",

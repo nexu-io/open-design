@@ -19,10 +19,28 @@ describe('apiProtocols table consistency', () => {
       (provider) => provider.protocol === 'ollama' && provider.baseUrl === 'https://ollama.com',
     );
 
-    expect(ollamaCloudProvider?.models).toBeDefined();
+    expect(ollamaCloudProvider?.preferredModels).toBeDefined();
     for (const model of recentCloudModels) {
       expect(SUGGESTED_MODELS_BY_PROTOCOL.ollama).toContain(model);
-      expect(ollamaCloudProvider?.models).toContain(model);
+      expect(ollamaCloudProvider?.preferredModels).toContain(model);
     }
+  });
+
+  it('keeps the Atlas Cloud preset wired to OpenAI-compatible chat models', () => {
+    const atlasCloudProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.atlascloud.ai/v1',
+    );
+
+    expect(atlasCloudProvider).toMatchObject({
+      label: 'Atlas Cloud',
+      apiKeyConsoleLink: {
+        host: 'atlascloud.ai',
+        url: 'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
+      },
+    });
+    expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
+    expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
 });

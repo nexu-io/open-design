@@ -588,8 +588,8 @@ export function InlineModelSwitcher({
     () =>
       Array.from(
         new Set(
-          providerForProtocol?.models?.length
-            ? providerForProtocol.models
+          providerForProtocol?.preferredModels.length
+            ? providerForProtocol.preferredModels
             : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
         ),
       ),

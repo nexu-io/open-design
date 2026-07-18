@@ -15,7 +15,12 @@ import {
   resolveSucceededRunStatus,
   selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
+  shouldReplayTerminalRunMessage,
 } from '../../src/components/ProjectView';
+import {
+  BRAND_BROWSER_TAB_ID,
+  registerBrandBrowser,
+} from '../../src/runtime/brand-browser-bridge';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -40,7 +45,9 @@ const patchProject = vi.fn();
 const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const fetchProjectFileText = vi.fn();
 const cancelBrandExtraction = vi.fn();
+const continueBrandExtraction = vi.fn();
 const originalFetch = globalThis.fetch;
 
 const replayArtifact: Artifact = {
@@ -135,6 +142,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectDesignSystemPackageAudit: (...args: unknown[]) => fetchProjectDesignSystemPackageAudit(...args),
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
+  fetchProjectFileText: (...args: unknown[]) => fetchProjectFileText(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
   upsertPreviewComment: vi.fn(),
@@ -150,6 +158,7 @@ vi.mock('../../src/runtime/brands', async () => {
   return {
     ...actual,
     cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+    continueBrandExtraction: (...args: unknown[]) => continueBrandExtraction(...args),
   };
 });
 
@@ -219,6 +228,7 @@ async function waitForReadyChatPaneProps() {
       reason?: string;
       url?: string;
     }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
+    onContinueBrandExtraction?: () => void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
     initialDraft?: string;
   };
@@ -427,11 +437,13 @@ describe('retry target resolution', () => {
     });
   });
 
-  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
+  it('keeps earlier delivery-failure retry attempts visible while reusing the original user turn', () => {
     const firstFailure: ChatMessage = {
       ...failedAssistant,
       id: 'assistant-1',
       content: 'First attempt produced partial output',
+      runStatus: 'succeeded',
+      resultDeliveryState: 'no_result',
       events: [{ kind: 'text', text: 'thinking before failure' }],
       producedFiles: [
         {
@@ -447,6 +459,8 @@ describe('retry target resolution', () => {
       ...failedAssistant,
       id: 'assistant-2',
       content: 'Retry failed too',
+      runStatus: 'succeeded',
+      resultDeliveryState: 'delivery_failed',
     };
 
     expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
@@ -557,6 +571,31 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus(undefined)).toBe('succeeded');
     expect(resolveSucceededRunStatus('failed')).toBe('failed');
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
+  });
+
+  it('replays an unverified terminal Design-mode result after reload', () => {
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-unverified-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-unverified-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-chat-answer',
+        role: 'assistant',
+        content: 'Here is the answer.',
+        runId: 'run-chat-answer',
+        runStatus: 'succeeded',
+        sessionMode: 'chat',
+        startedAt: 1,
+      }),
+    ).toBe(false);
   });
 
   // Regression: a phantom 'running' row in DB (no runId, no matching active
@@ -944,7 +983,7 @@ describe('ProjectView daemon cleanup', () => {
     expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
   });
 
-  it('anchors the brand browser-assist download guide between the transcript and composer', async () => {
+  it('opens browser assist without adding a global download-guide toast', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
@@ -1018,14 +1057,97 @@ describe('ProjectView daemon cleanup', () => {
       });
     });
 
-    const toast = await waitFor(() => {
-      const node = document.querySelector('.od-toast');
-      expect(node?.textContent).toContain('chat.brandBrowserAssistDownloadGuideTitle');
-      return node as HTMLElement;
+    expect(document.querySelector('.project-actions-toast-anchor .od-toast')).toBeNull();
+  });
+
+  it('anchors continue-extraction snapshot errors in the chat pane', async () => {
+    // Continue extraction snapshot failures should stay between the transcript
+    // and the composer, without resurrecting the long download-guide details
+    // that now live beside the Browser download action.
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+    // No saved page archive on disk…
+    fetchProjectFileText.mockResolvedValue(null);
+    // …and the daemon cannot finish programmatically either.
+    continueBrandExtraction.mockResolvedValue({ ok: false, error: 'still walled' });
+
+    // A mounted desktop Browser tab whose live DOM and page-snapshot download
+    // both fail, so the flow lands on a contained snapshot error toast.
+    registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, {
+      executeJavaScript: () => null,
+      downloadPageSnapshot: async () => ({ ok: false, message: 'snapshot save failed' }),
+      getURL: () => 'https://refly.ai/',
+      isDesktopWebview: true,
     });
-    expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
-    expect(toast.closest('.split-chat-slot')).toBeTruthy();
-    expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
+
+    chatPaneSpy.mockClear();
+    fileWorkspaceSpy.mockClear();
+
+    try {
+      render(
+        <ProjectView
+          project={{
+            id: 'brand-project',
+            name: 'Refly Design System',
+            skillId: null,
+            designSystemId: null,
+            metadata: {
+              kind: 'brand',
+              importedFrom: 'brand-extraction',
+              brandId: 'refly-ai',
+              brandSourceUrl: 'https://refly.ai/',
+            },
+            createdAt: 1,
+            updatedAt: 1,
+          } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      const chatProps = await waitForReadyChatPaneProps();
+      expect(chatProps.onContinueBrandExtraction).toBeTypeOf('function');
+
+      await act(async () => {
+        chatProps.onContinueBrandExtraction?.();
+      });
+
+      const toast = await waitFor(() => {
+        const node = document.querySelector('.od-toast');
+        expect(node?.textContent).toContain('snapshot save failed');
+        return node as HTMLElement;
+      });
+      expect(toast.textContent).not.toContain('chat.brandBrowserAssistDownloadGuideDetails');
+      expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
+      expect(toast.closest('.split-chat-slot')).toBeTruthy();
+      expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
+    } finally {
+      registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, null);
+    }
   });
 
   it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {

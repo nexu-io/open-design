@@ -1,39 +1,27 @@
 ---
 /*
- * /plugins/ — top-level plugin library hub.
+ * /plugins/ — Agent design plugin library hub.
  *
- * Replaces the prior `/skills/`, `/templates/`, `/systems/`, `/craft/`
- * top-level entries with a single library that mirrors how the in-app
- * Plugins home is organised: artifact-producing entries under
- * Templates, instruction-only skills under Skills, brand systems under
- * Systems, craft principles under Craft. Visitors who land here can
- * mentally map the catalogue to what they will see when they open
- * Open Design itself.
- *
- * Anyone who already knows the slug they want skips the hub entirely
- * via `/skills/<slug>/`, `/templates/<slug>/` etc. Detail-page URLs
- * stay where they are; the hub is purely a discovery surface.
+ * A content-first library surface: a centered hero with quick stats and
+ * download / GitHub-star CTAs, on-brand category covers, and a dense
+ * "explore all resources" grid of real plugins so the page reads as a
+ * full, browsable library at a glance. Detail-page URLs stay where they
+ * are; the hub is purely a discovery surface.
  */
 import Layout from '../../_components/sub-page-layout.astro';
 import PluginContribute from '../../_components/plugin-contribute.astro';
+import TemplateCard from '../../_components/template-card.astro';
 import { getCraftRecords, getSystemRecords } from '../../_lib/catalog';
-import { getBundledPlugins } from '../../_lib/bundled-plugins';
-import { categorizePlugin, bundledRecordOf } from '../../_lib/plugin-facets';
+import { getBundledPlugins, type BundledPluginRecord } from '../../_lib/bundled-plugins';
+import { categorizePlugin, bundledRecordOf, type PluginCategorySlug } from '../../_lib/plugin-facets';
 import { getPluginsCopy } from '../../_lib/plugins-i18n';
 import { localeFromPath, localizedHref } from '../../i18n';
 
+const REPO_URL = 'https://github.com/nexu-io/open-design';
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
 const pcopy = getPluginsCopy(locale);
 
-// Counts come from two sources because the underlying catalog pages
-// each use whichever shape carries the data they render. Templates +
-// Skills read `plugins/_official/` (the daemon's bundled-plugin
-// registry, which is what the in-app Plugins home shows). Systems
-// reads the legacy SystemRecord set so its detail rendering can keep
-// using palette swatches from DESIGN.md — the bundled-plugin manifest
-// doesn't carry palette data. The two design-systems data sources
-// overlap 1:1 so the count stays consistent.
 const [bundled, systems, craft] = await Promise.all([
   Promise.resolve(getBundledPlugins()),
   getSystemRecords(locale),
@@ -41,18 +29,46 @@ const [bundled, systems, craft] = await Promise.all([
 ]);
 
 const nonSystems = bundled.filter((p) => p.bucket !== 'design-systems');
-const templatesSet = nonSystems.filter(
-  (p) => categorizePlugin(bundledRecordOf(p)) !== null,
-);
-const skillsSet = nonSystems.filter(
-  (p) => categorizePlugin(bundledRecordOf(p)) === null,
-);
+const templatesSet = nonSystems.filter((p) => categorizePlugin(bundledRecordOf(p)) !== null);
+const skillsSet = nonSystems.filter((p) => categorizePlugin(bundledRecordOf(p)) === null);
 
 const templatesCount = templatesSet.length;
 const skillsCount = skillsSet.length;
 const systemsCount = systems.length;
 const craftCount = craft.length;
 const totalCount = templatesCount + skillsCount + systemsCount + craftCount;
+
+// Explore grid — real template cards (rich preview posters), featured first.
+const isFeatured = (p: BundledPluginRecord) => (p.tags ?? []).includes('featured');
+// Only surface HTML-based templates with a real cover — hide media
+// generators (image / video / audio) and any card without a preview.
+const MEDIA_CATEGORIES = new Set<PluginCategorySlug>(['image', 'video', 'audio']);
+// Curated, non-overlapping filter tags (allowlist beats a blocklist here —
+// the raw tag set is noisy and full of near-dupes like deck/slides/ppt).
+const TAG_ALLOWLIST = ['web', 'deck', 'marketing', 'prototype', 'desktop', 'brand', 'editorial', 'motion'];
+const cleanTagsOf = (rec: BundledPluginRecord) =>
+  (rec.tags ?? []).filter((t) => TAG_ALLOWLIST.includes(t));
+const hasPreview = (p: BundledPluginRecord) => Boolean(p.previewPoster || p.previewVideo);
+// Low-quality entries pulled from the hub's explore grid (by manifest id).
+const EXCLUDE_IDS = new Set(['example-data-report']);
+
+const exploreItems = [...templatesSet]
+  .filter((p) => !EXCLUDE_IDS.has(p.manifestId))
+  .filter(hasPreview)
+  .map((rec) => ({ rec, category: categorizePlugin(bundledRecordOf(rec)), tags: cleanTagsOf(rec) }))
+  .filter((it) => it.category !== null && !MEDIA_CATEGORIES.has(it.category))
+  .sort((a, b) => Number(isFeatured(b.rec)) - Number(isFeatured(a.rec)))
+  .slice(0, 24)
+  .map((it, idx) => ({ rec: it.rec, idx, tags: it.tags }));
+
+// Filter chips = the most-common real content tags across the visible
+// cards (clean, junk tags dropped), so a click filters the grid in place.
+const tagCounts = new Map<string, number>();
+for (const it of exploreItems) for (const t of it.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+const titleize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1).replace(/-/g, ' ');
+const topTags = TAG_ALLOWLIST
+  .filter((tag) => (tagCounts.get(tag) ?? 0) > 0)
+  .map((tag) => ({ tag, label: pcopy.tagLabels[tag] ?? titleize(tag), count: tagCounts.get(tag) ?? 0 }));
 
 const title = pcopy.hubMetaTitle(totalCount);
 const description = pcopy.hubMetaDescription;
@@ -72,38 +88,99 @@ const jsonLd = {
 };
 
 const tiles = [
-  { href: href('/plugins/templates/'), title: pcopy.tileTemplates, count: templatesCount, blurb: pcopy.tileTemplatesBlurb, cta: pcopy.browseTemplates },
-  { href: href('/plugins/skills/'),    title: pcopy.tileSkills,    count: skillsCount,    blurb: pcopy.tileSkillsBlurb,    cta: pcopy.browseSkills },
-  { href: href('/plugins/systems/'),   title: pcopy.tileSystems,   count: systemsCount,   blurb: pcopy.tileSystemsBlurb,   cta: pcopy.browseSystems },
+  { href: href('/plugins/templates/'), title: pcopy.tileTemplates, count: templatesCount, blurb: pcopy.tileTemplatesBlurb, cta: pcopy.browseTemplates, cover: '/plugins/covers/templates.webp' },
+  { href: href('/plugins/skills/'),    title: pcopy.tileSkills,    count: skillsCount,    blurb: pcopy.tileSkillsBlurb,    cta: pcopy.browseSkills,    cover: '/plugins/covers/skills.webp' },
+  { href: href('/plugins/systems/'),   title: pcopy.tileSystems,   count: systemsCount,   blurb: pcopy.tileSystemsBlurb,   cta: pcopy.browseSystems,   cover: '/plugins/covers/systems.webp' },
 ];
+
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  {/* Bare heading — the kicker label + top rule were removed from this
-      module per design; `catalog-head-bare` drops the border/padding. */}
-  <header class="catalog-head catalog-head-bare">
+  <header class="catalog-head catalog-head-bare plugins-hero">
+    <p class="plugins-eyebrow">{pcopy.hubEyebrow}</p>
     <h1 class="display">
       {pcopy.hubHeading(totalCount)}<span class="dot">.</span>
     </h1>
     <p class="lead">{pcopy.hubLead}</p>
+    <ul class="plugins-stats">
+      <li><strong>{totalCount}+</strong> {pcopy.hubUnitPlugins}</li>
+      <li class="plugins-stat-link"><a href={href('/agents/')}>{pcopy.hubStatAgents} →</a></li>
+    </ul>
+    <div class="plugins-hero-cta">
+      <a class="btn btn-primary" href={href('/download/')}>{pcopy.hubCtaDownload}</a>
+      <a class="btn btn-ghost plugins-star-btn" href={REPO_URL} target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 .6l2.02 4.28 4.6.6-3.37 3.18.88 4.68L8 11.5 3.87 13.7l.88-4.68L1.38 5.85l4.6-.6z"/></svg>
+        GitHub<span class="plugins-star-count" data-github-stars>76K</span>
+      </a>
+    </div>
   </header>
 
-  <PluginContribute />
-
+  {/* Browse by category — each collection leads with an on-brand cover. */}
   <section class="plugins-tile-grid" aria-label={pcopy.hubLabel}>
     {tiles.map((tile) => (
-      <a class="plugins-tile" href={tile.href}>
-        <div class="plugins-tile-head">
-          <h2 class="plugins-tile-title">{tile.title}</h2>
-          <span class="plugins-tile-count">{tile.count}</span>
+      <a class="plugins-tile plugins-tile-covered" href={tile.href}>
+        <img class="plugins-tile-cover" src={tile.cover} alt="" width="720" height="405" loading="lazy" decoding="async" />
+        <div class="plugins-tile-body">
+          <div class="plugins-tile-head">
+            <h2 class="plugins-tile-title">{tile.title}</h2>
+            <span class="plugins-tile-count">{tile.count}</span>
+          </div>
+          <p class="plugins-tile-blurb">{tile.blurb}</p>
+          <span class="plugins-tile-cta">{tile.cta} →</span>
         </div>
-        <p class="plugins-tile-blurb">{tile.blurb}</p>
-        <span class="plugins-tile-cta">{tile.cta} →</span>
       </a>
     ))}
   </section>
+
+  {/* Explore all resources — dense grid of real plugins with filter chips. */}
+  <section class="plugins-explore" aria-label={pcopy.hubExploreTitle}>
+    <div class="plugins-sec-head">
+      <h2 class="plugins-sec-title">{pcopy.hubExploreTitle}</h2>
+      <a class="plugins-sec-more" href={href('/plugins/templates/')}>{pcopy.hubViewAll} →</a>
+    </div>
+    <div class="explore-tags" data-explore-tags>
+      <button class="explore-tag is-active" data-tag-chip="" type="button">
+        {pcopy.hubFilterAll}<span class="chip-num">{exploreItems.length}</span>
+      </button>
+      {topTags.map((t) => (
+        <button class="explore-tag" data-tag-chip={t.tag} type="button">
+          {t.label}<span class="chip-num">{t.count}</span>
+        </button>
+      ))}
+    </div>
+    <div class="explore-grid" data-explore-grid>
+      {exploreItems.map(({ rec, idx, tags }) => (
+        <div class="explore-cell" data-tags={tags.join(' ')}>
+          <TemplateCard record={rec} index={idx} featured={isFeatured(rec)} />
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <script is:inline>
+    (function () {
+      var bar = document.querySelector('[data-explore-tags]');
+      var grid = document.querySelector('[data-explore-grid]');
+      if (!bar || !grid) return;
+      var chips = bar.querySelectorAll('.explore-tag');
+      var cells = grid.querySelectorAll('.explore-cell');
+      bar.addEventListener('click', function (e) {
+        var chip = e.target.closest('.explore-tag');
+        if (!chip) return;
+        var tag = chip.getAttribute('data-tag-chip') || '';
+        chips.forEach(function (c) { c.classList.toggle('is-active', c === chip); });
+        cells.forEach(function (cell) {
+          var tags = (cell.getAttribute('data-tags') || '').split(' ');
+          cell.hidden = tag !== '' && tags.indexOf(tag) === -1;
+        });
+      });
+    })();
+  </script>
+
+
+  {/* Contribute entry — de-emphasized, at the bottom. */}
+  <PluginContribute compact />
 </Layout>
 
-{/* `.plugins-tile-grid` styles live in `app/sub-pages.css` so the
-    catch-all `[locale]/[...path].astro` can reuse them when rendering
-    the localized hub. */}
+{/* Hub styles live in `app/sub-pages.css` so the catch-all
+    `[locale]/[...path].astro` can reuse them for the localized hub. */}

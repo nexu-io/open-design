@@ -116,7 +116,7 @@ Everything below is *derived* — no token here was hand-authored.
 
 | Path | What it is |
 | --- | --- |
-| \`seed.json\` | The ~20-field SeedToken — the only authored surface. |
+| \`seed.json\` | Generated snapshot of the effective seed; persistent overrides live in \`brand.json.seed\`. |
 | \`tokens.default.json\` | Full derived DesignTokens (light). |
 | \`tokens.dark.json\` | Same seed, dark algorithm. |
 | \`tokens.compact.json\` | Same seed, compact (dense) algorithm. |
@@ -135,10 +135,12 @@ Everything below is *derived* — no token here was hand-authored.
 
 ## How to re-theme
 
-The whole system traces back to \`seed.json\`. To re-brand, change one field and
-re-run the engine — every downstream token, component and artifact follows.
+The whole system is regenerated from \`brand.json\` and optional
+\`brand.json.seed\` overrides. Persist authored overrides there, then run
+\`od brand finalize <brand-id>\` — every downstream token, component and artifact
+follows. Do not edit \`system/seed.json\` directly; finalize replaces it.
 
-- **Change the brand color:** edit \`colorPrimary\` in the seed (e.g. \`"#1677ff"\`).
+- **Change the brand color:** edit the accent role or \`seed.colorPrimary\` in \`brand.json\`.
   The 10-step palette, all interaction states, the primary background/border and
   every component that references \`var(--brand-color-primary)\` update together.
 - **Light → dark:** the dark theme is the same seed run through the \`"dark"\`

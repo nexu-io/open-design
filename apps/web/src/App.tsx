@@ -32,6 +32,8 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
+import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
 import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
@@ -58,9 +60,11 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  openExternalUrl,
   uploadProjectFiles,
   replaceProjectWorkingDir,
 } from './providers/registry';
+import { openFirstPartyExternalLinkFromClick } from './first-party-external-link';
 import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
@@ -85,8 +89,13 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
+import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
 import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
+import {
+  amrArtifactUpgradeHomeMockOffer,
+  type AmrArtifactUpgradeHomeOffer,
+} from './runtime/amr-artifact-upgrade';
 import {
   createDesignSystemProjectFromProject,
   createProject,
@@ -381,6 +390,15 @@ function AppInner() {
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   useModalWindowDragGuard();
+  useEffect(() => {
+    const onFirstPartyExternalLink = (event: MouseEvent) => openFirstPartyExternalLinkFromClick(
+      event,
+      (url) => { void openExternalUrl(url); },
+    );
+    // React handlers append AMR attribution while the event bubbles; bridge the final URL afterwards.
+    document.addEventListener('click', onFirstPartyExternalLink);
+    return () => document.removeEventListener('click', onFirstPartyExternalLink);
+  }, []);
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
@@ -401,6 +419,14 @@ function AppInner() {
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
+    () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
+      ? amrArtifactUpgradeHomeMockOffer(window.location.search)
+      : null,
+  );
+  const amrArtifactUpgradeHomeMock = amrArtifactUpgradeHomeMockConfig !== null;
+  const [amrArtifactUpgradeHomeOffer, setAmrArtifactUpgradeHomeOffer] =
+    useState<AmrArtifactUpgradeHomeOffer | null>(() => amrArtifactUpgradeHomeMockConfig);
   // Surfaced when a Home-picked working dir could not be applied to a freshly
   // created project (expired/invalid desktop token, daemon rejection). Without
   // this the failure was swallowed and the user believed their folder was in
@@ -476,6 +502,10 @@ function AppInner() {
   // so they don't race ahead of the daemon-stored choice and overwrite it
   // with a freshly picked first-available agent.
   const [daemonConfigLoaded, setDaemonConfigLoaded] = useState(false);
+  // True only when GET /api/app-config returned a real config object. Used to
+  // gate silent-update default seeding: a failed/null fetch must not be treated
+  // as "no preference yet" or we would overwrite a daemon-backed opt-out.
+  const [daemonAppConfigReady, setDaemonAppConfigReady] = useState(false);
   // Narrower flag dedicated to the Composio API key hydration. The key is
   // persisted by the daemon (and only reflected back via apiKeyConfigured
   // + apiKeyTail), so after a dev-server restart there is a window where
@@ -628,6 +658,10 @@ function AppInner() {
   // globals effect below reads it; the sync effects live next to the
   // other AMR plumbing further down.
   const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+  const resolvedAmrPlan =
+    amrLoginStatus?.account?.plan?.trim()
+    || amrLoginStatus?.user?.plan?.trim()
+    || null;
   // Child surfaces report status snapshots, not login events. Deduplicate the
   // signed-in transition here: restarting the model poll for every Settings
   // snapshot updates `agents`, which makes Settings fetch status again and
@@ -853,6 +887,7 @@ function AppInner() {
         setProjectsLoading(false);
         setPromptTemplatesLoading(false);
         setDaemonConfigLoaded(true);
+        setDaemonAppConfigReady(false);
         // Composio hydration also depends on the daemon. With no daemon
         // we just keep whatever localStorage already held; drop the
         // skeleton so the Settings → Connectors input reflects state.
@@ -1025,10 +1060,12 @@ function AppInner() {
           navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
         }
         setDaemonConfigLoaded(true);
+        // Only a non-null GET payload means we actually observed daemon prefs.
+        setDaemonAppConfigReady(daemonConfig != null);
         // Composio key hydration is part of this same daemon-config
         // fetch — by the time we land here the daemon has either
         // returned the saved-key shape (apiKeyConfigured + tail) or
-        // it errored and we kept whatever localStorage held. Either
+        // it errored and we kept whatever localStorage already held. Either
         // way it is safe to drop the skeleton.
         setComposioConfigLoading(false);
       });
@@ -1178,6 +1215,35 @@ function AppInner() {
   }, []);
 
   /**
+   * Non-optimistic, serialized write for the daemon-owned silent-update
+   * preference. Concurrent Settings / popup toggles cannot commit out of
+   * order: only the latest request applies to app state after its daemon
+   * write succeeds.
+   */
+  const silentUpdatePreferenceWriterRef = useRef(
+    createSilentUpdatePreferenceWriter<AppConfig>({
+      readBase: () => latestPersistedConfigRef.current,
+      writeDaemon: async (next) => {
+        await syncConfigToDaemon(next, { throwOnError: true });
+      },
+      commit: (allowSilentUpdates) => {
+        const next: AppConfig = {
+          ...latestPersistedConfigRef.current,
+          allowSilentUpdates,
+        };
+        latestPersistedConfigRef.current = next;
+        setConfig((prev) => ({ ...prev, allowSilentUpdates }));
+        // saveConfig strips daemon-owned keys from localStorage; in-memory
+        // config still carries allowSilentUpdates for the rest of the session.
+        saveConfig(next);
+      },
+    }),
+  );
+  const handleSilentUpdatePreferenceChange = useCallback(async (allowSilentUpdates: boolean) => {
+    await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
+  }, []);
+
+  /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
    * the daemon stay in lock-step with the user's draft. We deliberately
@@ -1194,7 +1260,16 @@ function AppInner() {
     // a half-typed key can't survive in localStorage. If the dialog is
     // closing, preserve any onboarding completion that the close gesture
     // already committed so an unmount autosave cannot re-open the welcome flow.
-    const persisted = buildPersistedConfig(next, configRef.current);
+    //
+    // allowSilentUpdates is daemon-owned and must not be applied optimistically:
+    // keep the previous value in memory until the daemon write succeeds.
+    const prevSilent = latestPersistedConfigRef.current.allowSilentUpdates;
+    const nextSilent = next.allowSilentUpdates;
+    const silentChanged = nextSilent !== prevSilent;
+    const nextForOptimistic = silentChanged
+      ? { ...next, allowSilentUpdates: prevSilent }
+      : next;
+    const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
@@ -1203,6 +1278,9 @@ function AppInner() {
       && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
         force: options?.forceMediaProviderSync,
       });
+    const daemonPayload = silentChanged
+      ? { ...persisted, allowSilentUpdates: nextSilent }
+      : persisted;
     await Promise.all([
       shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
@@ -1211,8 +1289,15 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(persisted, { throwOnError: true }),
+      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
     ]);
+    if (silentChanged) {
+      latestPersistedConfigRef.current = {
+        ...latestPersistedConfigRef.current,
+        allowSilentUpdates: nextSilent,
+      };
+      setConfig((curr) => ({ ...curr, allowSilentUpdates: nextSilent }));
+    }
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
   const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
@@ -2435,6 +2520,8 @@ function AppInner() {
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
         onConfigPersist={handleConfigPersist}
+        daemonAppConfigReady={daemonAppConfigReady}
+        onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
         onSkillsRefresh={refreshSkills}
         onSkillsChanged={handleSkillsChanged}
         onRefreshAgents={refreshAgents}
@@ -2464,6 +2551,39 @@ function AppInner() {
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
+        artifactUpgradeSlot={
+          amrArtifactUpgradeHomeOffer ? (
+            <AmrArtifactUpgradeHomeCard
+              key={amrArtifactUpgradeHomeOffer.sessionKey}
+              profile={amrLoginStatus?.profile ?? null}
+              metricsConsent={config.telemetry?.metrics === true}
+              installationId={config.installationId}
+              onViewArtifact={() => {
+                if (
+                  !amrArtifactUpgradeHomeOffer.projectId
+                  || !amrArtifactUpgradeHomeOffer.conversationId
+                ) {
+                  navigate({ kind: 'home', view: 'projects' });
+                  return;
+                }
+                navigate({
+                  kind: 'project',
+                  projectId: amrArtifactUpgradeHomeOffer.projectId,
+                  conversationId: amrArtifactUpgradeHomeOffer.conversationId,
+                  fileName: amrArtifactUpgradeHomeOffer.fileName,
+                });
+              }}
+              onDismiss={() => {
+                if (amrArtifactUpgradeHomeMock) return;
+                setAmrArtifactUpgradeHomeOffer((current) =>
+                  current?.sessionKey === amrArtifactUpgradeHomeOffer.sessionKey
+                    ? null
+                    : current,
+                );
+              }}
+            />
+          ) : undefined
+        }
       />
     );
   }
@@ -2490,6 +2610,27 @@ function AppInner() {
         />
       )}
       <TooltipLayer />
+      <AmrArtifactUpgradeGate
+        homeVisible={route.kind === 'home' && route.view === 'home'}
+        activeProjectId={route.kind === 'project' ? route.projectId : null}
+        activeConversationId={
+          route.kind === 'project' ? route.conversationId ?? null : null
+        }
+        activeFileName={route.kind === 'project' ? route.fileName : null}
+        plan={resolvedAmrPlan}
+        planResolved={
+          amrLoginStatus !== null
+          && (amrLoginStatus.loggedIn === false || resolvedAmrPlan !== null)
+        }
+        profile={amrLoginStatus?.profile ?? null}
+        metricsConsent={config.telemetry?.metrics === true}
+        installationId={config.installationId}
+        onHomeOfferChange={
+          amrArtifactUpgradeHomeMock
+            ? undefined
+            : setAmrArtifactUpgradeHomeOffer
+        }
+      />
       <AnimatePresence>
       {settingsOpen ? (
         <SettingsDialog
@@ -2503,6 +2644,7 @@ function AppInner() {
           initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
+          onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
           onDraftChange={handleSettingsDraftChange}
           onPersistComposioKey={handleConfigPersistComposioKey}
           onClose={() => {

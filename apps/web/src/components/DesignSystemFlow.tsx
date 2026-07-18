@@ -32,6 +32,7 @@ import {
 import {
   createConversation,
   getProject,
+  getProjectDetail,
   listConversations,
   listMessages,
   loadTabs,
@@ -1642,6 +1643,26 @@ export function DesignSystemDetailView({
   const [chatSeed, setChatSeed] = useState<{ id: string; text: string } | null>(null);
   const [workspaceProjectId, setWorkspaceProjectId] = useState<string | null>(null);
   const [workspaceProjectFiles, setWorkspaceProjectFiles] = useState<ProjectFile[]>([]);
+  // Daemon-resolved working directory of the workspace project — proof anchor
+  // for classifying absolute disk hrefs in chat file links (AssistantMessage).
+  const [workspaceProjectResolvedDir, setWorkspaceProjectResolvedDir] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!workspaceProjectId) {
+      setWorkspaceProjectResolvedDir(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void getProjectDetail(workspaceProjectId).then((detail) => {
+      if (cancelled) return;
+      setWorkspaceProjectResolvedDir(detail?.resolvedDir ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceProjectId]);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -2118,6 +2139,24 @@ export function DesignSystemDetailView({
     setWorkspaceOpenRequest({ name, nonce: Date.now() });
   }, []);
 
+  // Known-file set for the design-system chat's file-link routing — same
+  // shape ProjectView feeds its primary ChatPane.
+  const workspaceProjectFileNames = useMemo(
+    () => new Set(workspaceProjectFiles.map((file) => file.name)),
+    [workspaceProjectFiles],
+  );
+
+  // Chat file links to the workspace's own files open through the Files tab:
+  // the chat pane sits next to the review column, so the workspace (and its
+  // open request) is only visible after switching tabs.
+  const openWorkspaceFileFromChat = useCallback(
+    (name: string) => {
+      setTab('files');
+      requestWorkspaceFileOpen(name);
+    },
+    [requestWorkspaceFileOpen],
+  );
+
   const sendProjectChatMessage = useCallback(
     async (
       prompt: string,
@@ -2545,6 +2584,9 @@ export function DesignSystemDetailView({
             config={config}
             projectId={workspaceProjectId}
             projectFiles={workspaceProjectFiles}
+            projectFileNames={workspaceProjectFileNames}
+            projectResolvedDir={workspaceProjectResolvedDir}
+            onRequestOpenFile={openWorkspaceFileFromChat}
             onEnsureProject={ensureWorkspaceProject}
             onSend={(prompt, attachments, commentAttachments) => {
               void sendProjectChatMessage(prompt, attachments, commentAttachments);

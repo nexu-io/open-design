@@ -4,6 +4,7 @@
   "name": "video-template-video-seedance-desk-hologram-ar-realdesk",
   "title": "Video - Desk Hologram AR on Real Workspace (Seedance 2.0)",
   "version": "0.1.0",
+  "publishedAt": "2026-06-09T12:16:49Z",
   "description": "A two-phase Seedance 2.0 workflow for the viral desk-hologram format: first lock a photoreal keyframe on a real developer desk (Open Design UI on the monitor, a cobalt-blue extraterrestrial hunter standing on the keyboard), then animate that still into a ~15s 9:16 image-to-video clip. Tuned for believable AR passthrough — medium-strength VFX, real desk clutter, monitor glow spill on the character, and light physical interactions (open mug, keyboard step, bow draw). Inspired by the desk-hologram Seedance 2.0 trend; no copyrighted character names in the prompt.",
   "license": "Apache-2.0",
   "author": {

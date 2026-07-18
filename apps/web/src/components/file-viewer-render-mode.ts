@@ -64,6 +64,14 @@ export interface UrlLoadDecision {
    * so `injectPreviewFocusGuard` can suppress the focus grab.
    */
   needsFocusGuard?: boolean;
+  /**
+   * The HTML source contains a self-redirecting directive (a
+   * `<meta http-equiv="refresh">`, or a load-time `location` navigation /
+   * `location.reload()`) that can loop forever and freeze the preview. When
+   * true, forces the srcDoc path so `injectPreviewRedirectGuard` (injected by
+   * buildSrcdoc) is present to detect and break the loop.
+   */
+  needsRedirectGuard?: boolean;
 }
 
 /**
@@ -105,6 +113,10 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
   if (d.needsFocusGuard) return false;
+  // A self-redirecting document must go through srcDoc so buildSrcdoc's
+  // redirect-loop guard is in place; URL-load serves it raw with no guard and
+  // the iframe reloads itself forever (nexu-io/open-design#710).
+  if (d.needsRedirectGuard) return false;
   // Root-relative project asset refs only resolve after the srcDoc pipeline
   // normalizes them (normalizeRootRelativeProjectAssetRefs); the URL-load
   // path serves the document untouched and the browser 404s each asset.
@@ -255,5 +267,42 @@ export function htmlNeedsSandboxShim(source: string): boolean {
   // search bounded to the tag itself. Lazy match avoids spilling into
   // unrelated `src=` attributes on later tags in the same document.
   if (/<script\s[^>]*?\bsrc\s*=/i.test(source)) return true;
+  return false;
+}
+
+/**
+ * Return true when the HTML source contains a self-redirecting directive that
+ * can loop forever and freeze the preview iframe (nexu-io/open-design#710).
+ * When true, FileViewer forces the srcDoc path so buildSrcdoc's
+ * `injectPreviewRedirectGuard` is present to detect and break the loop — the
+ * URL-load path serves the document untouched and has no such guard.
+ *
+ * Detection covers the two families that produce the freeze:
+ *
+ *   1. `<meta http-equiv="refresh">` — the canonical HTML redirect; a
+ *      self-target or a cycle reloads the frame endlessly.
+ *   2. Load-time `location` navigation — `location.reload()`,
+ *      `location.replace(...)`, `location.assign(...)`, or assigning
+ *      `location`/`location.href`/`window.location`. Any of these run at parse
+ *      time can re-navigate the frame in a loop. External `<script src=...>`
+ *      already routes through srcDoc via `htmlNeedsSandboxShim` /
+ *      `htmlNeedsFocusGuard`, so a redirect hidden in a linked file is covered
+ *      too.
+ *
+ * Pure string scan over the same `source` already fetched for preview — no
+ * extra I/O. Heuristic by design: a false positive just takes the (guarded,
+ * slightly slower) srcDoc path, which is the safe direction; a false negative
+ * is the same unguarded preview as before.
+ */
+export function htmlNeedsRedirectGuard(source: string | null | undefined): boolean {
+  if (!source) return false;
+  // <meta http-equiv="refresh" ...> in any attribute order / quoting.
+  if (/<meta\b[^>]*\bhttp-equiv\s*=\s*["']?\s*refresh\b/i.test(source)) return true;
+  // location.reload() / location.replace(...) / location.assign(...).
+  if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
+  // location.href = ...  (an assignment, not a read — `=` not followed by `=`).
+  if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;
+  // window.location = ... / document.location = ... / self|top|parent.location = ...
+  if (/\b(?:window|document|self|top|parent)\s*\.\s*location\s*=[^=]/i.test(source)) return true;
   return false;
 }

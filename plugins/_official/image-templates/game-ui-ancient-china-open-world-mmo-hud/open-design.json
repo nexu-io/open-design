@@ -24,6 +24,7 @@
     "en": "Game UI - Ancient China Open-World MMO HUD"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Generates an in-game HUD screenshot mockup for a AAA ancient-China open-world MMO, in the cinematic photoreal style of Black Myth: Wukong. A beautiful female swordswoman protagonist anchors the center of the frame in a misty mountain ancient-shrine scene, surrounded by a complete MMO HUD: top-left character portrait with HP/MP/stamina bars and buff icons, bottom-center skill hotbar with Chinese-calligraphy skill icons, top-right minimap with quest markers, right-side quest tracker panel, bottom-left scrolling chat window, floating world-space NPC nameplates and quest exclamation mark. Rendered as a realistic monitor screenshot, 16:9, suitable for pitch decks, gamescom-style key art, and Xiaohongshu/bilibili game teasers.",
   "description_i18n": {
     "zh-CN": "生成古代中国题材 AAA 级开放世界 MMO 游戏的 HUD 界面截图样机，采用 Black Myth: Wukong 风格的电影级写实画面。包含完整的 MMO HUD 元素：角色头像、血条法力条、技能快捷栏（中文书法风格图标）、小地图、任务追踪面板、聊天窗口和 NPC 名牌等，16:9 比例，适用于游戏宣发和展示。",

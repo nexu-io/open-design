@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatFormAnswers,
@@ -12,6 +12,72 @@ const VALID_BODY = `{
       "options": ["Mobile", "Desktop", "Responsive"], "required": true }
   ]
 }`;
+
+describe('form content language (lang)', () => {
+  it('parses a top-level lang tag from the complete form body', () => {
+    const input = [
+      '<question-form id="discovery" title="快速确认 · 30秒">',
+      '{ "lang": "zh-CN", "questions": [',
+      '  { "id": "output", "label": "我们要做什么？", "type": "radio", "options": ["海报", "网页"] }',
+      '] }',
+      '</question-form>',
+    ].join('\n');
+
+    const segments = splitOnQuestionForms(input);
+    expect(segments[0]?.kind).toBe('form');
+    if (segments[0]?.kind !== 'form') return;
+    expect(segments[0].form.lang).toBe('zh-CN');
+  });
+
+  it('never exposes a defaultValue on the still-streaming trailing question', () => {
+    // Red spec for the truncated-prefill freeze (production run beaf2da0):
+    // while a question object is still streaming, the partial-JSON repair can
+    // terminate mid-default — `"default": ["历史背景与经过", "抗战精` repairs
+    // to ["历史背景与经过", "抗战精"], and `"default": "单位教` to "单位教".
+    // The card adopts a streamed default only while the answer is still
+    // empty, so a truncated adoption freezes garbage that the completed
+    // default can never overwrite. The in-flight question must therefore
+    // expose NO defaultValue until its braces close.
+    const head =
+      '<question-form id="discovery" title="快速确认">\n' +
+      '{ "questions": [\n' +
+      '  { "id": "focus", "label": "内容重点（最多选2项）", "type": "checkbox", "maxSelections": 2,\n' +
+      '    "default": ["历史背景与经过", "抗战精';
+
+    const midDefault = parsePartialQuestionForm(head);
+    const focusMid = midDefault?.questions.find((q) => q.id === 'focus');
+    expect(focusMid).toBeTruthy();
+    expect(focusMid?.defaultValue).toBeUndefined();
+
+    const closed = parsePartialQuestionForm(
+      head +
+        '神与当代意义"],\n' +
+        '    "options": ["历史背景与经过", "重要战役与事件", "抗战精神与当代意义"] },\n' +
+        '  { "id": "tone", "label": "整体基调", "type": "radio", "default": "庄重',
+    );
+    // First question closed → its complete default surfaces; the trailing
+    // in-flight question ("tone", mid-default "庄重…") still exposes none.
+    const focusClosed = closed?.questions.find((q) => q.id === 'focus');
+    expect(focusClosed?.defaultValue).toEqual(['历史背景与经过', '抗战精神与当代意义']);
+    const toneInFlight = closed?.questions.find((q) => q.id === 'tone');
+    expect(toneInFlight).toBeTruthy();
+    expect(toneInFlight?.defaultValue).toBeUndefined();
+  });
+
+  it('adopts a streaming lang only once its string literal terminates', () => {
+    // A half-streamed tag like "zh-C" must not resolve to a dictionary; the
+    // field appears once the closing quote lands (same churn rule as `id`).
+    const partial = parsePartialQuestionForm(
+      '<question-form id="discovery" title="快速确认">\n{ "lang": "zh-C',
+    );
+    expect(partial?.lang).toBeUndefined();
+
+    const complete = parsePartialQuestionForm(
+      '<question-form id="discovery" title="快速确认">\n{ "lang": "zh-CN", "questions": [',
+    );
+    expect(complete?.lang).toBe('zh-CN');
+  });
+});
 
 describe('splitOnQuestionForms', () => {
   it('normalizes string and object question options', () => {
@@ -94,6 +160,33 @@ describe('splitOnQuestionForms', () => {
     });
   });
 
+  it('parses the agent-recommended `default` prefill the prompt contract ships', () => {
+    // The system prompt instructs every question to carry a brief-inferred
+    // recommended `default` (option value for radio/select, array for
+    // checkbox, text otherwise) so the user can submit the form unchanged.
+    const input = [
+      '<question-form id="discovery" title="Quick brief">',
+      '{',
+      '  "questions": [',
+      '    { "id": "brand", "label": "Brand context", "type": "radio", "default": "pick_direction",',
+      '      "options": [{ "label": "Pick a direction for me", "value": "pick_direction" }] },',
+      '    { "id": "tone", "label": "Tone", "type": "checkbox", "default": ["Modern minimal", "tech"],',
+      '      "options": ["Modern minimal", { "label": "Tech / utility", "value": "tech" }] },',
+      '    { "id": "scale", "label": "Roughly how much?", "type": "text", "default": "8 slides" }',
+      '  ]',
+      '}',
+      '</question-form>',
+    ].join('\n');
+
+    const segment = splitOnQuestionForms(input).find((s) => s.kind === 'form');
+    if (!segment || segment.kind !== 'form') throw new Error('expected parsed form');
+
+    expect(segment.form.questions[0]?.defaultValue).toBe('pick_direction');
+    // Label-form defaults canonicalize to stable option values.
+    expect(segment.form.questions[1]?.defaultValue).toEqual(['Modern minimal', 'tech']);
+    expect(segment.form.questions[2]?.defaultValue).toBe('8 slides');
+  });
+
   it('preserves stable option values when formatting object-option answers', () => {
     const text = formatFormAnswers(
       {
@@ -126,6 +219,66 @@ describe('splitOnQuestionForms', () => {
     }
   });
 
+  it('parses the deliveryFormat/container array payload from Feishu acceptance', () => {
+    const input = [
+      '要的话我可以直接按这张图出 motion overlay。先选一下输出偏好:',
+      '<question-form>',
+      JSON.stringify([
+        {
+          id: 'deliveryFormat',
+          prompt: '导出格式？',
+          type: 'radio',
+          options: [
+            { id: 'mov', label: 'MOV（透明背景，可直接导入剪映 / PR / FCP 叠加）' },
+            { id: 'webm', label: 'WebM（透明背景，适合网页 / 浏览器播放）' },
+            { id: 'preview', label: '预览图 / 预览工程（适合先确认效果）' },
+            { id: 'remotion', label: 'Remotion 工程（适合继续编辑和拼装）' },
+          ],
+        },
+        {
+          id: 'container',
+          prompt: '对话外壳？',
+          type: 'radio',
+          options: [
+            { id: 'none', label: '不要外壳，只要气泡' },
+            { id: 'phone', label: '手机聊天界面' },
+          ],
+        },
+      ]),
+      '</question-form>',
+    ].join('\n');
+
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'form']);
+    const form = out[1]?.kind === 'form' ? out[1].form : null;
+    expect(form?.questions.map((q) => [q.id, q.label, q.type])).toEqual([
+      ['deliveryFormat', '导出格式？', 'radio'],
+      ['container', '对话外壳？', 'radio'],
+    ]);
+    expect(form?.questions[0]?.options?.map((option) => option.value)).toEqual([
+      'mov',
+      'webm',
+      'preview',
+      'remotion',
+    ]);
+  });
+
+  it('normalizes partially missing question fields instead of dropping the form', () => {
+    const out = splitOnQuestionForms(
+      `<question-form>${JSON.stringify([
+        { prompt: 'Pick one', options: ['A', 'B'] },
+        { id: 'notes', type: 'textarea' },
+      ])}</question-form>`,
+    );
+
+    expect(out.map((s) => s.kind)).toEqual(['form']);
+    const form = out[0]?.kind === 'form' ? out[0].form : null;
+    expect(form?.questions).toMatchObject([
+      { id: 'q1', label: 'Pick one', type: 'radio' },
+      { id: 'notes', label: 'notes', type: 'textarea' },
+    ]);
+  });
+
   it('accepts <ask-question> as an alias for <question-form> (#1194)', () => {
     const out = splitOnQuestionForms(`<ask-question id="brief" title="Quick brief">${VALID_BODY}</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['form']);
@@ -146,9 +299,21 @@ describe('splitOnQuestionForms', () => {
     expect(out.map((s) => s.kind)).toEqual(['text']);
   });
 
-  it('keeps malformed JSON bodies as raw text', () => {
+  it('replaces malformed JSON bodies with a safe fallback and diagnostics', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const out = splitOnQuestionForms(`<ask-question>not json</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['text']);
+    expect(out[0]).toMatchObject({
+      kind: 'text',
+      text: 'The assistant sent a question form that could not be rendered. Please ask it to resend the questions.',
+    });
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('<ask-question>');
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('not json');
+    expect(warn).toHaveBeenCalledWith(
+      '[question-form] failed to render inline question form',
+      expect.objectContaining({ reason: 'invalid-json', tagName: 'ask-question' }),
+    );
+    warn.mockRestore();
   });
 
   it('keeps unterminated tags as prose without swallowing trailing text', () => {
@@ -163,6 +328,45 @@ describe('splitOnQuestionForms', () => {
     if (out[1]?.kind === 'form') {
       expect(out[1].form.id).toBe('x');
     }
+  });
+
+  it('unwinds a false-positive open tag mentioned in prose and re-parses the real form', () => {
+    // Model mentioned the tag name inside backtick-quoted prose before
+    // emitting the real form — the first open match must not consume the real
+    // close tag, or the real form is lost.
+    const input =
+      `my first output should be \`<question-form id="discovery">\`.\n\n` +
+      `Let me write a custom form:\n\n` +
+      `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
+      `Now I'll proceed.`;
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
+    if (out[2]?.kind === 'form') {
+      expect(out[2].form.id).toBe('discovery');
+      expect(out[2].form.questions).toHaveLength(1);
+    }
+    // Segments must reconstruct the input without gaps or duplication.
+    const reconstructed = out
+      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .join('');
+    expect(reconstructed).toBe(input);
+  });
+
+  it('unwinds a tag-name mismatch — prose mentions <ask-question> but the real form is <question-form>', () => {
+    const input =
+      `In your output you'll see \`<ask-question>\` tags.\n\n` +
+      `<question-form id="real" title="Brief">${VALID_BODY}</question-form>\n\n` +
+      `Done.`;
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
+    if (out[2]?.kind === 'form') {
+      expect(out[2].form.id).toBe('real');
+      expect(out[2].form.questions).toHaveLength(1);
+    }
+    const reconstructed = out
+      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .join('');
+    expect(reconstructed).toBe(input);
   });
 });
 

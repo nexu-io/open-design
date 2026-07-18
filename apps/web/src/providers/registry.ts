@@ -71,6 +71,7 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
+import { GENERIC_DEPLOY_ENVELOPE_CODES } from '../analytics/deploy-error-code';
 import {
   isOpenDesignHostAvailable,
   openHostExternalUrl,
@@ -913,15 +914,17 @@ function popupBlockedMessage(): string {
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
+  const bridgedUrl = await bridgeFirstPartyUrl(url);
+  const targetUrl = bridgedUrl ?? url;
   if (isOpenDesignHostAvailable()) {
-    const opened = await openHostExternalUrl(url);
+    const opened = await openHostExternalUrl(targetUrl);
     if (opened.ok) return true;
   }
   try {
     const resp = await fetch('/api/system/open-external', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url: targetUrl }),
     });
     if (resp.ok) {
       const json = (await resp.json().catch(() => null)) as { ok?: unknown } | null;
@@ -931,11 +934,28 @@ export async function openExternalUrl(url: string): Promise<boolean> {
     // Fall through to current-tab navigation below.
   }
   try {
-    window.location.assign(url);
+    window.location.assign(targetUrl);
   } catch {
     return false;
   }
   return false;
+}
+
+async function bridgeFirstPartyUrl(url: string): Promise<string | null> {
+  try {
+    const target = new URL(url);
+    if (!['open-design.ai', 'www.open-design.ai', 'staging.open-design.ai'].includes(target.hostname)) return null;
+    const resp = await fetch('/api/attribution/bridge-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: target.toString() }),
+    });
+    if (!resp.ok) return null;
+    const body = await resp.json() as { url?: unknown };
+    return typeof body.url === 'string' ? body.url : null;
+  } catch {
+    return null;
+  }
 }
 
 async function decodeConnectorError(resp: Response): Promise<string> {
@@ -1365,11 +1385,13 @@ export async function deployProjectFile(
   fileName: string,
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
+  target?: 'preview' | 'production',
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
+    ...(target ? { target } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',
@@ -1378,9 +1400,19 @@ export async function deployProjectFile(
   });
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string }; message?: string }
+      | { error?: { message?: string; code?: string }; code?: string; message?: string }
       | null;
-    throw new Error(payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`);
+    const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
+    // Preserve a queryable failure code for analytics (`deployErrorCode` reads
+    // `.code` first). The daemon deploy route (apps/daemon/src/routes/deploy.ts)
+    // collapses every non-404 failure's code to a generic `BAD_REQUEST` (and 404
+    // to `FILE_NOT_FOUND`) while keeping the REAL provider HTTP status on the
+    // response and the real message in the body — so ignore those envelope codes
+    // and fall back to `HTTP_${resp.status}`, which then buckets as HTTP_403 /
+    // HTTP_429 / HTTP_500 instead of collapsing every failure into one code.
+    const rawCode = payload?.error?.code || payload?.code;
+    const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
+    throw Object.assign(new Error(message), { code });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
 }

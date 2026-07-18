@@ -1361,6 +1361,9 @@
    File workspace — tabs + viewer
    ============================================================ */
 .workspace {
+  /* Containing block for .workspace-toast-anchor (viewer/routines.css), which
+     pins workspace-owned toasts to this pane instead of the viewport. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2539,6 +2542,26 @@
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+/* Canvas-local Design delivery feedback. It stays with the workspace while
+   the empty placeholder hands over to an actual file preview, rather than
+   becoming a bottom-of-screen notification. */
+.ws-preview-run-status-slot {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 48px);
+  pointer-events: none;
+  transform: translate(-50%, 116px);
+}
+
+@media (max-width: 640px) {
+  .ws-preview-run-status-slot {
+    max-width: calc(100% - 32px);
+    transform: translate(-50%, 104px);
+  }
 }
 
 .ws-browser-panel {

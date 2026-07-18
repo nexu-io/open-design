@@ -1,5 +1,6 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { posix } from "node:path";
@@ -28,12 +29,17 @@ import type { ToolPackConfig } from "../src/config.js";
 import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
+  createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
+  LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  renderLinuxAppImageAppRun,
+  renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
+  stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
 } from "../src/linux.js";
@@ -82,6 +88,19 @@ function makeConfig(): ToolPackConfig {
     webOutputMode: "server",
     workspaceRoot: "/work",
   };
+}
+
+const linuxOnlyIt = process.platform === "linux" ? it : it.skip;
+
+async function waitForChildExit(child: ChildProcess, timeoutMs = 5000): Promise<void> {
+  if (child.exitCode != null || child.signalCode != null) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 describe("buildDockerArgs", () => {
@@ -498,6 +517,103 @@ describe("stopPackedLinuxHeadless", () => {
   });
 });
 
+describe("stopPackedLinuxApp", () => {
+  linuxOnlyIt("treats a direct AppRun-launched Electron process as owned", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-direct-apprun-"));
+    const namespace = "direct-apprun";
+    const outputNamespaceRoot = join(root, "out", "linux", "namespaces", namespace);
+    const runtimeNamespaceBaseRoot = join(root, "runtime", "linux", "namespaces");
+    const runtimeNamespaceRoot = join(runtimeNamespaceBaseRoot, namespace);
+    const config: ToolPackConfig = {
+      ...makeConfig(),
+      namespace,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          appBuilderRoot: join(outputNamespaceRoot, "builder"),
+          namespaceRoot: outputNamespaceRoot,
+        },
+        runtime: {
+          namespaceBaseRoot: runtimeNamespaceBaseRoot,
+          namespaceRoot: runtimeNamespaceRoot,
+        },
+      },
+    };
+    const appDir = join(root, "AppDir");
+    const executablePath = join(appDir, "Open Design");
+    const appRunPath = join(appDir, "AppRun");
+    const markerPath = join(runtimeNamespaceRoot, "runtime", "desktop-root.json");
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      }),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace,
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+    let child: ChildProcess | null = null;
+
+    try {
+      await mkdir(appDir, { recursive: true });
+      await copyFile(process.execPath, executablePath);
+      await chmod(executablePath, 0o755);
+      await writeFile(appRunPath, "#!/bin/sh\n", "utf8");
+      await mkdir(config.roots.output.appBuilderRoot, { recursive: true });
+      await writeFile(join(config.roots.output.appBuilderRoot, "Open-Design.direct-apprun.AppImage"), "", "utf8");
+
+      child = spawn(executablePath, ["-e", "setInterval(() => {}, 1000)"], {
+        env: { ...process.env, APPIMAGE: appRunPath },
+        stdio: "ignore",
+      });
+      await new Promise<void>((resolve, reject) => {
+        child?.once("spawn", resolve);
+        child?.once("error", reject);
+      });
+      expect(child.pid).toEqual(expect.any(Number));
+      await access(`/proc/${child.pid}/exe`);
+
+      await mkdir(dirname(markerPath), { recursive: true });
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/",
+          executablePath,
+          logPath: join(runtimeNamespaceRoot, "logs", "desktop", "latest.log"),
+          namespaceRoot: runtimeNamespaceRoot,
+          pid: child.pid,
+          ppid: process.pid,
+          stamp,
+          startedAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          version: 1,
+        })}\n`,
+        "utf8",
+      );
+
+      vi.mocked(requestJsonIpc).mockRejectedValue(new Error("shutdown unavailable in test"));
+      const result = await stopPackedLinuxApp(config);
+
+      expect(result.status).toBe("stopped");
+      expect(result.stoppedPids).toContain(child.pid);
+      expect(result.remainingPids).toEqual([]);
+    } finally {
+      if (child?.pid != null && child.exitCode == null && child.signalCode == null) {
+        try {
+          process.kill(child.pid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+        await waitForChildExit(child, 1000);
+      }
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("resolveProductionInstallCommand", () => {
   it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
     expect(resolveProductionInstallCommand({})).toEqual({
@@ -547,7 +663,7 @@ describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
 Name=Open Design (@@NAMESPACE@@)
-Exec=env OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
+Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
 `;
@@ -560,7 +676,7 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("Name=Open Design (default)");
     expect(out).toContain(
-      "Exec=env OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
+      "Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
     );
     expect(out).toContain("Icon=open-design-default");
   });
@@ -571,8 +687,17 @@ MimeType=x-scheme-handler/od;
       execPath: "/x",
       iconName: "open-design-ns",
     });
-    expect(out).toMatch(/^Exec=env OD_PACKAGED_NAMESPACE=ns /m);
+    expect(out).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=ns /m);
     expect(out).not.toMatch(/OD_NAMESPACE=/);
+  });
+
+  it("unsets ELECTRON_RUN_AS_NODE on the Exec= line so desktop launches run Electron normally", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+    });
+    expect(out).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE /m);
   });
 
   it("preserves --appimage-extract-and-run on the Exec= line so menu launches bypass FUSE", () => {
@@ -600,6 +725,120 @@ MimeType=x-scheme-handler/od;
       iconName: "open-design-ns",
     });
     expect(out).toContain("MimeType=x-scheme-handler/od;");
+  });
+});
+
+describe("renderLinuxPackagedMainEntry", () => {
+  it("loads the ESM packaged entry without require or temporary keepalive handles", () => {
+    const out = renderLinuxPackagedMainEntry();
+
+    expect(out).toContain('import("@open-design/packaged")');
+    expect(out).not.toContain('require("@open-design/packaged")');
+    expect(out).not.toContain("setTimeout");
+  });
+});
+
+describe("LINUX_APPIMAGE_EXECUTABLE_ARGS", () => {
+  it("keeps the AppImage no-sandbox fallback explicit for constrained Linux hosts", () => {
+    expect([...LINUX_APPIMAGE_EXECUTABLE_ARGS]).toEqual(["--no-sandbox"]);
+  });
+});
+
+describe("renderLinuxAppImageAppRun", () => {
+  it("unsets ELECTRON_RUN_AS_NODE before execing the Electron binary", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain("unset ELECTRON_RUN_AS_NODE");
+    expect(out.indexOf("unset ELECTRON_RUN_AS_NODE")).toBeLessThan(out.indexOf('exec "$BIN"'));
+    expect(out).toContain('BIN="$APPDIR/Open Design"');
+  });
+
+  it("preserves AppImageLauncher install-only behavior", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('if [ -z "$APPIMAGE_EXIT_AFTER_INSTALL" ] ; then');
+    expect(out).toContain("trap atexit EXIT");
+  });
+
+  it("passes desktop Exec arguments through to Electron", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('args=("$@")');
+    expect(out).toContain('exec "$BIN" "${args[@]}"');
+  });
+
+  it("sets APPIMAGE when running an extracted AppRun directly", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('APPIMAGE="$APPDIR/AppRun"');
+  });
+
+  linuxOnlyIt("exports APPIMAGE fallback to the execed Electron process", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-export-"));
+    const appDir = join(root, "AppDir");
+    const appRunPath = join(appDir, "AppRun");
+    const observedEnvPath = join(root, "observed-env.txt");
+    const electronPath = join(appDir, "Open Design");
+
+    try {
+      await mkdir(appDir, { recursive: true });
+      await writeFile(appRunPath, renderLinuxAppImageAppRun(), "utf8");
+      await chmod(appRunPath, 0o755);
+      await writeFile(
+        electronPath,
+        `#!/bin/bash
+{
+  printf 'APPIMAGE=%s\\n' "$APPIMAGE"
+  printf 'ELECTRON_RUN_AS_NODE=%s\\n' "\${ELECTRON_RUN_AS_NODE-unset}"
+} > ${JSON.stringify(observedEnvPath)}
+`,
+        "utf8",
+      );
+      await chmod(electronPath, 0o755);
+
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        APPDIR: appDir,
+        ELECTRON_RUN_AS_NODE: "1",
+      };
+      delete env.APPIMAGE;
+      const child = spawn(appRunPath, [], { env, stdio: "ignore" });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+
+      expect(exit).toEqual({ code: 0, signal: null });
+      expect(await readFile(observedEnvPath, "utf8")).toBe(
+        `APPIMAGE=${appRunPath}\nELECTRON_RUN_AS_NODE=unset\n`,
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("createLinuxDesktopLaunchEnv", () => {
+  it("strips ELECTRON_RUN_AS_NODE before spawning the Electron AppImage", () => {
+    const config = makeConfig();
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: "/tmp/open-design/ipc/default/desktop.sock",
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: "default",
+      source: SIDECAR_SOURCES.TOOLS_PACK,
+    };
+
+    const env = createLinuxDesktopLaunchEnv(config, stamp, {
+      ELECTRON_RUN_AS_NODE: "1",
+      KEEP_ME: "yes",
+    });
+
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(env.KEEP_ME).toBe("yes");
+    expect(env.OD_SIDECAR_BASE).toBe(
+      "/work/.tmp/tools-pack/runtime/linux/namespaces/default/runtime",
+    );
   });
 });
 
@@ -718,6 +957,30 @@ describe("matchesAppImageProcess", () => {
   it("rejects extracted-mode when APPIMAGE env is missing", () => {
     const ok = matchesAppImageProcess(
       { pid: 1234, executable: "/tmp/.mount_abc123/AppRun", env: {} },
+      installPath,
+    );
+    expect(ok).toBe(false);
+  });
+
+  it("matches direct AppRun fallback when APPIMAGE points to the sibling AppRun", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: "/tmp/appimage_extracted_fe548e54/AppRun" },
+      },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects direct AppRun fallback when APPIMAGE points outside the executable directory", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: "/tmp/other/AppRun" },
+      },
       installPath,
     );
     expect(ok).toBe(false);

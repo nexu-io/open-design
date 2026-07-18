@@ -382,21 +382,35 @@
 }
 
 .updater-popup__error {
+  margin: 0;
   color: var(--red) !important;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
+/* Footer stays a single row: long en labels wrap inside the checkbox column;
+   actions stay non-shrinking on the trailing edge. */
 .updater-popup__footer {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
 }
 
+.updater-popup__preference {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .updater-popup__checkbox {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
   color: var(--text-muted);
@@ -408,19 +422,23 @@
   flex: 0 0 auto;
   inline-size: auto;
   width: auto;
-  margin: 0;
+  margin: 2px 0 0;
 }
 
 .updater-popup__checkbox span {
   min-width: 0;
-  white-space: nowrap;
-  word-break: keep-all;
+  flex: 1 1 auto;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .updater-popup__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   min-height: 34px;
 }
@@ -687,8 +705,8 @@
    save settles. */
 .settings-chrome {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 24px;
+  right: 24px;
   z-index: 10;
   display: flex;
   align-items: center;

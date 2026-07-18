@@ -349,6 +349,8 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     const html = await bridged.text();
     expect(html).toContain('data-od-url-scroll-bridge');
     expect(html).toContain("type: 'od:preview-scroll'");
+    expect(html).toContain("type: 'od:preview-content-size'");
+    expect(html).toContain('od:preview-content-size-request');
   });
 
   it('injects the URL preview scroll bridge before the closing body tag', async () => {
@@ -425,6 +427,16 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('injects the URL preview scroll bridge for powered previews when requested', async () => {
+    const bridged = await fetch(`${poweredUrl('page.html')}?odPreviewBridge=scroll`);
+    expect(bridged.status).toBe(200);
+    expect(bridged.headers.get('document-isolation-policy')).toBe('isolate-and-credentialless');
+    const html = await bridged.text();
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain("type: 'od:preview-content-size'");
+    expect(html).toContain('od:preview-content-size-request');
   });
 
   it('does not let the powered preview origin call normal daemon APIs', async () => {

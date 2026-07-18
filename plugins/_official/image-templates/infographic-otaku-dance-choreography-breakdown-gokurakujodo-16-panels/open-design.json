@@ -24,6 +24,7 @@
     "en": "Infographic - Otaku Dance Choreography Breakdown (Gokuraku Jodo, 16 Panels)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A single vertical 2:3 poster composed as a 4×4 grid of 16 connected square panels, forming a full choreography breakdown chart for the famous Japanese otaku dance song 極楽浄土 (Gokuraku Jodo). Each panel shows the same cute half-realistic anime idol girl (pink twin-tails, sailor-collar school-idol uniform) performing one signature pose from the dance, full-body, on a pastel-pink background with a small Japanese caption strip at the bottom and a numbered circle at the top-left. Explicitly engineered as a POSE REFERENCE sheet for AI video generation — every silhouette is crisp and unambiguous, no motion lines or background clutter. Tuned for gpt-image-2, aspect 2:3. Category: Infographic.",
   "description_i18n": {
     "zh-CN": "一张2:3竖版海报，由4×4网格的16个方形面板组成，展示日本御宅族热门舞曲《极乐净土》的完整舞蹈动作分解。每个面板展示同一位半写实风格动漫偶像少女（粉色双马尾，水手服校园偶像制服）的标志性舞蹈姿势，专为AI视频生成设计的姿势参考图，适配gpt-image-2，2:3比例。",

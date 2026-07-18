@@ -1275,7 +1275,7 @@ async function expectOnboardingFinished(page: Page) {
   }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await dismissPrivacyDialog(page);
-  await expect(page.getByRole('heading', { name: /What will you design today/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /What will you design with your agent today/i })).toBeVisible();
 }
 
 async function expectFinalDesignSystemStep(page: Page) {

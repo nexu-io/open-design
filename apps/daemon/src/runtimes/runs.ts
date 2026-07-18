@@ -112,6 +112,8 @@ export function createChatRunService({
       lastTodoSnapshot: null,
       truncatedMidTurn: false,
       endedWithUnfinishedWork: false,
+      artifactCount: undefined as number | undefined,
+      artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
@@ -219,6 +221,7 @@ export function createChatRunService({
     failureDetail: run.failureDetail ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
+    ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
@@ -258,6 +261,7 @@ export function createChatRunService({
       status,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
+      ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
     });

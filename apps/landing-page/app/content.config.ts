@@ -120,7 +120,7 @@ const blog = defineCollection({
     .object({
       title: z.string(),
       date: z.coerce.date(),
-      category: z.enum(['Product', 'Guides', 'Use cases', 'Community']),
+      category: z.enum(['Product', 'Guides', 'Use cases', 'Community', 'Tools & Skills']),
       readingTime: z.number().int().positive(),
       summary: z.string(),
       author: z.string().optional(),

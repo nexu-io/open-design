@@ -219,7 +219,7 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('offers a quit retry after the installer has opened', () => {
+  it('shows installer handoff without claiming that quit failed', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
@@ -247,8 +247,8 @@ describe('SettingsDialog about update control', () => {
       primaryAction: 'quit',
       primaryLabelKey: 'updater.quitButton',
       showReleaseLink: false,
-      statusKey: 'settings.updateQuitFailed',
-      statusTone: 'warning',
+      statusKey: 'updater.opening',
+      statusTone: 'neutral',
     });
   });
 
@@ -261,9 +261,33 @@ describe('SettingsDialog about update control', () => {
     expect(control).toMatchObject({
       primaryAction: 'check',
       primaryLabelKey: 'settings.updateRetry',
-      statusKey: 'settings.updateStatusFailed',
+      statusKey: 'updater.failed',
       statusTone: 'error',
     });
+  });
+
+  it('retries updater errors from the last actionable phase', () => {
+    const downloadRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({ availableVersion: '1.2.3-beta.4', state: 'error' }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+    const installRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({
+          availableVersion: '1.2.3-beta.4',
+          downloadPath: '/tmp/Open Design Beta.dmg',
+          state: 'error',
+        }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+
+    expect(downloadRetry.primaryAction).toBe('download');
+    expect(installRetry.primaryAction).toBe('install');
   });
 
   it('does not offer in-app update actions in development or web-only contexts', () => {
@@ -375,6 +399,27 @@ describe('SettingsDialog API protocol switching', () => {
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+  });
+
+  it('keeps Atlas Cloud as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const atlas = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(atlas).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
     });
   });
 

@@ -24,6 +24,7 @@
     "en": "Social Media Post - Fashion Editorial Collage"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A highly detailed 2x2 photo collage prompt for fashion editorial shots, focusing on consistent styling, specific lighting, and facial features from a reference photo.",
   "description_i18n": {
     "zh-CN": "生成2x2时尚编辑照片拼贴，专注于一致的造型、特定灯光和参考照片中的面部特征。",

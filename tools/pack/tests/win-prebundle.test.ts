@@ -77,8 +77,11 @@ describe("win standalone prebundle policy", () => {
     expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    // Must match apps/daemon/package.json / the pnpm lockfile, or
+    // electron-builder's collector drops the module from the shipped app and
+    // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
     expect(WIN_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
-      "better-sqlite3": "12.9.0",
+      "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
     });
     expect(WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");

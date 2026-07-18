@@ -621,11 +621,7 @@
   inset: auto;
   width: 30px;
   height: 30px;
-  object-fit: cover;
-  border-radius: var(--radius);
   display: block;
-  user-select: none;
-  -webkit-user-drag: none;
   pointer-events: none;
 }
 .entry-nav-rail__btn {
@@ -760,7 +756,13 @@
   background: var(--bg);
   isolation: isolate;
 }
-.entry-main__topbar:has(.entry-settings-menu__popover) {
+/* The topbar is an isolated sticky stacking context at z-index 10, so a
+   child popover's own z-index cannot escape it. While a topbar popover or
+   the updater's "update ready" prompt is open, lift the whole topbar above
+   raised page surfaces (e.g. the home composer card at z-index 1700 when
+   its agent picker is open) so the prompt paints on top. */
+.entry-main__topbar:has(.entry-settings-menu__popover),
+.entry-main__topbar:has(.updater-popup) {
   z-index: 1900;
 }
 .entry-main__topbar::before {
@@ -1792,6 +1794,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.model-select-searchable__option-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .model-select-searchable__value-badge,
 .model-select-searchable__option-badge {
   --model-tag-color: var(--text-muted);
@@ -1842,6 +1850,12 @@
 .model-select-searchable__option.is-active .model-select-searchable__option-meta {
   color: color-mix(in srgb, var(--accent-strong) 60%, var(--text-muted));
 }
+.model-select-searchable__option-affordances {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+}
 .model-select-searchable__option-lock-inline {
   display: inline-flex;
   align-items: center;
@@ -1856,7 +1870,6 @@
   color: var(--text-muted);
   cursor: pointer;
   vertical-align: middle;
-  margin-left: 6px;
   transition:
     color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     background 160ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -2014,16 +2027,13 @@
   gap: 8px;
 }
 
-/* Brand mark above the title. Uses the monochrome brand glyph masked with
-   --text-strong so it reads as black in light mode and white in dark mode. */
+/* Brand mark above the title; the glyph itself comes from the shared
+   .od-brand-glyph primitive. */
 .onboarding-cloud__logo {
   display: block;
   width: 52px;
   height: 52px;
   margin-bottom: 22px;
-  background-color: var(--text-strong);
-  -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
-  mask: url(/brand-icon.svg) center / contain no-repeat;
 }
 
 /* Compact, icon-only language switcher used in the cloud landing top bar —

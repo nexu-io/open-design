@@ -59,6 +59,8 @@ import {
   appendSavedPreviewCommentOrder,
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
+  desktopPreviewAutoFitZoomPercent,
+  desktopPreviewDocumentContentWidth,
   deckKeyboardShortcutForEvent,
   effectivePreviewScale,
   fileVersionPreviewOptions,
@@ -161,6 +163,30 @@ function testRect(left: number, top: number, width: number, height: number): DOM
     bottom: top + height,
     toJSON: () => ({}),
   } as DOMRect;
+}
+
+function installSandboxedPreviewWindow(frame: HTMLIFrameElement): Window {
+  const previewWindow = {
+    postMessage: vi.fn(),
+  } as unknown as Window;
+  Object.defineProperty(previewWindow, 'document', {
+    configurable: true,
+    get() {
+      throw new DOMException('Blocked by iframe sandbox', 'SecurityError');
+    },
+  });
+  Object.defineProperty(frame, 'contentWindow', {
+    configurable: true,
+    value: previewWindow,
+  });
+  return previewWindow;
+}
+
+function postPreviewContentWidth(source: Window, width: number) {
+  window.dispatchEvent(new MessageEvent('message', {
+    source,
+    data: { type: 'od:preview-content-size', width },
+  }));
 }
 
 function clickAgentTool(testId: string) {
@@ -346,6 +372,21 @@ describe('FileViewer preview scale', () => {
 
   it('uses the requested zoom for desktop preview overlays', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
+  });
+
+  it('calculates a desktop auto-fit zoom for wide landing pages', () => {
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 })).toBe(100);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 }, 1440)).toBeCloseTo(62.5);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 }, 900)).toBe(100);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 1600, height: 900 }, 1440)).toBe(100);
+  });
+
+  it('measures desktop preview document content width from real iframe layout', () => {
+    const doc = document.implementation.createHTMLDocument('preview');
+    Object.defineProperty(doc.documentElement, 'scrollWidth', { configurable: true, value: 960 });
+    Object.defineProperty(doc.body, 'scrollWidth', { configurable: true, value: 1440 });
+
+    expect(desktopPreviewDocumentContentWidth(doc)).toBe(1440);
   });
 
   it('only treats unmodified deck keyboard presses as deck shortcuts', () => {
@@ -755,6 +796,77 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
   });
 
+  it('promotes large HTML files to the srcDoc path when the routing preview shows sandbox-unsafe scripts', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      size: 3 * 1024 * 1024,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Imported app',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const previewText = '<!doctype html><html><head><script src="./app.js"></script></head>';
+    let fullHtml = `${previewText}<body><main>Imported filesystem app</main></body></html>`;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.startsWith('/api/projects/project-1/text-preview/index.html')) {
+        return new Response(JSON.stringify({
+          text: previewText,
+          poweredPreview: { required: false, reasons: [] },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/projects/project-1/raw/index.html')) {
+        return new Response(fullHtml, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      if (url === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files: [file] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Imported filesystem app');
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/text-preview/index.html'), { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/raw/index.html?cacheBust='), {});
+
+    fullHtml = `${previewText}<body><main>Updated filesystem app</main></body></html>`;
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: file.mtime + 1 }}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Updated filesystem app');
+    });
+  });
+
   it('evicts least-recent inactive preview iframes once the pool exceeds its limit', () => {
     function Harness({ activeKey }: { activeKey: string | null }) {
       return (
@@ -1048,7 +1160,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const workerHtml = '<!doctype html><html><body><script>new Worker("worker.js")</script></body></html>';
-    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0';
+    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot';
 
     const { rerender } = render(
       <FileViewer
@@ -3358,6 +3470,98 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(options.deck).toBe(true);
     expect(options.baseHref).toBe('/api/projects/project-1/raw/');
+
+    expect(fileVersionPreviewOptions(
+      'project-1',
+      'slides.html',
+      '<section class="slide">A</section><section class="slide">B</section>',
+    ).deck).toBe(true);
+  });
+
+  it('routes history deck arrow keys to the preview unless a text input is focused', async () => {
+    const deckSource = [
+      '<!doctype html><html><body>',
+      '<deck-stage>',
+      '<section data-screen-label="01 Cover">Cover</section>',
+      '<section data-screen-label="02 Plan">Plan</section>',
+      '</deck-stage>',
+      '</body></html>',
+    ].join('');
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v4',
+      fileName: 'index.html',
+      version: 4,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const earlierVersions = [3, 2, 1].map((version) => ({
+      ...currentVersion,
+      id: `v${version}`,
+      version,
+      label: `Prior checkpoint ${version}`,
+      prompt: `Prior prompt ${version}`,
+      current: false,
+    }));
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, ...earlierVersions] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="slide_deck"
+        file={file}
+        liveHtml={deckSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    const currentOption = within(versionDialog).getByRole('option', { name: /Current prompt/ }) as HTMLButtonElement;
+    currentOption.focus();
+    const previewFrame = await waitFor(() => {
+      const frame = versionDialog.querySelector('iframe[title="index.html v4"]') as HTMLIFrameElement | null;
+      expect(frame?.contentWindow).toBeTruthy();
+      return frame!;
+    });
+    const postMessage = vi.spyOn(previewFrame.contentWindow!, 'postMessage').mockImplementation(() => {});
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od:slide', action: 'next' }, '*');
+
+    postMessage.mockClear();
+    const search = within(versionDialog).getByRole('searchbox', { name: 'Search…' }) as HTMLInputElement;
+    search.focus();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   it('exposes selected-version download actions and exports that version content', async () => {
@@ -5066,6 +5270,164 @@ describe('FileViewer tweaks toolbar', () => {
       expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
       expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
     });
+  });
+
+  it('auto-fits wide desktop HTML previews until the user manually zooms', async () => {
+    let viewerBodyWidth = 900;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, viewerBodyWidth, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'wide-autofit-preview.html',
+          path: 'wide-autofit-preview.html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Wide autofit preview',
+            entry: 'wide-autofit-preview.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><main style="min-width:1440px">Wide landing page</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    act(() => postPreviewContentWidth(previewWindow, 1440));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+    const scaledShell = Array.from(container.querySelectorAll('div')).find(
+      (node) => node.style.transform === 'scale(0.625)',
+    );
+    expect(scaledShell).toBeTruthy();
+
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '50%' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '50%' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '75%' }));
+
+    viewerBodyWidth = 1000;
+    window.dispatchEvent(new Event('resize'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '75%' })).toBeTruthy();
+    });
+  });
+
+  it('requests the content-size bridge for powered desktop previews before auto-fitting', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        return testRect(0, 0, 0, 0);
+      });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({
+          supported: true,
+          baseOrigin: 'http://127.0.0.1:48123',
+          pathPrefix: 'powered',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'powered-wide.html',
+          path: 'powered-wide.html',
+          mtime: 1710000000,
+        })}
+        liveHtml='<html><body><script>new SharedArrayBuffer(8)</script><main style="min-width:1440px">Wide powered page</main></body></html>'
+      />,
+    );
+
+    await screen.findByTestId('artifact-preview-frame');
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
+      expect(frame.getAttribute('src')).toBe(
+        'http://localhost:48123/api/projects/project-1/powered/powered-wide.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
+      );
+    });
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    act(() => postPreviewContentWidth(previewWindow, 1440));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+  });
+
+  it('keeps desktop HTML previews at 100% when measured content already fits', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'responsive-preview.html',
+          path: 'responsive-preview.html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Responsive preview',
+            entry: 'responsive-preview.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><main style="width:100%">Responsive landing page</main></body></html>'
+      />,
+    );
+
+    const responsiveFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(responsiveFrame);
+    fireEvent.load(responsiveFrame);
+    act(() => postPreviewContentWidth(previewWindow, 900));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+    const scaledShell = Array.from(container.querySelectorAll('div')).find(
+      (node) => node.style.transform === 'scale(1)',
+    );
+    expect(scaledShell).toBeTruthy();
   });
 
   it('portals the comment composer to the preview viewport instead of the clipped canvas', async () => {

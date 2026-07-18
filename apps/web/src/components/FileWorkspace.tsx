@@ -102,11 +102,9 @@ import {
   type ChatSessionMode,
   type InstalledPluginRecord,
   type LocalizedText,
-  type RunContextSelection,
   type WorkspaceContextItem,
 } from '@open-design/contracts';
 import { createTerminal, killTerminal, listPlugins } from '../state/projects';
-import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import {
   DesignBrowserPanel,
@@ -141,7 +139,7 @@ import { useInView } from './plugins-home/useInView';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { LibraryPicker } from './LibraryPicker';
-import { QuestionsPanel } from './QuestionsPanel';
+import { PreviewRunStatusBar } from './PreviewRunStatusBar';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
@@ -272,7 +270,6 @@ interface Props {
   messages?: ChatMessage[];
   artifactHtml?: string | null;
   conversationError?: string | null;
-  onRetry?: (message: ChatMessage) => void;
   // Contextual failure recovery, mirrored from the chat error card so the
   // preview surface can offer the same one-click fix (AMR authorize, terminal
   // sign-in) instead of a bare retry.
@@ -285,29 +282,6 @@ interface Props {
   // row was removed; these moved here alongside the FileViewer present/Share
   // portal that targets the same actions container.
   headerActions?: ReactNode;
-  // Active discovery question form, surfaced in the right-hand Questions tab
-  // instead of inline in the chat. Owned by ProjectView (derived from the
-  // latest assistant message).
-  questionForm?: QuestionForm | null;
-  // Tolerantly-parsed form shown while the block is still streaming, so the
-  // panel renders a frame and fills questions in progressively.
-  questionFormPreview?: QuestionForm | null;
-  // Stable per-occurrence id so the panel can remember a completed reveal
-  // across the streaming→persisted remount instead of re-animating.
-  questionFormKey?: string | null;
-  questionFormInteractive?: boolean;
-  // The turn is busy (streaming/queued) — keep Continue/Skip disabled while the
-  // form itself stays editable.
-  questionFormSubmitDisabled?: boolean;
-  questionFormSubmittedAnswers?: Record<string, string | string[]>;
-  questionsGenerating?: boolean;
-  onSubmitQuestionForm?: (
-    text: string,
-    attachments?: ChatAttachment[],
-    context?: RunContextSelection,
-  ) => void;
-  // Bumped nonce that focuses the Questions tab (banner click / new form).
-  focusQuestionsRequest?: { nonce: number } | null;
 }
 
 interface SketchState {
@@ -374,7 +348,6 @@ function shouldKeepCurrentSketchState(
 
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
-const QUESTIONS_TAB = '__questions__';
 
 // Module-level default so a caller that omits `previewComments` doesn't mint
 // a fresh [] every render — that identity feeds the memoized FileViewer.
@@ -1283,21 +1256,8 @@ export function FileWorkspace({
   messages = [],
   conversationId,
   headerActions,
-  questionForm = null,
-  questionFormPreview = null,
-  questionFormKey = null,
-  questionFormInteractive = false,
-  questionFormSubmitDisabled = false,
-  questionFormSubmittedAnswers,
-  questionsGenerating = false,
-  onSubmitQuestionForm,
-  focusQuestionsRequest = null,
 }: Props) {
   const { locale, t } = useI18n();
-  // The chat column only shows a compact Questions banner; the form itself
-  // lives here, including after submission when a banner click can reopen the
-  // answered preview.
-  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -1452,6 +1412,10 @@ export function FileWorkspace({
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
     [files],
   );
+
+  // Known-file set for the side chat's file-link routing — same shape
+  // ProjectView feeds its primary ChatPane.
+  const sideChatFileNames = useMemo(() => new Set(files.map((file) => file.name)), [files]);
 
   const projectPagePresets = useMemo(
     () => [
@@ -1832,7 +1796,6 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -1964,37 +1927,6 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideNavRequest]);
 
-  // Focus the Questions tab when the parent bumps the nonce (banner click in
-  // chat, or a freshly generated form). The tab is transient — not added to
-  // the persisted tab list.
-  useEffect(() => {
-    if (!focusQuestionsRequest) return;
-    setActiveTab(QUESTIONS_TAB);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusQuestionsRequest?.nonce]);
-
-  // Submitting from the right-hand panel should close the preview once. The
-  // answered form remains available, so a later chat-banner click can reopen
-  // the same Questions tab without this effect immediately closing it again.
-  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
-  useEffect(() => {
-    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
-    const isAnswered = questionFormSubmittedAnswers !== undefined;
-    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
-    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
-      setActiveTab(defaultRootTab);
-    }
-  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
-
-  // If the Questions tab is active but the form is gone because a new assistant
-  // turn has no form, fall back to the default root tab.
-  useEffect(() => {
-    if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
-      setActiveTab(defaultRootTab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, showQuestionsTab]);
-
   function openFile(name: string, options?: { forcePersist?: boolean }) {
     setUploadError(null);
     // Read from the ref, not the `persistedTabs` prop closure: this path is
@@ -2077,11 +2009,6 @@ export function FileWorkspace({
   }
 
   function activateWorkspaceTab(tabId: string) {
-    if (tabId === QUESTIONS_TAB) {
-      setUploadError(null);
-      setActiveTab(tabId);
-      return;
-    }
     const sketchEntry = sketches[tabId];
     if (sketchEntry && !sketchEntry.persisted) {
       setUploadError(null);
@@ -2113,10 +2040,6 @@ export function FileWorkspace({
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
     if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
-    if (activeTab === QUESTIONS_TAB) {
-      setActiveTab(defaultRootTab);
-      return;
-    }
     if (isBrowserTabId(activeTab)) {
       closeBrowserTab(activeTab);
       return;
@@ -2314,7 +2237,7 @@ export function FileWorkspace({
   // The Pages switcher is already sticky-pinned, so we only scroll
   // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
@@ -2896,7 +2819,6 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
@@ -2920,11 +2842,16 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
+
+  // The delivery hint belongs to the main design-preview surface only. Browser,
+  // terminal, questions, design-system, and side-chat tabs carry their own
+  // context and must not inherit status/analytics from the primary chat.
+  const showPreviewRunStatus =
+    activeTab === DESIGN_FILES_TAB || activeLiveArtifact !== null || activeFile !== null;
 
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
@@ -3081,12 +3008,11 @@ export function FileWorkspace({
     const ids: string[] = [];
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
     ids.push(DESIGN_FILES_TAB);
-    if (showQuestionsTab) ids.push(QUESTIONS_TAB);
     for (const entry of visibleOrderedWorkspaceTabs) {
       ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
     }
     return ids;
-  }, [designSystemProject, showQuestionsTab, visibleOrderedWorkspaceTabs]);
+  }, [designSystemProject, visibleOrderedWorkspaceTabs]);
 
   // Per-tab handler sets with stable identities. Tab is memoized; the inline
   // closures the strip map used to create handed every Tab fresh props on
@@ -3438,6 +3364,7 @@ export function FileWorkspace({
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
+        browserSnapshotToast ? 'has-browser-snapshot-toast' : '',
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
@@ -3520,23 +3447,6 @@ export function FileWorkspace({
               <Icon name="chevron-down" size={12} />
             </button>
           </div>
-          {showQuestionsTab ? (
-            <button
-              type="button"
-              className={`ws-tab questions-tab ${activeTab === QUESTIONS_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === QUESTIONS_TAB}
-              tabIndex={0}
-              data-testid="questions-tab"
-              onClick={() => setActiveTab(QUESTIONS_TAB)}
-              title={t('questions.tabLabel')}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="help-circle" size={13} />
-              </span>
-              <span className="ws-tab-label">{t('questions.tabLabel')}</span>
-            </button>
-          ) : null}
           {visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -3668,24 +3578,32 @@ export function FileWorkspace({
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
+      {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
+          the viewport's: a bare fixed .od-toast centers across the whole
+          window, drifting over the chat pane and covering the composer send
+          area in split view. */}
       {browserSnapshotToast ? (
-        <Toast
-          message={browserSnapshotToast.message}
-          details={browserSnapshotToast.details}
-          actionLabel={browserSnapshotToast.actionLabel}
-          className={browserSnapshotToast.className}
-          onAction={browserSnapshotToast.onAction}
-          role={browserSnapshotToast.role}
-          tone={browserSnapshotToast.tone}
-          ttlMs={browserSnapshotToast.ttlMs}
-          onDismiss={() => setBrowserSnapshotToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={browserSnapshotToast.message}
+            details={browserSnapshotToast.details}
+            actionLabel={browserSnapshotToast.actionLabel}
+            className={browserSnapshotToast.className}
+            onAction={browserSnapshotToast.onAction}
+            role={browserSnapshotToast.role}
+            tone={browserSnapshotToast.tone}
+            ttlMs={browserSnapshotToast.ttlMs}
+            onDismiss={() => setBrowserSnapshotToast(null)}
+          />
+        </div>
       ) : launcherToast ? (
-        <Toast
-          message={launcherToast}
-          role="alert"
-          onDismiss={() => setLauncherToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={launcherToast}
+            role="alert"
+            onDismiss={() => setLauncherToast(null)}
+          />
+        </div>
       ) : null}
       <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
@@ -3736,21 +3654,7 @@ export function FileWorkspace({
             />
           </div>
         ))}
-        {activeTab === QUESTIONS_TAB ? (
-          <QuestionsPanel
-            key={questionFormKey ?? undefined}
-            projectId={projectId}
-            formKey={questionFormKey}
-            form={questionForm ?? questionFormPreview}
-            interactive={questionFormInteractive}
-            submitDisabled={questionFormSubmitDisabled}
-            submittedAnswers={questionFormSubmittedAnswers}
-            generating={questionsGenerating}
-            onSubmit={(text, payload) =>
-              onSubmitQuestionForm?.(text, payload?.attachments ?? [], payload?.context)
-            }
-          />
-        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+        {activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
@@ -3932,6 +3836,8 @@ export function FileWorkspace({
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
             projectFiles={visibleFiles}
+            projectFileNames={sideChatFileNames}
+            projectResolvedDir={resolvedDir}
             conversations={conversations}
             onSelectConversation={onSelectConversation ?? (() => {})}
             onDeleteConversation={onDeleteConversation ?? (() => {})}
@@ -3997,6 +3903,15 @@ export function FileWorkspace({
             .
           </div>
         )}
+        {showPreviewRunStatus ? (
+          <div className="ws-preview-run-status-slot">
+            <PreviewRunStatusBar
+              projectId={projectId}
+              conversationId={conversationId}
+              messages={messages}
+            />
+          </div>
+        ) : null}
       </div>
       <PageCreatorDialog
         open={pageCreatorOpen}
@@ -6302,7 +6217,6 @@ function isPrimaryWorkspaceTab(
     || isTerminalTabId(name)
     || isSideChatTabId(name)
     || name === DESIGN_SYSTEM_TAB
-    || name === QUESTIONS_TAB
   ) {
     return true;
   }

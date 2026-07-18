@@ -24,6 +24,7 @@
     "en": "Meeting Notes"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Meeting notes page — title bar with attendees, agenda checklist, decisions block, action items table with owners + dates, and a \"next meeting\" footer. Use when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\", \"all-hands recap\", or \"会议纪要\".",
   "description_i18n": {
     "zh-CN": "会议记录页面——包含与会者标题栏、议程清单、决策事项区块、带负责人和日期的行动项表格，以及'下次会议'页脚。适用于需要'会议纪要'、'会议记录'、'1:1 笔记'、'全员会议总结'或'minutes'的场景。",

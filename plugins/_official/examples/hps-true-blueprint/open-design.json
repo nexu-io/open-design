@@ -9,6 +9,7 @@
     "zh-TW": "像首席架构师一样讲工程蓝图"
   },
   "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
   "description": "Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.",
   "description_i18n": {
     "en": "Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.",

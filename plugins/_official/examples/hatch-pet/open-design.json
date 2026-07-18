@@ -24,6 +24,7 @@
     "en": "Hatch Pet"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Create, repair, validate, preview, and package Codex-compatible animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a Codex pet, create a custom animated pet, or build a built-in pet asset with an 8x9 atlas, transparent unused cells, row-by-row animation prompts, QA contact sheets, preview videos, and pet.json packaging. This skill composes the installed $imagegen system skill for visual generation and uses bundled scripts for deterministic spritesheet assembly.",
   "description_i18n": {
     "zh-CN": "从角色美术、截图或生成图像创建、修复、验证、预览并打包符合 Codex 规范的宠物动画精灵图。自动生成 8x9 图集、透明空白单元格、逐行动画提示、QA 审查表、预览视频和 pet.json 打包文件。",

@@ -158,6 +158,13 @@ interface ChatRun {
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  artifactOutcome?: {
+    artifactCount: number;
+    artifactsCreated?: number;
+    artifactsModified?: number;
+    designSystemCreated: boolean;
+    previewModuleCount: number;
+  };
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;
@@ -1110,37 +1117,46 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
           runPreviewModuleCountForRun(run);
-        const artifactBaseline = runArtifactBaselines.take(run.id);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
-        if (artifactBaseline && !artifactBaseline.contended) {
-          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
-          try {
-            diff = diffRunArtifacts(
-              artifactBaseline.before,
-              snapshotProjectArtifacts(artifactBaseline.cwd),
-            );
-          } catch {
-            diff = null;
-          }
-          if (diff) {
-            artifactCount = diff.touched;
-            artifactsCreated = diff.created;
-            artifactsModified = diff.modified;
-            designSystemCreated = diff.designSystemCreated;
-            previewModuleCount = diff.previewModuleCount;
+        const artifactOutcome = run.artifactOutcome;
+        if (artifactOutcome) {
+          artifactCount = artifactOutcome.artifactCount;
+          artifactsCreated = artifactOutcome.artifactsCreated;
+          artifactsModified = artifactOutcome.artifactsModified;
+          designSystemCreated = artifactOutcome.designSystemCreated;
+          previewModuleCount = artifactOutcome.previewModuleCount;
+        } else {
+          const artifactBaseline = runArtifactBaselines.take(run.id);
+          if (artifactBaseline && !artifactBaseline.contended) {
+            let diff: ReturnType<typeof diffRunArtifacts> | null = null;
+            try {
+              diff = diffRunArtifacts(
+                artifactBaseline.before,
+                snapshotProjectArtifacts(artifactBaseline.cwd),
+              );
+            } catch {
+              diff = null;
+            }
+            if (diff) {
+              artifactCount = diff.touched;
+              artifactsCreated = diff.created;
+              artifactsModified = diff.modified;
+              designSystemCreated = diff.designSystemCreated;
+              previewModuleCount = diff.previewModuleCount;
+            } else {
+              artifactCount = toolStreamArtifactCount();
+              designSystemCreated = toolStreamDesignSystemCreated();
+              previewModuleCount = toolStreamPreviewModuleCount();
+            }
           } else {
             artifactCount = toolStreamArtifactCount();
             designSystemCreated = toolStreamDesignSystemCreated();
             previewModuleCount = toolStreamPreviewModuleCount();
           }
-        } else {
-          artifactCount = toolStreamArtifactCount();
-          designSystemCreated = toolStreamDesignSystemCreated();
-          previewModuleCount = toolStreamPreviewModuleCount();
         }
         const activationMilestones = deriveActivationMilestones({
           result,

@@ -6,6 +6,7 @@ import {
   velaLogout,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { openExternalUrl } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import {
   amrHandoffDeviceId,
@@ -552,6 +553,7 @@ export function AmrLoginPill({
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.stopPropagation();
+      event.preventDefault();
       const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
         metricsConsent,
       });
@@ -560,11 +562,16 @@ export function AmrLoginPill({
         resolvedDeviceId: getResolvedDeviceId(),
         installationId,
       });
-      event.currentTarget.href = attributedAmrUrl(
+      const url = attributedAmrUrl(
         amrConsoleUrlForProfile(status?.profile),
         attribution,
         deviceId,
       );
+      event.currentTarget.href = url;
+      // This link deliberately stops propagation to avoid re-selecting its
+      // agent card, so App's document-level first-party bridge cannot see it.
+      // Open the final, attributed URL directly to mint the browser bridge.
+      void openExternalUrl(url);
     },
     [analytics.track, installationId, metricsConsent, status?.profile],
   );
