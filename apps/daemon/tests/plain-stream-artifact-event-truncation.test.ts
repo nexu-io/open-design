@@ -252,6 +252,54 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
     ).toContain('split-b.html');
   });
 
+  // Regression guard #3 for the accumulator merge (raised by review on #5850):
+  // two DISTINCT artifacts that happen to share the same identifier AND the same
+  // body, straddling the cap boundary, must BOTH persist. A value-level dedup
+  // (identifier+content) would collapse them to one; the stream-offset stitch
+  // treats them as two separate occurrences and keeps both.
+  it('keeps both artifacts when a distinct pair shares the same identifier and body across the cap boundary', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-plain-dup-bin-'));
+    const fakeDeepseek = await writeSameBodyArtifactsAcrossCapDeepseek(binDir, 'deepseek-dup');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'deepseek',
+      agentCliEnv: { deepseek: { DEEPSEEK_BIN: fakeDeepseek } },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { run, projectId } = await createAndWaitForRun(started.url);
+    expect(run.status).toBe('succeeded');
+
+    const filesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
+    );
+    expect(filesResponse.status).toBe(200);
+    const filesBody = await filesResponse.json() as unknown;
+    const files = Array.isArray(filesBody)
+      ? filesBody
+      : ((filesBody as { files?: unknown[] }).files ?? []);
+    const names = files.map((file) =>
+      typeof (file as { name?: unknown }).name === 'string'
+        ? (file as { name: string }).name
+        : String(file),
+    );
+    const dupFiles = names.filter((name) => /^dup.*\.html$/.test(name));
+    expect(
+      dupFiles.length,
+      `both same-identifier same-body artifacts must persist as distinct files ` +
+        `(got ${JSON.stringify(dupFiles)}) — a value-level dedup would keep only one`,
+    ).toBe(2);
+  });
+
   // Control: identical run WITHOUT the flood — the artifact tag stays inside
   // the ring buffer and persistence works. This passes on origin/main and
   // isolates the >2000-event truncation as the only variable that flips the
@@ -373,6 +421,31 @@ for (let i = 0; i < 9; i++) W('prefix-' + i + '-' + CHUNK + '\\n');
 W('<artifact identifier="split-b" title="Split B" type="text/html">\\n');
 W('<!doctype html><html><body>artifact B after the cap</body></html>\\n');
 W('</artifact>\\n');
+process.exit(0);
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
+// Writes two artifacts with the SAME identifier and IDENTICAL body, separated
+// by a >8 MiB prose block (few large chunks so the ring is not truncated). One
+// lands in the capped head, one past it; both survive in the tail ring. They
+// are genuinely distinct deliverables and both must persist.
+async function writeSameBodyArtifactsAcrossCapDeepseek(dir: string, name: string): Promise<string> {
+  const bin = path.join(dir, name);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+if (process.argv.includes('--version')) { console.log('deepseek 4.0.0-dup'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: deepseek exec [--auto] <prompt>'); process.exit(0); }
+const W = (s) => fs.writeSync(1, s);
+const BLOCK =
+  '<artifact identifier="dup" title="Dup" type="text/html">\\n' +
+  '<!doctype html><html><body>identical body</body></html>\\n' +
+  '</artifact>\\n';
+W(BLOCK);
+const CHUNK = 'x'.repeat(1024 * 1024);
+for (let i = 0; i < 9; i++) W('prefix-' + i + '-' + CHUNK + '\\n');
+W(BLOCK);
 process.exit(0);
 `, 'utf8');
   await chmod(bin, 0o755);

@@ -203,7 +203,6 @@ import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js'
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
   extractPlainStreamArtifacts,
-  mergePlainStreamArtifacts,
   persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
 } from './runtimes/plain-stream.js';
@@ -5163,26 +5162,22 @@ export async function startServer({
           memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
         }
       }
-      // Accumulate plain-stream stdout on the run itself so the finalizer's
-      // artifact extraction does not depend on the <artifact> tag surviving the
-      // 2000-event run.events ring buffer. A long run that streams a complete
-      // <artifact> early and then floods >2000 later stdout events would evict
-      // the opening tag, making the finalizer's `includes('<artifact')` scan of
-      // run.events miss it and silently drop the delivered file. This mirrors
-      // the truncation-proof ledger the verdict consumers adopted in #5351.
-      // Bounded so a long run cannot grow this without limit.
+      // Keep enough of the plain-stream stdout on the run itself that the
+      // finalizer's artifact extraction does not depend on the <artifact> tag
+      // surviving the 2000-event run.events ring buffer. A long run that streams
+      // a complete <artifact> early and then floods >2000 later stdout events
+      // would evict the opening tag, making a scan of run.events miss it and
+      // silently drop the delivered file (#5351 fixed the same truncation class
+      // for the verdict consumers). We keep the HEAD (first CAP bytes, bounded)
+      // and separately track the TOTAL byte count; the finalizer stitches the
+      // head to the tail-biased run.events at their exact stream offset, so no
+      // artifact is lost and none is double-counted regardless of where in the
+      // stream it appears.
       if (event === 'stdout' && data && typeof data.chunk === 'string') {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
         if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
-          const next = (run.plainArtifactStdout ?? '') + data.chunk;
-          run.plainArtifactStdout = next.slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
-          // Record when the head-biased accumulator hit its cap: past this
-          // point later chunks are dropped, so an <artifact> that only appears
-          // AFTER the cap will not be in this buffer. The finalizer must then
-          // fall back to the (tail-biased) run.events ring instead of trusting
-          // the capped buffer's absence of the tag.
-          if (next.length > PLAIN_ARTIFACT_STDOUT_CAP) run.plainArtifactStdoutCapped = true;
-        } else {
-          run.plainArtifactStdoutCapped = true;
+          run.plainArtifactStdout =
+            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
@@ -7842,26 +7837,43 @@ export async function startServer({
         run.projectId
       ) {
         // Reconstruct the agent's stdout for artifact extraction from two
-        // truncation-complementary sources:
-        //   - the head-biased accumulator (`run.plainArtifactStdout`), which
-        //     keeps the FIRST CAP bytes streamed on the run, and
-        //   - the tail-biased run.events ring, which keeps the LAST 2000 events.
-        // Neither alone is complete for a long run: an <artifact> streamed early
-        // is evicted from the ring, while one that first appears after >CAP bytes
-        // of prose is absent from the capped accumulator. When the accumulator
-        // was capped we therefore extract from BOTH and union the artifacts
-        // (deduped), so an <artifact> on either side of the cap boundary — or one
-        // on each side (`A -> >CAP prose -> B`) — is still persisted. When it was
-        // not capped the accumulator holds the whole stream and is authoritative.
-        const accumulated = run.plainArtifactStdout ?? '';
-        const plainArtifacts = run.plainArtifactStdoutCapped
-          ? mergePlainStreamArtifacts(
-              extractPlainStreamArtifacts(accumulated),
-              extractPlainStreamArtifacts(plainStdoutFromRunEvents(run.events)),
-            )
-          : extractPlainStreamArtifacts(
-              accumulated.length > 0 ? accumulated : plainStdoutFromRunEvents(run.events),
-            );
+        // truncation-complementary windows over the SAME underlying stream:
+        //   - head: `run.plainArtifactStdout`, the FIRST CAP bytes (bounded), and
+        //   - tail: run.events, the LAST 2000 events.
+        // Using stream offsets (total byte count) we stitch them into a single
+        // continuous string at their exact seam, then extract ONCE. This is
+        // correct by construction:
+        //   - not truncated  -> head == whole stream (or tail == whole stream);
+        //   - overlapping    -> seam removes the double-covered span, so the
+        //                        same artifact is never counted twice AND two
+        //                        distinct artifacts that share a body are both
+        //                        kept (no value-level dedup);
+        //   - a true gap (a run with both >CAP early bytes AND >2000 later
+        //     events whose tail does not reach back to CAP) -> extract each
+        //     window separately and concatenate the artifact lists. The windows
+        //     do not overlap there, so there are no duplicate occurrences; only
+        //     an artifact buried entirely in the un-covered middle is lost, which
+        //     was already unrecoverable before this change (the old code only
+        //     ever had the tail).
+        const head = run.plainArtifactStdout ?? '';
+        const tail = plainStdoutFromRunEvents(run.events);
+        const totalBytes = run.plainStdoutTotalBytes ?? head.length;
+        const tailStart = Math.max(0, totalBytes - tail.length);
+        let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
+        if (head.length === 0) {
+          plainArtifacts = extractPlainStreamArtifacts(tail);
+        } else if (tailStart <= head.length) {
+          // Overlap or contiguous: splice tail on at the seam and extract once.
+          const stitched = head + tail.slice(head.length - tailStart);
+          plainArtifacts = extractPlainStreamArtifacts(stitched);
+        } else {
+          // Gap: no overlap, so extracting each window and concatenating cannot
+          // produce a duplicate occurrence or a false cross-gap artifact.
+          plainArtifacts = [
+            ...extractPlainStreamArtifacts(head),
+            ...extractPlainStreamArtifacts(tail),
+          ];
+        }
         if (plainArtifacts.length > 0) {
           try {
             const project = getProject(db, run.projectId);
