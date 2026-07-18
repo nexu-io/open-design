@@ -179,4 +179,162 @@ describe('parseDeckThumbnails', () => {
     const styleless = '<body><section class="slide">A</section></body>';
     expect(parseDeckThumbnails(styleless).reason).toBe('no-styles');
   });
+
+  it('strips executable content from untrusted slide markup', () => {
+    const deck = [
+      '<!doctype html><html><head><style>',
+      '  .deck-stage { width: 1920px; height: 1080px; }',
+      '  .slide:not(.active) { display: none; }',
+      '</style></head><body>',
+      '  <div class="deck-shell"><div class="deck-stage" id="deck-stage">',
+      '    <section class="slide active">',
+      '      <img src="x" onerror="fetch(\'//evil\')" alt="" />',
+      '      <a href="javascript:alert(1)">link</a>',
+      '      <a href="java\tscript:alert(3)">tabbed</a>',
+      '      <h1 onclick="steal()">Title</h1>',
+      '      <script>alert(2)</script>',
+      '      <iframe src="https://evil.example"></iframe>',
+      '      <object data="https://evil.example"></object>',
+      '      <embed src="https://evil.example" />',
+      '      <form action="https://evil.example"><button formaction="javascript:go()">x</button></form>',
+      '    </section>',
+      '  </div></div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    const slide = parsed.slides[0] ?? '';
+    // no inline event handlers, executable/navigable elements, or script URLs
+    expect(slide).not.toMatch(/onerror/i);
+    expect(slide).not.toMatch(/onclick/i);
+    expect(slide).not.toMatch(/<script/i);
+    expect(slide).not.toMatch(/<iframe/i);
+    expect(slide).not.toMatch(/<object/i);
+    expect(slide).not.toMatch(/<embed/i);
+    expect(slide).not.toMatch(/<form/i);
+    expect(slide).not.toMatch(/formaction/i);
+    expect(slide).not.toMatch(/javascript:/i);
+    // control-character-obfuscated scheme is neutralized too
+    expect(slide).not.toContain('alert(3)');
+    // benign slide content is preserved
+    expect(slide).toContain('<h1');
+    expect(slide).toContain('Title');
+  });
+
+  it('sanitizes reconstructed slide ancestors (a second injection path)', () => {
+    const deck = [
+      '<!doctype html><html><head><style>',
+      '  .deck-stage { width: 1920px; height: 1080px; }',
+      '</style></head><body>',
+      '  <div class="deck-shell" onclick="wrap()"><div class="deck-stage" id="deck-stage" onmouseover="wrap2()">',
+      '    <section class="slide active"><h1>Title</h1></section>',
+      '  </div></div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    const ancestorAttrNames = parsed.ancestors.flatMap((a) => a.attributes.map(([n]) => n.toLowerCase()));
+    // wrapper inline handlers are dropped before they are recreated in the DOM
+    expect(ancestorAttrNames.some((n) => n.startsWith('on'))).toBe(false);
+    // benign wrapper attributes (class) survive so CSS still targets the chain
+    expect(ancestorAttrNames).toContain('class');
+  });
+
+  it('neutralizes a slide whose root element is itself executable/navigable', () => {
+    const deck = [
+      '<!doctype html><html><head><style>',
+      '  .deck-stage { width: 1920px; height: 1080px; }',
+      '</style></head><body>',
+      '  <div class="deck-stage" id="deck-stage">',
+      '    <form class="slide active" onsubmit="steal()" action="https://evil.example"><h1>Title</h1></form>',
+      '  </div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    const slide = parsed.slides[0] ?? '';
+    // the navigable/submittable root element and its handlers are removed ...
+    expect(slide).not.toMatch(/<form/i);
+    expect(slide).not.toMatch(/onsubmit/i);
+    expect(slide).not.toMatch(/action=/i);
+    // ... while its inert content is preserved
+    expect(slide).toContain('Title');
+  });
+
+  it('removes SVG SMIL animation that could rewrite a sanitized attribute', () => {
+    const deck = [
+      '<!doctype html><html><head><style>',
+      '  .deck-stage { width: 1920px; height: 1080px; }',
+      '</style></head><body>',
+      '  <div class="deck-stage" id="deck-stage">',
+      '    <section class="slide active">',
+      '      <svg><a><animate attributeName="href" to="javascript:steal()" /></a></svg>',
+      '    </section>',
+      '  </div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    const slide = parsed.slides[0] ?? '';
+    expect(slide).not.toMatch(/<animate/i);
+    expect(slide).not.toMatch(/javascript:/i);
+  });
+
+  it('rejects a font-stylesheet link whose host is not exactly an approved CDN', () => {
+    const deck = [
+      '<!doctype html><html><head>',
+      '  <link rel="stylesheet" href="https://evil.example/fonts.googleapis.com/inject.css">',
+      '  <style>.deck-stage { width: 1920px; height: 1080px; }</style>',
+      '</head><body>',
+      '  <div class="deck-stage" id="deck-stage"><section class="slide active"><h1>Title</h1></section></div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    // a substring hostname match would inject this stylesheet into the app doc;
+    // it must be treated as an untrusted external stylesheet instead.
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('external-stylesheet');
+    expect(parsed.fontLinks).not.toContain('https://evil.example/fonts.googleapis.com/inject.css');
+  });
+
+  it('still accepts a genuine approved font CDN stylesheet link', () => {
+    const deck = [
+      '<!doctype html><html><head>',
+      '  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">',
+      '  <style>.deck-stage { width: 1920px; height: 1080px; }</style>',
+      '</head><body>',
+      '  <div class="deck-stage" id="deck-stage"><section class="slide active"><h1>Title</h1></section></div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.fontLinks).toContain('https://fonts.googleapis.com/css2?family=Inter');
+  });
+
+  it('drops a slide-nested <style> element from the sanitized slide body', () => {
+    const deck = [
+      '<!doctype html><html><head><style>.deck-stage { width: 1920px; height: 1080px; }</style></head><body>',
+      '  <div class="deck-stage" id="deck-stage">',
+      '    <section class="slide active">',
+      '      <style>@import url("https://evil.example/nested.css");</style>',
+      '      <h1>Title</h1>',
+      '    </section>',
+      '  </div>',
+      '</body></html>',
+    ].join('\n');
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+    expect(parsed.renderable).toBe(true);
+    const slide = parsed.slides[0] ?? '';
+    // DOMPurify removes the <style> element from the slide body markup.
+    expect(slide).not.toMatch(/<style/i);
+    expect(slide).not.toContain('evil.example');
+    expect(slide).toContain('Title');
+    // Note the deferred gap: parseDeckThumbnails harvests every <style> in the
+    // document into styleText independently of this DOMPurify pass, so the
+    // nested rule's CSS (including its @import) still lands in styleText. CSS
+    // @import stripping is intentionally left to the CSS-tokenizer follow-up,
+    // so this stays unchanged from main and is asserted here, not silently
+    // assumed closed.
+    expect(parsed.styleText).toContain('evil.example');
+  });
 });
