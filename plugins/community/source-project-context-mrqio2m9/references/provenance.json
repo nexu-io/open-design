@@ -1,0 +1,19 @@
+{
+  "candidateId": "579910ba-59f8-4c7e-9c43-ef6524885dbd",
+  "projectId": "6e11e93b-7baa-470c-bae1-5742d62ad504",
+  "runId": "88c6cf31-62b5-443d-9f44-0aebc5b410a3",
+  "conversationId": "ebb49f13-7931-4d09-af8e-5edb9de2e169",
+  "provenance": {
+    "summary": "Detected from context/source-context.md after a successful run.",
+    "detectedAt": 1784388176699
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 1463,
+      "copied": true
+    }
+  ]
+}
