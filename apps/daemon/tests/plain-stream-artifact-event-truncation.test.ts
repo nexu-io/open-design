@@ -202,6 +202,56 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
     ).toContain(ARTIFACT_FILE_NAME);
   });
 
+  // Regression guard #2 for the accumulator cap (raised by review on #5850): two
+  // artifacts split across the cap boundary — `A -> >8 MiB prose -> B`. The
+  // head-biased accumulator holds A (so it DOES contain `<artifact`), but B is
+  // past the cap and only survives in the tail-biased run.events. A finalizer
+  // that trusts the accumulator whenever it contains any tag would persist only
+  // A and silently drop B. Both must land: when capped, the finalizer unions the
+  // head and tail artifact sets.
+  it('persists BOTH artifacts when they straddle the cap boundary (A -> >8 MiB -> B)', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-plain-split-bin-'));
+    const fakeDeepseek = await writeArtifactBigPrefixArtifactDeepseek(binDir, 'deepseek-split');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'deepseek',
+      agentCliEnv: { deepseek: { DEEPSEEK_BIN: fakeDeepseek } },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { run, projectId } = await createAndWaitForRun(started.url);
+    expect(run.status).toBe('succeeded');
+
+    const filesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
+    );
+    expect(filesResponse.status).toBe(200);
+    const filesBody = await filesResponse.json() as unknown;
+    const files = Array.isArray(filesBody)
+      ? filesBody
+      : ((filesBody as { files?: unknown[] }).files ?? []);
+    const names = files.map((file) =>
+      typeof (file as { name?: unknown }).name === 'string'
+        ? (file as { name: string }).name
+        : String(file),
+    );
+    expect(names, 'the early artifact A (in the capped head) must persist').toContain('split-a.html');
+    expect(
+      names,
+      'the late artifact B (past the cap, only in the tail ring) must ALSO persist — ' +
+        'the finalizer must union head and tail artifact sets, not stop at A',
+    ).toContain('split-b.html');
+  });
+
   // Control: identical run WITHOUT the flood — the artifact tag stays inside
   // the ring buffer and persistence works. This passes on origin/main and
   // isolates the >2000-event truncation as the only variable that flips the
@@ -297,6 +347,31 @@ for (let i = 0; i < 9; i++) W('prefix-' + i + '-' + CHUNK + '\\n');
 // The artifact appears only AFTER the >8 MiB prefix.
 W('<artifact identifier="${ARTIFACT_IDENTIFIER}" title="Cap Repro" type="text/html">\\n');
 W('<!doctype html><html><body>accumulator cap fallback repro</body></html>\\n');
+W('</artifact>\\n');
+process.exit(0);
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
+// Writes artifact A, THEN a >8 MiB prose block (few large chunks so the ring is
+// not truncated), THEN artifact B, then exits. A lands in the capped head
+// accumulator; B is past the cap and survives only in the tail-biased ring —
+// the finalizer must union both.
+async function writeArtifactBigPrefixArtifactDeepseek(dir: string, name: string): Promise<string> {
+  const bin = path.join(dir, name);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+if (process.argv.includes('--version')) { console.log('deepseek 4.0.0-split'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: deepseek exec [--auto] <prompt>'); process.exit(0); }
+const W = (s) => fs.writeSync(1, s);
+W('<artifact identifier="split-a" title="Split A" type="text/html">\\n');
+W('<!doctype html><html><body>artifact A before the cap</body></html>\\n');
+W('</artifact>\\n');
+const CHUNK = 'x'.repeat(1024 * 1024);
+for (let i = 0; i < 9; i++) W('prefix-' + i + '-' + CHUNK + '\\n');
+W('<artifact identifier="split-b" title="Split B" type="text/html">\\n');
+W('<!doctype html><html><body>artifact B after the cap</body></html>\\n');
 W('</artifact>\\n');
 process.exit(0);
 `, 'utf8');

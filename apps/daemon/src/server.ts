@@ -202,7 +202,9 @@ import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
-  persistPlainStreamArtifacts,
+  extractPlainStreamArtifacts,
+  mergePlainStreamArtifacts,
+  persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
@@ -7839,31 +7841,34 @@ export async function startServer({
         (def.streamFormat ?? 'plain') === 'plain' &&
         run.projectId
       ) {
-        // Prefer the truncation-proof accumulator (populated on the run as
-        // stdout streams, above) over re-scanning run.events, whose 2000-event
-        // ring buffer can evict an <artifact> block streamed early in a long
-        // run and silently drop the delivered file.
-        //
-        // The accumulator is head-biased (it keeps the first CAP bytes), while
-        // run.events is tail-biased (last 2000 events). They cover complementary
-        // cases, so we must not blindly trust the accumulator's ABSENCE of the
-        // tag: an <artifact> that first appears after >CAP bytes of prose is not
-        // in the capped buffer but may still be in the last 2000 events. Fall
-        // back to the ring when the accumulator is empty OR when it was capped
-        // and does not itself contain the tag.
+        // Reconstruct the agent's stdout for artifact extraction from two
+        // truncation-complementary sources:
+        //   - the head-biased accumulator (`run.plainArtifactStdout`), which
+        //     keeps the FIRST CAP bytes streamed on the run, and
+        //   - the tail-biased run.events ring, which keeps the LAST 2000 events.
+        // Neither alone is complete for a long run: an <artifact> streamed early
+        // is evicted from the ring, while one that first appears after >CAP bytes
+        // of prose is absent from the capped accumulator. When the accumulator
+        // was capped we therefore extract from BOTH and union the artifacts
+        // (deduped), so an <artifact> on either side of the cap boundary — or one
+        // on each side (`A -> >CAP prose -> B`) — is still persisted. When it was
+        // not capped the accumulator holds the whole stream and is authoritative.
         const accumulated = run.plainArtifactStdout ?? '';
-        const plainStdout =
-          accumulated.length > 0 &&
-          !(run.plainArtifactStdoutCapped && !accumulated.includes('<artifact'))
-            ? accumulated
-            : plainStdoutFromRunEvents(run.events);
-        if (plainStdout.includes('<artifact')) {
+        const plainArtifacts = run.plainArtifactStdoutCapped
+          ? mergePlainStreamArtifacts(
+              extractPlainStreamArtifacts(accumulated),
+              extractPlainStreamArtifacts(plainStdoutFromRunEvents(run.events)),
+            )
+          : extractPlainStreamArtifacts(
+              accumulated.length > 0 ? accumulated : plainStdoutFromRunEvents(run.events),
+            );
+        if (plainArtifacts.length > 0) {
           try {
             const project = getProject(db, run.projectId);
-            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+            const persistedPlainArtifacts = await persistPlainStreamArtifactList({
               projectsRoot: PROJECTS_DIR,
               projectId: run.projectId,
-              stdout: plainStdout,
+              artifacts: plainArtifacts,
               metadata: project?.metadata,
               writeProjectFile,
             });
