@@ -511,6 +511,103 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('does not mistake the empty-output guard quota advice for a hard quota', () => {
+    const message =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. ' +
+      'Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('empty_output'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'empty_output',
+      failure_detail: 'empty_output',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('preserves real auth evidence alongside the empty-output guard', () => {
+    const message =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. ' +
+      'Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          { event: 'stderr', data: { chunk: 'Provider rejected the invalid API key.' } },
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('empty_output'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'invalid_api_key',
+      retryable: false,
+      user_action: 'login',
+    });
+  });
+
+  it('preserves real hard-quota evidence alongside the empty-output guard', () => {
+    const message =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. ' +
+      'Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          { event: 'stderr', data: { chunk: 'Provider error: insufficient quota.' } },
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('empty_output'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'hard_quota',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('does not carry empty-output quota advice into a later retry failure', () => {
+    const emptyOutputMessage =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. ' +
+      'Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'The retried agent stream failed unexpectedly.',
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', emptyOutputMessage, true),
+          runtimeCloseEvent('empty_output'),
+          { event: 'run_retry_attempted', data: { retry_attempt_index: 1 } },
+          errorEvent(
+            'AGENT_EXECUTION_FAILED',
+            'The retried agent stream failed unexpectedly.',
+            true,
+          ),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
   it('maps signal exits and stall text to timeout', () => {
     expect(
       classifyRunFailure({

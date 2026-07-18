@@ -362,6 +362,7 @@ import {
   cursorAuthGuidance,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
+import { extractOpenCodeSessionReply } from './runtimes/opencode-session-export.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -6883,6 +6884,10 @@ export async function startServer({
     // Idempotent — multiple guard paths (per-message Claude, run-scoped
     // non-Claude, plain stdout) can all call it.
     let roleMarkerAbortFired = false;
+    let childCloseObserved = false;
+    child.once('exit', () => {
+      childCloseObserved = true;
+    });
     function abortForRoleMarker(marker: string) {
       if (roleMarkerAbortFired) return;
       roleMarkerAbortFired = true;
@@ -6896,6 +6901,10 @@ export async function startServer({
           { retryable: true },
         ),
       );
+      // Close-time recovery and buffered flushes still pass through the same
+      // guard, but the original child is already gone. Do not signal a stale
+      // process-group id or arm a forced-shutdown timer after close.
+      if (childCloseObserved) return;
       // ACP sessions (Hermes, Kimi, Devin, Kiro, etc.) need explicit
       // abort because their I/O is multiplexed and they won't
       // necessarily exit on child SIGTERM alone.
@@ -7043,6 +7052,17 @@ export async function startServer({
       // see so the create-turn store (and the resumable-failure store) use the
       // CLI's real session handle, not the unused daemon-minted `newSessionId`.
       if (
+        def.id === 'byok-opencode' &&
+        ev?.type === 'status' &&
+        typeof ev.sessionId === 'string' &&
+        ev.sessionId.length > 0
+      ) {
+        // API-mode OpenCode deliberately does not resume its native session,
+        // but its session handle is still needed for the clean-exit recovery
+        // below when the CLI persists a reply and exits before flushing text.
+        capturedSessionId = ev.sessionId;
+      }
+      if (
         agentCapturesSessionId &&
         ev?.type === 'status' &&
         typeof ev.sessionId === 'string' &&
@@ -7072,6 +7092,62 @@ export async function startServer({
         agentProducedOutput = true;
       }
       emitAgentEvent(ev);
+    };
+    const recoverByokOpenCodeSessionOutput = async () => {
+      if (
+        def.id !== 'byok-opencode' ||
+        !capturedSessionId ||
+        !spawnedAgentEnv ||
+        !agentLaunch.launchPath ||
+        run.cancelRequested
+      ) {
+        return false;
+      }
+
+      const invocation = createCommandInvocation({
+        command: agentLaunch.launchPath,
+        args: ['export', capturedSessionId],
+        env: spawnedAgentEnv,
+      });
+      const exported = await new Promise<string | null>((resolve) => {
+        execFile(
+          invocation.command,
+          invocation.args,
+          {
+            cwd: effectiveCwd,
+            env: spawnedAgentEnv,
+            encoding: 'utf8',
+            timeout: 15_000,
+            maxBuffer: 32 * 1024 * 1024,
+            windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+          },
+          (error, stdout) => {
+            resolve(error ? null : String(stdout || ''));
+          },
+        );
+      });
+      if (!exported || run.cancelRequested) return false;
+
+      const reply = extractOpenCodeSessionReply(exported, {
+        since: runStartTimeMs,
+      });
+      if (!reply) return false;
+
+      sendAgentEvent({ type: 'text_delta', delta: reply.text });
+      if (reply.usage) {
+        sendAgentEvent({
+          type: 'usage',
+          usage: reply.usage,
+          ...(reply.costUsd !== null ? { costUsd: reply.costUsd } : {}),
+        });
+      }
+      send('diagnostic', {
+        type: 'opencode_session_output_recovered',
+        source: 'session_export',
+        message_id: reply.messageId,
+        completed_at: reply.completedAt,
+      });
+      return agentProducedOutput;
     };
     const parseBufferedAntigravityGeminiJsonEventStream = () => {
       if (
@@ -7422,6 +7498,7 @@ export async function startServer({
       finishWithRetryDecision('failed', 1, null);
     });
     child.on('close', async (code, signal) => {
+      childCloseObserved = true;
       try {
       clearInactivityWatchdog();
       clearForcedChildShutdown();
@@ -7501,7 +7578,27 @@ export async function startServer({
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       parseBufferedAntigravityGeminiJsonEventStream();
+      if (
+        code === 0 &&
+        !run.cancelRequested &&
+        !agentStreamError &&
+        trackingSubstantiveOutput &&
+        !agentProducedOutput
+      ) {
+        try {
+          await recoverByokOpenCodeSessionOutput();
+        } finally {
+          // sendAgentEvent normally represents live child activity and
+          // re-arms the inactivity watchdog. Recovery runs after child close,
+          // so leave no post-close timer (or retained BYOK environment) behind.
+          clearInactivityWatchdog();
+        }
+      }
       flushAgentTitleMarkerBuffer();
+      if (roleMarkerAbortFired) {
+        markRpcCloseReason('stream_error');
+        return finishWithRetryDecision('failed', 1, signal ?? null);
+      }
       if (agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
