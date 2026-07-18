@@ -359,36 +359,48 @@ export async function preflightCheckPreviewAssets(
 ): Promise<BlockedPreviewAsset[]> {
   const blocked: BlockedPreviewAsset[] = [];
   const MAX_ASSETS = 32;
+  const CONCURRENCY = 4;
 
-  // Collect confirmed project asset refs (capped)
+  // Collect confirmed project asset refs, de-duplicated by project path.
   const refs: Array<{ ref: string; projectPath: string }> = [];
-  let collected = 0;
+  const seen = new Set<string>();
 
   eachAssetRef(html, (ref) => {
-    if (collected >= MAX_ASSETS) return;
+    if (refs.length >= MAX_ASSETS) return;
     const projectPath = rootRelativeProjectAssetPath(ref, projectFilePaths);
-    if (projectPath) {
+    if (projectPath && !seen.has(projectPath)) {
+      seen.add(projectPath);
       refs.push({ ref, projectPath });
-      collected++;
     }
   });
 
-  // Check each asset through the raw route
-  for (const { ref, projectPath } of refs) {
-    if (signal?.aborted) break;
+  // Check assets through the raw route with bounded concurrency. Only error
+  // responses need a body; successful binary resources must not be consumed.
+  let nextIndex = 0;
+  const checkNext = async (): Promise<void> => {
+    while (!signal?.aborted) {
+      const index = nextIndex++;
+      if (index >= refs.length) return;
+      const item = refs[index];
+      if (!item) return;
+      const { ref, projectPath } = item;
 
-    try {
-      const url = toRawUrl(projectPath);
-      const res = await fetch(url, { signal });
-      const body = await res.json().catch(() => null);
-
-      if (isBlockedPreviewAssetResponse(res.status, body)) {
-        blocked.push({ projectPath, originalRef: ref });
+      try {
+        const res = await fetch(toRawUrl(projectPath), { signal });
+        let body: unknown = null;
+        if (res.status === 400) {
+          body = await res.json().catch(() => null);
+        }
+        if (isBlockedPreviewAssetResponse(res.status, body)) {
+          blocked.push({ projectPath, originalRef: ref });
+        }
+      } catch {
+        // Ignore network errors and cancellation; preview rendering is non-fatal.
       }
-    } catch {
-      // Ignore network errors — preserve existing 404 preview behavior
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, refs.length) }, () => checkNext()));
 
   return blocked;
 }

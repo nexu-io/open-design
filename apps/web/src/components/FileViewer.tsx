@@ -7091,6 +7091,7 @@ function HtmlViewer({
   const [blockedPreviewAssets, setBlockedPreviewAssets] = useState<BlockedPreviewAsset[]>([]);
   useEffect(() => {
     let cancelled = false;
+    const abortController = new AbortController();
     setProjectFilePathSet(null);
     setBlockedPreviewAssets([]);
     void fetchProjectFiles(projectId).then((files) => {
@@ -7100,7 +7101,6 @@ function HtmlViewer({
         // security blocks before the iframe renders broken images. Runs after the
         // file list lands so asset refs can be confirmed against real project files.
         if (source && file && file.path) {
-          const abortController = new AbortController();
           void preflightCheckPreviewAssets(
             source,
             file.path,
@@ -7117,6 +7117,7 @@ function HtmlViewer({
     });
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [source, projectId, file?.path, file?.mtime, filesRefreshKey, reloadKey]);
   const projectRootAssetRefs = useMemo(

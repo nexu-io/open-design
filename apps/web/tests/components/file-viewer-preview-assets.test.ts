@@ -345,6 +345,51 @@ describe('preflightCheckPreviewAssets', () => {
     expect(fetchMock).toHaveBeenCalledTimes(32);
   });
 
+  it('checks each project path only once when it is referenced repeatedly', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = [
+      '<img src="/photo.jpg">',
+      '<img data-src="/photo.jpg">',
+      '<source srcset="/photo.jpg 1x, /photo.jpg 2x">',
+      '<style>.hero { background-image: url(/photo.jpg); }</style>',
+    ].join('');
+    await preflightCheckPreviewAssets(html, 'index.html', files, toRawUrl);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not consume successful binary response bodies', async () => {
+    const json = vi.fn();
+    const fetchMock = vi.fn(async () => ({ status: 200, json } as unknown as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await preflightCheckPreviewAssets('<img src="/photo.jpg">', 'index.html', files, toRawUrl);
+
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('checks assets with at most four concurrent requests', async () => {
+    const manyFiles = new Set(Array.from({ length: 12 }, (_, i) => `img${i}.png`));
+    let active = 0;
+    let maxActive = 0;
+    const fetchMock = vi.fn(async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active--;
+      return new Response('', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const html = Array.from({ length: 12 }, (_, i) => `<img src="/img${i}.png">`).join('');
+    await preflightCheckPreviewAssets(html, 'index.html', manyFiles, toRawUrl);
+
+    expect(fetchMock).toHaveBeenCalledTimes(12);
+    expect(maxActive).toBe(4);
+  });
+
   it('stops on abort signal', async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
