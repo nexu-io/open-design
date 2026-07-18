@@ -372,4 +372,36 @@ describe('speaker notes HTML helpers', () => {
     expect(html).toContain('window.resizeTo(nextWidth, nextHeight)');
     expect(html).toContain("window.addEventListener('resize', scheduleMinimumWindowSize)");
   });
+
+  it('sandboxes the presenter slide iframes to an opaque origin', () => {
+    const html = buildSpeakerNotesPresenterHtml({
+      previewHtml: '<section class="slide">One</section>',
+      title: 'Deck',
+      projectId: 'project-1',
+      fileName: 'deck.html',
+      notes: ['Intro'],
+      initialSlideIndex: 0,
+      slideCount: 1,
+      labels: {
+        title: 'Speaker notes',
+        edit: 'Edit',
+        save: 'Save notes',
+        pause: 'Pause',
+        resume: 'Resume',
+        reset: 'Reset',
+        previous: 'Previous',
+        next: 'Next',
+        empty: 'Empty',
+        slide: 'Slide {current} / {total}',
+      },
+    });
+    // The srcdoc loaded into each frame is the full, untrusted deck (scripts
+    // included); the frames must run it in an opaque origin so it cannot reach
+    // the app's storage or daemon.
+    for (const id of ['current', 'previous', 'next']) {
+      const tag = html.match(new RegExp(`<iframe id="${id}"[^>]*>`))?.[0] ?? '';
+      expect(tag).toContain('sandbox="allow-scripts"');
+      expect(tag).not.toContain('allow-same-origin');
+    }
+  });
 });

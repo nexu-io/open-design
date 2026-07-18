@@ -22,12 +22,23 @@ import {
   type FacetSelection,
 } from './facets';
 import { sortByVisualAppeal } from './visualScore';
+import { comparePluginGalleryOrder, isSunkToBottom } from './pluginPopularity';
 import {
   readStoredSortOrder,
   sortByNewest,
   writeStoredSortOrder,
   type PluginSortOrder,
 } from './sortOrder';
+
+// Push the sunk tiles (default seeds, no-preview, manually-sunk ugly previews)
+// to the end while keeping everything else in its incoming order. The per-facet
+// comparator already sinks them inside a facet; this applies the same to "All".
+function sinkToBottom(list: InstalledPluginRecord[]): InstalledPluginRecord[] {
+  const keep: InstalledPluginRecord[] = [];
+  const sunk: InstalledPluginRecord[] = [];
+  for (const p of list) (isSunkToBottom(p.id) ? sunk : keep).push(p);
+  return [...keep, ...sunk];
+}
 
 export type FilterMode = 'all' | 'saved';
 
@@ -128,17 +139,34 @@ export function usePluginFacets({
     setBootstrapped(true);
   }, [bootstrapped, preferDefaultFacet, visiblePlugins.length, catalog]);
 
-  // The visual-appeal sort is applied at `visiblePlugins` derivation
-  // (above), so any downstream `applyFacetSelection` slice preserves
-  // the ranking. We do not re-sort here because filter + featured
-  // override should both remain stable across selections.
+  // The visual-appeal sort at `visiblePlugins` is the master / "All" browse
+  // order. When a specific facet is selected we re-sort that slice by usage
+  // (OPEND-449): non-prototype facets lead by real usage, the Prototype facet
+  // keeps its curated order, and the default mode-seeds + no-preview tiles sink
+  // to the bottom. "All" stays on the master order so it doesn't read as a
+  // cross-facet usage jumble. Array#sort is stable, so ties keep master order.
   const filtered = useMemo(() => {
-    const base =
-      mode === 'saved'
-        ? savedList
-        : applyFacetSelection(orderedPlugins, selection);
+    if (mode === 'saved') return filterByQuery(savedList, query, locale);
+    // Facet selection runs on `orderedPlugins` so the user's hot/newest sort
+    // choice flows through. OPEND-449 usage ordering is the default ("hot")
+    // experience: non-prototype facets lead by real usage, the Prototype facet
+    // keeps its curated order, and the default mode-seeds + no-preview tiles
+    // sink to the bottom. When the user explicitly switches to "newest",
+    // respect that chronological order and skip the usage re-sort.
+    const slice = applyFacetSelection(orderedPlugins, selection);
+    let base: InstalledPluginRecord[];
+    if (sortOrder === 'newest') {
+      base = slice;
+    } else if (selection.category) {
+      const curationGoverned = selection.category === 'prototype';
+      base = [...slice].sort((a, b) =>
+        comparePluginGalleryOrder(a.id, b.id, curationGoverned, curationGoverned),
+      );
+    } else {
+      base = sinkToBottom(slice);
+    }
     return filterByQuery(base, query, locale);
-  }, [mode, savedList, orderedPlugins, selection, query, locale]);
+  }, [mode, savedList, orderedPlugins, selection, query, locale, sortOrder]);
 
   function pickCategory(slug: string | null): void {
     if (mode === 'saved') setMode('all');

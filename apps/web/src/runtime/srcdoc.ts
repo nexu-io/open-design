@@ -425,7 +425,7 @@ export function buildSrcdoc(
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
   const withTransport = injectSrcdocTransportActivationBridge(
-    injectExportCaptureBridge(injectSnapshotBridge(withTweaks)),
+    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(withTweaks))),
   );
   // Embed the reload counter so the srcdoc string differs across reloads even
   // when the underlying HTML bytes are identical.  This ensures the browser
@@ -720,6 +720,68 @@ function injectSnapshotBridge(doc: string): string {
       window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
     });
   });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+function injectPreviewContentSizeBridge(doc: string): string {
+  const script = `<script data-od-preview-content-size-bridge>(function(){
+  if (window.__odPreviewContentSizeBridge) return;
+  window.__odPreviewContentSizeBridge = true;
+  var pending = false;
+  function measure(){
+    var root = document.documentElement;
+    var body = document.body || root;
+    if (!root) return null;
+    var values = [
+      root.scrollWidth,
+      body && body.scrollWidth,
+      root.offsetWidth,
+      body && body.offsetWidth,
+      root.clientWidth,
+      body && body.clientWidth
+    ];
+    var width = 0;
+    for (var i = 0; i < values.length; i += 1) {
+      var next = Number(values[i] || 0);
+      if (Number.isFinite(next) && next > width) width = next;
+    }
+    return width > 0 ? Math.ceil(width) : null;
+  }
+  function post(){
+    try { window.parent.postMessage({ type: 'od:preview-content-size', width: measure() }, '*'); } catch (_) {}
+  }
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function(){
+      pending = false;
+      post();
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:preview-content-size-request') return;
+    schedule();
+  });
+  window.addEventListener('resize', schedule);
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      var observer = new ResizeObserver(schedule);
+      observer.observe(document.documentElement);
+      if (document.body) observer.observe(document.body);
+    } catch (_) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule);
+  } else {
+    setTimeout(schedule, 0);
+  }
+  setTimeout(schedule, 80);
+  setTimeout(schedule, 260);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(schedule).catch(function(){});
+  }
 })();</script>`;
   return injectBeforeBodyEnd(doc, script);
 }

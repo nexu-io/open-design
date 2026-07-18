@@ -71,7 +71,6 @@ import type {
   NextStepActionClickProps,
   QuestionsFormClickProps,
   RunFailedToastClickProps,
-  PreviewRunStatusClickProps,
   AmrAuthResultProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
@@ -275,13 +274,6 @@ export function trackQuestionsFormSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
-): void {
-  send(track, 'ui_click', props);
-}
-
-export function trackPreviewRunStatusClick(
-  track: Track,
-  props: PreviewRunStatusClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

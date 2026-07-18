@@ -292,8 +292,8 @@ describe('AssistantMessage next-step affordance', () => {
   });
 });
 
-// A clarification turn ends the run while its <question-form> is still waiting
-// for the user in the Questions tab; the next-step card must hold back until
+// A clarification turn ends the run while its inline <question-form> is still
+// waiting for the user; the next-step card must hold back until
 // the answers (or a skip-all, which submits through the same path) arrive as
 // the following user message.
 describe('AssistantMessage next-step affordance during the question phase', () => {
@@ -322,7 +322,8 @@ describe('AssistantMessage next-step affordance during the question phase', () =
         {...handlers()}
       />,
     );
-    expect(screen.getByTestId('questions-banner')).toBeTruthy();
+    expect(screen.getByText('Brief')).toBeTruthy();
+    expect(screen.getByText('Studio name')).toBeTruthy();
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 

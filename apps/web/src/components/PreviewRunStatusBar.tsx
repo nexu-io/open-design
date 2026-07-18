@@ -1,10 +1,6 @@
-import { Button } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  trackPreviewRunStatusClick,
-  trackPreviewRunStatusSurfaceView,
-} from '../analytics/events';
+import { trackPreviewRunStatusSurfaceView } from '../analytics/events';
 import { useAnalytics } from '../analytics/provider';
 import { useI18n } from '../i18n';
 import {
@@ -24,7 +20,6 @@ interface Props {
   projectId: string;
   conversationId?: string | null;
   messages: readonly ChatMessage[];
-  onViewDetails?: (message: ChatMessage) => void;
 }
 
 function statusLabelKey(status: PreviewRunStatus):
@@ -52,7 +47,6 @@ export function PreviewRunStatusBar({
   projectId,
   conversationId,
   messages,
-  onViewDetails,
 }: Props) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -136,21 +130,6 @@ export function PreviewRunStatusBar({
   const elapsed = formatPreviewRunElapsed(displayed.elapsedMs);
   const isFailure = displayed.phase === 'failed';
   const label = t(statusLabelKey(displayed));
-  const trackClick = () => {
-    trackPreviewRunStatusClick(analytics.track, {
-      page_name: 'file_manager',
-      area: 'preview_run_status',
-      element: 'view_details',
-      status: displayed.phase,
-      ...(displayed.message.resultDeliveryState
-        ? { delivery_state: displayed.message.resultDeliveryState }
-        : {}),
-      project_id: projectId,
-      conversation_id: conversationId ?? null,
-      assistant_message_id: displayed.message.id,
-      ...(displayed.message.runId ? { run_id: displayed.message.runId } : {}),
-    });
-  };
 
   return (
     <div
@@ -172,21 +151,6 @@ export function PreviewRunStatusBar({
             {t('previewRunStatus.elapsed', { time: elapsed })}
           </span>
         )}
-        {isFailure ? (
-          onViewDetails ? (
-            <Button
-              variant="ghost"
-              className={styles.action}
-              data-testid="preview-run-status-view-details"
-              onClick={() => {
-                trackClick();
-                onViewDetails(displayed.message);
-              }}
-            >
-              {t('previewRunStatus.viewDetails')}
-            </Button>
-          ) : null
-        ) : null}
       </div>
     </div>
   );

@@ -37,6 +37,17 @@ type RunEvent = {
 
 const FAKE_VELA = fileURLToPath(new URL('./fixtures/fake-vela.mjs', import.meta.url));
 
+// The two silent-stall cases below make the inactivity watchdog do two jobs with
+// one budget: trip on the first (silent) attempt so the same-run retry fires,
+// and NOT trip on that retry before its fresh child clears node cold-start and
+// emits its first token. The old 400ms sat too close to cold-start on a loaded
+// host, so the retry occasionally tripped its own watchdog and the spec flaked
+// (#5721; same watchdog path as #5292). The first attempt stalls for ~60s, so
+// any value trips it deterministically — sizing the budget well above any
+// realistic subprocess cold-start removes the race. 40 consecutive runs of both
+// stall cases were clean at 3000ms; 400ms flaked ~1/8.
+const STALL_WATCHDOG_TIMEOUT_MS = '3000';
+
 describe('same-run retry runtime', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
@@ -190,11 +201,10 @@ describe('same-run retry runtime', () => {
     delete process.env.LANGFUSE_SECRET_KEY;
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
-    // Trip the no-output inactivity watchdog quickly so the first (silent)
-    // attempt stalls at first_token_wait and the same-run retry can fire. Kept
-    // comfortably above node cold-start so the recovered retry attempt's own
-    // watchdog does not also trip before it emits its first token.
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    // Trip the no-output watchdog on the silent first attempt so the same-run
+    // retry fires; sized above cold-start so the retry doesn't trip it too
+    // (see STALL_WATCHDOG_TIMEOUT_MS).
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {
@@ -261,10 +271,15 @@ describe('same-run retry runtime', () => {
     delete process.env.LANGFUSE_SECRET_KEY;
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
-    // Watchdog trips the first (silent) attempt fast; the escalation grace is
-    // shortened so the stale SIGTERM/SIGKILL land while the retry child is
-    // mid-work (retry backoff is <=500ms, so 800ms grace guarantees overlap).
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    // Watchdog trips the first (silent) attempt; the escalation grace is short
+    // so the stale SIGTERM/SIGKILL land while the retry child is mid-work. Both
+    // the escalation window (trip + grace) and the retry lifetime (trip +
+    // backoff) are anchored to the trip, so the overlap that makes this a valid
+    // regression is independent of the timeout value; the timeout only has to
+    // clear the retry's cold-start (see STALL_WATCHDOG_TIMEOUT_MS). Retry backoff
+    // is <=500ms and the retry keeps emitting for ~2.1s, so the 800ms grace
+    // still lands mid-work.
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '800';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;

@@ -635,7 +635,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'api',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       agentId: null,
       skillId: null,
       designSystemId: null,
@@ -662,7 +662,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — Anthropic');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com/anthropic');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
   }, 45_000);
 
@@ -748,7 +748,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'daemon',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       apiProtocol: 'openai',
       apiProviderBaseUrl: 'https://api.deepseek.com',
       agentId: 'codex',
@@ -774,7 +774,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
 
     await clickDesktopExecutionModeTab(desktop, 'Local CLI');
@@ -794,7 +794,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
   }, 45_000);
 

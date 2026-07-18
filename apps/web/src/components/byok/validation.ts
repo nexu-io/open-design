@@ -56,7 +56,7 @@ export interface NormalizedByokBaseUrl {
 export type ByokModelPreferenceSource =
   | 'explicit'
   | 'account'
-  | 'provider_default'
+  | 'provider_preferred'
   | 'empty';
 
 export interface ByokModelPreference {
@@ -224,22 +224,34 @@ export function blockingByokDraftFields(
 export function resolveByokModelPreference({
   currentModel,
   accountModels,
-  providerDefaultModel,
+  providerPreferredModels = [],
 }: {
   currentModel: string;
   accountModels: readonly ProviderModelOption[];
-  providerDefaultModel?: string;
+  providerPreferredModels?: readonly string[];
 }): ByokModelPreference {
   const explicit = currentModel.trim();
   if (explicit) return { model: explicit, source: 'explicit' };
-  const account = accountModels.find((model) => model.enabled !== false && model.id.trim());
-  if (account) return { model: account.id, source: 'account' };
-  const providerDefault = providerDefaultModel?.trim() ?? '';
-  const disabledProviderDefault = accountModels.some(
-    (model) => model.id.trim() === providerDefault && model.enabled === false,
+  const enabledAccountModels = accountModels.filter(
+    (model) => model.enabled !== false && model.id.trim(),
   );
-  if (providerDefault && !disabledProviderDefault) {
-    return { model: providerDefault, source: 'provider_default' };
+  const enabledAccountModelIds = new Set(
+    enabledAccountModels.map((model) => model.id.trim()),
+  );
+  const providerPreferred = providerPreferredModels
+    .map((model) => model.trim())
+    .find((model) => model && enabledAccountModelIds.has(model));
+  if (providerPreferred) {
+    return { model: providerPreferred, source: 'provider_preferred' };
+  }
+  if (accountModels.length === 0) {
+    const fallback = providerPreferredModels.find((model) => model.trim())?.trim() ?? '';
+    if (fallback) {
+      return { model: fallback, source: 'provider_preferred' };
+    }
+  }
+  if (enabledAccountModels.length === 1) {
+    return { model: enabledAccountModels[0]!.id.trim(), source: 'account' };
   }
   return { model: '', source: 'empty' };
 }

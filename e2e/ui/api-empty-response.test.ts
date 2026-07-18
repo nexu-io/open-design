@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
         apiProtocol: 'openai',
         apiKey: 'sk-test',
         baseUrl: 'https://api.deepseek.com',
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         agentId: null,
         skillId: null,
         designSystemId: null,

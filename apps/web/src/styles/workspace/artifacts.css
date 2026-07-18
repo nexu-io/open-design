@@ -2241,6 +2241,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.model-select-searchable__option-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .model-select-searchable__value-badge,
 .model-select-searchable__option-badge {
   --model-tag-color: var(--text-muted);
@@ -2291,6 +2297,12 @@
 .model-select-searchable__option.is-active .model-select-searchable__option-meta {
   color: color-mix(in srgb, var(--accent-strong) 60%, var(--text-muted));
 }
+.model-select-searchable__option-affordances {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+}
 .model-select-searchable__option-lock-inline {
   display: inline-flex;
   align-items: center;
@@ -2305,7 +2317,6 @@
   color: var(--text-muted);
   cursor: pointer;
   vertical-align: middle;
-  margin-left: 6px;
   transition:
     color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     background 160ms cubic-bezier(0.23, 1, 0.32, 1);

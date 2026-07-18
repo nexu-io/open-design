@@ -2,6 +2,10 @@ export interface PagesFunctionContext<Env, Params = Record<string, string>> {
   request: Request;
   env: Env;
   params: Params;
+  // Serves the next matching handler — for a Pages Function that owns a broad
+  // route, this falls through to the static asset (or the 404 page) instead of
+  // the function generating a response itself.
+  next: (input?: Request | string, init?: RequestInit) => Promise<Response>;
 }
 
 export type PagesFunction<Env, Params = Record<string, string>> = (

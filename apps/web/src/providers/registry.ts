@@ -1385,11 +1385,13 @@ export async function deployProjectFile(
   fileName: string,
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
+  target?: 'preview' | 'production',
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
+    ...(target ? { target } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',

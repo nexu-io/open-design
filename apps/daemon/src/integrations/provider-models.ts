@@ -91,7 +91,7 @@ function uniqueModels(models: ProviderModelOption[]): ProviderModelOption[] {
     const label = model.label.trim() || id;
     out.push({ ...model, id, label });
   }
-  return out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
 }
 
 function isOpenAiChatModelId(id: string): boolean {

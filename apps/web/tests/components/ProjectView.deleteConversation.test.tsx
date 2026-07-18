@@ -3,7 +3,6 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
-import type { QuestionFormOpenRequest } from '../../src/components/AssistantMessage';
 import type { QuestionForm } from '../../src/artifacts/question-form';
 
 const listConversations = vi.fn();
@@ -33,14 +32,14 @@ const saveTabs = vi.fn();
 // regression we want to pin).
 const chatPaneProps: {
   onDeleteConversation?: (id: string) => Promise<void> | void;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: (text: string) => void;
+  questionFormSubmitDisabled?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
 } = {};
 
 const fileWorkspaceProps: {
-  questionFormInteractive?: boolean;
-  questionFormSubmittedAnswers?: Record<string, string | string[]>;
+  questionForm?: QuestionForm | null;
 } = {};
 
 vi.mock('../../src/i18n', () => ({
@@ -105,12 +104,14 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     onDeleteConversation?: (id: string) => Promise<void> | void;
-    onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+    onSubmitQuestionForm?: (text: string) => void;
+    questionFormSubmitDisabled?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
   }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
-    chatPaneProps.onOpenQuestions = props.onOpenQuestions;
+    chatPaneProps.onSubmitQuestionForm = props.onSubmitQuestionForm;
+    chatPaneProps.questionFormSubmitDisabled = props.questionFormSubmitDisabled;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     return null;
@@ -120,11 +121,9 @@ vi.mock('../../src/components/ChatPane', () => ({
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: (props: {
-    questionFormInteractive?: boolean;
-    questionFormSubmittedAnswers?: Record<string, string | string[]>;
+    questionForm?: QuestionForm | null;
   }) => {
-    fileWorkspaceProps.questionFormInteractive = props.questionFormInteractive;
-    fileWorkspaceProps.questionFormSubmittedAnswers = props.questionFormSubmittedAnswers;
+    fileWorkspaceProps.questionForm = props.questionForm;
     return null;
   },
 }));
@@ -167,11 +166,11 @@ describe('ProjectView conversation delete', () => {
     cleanup();
     vi.clearAllMocks();
     chatPaneProps.onDeleteConversation = undefined;
-    chatPaneProps.onOpenQuestions = undefined;
+    chatPaneProps.onSubmitQuestionForm = undefined;
+    chatPaneProps.questionFormSubmitDisabled = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
-    fileWorkspaceProps.questionFormInteractive = undefined;
-    fileWorkspaceProps.questionFormSubmittedAnswers = undefined;
+    fileWorkspaceProps.questionForm = undefined;
   });
 
   // Issue #1202: the home `Needs input` badge is rendered from the
@@ -311,7 +310,7 @@ describe('ProjectView conversation delete', () => {
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });
 
-  it('keeps the latest unanswered question form editable after opening it from the chat banner', async () => {
+  it('keeps the latest unanswered question form in chat instead of the workspace panel', async () => {
     const form: QuestionForm = {
       id: 'task-type',
       title: 'Choose the task type',
@@ -356,22 +355,8 @@ describe('ProjectView conversation delete', () => {
 
     renderProjectView(vi.fn());
 
-    await waitFor(() => expect(fileWorkspaceProps.questionFormInteractive).toBe(true));
-    expect(fileWorkspaceProps.questionFormSubmittedAnswers).toBeUndefined();
-    await waitFor(() => expect(chatPaneProps.onOpenQuestions).toBeDefined());
-
-    act(() => {
-      chatPaneProps.onOpenQuestions?.({
-        form: {
-          id: form.id,
-          title: form.title,
-          questions: [...form.questions],
-        },
-        messageId: assistantMessage.id,
-      });
-    });
-
-    expect(fileWorkspaceProps.questionFormSubmittedAnswers).toBeUndefined();
-    expect(fileWorkspaceProps.questionFormInteractive).toBe(true);
+    await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
+    expect(chatPaneProps.questionFormSubmitDisabled).toBe(false);
+    expect(fileWorkspaceProps.questionForm).toBeUndefined();
   });
 });
