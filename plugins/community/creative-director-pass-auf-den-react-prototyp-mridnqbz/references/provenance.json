@@ -1,0 +1,19 @@
+{
+  "candidateId": "ba52ac4d-2a4c-4bc9-ac7e-b47916ec0763",
+  "projectId": "3d69f13e-d624-486d-9e8c-ff4396b35862",
+  "runId": "4bb5d796-b689-4e61-80aa-a6fb8d4e3956",
+  "conversationId": "2b661bc0-947c-4096-a038-90aae8eab846",
+  "provenance": {
+    "summary": "Detected from creative-director-plan.md after a successful run.",
+    "detectedAt": 1783896045222
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "creative-director-plan.md",
+      "label": "creative-director-plan.md",
+      "size": 8535,
+      "copied": true
+    }
+  ]
+}
