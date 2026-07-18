@@ -1,7 +1,9 @@
 import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import nodePath from 'node:path';
+import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
+import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
 import {
   InlineAssetsLimitError,
@@ -333,6 +335,23 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
+      }
+      // Refuse to import a system directory or a credential store. Importing the
+      // home root (or ~/.ssh, ~/.aws, ~/.gnupg) would bind the project's file
+      // API to the user's private keys/credentials — GET/DELETE raw/* could then
+      // read or delete them. `isBlockedSystemDir` covers /etc, /proc, etc.; the
+      // credential set is checked with a prefix match, and the home ROOT only
+      // by exact match so legitimate subfolders (e.g. ~/Projects) stay allowed.
+      let homeReal = os.homedir();
+      try { homeReal = await fs.promises.realpath(homeReal); } catch { /* keep as-is */ }
+      const credentialDirs = ['.ssh', '.aws', '.gnupg', '.kube', '.docker'].map((d) =>
+        path.join(homeReal, d),
+      );
+      const inCredentialDir = credentialDirs.some(
+        (dir) => normalizedPath === dir || normalizedPath.startsWith(dir + path.sep),
+      );
+      if (isBlockedSystemDir(normalizedPath) || normalizedPath === homeReal || inCredentialDir) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import a system or credential directory');
       }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
