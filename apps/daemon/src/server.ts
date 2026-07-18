@@ -5110,6 +5110,10 @@ export async function startServer({
     // extractor only needs the head of the reply.
     const MEMORY_REPLY_CAP = 32 * 1024;
     let memoryReplyText = '';
+    // Upper bound for the truncation-proof plain-stream stdout accumulator used
+    // by the artifact finalizer (see the emit handler below). 8 MiB comfortably
+    // covers realistic artifact-bearing runs while bounding per-run memory.
+    const PLAIN_ARTIFACT_STDOUT_CAP = 8 * 1024 * 1024;
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -5156,6 +5160,19 @@ export async function startServer({
         if (replyPiece) {
           memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
         }
+      }
+      // Accumulate plain-stream stdout on the run itself so the finalizer's
+      // artifact extraction does not depend on the <artifact> tag surviving the
+      // 2000-event run.events ring buffer. A long run that streams a complete
+      // <artifact> early and then floods >2000 later stdout events would evict
+      // the opening tag, making the finalizer's `includes('<artifact')` scan of
+      // run.events miss it and silently drop the delivered file. This mirrors
+      // the truncation-proof ledger the verdict consumers adopted in #5351.
+      // Bounded so a long run cannot grow this without limit.
+      if (event === 'stdout' && data && typeof data.chunk === 'string' &&
+          (run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+        run.plainArtifactStdout =
+          ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -7813,7 +7830,15 @@ export async function startServer({
         (def.streamFormat ?? 'plain') === 'plain' &&
         run.projectId
       ) {
-        const plainStdout = plainStdoutFromRunEvents(run.events);
+        // Prefer the truncation-proof accumulator (populated on the run as
+        // stdout streams, above) over re-scanning run.events, whose 2000-event
+        // ring buffer can evict an <artifact> block streamed early in a long
+        // run and silently drop the delivered file. Fall back to the ring only
+        // when the accumulator is empty (e.g. a run that produced no stdout).
+        const plainStdout =
+          run.plainArtifactStdout && run.plainArtifactStdout.length > 0
+            ? run.plainArtifactStdout
+            : plainStdoutFromRunEvents(run.events);
         if (plainStdout.includes('<artifact')) {
           try {
             const project = getProject(db, run.projectId);
