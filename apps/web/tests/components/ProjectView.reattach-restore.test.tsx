@@ -288,11 +288,12 @@ describe('computeTraceObjectFiles', () => {
       },
     ];
 
-    const files = computeTraceObjectFiles(
-      before,
-      next as never,
-      ['/home/bryan/projects/open-design/.od/projects/46041b54/existing.html'],
-    );
+   const files = computeTraceObjectFiles(
+  before,
+  next as never,
+  ['/home/bryan/projects/open-design/.od/projects/46041b54/existing.html'],
+  '46041b54',
+);
 
     expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
       ['existing.html', 'modified'],
