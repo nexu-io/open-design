@@ -351,6 +351,7 @@ interface RunCreateMeta extends JsonRecord {
   assistantMessageId?: string;
   clientRequestId?: string;
   requestFingerprint?: string;
+  userMessageId?: string;
   agentId?: string;
   pluginId?: string;
   appliedPluginSnapshotId?: string;
