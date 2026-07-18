@@ -70,6 +70,19 @@ function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) 
     if (url === '/api/deploy/cloudflare-pages/zones') {
       return new Response(JSON.stringify({ zones: [] }), { status: 200 });
     }
+    if (url === '/api/deploy/config' && method === 'PUT') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return new Response(JSON.stringify({
+        providerId: body.providerId ?? 'cloudflare-pages',
+        configured: true,
+        tokenMask: 'saved-cloudflare-token',
+        teamId: '',
+        teamSlug: '',
+        accountId: 'account-123',
+        projectName: '',
+        target: 'preview',
+      }), { status: 200 });
+    }
     if (url === '/api/projects/project-1/deploy' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       onDeployBody(body);
