@@ -531,6 +531,7 @@ export const zhCN: Dict = {
   "settings.modelRefreshLive": "已从 CLI 刷新模型。",
   "settings.modelRefreshLocalConfigLive": "已从本地配置刷新模型。",
   "settings.modelRefreshFallback": "未返回实时模型目录，将继续使用内置列表。",
+  "settings.modelRefreshLocalConfigFallback": "\u672a\u627e\u5230\u672c\u5730\u8def\u7531\u914d\u7f6e\uff0c\u5185\u7f6e\u522b\u540d\u4ecd\u53ef\u7528\u3002",
   "settings.modelRefreshError": "无法刷新模型，已保留当前列表和选择。",
   "settings.reasoningPicker": "推理强度",
   "settings.modelPickerHint":

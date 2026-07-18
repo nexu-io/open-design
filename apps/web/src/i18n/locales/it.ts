@@ -523,6 +523,7 @@ export const it: Dict = {
   'settings.modelRefreshRunning': 'Refreshing model catalog',
   'settings.modelRefreshLive': 'Models refreshed from the CLI.',
   'settings.modelRefreshLocalConfigLive': 'Models refreshed from local configuration.',
+  'settings.modelRefreshLocalConfigFallback': 'No local routing configuration was found. Built-in aliases remain available.',
   'settings.modelRefreshFallback': 'No live catalog was returned. The built-in list remains available.',
   'settings.modelRefreshError': 'Could not refresh models. The current list and selection were kept.',
   'settings.reasoningPicker': 'Sforzo di ragionamento',

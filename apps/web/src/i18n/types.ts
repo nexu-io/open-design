@@ -480,6 +480,7 @@ export interface Dict {
   'settings.modelRefreshRunning': string;
   'settings.modelRefreshLive': string;
   'settings.modelRefreshLocalConfigLive': string;
+  'settings.modelRefreshLocalConfigFallback': string;
   'settings.modelRefreshFallback': string;
   'settings.modelRefreshError': string;
   'settings.cliEnvTitle': string;

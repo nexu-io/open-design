@@ -533,6 +533,7 @@ export const zhTW: Dict = {
   "settings.modelRefreshLive": "已從 CLI 重新整理模型。",
   "settings.modelRefreshLocalConfigLive": "已從本機設定重新整理模型。",
   "settings.modelRefreshFallback": "未傳回即時模型目錄，將繼續使用內建列表。",
+  "settings.modelRefreshLocalConfigFallback": "\u627e\u4e0d\u5230\u672c\u6a5f\u8def\u7531\u8a2d\u5b9a\uff0c\u5167\u5efa\u522b\u540d\u4ecd\u53ef\u4f7f\u7528\u3002",
   "settings.modelRefreshError": "無法重新整理模型，已保留目前列表和選擇。",
   "settings.reasoningPicker": "推理強度",
   "settings.modelPickerHint":

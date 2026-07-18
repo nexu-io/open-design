@@ -3802,7 +3802,9 @@ export function SettingsDialog({
         ? t('settings.modelRefreshLocalConfigLive')
         : t('settings.modelRefreshLive')
       : modelRefreshStatus === 'fallback'
-        ? t('settings.modelRefreshFallback')
+        ? modelDiscovery === 'local-config'
+          ? t('settings.modelRefreshLocalConfigFallback')
+            : t('settings.modelRefreshFallback')
         : modelRefreshStatus === 'error'
           ? t('settings.modelRefreshError')
           : null;

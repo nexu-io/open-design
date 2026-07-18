@@ -2527,6 +2527,32 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
+  it('reports a local configuration fallback after refreshing Claude models', async () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      modelDiscovery: 'local-config',
+      modelsSource: 'fallback',
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    const onRefreshAgents = vi.fn(async () => [claudeAgent]);
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent], onRefreshAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-claude'));
+
+    await waitFor(() => {
+      expect(screen.getByText(en['settings.modelRefreshLocalConfigFallback'])).toBeTruthy();
+      expect(screen.queryByText(en['settings.modelRefreshFallback'])).toBeNull();
+    });
+  });
+
+
   it('reports a model refresh failure without clearing the picker', async () => {
     const onRefreshAgents = vi.fn(async () => {
       throw new Error('daemon unavailable');
