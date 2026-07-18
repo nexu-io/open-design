@@ -311,6 +311,47 @@ describe('preflightCheckPreviewAssets', () => {
     expect(blocked[0]).toEqual({ projectPath: 'photo.jpg', originalRef: '/photo.jpg' });
   });
 
+  it('preflights owner-relative assets from the HTML file directory', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.endsWith('/raw/photo.jpg')) {
+        return new Response(JSON.stringify(symlinkBody), { status: 400 });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const blocked = await preflightCheckPreviewAssets(
+      '<img src="./photo.jpg">',
+      'index.html',
+      files,
+      toRawUrl,
+    );
+
+    expect(blocked).toEqual([{ projectPath: 'photo.jpg', originalRef: './photo.jpg' }]);
+  });
+
+  it('preflights parent-relative assets from nested HTML files', async () => {
+    const nestedFiles = new Set(['pages/index.html', 'assets/hero.png']);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.endsWith('/raw/assets/hero.png')) {
+        return new Response(JSON.stringify(symlinkBody), { status: 400 });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const blocked = await preflightCheckPreviewAssets(
+      '<img src="../assets/hero.png">',
+      'pages/index.html',
+      nestedFiles,
+      toRawUrl,
+    );
+
+    expect(blocked).toEqual([{ projectPath: 'assets/hero.png', originalRef: '../assets/hero.png' }]);
+  });
+
   it('ignores ordinary 404 responses (missing files are not security blocks)', async () => {
     const fetchMock = vi.fn(async () => new Response('', { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);

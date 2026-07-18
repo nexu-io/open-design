@@ -352,7 +352,7 @@ export function isBlockedPreviewAssetResponse(
  */
 export async function preflightCheckPreviewAssets(
   html: string,
-  _ownerFilePath: string,
+  ownerFilePath: string,
   projectFilePaths: ReadonlySet<string>,
   toRawUrl: (projectPath: string) => string,
   signal?: AbortSignal,
@@ -367,7 +367,14 @@ export async function preflightCheckPreviewAssets(
 
   eachAssetRef(html, (ref) => {
     if (refs.length >= MAX_ASSETS) return;
-    const projectPath = rootRelativeProjectAssetPath(ref, projectFilePaths);
+    const trimmed = ref.trim();
+    const rootPath = rootRelativeProjectAssetPath(trimmed, projectFilePaths);
+    const relativePath = rootPath
+      ? null
+      : resolveRelativeAssetPath(ownerFilePath, trimmed);
+    const projectPath = rootPath ?? (
+      relativePath && projectFilePaths.has(relativePath) ? relativePath : null
+    );
     if (projectPath && !seen.has(projectPath)) {
       seen.add(projectPath);
       refs.push({ ref, projectPath });
