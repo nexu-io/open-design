@@ -842,6 +842,7 @@ export interface Dict {
   'settings.memoryExtractionPhaseSkipped': string;
   'settings.memoryExtractionPhaseFailed': string;
   'settings.memoryExtractionSkipNoProvider': string;
+  'settings.memoryExtractionSkipUnsupportedProvider': string;
   'settings.memoryExtractionSkipDisabled': string;
   'settings.memoryExtractionSkipEmpty': string;
   'settings.memoryExtractionSkipNoMatch': string;
@@ -859,6 +860,7 @@ export interface Dict {
   'settings.memoryExtractionsClearConfirm': string;
   'settings.memoryNoProviderBannerTitle': string;
   'settings.memoryNoProviderBannerBody': string;
+  'settings.memoryUnsupportedProviderBannerBody': string;
   // Memory model picker — rendered inline next to the chat model picker
   // so picking "the fast model that mines facts each turn" lives in the
   // same row as the chat agent + model. Reuses the surrounding chat
@@ -890,6 +892,7 @@ export interface Dict {
   'settings.mcpInstructionCursor': string;
   'settings.mcpDeeplinkInstallCursor': string;
   'settings.mcpMethodJson': string;
+  'settings.mcpInstructionKiro': string;
   'settings.mcpInstructionCopilot': string;
   'settings.mcpInstructionAntigravity': string;
   'settings.mcpInstructionZed': string;
@@ -2471,6 +2474,20 @@ export interface Dict {
   'chat.amrLowBalance.rechargeCta': string;
   'chat.amrLowBalance.proceedCta': string;
   'chat.amrLowBalance.dontRemind': string;
+  'chat.amrArtifactUpgrade.title': string;
+  'chat.amrArtifactUpgrade.message': string;
+  'chat.amrArtifactUpgrade.benefit1': string;
+  'chat.amrArtifactUpgrade.benefit2': string;
+  'chat.amrArtifactUpgrade.benefit3': string;
+  'chat.amrArtifactUpgrade.benefit4': string;
+  'chat.amrArtifactUpgrade.promoBanner': string;
+  'chat.amrArtifactUpgrade.countdownLabel': string;
+  'chat.amrArtifactUpgrade.plansCta': string;
+  'chat.amrArtifactUpgrade.homePlansCta': string;
+  'chat.amrArtifactUpgrade.laterCta': string;
+  'chat.amrArtifactUpgrade.homeTitle': string;
+  'chat.amrArtifactUpgrade.homeMessage': string;
+  'chat.amrArtifactUpgrade.homeArtifactCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
@@ -3210,6 +3227,12 @@ export interface Dict {
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;
   'workspace.terminalRestart': string;
+  'previewRunStatus.analyzing': string;
+  'previewRunStatus.generating': string;
+  'previewRunStatus.verifying': string;
+  'previewRunStatus.succeeded': string;
+  'previewRunStatus.failed': string;
+  'previewRunStatus.elapsed': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -3672,6 +3695,9 @@ export interface Dict {
   'fileViewer.deployProviderLabel': string;
   'fileViewer.vercelProvider': string;
   'fileViewer.cloudflarePagesProvider': string;
+  'fileViewer.deployTargetLabel': string;
+  'fileViewer.deployTargetPreview': string;
+  'fileViewer.deployTargetProduction': string;
   'fileViewer.deployToProvider': string;
   'fileViewer.redeployToProvider': string;
   'fileViewer.deployingToProvider': string;
@@ -3903,6 +3929,7 @@ export interface Dict {
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
+  'qf.otherOption': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;

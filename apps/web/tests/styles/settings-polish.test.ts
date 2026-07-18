@@ -67,4 +67,19 @@ describe('settings polish CSS', () => {
     expect(ruleValue(checkbox, 'padding')).toBe('0');
     expect(ruleValue(checkbox, 'margin')).toBe('2px 0 0');
   });
+
+  it('keeps updater popup checkbox and actions on one footer row for long en labels', () => {
+    const footer = cssBlock(mentionHomeCss, '.updater-popup__footer');
+    const preference = cssBlock(mentionHomeCss, '.updater-popup__preference');
+    const label = cssBlock(mentionHomeCss, '.updater-popup__checkbox span');
+    const actions = cssBlock(mentionHomeCss, '.updater-popup__actions');
+
+    expect(ruleValue(footer, 'display')).toBe('flex');
+    expect(ruleValue(footer, 'flex-wrap')).toBe('nowrap');
+    expect(ruleValue(preference, 'flex')).toBe('1 1 0');
+    expect(ruleValue(preference, 'min-width')).toBe('0');
+    expect(ruleValue(label, 'white-space')).toBe('normal');
+    expect(ruleValue(actions, 'flex')).toBe('0 0 auto');
+    expect(ruleValue(actions, 'flex-wrap')).toBe('nowrap');
+  });
 });

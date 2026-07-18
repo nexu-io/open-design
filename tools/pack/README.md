@@ -2,7 +2,7 @@
 
 Local packaging control plane for Open Design.
 
-The active slice is mac-first local packaging and smoke lifecycle control:
+`tools-pack` is the cross-platform packaging and smoke-lifecycle control plane. The macOS commands include:
 
 - `tools-pack mac build --to all`
 - `tools-pack mac build --to app|dmg|zip`
@@ -16,8 +16,9 @@ The active slice is mac-first local packaging and smoke lifecycle control:
 - `tools-pack mac cleanup`
 
 Build artifacts are namespace-scoped under `.tmp/tools-pack/out/mac/namespaces/<namespace>/`.
-Release artifacts keep the canonical `Open Design.app` bundle shape; local `tools-pack install` copies it as
-`Open Design.<namespace>.app` so developer namespaces can coexist without affecting runtime data/log/cache paths.
+Public release bundles keep channel-distinct identities: `Open Design.app`, `Open Design Beta.app`,
+`Open Design Prerelease.app`, or `Open Design Preview.app`. Local `tools-pack install` adds the developer
+namespace so installs can coexist without affecting runtime data/log/cache paths.
 
 Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/namespaces/<namespace>/`:
 
@@ -52,9 +53,9 @@ The packaged daemon path contract lives only in the root `AGENTS.md` section
 **Daemon data directory contract**. Before changing or documenting packaged
 path propagation, you MUST read that section; this README MUST NOT restate it.
 
-Packaged desktop can check the release metadata feed, download a verified mac DMG or Windows installer, and expose
-update actions through desktop IPC. This runtime updater phase still opens the downloaded installer for manual
-replacement instead of applying an in-place update.
+Packaged desktop checks release metadata, verifies the downloaded artifact, and exposes update actions through desktop
+IPC. Launcher-based builds prefer verified payload activation followed by relaunch; installer replacement remains the
+fallback for artifact types and older builds that cannot apply a payload in place.
 
 Electron-builder resources live under `tools/pack/resources/mac/`. The current logo is staged there as the mac icon/DMG
 placeholder so future design-provided assets can replace the resource files without changing packaging code.
@@ -112,7 +113,7 @@ Local lifecycle commands:
 - `tools-pack linux cleanup`
 - `tools-pack linux cleanup --headless`
 
-Build artifacts are namespace-scoped under `.tmp/tools-pack/out/linux/namespaces/<namespace>/`. Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/linux/namespaces/<namespace>/{data,logs,runtime,cache,user-data}/`. Containerized build cache lives under `.tmp/tools-pack/.docker-cache/{electron,electron-builder}/`.
+Build artifacts are namespace-scoped under `.tmp/tools-pack/out/linux/namespaces/<namespace>/`. Packaged logs, sidecar runtime, cache, and Electron user-data are namespace-scoped under the tools-pack runtime root. Daemon storage follows only the root `AGENTS.md` **Daemon data directory contract**. Containerized build cache lives under `.tmp/tools-pack/.docker-cache/{electron,electron-builder}/`.
 
 Local installs use XDG paths:
 

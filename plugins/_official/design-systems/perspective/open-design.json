@@ -24,6 +24,7 @@
     "en": "Perspective"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Spatial depth design with isometric views, vanishing points, and layered elements that guide attention through 3D-like realism.",
   "description_i18n": {
     "zh-CN": "采用等距视图、消失点和分层元素的空间深度设计，通过 3D 般的真实感引导视觉注意力。",

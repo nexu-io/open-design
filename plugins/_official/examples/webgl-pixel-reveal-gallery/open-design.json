@@ -16,6 +16,7 @@
     "en": "Pixel Reveal Gallery"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A scroll-reactive masonry gallery (Three.js + GSAP) where each image develops from a pixel/grid dissolve on viewport entry, with a split-text heading and click-to-fullscreen Flip.",
   "description_i18n": {
     "zh-CN": "滚动响应式瀑布流图廊（Three.js + GSAP）：每图进入视口时从像素/网格溶解显影，配分行标题动画与点击 Flip 放大。",

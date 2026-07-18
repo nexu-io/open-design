@@ -2,305 +2,217 @@
 
 ## Purpose
 
-Runtime Adapter is the daemon layer responsible for adapting local AI agent CLIs. It converts Open Design's unified generation requests into the actual command-line invocations for each CLI, and converts CLI output into streaming events that the frontend can consume.
+The runtime adapter layer lets the daemon drive locally installed AI-agent
+CLIs through one Open Design run contract. It resolves and probes each CLI,
+builds a runtime-specific invocation, delivers the composed prompt, normalizes
+the runtime's output, and publishes run events to the web UI and `od` CLI.
 
-The current implementation is concentrated in:
+## Current Source Layout
 
-- `apps/daemon/src/agents.ts`: agent definitions, detection, model lists, argument construction, model validation.
-- `apps/daemon/src/server.ts`: `/api/chat` request orchestration, prompt composition, `spawn()` subprocesses, SSE forwarding.
-- `apps/daemon/src/claude-stream.ts`: parsing Claude Code structured JSONL output.
-- `apps/daemon/src/json-event-stream.ts`: parsing structured JSON/JSONL output from Codex, Gemini, OpenCode, and Cursor Agent.
-- `apps/daemon/src/acp.ts`: model detection and streaming session orchestration for the ACP JSON-RPC runtime.
+The implementation is split by responsibility:
 
-## Currently Supported Runtimes
+- `apps/daemon/src/runtimes/registry.ts` owns the built-in registry and appends
+  configured local profiles.
+- `apps/daemon/src/runtimes/defs/*.ts` contains one runtime definition per
+  built-in adapter. `apps/daemon/src/agents.ts` is now only a compatibility
+  re-export surface; it is not the definition source.
+- `apps/daemon/src/runtimes/types.ts` defines `RuntimeAgentDef` and the detected
+  agent shape.
+- `apps/daemon/src/runtimes/detection.ts`, `launch.ts`, `executables.ts`,
+  `invocation.ts`, and `models.ts` own probing, executable resolution, process
+  launch normalization, and model validation.
+- `apps/daemon/src/routes/runs.ts` owns `POST /api/runs`, run event streaming,
+  cancellation, and the compatibility `POST /api/chat` route. The current run
+  execution pipeline is assembled in `apps/daemon/src/server.ts`.
+- `apps/daemon/src/runtimes/claude-stream.ts`, `json-event-stream.ts`,
+  `qoder-stream.ts`, and `apps/daemon/src/copilot-stream.ts` normalize
+  runtime-specific structured output.
+- `apps/daemon/src/agent-protocol/` owns the shared JSON-line transport and the
+  ACP and pi RPC protocol implementations.
 
-`AGENT_DEFS` in `apps/daemon/src/agents.ts` defines 8 local runtimes:
+## Registered Runtimes
 
-| id | Name | CLI | Output format | Model list source |
-|---|---|---|---|---|
-| `claude` | Claude Code | `claude` | `claude-stream-json` | Static fallback |
-| `codex` | Codex CLI | `codex` | `json-event-stream` | Static fallback |
-| `gemini` | Gemini CLI | `gemini` | `json-event-stream` | Static fallback |
-| `opencode` | OpenCode | `opencode` | `json-event-stream` | `opencode models` + fallback |
-| `hermes` | Hermes | `hermes` | `acp-json-rpc` | `session/new` from `hermes acp` + fallback |
-| `kimi` | Kimi CLI | `kimi` | `acp-json-rpc` | `session/new` from `kimi acp` + fallback |
-| `cursor-agent` | Cursor Agent | `cursor-agent` | `json-event-stream` | `cursor-agent models` + fallback |
-| `qwen` | Qwen Code | `qwen` | `plain` | Static fallback |
+`BASE_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently contains
+26 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
+loaded by `readLocalAgentProfileDefs()`, so an installation can expose more
+entries than the built-in list.
 
-Each runtime definition contains:
+| Stream / protocol | Built-in adapter IDs | CLI binaries |
+|---|---|---|
+| `claude-stream-json` | `claude`, `amp`, `codebuddy` | `claude`, `amp`, `codebuddy` |
+| `json-event-stream` | `codex`, `opencode`, `byok-opencode`, `cursor-agent`, `mimo` | `codex`, `opencode-cli`, `opencode-cli`, `cursor-agent`, `mimo` |
+| `acp-json-rpc` | `amr`, `devin`, `hermes`, `trae-cli`, `kimi`, `kiro`, `kilo`, `vibe`, `reasonix` | `vela`, `devin`, `hermes`, `traecli`, `kimi`, `kiro-cli`, `kilo`, `vibe-acp`, `reasonix` |
+| `pi-rpc` | `pi` | `pi` |
+| `qoder-stream-json` | `qoder` | `qodercli` |
+| `copilot-stream-json` | `copilot` | `copilot` |
+| `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode` |
 
-- `id` / `name` / `bin`: used for frontend display and process startup.
-- `versionArgs`: used to detect the version.
-- `fallbackModels`: static fallback options for the model selector.
-- `listModels`: optional model discovery command.
-- `fetchModels`: optional custom model detection logic, suitable for runtimes such as ACP that require a handshake before the model list is available.
-- `reasoningOptions`: optional reasoning effort options, currently used by Codex.
-- `buildArgs()`: converts unified input into the CLI's argv; it can also read `runtimeContext` at runtime, currently used to explicitly pass execution context such as `cwd`.
-- `streamFormat`: tells the daemon how to interpret stdout.
+There is no registered `gemini` adapter. The standalone Gemini CLI runtime was
+retired when Kimi ACP was restored. The JSON event parser still understands a
+Gemini-shaped stream as an internal compatibility path for buffered
+Antigravity output; that parser branch does not make Gemini a selectable
+runtime.
+
+## Runtime Definition Contract
+
+Each `RuntimeAgentDef` supplies the declarative data and hooks needed by the
+shared orchestration layer. The main groups are:
+
+- Identity and executable discovery: `id`, `name`, `bin`, `fallbackBins`,
+  `versionArgs`, and optional help/capability probes.
+- Model discovery and validation: `fallbackModels`, optional `listModels` or
+  `fetchModels`, optional `reasoningOptions`, and custom-model policy.
+- Invocation: `buildArgs()`, optional runtime environment, prompt delivery
+  mode, image support, and prompt-size constraints.
+- Output normalization: `streamFormat` and, for the shared JSON event stream,
+  `eventParser`.
+- Integrations: MCP discovery/injection metadata, authentication probes,
+  inactivity timeouts, and install/documentation metadata.
+- Session continuity: CLI resume, captured stream session IDs, or ACP
+  `session/load`, depending on the runtime.
+
+Local profiles inherit a built-in adapter and may override identity, binary,
+arguments, environment, models, and version/help probes. A profile cannot
+replace a built-in ID, and an unknown explicit base adapter is rejected.
 
 ## Detection Flow
 
-The detection entry point is `detectAgents()`.
+The batch entry point is `detectAgents()`; `detectAgentsStream()` yields the
+same results as each probe settles.
 
-Flow:
+1. Iterate over the registry, including valid local profiles.
+2. Use `resolveAgentLaunch()` to select the executable that the run path will
+   actually launch. This includes configured binaries, compatible fallback
+   binaries, and wrapper/native-launch normalization.
+3. Run the version probe. A missing, non-executable, or broken target is
+   reported as unavailable with a diagnostic.
+4. For an invocable runtime, probe advertised CLI capabilities, models, and
+   authentication concurrently.
+5. Use live model discovery when it succeeds; otherwise expose the adapter's
+   fallback model list and mark its source as `fallback`.
+6. Refresh the model-validation cache from the result surfaced to clients.
 
-1. Iterate over `AGENT_DEFS`.
-2. Use `resolveOnPath()` to locate the CLI binary in `PATH`.
-3. After locating it, run `versionArgs` to get the version.
-4. Generate the model list through `listModels`, `fetchModels`, or `fallbackModels`, depending on runtime capabilities.
-5. Return the result to the frontend and refresh the runtime's model validation cache.
+A failed probe is isolated to that adapter instead of removing every agent
+from the picker. Detection results include availability, resolved path,
+version, models and their source, stream metadata, authentication state, and
+diagnostics where applicable.
 
-The detection result includes:
+## Run Flow
 
-- `available`: whether the CLI is available.
-- `path`: the actual binary path.
-- `version`: version string.
-- `models`: model list used by the frontend model menu.
-- `reasoningOptions`: reasoning effort menu.
-- `streamFormat`: output format hint.
+`apps/daemon/src/routes/runs.ts` exposes the durable run API:
 
-## Runtime Flow
+- `POST /api/runs` creates and starts a run.
+- `GET /api/runs/:id/events` streams persisted and live run events.
+- `POST /api/runs/:id/cancel` cancels the run.
+- `POST /api/chat` remains the compatibility chat/SSE entry point.
 
-Actual execution happens in `POST /api/chat` in `apps/daemon/src/server.ts`.
+For a local runtime, the shared execution pipeline:
 
-Flow:
+1. Resolves `RuntimeAgentDef` from the request's `agentId` and validates the
+   selected model, reasoning option, project, attachments, and tool bundle.
+2. Resolves the project working directory. This spec MUST NOT define daemon
+   data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data
+   directory contract**.
+3. Composes the daemon system prompt, applicable conversation context, active
+   skill and design-system content, attachments, and the current user turn.
+4. Stages active skill side files inside the project when possible and builds
+   the runtime-specific allowed-directory set. Design-system bodies are read
+   by the daemon and folded into the prompt.
+5. Resolves the same launch target used by detection, calls `buildArgs()`,
+   normalizes the platform-specific invocation, and starts the child with an
+   argument array and `shell: false`.
+6. Delivers the prompt through the adapter's declared input mode and routes
+   stdout through the matching stream or protocol handler.
+7. Publishes normalized agent events and lifecycle state to the run service,
+   while tracking cancellation, retries, inactivity, artifacts, usage, and
+   native-session recovery.
 
-1. The frontend submits `agentId`, user message, system prompt, project ID, attachments, model, and reasoning options.
-2. The daemon uses `getAgentDef(agentId)` to find the runtime definition.
-3. The daemon creates or locates the daemon-managed project working directory.
-   This spec MUST NOT define daemon data paths; read root
-   [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**.
-4. The daemon validates uploaded image paths and project attachment paths.
-5. The daemon combines the system prompt, working directory hint, existing file list, attachment list, and user request into one prompt.
-6. The daemon prepares additional readable directories: `skills/` and `design-systems/`.
-7. The daemon validates the model and reasoning option.
-8. It calls `def.buildArgs(...)` to generate CLI arguments; currently it also passes `runtimeContext = { cwd }` for CLIs that need an explicit workspace argument.
-9. It starts the local runtime with `spawn(def.bin, args, { cwd })`; plain / Claude use read-only stdin, and ACP runtimes use writable stdin.
-10. The daemon forwards runtime output to the frontend through SSE.
+## Prompt Delivery and Session Continuity
 
-## Output Stream Handling
+Prompt delivery is no longer one universal argv strategy:
 
-There are currently four output formats:
+- Stdin-capable adapters declare `promptViaStdin`. Claude uses
+  `promptInputFormat: 'stream-json'`; other stdin adapters receive text.
+- `grok-build` and `atomcode` opt into daemon-created prompt files.
+- ACP and pi RPC sessions send the prompt through their protocol handshake.
+- Any remaining argv-based adapter is checked against platform command-line
+  budgets before launch.
 
-### Claude Code: Structured JSONL
+Session continuity is likewise adapter-specific:
 
-Claude Code uses:
+- Claude, Codebuddy, and OpenCode can continue a CLI-owned session.
+- Codex captures the thread ID from `thread.started` and resumes that explicit
+  thread on later turns.
+- Pi persists and reuses its RPC session file.
+- AMR can capture an ACP durable session ID and resume with `session/load`.
+- Other adapters continue to receive daemon-composed conversation context.
 
-```bash
-claude -p <prompt> --output-format stream-json --verbose --include-partial-messages
+The daemon owns the resume identity checks and transparent reseed behavior, so
+runtime definitions only declare the mechanism they support.
+
+## Output Normalization
+
+The run pipeline selects a handler from `streamFormat`:
+
+| Format | Current handler |
+|---|---|
+| `claude-stream-json` | `createClaudeStreamHandler()` in `runtimes/claude-stream.ts` |
+| `json-event-stream` | `createJsonEventStreamHandler()` in `runtimes/json-event-stream.ts`, parameterized by `eventParser` |
+| `qoder-stream-json` | `createQoderStreamHandler()` in `runtimes/qoder-stream.ts` |
+| `copilot-stream-json` | `createCopilotStreamHandler()` in `copilot-stream.ts` |
+| `pi-rpc` | `attachPiRpcSession()` from `agent-protocol/pi-rpc/` |
+| `acp-json-rpc` | `attachAcpSession()` from `agent-protocol/acp/` |
+| `plain` | guarded stdout/stderr forwarding |
+
+Structured handlers normalize runtime output into events such as `status`,
+`text_delta`, `thinking_start`, `thinking_delta`, `tool_use`, `tool_result`,
+`usage`, and `error`. The shared run layer applies role-marker and substantive-
+output guards before completing the run.
+
+## ACP and Pi Protocol Layout
+
+The old flat `apps/daemon/src/acp.ts` and `apps/daemon/src/pi-rpc.ts` modules no
+longer exist. Their current boundary is:
+
+```text
+apps/daemon/src/agent-protocol/
+├── core/       shared JSON-line transport
+├── acp/        ACP model detection, session setup, RPC, and update mapping
+├── pi-rpc/     pi model parsing, session lifecycle, and event mapping
+└── index.ts    explicit public re-exports
 ```
 
-The daemon parses stdout through `createClaudeStreamHandler()` and converts Claude Code JSONL events into UI events:
-
-- `status`
-- `text_delta`
-- `thinking_delta`
-- `thinking_start`
-- `tool_use`
-- `tool_result`
-- `usage`
-
-These events are sent to the frontend through the SSE `agent` event.
-
-### Codex / Gemini / OpenCode / Cursor Agent: Structured JSON Event Stream
-
-These four runtimes currently use the unified `json-event-stream` output format, with stdout parsed by `apps/daemon/src/json-event-stream.ts`.
-
-#### Codex
-
-Codex currently uses:
-
-```bash
-codex exec --json --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true -C <cwd>
-```
-
-The current integration uses the lightweight structured path through `exec --json`. Compared with the original plain-text `codex exec`, this path adds:
-
-- `--json`: structured event output
-- `--skip-git-repo-check`: allows running in a temporary working directory
-- `--sandbox workspace-write`: allows Codex to edit within the project workspace without using the deprecated `--full-auto` shortcut
-- `-c sandbox_workspace_write.network_access=true`: keeps network access enabled inside the workspace-write sandbox
-- `-C <cwd>`: explicit working directory
-
-The daemon currently maps:
-
-- `thread.started` → `status(initializing)`
-- `turn.started` → `status(running)`
-- `item.completed(agent_message)` → `text_delta`
-- `turn.completed.usage` → `usage`
-
-#### Gemini
-
-Gemini currently uses:
-
-```bash
-GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo
-```
-
-The daemon delivers the prompt over stdin rather than argv. It currently maps:
-
-- `init` → `status(initializing)`
-- `message(role=assistant)` → `text_delta`
-- `result.stats` → `usage`
-
-Gemini may still output some workspace scan warnings on stderr at runtime; the main flow remains unaffected.
-
-#### OpenCode
-
-OpenCode currently uses:
-
-```bash
-opencode run --format json --dangerously-skip-permissions <prompt>
-```
-
-When the user selects a model, `--model <id>` is appended.
-
-The daemon currently maps:
-
-- `step_start` → `status(running)`
-- `text` → `text_delta`
-- `tool_use` → `tool_use`
-- Completed `tool_use.state` → `tool_result`
-- `step_finish.part.tokens` → `usage`
-
-#### Cursor Agent
-
-Cursor Agent currently uses:
-
-```bash
-cursor-agent --print --output-format stream-json --stream-partial-output --force --trust --workspace <cwd> -p <prompt>
-```
-
-When the user selects a model, `--model <id>` is appended.
-
-The daemon currently maps:
-
-- `system(subtype=init)` → `status(initializing)`
-- `assistant` partial chunks with `timestamp_ms` → `text_delta`
-- `result.usage` → `usage`
-
-Cursor outputs both partial assistant chunks and the final aggregated assistant message. The daemon currently prioritizes partial chunks and ignores the final aggregated text after partial chunks have appeared, avoiding duplicate rendering.
-
-#### Qoder
-
-Qoder currently uses:
-
-```bash
-qodercli -p --output-format stream-json --permission-mode bypass_permissions
-```
-
-The daemon delivers the composed prompt over stdin rather than argv. When runtime context is available, `--cwd <cwd>` is appended. When the user selects a model, `--model <id>` is appended. Additional readable directories are passed as repeated `--add-dir <dir>` pairs.
-
-Validated uploaded image paths are passed as repeated `--attachment <path>` pairs so Qoder receives the original multimodal context in addition to the textual `@path` prompt hint.
-
-The daemon parses Qoder stream-json output through `apps/daemon/src/qoder-stream.ts` and currently maps:
-
-- `system(subtype=init)` → `status(initializing)`
-- assistant text content blocks → `text_delta`
-- thinking content blocks → `thinking_start` / `thinking_delta`
-- assistant error records → `error`
-- result usage metadata → `usage`
-
-### Qwen: Plain Text Pass-through
-
-Qwen currently still uses the `plain` output format.
-
-The daemon directly forwards stdout chunks to the frontend through the SSE `stdout` event, and stderr chunks through the `stderr` event.
-
-### Hermes / Kimi: ACP JSON-RPC
-
-Hermes uses:
-
-```bash
-hermes acp --accept-hooks
-```
-
-Kimi uses:
-
-```bash
-kimi acp
-```
-
-The daemon starts an ACP session over stdio through `apps/daemon/src/acp.ts`:
-
-1. `initialize`
-2. `session/new`
-3. Optional `session/set_model`
-4. `session/prompt`
-
-When an ACP runtime actively emits `session/request_permission`, the daemon prefers `approve_for_session`, which supports headless automatic approval for CLIs such as Kimi that require approval before tool calls.
-
-The `session/new` response returns `sessionId`, `models.availableModels`, and `models.currentModelId`. The daemon reuses this information for model detection and runtime status reporting.
-
-It then converts Hermes / Kimi `session/update` events into frontend-consumable `agent` events:
-
-- `agent_thought_chunk` → `thinking_start` / `thinking_delta`
-- `agent_message_chunk` → `text_delta`
-- Final usage from `session/prompt` → `usage`
-
-At runtime, two additional status events are added:
-
-- Emit `status(model)` after `session/new` returns the default model.
-- Emit `status(streaming)` when the first text token arrives, including `ttftMs`.
-
-Model detection also reuses ACP: during detection, the daemon reads `models.availableModels` and `models.currentModelId` from the `session/new` response.
-
-The current Kimi MVP integration directly reuses the Hermes ACP orchestrator. Automatic permission approval has been added to the shared ACP layer. `multica` also contains Kimi-specific tool title normalization and provider error sniffing; this repository currently keeps a lighter implementation.
-
-## Prompt Injection Approach
-
-Local CLIs currently use a unified approach of folding the system prompt into the user message.
-
-The reason is that most local code-agent CLI command-line entry points lack an independent system channel. The daemon composes the following content into a single input:
-
-- `systemPrompt`: base output contract + skill content + design system content.
-- `cwdHint`: current working directory and file writing rules.
-- `filesListBlock`: existing file list in the project directory.
-- `attachmentHint`: attachments uploaded or selected by the user.
-- `message`: original user request.
-- `safeImages`: temporary uploaded image paths appended in `@path` form.
-
-Claude Code additionally exposes `skills/` and `design-systems/` through `--add-dir`, making it easier for the agent to read skill seeds, templates, and design system files.
-
-## Safety and Validation
-
-Existing protections include:
-
-- Process startup uses `spawn()` argument arrays, avoiding shell string concatenation.
-- Model IDs are first compared with the model list exposed by the most recent `/api/agents` response.
-- Custom model IDs are validated by `sanitizeCustomModel()`, limiting length, character set, and starting character.
-- Reasoning options must exist in the runtime definition's `reasoningOptions`.
-- Image paths must be located inside the daemon temporary upload directory.
-- Attachment paths must be located inside the project working directory.
-- Agent working directories are constrained to daemon-managed project storage.
-- ACP runtimes have timeout protection for the initialize, session/new, session/set_model, and session/prompt stages.
-- ACP runtimes listen for `stdin` errors and proactively clean up detection processes after model detection completes.
-- When the SSE connection closes, the daemon sends `SIGTERM` to the subprocess.
-
-## Current Capability Boundaries
-
-The current runtime adapter is a lightweight adaptation layer that already covers discovery, startup, argument construction, model selection, and streaming forwarding.
-
-Main boundaries:
-
-- The adapter is still a declarative object array and has not yet been split into independent adapter classes or directories.
-- The capability model is thin and currently mainly exposes models, reasoning, and output format.
-- Claude Code, Codex, Gemini, OpenCode, Cursor Agent, Hermes, and Kimi already have structured event parsing.
-- Qwen currently still uses plain text pass-through.
-- Skill injection mainly relies on prompt composition; only Claude Code uses `--add-dir` to support reading external directories.
-- Hermes currently only integrates the core ACP text session path and has not mapped more `session/update` types into unified UI events.
-- Cancellation is triggered by HTTP connection closure and `SIGTERM`; there is no explicit runId / cancel API yet.
-- Resume, auth state, permission modes, and capability gating have not yet formed a unified interface.
-- API fallback belongs to the frontend provider path and is currently outside the daemon runtime adapter layer.
-
-## Gap from the Target Architecture
-
-`docs/agent-adapters.md` describes a more complete target shape: each agent adapter has interfaces such as `detect()`, `capabilities()`, `run()`, `cancel()`, and `resume()`, and outputs unified `AgentEvent`s.
-
-The current implementation already has the core outline of the target architecture:
-
-- `detectAgents()` corresponds to `detect()`.
-- `AGENT_DEFS` corresponds to the adapter registry.
-- `buildArgs()` corresponds to runtime-specific invocation.
-- `streamFormat` + `claude-stream.ts` + `json-event-stream.ts` + `acp.ts` correspond to stream normalization.
-- `/api/chat` corresponds to unified run orchestration.
+`core/` is the shared foundation. ACP and pi RPC do not import each other's
+internals. See `apps/daemon/src/agent-protocol/README.md` for the module's
+public surface and dependency rules.
+
+## Safety and Lifecycle Guarantees
+
+The current adapter layer includes these protections:
+
+- Detection and execution resolve the same launch target; a run does not fall
+  back to blindly spawning `def.bin` after detection fails.
+- Child processes use argument arrays with `shell: false`; platform wrapper
+  normalization is centralized in the invocation layer.
+- Model IDs, reasoning choices, attachment paths, prompt budgets, working
+  directories, and optional external MCP injection are validated before use.
+- Structured protocol stages and the overall run have timeout/inactivity
+  guards.
+- `POST /api/runs/:id/cancel` propagates cancellation to the active child or
+  protocol session, with forced shutdown as a fallback.
+- Native session IDs are persisted only for adapters that declare a resume
+  mechanism, and stale resume targets are cleared and reseeded once.
+
+## Current Architecture Boundary
+
+The runtime layer has already moved beyond a single `agents.ts` object array:
+definitions, probing, executable resolution, prompt budgeting, parsers, and
+subprocess protocols are separate modules. It remains intentionally centered
+on declarative `RuntimeAgentDef` records plus shared run orchestration rather
+than independent adapter classes implementing `detect()`, `run()`, `cancel()`,
+and `resume()`.
+
+Cancellation, retries, persistence, SSE/AG-UI delivery, and most resume policy
+are run-service concerns. Runtime definitions own only the CLI-specific facts
+and hooks needed by that shared pipeline. Cloud/API provider execution remains
+a separate provider path; `byok-opencode` is the local OpenCode bridge.

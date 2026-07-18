@@ -24,6 +24,7 @@
     "en": "Flowai Live Dashboard Template"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Team-management dashboard skill in the FlowAI aesthetic — three tabs (Team Members, Team Details, Activity Log), KPI stat row, member table, role distribution bar chart, online presence and activity sparklines, and a top-contributors panel, all in a single self-contained HTML file with light/dark theming, hoverable chart tooltips, click-to-zoom panels, and CSV export. Use when the brief asks for a team / workspace admin dashboard, an interactive admin dashboard with charts, or names FlowAI.",
   "description_i18n": {
     "zh-CN": "FlowAI 风格的团队管理仪表板，包含三个标签页（团队成员、团队详情、活动日志）、KPI 统计行、成员表格、角色分布条形图、在线状态和活动趋势图、顶级贡献者面板，支持亮暗主题切换、图表悬停提示、面板点击缩放和 CSV 导出功能。",

@@ -148,7 +148,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
     apiProtocol: 'openai',
     apiVersion: '',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com',
     agentId: null,
     skillId: null,
@@ -170,7 +170,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
   await expect(deepSeekTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com');
-  await expect(modelSelect).toContainText(/deepseek-chat/i);
+  await expect(modelSelect).toContainText(/deepseek-v4-flash/i);
 
   await anthropicTab.click();
 
@@ -240,7 +240,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   const providerPicker = providerPresetCombobox(dialog);
   await selectComboboxOption(page, providerPicker, /DeepSeek — OpenAI/i, '[data-testid="settings-byok-provider-preset-popover"]');
-  await expectModelComboboxText(dialog, /deepseek-chat/i);
+  await expectModelComboboxText(dialog, /deepseek-v4-flash/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
   await dialog.getByRole('button', { name: 'Show' }).click();
@@ -255,7 +255,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
       apiProtocol: 'openai',
       apiKey: 'sk-openai-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       apiProviderBaseUrl: 'https://api.deepseek.com',
     });
 
@@ -268,7 +268,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
     apiProtocol: 'openai',
     apiKey: 'sk-openai-test',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
 
@@ -276,7 +276,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'DeepSeek', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
-  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
+  await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
 });
@@ -312,11 +312,11 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
   );
   await expect(providerPresetCombobox(dialog)).toContainText(/DeepSeek — Anthropic/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
-  await expectModelComboboxText(dialog, /deepseek-chat/i);
+  await expectModelComboboxText(dialog, /deepseek-v4-flash/i);
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     apiProtocol: 'anthropic',
     baseUrl: 'https://api.deepseek.com/anthropic',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com/anthropic',
   });
 
@@ -327,7 +327,7 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
   const reopenedDialog = page.getByRole('dialog');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — Anthropic/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
-  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
+  await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
 });
 
 test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists selection', async ({ page }) => {

@@ -24,6 +24,7 @@
     "uk": "Доопрацювання дизайну"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T14:39:32Z",
   "description": "Baseline Refine plugin for improving an existing Open Design artifact with a focused critique, small patch, and handoff summary.",
   "description_i18n": {
     "en": "Baseline Refine plugin for improving an existing Open Design artifact with a focused critique, small patch, and handoff summary.",

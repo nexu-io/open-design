@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { getProjectFileVersionRootStats } from '../src/project-file-versions.js';
 import { projectFileWriteTestHooks } from '../src/projects.js';
+import { snapshotAiHtmlVersionsForRun } from '../src/run-html-version-snapshots.js';
 import { startServer } from '../src/server.js';
 
 describe('project file version routes', () => {
@@ -172,6 +173,53 @@ describe('project file version routes', () => {
     };
     expect(editedList.versions).toHaveLength(2);
     expect(editedList.versions.filter((version) => version.current)).toHaveLength(1);
+  });
+
+  it('preserves AI-generated HTML history after a manual edit', async () => {
+    const projectId = await createProject();
+    const projectRoot = path.join(projectsRoot(), projectId);
+    const htmlPath = path.join(projectRoot, 'proposal.html');
+    await fs.mkdir(projectRoot, { recursive: true });
+
+    await fs.writeFile(htmlPath, '<html><body>generated proposal</body></html>');
+    await snapshotAiHtmlVersionsForRun({
+      projectsRoot: projectsRoot(),
+      projectId,
+      projectRoot,
+      diff: { touchedPaths: [htmlPath] },
+      prompt: 'Generate a proposal',
+      promptSource: 'message',
+    });
+    await fs.writeFile(htmlPath, '<html><body>polished proposal</body></html>');
+    await snapshotAiHtmlVersionsForRun({
+      projectsRoot: projectsRoot(),
+      projectId,
+      projectRoot,
+      diff: { touchedPaths: [htmlPath] },
+      prompt: 'Polish the proposal',
+      promptSource: 'message',
+    });
+
+    const manualEditResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'proposal.html',
+        content: '<html><body>manually edited proposal</body></html>',
+        versionSource: 'manual',
+        versionLabel: 'Manual copy edit',
+      }),
+    });
+    expect(manualEditResponse.status).toBe(200);
+
+    const listResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files/proposal.html/versions`);
+    expect(listResponse.status).toBe(200);
+    const listed = (await listResponse.json()) as {
+      versions: Array<{ version: number; source: string; current: boolean }>;
+    };
+    expect(listed.versions.map((version) => version.source)).toEqual(['ai', 'ai', 'manual']);
+    expect(listed.versions.map((version) => version.version)).toEqual([1, 2, 3]);
+    expect(listed.versions.filter((version) => version.current)).toHaveLength(1);
   });
 
   it('captures initial HTML versions for batch project uploads', async () => {

@@ -17,13 +17,6 @@ import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
-import {
-  findFirstQuestionForm,
-  hasUnterminatedQuestionForm,
-  parsePartialQuestionForm,
-  type QuestionForm,
-} from '../artifacts/question-form';
-import { parseSubmittedAnswers } from './QuestionForm';
 import { useI18n } from '../i18n';
 import {
   fetchChatRunStatus,
@@ -32,6 +25,7 @@ import {
   fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
+  publishDaemonRunFinishedEvent,
   reattachDaemonRun,
   reportChatRunFeedback,
   streamViaDaemon,
@@ -55,6 +49,7 @@ import {
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
+import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
@@ -119,7 +114,7 @@ import {
 } from '../runtime/design-delivery';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
-import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
+import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -226,8 +221,7 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
-import type { QuestionFormOpenRequest } from './AssistantMessage';
-import type { ChatSendMeta } from './ChatComposer';
+import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -236,6 +230,7 @@ import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedArtifact,
+  selectAutoOpenTurnArtifact,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
@@ -1253,6 +1248,7 @@ function byokOpenCodeProviderFromConfig(
     protocol: config.apiProtocol,
     apiKey: config.apiKey.trim(),
     baseUrl: config.baseUrl,
+    model: config.model,
     ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
     apiVersion:
       config.apiProtocol === 'azure'
@@ -1666,7 +1662,6 @@ export function ProjectView({
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
     {
       snapshot: AmrWalletSnapshot;
-      plan: string | null;
       resolve: (decision: AmrLowBalanceDecision) => void;
     } | null
   >(null);
@@ -1870,146 +1865,6 @@ export function ProjectView({
   const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
   const currentConversationQueueDisabled = currentConversationLoading
     || failedMessagesConversationId === activeConversationId;
-
-  // The discovery question form lives in the right-hand Questions tab. We
-  // derive it from the latest assistant message: if that message embeds a
-  // <question-form> block, the panel renders it. The form is interactive
-  // only while it's the most recent turn and the user hasn't answered yet
-  // (an answer arrives as a following "[form answers …]" user message).
-  const lastAssistantIndex = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.role === 'assistant') return i;
-    }
-    return -1;
-  }, [messages]);
-  const lastAssistantContent =
-    lastAssistantIndex >= 0 ? messages[lastAssistantIndex]?.content ?? '' : '';
-  const lastAssistantMessageId =
-    lastAssistantIndex >= 0 ? messages[lastAssistantIndex]?.id ?? null : null;
-  const questionForm: QuestionForm | null = useMemo(
-    () => findFirstQuestionForm(lastAssistantContent)?.form ?? null,
-    [lastAssistantContent],
-  );
-  const questionFormSubmittedAnswers = useMemo(() => {
-    if (!questionForm) return undefined;
-    for (let i = lastAssistantIndex + 1; i < messages.length; i++) {
-      const m = messages[i];
-      if (m?.role !== 'user') continue;
-      const parsed = parseSubmittedAnswers(questionForm, m.content ?? '');
-      if (parsed) return parsed;
-    }
-    return undefined;
-  }, [questionForm, lastAssistantIndex, messages]);
-  const questionsGenerating =
-    currentConversationStreaming && hasUnterminatedQuestionForm(lastAssistantContent);
-  // While the form is still streaming, parse it tolerantly so the Questions tab
-  // can show a frame (title) immediately and fill questions in as they arrive.
-  const questionFormPreview = useMemo(
-    () => (questionsGenerating ? parsePartialQuestionForm(lastAssistantContent) : null),
-    [questionsGenerating, lastAssistantContent],
-  );
-  // The active (latest, unanswered) form stays editable the whole time it's on
-  // screen — while it streams in AND while the turn is still busy — so it never
-  // flickers between the locked (grey) and interactive (accent) styles.
-  // Submission is gated separately by the panel via `submitDisabled`/generating.
-  const questionFormActive =
-    (!!questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
-  // Mirror `questionFormActive`'s unanswered gate: once the user answers, the
-  // Questions tab closes, so the auto-focus nonce must not treat an answered
-  // form as a freshly appeared one.
-  const hasQuestions =
-    Boolean(questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
-  // Stable identity for the current form occurrence, used to remember that its
-  // one-by-one reveal already played. Keyed on the conversation + the hosting
-  // assistant message id (not the message index, and NOT the parsed form id —
-  // see buildQuestionFormKey). The assistant message id is allocated once and
-  // kept in place across the streaming→persisted swap (same `assistantId`
-  // throughout), so it survives the brief unmount/re-focus of the Questions tab
-  // without replaying the animation, yet differs for every distinct form
-  // occurrence (each lives in its own assistant message).
-  const questionFormKey = useMemo(
-    () =>
-      buildQuestionFormKey(
-        activeConversationId,
-        lastAssistantMessageId,
-        Boolean(questionForm ?? questionFormPreview),
-      ),
-    [activeConversationId, lastAssistantMessageId, questionForm, questionFormPreview],
-  );
-
-  // Release #3661: let a past question form be manually re-opened in the
-  // Questions panel. Layered on top of main's stable questionFormKey (#3644) —
-  // the `displayed*` values fall back to the live form when nothing is manually
-  // pinned, so both fixes coexist.
-  const [manualQuestionFormRequest, setManualQuestionFormRequest] =
-    useState<QuestionFormOpenRequest | null>(null);
-  useEffect(() => {
-    setManualQuestionFormRequest(null);
-  }, [project.id, activeConversationId]);
-  useEffect(() => {
-    if (hasQuestions && questionFormKey) setManualQuestionFormRequest(null);
-  }, [hasQuestions, questionFormKey]);
-  const displayedQuestionForm = manualQuestionFormRequest?.form ?? questionForm;
-  const displayedQuestionFormPreview = manualQuestionFormRequest ? null : questionFormPreview;
-  const displayedQuestionFormSubmittedAnswers =
-    manualQuestionFormRequest?.submittedAnswers ?? questionFormSubmittedAnswers;
-  const displayedQuestionFormActive = manualQuestionFormRequest ? false : questionFormActive;
-  const displayedQuestionsGenerating = manualQuestionFormRequest ? false : questionsGenerating;
-  const displayedQuestionFormKey = manualQuestionFormRequest
-    ? `${activeConversationId ?? 'conversation'}:${manualQuestionFormRequest.messageId}:${manualQuestionFormRequest.form.id}:manual`
-    : questionFormKey;
-
-  // Auto-switch the workspace to the Questions tab when a new discovery form
-  // first appears, and let the chat banner re-focus it on click. The nonce
-  // bump is what FileWorkspace listens to.
-  const [questionsFocusNonce, setQuestionsFocusNonce] = useState(0);
-  const prevHasQuestionsRef = useRef(false);
-  useEffect(() => {
-    if (hasQuestions && !prevHasQuestionsRef.current) {
-      setQuestionsFocusNonce((n) => n + 1);
-    }
-    prevHasQuestionsRef.current = hasQuestions;
-  }, [hasQuestions]);
-  const focusQuestionsRequest = useMemo(
-    () => (questionsFocusNonce > 0 ? { nonce: questionsFocusNonce } : null),
-    [questionsFocusNonce],
-  );
-  const submittedAnswersForQuestionFormRequest = useCallback((request: QuestionFormOpenRequest) => {
-    const assistantIndex = messages.findIndex((m) => m.id === request.messageId);
-    if (assistantIndex < 0) return null;
-    for (let i = assistantIndex + 1; i < messages.length; i++) {
-      const m = messages[i];
-      if (!m) continue;
-      if (m.role === 'assistant') break;
-      if (m.role !== 'user') continue;
-      const parsed = parseSubmittedAnswers(request.form, m.content ?? '');
-      if (parsed) return parsed;
-    }
-    return null;
-  }, [messages]);
-  const openQuestionsTab = useCallback((request?: QuestionFormOpenRequest) => {
-    if (request) {
-      const opensCurrentLiveForm =
-        request.messageId === lastAssistantMessageId
-        && questionForm?.id === request.form.id
-        && questionFormSubmittedAnswers === undefined;
-      if (opensCurrentLiveForm) {
-        setManualQuestionFormRequest(null);
-      } else {
-        setManualQuestionFormRequest({
-          ...request,
-          submittedAnswers:
-            request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
-        });
-      }
-    }
-    setQuestionsFocusNonce((n) => n + 1);
-  }, [
-    lastAssistantMessageId,
-    questionForm,
-    questionFormSubmittedAnswers,
-    submittedAnswersForQuestionFormRequest,
-  ]);
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
@@ -3144,13 +2999,6 @@ export function ProjectView({
         nonce,
         attentionAction: 'download-page',
       });
-      setProjectActionsToast({
-        message: t('chat.brandBrowserAssistDownloadGuideTitle'),
-        details: t('chat.brandBrowserAssistDownloadGuideDetails'),
-        tone: 'default',
-        ttlMs: 12000,
-        scope: 'chat-pane',
-      });
       return { ok: true, action: 'opened' };
     },
     [currentProject.metadata?.brandSourceUrl, t],
@@ -3918,15 +3766,28 @@ export function ProjectView({
             }
             const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+            const touchedFilePaths = extractTouchedFilePathsFromEvents(message.events);
             const traceObjectFiles = mergeRecoveredTraceObjectFile(
               computeTraceObjectFiles(
                 beforeFileNames,
                 nextFiles,
-                extractTouchedFilePathsFromEvents(message.events),
+                touchedFilePaths,
+                project.id,
+                projectDetail.resolvedDir,
               ) ?? [],
               recoveredExistingArtifact,
             );
-            const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+            const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+              ...autoOpenArtifactOptions,
+              turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
+              turnEndedAt: message.endedAt || legacyReplayEndedAt || null,
+              agentTouchedFileNames: resolveAgentTouchedFileNames(
+                touchedFilePaths,
+                nextFiles,
+                project.id,
+                projectDetail.resolvedDir,
+              ),
+            });
             if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
             const deliveryOutcome = resolveDesignDeliveryOutcome({
               sessionMode: message.sessionMode,
@@ -4082,11 +3943,18 @@ export function ProjectView({
           reattachTextBuffersRef.current.delete(textBuffer);
         };
 
+        const shouldPublishRunFinishedEvent =
+          isActiveRunStatus(message.runStatus)
+          || spuriouslyFailedPending
+          || recoverableGenericDisconnectFailed;
         void reattachDaemonRun({
           runId,
+          projectId: project.id,
+          conversationId: reattachConversationId,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
+          publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           handlers: {
             onDelta: (delta) => {
               // First payload from the resumed stream is real recovery — the daemon is
@@ -4220,17 +4088,30 @@ export function ProjectView({
                 }
                 const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                const touchedFilePaths = extractTouchedFilePathsFromEvents(
+                  needsFullReplay ? replayedEvents : message.events,
+                );
                 const traceObjectFiles = mergeRecoveredTraceObjectFile(
                   computeTraceObjectFiles(
                     beforeFileNames,
                     nextFiles,
-                    extractTouchedFilePathsFromEvents(
-                      needsFullReplay ? replayedEvents : message.events,
-                    ),
+                    touchedFilePaths,
+                    project.id,
+                    projectDetail.resolvedDir,
                   ) ?? [],
                   recoveredExistingArtifact,
                 );
-                const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+                const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+                  ...autoOpenArtifactOptions,
+                  turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
+                  turnEndedAt: endedAt ?? null,
+                  agentTouchedFileNames: resolveAgentTouchedFileNames(
+                    touchedFilePaths,
+                    nextFiles,
+                    project.id,
+                    projectDetail.resolvedDir,
+                  ),
+                });
                 if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
                 const deliveryEvents = needsFullReplay ? replayedEvents : message.events;
@@ -4348,6 +4229,19 @@ export function ProjectView({
                     const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
                     if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                     if (latestRunStatus?.status === 'succeeded') setError(null);
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && latestRunStatus?.status === 'succeeded'
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
                     // Unlike the recoverArtifacts sibling below, this row's
                     // endedAt was already stamped synchronously above (~4041)
                     // at disconnect time — `prev.endedAt` is never null here,
@@ -4421,6 +4315,18 @@ export function ProjectView({
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                   } else if (latestRunStatus.status === 'succeeded') {
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
                     clearProjectTimeout(backoffTimer);
                     setError(null);
                     // If the resumed stream already replayed some content/events
@@ -4994,20 +4900,22 @@ export function ProjectView({
             // Low balance: pause THIS send while the reminder dialog waits
             // for a decision. 'proceed' resumes the very same send below —
             // a continuation, not a re-submit.
-            const plan = await resolveAmrLowBalancePlan(gate.snapshot);
+            const plan = await resolveAmrPlan(gate.snapshot);
             if (messagesConversationIdRef.current !== activeConversationId) {
               queueGateSend();
               return false;
             }
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            // Same conversation-switch guard for the dialog-open window; the
-            // payload is parked (not sent) so nothing is lost either way.
-            if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
-              parkBlockedSend();
-              return false;
+            if (isPaidAmrPlan(plan)) {
+              const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
+                setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+              });
+              setAmrLowBalanceWarn(null);
+              // Same conversation-switch guard for the dialog-open window; the
+              // payload is parked (not sent) so nothing is lost either way.
+              if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
+                parkBlockedSend();
+                return false;
+              }
             }
           }
           amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
@@ -5629,8 +5537,20 @@ export function ProjectView({
                 beforeFileNames,
                 nextFiles,
                 traceTouchedFilePaths,
+                project.id,
+                projectDetail.resolvedDir,
               ) ?? [];
-              const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+              const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+                ...autoOpenArtifactOptions,
+                turnStartedAt: startedAt,
+                turnEndedAt: endedAt ?? null,
+                agentTouchedFileNames: resolveAgentTouchedFileNames(
+                  traceTouchedFilePaths,
+                  nextFiles,
+                  project.id,
+                  projectDetail.resolvedDir,
+                ),
+              });
               if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
               const deliveryCandidate: ChatMessage = {
                 ...latestAssistantMsg,
@@ -5767,6 +5687,15 @@ export function ProjectView({
                 const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                 } else if (latestRunStatus.status === 'succeeded') {
+                  if (typeof latestRunStatus.artifactCount === 'number') {
+                    publishDaemonRunFinishedEvent({
+                      runId: runIdForGenericDisconnect,
+                      projectId: project.id,
+                      conversationId: runConversationId,
+                      result: 'success',
+                      artifactCount: latestRunStatus.artifactCount,
+                    });
+                  }
                   clearProjectTimeout(backoffTimer);
                   // Advance the outer endedAt so updateConversationLatestRun()
                   // below adopts this same authoritative terminal timestamp,
@@ -6061,6 +5990,7 @@ export function ProjectView({
               apiKey: byokOpenCodeProvider.apiKey,
               baseUrl: byokOpenCodeProvider.baseUrl,
               apiVersion: byokOpenCodeProvider.apiVersion,
+              model: byokOpenCodeProvider.model,
             }
           : undefined;
         if (userText.length > 0) {
@@ -6223,6 +6153,26 @@ export function ProjectView({
       byokVideoModelOptionsPV,
       byokSpeechModelOptionsPV,
     ],
+  );
+
+  const handleComposerSend = useCallback(
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[],
+      meta?: ChatSendMeta,
+    ): Promise<ChatSendOutcome> => {
+      if (activeConversationId) {
+        const decision = await requestAmrArtifactUpgrade({
+          projectId: project.id,
+          conversationId: activeConversationId,
+          source: 'chat_send',
+        });
+        if (decision === 'cancel') return 'restore-draft';
+      }
+      void handleSend(prompt, attachments, commentAttachments, meta);
+    },
+    [activeConversationId, handleSend, project.id],
   );
 
   // Cancel every in-flight run for the current conversation (the user's own
@@ -7272,7 +7222,7 @@ export function ProjectView({
 	            sendDisabled: currentConversationSendDisabled,
             queuedItems: currentConversationQueuedItems,
             error: conversationLoadError ?? error,
-            onSend: handleSend,
+            onSend: handleComposerSend,
             onRetry: handleRetry,
             onStop: handleStop,
             onRemoveQueuedSend: removeQueuedChatSend,
@@ -7293,7 +7243,7 @@ export function ProjectView({
       error,
       handleAssistantFeedback,
       handleRetry,
-      handleSend,
+      handleComposerSend,
       handleStop,
       messages,
       removeQueuedChatSend,
@@ -7959,6 +7909,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 7000,
+            scope: 'chat-pane',
           });
           return { status: 'handled' };
         }
@@ -7981,6 +7932,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 6000,
+            scope: 'chat-pane',
           });
           return { status: 'handled' };
         }
@@ -8010,6 +7962,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 5000,
+            scope: 'chat-pane',
           });
           return;
         }
@@ -8055,9 +8008,10 @@ export function ProjectView({
           snapshotMessage(liveSnapshot) ||
           fallbackMessage ||
           t('chat.brandBrowserAssistReadFailed'),
-        details: t('chat.brandBrowserAssistDownloadGuideDetails'),
+        details: null,
         tone: 'error',
         ttlMs: 7000,
+        scope: 'chat-pane',
       });
     })()
       .catch((err) => {
@@ -8067,6 +8021,7 @@ export function ProjectView({
           details: null,
           tone: 'error',
           ttlMs: 5000,
+          scope: 'chat-pane',
         });
       })
       .finally(() => {
@@ -8594,6 +8549,7 @@ export function ProjectView({
               hasActiveDesignSystem={!!projectDesignSystemId}
               activeDesignSystem={chatDesignSystemSummary}
               projectFileNames={projectFileNames}
+              projectResolvedDir={projectDetail.resolvedDir}
               skills={skills}
               onEnsureProject={handleEnsureProject}
               previewComments={previewComments}
@@ -8601,7 +8557,7 @@ export function ProjectView({
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-              onSend={handleSend}
+              onSend={handleComposerSend}
               onRetry={handleRetry}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
@@ -8620,7 +8576,14 @@ export function ProjectView({
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
               onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
-              onOpenQuestions={openQuestionsTab}
+              questionFormSubmitDisabled={currentConversationActionDisabled}
+              onSubmitQuestionForm={(text, attachments = [], context) => {
+                if (currentConversationActionDisabled) return false;
+                return handleSend(text, attachments, [], {
+                  entryFrom: 'question_answer',
+                  ...(context ? { context } : {}),
+                });
+              }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}
               onArtifactShare={handleArtifactShare}
@@ -8857,7 +8820,6 @@ export function ProjectView({
           messages={messages}
           artifactHtml={artifact?.html}
           conversationError={error}
-          onRetry={handleRetry}
           onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
           onLaunchTerminalAuth={handleLaunchAntigravityOauth}
           conversationId={activeConversationId}
@@ -8892,23 +8854,6 @@ export function ProjectView({
               />
             </>
           )}
-          questionForm={displayedQuestionForm}
-          questionFormPreview={displayedQuestionFormPreview}
-          questionFormKey={displayedQuestionFormKey}
-          questionFormInteractive={displayedQuestionFormActive}
-          questionFormSubmitDisabled={currentConversationActionDisabled}
-          questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
-          questionsGenerating={displayedQuestionsGenerating}
-          focusQuestionsRequest={focusQuestionsRequest}
-          onSubmitQuestionForm={(text, attachments = [], context) => {
-            if (currentConversationActionDisabled) return;
-            // Submitting question-form answers is a clarification turn, not a
-            // fresh create/edit — tag entry_from so the dashboard can separate it.
-            void handleSend(text, attachments, [], {
-              entryFrom: 'question_answer',
-              ...(context ? { context } : {}),
-            });
-          }}
         />
       </div>
       {contextPluginDetails ? (
@@ -8960,7 +8905,6 @@ export function ProjectView({
       {amrLowBalanceWarn ? (
         <AmrLowBalanceDialog
           balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-          plan={amrLowBalanceWarn.plan}
           profile={amrLowBalanceWarn.snapshot.profile}
           entrySource="chat_low_balance_warn_recharge"
           metricsConsent={config.telemetry?.metrics === true}
@@ -9652,6 +9596,8 @@ export function computeTraceObjectFiles(
   beforeNames: ReadonlySet<string> | readonly string[] | undefined,
   next: readonly ProjectFile[],
   touchedPaths: Iterable<string> = [],
+  projectId?: string,
+  projectRoot?: string | null,
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
@@ -9660,7 +9606,7 @@ export function computeTraceObjectFiles(
     byName.set(file.name, { ...file, traceObjectReason: 'new' });
   }
   for (const rawPath of touchedPaths) {
-    const file = findTouchedProjectFile(rawPath, next);
+    const file = findTouchedProjectFile(rawPath, next, projectId, projectRoot);
     if (!file) continue;
     byName.set(file.name, {
       ...file,
@@ -9670,10 +9616,48 @@ export function computeTraceObjectFiles(
   return [...byName.values()];
 }
 
-function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]): ProjectFile | null {
-  const normalized = normalizeComparableFilePath(rawPath);
-  if (!normalized) return null;
-  const hasPathSeparator = normalized.includes('/');
+function findTouchedProjectFile(
+  rawPath: string,
+  files: readonly ProjectFile[],
+  projectId?: string,
+  projectRoot?: string | null,
+): ProjectFile | null {
+  const slashed = rawPath.replace(/\\/g, '/');
+  // Lexically resolve `.`/`..` first: a path whose `..` climbs above its own
+  // anchor can never be proven to stay anywhere, so it is rejected outright —
+  // before any suffix matching could pair it with an in-project file.
+  const segments = lexicallyNormalizePathSegments(slashed);
+  if (!segments || segments.length === 0) return null;
+  let normalized = segments.join('/');
+  // A managed-project alias (`…/projects/<projectId>/…`) identifies the file's
+  // project-relative form regardless of where the alias mount lives, so it is
+  // trusted as-is; containment below only anchors paths without that marker.
+  const managedProjectRelativePath = relativePathFromManagedProjectAlias(normalized, projectId);
+  if (!managedProjectRelativePath && isAbsoluteToolPath(slashed)) {
+    const rootSegments = projectRoot
+      ? lexicallyNormalizePathSegments(projectRoot.replace(/\\/g, '/'))
+      : null;
+    if (rootSegments && rootSegments.length > 0) {
+      // An absolute tool path is only trusted when it provably lives under
+      // the project root: require the root's segments as a prefix and match
+      // on the remaining project-relative form (/workspace/index.html →
+      // index.html). Out-of-root paths (including `..` escapes that resolve
+      // outside the root) are rejected here rather than falling through to
+      // suffix matching, where /tmp/site/index.html could otherwise pick the
+      // project's own index.html.
+      if (segments.length <= rootSegments.length) return null;
+      for (let i = 0; i < rootSegments.length; i += 1) {
+        if (segments[i] !== rootSegments[i]) return null;
+      }
+      normalized = segments.slice(rootSegments.length).join('/');
+    }
+    // Without a usable root there is no anchor to judge containment against;
+    // keep the legacy suffix behavior below.
+  }
+  const comparablePaths = managedProjectRelativePath
+    ? [normalized, managedProjectRelativePath]
+    : [normalized];
+  const hasPathSeparator = comparablePaths.every((candidate) => candidate.includes('/'));
   const basename = normalized.split('/').pop() ?? normalized;
   const normalizedFiles = files.map((file) => ({
     file,
@@ -9691,13 +9675,15 @@ function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]):
     return matched;
   };
 
-  const exact = matches((candidate) => candidate === normalized);
+  const exact = matches((candidate) => comparablePaths.includes(candidate));
   if (exact.length === 1) return exact[0]!;
   if (exact.length > 1) return null;
 
   const suffix = matches((candidate) =>
     candidate.includes('/') &&
-    (candidate.endsWith(`/${normalized}`) || normalized.endsWith(`/${candidate}`)),
+    comparablePaths.some((comparablePath) =>
+      candidate.endsWith(`/${comparablePath}`) || comparablePath.endsWith(`/${candidate}`),
+    ),
   );
   if (suffix.length === 1) return suffix[0]!;
   if (suffix.length > 1) return null;
@@ -9710,12 +9696,63 @@ function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]):
   return basenameMatches.length === 1 ? basenameMatches[0]!.file : null;
 }
 
+function relativePathFromManagedProjectAlias(
+  normalizedPath: string,
+  projectId: string | undefined,
+): string | null {
+  const normalizedProjectId = normalizeComparableFilePath(projectId ?? '');
+  if (!normalizedProjectId || normalizedProjectId.includes('/')) return null;
+  const marker = `projects/${normalizedProjectId}/`;
+  const markerIndex = normalizedPath.lastIndexOf(marker);
+  if (markerIndex < 0 || (markerIndex > 0 && normalizedPath[markerIndex - 1] !== '/')) return null;
+  return normalizedPath.slice(markerIndex + marker.length) || null;
+}
+
 function normalizeComparableFilePath(value: string): string {
   return value
     .replace(/\\/g, '/')
     .split('/')
     .filter((part) => part && part !== '.')
     .join('/');
+}
+
+// Lexically resolve `.`/`..` segments. Returns null when a `..` climbs above
+// the path's own anchor — such a path cannot be proven to resolve anywhere.
+function lexicallyNormalizePathSegments(path: string): string[] | null {
+  const out: string[] = [];
+  for (const part of path.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+function isAbsoluteToolPath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+}
+
+// Resolve the agent's raw Write/Edit tool paths (absolute or partial) to
+// project file NAMES for selectAutoOpenTurnArtifact's touched-file
+// restriction. Paths that do not resolve to a project file (out-of-project
+// writes) are dropped; ambiguous matches resolve to null inside
+// findTouchedProjectFile and are dropped the same way.
+export function resolveAgentTouchedFileNames(
+  touchedPaths: Iterable<string>,
+  files: readonly ProjectFile[],
+  projectId?: string,
+  projectRoot?: string | null,
+): Set<string> {
+  const names = new Set<string>();
+  for (const rawPath of touchedPaths) {
+    const file = findTouchedProjectFile(rawPath, files, projectId, projectRoot);
+    if (file) names.add(file.name);
+  }
+  return names;
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any

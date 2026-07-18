@@ -19,6 +19,12 @@ without churning code paths.
 | `interrupt-handler.ts` | Resolves the kill request from `POST /api/projects/:id/critique/:runId/interrupt`. |
 | `adapter-degraded.ts` | In-memory degraded-adapter registry with 24h TTL. The orchestrator + Settings UI consult `isDegraded(adapterId)` before routing a run to it. |
 | `conformance.ts` | Conformance harness entry point. The prerelease cycle calls `runAdapterConformance` per adapter × per brief template and tallies `shipped / degraded / failed`. |
+| `conformance-history.ts` | Reads and summarizes persisted conformance history used by rollout decisions. |
+| `ratchet.ts` + `rollout.ts` | Evaluate conformance evidence and resolve the current feature rollout tier. |
+| `run-registry.ts` | Project-keyed in-process run registry used by interrupt handling. |
+| `scoreboard.ts` | Aggregates per-adapter conformance outcomes for the status surfaces. |
+| `spawn-inputs.ts` | Builds the isolated prompt and filesystem inputs passed to critique subprocesses. |
+| `transcript.ts` | Persists and reads replayable critique event transcripts. |
 | `__fixtures__/v1/` | Canonical transcripts the parser tests + conformance harness consume (happy-3-rounds, malformed-unbalanced, missing-artifact, etc.). |
 | `__fixtures__/adapters/` | Synthetic adapter stubs that emit the v1 fixtures. The conformance harness wraps them in `AsyncIterable<string>` so the parser path is exercised end-to-end without a real model. |
 
@@ -47,7 +53,7 @@ without churning code paths.
   v2 work is cross-package: the daemon adds per-skill weight
   overrides driven off `od.critique.cast` in `SKILL.md` frontmatter
   (this directory) and the web Settings surface adds a per-project
-  weight editor (`apps/web/src/components/Settings/`). Treat the v1
+  weight editor (`apps/web/src/components/SettingsDialog.tsx`). Treat the v1
   weights as a wire-shape invariant rather than a tuning knob;
   changing them mid-v1 will break the `composite` numbers persisted
   in `critique_runs`.

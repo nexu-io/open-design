@@ -8,6 +8,12 @@
 import { getPluginsCopy } from '../_lib/plugins-i18n';
 import { localeFromPath } from '../i18n';
 
+interface Props {
+  /** Slim, de-emphasized variant used on the hub where resources lead. */
+  compact?: boolean;
+}
+const { compact = false } = Astro.props;
+
 const locale = localeFromPath(Astro.url.pathname);
 const pcopy = getPluginsCopy(locale);
 
@@ -30,7 +36,7 @@ const ISSUE_URL =
   );
 ---
 
-<aside class="plugin-contribute">
+<aside class:list={['plugin-contribute', { 'plugin-contribute-compact': compact }]}>
   <div class="pc-text">
     <h2 class="pc-title">{pcopy.contributeTitle}</h2>
     <p class="pc-body">{pcopy.contributeBody}</p>
@@ -85,5 +91,27 @@ const ISSUE_URL =
     .plugin-contribute {
       padding: 22px;
     }
+  }
+
+  /* Compact variant — slim strip so the resource cards stay the focus. */
+  .plugin-contribute-compact {
+    gap: 16px;
+    margin: 8px 0 0;
+    padding: 13px 18px;
+    border-radius: 10px;
+  }
+  .plugin-contribute-compact .pc-title {
+    margin: 0 0 2px;
+    font-size: 15px;
+  }
+  .plugin-contribute-compact .pc-body {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .plugin-contribute-compact .pc-actions {
+    gap: 14px;
+  }
+  .plugin-contribute-compact .pc-guide {
+    font-size: 13px;
   }
 </style>

@@ -372,15 +372,34 @@ function escapeRegExp(value: string): string {
 
 async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
-  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
-  await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name: 'brand.png',
+    mimeType: 'image/png',
+    buffer: pngBytes,
+  });
+  await expect(page.getByRole('tab', { name: /brand\.png/i })).toBeVisible();
+
+  const uploadedImage = await page.request.get(
+    `/api/projects/${encodeURIComponent(projectId)}/raw/brand.png`,
+  );
+  expect(uploadedImage.ok(), `uploaded image: ${await uploadedImage.text()}`).toBeTruthy();
+  expect(uploadedImage.headers()['content-type']).toContain('image/png');
+
   await seedHtmlArtifact(
     page,
     projectId,
     'image-preview.html',
-    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="brand.png"></main></body></html>',
+    // Generated pages commonly use site-root paths. Before the preview asset
+    // normalization fix, this resolved against the Open Design app origin and
+    // left the uploaded image broken even though its project raw URL was valid.
+    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="/brand.png"></main></body></html>',
   );
   await page.reload();
+  await expectWorkspaceReady(page);
   await openDesignFile(page, 'image-preview.html');
 
   const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });

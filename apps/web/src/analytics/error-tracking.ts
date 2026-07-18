@@ -275,6 +275,69 @@ function dispatch(item: BufferedSafetyEvent): void {
   }
 }
 
+// Frame-level source-map correlation.
+//
+// `@posthog/cli sourcemap inject` (run from tools/pack/src/web-sourcemaps.ts
+// on every packaged build) bakes a unique chunk id into each browser chunk
+// and the matching id into the .map it uploads to PostHog. At load time each
+// injected chunk registers `globalThis._posthogChunkIds[<its Error().stack>] =
+// <chunkId>`. Symbolication then requires that chunk id to ride along on each
+// captured frame: packaged chunks load over the `od://` scheme, which PostHog
+// cannot fetch a `.map` from, so the chunk id is the ONLY correlation key.
+//
+// posthog-js stamps it natively, but we set `capture_exceptions: false` and
+// hand-build exceptions here, so we must replicate the stamping or every
+// packaged frame ships un-symbolicatable (observed in prod: 100% of frames
+// failed with "had no source url or chunk id"). This mirrors
+// @posthog/core error-tracking/chunk-ids.ts so the filename→chunkId map is
+// identical to what the uploaded maps were injected against.
+type ChunkIdMap = Record<string, string>;
+
+let cachedRegistry: ChunkIdMap | undefined;
+let cachedFilenameChunkIds: ChunkIdMap | undefined;
+let cachedRegistryKeyCount = -1;
+
+function getFilenameToChunkIdMap(): ChunkIdMap {
+  const registry = (globalThis as { _posthogChunkIds?: ChunkIdMap })._posthogChunkIds;
+  if (!registry) return {};
+  const keys = Object.keys(registry);
+  // Chunks register lazily as they load, so the registry grows over the
+  // session. Rebuild only when it changes (same identity + same size = hit).
+  if (
+    cachedFilenameChunkIds &&
+    cachedRegistry === registry &&
+    keys.length === cachedRegistryKeyCount
+  ) {
+    return cachedFilenameChunkIds;
+  }
+  const map: ChunkIdMap = {};
+  for (const stackKey of keys) {
+    const chunkId = registry[stackKey];
+    if (!chunkId) continue;
+    // The registry key is an Error().stack captured inside the injected chunk.
+    // Key the chunk id on the frame where that Error was constructed — the
+    // chunk's own file. @posthog/core scans its stackParser output (which it
+    // reverses to oldest-first) from the end, i.e. the NEWEST frame; parseStack
+    // here keeps Error.stack's native newest-first order, so the newest frame
+    // is frames[0]. Take the first frame with a filename. A registration stack
+    // is typically multi-frame (the injected IIFE sits above webpack
+    // require/loader frames), so picking the wrong end would key the id onto a
+    // runtime-chunk filename and leave the real chunk with no entry.
+    const frames = parseStack(stackKey, {});
+    for (const frame of frames) {
+      const filename = frame?.filename;
+      if (typeof filename === 'string' && filename) {
+        map[filename] = chunkId;
+        break;
+      }
+    }
+  }
+  cachedRegistry = registry;
+  cachedRegistryKeyCount = keys.length;
+  cachedFilenameChunkIds = map;
+  return map;
+}
+
 function buildExceptionList(
   error: unknown,
   fallbackMessage: string,
@@ -288,6 +351,7 @@ function buildExceptionList(
       ? error
       : fallbackMessage;
   const stack = isError && typeof error.stack === 'string' ? error.stack : '';
+  const chunkIds = getFilenameToChunkIdMap();
   // Stamp `platform` on every frame. PostHog's exception ingestion treats
   // it as a required field (it selects the symbolication / issue-grouping
   // strategy per frame); a frame without it fails the exceptions pipeline
@@ -296,10 +360,21 @@ function buildExceptionList(
   // were failing to ingest. posthog-js stamps the same value on each frame;
   // we replicate it because client.ts sets `capture_exceptions: false` and
   // this module is the sole browser-exception transport.
-  const frames = parseStack(stack, metadata).map((frame) => ({
-    ...frame,
-    platform: FRAME_PLATFORM,
-  }));
+  //
+  // Also stamp `chunk_id` when the frame's chunk registered one (see
+  // `getFilenameToChunkIdMap`). Without it, packaged `od://` frames carry no
+  // source URL PostHog can fetch, so the uploaded sourcemap can never be
+  // matched and every frame stays minified — the reason production stacks
+  // showed `?:?` despite the tools-pack sourcemap upload succeeding.
+  const frames = parseStack(stack, metadata).map((frame) => {
+    const filename = typeof frame.filename === 'string' ? frame.filename : undefined;
+    const chunkId = filename ? chunkIds[filename] : undefined;
+    return {
+      ...frame,
+      platform: FRAME_PLATFORM,
+      ...(chunkId ? { chunk_id: chunkId } : {}),
+    };
+  });
   return [
     {
       type,

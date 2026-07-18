@@ -80,7 +80,9 @@ export type TrackingAmrEntrySource =
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
   | 'avatar_amr_upgrade'
-  | 'avatar_amr_agent_card';
+  | 'avatar_amr_agent_card'
+  | 'artifact_success_upgrade'
+  | 'home_artifact_upgrade';
 
 export interface AmrEntryAttribution {
   entryId: string;

@@ -24,6 +24,7 @@
     "en": "Codex Interactive Capability Map"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-22T07:49:16Z",
   "description": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel.",
   "description_i18n": {
     "zh-CN": "将长文、帖子、备忘录或产品说明转换为 Codex 风格的可点击能力地图，包含工作流循环、用例矩阵和响应式详情面板。",

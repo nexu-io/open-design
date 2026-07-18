@@ -16,6 +16,7 @@
     "en": "Liquid Iridescence"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A self-contained WebGL2 hero: a living oil-on-water field brightened into iridescent caustic filaments; move the cursor to bend the flow.",
   "description_i18n": {
     "zh-CN": "自包含 WebGL2 主视觉：活的油水场提亮为虹彩焦散丝线；移动光标扰动流场。",

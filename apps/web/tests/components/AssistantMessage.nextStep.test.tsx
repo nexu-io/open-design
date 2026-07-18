@@ -291,3 +291,88 @@ describe('AssistantMessage next-step affordance', () => {
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
   });
 });
+
+// A clarification turn ends the run while its inline <question-form> is still
+// waiting for the user; the next-step card must hold back until
+// the answers (or a skip-all, which submits through the same path) arrive as
+// the following user message.
+describe('AssistantMessage next-step affordance during the question phase', () => {
+  const QUESTION_FORM_CONTENT = [
+    'Got it — a couple of quick questions first.',
+    '',
+    '<question-form id="discovery" title="Brief">',
+    '{"questions":[{"id":"studio","label":"Studio name","type":"text","required":true}]}',
+    '</question-form>',
+  ].join('\n');
+
+  function questionFormMessage(content = QUESTION_FORM_CONTENT): ChatMessage {
+    return baseMessage({
+      content,
+      events: [{ kind: 'text', text: content } as NonNullable<ChatMessage['events']>[number]],
+    });
+  }
+
+  it('does not render while the question form is still unanswered', () => {
+    render(
+      <AssistantMessage
+        message={questionFormMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByText('Brief')).toBeTruthy();
+    expect(screen.getByText('Studio name')).toBeTruthy();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('does not render while an unterminated question form is pending', () => {
+    const content = 'Quick brief first.\n\n<question-form id="discovery" title="Brief">\n{"questions":[';
+    render(
+      <AssistantMessage
+        message={questionFormMessage(content)}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        {...handlers()}
+      />,
+    );
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('renders once the next user message submits the form answers', () => {
+    render(
+      <AssistantMessage
+        message={questionFormMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        nextUserContent={'[form answers — discovery]\n- Studio name: Cobalt Studio'}
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
+
+  it('ignores a suppressed direction form (locked design system) when gating', () => {
+    const content = [
+      'Pick a direction.',
+      '',
+      '<question-form id="direction" title="Visual direction">',
+      '{"questions":[{"id":"dir","label":"Direction","type":"direction-cards","options":["A","B"]}]}',
+      '</question-form>',
+    ].join('\n');
+    render(
+      <AssistantMessage
+        message={questionFormMessage(content)}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        suppressDirectionForms
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
+});

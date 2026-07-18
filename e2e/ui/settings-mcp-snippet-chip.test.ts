@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(key, JSON.stringify({
       mode: 'api', apiProtocol: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat', agentId: null, skillId: null, designSystemId: null,
+      model: 'deepseek-v4-flash', agentId: null, skillId: null, designSystemId: null,
       onboardingCompleted: true, agentModels: {}, privacyDecisionAt: 1,
       telemetry: { metrics: false, content: false, artifactManifest: false },
     }));

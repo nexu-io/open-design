@@ -2176,12 +2176,14 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     entryOccurredAt: '2026-06-03T12:00:00.000Z',
   });
 
-  it('accepts the four new upgrade / agent-card sources so mirroring is not 400ed', () => {
+  it('accepts upgrade / agent-card sources so mirroring is not 400ed', () => {
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
       ['avatar_amr_upgrade', 'chat_panel'],
       ['avatar_amr_agent_card', 'chat_panel'],
+      ['artifact_success_upgrade', 'artifact'],
+      ['home_artifact_upgrade', 'home'],
     ];
     for (const [source, page] of cases) {
       expect(parseAmrEntryAnalyticsPayload(payloadFor(source, page))).not.toBeNull();

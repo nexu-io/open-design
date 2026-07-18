@@ -117,7 +117,13 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
-import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
+import {
+  buildLazySrcdocTransport,
+  buildRedirectLoopBlockedDoc,
+  buildSrcdoc,
+  canActivateSrcDocTransport,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '../runtime/srcdoc';
 import { DeckThumbnailRail } from './DeckThumbnailRail';
 import { parseDeckThumbnails } from '../runtime/deck-thumbnail-parser';
 import {
@@ -132,9 +138,11 @@ import {
   upsertSpeakerNotesInHtml,
 } from '../runtime/speaker-notes';
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
   htmlNeedsPoweredPreview,
+  htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -283,8 +291,21 @@ const POWERED_PREVIEW_SANDBOX =
   'allow-scripts allow-same-origin allow-downloads allow-popups allow-forms allow-modals allow-pointer-lock';
 const POWERED_PREVIEW_ALLOW =
   'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
+const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot';
 const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
 const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
+type HtmlSourceLoadMode = 'full' | 'routing-preview';
+
+function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean {
+  if (!source) return false;
+  return (
+    htmlNeedsSandboxShim(source) ||
+    htmlNeedsFocusGuard(source) ||
+    htmlNeedsRedirectGuard(source) ||
+    hasTweaksTemplate(source)
+  );
+}
+
 const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   {
     id: 'desktop',
@@ -902,6 +923,34 @@ export function effectivePreviewScale(
   const availableHeight = Math.max(1, canvasSize.height - canvasPadding);
   const fitScale = Math.min(1, availableWidth / preset.width, availableHeight / preset.height);
   return Math.min(previewScale, fitScale);
+}
+
+export function desktopPreviewAutoFitZoomPercent(
+  canvasSize: PreviewCanvasSize | undefined,
+  contentWidth?: number | null,
+): number {
+  if (!canvasSize?.width || !Number.isFinite(canvasSize.width)) return 100;
+  if (!contentWidth || !Number.isFinite(contentWidth) || contentWidth <= canvasSize.width) return 100;
+  return Math.max(1, Math.min(100, (canvasSize.width / contentWidth) * 100));
+}
+
+export function desktopPreviewDocumentContentWidth(doc: Document | null | undefined): number | null {
+  if (!doc) return null;
+  const root = doc.documentElement;
+  const body = doc.body;
+  const widths = [
+    root?.scrollWidth,
+    body?.scrollWidth,
+    root?.offsetWidth,
+    body?.offsetWidth,
+    root?.clientWidth,
+    body?.clientWidth,
+  ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+  return widths.length ? Math.max(...widths) : null;
+}
+
+function zoomPercentLabel(zoomPercent: number): string {
+  return `${Math.round(zoomPercent)}%`;
 }
 
 type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
@@ -2598,13 +2647,21 @@ function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileV
   return 'ai';
 }
 
+function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return (
+    /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source) ||
+    sourceLooksLikeExportableDeck(source)
+  );
+}
+
 export function fileVersionPreviewOptions(
   projectId: string,
   fileName: string,
   source: string | null | undefined,
 ) {
   return {
-    deck: sourceLooksLikeExportableDeck(source),
+    deck: sourceLooksLikeDeckPreview(source),
     baseHref: projectRawUrl(projectId, baseDirFor(fileName)),
   };
 }
@@ -2647,6 +2704,12 @@ export function deckKeyboardShortcutForEvent(event: DeckKeyboardShortcutEvent): 
   if (event.key === 'End') return 'last';
   if (event.key.toLowerCase() === 'r') return 'reset';
   return null;
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
 function normalizeDeckVisualSource(source: string): string {
@@ -2947,6 +3010,25 @@ function FileVersionManagerModal({
     const fallback = window.setTimeout(() => setLoadedSrcDoc(srcDoc), 6000);
     return () => window.clearTimeout(fallback);
   }, [srcDoc, loadedSrcDoc]);
+
+  useEffect(() => {
+    if (!isDeckPreview || !selectedContentMatchesVersion || loadingContent) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (document.activeElement === versionPreviewIframeRef.current) return;
+      if (isEditableKeyboardTarget(event.target) || isEditableKeyboardTarget(document.activeElement)) return;
+      const shortcut = deckKeyboardShortcutForEvent(event);
+      if (!shortcut) return;
+      const win = versionPreviewIframeRef.current?.contentWindow;
+      if (!win) return;
+      event.preventDefault();
+      win.postMessage({
+        type: 'od:slide',
+        action: shortcut === 'reset' ? 'first' : shortcut,
+      }, '*');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDeckPreview, loadingContent, selectedContentMatchesVersion]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -6130,6 +6212,7 @@ function HtmlViewer({
   const [serverPoweredPreviewRequired, setServerPoweredPreviewRequired] = useState(false);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const [zoomMode, setZoomMode] = useState<'auto' | 'manual'>('auto');
   const fileViewportKey = previewViewportStateKey(projectId, file);
   const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
     () => htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop',
@@ -6159,6 +6242,8 @@ function HtmlViewer({
 
   useEffect(() => {
     setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
+    setZoom(100);
+    setZoomMode('auto');
   }, [fileViewportKey]);
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
@@ -6178,6 +6263,7 @@ function HtmlViewer({
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
+  const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -6236,6 +6322,7 @@ function HtmlViewer({
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const [commentComposerHost, setCommentComposerHost] = useState<HTMLDivElement | null>(null);
   const [commentPreviewCanvasNode, setCommentPreviewCanvasNode] = useState<HTMLDivElement | null>(null);
+  const [desktopPreviewContentWidth, setDesktopPreviewContentWidth] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -6264,6 +6351,17 @@ function HtmlViewer({
   const setCommentPreviewCanvasRef = useCallback((node: HTMLDivElement | null) => {
     setCommentPreviewCanvasNode((current) => (current === node ? current : node));
   }, []);
+  const requestDesktopPreviewContentMeasure = useCallback((target: HTMLIFrameElement | null = iframeRef.current) => {
+    target?.contentWindow?.postMessage({ type: 'od:preview-content-size-request' }, '*');
+  }, []);
+  const scheduleDesktopPreviewContentMeasure = useCallback((target: HTMLIFrameElement | null = iframeRef.current) => {
+    requestDesktopPreviewContentMeasure(target);
+    window.requestAnimationFrame(() => {
+      requestDesktopPreviewContentMeasure(target);
+      window.setTimeout(() => requestDesktopPreviewContentMeasure(target), 80);
+      window.setTimeout(() => requestDesktopPreviewContentMeasure(target), 260);
+    });
+  }, [requestDesktopPreviewContentMeasure]);
   useEffect(() => {
     if (!onBrandExtractionStopRequest) return;
     const requestStop = onBrandExtractionStopRequest;
@@ -6312,6 +6410,7 @@ function HtmlViewer({
   useEffect(() => {
     setManualEditSrcDocActive(false);
     setManualEditFrozenSource(null);
+    setDesktopPreviewContentWidth(null);
   }, [projectId, file.name]);
   useEffect(() => {
     onCommentModeChange?.(commentPanelOpen);
@@ -6592,7 +6691,6 @@ function HtmlViewer({
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
-  const previewScale = zoom / 100;
   const localCommentSideDockActive = commentPanelOpen && !commentPortalHost;
   const boardPreviewCanvasSize = commentPreviewCanvasSize(previewBodySize, {
     boardMode: localCommentSideDockActive,
@@ -6604,6 +6702,16 @@ function HtmlViewer({
     sidePanelCollapsed: commentSidePanelCollapsed,
     viewport: previewViewport,
   });
+  useEffect(() => {
+    if (previewViewport !== 'desktop' || zoomMode !== 'auto') return;
+    scheduleDesktopPreviewContentMeasure();
+  }, [
+    boardPreviewCanvasSize?.width,
+    boardPreviewCanvasSize?.height,
+    previewViewport,
+    scheduleDesktopPreviewContentMeasure,
+    zoomMode,
+  ]);
 
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
@@ -6629,6 +6737,13 @@ function HtmlViewer({
     setCloudflareAccountId(matchingConfig?.accountId || '');
     setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
     setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
+    // The daemon's GET /api/deploy/config response currently hardcodes `target: 'preview'`
+    // as a placeholder (apps/daemon/src/deploy.ts publicDeployConfig /
+    // publicCloudflarePagesConfig) rather than persisting a real user preference, so it must
+    // not be used to seed the deploy-target selector's default. Default to 'production' to
+    // match the daemon's documented default for an omitted target on POST deploy, and to match
+    // pre-regression behavior.
+    setDeployTarget('production');
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -6741,6 +6856,12 @@ function HtmlViewer({
   const [speakerNotesStatus, setSpeakerNotesStatus] = useState<'saved' | 'error' | null>(null);
   const speakerNotesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
+  const previewZoomPercent = zoomMode === 'auto' && previewViewport === 'desktop'
+    ? desktopPreviewAutoFitZoomPercent(boardPreviewCanvasSize, desktopPreviewContentWidth)
+    : zoom;
+  const previewScale = previewZoomPercent / 100;
+  const previewZoomText = zoomPercentLabel(previewZoomPercent);
+  const zoomLevelActive = (level: number) => Math.abs(previewZoomPercent - level) < 0.001;
   const overlayPreviewScale = effectivePreviewScale(
     previewViewport,
     previewScale,
@@ -6799,7 +6920,11 @@ function HtmlViewer({
       // switches but before the effect has run.
     }
     let cancelled = false;
-    if (shouldDeferPassivePreviewSource && sourceRef.current !== null) {
+    if (
+      shouldDeferPassivePreviewSource &&
+      sourceRef.current !== null &&
+      !previewTextNeedsFullSourceForSafeInline(sourceRef.current)
+    ) {
       setRoutingSource(sourceRef.current);
       sourceEverLoadedRef.current = true;
       return () => {
@@ -6818,15 +6943,30 @@ function HtmlViewer({
       ? fetchProjectFileTextPreview(projectId, file.name, {
           limit: HTML_ROUTING_TEXT_PREVIEW_LIMIT,
           cacheBustKey,
-        }).then((preview) => ({
-          text: preview?.text ?? null,
-          poweredPreviewRequired: preview?.poweredPreview.required === true,
-        }))
+        }).then(async (preview) => {
+          const previewText = preview?.text ?? null;
+          if (previewTextNeedsFullSourceForSafeInline(previewText)) {
+            const fullText = await fetchProjectFileText(projectId, file.name, { cacheBustKey });
+            if (fullText !== null) {
+              return {
+                text: fullText,
+                poweredPreviewRequired: preview?.poweredPreview.required === true,
+                sourceLoadMode: 'full' as HtmlSourceLoadMode,
+              };
+            }
+          }
+          return {
+            text: previewText,
+            poweredPreviewRequired: preview?.poweredPreview.required === true,
+            sourceLoadMode: 'routing-preview' as HtmlSourceLoadMode,
+          };
+        })
       : fetchProjectFileText(projectId, file.name, { cacheBustKey }).then((text) => ({
-          text,
-          poweredPreviewRequired: false,
-        }));
-    void loadText.then(({ text, poweredPreviewRequired }) => {
+        text,
+        poweredPreviewRequired: false,
+        sourceLoadMode: 'full' as HtmlSourceLoadMode,
+      }));
+    void loadText.then(({ text, poweredPreviewRequired, sourceLoadMode }) => {
       if (cancelled) return;
       setServerPoweredPreviewRequired(poweredPreviewRequired);
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
@@ -6873,7 +7013,7 @@ function HtmlViewer({
       sourceEverLoadedRef.current = true;
       lastGoodSourceForRoutingRef.current = text;
       setRoutingSource(text);
-      if (shouldDeferPassivePreviewSource) {
+      if (sourceLoadMode === 'routing-preview') {
         sourceRef.current = null;
       } else {
         setSource(text);
@@ -6920,11 +7060,7 @@ function HtmlViewer({
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
     const s = routingHtmlSource;
-    if (!s) return false;
-    return (
-      /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s) ||
-      sourceLooksLikeExportableDeck(s)
-    );
+    return sourceLooksLikeDeckPreview(s);
   }, [routingHtmlSource]);
   const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
@@ -7058,6 +7194,19 @@ function HtmlViewer({
     const s = routingHtmlSource;
     return s != null && htmlNeedsFocusGuard(s);
   }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  // A self-redirecting artifact must render through srcDoc so buildSrcdoc's
+  // redirect-loop guard is present; on the raw URL-load path the iframe reloads
+  // itself forever and freezes the workspace (nexu-io/open-design#710).
+  const needsRedirectGuard = useMemo(() => {
+    if (passiveLargeHtmlPreview) return false;
+    const s = routingHtmlSource;
+    return s != null && htmlNeedsRedirectGuard(s);
+  }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  // Set by the injected guard's `od:redirect-loop-blocked` postMessage. The
+  // browser makes `window.location` unforgeable, so a runaway reload can only be
+  // stopped host-side — parking the srcDoc iframe on static content below. File-
+  // scoped: reset whenever the file, project, or reload key changes.
+  const [redirectLoopBlocked, setRedirectLoopBlocked] = useState(false);
   // Project file paths, for confirming root-relative asset refs
   // (`/reference-assets/main.css`) against real files instead of guessing
   // from path shape. `null` while the list is in flight — the detection memo
@@ -7106,11 +7255,12 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: (forceInline || needsSandboxShim) && !needsPowered,
     needsFocusGuard: needsFocusGuard && !needsPowered,
+    needsRedirectGuard: needsRedirectGuard && !needsPowered,
     projectRootAssetRefs,
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -7184,6 +7334,28 @@ function HtmlViewer({
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
   }, [useUrlLoadPreview]);
+  // Clear a redirect-loop park whenever the artifact changes or the user hits
+  // reload (reloadKey bump): the previewed content is fresh, so give it a clean
+  // run rather than staying pinned on the "loop detected" placeholder.
+  useEffect(() => {
+    setRedirectLoopBlocked(false);
+  }, [projectId, file.name, reloadKey]);
+  // The injected redirect guard posts `od:redirect-loop-blocked` when a preview
+  // reloads itself past its hop budget. Only trust our own two preview frames,
+  // then park the srcDoc iframe on static content so the loop cannot continue.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const fromPreview =
+        ev.source === srcDocPreviewIframeRef.current?.contentWindow ||
+        ev.source === urlPreviewIframeRef.current?.contentWindow;
+      if (!fromPreview) return;
+      const data = ev.data as { type?: string } | null;
+      if (data?.type !== PREVIEW_REDIRECT_LOOP_MESSAGE) return;
+      setRedirectLoopBlocked(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   // Resolve the cross-origin powered-preview URL for artifacts that need it.
   // `resolved:false` means the (cached) daemon isolation probe is still in
@@ -7207,7 +7379,7 @@ function HtmlViewer({
       if (cancelled) return;
       setPowered({
         resolved: true,
-        url: base ? `${base}?v=${Math.round(file.mtime)}&r=${reloadKey}` : null,
+        url: base ? `${base}?v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}` : null,
       });
     });
     return () => {
@@ -7414,7 +7586,16 @@ function HtmlViewer({
   // re-load. Direct-mount path (no #2361/#2791 postMessage race).
   const useLazySrcDocTransport =
     !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview && !srcDocMaterialized;
-  const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
+  // Park on a static "loop detected" document once the guard reports a runaway
+  // redirect. A self-redirecting artifact is forced onto the srcDoc iframe by
+  // `needsRedirectGuard`, so swapping this content is the reliable stop — the
+  // placeholder carries no redirect, so the frame settles the moment it loads.
+  const redirectLoopBlockedDoc = useMemo(() => buildRedirectLoopBlockedDoc(), []);
+  const srcDocTransportContent = redirectLoopBlocked
+    ? redirectLoopBlockedDoc
+    : useLazySrcDocTransport
+      ? lazySrcDocTransport
+      : srcDoc;
   // Materialize the srcDoc iframe the first time it actually becomes the active
   // (visible) transport — i.e. the first Mark/Edit/Comment/Inspect entry. We do
   // NOT pre-render it while hidden/idle: that ran a second live copy during
@@ -7615,13 +7796,25 @@ function HtmlViewer({
         }, '*');
       }
     }
+    function onContentSizeMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; width?: number | null } | null;
+      if (!data || data.type !== 'od:preview-content-size') return;
+      const measuredWidth = typeof data.width === 'number' && Number.isFinite(data.width) && data.width > 0
+        ? Math.ceil(data.width)
+        : null;
+      setDesktopPreviewContentWidth((current) => (current === measuredWidth ? current : measuredWidth));
+    }
     window.addEventListener('message', onMessage);
     window.addEventListener('message', onRestoreRequest);
     window.addEventListener('message', onDcViewportMessage);
+    window.addEventListener('message', onContentSizeMessage);
     return () => {
       window.removeEventListener('message', onMessage);
       window.removeEventListener('message', onRestoreRequest);
       window.removeEventListener('message', onDcViewportMessage);
+      window.removeEventListener('message', onContentSizeMessage);
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
 
@@ -9532,7 +9725,13 @@ function HtmlViewer({
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name, deployProviderId, cloudflarePagesSelection);
+      const next = await deployProjectFile(
+        projectId,
+        file.name,
+        deployProviderId,
+        cloudflarePagesSelection,
+        deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+      );
       setDeploymentsByProvider((current) => ({
         ...current,
         [next.providerId]: next,
@@ -11319,7 +11518,7 @@ function HtmlViewer({
                       setZoomMenuOpen((v) => !v);
                     }}
                   >
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{previewZoomText}</span>
                   </button>
                   {zoomMenuOpen ? (
                     <div className="zoom-menu-popover" role="menu">
@@ -11327,15 +11526,16 @@ function HtmlViewer({
                         <button
                           key={level}
                           type="button"
-                          className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                          className={`zoom-menu-item${zoomLevelActive(level) ? ' active' : ''}`}
                           role="menuitem"
                           onClick={() => {
+                            setZoomMode('manual');
                             setZoom(level);
                             setZoomMenuOpen(false);
                           }}
                         >
                           <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                          {zoom === level ? (
+                          {zoomLevelActive(level) ? (
                             <Icon name="check" size={13} />
                           ) : null}
                         </button>
@@ -11502,16 +11702,17 @@ function HtmlViewer({
                           <button
                             key={level}
                             type="button"
-                            className={`viewer-toolbar-more-item${zoom === level ? ' active' : ''}`}
+                            className={`viewer-toolbar-more-item${zoomLevelActive(level) ? ' active' : ''}`}
                             role="menuitem"
                             onClick={() => {
+                              setZoomMode('manual');
                               setZoom(level);
                               setToolbarMoreOpen(false);
                             }}
                           >
                             <RemixIcon name="zoom-in-line" size={15} />
                             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                            {zoom === level ? <Icon name="check" size={13} /> : null}
+                            {zoomLevelActive(level) ? <Icon name="check" size={13} /> : null}
                           </button>
                         ))}
                       </>
@@ -11959,6 +12160,7 @@ function HtmlViewer({
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            if (useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
                           }}
                         />
                       ) : (
@@ -11986,6 +12188,7 @@ function HtmlViewer({
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            if (useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
                           }}
                         />
                       )}
@@ -12048,6 +12251,7 @@ function HtmlViewer({
                           syncBridgeModes(frame);
                           syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                          if (!useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
                         }}
                       />
                     </div>
@@ -12646,6 +12850,20 @@ function HtmlViewer({
                   ))}
                 </select>
               </label>
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <label className="deploy-target-field">
+                  <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
+                  <select
+                    value={deployTarget}
+                    onChange={(e) => {
+                      setDeployTarget(e.target.value as 'preview' | 'production');
+                    }}
+                  >
+                    <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
+                    <option value="production">{t('fileViewer.deployTargetProduction')}</option>
+                  </select>
+                </label>
+              ) : null}
               <div className="field-label-row deploy-token-label-row">
                 <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
                 <a
@@ -12889,7 +13107,7 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {deploySavedToast ? (
+      {deploySavedToast && typeof document !== 'undefined' ? createPortal(
         <Toast
           message={deploySavedToast.message}
           details={deploySavedToast.details}
@@ -12897,7 +13115,8 @@ function HtmlViewer({
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
-        />
+        />,
+        document.body,
       ) : null}
       {deployActionToast && typeof document !== 'undefined' ? createPortal(
         <Toast

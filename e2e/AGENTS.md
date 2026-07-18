@@ -2,7 +2,7 @@
 
 Follow the root `AGENTS.md` first. This package owns user-level end-to-end smoke tests and Playwright UI automation only.
 
-For the current coverage posture, recent hardening work, grouped-run status, and known intentional gaps, see [docs/testing/e2e-coverage/status.md](/Users/mac/open-design/open-design/docs/testing/e2e-coverage/status.md).
+For the current coverage posture, recent hardening work, grouped-run status, and known intentional gaps, see [`docs/testing/e2e-coverage/status.md`](../docs/testing/e2e-coverage/status.md).
 
 ## Directory layout
 

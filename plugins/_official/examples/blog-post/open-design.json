@@ -24,6 +24,7 @@
     "en": "Blog Post"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A long-form article / blog post — masthead, hero image placeholder, article body with figures and pull quotes, author byline, related posts. Use when the brief asks for \"blog\", \"article\", \"post\", \"essay\", or \"case study\".",
   "description_i18n": {
     "zh-CN": "长篇文章/博客——包含页眉、主图占位符、带插图和引用的正文、作者署名及相关文章推荐。适用于需求中包含'博客'、'文章'、'帖子'、'随笔'或'案例研究'等关键词时。",

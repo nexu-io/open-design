@@ -24,6 +24,7 @@
     "en": "Eng Runbook"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An engineering runbook — service overview, alerts table, dashboards links, common procedures with copy-pasteable commands, on-call rotation, and an incident-response checklist. Use when the brief mentions \"runbook\", \"ops doc\", \"on-call guide\", \"SRE doc\", or \"运维手册\".",
   "description_i18n": {
     "zh-CN": "工程运维手册 — 包含服务概览、告警表、仪表盘链接、常用命令操作步骤、值班轮换和事故响应清单。适用于需要运维文档、值班指南、SRE 文档或运维手册的场景。",

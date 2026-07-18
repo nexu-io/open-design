@@ -54,6 +54,8 @@ const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
+const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
+const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
 const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
@@ -128,18 +130,24 @@ async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promis
 // Pull the two jq programs that the `validate` job's "Check workspace validation jobs" step runs
 // (the blanket failure scan and the required-jobs scan) straight out of ci.yml, so the gate logic
 // under test stays the real workflow source rather than a reimplementation. Both are invoked as
-// `jq -r --arg event "$EVENT_NAME" '<program>'` and contain no single quotes, so the program is the
-// text between the opening and the next `'`.
+// `jq -r '<program>'` and contain no single quotes, so the program is the text between the opening
+// and the next `'`.
 function extractValidateGateJqPrograms(workflow: string): { failures: string; requiredMisses: string } {
   const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
-  const programs = [...validate.matchAll(/jq -r --arg event "\$EVENT_NAME" '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
+  // Only the "Check workspace validation jobs" step — later validate steps also use jq.
+  const needsCheck = sectionBetween(
+    validate,
+    "      - name: Check workspace validation jobs",
+    "      - name: Block merge while the needs-validation label is present",
+  );
+  const programs = [...needsCheck.matchAll(/jq -r '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
   expect(programs).toHaveLength(2);
   return { failures: programs[0] ?? "", requiredMisses: programs[1] ?? "" };
 }
 
-function runValidateGateJq(program: string, eventName: string, needs: unknown): Promise<string> {
+function runValidateGateJq(program: string, needs: unknown): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile("jq", ["-r", "--arg", "event", eventName, program], { encoding: "utf8" }, (error, stdout, stderr) => {
+    const child = execFile("jq", ["-r", program], { encoding: "utf8" }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }));
         return;
@@ -151,11 +159,11 @@ function runValidateGateJq(program: string, eventName: string, needs: unknown): 
 }
 
 // Mirrors the bash gate decision: the step exits non-zero when either jq program emits any line.
-async function validateGatePasses(workflow: string, eventName: string, needs: unknown): Promise<boolean> {
+async function validateGatePasses(workflow: string, needs: unknown): Promise<boolean> {
   const { failures, requiredMisses } = extractValidateGateJqPrograms(workflow);
   const [failureLines, missLines] = await Promise.all([
-    runValidateGateJq(failures, eventName, needs),
-    runValidateGateJq(requiredMisses, eventName, needs),
+    runValidateGateJq(failures, needs),
+    runValidateGateJq(requiredMisses, needs),
   ]);
   return failureLines === "" && missLines === "";
 }
@@ -313,7 +321,7 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
+    const blobGuard = sectionBetween(workflow, "  static_gate:", "  preflight:");
 
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
     expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
@@ -330,7 +338,7 @@ describe("packaged smoke workflow", () => {
     ]);
 
     const ciTrigger = sectionBetween(ciWorkflow, "on:", "\npermissions:");
-    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  nix_validation:");
+    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  preflight:");
     const dockerTrigger = sectionBetween(dockerWorkflow, "on:", "\njobs:");
 
     expect(ciTrigger).toContain("pull_request:");
@@ -340,8 +348,24 @@ describe("packaged smoke workflow", () => {
     expect(ciBlobGuard).not.toContain('${{ github.event_name }}" = "push"');
     expect(dockerTrigger).toContain("workflow_call:");
     expect(dockerTrigger).toContain("tags: ['v*.*.*']");
+    expect(dockerTrigger).toContain("pull_request:");
+    // Publish stays tag/call only — no continuous main-branch image push.
     expect(dockerTrigger).not.toContain("branches: [main]");
-    expect(dockerTrigger).not.toContain("- main");
+    expect(dockerTrigger).not.toMatch(/push:\s*\n\s*branches:/);
+    // Publish mode must not key only on event_name == workflow_call (caller keeps
+    // its own event name). Release calls pass release_version / publish_latest.
+    const dockerMode = sectionBetween(dockerWorkflow, "Resolve publish mode", "Set up QEMU");
+    expect(dockerMode).toContain("RELEASE_VERSION");
+    expect(dockerMode).toContain("PUBLISH_LATEST");
+    expect(dockerMode).toContain('[ "$EVENT_NAME" = "push" ]');
+    expect(dockerMode).toContain('[ -n "${RELEASE_VERSION:-}" ]');
+    // Shell condition must not treat literal workflow_call as the publish signal.
+    expect(dockerMode).not.toMatch(/\[\s*"\$EVENT_NAME"\s*=\s*"workflow_call"\s*\]/);
+    // Smoke-only sha tags must be disabled whenever publish mode is true (release
+    // callers are workflow_dispatch with release_version, and would otherwise push
+    // manual-sha-* alongside the real version tags).
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request'");
+    expect(dockerWorkflow).toContain("steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch'");
     expect(commentWorkflow).toContain("workflows: [ci]");
     // comment.atom consumes merge_group runs too, so the needs-validation gate can surface a
     // queue-ejection notice on the PR; autofix/report stay pull_request-only trusted consumers.
@@ -884,35 +908,45 @@ process.stdin.on("end", () => {
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
       run_ui_p0: true,
-      run_nix_validation: false,
     });
     await expect(runScopesPrint("workflow_dispatch", { inputs: {} })).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
-      run_docker_build: true,
-      run_nix_validation: true,
       run_ui_p0: true,
+      run_preflight: true,
     });
     await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
-      run_docker_build: true,
-      run_nix_validation: true,
       run_ui_p0: true,
+      run_preflight: true,
     });
+    // Packaging (nix / docker) is no longer part of core scopes / Validate workspace.
+    for (const plan of await Promise.all([
+      runScopesPrint("merge_group", {}),
+      runScopesPrint("workflow_dispatch", { inputs: {} }),
+      runScopesPrint("pull_request", { pull_request: { number: 1 } }, ["apps/web/src/app/page.tsx"]),
+    ])) {
+      expect(plan).not.toHaveProperty("run_nix_validation");
+      expect(plan).not.toHaveProperty("run_docker_build");
+      expect(plan).not.toHaveProperty("nix_validation_required");
+      expect(plan).not.toHaveProperty("docker_validation_required");
+    }
   });
 
-  it("[P2] keeps the Validate workspace gate Nix-advisory on PRs and enforced at merge", async () => {
+  it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    // The gate must read the event so it can treat a red nix_validation differently per surface.
-    expect(validate).toContain("EVENT_NAME: ${{ github.event_name }}");
-    expect(validate).toContain('select(.key != "nix_validation" or $event != "pull_request")');
-    expect(validate).toContain('when($out.run_nix_validation == "true" and $event != "pull_request"; ["nix_validation"])');
+    expect(workflow).not.toContain("nix_validation:");
+    expect(workflow).not.toContain("docker_pr:");
+    expect(validate).not.toContain("nix_validation");
+    expect(validate).not.toContain("docker_pr");
+    expect(validate).not.toContain("run_nix_validation");
+    expect(validate).not.toContain("run_docker_build");
+    expect(validate).toContain("Check workspace validation jobs");
 
     const baseOutputs = {
-      run_nix_validation: "true",
       run_preflight: "false",
       run_workspace_unit_tests: "false",
       run_windows_tools_pack_payload_tests: "false",
@@ -921,43 +955,34 @@ process.stdin.on("end", () => {
       run_playwright_critical: "false",
       run_ui_p0: "false",
       run_playwright_visual: "false",
-      run_docker_build: "false",
     };
-    const needsWithFailedNix = {
-      scopes: { result: "success", outputs: baseOutputs },
-      static_gate: { result: "success" },
-      nix_validation: { result: "failure" },
-    };
+    // Core gate only cares about app jobs — unknown packaging keys are ignored.
+    await expect(
+      validateGatePasses(workflow, {
+        scopes: { result: "success", outputs: baseOutputs },
+        static_gate: { result: "success" },
+      }),
+    ).resolves.toBe(true);
 
-    // A stale/failed Nix hash is advisory on pull_request: the gate still passes while autofix heals it.
-    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedNix)).resolves.toBe(true);
-    // ...but it is a hard gate at merge time and on manual full runs — fail closed, never reaching main.
-    await expect(validateGatePasses(workflow, "merge_group", needsWithFailedNix)).resolves.toBe(false);
-    await expect(validateGatePasses(workflow, "workflow_dispatch", needsWithFailedNix)).resolves.toBe(false);
-
-    // The PR exception is scoped to Nix only — any other failed required job still fails the gate on a PR.
     const needsWithFailedWeb = {
       scopes: { result: "success", outputs: { ...baseOutputs, run_web_workspace_tests: "true" } },
       static_gate: { result: "success" },
-      nix_validation: { result: "success" },
       web_workspace_tests: { result: "failure" },
     };
-    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedWeb)).resolves.toBe(false);
+    await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
   });
 
   it("[P2] routes default CI through cost-sensitive runner tiers", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const runners = sectionBetween(workflow, "  runners:", "  scopes:");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
-    const staticGate = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
+    const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");
     const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  windows_tools_pack_payload_tests:");
     const webWorkspaceTests = sectionBetween(workflow, "  web_workspace_tests:", "  e2e_vitest:");
     const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
-    const nixValidation = sectionBetween(workflow, "  nix_validation:", "  preflight:");
     const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
-    const dockerPr = sectionBetween(workflow, "  docker_pr:", "  validate:");
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
-    const visual = sectionBetween(workflow, "  playwright_visual:", "  docker_pr:");
+    const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
 
     expect(runners).toContain("runs-on: ubuntu-24.04");
     expect(runners).toContain("runs_on: ${{ steps.runners.outputs.runs_on }}");
@@ -975,10 +1000,8 @@ process.stdin.on("end", () => {
     expect(e2eVitest).toContain("fromJSON(needs.runners.outputs.runs_on).js_hot");
     expect(e2eVitest).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot)");
     expect(e2eVitest).not.toContain('"od-persistent-ci"');
-    expect(nixValidation).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium)");
-    expect(dockerPr).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_hot");
     expect(uiP0).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot)");
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
@@ -1065,17 +1088,20 @@ process.stdin.on("end", () => {
       readFile(handoffScriptPath, "utf8"),
     ]);
 
+    // Core ci still produces comment + report handoffs (needs-validation, visual).
+    // Packaging hash autofix left core ci with nix — no ci-produced autofix handoffs for now.
     expect(ciWorkflow).toContain("handoff.py dir comment");
-    expect(ciWorkflow).toContain("handoff.py dir autofix");
     expect(ciWorkflow).toContain("handoff.py dir report");
     expect(ciWorkflow).toContain("handoff-comment-");
-    expect(ciWorkflow).toContain("handoff-autofix-");
     expect(ciWorkflow).toContain("handoff-report-");
+    expect(ciWorkflow).not.toContain("handoff.py dir autofix");
+    expect(ciWorkflow).not.toContain("handoff-autofix-");
     expect(ciWorkflow).not.toContain("nix-hash-autofix");
     expect(ciWorkflow).not.toContain("visual-pr-comment");
     expect(commentWorkflow).toContain("artifact-pattern comment");
     expect(commentWorkflow).toContain("merge-multiple: false");
     expect(commentWorkflow).toContain("pull-requests: write");
+    // Atom capability remains available for future producers; it is not required to be fed by ci.
     expect(autofixWorkflow).toContain("artifact-pattern autofix");
     expect(autofixWorkflow).toContain("allowed_paths");
     expect(reportWorkflow).toContain("artifact-pattern report");
@@ -1522,8 +1548,10 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, productionWorkflow, script] = await Promise.all([
+    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
       readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
+      readFile(landingPageCiWorkflowPath, "utf8"),
+      readFile(landingPageStagingWorkflowPath, "utf8"),
       readFile(landingPageProductionWorkflowPath, "utf8"),
       readFile(landingPageDailyFeishuScriptPath, "utf8"),
     ]);
@@ -1550,6 +1578,19 @@ process.stdin.on("end", () => {
     expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
     expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
     expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
+
+    // Wrangler Pages ignores custom --config paths. Before every staging
+    // migration/deploy, replace the default config with staging's isolated
+    // bindings so preview/staging traffic can never touch production KV/D1.
+    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
+      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
+      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
+      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
+      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
+      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
+    }
+    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
+    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
 
     expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
     expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');

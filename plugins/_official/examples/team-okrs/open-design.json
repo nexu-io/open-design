@@ -24,6 +24,7 @@
     "en": "Team Okrs"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "OKR tracker page — quarter banner, three objectives with their key results as progress bars, owner avatars, status pills, and a \"this quarter at a glance\" sidebar. Use when the brief mentions \"OKRs\", \"key results\", \"objectives\", or \"目标\".",
   "description_i18n": {
     "zh-CN": "OKR 跟踪页面——季度横幅，三个目标及其关键结果进度条、负责人头像、状态标签，以及「本季度概览」侧边栏。当需求提及 OKR、关键结果、目标时使用。",

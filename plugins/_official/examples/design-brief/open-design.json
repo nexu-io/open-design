@@ -24,6 +24,7 @@
     "en": "Design Brief"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Parse a structured design brief written in I-Lang protocol format into a concrete design spec. Eliminates ambiguity from vague requests like \"make it professional\" by requiring explicit dimensions: palette, typography, layout, mood, density, and constraints. Trigger keywords: \"design brief\", \"create a design brief\", \"ilang brief\", \"structured brief\".",
   "description_i18n": {
     "zh-CN": "将 I-Lang 协议格式编写的结构化设计简报解析为具体的设计规范。通过要求明确的维度（调色板、排版、布局、氛围、密度和约束）消除诸如'使其专业'之类模糊请求的歧义。触发关键词：design brief、create a design brief、ilang brief、structured brief。",

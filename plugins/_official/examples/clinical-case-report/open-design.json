@@ -24,6 +24,7 @@
     "en": "Clinical Case Report"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Structured medical case presentation for clinical rounds, conferences, and documentation. Generates SOAP-format or narrative case reports with physiologically accurate vitals, labs, and evidence-based plans. Use when the brief mentions \"case report\", \"case presentation\", \"SOAP note\", \"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\".",
   "description_i18n": {
     "zh-CN": "为临床查房、病例讨论会和医疗文档生成结构化病例报告。支持生成SOAP格式或叙述性病例报告，包含生理准确的生命体征、实验室数据和循证医疗方案。",

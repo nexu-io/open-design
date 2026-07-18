@@ -14,11 +14,11 @@
 | 模块 | 覆盖重点 | 对应测试文件 |
 | --- | --- | --- |
 | [status.md](./status.md) | 当前 E2E 分层、最近补强范围、grouped run 状态、已知 intentional gap | `e2e/ui/app.test.ts`, `e2e/ui/real-daemon-run.test.ts`, `e2e/ui/app-design-files.test.ts`, `e2e/ui/app-restoration.test.ts`, `e2e/ui/project-management-flows.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts`, `e2e/tests/dialog/artifact-consistency.test.ts` |
-| [entry.md](./entry.md) | 入口页创建路径、连接器入口、提示词模板、资源驱动场景、顶部 chrome | `e2e/ui/app.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/entry-chrome-flows.test.ts` |
+| [entry.md](./entry.md) | Home / New project 创建路径、左侧导航、连接器入口、提示词模板与资源驱动场景 | `e2e/ui/app.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/entry-chrome-flows.test.ts`, `e2e/ui/project-management-flows.test.ts` |
 | [project-management.md](./project-management.md) | 首页/项目管理、设计系统、项目重命名、删除流程、搜索与视图切换 | `e2e/ui/project-management-flows.test.ts` |
-| [workspace.md](./workspace.md) | 工作区标签、会话、文件流、快速切换器、手动编辑模式 | `e2e/ui/app.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts` |
-| [settings.md](./settings.md) | API protocol 回归、国际化内容完整性、关键设置表单行为、Orbit 设置 | `e2e/ui/settings-api-protocol.test.ts`, `e2e/tests/localized-content.test.ts`, `apps/web/tests/components/SettingsDialog.execution.test.tsx`, `apps/web/tests/components/SettingsDialog.orbit.test.tsx` |
-| [desktop.md](./desktop.md) | mac 桌面端 smoke 覆盖、打包产物运行时 smoke | `e2e/specs/mac.spec.ts` |
+| [workspace.md](./workspace.md) | 工作区标签、会话、文件流、快速切换器、源码预览与手动编辑模式 | `e2e/ui/app.test.ts`, `e2e/ui/app-design-files.test.ts`, `e2e/ui/app-manual-edit.test.ts`, `e2e/ui/app-restoration.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts` |
+| [settings.md](./settings.md) | API protocol 回归、国际化内容、Integrations Skills、Design systems 与 Orbit 设置 | `e2e/ui/settings-api-protocol.test.ts`, `e2e/ui/settings-design-systems.test.ts`, `e2e/tests/localized-content.test.ts`, `apps/web/tests/components/SettingsDialog.execution.test.tsx`, `apps/web/tests/components/SettingsDialog.orbit.test.tsx` |
+| [desktop.md](./desktop.md) | mac 桌面 shell smoke，以及 mac / Linux 打包产物运行时 smoke | `e2e/specs/mac.spec.ts`, `e2e/specs/linux.spec.ts` |
 
 ## 维护规则
 
@@ -49,7 +49,7 @@
 
 ## 当前套件结构
 
-- `e2e/ui/*.test.ts`：面向浏览器 UI 的 Playwright 回归测试。
-- `e2e/specs/*.spec.ts`：运行时与平台级 smoke 测试。
-- `e2e/tests/*.test.ts`：轻量 Vitest 完整性校验。
+- `e2e/ui/*.test.ts`：保持扁平的浏览器 UI Playwright 回归测试。
+- `e2e/specs/` 下各层级的 `*.spec.ts`：按能力目录组织的长链路核心业务、运行时与平台 smoke 测试。
+- `e2e/tests/` 下各层级的 `*.test.ts`：按热点目录组织的 Vitest 跨层校验与支撑测试。
 - `e2e/lib/**`：仅放 helper，不放可执行用例入口。

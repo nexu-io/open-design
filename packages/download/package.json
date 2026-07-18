@@ -1,6 +1,6 @@
 {
   "name": "@open-design/download",
-  "version": "0.14.2",
+  "version": "0.15.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",

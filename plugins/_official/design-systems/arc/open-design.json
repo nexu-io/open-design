@@ -24,6 +24,7 @@
     "en": "Arc Browser"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "\"The browser that browses for you.\" Translucent surfaces, gradient warmth, sidebar-first layout.",
   "description_i18n": {
     "zh-CN": "为你而浏览的浏览器。半透明表面、渐变暖色调、侧边栏优先布局。",

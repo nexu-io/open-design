@@ -82,6 +82,7 @@ import { canDuplicatePluginPreview } from './plugins-home/duplicate';
 import { pluginCategoryLabel } from './plugins-home/categoryLabel';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
+import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
@@ -1225,9 +1226,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   return (
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark">
-          <img src="/logo.svg" alt="" draggable={false} />
-        </span>
+        <span className="home-hero__brand-mark od-brand-glyph" />
         <span className="home-hero__brand-name">Open Design</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
@@ -2259,11 +2258,20 @@ function PluginPromptPresets({
   );
 }
 
+const FIRST_PARTY_WEB_CLONE_SITE_ICONS: Record<string, string> = {
+  'open-design.ai': '/logo.svg',
+};
+
+function webCloneFaviconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`;
+}
+
 // A Website-clone text example ("Website URL to clone: https://open-design.ai") —
-// pull the site out so the card can show the site's own favicon + bare domain
-// instead of the raw prompt line. Returns null for non-URL examples so the
-// generic text card renders unchanged.
-function webCloneExampleSite(example: string): { domain: string; faviconUrl: string } | null {
+// pull the site out so the card can show the site's own mark + bare domain
+// instead of the raw prompt line. First-party bundled examples use local assets
+// so the first screen is stable without waiting on a remote favicon service.
+// Returns null for non-URL examples so the generic text card renders unchanged.
+function webCloneExampleSite(example: string): { domain: string; iconUrl: string; fallbackIconUrl?: string } | null {
   const match = example.match(/https?:\/\/[^\s"'<>]+/i);
   if (!match) return null;
   let hostname: string;
@@ -2273,12 +2281,11 @@ function webCloneExampleSite(example: string): { domain: string; faviconUrl: str
     return null;
   }
   if (!hostname || !hostname.includes('.')) return null;
-  // The site's own favicon, resolved at render time via Google's public service
-  // — no third-party brand assets are bundled into the repo, and a broken/blocked
-  // fetch falls back to a lettered tile.
+  const firstPartyIcon = FIRST_PARTY_WEB_CLONE_SITE_ICONS[hostname];
   return {
     domain: hostname,
-    faviconUrl: `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(hostname)}`,
+    iconUrl: firstPartyIcon ?? webCloneFaviconUrl(hostname),
+    ...(firstPartyIcon ? { fallbackIconUrl: webCloneFaviconUrl(hostname) } : {}),
   };
 }
 
@@ -2291,10 +2298,16 @@ function WebClonePromptExampleCard({
   pulse: boolean;
   onPick: (example: string) => void;
 }) {
-  const [iconFailed, setIconFailed] = useState(false);
+  const [iconStage, setIconStage] = useState<'primary' | 'fallback' | 'failed'>('primary');
   const site = webCloneExampleSite(example);
   const domain = site?.domain ?? example;
   const monogram = (domain.replace(/[^a-z0-9]/i, '')[0] ?? '?').toUpperCase();
+  let iconUrl: string | null = null;
+  if (site && iconStage === 'primary') {
+    iconUrl = site.iconUrl;
+  } else if (site && iconStage === 'fallback') {
+    iconUrl = site.fallbackIconUrl ?? null;
+  }
   return (
     <button
       type="button"
@@ -2304,12 +2317,15 @@ function WebClonePromptExampleCard({
       title={domain}
     >
       <span className="home-hero__site-badge" aria-hidden>
-        {site && !iconFailed ? (
+        {site && iconUrl ? (
           <img
-            src={site.faviconUrl}
+            src={iconUrl}
             alt=""
-            loading="lazy"
-            onError={() => setIconFailed(true)}
+            loading="eager"
+            fetchPriority="high"
+            onError={() => {
+              setIconStage((stage) => (stage === 'primary' && site.fallbackIconUrl ? 'fallback' : 'failed'));
+            }}
           />
         ) : (
           <span className="home-hero__site-monogram">{monogram}</span>
@@ -2386,6 +2402,7 @@ function PluginPromptPresetCard({
             pluginId={record.id}
             pluginTitle={title}
             preview={preview}
+            eager={odMode === 'deck'}
           />
           {active ? (
             <span className="home-hero__plugin-preset-check" aria-hidden>
@@ -3862,6 +3879,13 @@ function comparePluginPresetOrder(
   b: InstalledPluginRecord,
   chipId: string,
 ): number {
+  // Gallery order (OPEND-449): pins first, default seeds + no-preview tiles sunk
+  // to the bottom, then usage popularity for non-prototype chips. The prototype
+  // chip stays curation-governed, so popularity is skipped and it keeps its
+  // curated order.
+  const curationGoverned = chipId === 'prototype';
+  const gallery = comparePluginGalleryOrder(a.id, b.id, curationGoverned, curationGoverned);
+  if (gallery !== 0) return gallery;
   const aCurated = curatedPluginPriorityForChip(a, chipId);
   const bCurated = curatedPluginPriorityForChip(b, chipId);
   if (aCurated !== null || bCurated !== null) {

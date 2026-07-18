@@ -106,6 +106,18 @@ export function spawnEnvForAgent(
     if (!env.AMR_CLIENT_SOURCE?.trim()) {
       env.AMR_CLIENT_SOURCE = 'open_design';
     }
+    // AMR runs through Vela's private OpenCode server. The server inherits
+    // this flag, which enables OpenCode's built-in, keyless Exa websearch
+    // tool for AMR without changing the standalone Vela CLI default.
+    if (!env.OPENCODE_ENABLE_EXA?.trim()) {
+      env.OPENCODE_ENABLE_EXA = '1';
+    }
+    // Vela owns the private OpenCode config and intentionally discards a
+    // parent OPENCODE_CONFIG_CONTENT. Its explicit opt-in lets AMR mount the
+    // keyless Parallel Search MCP (web_search + web_fetch) alongside Exa.
+    if (!env.VELA_ENABLE_PARALLEL_MCP?.trim()) {
+      env.VELA_ENABLE_PARALLEL_MCP = '1';
+    }
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),

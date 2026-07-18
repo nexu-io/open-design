@@ -9,7 +9,7 @@
 - **Node.js:** `~24` (Node 24.x). Repo บังคับเวอร์ชันนี้ผ่าน `package.json#engines`.
 - **pnpm:** `10.33.x`. Repo pin `pnpm@10.33.2` ผ่าน `packageManager`; ใช้ Corepack เพื่อให้เลือกเวอร์ชันที่ pin ไว้อัตโนมัติ.
 - **OS:** macOS, Linux และ WSL2 เป็น path หลัก. Windows native รองรับด้วย; ดูปัญหา setup ที่พบบ่อยใน [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md).
-- **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI ฯลฯ. ถ้าไม่ได้ติดตั้ง CLI ใดเลย ให้ใช้ BYOK API mode จาก Settings.
+- **Optional local agent CLI:** Open Design รองรับ registry ของ local runtimes เช่น Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI และอื่น ๆ. รายการปัจจุบันอยู่ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). ถ้าไม่ได้ติดตั้ง runtime ใดเลย ให้ใช้ BYOK runtime ที่ตั้งค่าไว้ใน Settings.
 
 ### Local agent CLI และ PATH
 
@@ -198,16 +198,11 @@ pnpm tools-dev run web # starts daemon + web in the foreground
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-เมื่อโหลดครั้งแรก แอปจะตรวจ code-agent CLI ที่ติดตั้งไว้ (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI), เลือกให้อัตโนมัติ และ default เป็น skill `web-prototype` + design system `Neutral Modern`. พิมพ์ prompt แล้วกด **Send**. Agent จะ stream เข้า pane ซ้าย; tag `<artifact>` จะถูก parse ออกมา และ HTML จะ render live ทางขวา. เมื่อเสร็จแล้ว คลิก **Save to disk** เพื่อ persist artifact ไว้ใต้ `./.od/artifacts/<timestamp>-<slug>/index.html`.
+เมื่อโหลดครั้งแรก แอปจะตรวจ local runtimes ที่พร้อมใช้และแสดง BYOK runtimes ที่ตั้งค่าไว้ใน Settings ด้วย. เลือก runtime, design template และ design system จากนั้นพิมพ์ prompt แล้วกด **Send**. Structured local runtime จะเขียน canonical project files และ stream file/tool events; file workspace กับ preview จะอัปเดตจากการเขียนเหล่านั้น. ส่วน text-only และ BYOK runs จะส่ง `<artifact>` block ที่สมบูรณ์ให้ host parse. ก่อน document หรือเปลี่ยน artifact storage path ต้องอ่าน `AGENTS.md` ที่ root ในส่วน **Daemon data directory contract**.
 
-Dropdown **Design system** ship มาพร้อม built-in systems 71 ชุด — starter ที่เขียนด้วยมือ 2 ชุด (Neutral Modern, Warm Editorial) และ product systems 69 ชุดที่ import จาก [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), group ตาม category (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). เลือกหนึ่งชุดเพื่อ skin prototype ทุกตัวด้วย aesthetic ของ brand นั้น และยังมี design skills อีก 57 ชุดจาก [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills).
+Catalog **Design systems** โหลดโดยตรงจาก packages `DESIGN.md` ใน [`design-systems/`](../../design-systems/). เลือกหนึ่งชุดเพื่อใช้ visual language ของ brand นั้นกับ artifact.
 
-Dropdown **Skill** group ตาม mode (Prototype / Deck / Template / Design system) และแสดง default skill ต่อ mode พร้อม suffix `· default`. Bundled skills:
-
-- **Prototype** — `web-prototype` (generic), `saas-landing`, `dashboard`, `pricing-page`, `docs-page`, `blog-post`, `mobile-app`.
-- **Deck / PPT** — `simple-deck` (single-file horizontal swipe) และ `magazine-web-ppt` (bundle `guizang-ppt` จาก [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) — default สำหรับ deck mode, ship assets/template + references 4 ชุดของตัวเอง). Skills ที่มี side files จะได้ preamble "Skill root (absolute)" อัตโนมัติ เพื่อให้ agent resolve `assets/template.html` และ `references/*.md` จาก path จริงบน disk แทน CWD.
-
-จับคู่ skill กับ design system และ prompt เดียว ก็จะได้ prototype หรือ deck ที่เหมาะกับ layout ใน visual language ที่เลือก.
+Catalog **Templates** มาจาก [`design-templates/`](../../design-templates/) และ group artifact formats สำหรับ prototype, deck, document, image, video และ audio. [`skills/`](../../skills/) สงวนไว้สำหรับ functional capabilities ที่ agent เรียกใช้ระหว่างทำงาน. จับคู่ template กับ design system เพื่อสร้าง artifact ใน visual language ที่เลือก.
 
 ## Other scripts
 
@@ -287,17 +282,17 @@ location /api/ {
 
 | Mode | Picker value | Request flow |
 |---|---|---|
-| **Local CLI** (default เมื่อ daemon ตรวจพบ agent) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → artifact parser → preview |
-| **API mode** (fallback / ไม่มี CLI) | "Anthropic API" / "OpenAI API" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized เป็น `delta/end/error` → artifact parser → preview |
+| **Local CLI** (default เมื่อ daemon ตรวจพบ agent) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → structured tool/file events ผ่าน SSE → project files → preview. Plain-stream CLIs ใช้ text-artifact path. |
+| **API mode** (fallback / ไม่มี CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized เป็น `delta/end/error` → parser `<artifact>` → preview |
 
-ทั้งสอง mode feed เข้า parser `<artifact>` ตัวเดียวกันและ sandboxed iframe ตัวเดียวกัน. สิ่งเดียวที่ต่างกันคือ transport และ system-prompt delivery (local CLIs ไม่มี system channel แยก จึง fold composed prompt เข้า user message).
+ทั้งสอง mode จบที่ file workspace และ sandboxed preview เดียวกัน แต่ handoff contract ต่างกัน. Runtime ที่ใช้ filesystem ได้จะเขียน canonical files และไม่ echo source ใน `<artifact>`. Plain/text-only และ BYOK runs ไม่มี file tools จึงใช้ HTML ที่สมบูรณ์ใน `<artifact>` เป็น canonical deliverable. Execution profile ถูกเลือกจาก runtime transport.
 
 ## Prompt composition
 
 ทุกครั้งที่ send, แอปจะ build system prompt จากสาม layer แล้วส่งให้ provider:
 
 ```
-BASE_SYSTEM_PROMPT   (output contract: wrap in <artifact>, no code fences)
+BASE_SYSTEM_PROMPT   (file หรือ <artifact> handoff ตาม execution profile)
    + active design system body  (DESIGN.md — palette/type/layout)
    + active skill body          (SKILL.md — workflow and output rules)
 ```
@@ -313,9 +308,12 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin entry
 │   │       ├── server.ts          # /api/* + static serving
-│   │       ├── agents.ts          # PATH scanner for claude/codex/devin/gemini/opencode/cursor-agent/qwen/qoder/copilot
+│   │       ├── agents.ts          # compatibility exports for the runtime modules
+│   │       ├── runtimes/
+│   │       │   ├── registry.ts    # supported runtime registry
+│   │       │   └── defs/          # per-runtime launch and argument definitions
 │   │       ├── skills.ts          # SKILL.md loader (frontmatter parser)
-│   │       └── design-systems.ts  # DESIGN.md loader
+│   │       └── design-systems/    # DESIGN.md loader and services
 │   │   ├── sidecar/           # tools-dev daemon sidecar wrapper
 │   │   └── tests/             # daemon package tests
 │   ├── web/                   # Next.js 16 App Router + React client
@@ -324,7 +322,7 @@ open-design/
 │       │   ├── App.tsx        # orchestrates mode / skill / DS pickers + send
 │       │   ├── providers/     # daemon + BYOK API transports
 │       │   ├── prompts/       # system, discovery, directions, deck framework
-│       │   ├── artifacts/     # streaming <artifact> parser + manifests
+│       │   ├── artifacts/     # text-artifact parsing + artifact manifests
 │       │   ├── runtime/       # iframe srcdoc, markdown, export helpers
 │       │   └── state/         # localStorage + daemon-backed project state
 │       ├── sidecar/           # tools-dev web sidecar wrapper
@@ -337,30 +335,11 @@ open-design/
 │   └── platform/              # generic process/platform primitives
 ├── tools/dev/                 # `pnpm tools-dev` lifecycle and inspect CLI
 ├── e2e/                       # Playwright UI + external integration/Vitest harness
-├── skills/                    # SKILL.md — drops in from any Claude Code skill repo
-│   ├── web-prototype/         # generic single-screen prototype (default for prototype mode)
-│   ├── saas-landing/          # marketing page (hero / features / pricing / CTA)
-│   ├── dashboard/             # admin / analytics dashboard
-│   ├── pricing-page/          # standalone pricing + comparison
-│   ├── docs-page/             # 3-column documentation layout
-│   ├── blog-post/             # editorial long-form
-│   ├── mobile-app/            # phone-frame single screen
-│   ├── simple-deck/           # minimal horizontal-swipe deck
-│   └── guizang-ppt/           # magazine-web-ppt — bundled deck/PPT default
-│       ├── SKILL.md
-│       ├── assets/template.html
-│       └── references/{themes,layouts,components,checklist}.md
-├── design-systems/            # DESIGN.md — 9-section schema (awesome-claude-design)
-│   ├── default/               # Neutral Modern (starter)
-│   ├── warm-editorial/        # Warm Editorial (starter)
-│   ├── README.md              # catalog overview
-│   └── …129 systems           # 2 starters · 70 product systems · 57 design skills
+├── skills/                    # functional capabilities invoked mid-task
+├── design-templates/          # rendering catalog for prototypes, decks, docs, and media
+├── design-systems/            # brand packages rooted at DESIGN.md
 ├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
 ├── docs/                      # product vision + spec
-├── .od/                       # runtime data (gitignored, auto-created)
-│   ├── app.sqlite              #   projects / conversations / messages / tabs
-│   ├── artifacts/              #   one-off "Save to disk" renders
-│   └── projects/<id>/          #   per-project working dir + agent cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # root quality scripts + `od` bin
 ```
@@ -368,7 +347,7 @@ open-design/
 ## Troubleshooting
 
 - **`better-sqlite3` fails to load / ABI mismatch after a Node.js version change** — `pnpm install` จะ re-run `postinstall` อัตโนมัติและ rebuild native addon สำหรับ Node.js ปัจจุบัน. ถ้าต้องการ rebuild เองหรือตรวจ fix: `pnpm --filter @open-design/daemon rebuild better-sqlite3` แล้ว `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`. ต้องมี build tools: `python3`, `make`, `g++` (หรือ `clang++`). ถ้าคุณมี `ignore-scripts=true` ใน `.npmrc`, ให้รัน `node scripts/postinstall.mjs` หลัง `pnpm install`.
-- **"no agents found on PATH"** — ติดตั้งหนึ่งในนี้: `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `qodercli`, `copilot`. หรือสลับเป็น API mode ใน Settings แล้ว paste provider key.
+- **"no agents found on PATH"** — ติดตั้ง local runtime ที่ register ไว้ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), ตรวจว่า daemon มองเห็น executable แล้วใช้ **Rescan** ใน **Settings → Execution mode**. หรือ configure BYOK runtime ใน Settings.
 - **Claude Code exits with code 1** — Open Design start `claude` ได้แล้ว แต่ spawned non-interactive run fail ก่อน produce response. จาก shell หรือ app environment เดียวกับที่ start Open Design ให้เช็ค:
   ```bash
   claude --version
@@ -376,10 +355,10 @@ open-design/
   printf 'hello' | claude -p --output-format stream-json --verbose --permission-mode bypassPermissions
   ```
   ถ้า smoke test รายงาน `401`, `apiKeySource: "none"` หรือ auth error อื่นโดยไม่มี custom endpoint ให้รัน `claude`, ใช้ `/login`, exit Claude แล้วลอง Open Design ใหม่. ถ้าคุณใช้หลาย Claude profiles ให้ตั้ง **Settings -> Execution mode -> Claude Code config directory** ไปที่ profile path เช่น `~/.claude-2`. ถ้าตั้ง `ANTHROPIC_BASE_URL` หรือ proxy ไว้ ให้เช็ค endpoint URL, proxy credentials, endpoint auth environment และ model access; ลบ custom endpoint เฉพาะเมื่ออยาก retry ด้วย standard Claude Code auth. บน Windows, native PowerShell และ WSL ใช้ Claude installs และ credential stores แยกกัน; ให้ re-authenticate ใน environment เดียวกับที่ Open Design ใช้ และเช็ค Windows Credential Manager ถ้า `/login` ไม่ซ่อม native Windows credentials.
-- **daemon 500 on /api/chat** — ดู stderr tail ใน daemon terminal; โดยมาก CLI reject args. CLI แต่ละตัวใช้ argv shapes ต่างกัน; ดู `apps/daemon/src/agents.ts` `buildArgs` ถ้าต้องปรับ.
+- **daemon 500 on /api/chat** — ดู stderr tail ใน daemon terminal; โดยมาก CLI reject args. CLI แต่ละตัวใช้ argv shapes ต่างกัน; ดู definition ที่ตรงกันใน `apps/daemon/src/runtimes/defs/` ถ้าต้องปรับ.
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — รัน media dispatcher checks ด้านบน. อย่า resume CLI session เก่า; เปิด project จาก Open Design app ใหม่เพื่อให้ daemon inject variables `OD_*` ชุดใหม่.
 - **Codex loads too much plugin context** — start Open Design ด้วย `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` เพื่อให้ daemon-spawned Codex processes รันด้วย `--disable plugins`.
-- **artifact never renders** — model produce text โดยไม่ได้ wrap ใน `<artifact>`. ยืนยันว่า system prompt ถูกส่งผ่าน (เช็ค daemon log) และพิจารณาสลับไป model ที่เก่งขึ้นหรือ skill ที่เข้มกว่า.
+- **artifact never renders** — ตรวจ handoff profile ก่อน. สำหรับ local runtime ที่ใช้ filesystem ได้ ให้ตรวจว่า agent สร้าง project file ที่ preview ได้และ file events มาถึง daemon; path นี้ไม่ควรส่ง source ใน `<artifact>`. สำหรับ plain/text-only หรือ BYOK run ให้ตรวจว่ามี `<artifact>` block ที่สมบูรณ์หนึ่งก้อน แล้วหา boundary แรกที่ fail ใน daemon log.
 - **`Authorization: Bearer <OD_API_TOKEN>` required on macOS** — Docker Desktop bridge networking ทำให้ daemon มอง request เป็น non-loopback. เปิด host networking ใน Docker Desktop และใช้ `network_mode: host`. ดู [`deploy/README.md` — Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos).
 
 ## Mapping back to the vision
@@ -387,6 +366,6 @@ open-design/
 Quickstart นี้คือ runnable seed ของ spec ใน [`docs/`](../../docs/). Spec อธิบายว่าโปรเจกต์จะโตไปทางไหน (ดู [`docs/roadmap.md`](../../docs/roadmap.md)). Highlights:
 
 - `docs/architecture.md` อธิบาย shipped stack: Next.js 16 App Router อยู่หน้า local daemon และ `apps/web/next.config.ts` rewrite ใน dev เพื่อให้ browser คุยกับ `/api` surface เดียวกัน.
-- `docs/skills-protocol.md` อธิบาย frontmatter `od:` แบบเต็ม (typed inputs, sliders, capability gating). MVP นี้อ่านเฉพาะ `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` — เพิ่มส่วนที่เหลือได้ใน `apps/daemon/src/skills.ts`.
-- `docs/agent-adapters.md` มองไปถึง dispatch ที่ richer กว่านี้ (capability detection, streaming tool-calls). `apps/daemon/src/agents.ts` ของเรายังเป็น dispatcher ขั้นต่ำ — เพียงพอสำหรับพิสูจน์ wiring.
-- `docs/modes.md` ระบุ modes สี่แบบ: prototype / deck / template / design-system. ตอนนี้เรา ship skills สำหรับสองแบบแรก; picker filter ตาม `mode` ได้แล้ว.
+- `docs/skills-protocol.md` อธิบาย `SKILL.md`/`od:` frontmatter ปัจจุบันและการแยก functional skills ออกจาก rendering templates. Parser และ normalization ใน `apps/daemon/src/skills.ts` คือ implementation source of truth.
+- `docs/agent-adapters.md` อธิบาย adapter contract. Launch, argument, model และ stream settings ของแต่ละ runtime อยู่ใน `apps/daemon/src/runtimes/defs/` และ register ใน `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` เป็น compatibility export surface.
+- `docs/modes.md` แยก New Project tabs หกแบบออกจาก normalized registry modes เจ็ดแบบ (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).

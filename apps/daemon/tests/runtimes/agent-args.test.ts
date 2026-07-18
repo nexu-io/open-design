@@ -269,6 +269,38 @@ test('pi args use rpc mode without --no-session and append model/thinking option
   ]);
 });
 
+test('pi fetchModels reads the model table from stdout', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-pi-models-'));
+  try {
+    const bin = join(dir, process.platform === 'win32' ? 'pi.cmd' : 'pi');
+    if (process.platform === 'win32') {
+      writeFileSync(
+        bin,
+        '@echo off\r\nif "%~1"=="--list-models" (\r\n  echo provider model context max-out thinking images\r\n  echo anthropic claude-sonnet-4-5 200K 64K yes yes\r\n  exit /b 0\r\n)\r\nexit /b 1\r\n',
+      );
+    } else {
+      writeFileSync(
+        bin,
+        '#!/bin/sh\nif [ "$1" = "--list-models" ]; then\n  printf \'%s\\n\' \\\n    \'provider model context max-out thinking images\' \\\n    \'anthropic claude-sonnet-4-5 200K 64K yes yes\'\n  exit 0\nfi\nexit 1\n',
+      );
+      chmodSync(bin, 0o755);
+    }
+
+    assert.ok(pi.fetchModels, 'pi must define fetchModels');
+    const models = await pi.fetchModels(bin, {});
+
+    assert.deepEqual(models, [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'anthropic/claude-sonnet-4-5',
+        label: 'anthropic/claude-sonnet-4-5',
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
   const args = pi.buildArgs(
     '',

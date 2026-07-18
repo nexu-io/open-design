@@ -24,6 +24,7 @@
     "en": "Magical Academy Storyboard Sequence"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A detailed storyboard-style prompt for a cinematic sequence depicting a magical girl at an academy, covering arrival, discovery of power, and a magical duel.",
   "description_i18n": {
     "zh-CN": "用于生成魔法学院场景的详细故事板提示词，包含少女到达学院、觉醒魔法力量和魔法决斗的电影化叙事序列。",

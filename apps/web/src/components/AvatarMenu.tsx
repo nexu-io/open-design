@@ -355,8 +355,8 @@ export function AvatarMenu({
       ? deploymentProviderConfig?.defaultModel?.trim()
         ? [deploymentProviderConfig.defaultModel.trim()]
         : []
-      : byokProvider?.models?.length
-        ? byokProvider.models
+      : byokProvider?.preferredModels.length
+        ? byokProvider.preferredModels
         : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
   );
 
@@ -373,7 +373,7 @@ export function AvatarMenu({
         title={t('avatar.title')}
         aria-label={t('avatar.title')}
       >
-        {currentAgent ? (
+        {config.mode === 'daemon' && currentAgent ? (
           <AgentIcon id={currentAgent.id} size={20} />
         ) : (
           <RemixIcon name="link" size={20} />
@@ -680,7 +680,7 @@ export function AvatarMenu({
                       ? [
                           {
                             value: config.model,
-                            label: byokProvider?.models?.includes(config.model)
+                            label: byokProvider?.preferredModels.includes(config.model)
                               ? config.model
                               : `${config.model} ${t('avatar.customSuffix')}`,
                           },
