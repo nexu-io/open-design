@@ -64,6 +64,10 @@ function containsInsufficientBalanceSignal(value: string): boolean {
   return value.includes('quota') && /\b(wallet|balance|credit|billing|funds?)\b/.test(value);
 }
 
+function containsGeminiQuotaSignal(value: string): boolean {
+  return value.includes('gemini http 429') && value.includes('resource_exhausted');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -137,6 +141,15 @@ export function classifyAmrAccountFailureSignal(
 export function classifyAmrAccountFailure(text: string): AmrAccountFailure | null {
   const value = normalizeFailureText(text);
   if (!value.trim()) return null;
+
+  if (containsGeminiQuotaSignal(value)) {
+    return {
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      message: 'Your Google Gemini API key has exceeded its quota or free tier limit. Check your plan and billing details at https://aistudio.google.com/apikey, or switch to a different model.',
+      action: 'recharge',
+      actionUrl: 'https://aistudio.google.com/apikey',
+    };
+  }
 
   if (containsInsufficientBalanceSignal(value)) {
     return {

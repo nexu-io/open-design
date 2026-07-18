@@ -156,8 +156,8 @@ export function promotedAmrRetryStatusPayload(update: JsonObject) {
  * @returns A structured error payload, or `null` when not applicable.
  */
 export function promotedAmrStderrPayload(chunk: string) {
-  if (!/opencode_event_stream_failure|session\.status/i.test(chunk)) return null;
-  if (!/\bretry\b/i.test(chunk)) return null;
+  if (!/opencode_event_stream_failure|session\.status|agent\.conversation_loop/i.test(chunk)) return null;
+  if (!/\bretry(ing)?\b/i.test(chunk)) return null;
   const failure = classifyAmrAccountFailure(chunk);
   if (!failure) return null;
   return {

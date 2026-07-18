@@ -34,7 +34,7 @@ const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
 ] as const;
 
 export const WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS = ["-t7z", "-m0=LZMA2", "-mx=1", "-mf=off"] as const;
-const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 300_000;
+const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 1_200_000; // increased from 300s to 20min for large builds
 
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
@@ -307,11 +307,15 @@ async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<stri
     const direct = await findFirstExistingPath([
       join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "makensis.exe"),
       join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "Bin", "makensis.exe"),
+      // Fallback for installations where folder name does not have the duplicated suffix
+      join(cacheRoot, "nsis", "nsis-3.0.4.1", "makensis.exe"),
+      join(cacheRoot, "nsis", "nsis-3.0.4.1", "Bin", "makensis.exe"),
     ]);
     if (direct != null) return direct;
   }
   return null;
 }
+
 
 async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   const cached = await findElectronBuilderMakensis(config);
