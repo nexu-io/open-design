@@ -219,6 +219,32 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(screen.queryByRole('button', { name: 'Search tabs' })).toBeNull();
   });
 
+  it('surfaces local projects that are not open as tabs when searching', async () => {
+    // Only the singleton Home entry tab is open — neither project is open as a
+    // tab. Searching must still find a closed local project (the #2693 gap:
+    // results were limited to open tabs).
+    render(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'home' }}
+        projects={[project, projectBeta]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search tabs' }));
+    const input = await screen.findByPlaceholderText('Search tabs');
+    fireEvent.change(input, { target: { value: 'Beta' } });
+
+    const result = await screen.findByRole('button', { name: 'Project Beta' });
+    fireEvent.click(result);
+
+    expect(navigate).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-beta',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
   it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,

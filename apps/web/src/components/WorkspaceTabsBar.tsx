@@ -488,6 +488,24 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       .slice(0, MAX_SEARCH_RESULTS);
   }, [displayTabs, query]);
 
+  // Local projects that match the query but aren't already open as tabs. The
+  // open-tabs list above only searches in-memory tabs, so a closed project was
+  // previously unreachable from search (#2693). This group only appears while
+  // searching; with no query the popover keeps showing open tabs alone.
+  const filteredProjects = useMemo(() => {
+    const needle = normalizeSearch(query);
+    if (!needle) return [];
+    const openProjectIds = new Set(
+      state.tabs.flatMap((tab) => (tab.kind === 'project' ? [tab.projectId] : [])),
+    );
+    return projects
+      .filter((project) => !openProjectIds.has(project.id))
+      .filter((project) => (project.name.trim() || t('common.untitled')).toLocaleLowerCase().includes(needle))
+      .slice()
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_SEARCH_RESULTS);
+  }, [projects, state.tabs, query, t]);
+
   useEffect(() => {
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
@@ -739,6 +757,15 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       return;
     }
     activateTab(tab);
+  }
+
+  // Open a local project chosen from the search popover. Navigation is enough:
+  // the route change reconciles into a project tab via the route-sync effect,
+  // matching how projects are opened elsewhere (App `onOpenProject`).
+  function openProjectFromSearch(projectId: string) {
+    setTabsMenuOpen(false);
+    dismissHoverPreview();
+    navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
   }
 
   function createNewTab() {
@@ -1081,6 +1108,51 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
                     <div className="workspace-tabs-empty">No tabs found</div>
                   )}
                 </div>
+                {filteredProjects.length > 0 ? (
+                  <>
+                    <div className="workspace-tabs-popover__section">
+                      <span>Local projects</span>
+                      <span>{filteredProjects.length}</span>
+                    </div>
+                    <div
+                      className="workspace-tabs-list"
+                      role="listbox"
+                      aria-label="Local projects"
+                    >
+                      {filteredProjects.map((project) => {
+                        const name = project.name.trim() || t('common.untitled');
+                        return (
+                          <div
+                            key={project.id}
+                            className="workspace-tabs-list__item"
+                            role="option"
+                            aria-selected={false}
+                          >
+                            <button
+                              type="button"
+                              className="workspace-tabs-list__main od-tooltip"
+                              onClick={() => openProjectFromSearch(project.id)}
+                              aria-label={name}
+                              title={name}
+                              data-tooltip={name}
+                              data-tooltip-placement="right"
+                            >
+                              <span className="workspace-tabs-list__icon" aria-hidden>
+                                <Icon name="folder" size={15} />
+                              </span>
+                              <span className="workspace-tabs-list__text">
+                                <span className="workspace-tabs-list__title">{name}</span>
+                                <span className="workspace-tabs-list__meta">
+                                  {t('workspaceTabs.project')}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : null}
               </div>,
               document.body,
             )
