@@ -9615,11 +9615,48 @@ function stripInternalStorageProjectPrefix(value: string): string {
   return value.replace(/^\.od\/projects\/[^/]+\//, '');
 }
 
-function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]): ProjectFile | null {
-  const normalized = normalizeComparableFilePath(stripInternalStorageProjectPrefix(rawPath));
-  if (!normalized) return null;
-  const hasPathSeparator = normalized.includes('/');
-  const basename = normalized.split('/').pop() ?? normalized;
+function findTouchedProjectFile(
+  rawPath: string,
+  files: readonly ProjectFile[],
+  projectId?: string,
+  projectRoot?: string | null,
+): ProjectFile | null {
+  const slashed = stripInternalStorageProjectPrefix(rawPath).replace(/\\/g, '/');
+
+// Lexically resolve `.`/`..` first.
+const segments = lexicallyNormalizePathSegments(slashed);
+if (!segments || segments.length === 0) return null;
+
+let normalized = segments.join('/');
+
+const managedProjectRelativePath =
+  relativePathFromManagedProjectAlias(normalized, projectId);
+
+if (!managedProjectRelativePath && isAbsoluteToolPath(slashed)) {
+  const rootSegments = projectRoot
+    ? lexicallyNormalizePathSegments(projectRoot.replace(/\\/g, '/'))
+    : null;
+
+  if (rootSegments && rootSegments.length > 0) {
+    if (segments.length <= rootSegments.length) return null;
+
+    for (let i = 0; i < rootSegments.length; i += 1) {
+      if (segments[i] !== rootSegments[i]) return null;
+    }
+
+    normalized = segments.slice(rootSegments.length).join('/');
+  }
+}
+
+const comparablePaths = managedProjectRelativePath
+  ? [normalized, managedProjectRelativePath]
+  : [normalized];
+
+const hasPathSeparator = comparablePaths.every((candidate) =>
+  candidate.includes('/'),
+);
+
+const basename = normalized.split('/').pop() ?? normalized;
   const normalizedFiles = files.map((file) => ({
     file,
     candidates: [
