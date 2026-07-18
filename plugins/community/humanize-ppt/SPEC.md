@@ -51,7 +51,7 @@ python3 scripts/humanize_ppt.py --out <dir> [mode flags] [inputs] [renderer/styl
 2. `--style-gallery` (v0.9) → **cover-style gate** (§6). Wins over `--preview-outline`.
 3. `--preview-outline` → write `outline-preview.md` and stop (review checkpoint).
 4. `--confirm-outline` → validate freshness, write `preview-confirmed.json`. Refuses if the outline is missing or the source mtime is newer. Mutually exclusive with `--preview-outline`.
-5. (no mode flag) → **brief mode**: write the full output contract (§5) and the renderer's production prompt. Wipes and recreates `--out` first, but only when it is missing, empty, or already a Humanize PPT run (`run_manifest.json` / `style_gallery_plan.json` at its root) — otherwise refuses unless `--force` is passed.
+5. (no mode flag) → **brief mode**: write the full output contract (§5) and the renderer's production prompt. Wipes and recreates `--out` first, but only when it is missing, empty, or already a Humanize PPT run (`run_manifest.json` / `style_gallery_plan.json` / `outline-preview.md` / `preview-confirmed.json` at its root) — otherwise refuses unless `--force` is passed.
 
 ### Renderer / style selection
 - `--renderer {auto,guizang,beautiful-html-templates,html-ppt,frontend-slides,ppt-master}` (default `auto`). `ppt-master` is explicit unless `--ppt-master-template` forces it.

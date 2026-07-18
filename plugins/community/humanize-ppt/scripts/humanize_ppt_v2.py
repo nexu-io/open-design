@@ -18,7 +18,7 @@ except ImportError:  # Stable scripts/humanize_ppt.py entrypoint imports this as
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = SKILL_ROOT / "registry" / "renderer_registry.json"
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 BEAUTIFUL_REPO_URL = "https://github.com/zarazhangrui/beautiful-html-templates.git"
 DEFAULT_ZH_PREVIEW_COUNT = 3
 DEFAULT_EN_PREVIEW_COUNT = 5
@@ -144,10 +144,18 @@ def expand_user_path(value):
     return Path(value).expanduser()
 
 
-# v1.1.1: markers a previous Humanize PPT run leaves at the root of --out.
+# v1.1.2: markers a previous Humanize PPT run leaves at the root of --out.
 # Used by ensure_clean_out_dir to tell "safe to wipe and rebuild" apart from
-# "someone else's directory" before a destructive rmtree.
-HUMANIZE_OUT_MARKERS = ("run_manifest.json", "style_gallery_plan.json")
+# "someone else's directory" before a destructive rmtree. Includes the
+# outline-preview/confirm gate's own artifacts (outline-preview.md,
+# preview-confirmed.json) so re-running --preview-outline / --confirm-outline
+# against the same --out is never mistaken for "someone else's directory".
+HUMANIZE_OUT_MARKERS = (
+    "run_manifest.json",
+    "style_gallery_plan.json",
+    "outline-preview.md",
+    "preview-confirmed.json",
+)
 
 
 def ensure_clean_out_dir(out, force=False):
@@ -157,8 +165,9 @@ def ensure_clean_out_dir(out, force=False):
     - Missing --out: create it.
     - Empty --out: use it as-is.
     - Non-empty --out that carries a Humanize marker file at its root (i.e.
-      a previous humanize_ppt run) or when the caller passed --force: wipe
-      and recreate it.
+      a previous humanize_ppt run, including a prior --preview-outline or
+      --confirm-outline checkpoint against the same --out) or when the
+      caller passed --force: wipe and recreate it.
     - Otherwise: refuse. Returns an error message string instead of raising
       or exiting so callers can report it via stderr with their own exit
       code, matching this module's existing error-handling style.
@@ -174,9 +183,10 @@ def ensure_clean_out_dir(out, force=False):
         shutil.rmtree(out)
         out.mkdir(parents=True, exist_ok=True)
         return None
+    marker_list = " or ".join(HUMANIZE_OUT_MARKERS)
     return (
         f"--out {out} already exists, is not empty, and does not look like a "
-        "previous Humanize PPT run (no run_manifest.json or style_gallery_plan.json "
+        f"previous Humanize PPT run (no {marker_list} "
         "at its root). Refusing to wipe it: it may hold content you did not intend "
         "to lose. Point --out at a dedicated run directory, or pass --force to wipe "
         "it anyway.\n"
@@ -3030,7 +3040,7 @@ def parse_args():
         description=f"Humanize PPT v{VERSION} — AST outline director + media plan + HTML/PPTX brief orchestrator + presentation checkup"
     )
     ap.add_argument("--source", default=None, help="Source markdown / text raw material. Required for brief mode. Old .ppt/.pptx must be extracted to text first; a rendered .pptx belongs in --qa-from, not --source.")
-    ap.add_argument("--out", required=True, help="Output directory. Brief mode wipes and recreates it, but only when empty, missing, already a Humanize PPT run (has run_manifest.json or style_gallery_plan.json), or --force is passed.")
+    ap.add_argument("--out", required=True, help="Output directory. Brief mode wipes and recreates it, but only when empty, missing, already a Humanize PPT run (has run_manifest.json, style_gallery_plan.json, outline-preview.md, or preview-confirmed.json), or --force is passed.")
     ap.add_argument(
         "--force",
         action="store_true",

@@ -160,4 +160,4 @@ C — Complete / Control
 
 The recommended stable entrypoint is `scripts/humanize_ppt.py` (versioned scripts remain as compatibility shims). Full CLI examples — brief mode, presentation checkup, native PPTX, outline preview, legacy entrypoints — live in `docs/local-demo.md`.
 
-**`--out` warning:** point `--out` at a dedicated run directory. Brief mode rebuilds it from scratch every run, but only wipes it automatically when it is missing, empty, or already a previous Humanize PPT run (`run_manifest.json` / `style_gallery_plan.json` at its root) — otherwise it refuses and asks for `--force`.
+**`--out` warning:** point `--out` at a dedicated run directory. Brief mode rebuilds it from scratch every run, but only wipes it automatically when it is missing, empty, or already a previous Humanize PPT run (`run_manifest.json` / `style_gallery_plan.json` / `outline-preview.md` / `preview-confirmed.json` at its root) — otherwise it refuses and asks for `--force`.

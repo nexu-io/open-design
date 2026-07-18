@@ -3,7 +3,7 @@
   "specVersion": "1.0.0",
   "name": "community-humanize-ppt",
   "title": "Humanize PPT",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Presentation system for agent-made PPTs — born for the talk, not just the template. Turns raw material into an AST (audience-state-transfer) outline with per-page media decisions, hands a production brief to downstream renderers (HTML-PPT skills or native PPTX), then runs a capped 3-round presentation checkup on the rendered deck.",
   "license": "MIT",
   "author": { "name": "LearnPrompt", "url": "https://github.com/LearnPrompt" },
