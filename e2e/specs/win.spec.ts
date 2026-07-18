@@ -139,6 +139,66 @@ const ensureMainAppShellExpression = `
     };
   })()
 `;
+// Regression guard for the 0.7.0 win-x64 report where the Image/Video/Audio
+// media entries did not render (issue: "0.7.0-win-x64 Image/Video/Audio 标签页
+// 不显示"). Drives the real packaged renderer to the New Project → Media tab and
+// asserts the three surface buttons actually mount with a layout box, then
+// restores a clean Home (Esc) so the later screenshot / updater-popup steps are
+// undisturbed. The buttons are static markup, so a miss here means the packaged
+// win renderer failed to paint that surface — exactly the reported symptom.
+const ensureMediaSurfacesExpression = `
+  (async () => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const rendered = (el) => el instanceof HTMLElement && el.getClientRects().length > 0;
+    const q = (sel) => document.querySelector(sel);
+    const surfaces = ['image', 'video', 'audio'];
+
+    // The rail collapses by default and hides the New Project entry; expand it
+    // first so the entry is reachable.
+    if (!(q('[data-testid="entry-nav-new-project"]') instanceof HTMLElement)) {
+      const railToggle = q('[data-testid="entry-rail-toggle"]');
+      if (railToggle instanceof HTMLElement) {
+        railToggle.click();
+        await wait(200);
+      }
+    }
+
+    // Open the New Project modal if it is not already showing.
+    if (!(q('[data-testid="new-project-modal"]') instanceof HTMLElement)) {
+      const nav = q('[data-testid="entry-nav-new-project"]');
+      if (nav instanceof HTMLElement) {
+        nav.click();
+        await wait(300);
+      }
+    }
+
+    // Switch to the Media tab — the image/video/audio segmented control only
+    // mounts while that tab is active.
+    const mediaTab = q('[data-testid="new-project-tab-media"]');
+    if (mediaTab instanceof HTMLElement) {
+      mediaTab.click();
+      await wait(200);
+    }
+
+    const modalOpened = q('[data-testid="new-project-modal"]') instanceof HTMLElement;
+    const found = {};
+    for (const surface of surfaces) {
+      found[surface] = rendered(q('[data-testid="new-project-media-surface-' + surface + '"]'));
+    }
+    const allRendered = surfaces.every((surface) => found[surface] === true);
+
+    // Restore a clean Home so downstream smoke steps are not affected.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await wait(150);
+
+    return {
+      allRendered,
+      mediaTabPresent: mediaTab instanceof HTMLElement,
+      modalOpened,
+      surfaces: found,
+    };
+  })()
+`;
 const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
@@ -475,6 +535,7 @@ winDescribe('packaged windows runtime smoke', () => {
 
       if (!inspect.desktopIpcUnavailable) {
         await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
+        await measureSmokeStep(timings, 'ensure media surfaces render', async () => ensureMediaSurfacesRender());
 
         await mkdir(dirname(preUpdateScreenshotPath), { recursive: true });
         const preUpdateScreenshot = await measureSmokeStep(timings, 'inspect screenshot before update', async () =>
@@ -1166,6 +1227,25 @@ async function ensureMainAppShell(timeoutMs = 45_000): Promise<void> {
     await delay(750);
   }
   throw new Error(`packaged windows runtime did not reach main app shell: ${formatUnknown(lastResult)}`);
+}
+
+async function ensureMediaSurfacesRender(timeoutMs = 45_000): Promise<void> {
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', ensureMediaSurfacesExpression]);
+      lastResult = inspect;
+      const value = inspect.eval?.value;
+      if (isRecord(value) && value.allRendered === true) return;
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(750);
+  }
+  throw new Error(
+    `packaged windows runtime did not render the image/video/audio media surfaces: ${formatUnknown(lastResult)}`,
+  );
 }
 
 async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid: number | null | undefined): Promise<WinInspectResult> {
