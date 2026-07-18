@@ -5169,10 +5169,19 @@ export async function startServer({
       // run.events miss it and silently drop the delivered file. This mirrors
       // the truncation-proof ledger the verdict consumers adopted in #5351.
       // Bounded so a long run cannot grow this without limit.
-      if (event === 'stdout' && data && typeof data.chunk === 'string' &&
-          (run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
-        run.plainArtifactStdout =
-          ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+      if (event === 'stdout' && data && typeof data.chunk === 'string') {
+        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+          const next = (run.plainArtifactStdout ?? '') + data.chunk;
+          run.plainArtifactStdout = next.slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+          // Record when the head-biased accumulator hit its cap: past this
+          // point later chunks are dropped, so an <artifact> that only appears
+          // AFTER the cap will not be in this buffer. The finalizer must then
+          // fall back to the (tail-biased) run.events ring instead of trusting
+          // the capped buffer's absence of the tag.
+          if (next.length > PLAIN_ARTIFACT_STDOUT_CAP) run.plainArtifactStdoutCapped = true;
+        } else {
+          run.plainArtifactStdoutCapped = true;
+        }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -7833,11 +7842,20 @@ export async function startServer({
         // Prefer the truncation-proof accumulator (populated on the run as
         // stdout streams, above) over re-scanning run.events, whose 2000-event
         // ring buffer can evict an <artifact> block streamed early in a long
-        // run and silently drop the delivered file. Fall back to the ring only
-        // when the accumulator is empty (e.g. a run that produced no stdout).
+        // run and silently drop the delivered file.
+        //
+        // The accumulator is head-biased (it keeps the first CAP bytes), while
+        // run.events is tail-biased (last 2000 events). They cover complementary
+        // cases, so we must not blindly trust the accumulator's ABSENCE of the
+        // tag: an <artifact> that first appears after >CAP bytes of prose is not
+        // in the capped buffer but may still be in the last 2000 events. Fall
+        // back to the ring when the accumulator is empty OR when it was capped
+        // and does not itself contain the tag.
+        const accumulated = run.plainArtifactStdout ?? '';
         const plainStdout =
-          run.plainArtifactStdout && run.plainArtifactStdout.length > 0
-            ? run.plainArtifactStdout
+          accumulated.length > 0 &&
+          !(run.plainArtifactStdoutCapped && !accumulated.includes('<artifact'))
+            ? accumulated
             : plainStdoutFromRunEvents(run.events);
         if (plainStdout.includes('<artifact')) {
           try {

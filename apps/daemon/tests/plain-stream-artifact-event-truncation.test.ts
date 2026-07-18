@@ -143,6 +143,65 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
     ).toContain(ARTIFACT_FILE_NAME);
   });
 
+  // Regression guard for the accumulator cap (raised by review on #5850): the
+  // truncation-proof stdout accumulator is head-biased (keeps the first CAP
+  // bytes). If an <artifact> first appears AFTER a >CAP prose/log prefix, it is
+  // NOT in the capped buffer — but it may still be in the last 2000 run.events.
+  // A naive "always prefer the accumulator" finalizer would newly drop it (a
+  // regression in the very path this PR fixes). The finalizer must fall back to
+  // run.events when the accumulator was capped and lacks the tag. Here the big
+  // prefix is written as a few large chunks, so the event count stays tiny and
+  // the artifact tag survives in the ring — the fallback must find it.
+  it('persists an artifact that first appears after a >8 MiB prefix (accumulator cap must fall back to the ring)', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-plain-cap-bin-'));
+    const fakeDeepseek = await writeBigPrefixThenArtifactDeepseek(binDir, 'deepseek-cap');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'deepseek',
+      agentCliEnv: { deepseek: { DEEPSEEK_BIN: fakeDeepseek } },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { run, projectId } = await createAndWaitForRun(started.url);
+    expect(run.status).toBe('succeeded');
+
+    // Mechanism: the prefix pushed the head-biased accumulator past its cap, but
+    // the artifact tag still lives in the small ring (few large chunks), so the
+    // finalizer's fallback path is what must persist the file.
+    const eventsBody = await fetchRunEventsSseBody(started.url, run.id);
+    expect(eventsBody.includes('<artifact')).toBe(true);
+
+    const filesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/files`,
+    );
+    expect(filesResponse.status).toBe(200);
+    const filesBody = await filesResponse.json() as unknown;
+    const files = Array.isArray(filesBody)
+      ? filesBody
+      : ((filesBody as { files?: unknown[] }).files ?? []);
+    const names = files.map((file) =>
+      typeof (file as { name?: unknown }).name === 'string'
+        ? (file as { name: string }).name
+        : String(file),
+    );
+    expect(
+      names,
+      `expected project files to include ${ARTIFACT_FILE_NAME} — the artifact ` +
+        `first appeared after a >8 MiB prefix, so it is absent from the capped ` +
+        `accumulator; the finalizer must fall back to run.events (where the tag ` +
+        `still lives) rather than trusting the capped buffer's absence of it`,
+    ).toContain(ARTIFACT_FILE_NAME);
+  });
+
   // Control: identical run WITHOUT the flood — the artifact tag stays inside
   // the ring buffer and persistence works. This passes on origin/main and
   // isolates the >2000-event truncation as the only variable that flips the
@@ -216,6 +275,30 @@ W('</artifact>\\n');
   }
   process.exit(0);
 })();
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
+// Writes >8 MiB of prose FIRST (in a few large chunks, so the daemon reads it
+// as a handful of run events — the ring buffer is NOT truncated), THEN a
+// complete artifact block, then exits. This overruns the head-biased stdout
+// accumulator's cap while leaving the artifact tag inside run.events.
+async function writeBigPrefixThenArtifactDeepseek(dir: string, name: string): Promise<string> {
+  const bin = path.join(dir, name);
+  // 9 chunks of 1 MiB = 9 MiB prose prefix, comfortably above the 8 MiB cap.
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+if (process.argv.includes('--version')) { console.log('deepseek 4.0.0-cap'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: deepseek exec [--auto] <prompt>'); process.exit(0); }
+const W = (s) => fs.writeSync(1, s);
+const CHUNK = 'x'.repeat(1024 * 1024);
+for (let i = 0; i < 9; i++) W('prefix-' + i + '-' + CHUNK + '\\n');
+// The artifact appears only AFTER the >8 MiB prefix.
+W('<artifact identifier="${ARTIFACT_IDENTIFIER}" title="Cap Repro" type="text/html">\\n');
+W('<!doctype html><html><body>accumulator cap fallback repro</body></html>\\n');
+W('</artifact>\\n');
+process.exit(0);
 `, 'utf8');
   await chmod(bin, 0o755);
   return bin;
