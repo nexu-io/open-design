@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDaemonTranscript,
+  DAEMON_RUN_FINISHED_EVENT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
+  type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
@@ -68,6 +70,79 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('publishes an authoritative successful run with an artifact to the app gate', async () => {
+    const handlers = createDaemonHandlers();
+    const eventTarget = new EventTarget();
+    const published: DaemonRunFinishedEventDetail[] = [];
+    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+    });
+    vi.stubGlobal('window', eventTarget);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
+      if (url === '/api/runs/run-artifact-success/events') {
+        return sseResponse(
+          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'make a design' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    expect(published).toEqual([{
+      runId: 'run-artifact-success',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      result: 'success',
+      artifactCount: 2,
+    }]);
+  });
+
+  it.each([
+    ['no artifact', '{"code":0,"status":"succeeded","artifactCount":0}'],
+    ['failed', '{"code":1,"status":"failed","artifactCount":1}'],
+    ['canceled', '{"code":null,"signal":"SIGTERM","status":"canceled","artifactCount":1}'],
+    ['implicit success', '{"code":0,"artifactCount":1}'],
+  ])('does not publish a run-finished upgrade event for %s', async (_label, payload) => {
+    const handlers = createDaemonHandlers();
+    const eventTarget = new EventTarget();
+    const published: DaemonRunFinishedEventDetail[] = [];
+    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+    });
+    vi.stubGlobal('window', eventTarget);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-not-eligible' });
+      if (url === '/api/runs/run-not-eligible/events') {
+        return sseResponse(`event: end\ndata: ${payload}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'make a design' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+
+    expect(published).toEqual([]);
+  });
+
   it('does not surface an error when a still-running same-run retry later succeeds', async () => {
     // The daemon emits the `error` frame for the failed first attempt BEFORE it
     // decides to retry. At that moment the run status is still `running` (the
@@ -103,6 +178,45 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps consuming when a same-run retry succeeds after the transient error status briefly reads failed', async () => {
+    // Regression for #5110: the daemon can emit an empty-output error for a
+    // failed first attempt, then recover the SAME run through the retry path.
+    // If the status probe observes the transient failed state and returns
+    // immediately, the browser never sees the later successful write/text/end
+    // frames and the chat keeps showing the stale empty-output failure.
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"Agent completed without producing any output.","retryable":true}\n\n' +
+          'event: agent\ndata: {"type":"tool_use","id":"call_1","name":"write","input":{"filePath":"index.html"}}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"call_1","content":"Wrote file successfully.","isError":false}\n\n' +
+          'event: agent\ndata: {"type":"text_delta","delta":"Landing page saved to `index.html`."}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'opencode',
+      history: [{ id: '1', role: 'user', content: 'make a landing page' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDelta).toHaveBeenCalledWith('Landing page saved to `index.html`.');
+    expect(handlers.onDone).toHaveBeenCalledWith('Landing page saved to `index.html`.');
   });
 
   it('prefers a structured daemon error over the lifecycle exit fallback when the run later fails', async () => {
@@ -210,6 +324,32 @@ describe('streamViaDaemon', () => {
     });
   });
 
+  it('requests title generation when enabled', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'name this conversation' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      titleGeneration: { enabled: true },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.titleGeneration).toEqual({ enabled: true });
+  });
+
   it('sends the applied plugin snapshot id to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -290,6 +430,26 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('first gemini request');
     expect(transcript).toContain('gemini response');
     expect(transcript).toContain('second gemini request');
+  });
+
+  it('keeps legacy API-mode assistant context when routing through BYOK OpenCode', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'draft the registration flow' },
+        {
+          id: '2',
+          role: 'assistant',
+          content: 'openai api response with design decisions',
+          agentId: 'openai-api',
+        },
+        { id: '3', role: 'user', content: 'make the second step clearer' },
+      ],
+      'byok-opencode',
+    );
+
+    expect(transcript).toContain('draft the registration flow');
+    expect(transcript).toContain('openai api response with design decisions');
+    expect(transcript).toContain('make the second step clearer');
   });
 
   it('extracts only the latest user prompt for telemetry', () => {
@@ -937,7 +1097,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('AMR Link URL or model route');
+    expect(message).toContain('Open Design link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1295,7 +1455,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('AMR/OpenCode started, but the run did not complete');
+    expect(message).toContain('Open Design started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');
@@ -1750,7 +1910,12 @@ describe('streamViaDaemon', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -1789,7 +1954,12 @@ describe('streamViaDaemon', () => {
 
     expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
     expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -1888,6 +2058,31 @@ describe('streamViaDaemon', () => {
       kind: 'status',
       label: 'researching',
       detail: 'tavily · shallow',
+    });
+  });
+
+  it('forwards agent-generated conversation title events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"conversation_title","title":"Infographic Habits"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'conversation_title',
+      title: 'Infographic Habits',
     });
   });
 

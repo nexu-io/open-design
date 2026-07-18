@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, parse as parsePath } from 'node:path';
+import { releaseChannelFromVersion } from '@open-design/release';
 
 export const APP_VERSION_FALLBACK = '0.0.0';
 
@@ -75,10 +76,9 @@ function cleanString(value: unknown): string | null {
 }
 
 function inferReleaseChannelFromVersion(version: string): string | null {
-  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return 'beta';
-  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return 'preview';
-  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(version)) return 'nightly';
-  return version.match(/^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/)?.[1]?.split('.')[0] ?? null;
+  return releaseChannelFromVersion(version)
+    ?? version.match(/^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/)?.[1]?.split('.')[0]
+    ?? null;
 }
 
 export function isPackagedRuntime({

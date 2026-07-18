@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
+import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -9,7 +10,13 @@ import {
   settingsSectionToTracking,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
-import { recordAmrEntry } from '../analytics/amr-attribution';
+import {
+  amrHandoffDeviceId,
+  attributedAmrUrl,
+  recordAmrEntry,
+  type TrackingAmrEntrySource,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackSettingsAppearanceClick,
   trackSettingsByokModelsFetchResult,
@@ -33,29 +40,43 @@ import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { AmrLoginPill } from './AmrLoginPill';
+import { PlanBadge } from './PlanBadge';
+import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
 import {
+  canUpgradeVelaPlan,
+  fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
+  formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
+import {
+  amrPlansUrlForProfile,
+  amrProfileBadgeLabel,
+} from '../runtime/amr-guidance';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
+import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import {
   CUSTOM_MODEL_SENTINEL,
+  orderModelOptionsByAvailability,
   SearchableModelSelect,
 } from './modelOptions';
 import {
+  BYOK_PROVIDER_PRESETS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  defaultKnownProviderModel,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
   mergeDaemonMediaProviders,
+  saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -63,8 +84,9 @@ import {
 import type { KnownProvider } from '../state/config';
 import { navigate as navigateRoute, useRoute } from '../router';
 import {
-  API_PROTOCOL_LABELS,
   API_PROTOCOL_TABS,
+  DEFAULT_BASE_URL_BY_PROTOCOL,
+  API_PROTOCOL_LABELS,
   isFixedOriginGateway,
   resolveFixedOriginBaseUrl,
   SUGGESTED_MODELS_BY_PROTOCOL,
@@ -105,18 +127,28 @@ import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
-  fetchLatestGithubReleaseInfo,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
+import {
+  checkForUpdaterUpdate,
+  deriveUpdaterModel,
+  downloadUpdaterUpdate,
+  openUpdaterInstaller,
+  quitAfterUpdaterInstallerOpen,
+  readUpdaterStatus,
+  subscribeToUpdaterStatus,
+  type UpdaterActionResult,
+  type UpdaterModel,
+} from '../lib/updater';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
-import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
@@ -174,7 +206,6 @@ export type SettingsSection =
   | 'critiqueTheater'
   | 'notifications'
   | 'pet'
-  | 'skills'
   | 'designSystems'
   | 'projectLocations'
   | 'memory'
@@ -187,10 +218,168 @@ export type SettingsSection =
   | 'library'
   | 'about';
 
+interface ByokProviderPreset {
+  id: string;
+  title: string;
+  protocol: ApiProtocol;
+  baseUrl: string;
+  preferredModels: readonly string[];
+  custom?: boolean;
+}
+
 // One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
 // card into view on the execution section and plays a highlight (plus a
 // sign-in coachmark when the user has not authorized AMR yet).
 export type SettingsHighlight = 'amr' | null;
+
+const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
+
+type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
+type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
+
+export interface AboutUpdateControl {
+  primaryAction: AboutUpdatePrimaryAction | null;
+  primaryLabelKey: keyof Dict | null;
+  showReleaseLink: boolean;
+  statusKey: keyof Dict;
+  statusTone: AboutUpdateTone;
+  statusVars?: Record<string, string | number>;
+}
+
+export function deriveAboutUpdateControl(
+  model: UpdaterModel,
+  appVersionInfo: AppVersionInfo | null,
+): AboutUpdateControl {
+  if (appVersionInfo?.packaged === false) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusDevelopment',
+      statusTone: 'neutral',
+    };
+  }
+
+  if (model.environment !== 'desktop' || !model.enabled || !model.supported) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusUnsupported',
+      statusTone: 'warning',
+    };
+  }
+
+  switch (model.status?.state) {
+    case 'checking':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.checking',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusChecking',
+        statusTone: 'neutral',
+      };
+    case 'not-available':
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateRecheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUpToDate',
+        statusTone: 'success',
+      };
+    case 'available':
+      return {
+        primaryAction: model.canDownload ? 'download' : null,
+        primaryLabelKey: model.canDownload ? 'updater.download' : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusAvailable'
+          : 'settings.updateStatusAvailableUnknown',
+        statusTone: 'warning',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    case 'downloading': {
+      const percent = model.downloadProgress?.percent;
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.downloading',
+        showReleaseLink: true,
+        statusKey: typeof percent === 'number'
+          ? 'settings.updateStatusDownloadingPercent'
+          : 'settings.updateStatusDownloading',
+        statusTone: 'neutral',
+        ...(typeof percent === 'number' ? { statusVars: { percent } } : {}),
+      };
+    }
+    case 'downloaded': {
+      if (model.installerOpened && model.canQuitAfterInstallerOpen) {
+        return {
+          primaryAction: 'quit',
+          primaryLabelKey: 'updater.quitButton',
+          showReleaseLink: false,
+          statusKey: model.updateKind === 'payload' ? 'updater.installingRestart' : 'updater.opening',
+          statusTone: 'neutral',
+        };
+      }
+      const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
+      return {
+        primaryAction: canInstallUpdate ? 'install' : null,
+        primaryLabelKey: canInstallUpdate
+          ? model.updateKind === 'payload'
+            ? 'updater.installRestart'
+            : 'settings.updateNow'
+          : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusReady'
+          : 'settings.updateStatusReadyUnknown',
+        statusTone: 'success',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    }
+    case 'installing':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.installingRestart',
+        showReleaseLink: false,
+        statusKey: 'settings.updateStatusInstalling',
+        statusTone: 'neutral',
+      };
+    case 'error': {
+      const canRetryInstall = model.status.downloadPath != null
+        && (model.canOpenInstaller || model.canApplyInPlace);
+      const primaryAction: AboutUpdatePrimaryAction = canRetryInstall
+        ? 'install'
+        : model.availableVersion != null && model.canDownload
+          ? 'download'
+          : 'check';
+      return {
+        primaryAction,
+        primaryLabelKey: 'settings.updateRetry',
+        showReleaseLink: true,
+        statusKey: 'updater.failed',
+        statusTone: 'error',
+      };
+    }
+    case 'unsupported':
+      return {
+        primaryAction: null,
+        primaryLabelKey: null,
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUnsupported',
+        statusTone: 'warning',
+      };
+    case 'idle':
+    default:
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateCheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusNotChecked',
+        statusTone: 'neutral',
+      };
+  }
+}
 
 interface Props {
   initial: AppConfig;
@@ -212,6 +401,13 @@ interface Props {
    */
   onPersist: (cfg: AppConfig, options?: { forceMediaProviderSync?: boolean }) => Promise<void> | void;
   /**
+   * Non-optimistic write for the daemon-owned silent-update preference.
+   * Settings → About uses this instead of the generic autosave path so a
+   * failed `/api/app-config` cannot leave app-wide config on the rejected value.
+   */
+  onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
+  onDraftChange?: (cfg: AppConfig) => void;
+  /**
    * Persist the Composio API key separately from the broader autosave
    * loop. Composio secrets need an explicit user gesture so half-typed
    * keys never leave the browser, so this is wired to a section-local
@@ -232,25 +428,26 @@ interface Props {
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
-  /** Re-fetch functional skills into App state after Settings mutations. */
-  onSkillsRefresh?: () => Promise<void> | void;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onProjectsRefresh?: () => Promise<void> | void;
-  /**
-   * Notified by Settings → Skills after a successful skill registry
-   * mutation (create / edit / delete). App.tsx uses this to drop preview
-   * iframes whose project depends on the affected skill — body-only
-   * edits do not move SkillSummary fields, so ProjectView's signature
-   * path can miss them.
-   */
+  /** Same channel for skill registry mutations. */
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
   onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
+}
+
+function telemetryPrefsEqual(
+  a: AppConfig['telemetry'],
+  b: AppConfig['telemetry'],
+): boolean {
+  return a?.metrics === b?.metrics
+    && a?.content === b?.content
+    && a?.artifactManifest === b?.artifactManifest;
 }
 
 export interface AgentRefreshOptions {
@@ -335,12 +532,6 @@ type TestState =
   | { status: 'running' }
   | { status: 'done'; result: ConnectionTestResponse };
 
-const GATEWAY_API_PROTOCOLS = new Set<ApiProtocol>([
-  'ollama',
-  'senseaudio',
-  'aihubmix',
-]);
-
 // Providers whose live model fetch IS their full account catalogue, so the
 // per-option "from your account" badge and the "Loaded N from your account"
 // hint are noise — every option carries the same badge and distinguishes
@@ -348,6 +539,7 @@ const GATEWAY_API_PROTOCOLS = new Set<ApiProtocol>([
 // Add a protocol here when the same applies to another provider.
 const ACCOUNT_MODEL_SOURCE_LABEL_HIDDEN = new Set<ApiProtocol>([
   'aihubmix',
+  'bedrock',
 ]);
 
 function hidesAccountModelSourceLabel(protocol: ApiProtocol): boolean {
@@ -362,6 +554,17 @@ type ProviderModelsState =
   | { status: 'idle' }
   | { status: 'running'; cacheKey: string }
   | { status: 'done'; cacheKey: string; result: ProviderModelsResponse };
+
+interface ByokProviderFormDraft {
+  apiConfig: ApiProtocolConfig;
+  maxTokensInput: string;
+  maxTokens: AppConfig['maxTokens'];
+  providerModelsCommittedKey: string | null;
+  providerModelsState: ProviderModelsState;
+  showApiKey: boolean;
+  apiModelCustomEditing: boolean;
+  apiModelUserSelected: boolean;
+}
 
 type ByokRequiredField = ByokDraftField;
 type ByokPreconditionAction = 'test';
@@ -431,12 +634,26 @@ export function canFetchProviderModels(
   protocol: ApiProtocol,
 ): boolean {
   return (
+    !isProviderModelDiscoveryUnsupported(protocol, config.baseUrl) &&
     protocol !== 'azure' &&
     protocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    (protocol === 'bedrock' || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isValidApiBaseUrl(config.baseUrl)
   );
+}
+
+export function isProviderModelDiscoveryUnsupported(
+  protocol: ApiProtocol,
+  baseUrl: string,
+): boolean {
+  if (protocol === 'azure' || protocol === 'ollama') return true;
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === 'token-plan-cn.xiaomimimo.com';
+  } catch {
+    return false;
+  }
 }
 
 function missingByokConnectionFields(
@@ -458,8 +675,9 @@ function missingByokModelFetchFields(
   const missing: ByokRequiredField[] = [];
   // AIHubMix publishes its catalogue on a public endpoint, so its model list
   // loads without a key (the user shouldn't need to paste a key just to browse
-  // models). Every other protocol fetches /v1/models behind the key.
-  if (protocol !== 'aihubmix' && !config.apiKey.trim()) missing.push('api_key');
+  // models). Bedrock uses a static model seed until AWS auth lands in BYOK.
+  // Every other protocol fetches /v1/models behind the key.
+  if (protocol !== 'aihubmix' && protocol !== 'bedrock' && !config.apiKey.trim()) missing.push('api_key');
   if (!config.baseUrl.trim()) missing.push('base_url');
   return missing;
 }
@@ -475,26 +693,6 @@ function providerConnectionTestKey(
     config.model.trim(),
     protocol === 'azure' ? config.apiVersion?.trim() ?? '' : '',
   ].join('\n');
-}
-
-function isLocalOllamaBaseUrl(baseUrl: string): boolean {
-  try {
-    const parsed = new URL(baseUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function byokProviderRequiresApiKey(
-  protocol: ApiProtocol,
-  provider: KnownProvider | undefined,
-  baseUrl: string,
-): boolean {
-  if (provider?.requiresApiKey === false) return false;
-  if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
-  return true;
 }
 
 type ByokFirstPartyBaseUrlHint = {
@@ -575,13 +773,16 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
     host: 'aihubmix.com',
     url: 'https://aihubmix.com/?aff=JA1e',
   },
+  bedrock: {
+    host: 'aws.amazon.com',
+    url: 'https://aws.amazon.com/bedrock/',
+  },
 };
 
 const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
   'cursor-agent': 'Cursor command line',
-  gemini: 'Google official CLI',
   opencode: 'Open-source agent CLI',
   qwen: 'Qwen coding CLI',
   copilot: 'GitHub coding CLI',
@@ -611,7 +812,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+  return agent.id === 'amr' ? 'Open Design' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -631,7 +832,7 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'claude',
     envKey: 'ANTHROPIC_API_KEY',
     labelKey: 'settings.cliEnvClaudeApiKey',
-    placeholder: 'Paste proxy API key',
+    placeholder: 'Paste CLI API key',
     secret: true,
   },
   {
@@ -664,7 +865,7 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    labelSuffix: 'OPENAI_API_KEY · proxy/legacy',
+    labelSuffix: 'OPENAI_API_KEY',
     placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
@@ -675,7 +876,7 @@ function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   return {
     apiKey: '',
     baseUrl: provider?.baseUrl ?? '',
-    model: provider?.model ?? '',
+    model: defaultKnownProviderModel(provider),
     apiVersion: '',
     apiProviderBaseUrl: provider ? provider.baseUrl : null,
   };
@@ -719,7 +920,7 @@ function nextApiProtocolConfig(
     return {
       ...defaultApiProtocolConfig(protocol),
       baseUrl: siblingProvider.baseUrl,
-      model: siblingProvider.model,
+      model: defaultKnownProviderModel(siblingProvider),
       apiProviderBaseUrl: siblingProvider.baseUrl,
     };
   }
@@ -750,6 +951,40 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     byokSpeechModel: config.byokSpeechModel ?? '',
     byokSpeechVoice: config.byokSpeechVoice ?? '',
   };
+}
+
+function persistByokProviderConfigDraft(
+  config: AppConfig,
+  draftKey: string,
+  apiConfig: ApiProtocolConfig,
+): AppConfig {
+  return {
+    ...config,
+    byokProviderConfigDrafts: {
+      ...(config.byokProviderConfigDrafts ?? {}),
+      [draftKey]: {
+        apiConfig,
+        maxTokens: config.maxTokens,
+      },
+    },
+  };
+}
+
+function byokProviderDraftKey(
+  protocol: ApiProtocol,
+  apiProviderBaseUrl: string | null | undefined,
+  baseUrl: string,
+): string {
+  return `${protocol}:${apiProviderBaseUrl ?? `custom:${baseUrl}`}`;
+}
+
+function byokProviderKeyForConfig(config: AppConfig): string {
+  const apiConfig = currentApiProtocolConfig(config);
+  return byokProviderDraftKey(
+    config.apiProtocol ?? 'anthropic',
+    apiConfig.apiProviderBaseUrl,
+    apiConfig.baseUrl,
+  );
 }
 
 function applyApiProtocolConfig(
@@ -789,17 +1024,42 @@ export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
   const result = validateBaseUrl(trimmed);
+  // The internal-IP / SSRF decision belongs to the daemon, which is the single
+  // source of truth and honors the operator's OD_ALLOWED_INTERNAL_HOSTS
+  // allowlist — a value the browser cannot see (#3225). A `forbidden` result
+  // here is a syntactically-valid URL that points at an internal address; keep
+  // it UI-valid so the operator can run the connection test / model fetch and
+  // get the daemon's authoritative answer (allowed when listed, a clear
+  // "Internal IPs blocked" otherwise). Only genuinely malformed URLs stay
+  // invalid client-side.
+  if (result.forbidden) return true;
   return Boolean(result.parsed && !result.error);
 }
+
+const AGENT_CLI_AUTH_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+]);
+const AGENT_CLI_BASE_URL_ENV_KEYS = new Set(['ANTHROPIC_BASE_URL', 'OPENAI_BASE_URL']);
 
 export function updateCurrentApiProtocolConfig(
   config: AppConfig,
   patch: Partial<ApiProtocolConfig>,
 ): AppConfig {
   const protocol = config.apiProtocol ?? 'anthropic';
+  const clearedApiKey =
+    patch.apiKey !== undefined &&
+    !patch.apiKey.trim() &&
+    Boolean(currentApiProtocolConfig(config).apiKey.trim());
+  const defaultModel = defaultApiProtocolConfig(protocol).model;
   const nextApiConfig: ApiProtocolConfig = {
     ...currentApiProtocolConfig(config),
     ...patch,
+    ...(clearedApiKey && defaultModel && patch.model === undefined
+      ? { model: defaultModel }
+      : {}),
   };
   return applyApiProtocolConfig(
     {
@@ -822,11 +1082,23 @@ export function updateAgentCliEnvValue(
 ): AppConfig {
   const value = rawValue.trim();
   const agentCliEnv = { ...(config.agentCliEnv ?? {}) };
+  const agentCliEnvIntent = { ...(config.agentCliEnvIntent ?? {}) };
   const nextAgentEnv = { ...(agentCliEnv[agentId] ?? {}) };
+  const nextAgentIntent = { ...(agentCliEnvIntent[agentId] ?? {}) };
   if (value) {
     nextAgentEnv[envKey] = value;
   } else {
     delete nextAgentEnv[envKey];
+  }
+
+  const hasAuthKey = Object.keys(nextAgentEnv).some((key) => AGENT_CLI_AUTH_ENV_KEYS.has(key));
+  if (
+    (AGENT_CLI_AUTH_ENV_KEYS.has(envKey) && value) ||
+    (AGENT_CLI_BASE_URL_ENV_KEYS.has(envKey) && hasAuthKey)
+  ) {
+    nextAgentIntent.apiKeyOverride = true;
+  } else if (AGENT_CLI_AUTH_ENV_KEYS.has(envKey) && !hasAuthKey) {
+    delete nextAgentIntent.apiKeyOverride;
   }
 
   if (Object.keys(nextAgentEnv).length > 0) {
@@ -835,9 +1107,16 @@ export function updateAgentCliEnvValue(
     delete agentCliEnv[agentId];
   }
 
+  if (Object.keys(nextAgentEnv).length > 0 && Object.keys(nextAgentIntent).length > 0) {
+    agentCliEnvIntent[agentId] = nextAgentIntent;
+  } else {
+    delete agentCliEnvIntent[agentId];
+  }
+
   return {
     ...config,
     agentCliEnv: Object.keys(agentCliEnv).length > 0 ? agentCliEnv : {},
+    agentCliEnvIntent: Object.keys(agentCliEnvIntent).length > 0 ? agentCliEnvIntent : {},
   };
 }
 
@@ -910,6 +1189,23 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
     throwOnError: true,
     agentCliEnv: cfg.agentCliEnv ?? {},
   };
+}
+
+export function amrWalletValueLabel(input: {
+  balance: string | null;
+  loadingLabel: string;
+  ready: boolean;
+  snapshot: AmrWalletSnapshot | null;
+  unavailableLabel: string;
+}): string {
+  if (input.balance) return input.balance;
+  if (!input.ready) return input.loadingLabel;
+  const code = input.snapshot?.error?.code;
+  if (code === 'missing_control_key' || code === 'unauthorized') {
+    const message = input.snapshot?.error?.message?.trim();
+    if (message) return message;
+  }
+  return input.unavailableLabel;
 }
 
 function apiModelOptionLabel(
@@ -1003,6 +1299,7 @@ export function sanitizeSettingsSavePayload(
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
+    byokProviderConfigDrafts: initial.byokProviderConfigDrafts,
     apiProviderBaseUrl: initial.apiProviderBaseUrl,
     baseUrl: initial.baseUrl,
     model: initial.model,
@@ -1049,22 +1346,22 @@ export function SettingsDialog({
   initialSection = 'execution',
   initialHighlight = null,
   onPersist,
+  onSilentUpdatePreferenceChange,
   onPersistComposioKey,
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
   onAmrLoginStatusChange,
-  onSkillsRefresh,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
   onProjectsRefresh,
-  onSkillsChanged,
   onDesignSystemsChanged,
   onDesignSystemImportRebuildJob,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
+  onDraftChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -1087,6 +1384,10 @@ export function SettingsDialog({
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
+  useEffect(() => {
+    onDraftChange?.(cfg);
+  }, [cfg, onDraftChange]);
+
   // settings_view — fire on dialog open and on every section switch so the
   // configuration funnel can see which section the user spent time in.
   // The fire is keyed on section so a section bounce (open → switch →
@@ -1102,12 +1403,17 @@ export function SettingsDialog({
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
+    const parentPrivacyChanged =
+      previousInitial.installationId !== initial.installationId ||
+      previousInitial.privacyDecisionAt !== initial.privacyDecisionAt ||
+      !telemetryPrefsEqual(previousInitial.telemetry, initial.telemetry);
     setCfg((current) => {
       const nextAgentCliEnv = reconcileAmrProfileEnv(current.agentCliEnv, initial.agentCliEnv);
       const nextAgentModels = reconcileAmrModelChoice(current.agentModels, previousInitial, initial);
       if (
         nextAgentCliEnv === current.agentCliEnv
         && nextAgentModels === current.agentModels
+        && !parentPrivacyChanged
       ) {
         return current;
       }
@@ -1115,6 +1421,13 @@ export function SettingsDialog({
         ...current,
         agentCliEnv: nextAgentCliEnv,
         agentModels: nextAgentModels,
+        ...(parentPrivacyChanged
+          ? {
+              installationId: initial.installationId,
+              privacyDecisionAt: initial.privacyDecisionAt,
+              telemetry: initial.telemetry ? { ...initial.telemetry } : undefined,
+            }
+          : {}),
       };
     });
     autosaveLastSavedRef.current = {
@@ -1128,6 +1441,13 @@ export function SettingsDialog({
         previousInitial,
         initial,
       ),
+      ...(parentPrivacyChanged
+        ? {
+            installationId: initial.installationId,
+            privacyDecisionAt: initial.privacyDecisionAt,
+            telemetry: initial.telemetry ? { ...initial.telemetry } : undefined,
+          }
+        : {}),
     };
     previousInitialRef.current = initial;
   }, [initial]);
@@ -1141,7 +1461,15 @@ export function SettingsDialog({
     };
   }, []);
   const [showApiKey, setShowApiKey] = useState(false);
+  const byokProviderFormDraftsRef = useRef<Record<string, ByokProviderFormDraft>>({});
+  const lastCustomByokProviderDraftKeysRef = useRef<Partial<Record<ApiProtocol, string>>>(
+    (initial.apiProviderBaseUrl ?? null) === null
+      ? { [initial.apiProtocol ?? 'anthropic']: byokProviderKeyForConfig(initial) }
+      : {},
+  );
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
+  const [settingsFullscreen, setSettingsFullscreen] = useState(false);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
   // long section the user had scrolled (e.g. Library) into a short one
@@ -1167,6 +1495,8 @@ export function SettingsDialog({
   });
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
+  const [amrWalletSnapshot, setAmrWalletSnapshot] = useState<AmrWalletSnapshot | null>(null);
+  const [amrWalletReady, setAmrWalletReady] = useState(false);
   const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
@@ -1175,6 +1505,25 @@ export function SettingsDialog({
   useEffect(() => {
     onAmrLoginStatusChange?.(amrCardStatus);
   }, [amrCardStatus, onAmrLoginStatusChange]);
+
+  const formatAmrWalletBalance = useCallback((balanceUsd: string | null | undefined) => {
+    if (!balanceUsd) return null;
+    const amount = Number(balanceUsd);
+    if (!Number.isFinite(amount)) return `$${balanceUsd}`;
+    return new Intl.NumberFormat(locale, {
+      currency: 'USD',
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
+      style: 'currency',
+    }).format(amount);
+  }, [locale]);
+
+  const refreshAmrWalletSnapshot = useCallback(async (options: { refresh?: boolean } = {}) => {
+    setAmrWalletReady(false);
+    const next = await fetchAmrWalletSnapshot(options);
+    setAmrWalletSnapshot(next);
+    setAmrWalletReady(true);
+  }, []);
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
@@ -1203,6 +1552,31 @@ export function SettingsDialog({
     };
   }, [agents]);
 
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent || amrCardStatus?.loggedIn !== true) {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      return;
+    }
+    let cancelled = false;
+    setAmrWalletReady(false);
+    void fetchAmrWalletSnapshot().then((next) => {
+      if (cancelled) return;
+      setAmrWalletSnapshot(next);
+      setAmrWalletReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agents,
+    amrCardStatus?.loggedIn,
+    amrCardStatus?.profile,
+    amrCardStatus?.user?.id,
+    amrCardStatus?.user?.email,
+  ]);
+
   // Reconcile AMR sign-in state whenever the user returns to the window. The
   // vela device-login flow completes in an external browser / AMR console; if
   // the in-pill poll has already timed out (or the login finished fully
@@ -1221,9 +1595,10 @@ export function SettingsDialog({
     // login, ping-pongs the action between "Signing in…" and "Authorize".
     const resyncAmrStatus = () => {
       if (document.visibilityState === 'hidden') return;
-      void fetchVelaLoginStatus().then((next) => {
+      void fetchVelaLoginStatus({ refresh: true }).then((next) => {
         if (cancelled || !next) return;
         setAmrCardStatus(next);
+        if (next.loggedIn) void refreshAmrWalletSnapshot({ refresh: true });
       });
     };
     window.addEventListener('focus', resyncAmrStatus);
@@ -1233,7 +1608,7 @@ export function SettingsDialog({
       window.removeEventListener('focus', resyncAmrStatus);
       document.removeEventListener('visibilitychange', resyncAmrStatus);
     };
-  }, [agents]);
+  }, [agents, refreshAmrWalletSnapshot]);
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
@@ -1304,6 +1679,7 @@ export function SettingsDialog({
   const providerModelsRevisionRef = useRef(0);
   const providerTestFirstResetRef = useRef(true);
   const providerModelsFirstResetRef = useRef(true);
+  const providerModelsSkipNextResetRef = useRef(false);
   const deferAfterKeyCleanRef = useRef(false);
   const providerAutoTestKeyRef = useRef<string | null>(null);
   const byokLastUnsuccessfulTestKeyRef = useRef<string | null>(null);
@@ -1322,26 +1698,116 @@ export function SettingsDialog({
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [versionChecking, setVersionChecking] = useState(false);
+  const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
+  const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
+  const [aboutUpdateQuitFailed, setAboutUpdateQuitFailed] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
 
-  const handleInstallLatest = useCallback(async () => {
-    if (versionChecking || !appVersionInfo) return;
-    setVersionChecking(true);
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = subscribeToUpdaterStatus((status) => {
+      if (!mounted) return;
+      const nextModel = deriveUpdaterModel(status, { hostAvailable: true });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
+    });
+    void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
+      if (!mounted) return;
+      const nextModel = result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const aboutUpdateControl = useMemo(() => {
+    const control = deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo);
+    if (!aboutUpdateQuitFailed || !aboutUpdaterModel.installerOpened) return control;
+    return {
+      ...control,
+      primaryAction: 'quit' as const,
+      primaryLabelKey: 'updater.quitButton' as const,
+      showReleaseLink: false,
+      statusKey: 'updater.quitFailedTitle' as const,
+      statusTone: 'warning' as const,
+    };
+  }, [aboutUpdateQuitFailed, aboutUpdaterModel, appVersionInfo]);
+
+  const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
+    if (!result.ok) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    setAboutUpdaterModel(result.model);
+    if (result.model.errorMessage != null) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    return true;
+  }, [t]);
+
+  const handleAboutUpdateAction = useCallback(async () => {
+    if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
+    setAboutUpdateActionBusy(true);
+    setAboutUpdateQuitFailed(false);
+    let quitAttempted = false;
     try {
-      const release = await fetchLatestGithubReleaseInfo();
-      const latestTag = (release?.tagName ?? '').replace(/^v/, '');
-      if (release?.stale !== true && latestTag && latestTag === appVersionInfo.version) {
-        setAboutToast(t('settings.alreadyLatest'));
-        return;
+      const options = { payload: { source: 'settings-about' } };
+      if (aboutUpdateControl.primaryAction === 'check') {
+        applyAboutUpdaterResult(await checkForUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'download') {
+        applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'quit') {
+        quitAttempted = true;
+        const quitResult = await quitAfterUpdaterInstallerOpen(options);
+        if (!quitResult.ok) {
+          setAboutUpdateQuitFailed(true);
+          setAboutToast(t('updater.quitFailedTitle'));
+        }
+      } else {
+        const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
+        if (installed) {
+          quitAttempted = true;
+          const quitResult = await quitAfterUpdaterInstallerOpen(options);
+          if (!quitResult.ok) {
+            setAboutUpdateQuitFailed(true);
+            setAboutToast(t('updater.quitFailedTitle'));
+          }
+        }
       }
     } catch {
-      // network error — fall through to open releases page
+      if (quitAttempted) setAboutUpdateQuitFailed(true);
+      setAboutToast(t('settings.updateActionFailed'));
     } finally {
-      setVersionChecking(false);
+      setAboutUpdateActionBusy(false);
     }
-    window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
-  }, [versionChecking, appVersionInfo, t]);
+  }, [
+    aboutUpdateActionBusy,
+    aboutUpdateControl.primaryAction,
+    aboutUpdaterModel.busy,
+    applyAboutUpdaterResult,
+    t,
+  ]);
+
+  const handleOpenReleaseNotes = useCallback(() => {
+    void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
+  }, []);
+
+  // Precise inverse of App.handleCompleteOnboarding: flip
+  // onboardingCompleted back to false, mirror it to localStorage and the
+  // daemon through the same config-persist path, then route the user into
+  // the first-run flow so they can replay setup (including brand extraction).
+  const handleResetOnboarding = useCallback(() => {
+    const next: AppConfig = { ...cfg, onboardingCompleted: false };
+    setCfg(next);
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    onClose();
+    navigateRoute({ kind: 'home', view: 'onboarding' });
+  }, [cfg, onClose]);
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
@@ -1455,6 +1921,10 @@ export function SettingsDialog({
       providerModelsFirstResetRef.current = false;
       return;
     }
+    if (providerModelsSkipNextResetRef.current) {
+      providerModelsSkipNextResetRef.current = false;
+      return;
+    }
     providerModelsRevisionRef.current += 1;
     providerModelsAbortRef.current?.abort();
     providerModelsAbortRef.current = null;
@@ -1478,7 +1948,7 @@ export function SettingsDialog({
   }, []);
 
   const installedCount = useMemo(
-    () => agents.filter((a) => a.available).length,
+    () => agents.filter((a) => a.available && isVisibleLocalCliAgent(a)).length,
     [agents],
   );
 
@@ -1499,11 +1969,115 @@ export function SettingsDialog({
       return { ...c, mode };
     });
   };
-  const setApiProtocol = (protocol: ApiProtocol) => {
-    setApiModelCustomEditing(false);
-    apiModelUserSelectedRef.current = false;
-    focusByokRequiredFieldAfterProtocolSwitchRef.current = true;
-    setCfg((c) => switchApiProtocolConfig(c, protocol));
+  const setByokProvider = (provider: ByokProviderPreset) => {
+    const currentDraftKey = byokProviderKeyForConfig(cfg);
+    const currentApiConfig = currentApiProtocolConfig(cfg);
+    if ((cfg.apiProviderBaseUrl ?? null) === null) {
+      lastCustomByokProviderDraftKeysRef.current[cfg.apiProtocol ?? 'anthropic'] =
+        currentDraftKey;
+    }
+    byokProviderFormDraftsRef.current[currentDraftKey] = {
+      apiConfig: currentApiConfig,
+      maxTokens: cfg.maxTokens,
+      maxTokensInput,
+      providerModelsCommittedKey,
+      providerModelsState,
+      showApiKey,
+      apiModelCustomEditing,
+      apiModelUserSelected: apiModelUserSelectedRef.current,
+    };
+    const nextProviderBaseUrlForCurrent = provider.custom ? null : provider.baseUrl;
+    const providerChangedBeforeSwitch = provider.custom
+      ? (cfg.apiProviderBaseUrl ?? null) !== null
+      : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
+        (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
+    focusByokRequiredFieldAfterProtocolSwitchRef.current = !provider.custom;
+    providerModelsSkipNextResetRef.current = providerChangedBeforeSwitch;
+    setCfg((current) => {
+      const currentProtocol = current.apiProtocol ?? 'anthropic';
+      const nextProviderBaseUrl = provider.custom ? null : provider.baseUrl;
+      const providerChanged = provider.custom
+        ? (current.apiProviderBaseUrl ?? null) !== null
+        : currentProtocol !== provider.protocol ||
+          (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
+      const switched = switchApiProtocolConfig(current, provider.protocol);
+      const fallbackApiConfig = currentApiProtocolConfig(switched);
+      const customDraftKey = provider.custom
+        ? lastCustomByokProviderDraftKeysRef.current[provider.protocol]
+        : null;
+      const nextProviderDraftKey = customDraftKey ?? byokProviderDraftKey(
+        provider.protocol,
+        nextProviderBaseUrl,
+        provider.custom ? fallbackApiConfig.baseUrl : provider.baseUrl,
+      );
+      const savedDraft = nextProviderDraftKey
+        ? byokProviderFormDraftsRef.current[nextProviderDraftKey]
+        : undefined;
+      const persistedDraft = nextProviderDraftKey
+        ? current.byokProviderConfigDrafts?.[nextProviderDraftKey]
+        : undefined;
+      const applyDraftUiState = (draft: ByokProviderFormDraft | undefined) => {
+        setShowApiKey(draft?.showApiKey ?? false);
+        setApiModelCustomEditing(draft?.apiModelCustomEditing ?? false);
+        apiModelUserSelectedRef.current = draft?.apiModelUserSelected ?? false;
+        setMaxTokensInput(
+          draft
+            ? draft.maxTokensInput
+            : switched.maxTokens == null ? '' : String(switched.maxTokens),
+        );
+        setProviderModelsCommittedKey(draft?.providerModelsCommittedKey ?? null);
+        setProviderModelsState(draft?.providerModelsState ?? { status: 'idle' });
+      };
+      if (savedDraft) {
+        applyDraftUiState(savedDraft);
+        return applyApiProtocolConfig(
+          persistByokProviderConfigDraft(
+            {
+              ...switched,
+              maxTokens: savedDraft.maxTokens,
+            },
+            currentDraftKey,
+            currentApiProtocolConfig(current),
+          ),
+          provider.protocol,
+          savedDraft.apiConfig,
+        );
+      }
+      if (persistedDraft) {
+        applyDraftUiState(undefined);
+        return applyApiProtocolConfig(
+          persistByokProviderConfigDraft(
+            {
+              ...switched,
+              maxTokens: persistedDraft.maxTokens,
+            },
+            currentDraftKey,
+            currentApiProtocolConfig(current),
+          ),
+          provider.protocol,
+          persistedDraft.apiConfig,
+        );
+      }
+      const switchedWithCurrentDraft = persistByokProviderConfigDraft(
+        switched,
+        currentDraftKey,
+        currentApiProtocolConfig(current),
+      );
+      if (provider.custom) {
+        applyDraftUiState(undefined);
+        return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
+          apiProviderBaseUrl: null,
+          ...(providerChanged ? { model: '' } : {}),
+        });
+      }
+      applyDraftUiState(undefined);
+      return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
+        ...(providerChanged ? { apiKey: '' } : {}),
+        baseUrl: provider.baseUrl,
+        model: provider.preferredModels[0] ?? '',
+        apiProviderBaseUrl: provider.baseUrl,
+      });
+    });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
     setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
@@ -1543,11 +2117,32 @@ export function SettingsDialog({
       setAgentRescanRunning(false);
     }
   };
-  const openAgentFixUrl = (url: string | undefined) => {
+  const attributedAmrSettingsUrl = (
+    url: string,
+    sourceDetail: TrackingAmrEntrySource,
+  ) => {
+    const attribution = recordAmrEntry(analytics.track, sourceDetail, new Date(), {
+      metricsConsent: cfg.telemetry?.metrics === true,
+    });
+    const deviceId = amrHandoffDeviceId({
+      metricsConsent: cfg.telemetry?.metrics === true,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: cfg.installationId,
+    });
+    return attributedAmrUrl(url, attribution, deviceId);
+  };
+  const openAgentFixUrl = (
+    url: string | undefined,
+    amrEntrySourceDetail?: TrackingAmrEntrySource,
+  ) => {
     const href = sanitizeHttpsUrl(url);
     if (!href) return;
     markAgentInstallIntent();
-    void openExternalUrl(href);
+    void openExternalUrl(
+      amrEntrySourceDetail
+        ? attributedAmrSettingsUrl(href, amrEntrySourceDetail)
+        : href,
+    );
   };
   const diagnosticHandlersForAgent = (agent: AgentInfo) => {
     const docsUrl = sanitizeHttpsUrl(agent.docsUrl);
@@ -1555,7 +2150,15 @@ export function SettingsDialog({
     return {
       onRescan: () => void handleRefreshAgents(),
       ...(docsUrl ? { onOpenDocs: () => openAgentFixUrl(docsUrl) } : {}),
-      ...(installUrl ? { onOpenInstall: () => openAgentFixUrl(installUrl) } : {}),
+      ...(installUrl
+        ? {
+            onOpenInstall: () =>
+              openAgentFixUrl(
+                installUrl,
+                agent.id === 'amr' ? 'settings_amr_install' : undefined,
+              ),
+          }
+        : {}),
     };
   };
   useEffect(() => {
@@ -1920,6 +2523,21 @@ export function SettingsDialog({
       }
       return;
     }
+    if (isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl)) {
+      trackModelsFetchResult({
+        result: 'failed',
+        error_code: 'unsupported_provider_models',
+        error_kind: 'unsupported_provider_models',
+        duration_ms: 0,
+      });
+      if (!options.silent) {
+        setByokPreconditionNotice({
+          action: 'test',
+          message: t('settings.fetchModelsUnsupported'),
+        });
+      }
+      return;
+    }
     const modelFetchBlockingIssues = blockingByokDraftIssues(
       byokModelFetchDraftValidation,
     );
@@ -2099,8 +2717,12 @@ export function SettingsDialog({
         return t('settings.testInvalidBaseUrl');
       case 'rate_limited':
         return t('settings.testRateLimited');
-      case 'upstream_unavailable':
-        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'upstream_unavailable': {
+        const baseMessage = t('settings.testUpstream', {
+          status: result.status ?? 0,
+        });
+        return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+      }
       case 'timeout':
         return t('settings.testTimeout', { ms });
       case 'agent_not_installed':
@@ -2128,19 +2750,56 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
-  const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
-  const apiProtocolTabGroups = [
+  const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
+  const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
+    ...BYOK_PROVIDER_PRESETS,
     {
-      id: 'protocols',
-      label: t('settings.protocolGroupProtocols'),
-      tabs: API_PROTOCOL_TABS.filter((tab) => !GATEWAY_API_PROTOCOLS.has(tab.id)),
-    },
-    {
-      id: 'gateways',
-      label: t('settings.protocolGroupGateways'),
-      tabs: API_PROTOCOL_TABS.filter((tab) => GATEWAY_API_PROTOCOLS.has(tab.id)),
+      id: 'custom',
+      title: t('settings.customProvider'),
+      protocol: apiProtocol,
+      baseUrl: cfg.baseUrl,
+      preferredModels: cfg.model ? [cfg.model] : [],
+      custom: true,
     },
   ];
+  const customByokProvider = byokProviderPresets.find((provider) => provider.custom) ?? {
+    id: 'custom',
+    title: t('settings.customProvider'),
+    protocol: apiProtocol,
+    baseUrl: cfg.baseUrl,
+    preferredModels: cfg.model ? [cfg.model] : [],
+    custom: true,
+  };
+  const byokPresetProtocols = new Set(
+    byokProviderPresets
+      .filter((provider) => !provider.custom)
+      .map((provider) => provider.protocol),
+  );
+  const byokProviderOptions: ReadonlyArray<ByokProviderPreset> = [
+    ...byokProviderPresets.filter((provider) => !provider.custom),
+    ...API_PROTOCOL_TABS.filter((tab) => !byokPresetProtocols.has(tab.id)).map((tab) => {
+      const fallback = defaultApiProtocolConfig(tab.id);
+      return {
+        id: `protocol-${tab.id}`,
+        title: tab.title,
+        protocol: tab.id,
+        baseUrl: fallback.baseUrl || DEFAULT_BASE_URL_BY_PROTOCOL[tab.id],
+        preferredModels: [
+          fallback.model || SUGGESTED_MODELS_BY_PROTOCOL[tab.id][0] || '',
+        ].filter(Boolean),
+      };
+    }),
+    customByokProvider,
+  ];
+  const selectedByokProvider =
+    cfg.apiProviderBaseUrl === null
+      ? customByokProvider
+      : byokProviderOptions.find(
+        (provider) =>
+          !provider.custom &&
+          provider.protocol === apiProtocol &&
+          provider.baseUrl === cfg.apiProviderBaseUrl,
+      ) ?? customByokProvider;
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const byokRequiredLabel = (field: ByokRequiredField): string => {
@@ -2252,6 +2911,11 @@ export function SettingsDialog({
   // Skip the very first effect tick so just opening the dialog doesn't
   // appear to "save" anything before the user has touched a field.
   const autosaveSkipFirstRef = useRef(true);
+  // Silent-update toggles use a dedicated non-optimistic path; skip the next
+  // autosave effect tick so we do not double-write through handleConfigPersist.
+  const suppressNextAutosaveRef = useRef(false);
+  const silentUpdateWriteTokenRef = useRef(0);
+  const [silentUpdateBusy, setSilentUpdateBusy] = useState(false);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveSavedTimerRef = useRef<number | null>(null);
   const autosaveRetryTimerRef = useRef<number | null>(null);
@@ -2272,6 +2936,10 @@ export function SettingsDialog({
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
       autosaveLastSavedRef.current = cfg;
+      return;
+    }
+    if (suppressNextAutosaveRef.current) {
+      suppressNextAutosaveRef.current = false;
       return;
     }
     setAutosaveStatus('pending');
@@ -2418,6 +3086,8 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiKeyConsoleLink =
+    selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
@@ -2428,6 +3098,33 @@ export function SettingsDialog({
     selectedProvider,
     cfg.baseUrl,
   );
+  const byokProviderConfigured = (provider: ByokProviderPreset): boolean => {
+    if (provider.custom) {
+      return canRunProviderConnectionTest(currentApiProtocolConfig(cfg), {
+        requiresApiKey: byokRequiresApiKey,
+      }) && isValidApiBaseUrl(cfg.baseUrl);
+    }
+    const providerDraft = cfg.byokProviderConfigDrafts?.[
+      byokProviderDraftKey(provider.protocol, provider.baseUrl, provider.baseUrl)
+    ]?.apiConfig;
+    const activeProvider = selectedByokProvider?.id === provider.id;
+    const entry = activeProvider
+      ? currentApiProtocolConfig(cfg)
+      : providerDraft ?? (
+        provider.protocol === apiProtocol
+          ? undefined
+          : cfg.apiProtocolConfigs?.[provider.protocol]
+      );
+    if (!entry || entry.baseUrl !== provider.baseUrl) return false;
+    const knownProvider = KNOWN_PROVIDERS.find((item) => item.baseUrl === provider.baseUrl);
+    return canRunProviderConnectionTest(entry, {
+      requiresApiKey: byokProviderRequiresApiKey(
+        provider.protocol,
+        knownProvider,
+        entry.baseUrl,
+      ),
+    }) && isValidApiBaseUrl(entry.baseUrl);
+  };
   const byokFirstPartyBaseUrl = useMemo(
     () => byokFirstPartyBaseUrlHint(
       apiProtocol,
@@ -2498,8 +3195,45 @@ export function SettingsDialog({
     ),
     [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
   );
+  const providerModelDiscoveryUnavailable =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
+  const providerModelDiscoverySupported =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    !providerModelDiscoveryUnavailable;
   const fetchedApiModelOptions =
-    activeProviderModelsCache[providerModelsKey] ?? [];
+    providerModelDiscoveryUnavailable
+      ? []
+      : activeProviderModelsCache[providerModelsKey] ?? [];
+  const providerPreferredModels =
+    selectedProvider?.preferredModels ?? SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
+  const providerManagedModelIds = useMemo(
+    () => new Set([
+      ...providerPreferredModels,
+      ...(selectedProvider?.retiredModels ?? []),
+    ]),
+    [providerPreferredModels, selectedProvider],
+  );
+  const fetchedApiModelIds = useMemo(
+    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
+    [fetchedApiModelOptions],
+  );
+  const pendingProviderModelReconciliation = (() => {
+    if (cfg.mode !== 'api' || apiModelCustomEditing) return null;
+    if (apiModelUserSelectedRef.current) return null;
+    if (fetchedApiModelOptions.length === 0) return null;
+    const currentModel = cfg.model.trim();
+    if (currentModel && fetchedApiModelIds.has(currentModel)) return null;
+    if (currentModel && !providerManagedModelIds.has(currentModel)) return null;
+    const preference = resolveByokModelPreference({
+      currentModel: '',
+      accountModels: fetchedApiModelOptions,
+      providerPreferredModels,
+    });
+    return preference.model === currentModel ? null : preference.model;
+  })();
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -2522,17 +3256,14 @@ export function SettingsDialog({
       // effects above: one nulls providerModelsCommittedKey, the other bumps
       // providerTestRevisionRef / clears providerAutoTestKeyRef. So committing
       // the model key or starting the auto-test here would be clobbered — the
-      // model commit before the auto-fetch effect reads it, and the auto-test
-      // result dropped by the stale-revision guard. Defer both until the
-      // cleaned value has landed (effect below), otherwise account models
-      // never auto-load and the auto-test success/error never reaches the UI
-      // for the exact dirty-paste case this handles.
+      // model commit before the auto-fetch effect reads it. Defer the commit
+      // until the cleaned value has landed (effect below); connection testing
+      // waits for model discovery and reconciliation.
       deferAfterKeyCleanRef.current = true;
       updateApiConfig({ apiKey: cleanedApiKey });
       return;
     }
     commitProviderModelsInputs();
-    handleAutoTestProvider();
   };
   useEffect(() => {
     if (!deferAfterKeyCleanRef.current) return;
@@ -2545,9 +3276,6 @@ export function SettingsDialog({
     } else {
       setProviderModelsCommittedKey(providerModelsKey);
     }
-    // Runs after the provider-test reset effect (declaration order) bumped the
-    // revision for the cleaned key, so this auto-test is not flagged stale.
-    handleAutoTestProvider();
   }, [
     byokFirstPartyBaseUrl?.hostTypo,
     byokModelFetchDraftValidation,
@@ -2560,11 +3288,34 @@ export function SettingsDialog({
     if (providerTestState.status === 'running') return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) return;
+    if (providerModelDiscoverySupported) {
+      if (
+        apiProtocol !== 'aihubmix' &&
+        providerModelsCommittedKey !== providerModelsKey
+      ) {
+        const timer = window.setTimeout(() => {
+          setProviderModelsCommittedKey(providerModelsKey);
+        }, 200);
+        return () => window.clearTimeout(timer);
+      }
+      if (
+        providerModelsState.status !== 'done' ||
+        providerModelsState.cacheKey !== providerModelsKey
+      ) return;
+      if (
+        !providerModelsState.result.ok &&
+        (
+          providerModelsState.result.kind === 'auth_failed' ||
+          providerModelsState.result.kind === 'forbidden'
+        )
+      ) return;
+      if (pendingProviderModelReconciliation !== null) return;
+    }
     const key = providerConnectionTestKey(apiProtocol, cfg);
     if (providerAutoTestKeyRef.current === key) return;
     const timer = window.setTimeout(() => {
       handleAutoTestProvider();
-    }, 500);
+    }, providerModelDiscoverySupported ? 0 : 500);
     return () => window.clearTimeout(timer);
   }, [
     apiProtocol,
@@ -2575,13 +3326,18 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.mode,
     cfg.model,
+    providerModelDiscoverySupported,
+    pendingProviderModelReconciliation,
+    providerModelsCommittedKey,
+    providerModelsKey,
+    providerModelsState,
     providerTestState.status,
     visualStabilityMode,
   ]);
   useEffect(() => {
     if (cfg.mode !== 'api') return;
     if (visualStabilityMode) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    if (isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl)) return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) return;
     // AIHubMix needs no key and prefills its base URL, so there's nothing to
@@ -2647,12 +3403,19 @@ export function SettingsDialog({
       )
       : null;
   const suggestedApiModelIds = useMemo(
-    () => Array.from(new Set(
-      selectedProvider?.models?.length
-        ? selectedProvider.models
-        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    )),
-    [apiProtocol, selectedProvider],
+    () => {
+      if (providerModelDiscoveryUnavailable) {
+        return selectedProvider?.preferredModels.length
+          ? Array.from(new Set(selectedProvider.preferredModels))
+          : [];
+      }
+      return Array.from(new Set(
+        selectedProvider?.preferredModels.length
+          ? selectedProvider.preferredModels
+          : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+      ));
+    },
+    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(
@@ -2666,42 +3429,15 @@ export function SettingsDialog({
   const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
   const byokVideoModelOptions = useByokVideoModelOptions(apiProtocol);
   const byokSpeechModelOptions = useByokSpeechModelOptions(apiProtocol);
-  const fetchedApiModelIds = useMemo(
-    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
-    [fetchedApiModelOptions],
-  );
   const apiModelIds = useMemo(
     () => apiModelOptions.map((m) => m.id),
     [apiModelOptions],
   );
-  const providerDefaultModel =
-    selectedProvider?.model.trim() || suggestedApiModelIds[0] || '';
   useEffect(() => {
-    if (cfg.mode !== 'api') return;
-    if (apiModelCustomEditing) return;
-    // Respect an explicit user pick — even when it equals the provider preset
-    // id, the user deliberately chose it and discovery must not rewrite it.
-    if (apiModelUserSelectedRef.current) return;
-    if (fetchedApiModelOptions.length === 0) return;
-    const currentModel = cfg.model.trim();
-    if (currentModel && fetchedApiModelIds.has(currentModel)) return;
-    if (currentModel && currentModel !== providerDefaultModel) return;
-
-    const preference = resolveByokModelPreference({
-      currentModel: '',
-      accountModels: fetchedApiModelOptions,
-      providerDefaultModel,
-    });
-    if (preference.source !== 'account') return;
-    if (preference.model === currentModel) return;
-    updateApiConfig({ model: preference.model });
+    if (pendingProviderModelReconciliation === null) return;
+    updateApiConfig({ model: pendingProviderModelReconciliation });
   }, [
-    apiModelCustomEditing,
-    cfg.mode,
-    cfg.model,
-    fetchedApiModelIds,
-    fetchedApiModelOptions,
-    providerDefaultModel,
+    pendingProviderModelReconciliation,
   ]);
   const apiModelCustomActive =
     shouldShowCustomModelInput(
@@ -2760,7 +3496,6 @@ export function SettingsDialog({
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
-    skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
       title: t('settings.designSystems'),
       subtitle: t('settings.designSystemsHint'),
@@ -2776,8 +3511,11 @@ export function SettingsDialog({
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
-  const installedAgents = agents.filter((a) => a.available);
-  const unavailableAgents = agents.filter((a) => !a.available);
+  const visibleAgents = agents.filter(isVisibleLocalCliAgent);
+  const installedAgents = orderAgentsWithOpenDesignFirst(
+    visibleAgents.filter((a) => a.available),
+  );
+  const unavailableAgents = visibleAgents.filter((a) => !a.available);
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
@@ -2795,8 +3533,8 @@ export function SettingsDialog({
   };
   const agentModelSummary = (agent: AgentInfo) => {
     if (!Array.isArray(agent.models) || agent.models.length === 0) return null;
-    const choice = cfg.agentModels?.[agent.id] ?? {};
-    const modelValue = choice.model ?? agent.models[0]?.id ?? '';
+    const choice = effectiveAgentModelChoice(agent, cfg.agentModels?.[agent.id]) ?? cfg.agentModels?.[agent.id] ?? {};
+    const modelValue = choice.model ?? defaultAgentModelId(agent) ?? '';
     if (!modelValue) return t('settings.modelCustom');
     return agentModelOptionLabel(
       agent.models.find((m) => m.id === modelValue),
@@ -2846,6 +3584,11 @@ export function SettingsDialog({
     }
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
+    const effectiveChoice = effectiveAgentModelChoice(selected, choice) ?? choice;
+    const modelsForSelect =
+      selected.id === 'amr' && selected.models
+        ? orderModelOptionsByAvailability(selected.models)
+        : selected.models;
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
     // Adapters opt out via `supportsCustomModel: false` on their
     // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
@@ -2853,8 +3596,13 @@ export function SettingsDialog({
     // (AMR routes through ACP `session/set_model` and validates against
     // a live catalog). Undefined === allow, matching today's UX.
     const allowCustomModel = selected.supportsCustomModel !== false;
+    const explicitCustomMode = agentCustomModelIds.has(selected.id);
     const configuredModel =
-      typeof choice.model === 'string' && choice.model
+      typeof effectiveChoice.model === 'string' && effectiveChoice.model
+        ? effectiveChoice.model
+        : null;
+    const customModelDraft =
+      explicitCustomMode && typeof choice.model === 'string'
         ? choice.model
         : null;
     const setChoice = (
@@ -2871,13 +3619,15 @@ export function SettingsDialog({
         };
       });
     };
-    const modelValue =
+    const fallbackModelValue =
       selected.id === 'amr' &&
       configuredModel &&
       !knownModelIds.includes(configuredModel)
-        ? selected.models?.[0]?.id ?? ''
-        : configuredModel ?? selected.models?.[0]?.id ?? '';
+        ? defaultAgentModelId(selected) ?? ''
+        : configuredModel ?? defaultAgentModelId(selected) ?? '';
+    const modelValue = customModelDraft ?? fallbackModelValue;
     const reasoningValue =
+      effectiveChoice.reasoning ??
       choice.reasoning ??
       selected.reasoningOptions?.[0]?.id ?? '';
     const customActive =
@@ -2886,7 +3636,7 @@ export function SettingsDialog({
       shouldShowCustomModelInput(
         modelValue,
         knownModelIds,
-        agentCustomModelIds.has(selected.id),
+        explicitCustomMode,
       );
     const selectValue = customActive
       ? CUSTOM_MODEL_SENTINEL
@@ -2926,7 +3676,7 @@ export function SettingsDialog({
                   popoverTestId={`settings-agent-model-popover-${selected.id}`}
                   minSearchableOptions={5}
                   popoverMinWidth={340}
-                  models={selected.models!}
+                  models={modelsForSelect!}
                   onChange={(nextValue) => {
                     if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setAgentCustomModelIds((prev) => {
@@ -2953,6 +3703,25 @@ export function SettingsDialog({
                             label: t('settings.modelCustom'),
                           },
                         ]
+                      : undefined
+                  }
+                  disabledOptionHint={
+                    selected.id === 'amr'
+                      ? (option) =>
+                          option.enabled === false
+                            ? t('settings.amrModelUpgradeHint')
+                            : null
+                      : undefined
+                  }
+                  onDisabledOptionUpgrade={
+                    selected.id === 'amr'
+                      ? () =>
+                          void openExternalUrl(
+                            attributedAmrSettingsUrl(
+                              amrPlansUrlForProfile(amrCardStatus?.profile),
+                              'settings_amr_upgrade',
+                            ),
+                          )
                       : undefined
                   }
                 />
@@ -3008,10 +3777,21 @@ export function SettingsDialog({
     );
   };
 
+  const settingsSidebarToggleLabel = settingsSidebarCollapsed
+    ? 'Expand settings sidebar'
+    : 'Collapse settings sidebar';
+  const settingsFullscreenLabel = settingsFullscreen
+    ? t('common.exitFullscreen')
+    : t('common.fullscreen');
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal modal-settings"
+        className={
+          'modal modal-settings' +
+          (settingsSidebarCollapsed ? ' settings-sidebar-collapsed' : '') +
+          (settingsFullscreen ? ' settings-fullscreen' : '')
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-dialog-title"
@@ -3057,7 +3837,21 @@ export function SettingsDialog({
           </div>
           <button
             type="button"
-            className="settings-close"
+            className="settings-chrome-btn settings-fullscreen-toggle"
+            onClick={() => setSettingsFullscreen((current) => !current)}
+            aria-label={settingsFullscreenLabel}
+            aria-pressed={settingsFullscreen}
+            title={settingsFullscreenLabel}
+          >
+            <Icon
+              name={settingsFullscreen ? 'minimize' : 'maximize'}
+              size={15}
+              strokeWidth={2}
+            />
+          </button>
+          <button
+            type="button"
+            className="settings-chrome-btn settings-close"
             onClick={onClose}
             aria-label={t('common.close')}
             title={t('common.close')}
@@ -3084,7 +3878,27 @@ export function SettingsDialog({
         </header>
 
         <div className="modal-body">
-          <aside className="settings-sidebar" aria-label="Settings sections">
+          <button
+            type="button"
+            className="settings-sidebar-toggle"
+            onClick={() => setSettingsSidebarCollapsed((current) => !current)}
+            aria-label={settingsSidebarToggleLabel}
+            aria-pressed={settingsSidebarCollapsed}
+            aria-controls="settings-sidebar"
+            title={settingsSidebarToggleLabel}
+          >
+            <Icon
+              name={settingsSidebarCollapsed ? 'chevron-right' : 'chevron-left'}
+              size={15}
+              strokeWidth={2}
+            />
+          </button>
+          <aside
+            id="settings-sidebar"
+            className="settings-sidebar"
+            aria-label="Settings sections"
+            aria-hidden={settingsSidebarCollapsed ? true : undefined}
+          >
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
@@ -3127,17 +3941,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mediaProviders')}</strong>
                 <small>Image / video / audio</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'skills' ? ' active' : ''}`}
-              onClick={() => setActiveSection('skills')}
-            >
-              <Icon name="grid" size={18} />
-              <span>
-                <strong>{t('settings.skills')}</strong>
-                <small>{t('settings.skillsHint')}</small>
               </span>
             </button>
             <button
@@ -3321,25 +4124,29 @@ export function SettingsDialog({
               </div>
               {cfg.mode === 'api' ? (
                 <div
-                  className="protocol-chips"
+                  className="protocol-chips protocol-chips--providers"
                   role="tablist"
                   aria-label={t('settings.protocolAria')}
                 >
-                  {apiProtocolTabGroups.map((group) => (
-                    <div className="protocol-chip-group" key={group.id}>
-                      <span className="protocol-chip-group-label">
-                        {group.label}
-                      </span>
-                      <div className="protocol-chip-group-options">
-                        {group.tabs.map((tab) => (
+                  <div className="protocol-chip-group protocol-chip-group--providers">
+                    <div className="protocol-chip-group-options">
+                      {byokProviderOptions.map((provider) => {
+                        const active = selectedByokProvider?.id === provider.id;
+                        const configured = byokProviderConfigured(provider);
+                        const statusLabel = configured
+                          ? t('settings.mediaProviderConfigured')
+                          : t('settings.mediaProviderUnset');
+                        return (
                           <button
-                            key={tab.id}
+                            key={provider.id}
                             type="button"
                             role="tab"
-                            aria-selected={apiProtocol === tab.id}
-                            className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
+                            aria-selected={active}
+                            aria-label={provider.title}
+                            className={'protocol-chip protocol-chip--provider' + (active ? ' active' : '')}
+                            title={`${provider.title} - ${statusLabel}`}
                             onClick={() => {
-                              const byokProviderId = byokProtocolToTracking(tab.id);
+                              const byokProviderId = byokProtocolToTracking(provider.protocol);
                               if (byokProviderId) {
                                 trackSettingsByokProviderOptionClick(analytics.track, {
                                   page_name: 'settings',
@@ -3347,18 +4154,24 @@ export function SettingsDialog({
                                   element: 'byok_provider_option',
                                   action: 'select_byok_provider',
                                   provider_id: byokProviderId,
-                                  is_selected: apiProtocol === tab.id,
+                                  is_selected: active,
                                 });
                               }
-                              setApiProtocol(tab.id);
+                              if (!active) {
+                                setByokProvider(provider);
+                              }
                             }}
                           >
-                            {tab.title}
+                            <span
+                              className={`protocol-chip-status${configured ? ' is-configured' : ' is-unset'}`}
+                              aria-hidden
+                            />
+                            <span>{provider.title}</span>
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
                 </div>
               ) : null}
           {cfg.mode === 'daemon' ? (
@@ -3455,7 +4268,6 @@ export function SettingsDialog({
                           const modelSummary = agentModelSummary(a);
                           const amrBenefits = [
                             t('settings.amrBenefitOfficial'),
-                            t('settings.amrBenefitLowerPrice'),
                             t('settings.amrBenefitManyModels'),
                           ];
                           const versionLabel =
@@ -3486,6 +4298,28 @@ export function SettingsDialog({
                             isAmrAgent && active && amrCardStatus?.loggedIn
                               ? amrProfileBadgeLabel(amrCardStatus.profile)
                               : null;
+                          const amrWalletVisible =
+                            isAmrAgent && active && amrCardStatus?.loggedIn === true;
+                          const amrStatusBalance =
+                            amrWalletVisible
+                              ? formatVelaBalanceUsd(amrCardStatus?.account?.balanceUsd)
+                              : null;
+                          const amrWalletBalance =
+                            amrWalletVisible && amrWalletSnapshot?.status === 'available'
+                              ? formatAmrWalletBalance(amrWalletSnapshot.balanceUsd)
+                              : null;
+                          const amrCardBalanceLabel =
+                            isAmrAgent && active && amrCardStatus?.loggedIn
+                              ? amrStatusBalance ?? amrWalletBalance
+                              : null;
+                          const amrCardPlanLabel =
+                            isAmrAgent && active && amrCardStatus?.loggedIn
+                              ? amrCardStatus.account?.plan?.trim() || null
+                              : null;
+                          const amrCardCanUpgrade =
+                            isAmrAgent && active && amrCardStatus?.loggedIn
+                              ? canUpgradeVelaPlan(amrCardStatus.account?.plan)
+                              : false;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
                             active &&
@@ -3525,7 +4359,15 @@ export function SettingsDialog({
                                       install_status: 'installed',
                                     });
                                     if (isAmrAgent) {
-                                      recordAmrEntry(analytics.track, 'settings_amr_agent_card');
+                                      recordAmrEntry(
+                                        analytics.track,
+                                        'settings_amr_agent_card',
+                                        new Date(),
+                                        {
+                                          metricsConsent:
+                                            cfg.telemetry?.metrics === true,
+                                        },
+                                      );
                                     }
                                     setCfg((c) => ({ ...c, agentId: a.id }));
                                   }}
@@ -3571,6 +4413,11 @@ export function SettingsDialog({
                                             </span>
                                           </>
                                         ) : null}
+                                        {isAmrAgent && amrCardPlanLabel ? (
+                                          <VisuallyHidden>
+                                            {`, ${t('settings.amrPlan')} ${amrCardPlanLabel}`}
+                                          </VisuallyHidden>
+                                        ) : null}
                                       </div>
                                       {metaLabel ? (
                                         <div className="agent-card-meta">
@@ -3584,11 +4431,46 @@ export function SettingsDialog({
                                           <span className="agent-card-amr-email-text" title={amrCardEmail}>
                                             {amrCardEmail}
                                           </span>
+                                          {amrCardPlanLabel ? (
+                                            <span
+                                              className="agent-card-plan-badge-slot"
+                                              aria-hidden="true"
+                                            >
+                                              <PlanBadge
+                                                plan={amrCardPlanLabel}
+                                                size="sm"
+                                                className="agent-card-plan-badge"
+                                                title={
+                                                  amrCardPlanLabel
+                                                    ? `${t('settings.amrPlan')} ${amrCardPlanLabel}`
+                                                    : undefined
+                                                }
+                                              />
+                                            </span>
+                                          ) : null}
                                           {amrCardProfileBadge ? (
                                             <span className="agent-card-amr-profile-badge">
                                               {amrCardProfileBadge}
                                             </span>
                                           ) : null}
+                                        </div>
+                                      ) : null}
+                                      {amrWalletVisible ? (
+                                        <div className="agent-card-amr-meta-row">
+                                          <span className="agent-card-amr-balance">
+                                            <span className="agent-card-amr-balance-label">
+                                              {t('settings.amrBalance')}
+                                            </span>
+                                            <span className="agent-card-amr-balance-value">
+                                              {amrWalletValueLabel({
+                                                balance: amrCardBalanceLabel,
+                                                loadingLabel: t('common.loading'),
+                                                ready: amrWalletReady || Boolean(amrCardBalanceLabel),
+                                                snapshot: amrWalletSnapshot,
+                                                unavailableLabel: t('settings.amrWalletUnavailable'),
+                                              })}
+                                            </span>
+                                          </span>
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (
@@ -3627,6 +4509,25 @@ export function SettingsDialog({
                                           </svg>
                                         </span>
                                       ) : null}
+                                      {amrCardCanUpgrade ? (
+                                        <button
+                                          type="button"
+                                          className="agent-card-amr-upgrade"
+                                          data-testid="settings-agent-card-amr-upgrade"
+                                          onClick={() =>
+                                            void openExternalUrl(
+                                              attributedAmrSettingsUrl(
+                                                amrPlansUrlForProfile(
+                                                  amrCardStatus?.profile,
+                                                ),
+                                                'settings_amr_upgrade',
+                                              ),
+                                            )
+                                          }
+                                        >
+                                          {t('settings.amrUpgrade')}
+                                        </button>
+                                      ) : null}
                                       <AmrLoginPill
                                         className="agent-card-amr-auth"
                                         hideSignedOutStatus
@@ -3635,7 +4536,10 @@ export function SettingsDialog({
                                         skipInitialRefresh
                                         signInLabel={t('settings.amrAuthorize')}
                                         showConsoleAction={amrCardStatus?.loggedIn === true}
+                                        iconOnlySignOut
                                         amrEntrySourceDetail="settings_amr_authorize"
+                                        metricsConsent={cfg.telemetry?.metrics === true}
+                                        installationId={cfg.installationId}
                                         revealPendingCancelAction={amrRevealPendingCancelAction}
                                         onStatusChange={setAmrCardStatus}
                                       />
@@ -3841,7 +4745,15 @@ export function SettingsDialog({
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="agent-card-link agent-card-link--ghost"
-                                        onClick={markAgentInstallIntent}
+                                        onClick={(event) => {
+                                          markAgentInstallIntent();
+                                          if (a.id === 'amr') {
+                                            event.currentTarget.href = attributedAmrSettingsUrl(
+                                              installUrl,
+                                              'settings_amr_install',
+                                            );
+                                          }
+                                        }}
                                       >
                                         {t('settings.agentInstall.install')}
                                       </a>
@@ -4113,7 +5025,7 @@ export function SettingsDialog({
                     setApiModelCustomEditing(false);
                     updateApiConfig({
                       baseUrl: p.baseUrl,
-                      model: p.model,
+                      model: defaultKnownProviderModel(p),
                       apiProviderBaseUrl: p.baseUrl,
                     });
                   }}
@@ -4234,7 +5146,7 @@ export function SettingsDialog({
                 model={cfg.model}
                 modelSelectRef={modelSelectRef}
                 models={apiModelOptions.map((m) => ({
-                  id: m.id,
+                  ...m,
                   label: apiModelOptionLabel(
                     m,
                     !hidesAccountModelSourceLabel(apiProtocol) &&
@@ -4251,13 +5163,18 @@ export function SettingsDialog({
                         hidesAccountModelSourceLabel(apiProtocol)
                           ? 'settings.modelsLoadedCount'
                           : 'settings.modelsLoadedFromAccount',
-                        { count: loadedAccountModelCount },
+                        {
+                          count: loadedAccountModelCount,
+                        },
                       )
                     : null
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
-                showFetchModelsUnsupportedHint={apiProtocol === 'ollama'}
+                showFetchModelsUnsupportedHint={
+                  apiProtocol !== 'azure' &&
+                  isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl)
+                }
                 showSuggestedModelsHint={apiProtocol !== 'azure' && !selectedProvider}
                 azureModelFetchHint={t('settings.azureModelFetchHint')}
                 onCustomModelChange={(value) => updateApiConfig({ model: value })}
@@ -4536,15 +5453,6 @@ export function SettingsDialog({
             <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'skills' ? (
-            <SkillsSection
-              cfg={cfg}
-              setCfg={setCfg}
-              onSkillsRefresh={onSkillsRefresh}
-              onSkillsChanged={onSkillsChanged}
-            />
-          ) : null}
-
           {activeSection === 'designSystems' ? (
             <DesignSystemsSection
               cfg={cfg}
@@ -4603,18 +5511,51 @@ export function SettingsDialog({
               {appVersionInfo ? (
                 <dl className="settings-about-list">
                   <div className="settings-about-version-row">
-                    <div className="settings-about-version-left">
-                      <dt>{t('settings.appVersion')}</dt>
-                      <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                    <div className="settings-about-version-copy">
+                      <div className="settings-about-version-left">
+                        <dt>{t('settings.appVersion')}</dt>
+                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                        <dd
+                          aria-live="polite"
+                          className={`settings-about-update-status settings-about-update-status--${aboutUpdateControl.statusTone}`}
+                        >
+                          {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
+                        </dd>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="settings-about-download-link"
-                      disabled={versionChecking}
-                      onClick={handleInstallLatest}
-                    >
-                      {versionChecking ? t('common.loading') : t('settings.installLatest')}
-                    </button>
+                    <div className="settings-about-update-actions">
+                      {aboutUpdateControl.primaryLabelKey ? (
+                        <button
+                          type="button"
+                          className={`settings-about-update-button${
+                            aboutUpdateControl.primaryAction === 'download'
+                              || aboutUpdateControl.primaryAction === 'install'
+                              || aboutUpdateControl.primaryAction === 'quit'
+                              ? ' settings-about-update-button--primary'
+                              : ''
+                          }`}
+                          disabled={
+                            aboutUpdateActionBusy
+                            || aboutUpdaterModel.busy
+                            || aboutUpdateControl.primaryAction == null
+                          }
+                          onClick={handleAboutUpdateAction}
+                        >
+                          {aboutUpdateActionBusy
+                            ? t('common.loading')
+                            : t(aboutUpdateControl.primaryLabelKey)}
+                        </button>
+                      ) : null}
+                      {aboutUpdateControl.showReleaseLink ? (
+                        <button
+                          type="button"
+                          className="settings-about-release-link"
+                          onClick={handleOpenReleaseNotes}
+                        >
+                          {t('settings.updateViewReleases')}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div>
                     <dt>{t('settings.appChannel')}</dt>
@@ -4640,12 +5581,89 @@ export function SettingsDialog({
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
+              <div className="settings-about-diagnostics settings-about-silent-updates">
+                <label className="settings-about-toggle">
+                  <input
+                    checked={cfg.allowSilentUpdates === true}
+                    data-testid="settings-allow-silent-updates"
+                    disabled={silentUpdateBusy}
+                    type="checkbox"
+                    onChange={(event) => {
+                      // Capture before setState: React clears event.currentTarget
+                      // after the handler returns, and the functional updater can
+                      // run later when SettingsDialog already has pending lanes
+                      // (about-updater status, autosave indicator, etc.).
+                      const allowSilentUpdates = event.currentTarget.checked;
+                      const previous = cfg.allowSilentUpdates;
+                      // Dedicated non-optimistic path: do not flush through
+                      // handleConfigPersist (which setConfig before daemon write).
+                      // Serialize via busy + write token so a slow earlier save
+                      // cannot re-apply UI after a later toggle.
+                      const writeToken = ++silentUpdateWriteTokenRef.current;
+                      suppressNextAutosaveRef.current = true;
+                      setCfg((current) => ({
+                        ...current,
+                        allowSilentUpdates,
+                      }));
+                      if (onSilentUpdatePreferenceChange == null) return;
+                      setSilentUpdateBusy(true);
+                      void (async () => {
+                        try {
+                          await onSilentUpdatePreferenceChange(allowSilentUpdates);
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                          // Only advance the baseline for this daemon-owned field.
+                          // Spreading autosaveLatestRef would stamp any concurrent
+                          // draft (theme, accent, …) as already saved and let the
+                          // generic autosave skip a real onPersist for that edit.
+                          autosaveLastSavedRef.current = {
+                            ...autosaveLastSavedRef.current,
+                            allowSilentUpdates,
+                          };
+                          setAutosaveStatus('saved');
+                          if (autosaveSavedTimerRef.current != null) {
+                            window.clearTimeout(autosaveSavedTimerRef.current);
+                          }
+                          autosaveSavedTimerRef.current = window.setTimeout(() => {
+                            autosaveSavedTimerRef.current = null;
+                            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+                          }, 1800);
+                        } catch {
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                          suppressNextAutosaveRef.current = true;
+                          setCfg((current) => ({
+                            ...current,
+                            allowSilentUpdates: previous,
+                          }));
+                          setAutosaveStatus('error');
+                        } finally {
+                          if (writeToken === silentUpdateWriteTokenRef.current) {
+                            setSilentUpdateBusy(false);
+                          }
+                        }
+                      })();
+                    }}
+                  />
+                  <span className="settings-about-toggle-copy">
+                    <span>{t('settings.allowSilentUpdates')}</span>
+                    <span className="hint">{t('settings.allowSilentUpdatesDesc')}</span>
+                  </span>
+                </label>
+              </div>
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>
                   <p className="hint">{t('diagnostics.exportHint')}</p>
                 </div>
                 <ExportDiagnosticsRow />
+              </div>
+              <div className="settings-about-diagnostics">
+                <div className="settings-about-diagnostics-text">
+                  <h4>{t('settings.resetOnboarding')}</h4>
+                  <p className="hint">{t('settings.resetOnboardingDesc')}</p>
+                </div>
+                <Button onClick={handleResetOnboarding}>
+                  {t('settings.resetOnboardingButton')}
+                </Button>
               </div>
             </section>
           ) : null}
@@ -6412,7 +7430,7 @@ function MediaProvidersSection({
 //
 // Schemas drift between clients in deliberate ways. VS Code keys
 // servers under "servers" with a required "type" field; Zed uses
-// "context_servers"; Cursor, Windsurf, and Antigravity share
+// "context_servers"; Cursor, Kiro, Windsurf, and Antigravity share
 // "mcpServers"; Claude Code is best served by its CLI which writes
 // to the local config for you. Verified against each tool's official
 // docs in May 2026.
@@ -6427,6 +7445,7 @@ type McpClientId =
   | 'claude'
   | 'codex'
   | 'cursor'
+  | 'kiro'
   | 'vscode'
   | 'zed'
   | 'windsurf'
@@ -6689,6 +7708,17 @@ function IntegrationsSection() {
         return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
       },
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'kiro',
+      label: 'Kiro CLI',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionKiro', {
+          path: homeConfigPath(info.platform, '~/.kiro/settings/mcp.json', '%USERPROFILE%\\.kiro\\settings\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
     },
     {
       id: 'vscode',
@@ -6978,7 +8008,22 @@ function IntegrationsSection() {
             }}
             data-lang={snippetLang}
           >
-            <code>
+            <code
+              style={{
+                // Neutralize the global inline-`code` chip style (background,
+                // padding, rounded corners, color, size) so it doesn't paint a
+                // light rounded rectangle behind every wrapped segment of the
+                // dark snippet block — which read as permanent selection
+                // highlights on the wrapped `claude mcp add-json` one-liner.
+                // Issue #4509.
+                background: 'transparent',
+                padding: 0,
+                borderRadius: 0,
+                color: 'inherit',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
+            >
               {snippet ||
                 (infoError
                   ? t('settings.mcpResolvingFailed')

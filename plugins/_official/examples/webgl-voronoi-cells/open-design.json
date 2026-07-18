@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-voronoi-cells",
+  "title": "Voronoi Cells",
+  "title_i18n": {
+    "zh-CN": "Voronoi 细胞",
+    "zh-TW": "Voronoi 細胞",
+    "ja": "ボロノイ・セル",
+    "ko": "보로노이 셀",
+    "de": "Voronoi-Zellen",
+    "fr": "Cellules de Voronoï",
+    "ru": "Ячейки Вороного",
+    "es": "Celdas de Voronoi",
+    "pt-BR": "Células de Voronoi",
+    "en": "Voronoi Cells"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
+  "description": "A self-contained WebGL2 hero: a living Voronoi network with drifting feature points, palette-keyed cells and glowing boundaries; move the cursor to push the cells.",
+  "description_i18n": {
+    "zh-CN": "自包含 WebGL2 主视觉：活的 Voronoi 网络，漂移特征点、按调色板着色的细胞与发光边界；移动光标推挤细胞。",
+    "zh-TW": "自包含 WebGL2 主視覺：活的 Voronoi 網絡，漂移特徵點、按調色板著色的細胞與發光邊界；移動游標推擠細胞。",
+    "en": "A self-contained WebGL2 hero: a living Voronoi network with drifting feature points, palette-keyed cells and glowing boundaries; move the cursor to push the cells."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-voronoi-cells",
+  "tags": [
+    "example",
+    "first-party",
+    "hero",
+    "webgl",
+    "webgl2",
+    "shader",
+    "voronoi",
+    "cells",
+    "generative",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a self-contained WebGL2 hero of a living Voronoi network with drifting points, palette-keyed cells and glowing edges, cursor-reactive.",
+        "zh-CN": "构建自包含 WebGL2 主视觉：活的 Voronoi 网络，漂移点、调色细胞与发光边界，光标可推挤。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

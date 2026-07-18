@@ -32,6 +32,7 @@ interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
   // Analytics — fires when the user picks an item inside the PreviewModal
@@ -44,6 +45,7 @@ export function PluginDetailsModal({
   record,
   onClose,
   onUse,
+  onDuplicate,
   isApplying,
   hideUseAction,
   onSharePopoverItemClick,
@@ -57,6 +59,7 @@ export function PluginDetailsModal({
         record={record}
         onClose={onClose}
         onUse={onUse}
+        onDuplicate={onDuplicate}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
         onSharePopoverItemClick={onSharePopoverItemClick}
@@ -71,6 +74,7 @@ export function PluginDetailsModal({
         }
         onClose={onClose}
         onUse={onUse}
+        onDuplicate={onDuplicate}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
         onSharePopoverItemClick={onSharePopoverItemClick}
@@ -82,6 +86,7 @@ export function PluginDetailsModal({
         record={record}
         onClose={onClose}
         onUse={onUse}
+        onDuplicate={onDuplicate}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
         onSharePopoverItemClick={onSharePopoverItemClick}
@@ -93,6 +98,7 @@ export function PluginDetailsModal({
         record={record}
         onClose={onClose}
         onUse={onUse}
+        onDuplicate={onDuplicate}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
       />

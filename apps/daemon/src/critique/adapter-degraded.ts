@@ -2,7 +2,7 @@
  * In-memory registry of adapters the conformance harness has marked
  * `critique:degraded` (Phase 10). Tracks (adapterId -> { reason, expiresAtMs })
  * with a per-entry TTL so a flaky adapter is sidelined automatically until
- * the next nightly cycle without operator action.
+ * the next prerelease cycle without operator action.
  *
  * v1 scope: process-local Map. The orchestrator and adapter routing both
  * sit inside the same daemon process, so a daemon-life-scoped store is

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Write a Competitive Displacement Deck like a Top Sales Engineer - B2B sales</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Geist:wght@300;400;700;800;900&family=Geist+Mono:wght@400;600;700;800&display=swap');
+
+/* ============================================================
+   Bento Insight Grid
+   Apple Keynote / QBR school — light-grey & cream canvas,
+   unequal-height rounded bento cards, one insight per card,
+   giant display headlines with hard weight contrast,
+   Geist Mono tabular KPI numerals, inline-SVG sparklines.
+   Spec source: huashu-design references/design-styles.md
+   "Bento modular grid / Bento Grid" (neutral school · 95% fidelity)
+   ============================================================ */
+
+:root {
+  --bg:        #F5F5F7;  /* master page background (Apple light grey) */
+  --cream:     #FBFAF7;  /* warm cream alternate page background      */
+  --card:      #FFFFFF;  /* default card surface                      */
+  --card-dark: #1D1D1F;  /* hero inverse card                         */
+  --tint-blue: #EAF2FE;  /* tinted card — brand                       */
+  --tint-green:#EAF8F0;  /* tinted card — positive                    */
+  --tint-warm: #FDF3E7;  /* tinted card — highlight                   */
+  --ink:       #1D1D1F;  /* primary text                              */
+  --ink-soft:  #424245;  /* body copy                                 */
+  --muted:     #6E6E73;  /* secondary labels                          */
+  --faint:     #AEAEB2;  /* tertiary captions                         */
+  --dark-ink:  #F5F5F7;  /* text on dark card                         */
+  --dark-mut:  #98989D;  /* secondary text on dark card               */
+  --hairline:  #E8E8ED;  /* 1px card border                           */
+  --brand:     #0071E3;  /* brand blue — primary accent               */
+  --green:     #1FA958;  /* positive delta accent                     */
+  --orange:    #F08A24;  /* highlight / warning accent                */
+  --shadow:    0 2px 6px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.05);
+  --r-lg:      32px;     /* large card radius                         */
+  --r-md:      24px;     /* default card radius                       */
+  --r-sm:      14px;     /* chip radius                               */
+  --sans: 'Inter', 'Geist', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --display: 'Geist', 'Inter', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: 'Geist Mono', 'SF Mono', ui-monospace, 'Menlo', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; background: #ECECEF; overflow: hidden; }
+
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- fixed 1920×1080 stage, scaled to viewport ---- */
+#stage {
+  position: fixed; top: 50%; left: 50%;
+  width: 1920px; height: 1080px;
+  transform-origin: center center;
+  background: var(--bg);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.slide {
+  position: absolute; inset: 0;
+  display: none;
+  padding: 84px 110px 76px;
+  background: var(--bg);
+}
+.slide.active { display: flex; flex-direction: column; }
+.slide.cream { background: var(--cream); }
+
+/* ---- shared typography ---- */
+.kicker {
+  font-family: var(--mono);
+  font-size: 14px; font-weight: 600;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--brand);
+}
+.page-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 30px;
+}
+.page-head .right {
+  font-family: var(--mono); font-size: 14px;
+  letter-spacing: 2px; color: var(--muted);
+}
+.title {
+  font-family: var(--display);
+  font-size: 62px; font-weight: 800; letter-spacing: -2px;
+  line-height: 1.08; margin-top: 14px;
+}
+.title .thin { font-weight: 400; color: var(--muted); }
+.subtitle {
+  font-size: 19px; color: var(--muted); font-weight: 400;
+  margin-top: 14px; line-height: 1.6;
+}
+
+/* ---- card primitives ---- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: 36px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.card.dark { background: var(--card-dark); border-color: #2C2C2E; color: var(--dark-ink); }
+.card.tb { background: var(--tint-blue); border-color: #DCE9FB; }
+.card.tg { background: var(--tint-green); border-color: #D9EFE2; }
+.card.tw { background: var(--tint-warm); border-color: #F4E6D2; }
+.card.lg { border-radius: var(--r-lg); }
+
+.card-label {
+  font-size: 14px; font-weight: 600; color: var(--muted);
+  letter-spacing: .3px;
+}
+.card.dark .card-label { color: var(--dark-mut); }
+
+.kpi {
+  font-family: var(--mono); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -2px; line-height: 1;
+  margin-top: auto;
+}
+.kpi .unit { font-size: .42em; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.card.dark .kpi .unit { color: var(--dark-mut); }
+
+.delta {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 15px; font-weight: 600;
+  letter-spacing: 0;
+  border-radius: 100px; padding: 5px 13px;
+  width: fit-content;
+}
+.delta.up   { color: var(--green);  background: var(--tint-green); }
+.delta.down { color: var(--orange); background: var(--tint-warm); }
+.card.dark .delta.up { background: rgba(48,209,88,.16); color: #4CD377; }
+/* on tinted cards the matching tint pill would melt into the surface:
+   lift it onto the white card token so the delta stays legible */
+.card.tg .delta.up   { background: var(--card); }
+.card.tw .delta.down { background: var(--card); }
+
+.spark { display: block; width: 100%; }
+
+.icon {
+  width: 52px; height: 52px;
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+  flex: none;
+}
+.icon.b { background: var(--tint-blue); color: var(--brand); }
+.icon.g { background: var(--tint-green); color: var(--green); }
+.icon.w { background: var(--tint-warm); color: var(--orange); }
+.icon svg { width: 26px; height: 26px; }
+
+/* ============ 01 cover ============ */
+.cover { justify-content: space-between; }
+.cover .brand-row {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.cover .logo {
+  font-family: var(--display); font-size: 23px; font-weight: 800; letter-spacing: -.5px;
+  display: flex; align-items: center; gap: 12px;
+}
+.cover .logo .dot {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: var(--brand); flex: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.cover .logo .dot svg { width: 16px; height: 16px; color: #fff; }
+.cover .display {
+  font-family: var(--display);
+  font-size: 138px; font-weight: 900; letter-spacing: -6px;
+  line-height: 1.04;
+}
+.cover .display .lite { font-weight: 300; color: var(--muted); letter-spacing: -4px; }
+.cover .cover-sub {
+  font-size: 22px; color: var(--muted); margin-top: 30px; line-height: 1.6;
+  font-weight: 400;
+}
+.cover .cover-sub b { color: var(--ink); font-weight: 700; }
+.cover-bento {
+  display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 20px;
+}
+.cover-bento .card { padding: 26px 30px; min-height: 148px; }
+.cover-bento .kpi { font-size: 44px; margin-top: 14px; }
+
+/* ============ 02 agenda ============ */
+.agenda-grid {
+  flex: 1; display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px; margin-top: 8px;
+}
+.agenda-grid .card { padding: 40px 36px; }
+.agenda-grid .num {
+  font-family: var(--mono); font-size: 78px; font-weight: 700;
+  letter-spacing: -3px; color: var(--hairline);
+}
+.agenda-grid .card:nth-child(1) .num { color: var(--brand); }
+.agenda-grid h3 {
+  font-size: 27px; font-weight: 800; letter-spacing: -.5px; margin-top: auto;
+}
+.agenda-grid p { font-size: 15.5px; color: var(--muted); line-height: 1.65; margin-top: 12px; }
+
+/* ============ 03 quarter bento ============ */
+.bento {
+  flex: 1; display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: 1.18fr 1fr;
+  gap: 22px;
+}
+.bento .a { grid-column: span 2; grid-row: span 2; }   /* dark hero, tall   */
+.bento .b { grid-column: span 2; }
+.bento .c { grid-column: span 2; }
+.bento .d { grid-column: span 2; }
+.bento .e { grid-column: span 1; }
+.bento .f { grid-column: span 1; }
+.bento .kpi-xl { font-size: 96px; letter-spacing: -4px; }
+.bento .kpi-lg { font-size: 64px; }
+.bento .kpi-md { font-size: 52px; }
+.bento .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.bento .foot { font-size: 14px; color: var(--muted); margin-top: 14px; }
+.card.dark .foot { color: var(--dark-mut); }
+
+/* ============ 04 one-insight ============ */
+.insight { align-items: center; justify-content: center; text-align: center; }
+.insight .kicker { margin-bottom: 26px; }
+.insight .giant {
+  font-family: var(--mono); font-weight: 800;
+  font-size: 360px; letter-spacing: -18px; line-height: .95;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.insight .giant .pct { font-size: .38em; font-weight: 700; color: var(--brand); letter-spacing: -4px; }
+.insight .giant-label {
+  font-family: var(--display);
+  font-size: 40px; font-weight: 800; letter-spacing: -1px; margin-top: 18px;
+}
+.insight .giant-note { font-size: 19px; color: var(--muted); margin-top: 16px; max-width: 880px; line-height: 1.7; }
+.insight .chip-row { display: flex; gap: 16px; margin-top: 44px; }
+.insight .chip {
+  background: var(--card); border: 1px solid var(--hairline);
+  border-radius: 100px; box-shadow: var(--shadow);
+  padding: 13px 26px; font-size: 15.5px; color: var(--muted);
+}
+.insight .chip b { font-family: var(--mono); color: var(--ink); font-weight: 700; }
+
+/* ============ 05 growth chart ============ */
+.chart-grid {
+  flex: 1; display: grid;
+  grid-template-columns: 2.1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 22px;
+}
+.chart-grid .main { grid-row: span 2; padding: 40px 44px; }
+.bars {
+  flex: 1; display: flex; align-items: flex-end; gap: 44px;
+  padding-top: 36px;
+}
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; justify-content: flex-end; }
+.bar-col .val { font-family: var(--mono); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar-col .bar {
+  width: 100%; border-radius: 16px 16px 8px 8px;
+  background: #E4E4E9;
+}
+.bar-col.hot .bar { background: var(--brand); }
+.bar-col.hot .val { color: var(--brand); }
+.bar-col .q { font-family: var(--mono); font-size: 14px; color: var(--muted); letter-spacing: 1px; }
+.chart-grid .side .kpi { font-size: 56px; }
+
+/* ============ 06 product bento ============ */
+.product-grid {
+  flex: 1; display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1.12fr 1fr;
+  gap: 22px;
+}
+.product-grid .wide { grid-column: span 2; }
+.product-grid h3 { font-size: 25px; font-weight: 800; letter-spacing: -.4px; }
+.product-grid p { font-size: 15.5px; color: var(--muted); line-height: 1.7; margin-top: 10px; }
+.product-grid .meta {
+  margin-top: auto; padding-top: 20px;
+  font-family: var(--mono); font-size: 14px; color: var(--muted);
+  display: flex; justify-content: space-between;
+}
+.product-grid .meta b { color: var(--green); font-weight: 600; }
+
+/* ============ 07 quote ============ */
+.quote-grid {
+  flex: 1; display: grid;
+  grid-template-columns: 2fr 1fr; gap: 22px;
+}
+.quote-card { padding: 64px 72px; justify-content: center; }
+.quote-mark { color: var(--brand); margin-bottom: 30px; }
+.quote-mark svg { width: 56px; height: 42px; }
+.quote-text {
+  font-family: var(--display);
+  font-size: 44px; font-weight: 700; letter-spacing: -1px; line-height: 1.42;
+}
+.quote-text em { font-style: normal; color: var(--brand); }
+.quote-attr { margin-top: 40px; display: flex; align-items: center; gap: 18px; }
+.quote-attr .avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--tint-blue); color: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 800; font-size: 21px;
+  flex: none;
+}
+.quote-attr .who b { display: block; font-size: 18px; font-weight: 700; }
+.quote-attr .who span { font-size: 14.5px; color: var(--muted); }
+.quote-side { display: grid; grid-template-rows: 1fr 1fr; gap: 22px; }
+.quote-side .kpi { font-size: 58px; }
+
+/* ============ 08 efficiency 2×2 ============ */
+.eff-grid {
+  flex: 1; display: grid;
+  grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 22px;
+}
+.eff-grid .card { padding: 38px 42px; }
+.eff-grid .kpi { font-size: 84px; letter-spacing: -3px; }
+.eff-grid .row { display: flex; justify-content: space-between; align-items: flex-start; }
+
+/* ============ 09 roadmap ============ */
+.road-grid {
+  flex: 1; display: grid;
+  grid-template-columns: repeat(3, 1fr); gap: 22px;
+}
+.road-grid .card { padding: 42px 40px; }
+.road-grid .q-tag {
+  font-family: var(--mono); font-size: 14px; font-weight: 600;
+  letter-spacing: 2px; color: var(--brand); margin-bottom: 22px;
+}
+.road-grid h3 { font-size: 30px; font-weight: 800; letter-spacing: -.6px; }
+.road-grid ul { list-style: none; margin-top: 26px; display: flex; flex-direction: column; gap: 16px; }
+.road-grid li {
+  font-size: 16px; color: var(--ink-soft); line-height: 1.6;
+  padding-left: 26px; position: relative;
+}
+.road-grid li::before {
+  content: ''; position: absolute; left: 0; top: 9px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--brand);
+}
+.road-grid .card:nth-child(2) li::before { background: var(--green); }
+.road-grid .card:nth-child(3) li::before { background: var(--orange); }
+.road-grid .target {
+  margin-top: auto; padding-top: 26px; border-top: 1px solid var(--hairline);
+  font-size: 14.5px; color: var(--muted);
+}
+.road-grid .target b { font-family: var(--mono); color: var(--ink); font-size: 17px; }
+
+/* ============ 10 closing ============ */
+.closing { justify-content: space-between; }
+.closing .display {
+  font-family: var(--display);
+  font-size: 168px; font-weight: 900; letter-spacing: -8px; line-height: 1;
+}
+.closing .display .blue { color: var(--brand); }
+.closing .sum-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.closing .sum-row .card { padding: 28px 32px; flex-direction: row; align-items: center; gap: 18px; }
+.closing .sum-row .kpi { font-size: 40px; margin: 0; }
+.closing .sum-row .card-label { font-size: 14.5px; }
+.closing .foot-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--mono); font-size: 14px; color: var(--muted); letter-spacing: 1px;
+}
+
+/* ---- entrance motion (transform/opacity only, ease-out stagger) ---- */
+@keyframes slide-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide.active > * {
+  animation: slide-rise .55s cubic-bezier(.16, 1, .3, 1) backwards;
+}
+.slide.active > *:nth-child(2) { animation-delay: .07s; }
+.slide.active > *:nth-child(3) { animation-delay: .14s; }
+.slide.active > *:nth-child(4) { animation-delay: .21s; }
+.slide.active > *:nth-child(5) { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  .slide.active > * { animation: none; }
+}
+
+/* ---- runtime chrome ---- */
+#counter {
+  position: fixed; right: 28px; bottom: 22px; z-index: 50;
+  font-family: var(--mono); font-size: 13px; letter-spacing: 2px;
+  color: var(--muted);
+  background: rgba(255,255,255,.85);
+  border: 1px solid var(--hairline);
+  border-radius: 100px; padding: 8px 18px;
+  backdrop-filter: blur(8px);
+}
+#counter b { color: var(--brand); font-weight: 600; }
+#keyhint {
+  position: fixed; left: 28px; bottom: 22px; z-index: 50;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 1.5px;
+  color: var(--muted);
+}
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- ============ 01 · Cover ============ -->
+<section class="slide cream cover active" data-screen-label="01 Cover">
+  <div class="brand-row">
+    <div class="logo">
+      <span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c3-6 7-6 10 0s7 6 10 0" transform="scale(0.85) translate(1,2)"/></svg></span>
+      Open Design
+    </div>
+    <div class="kicker">B2B SALES · DISPLACEMENT BRIEF</div>
+  </div>
+  <div>
+    <div class="display">Open Design<br><span class="lite">vs. the closed</span> cloud.</div>
+    <div class="cover-sub">A side-by-side displacement case for the evaluation committee: control, cost under BYOK, and lock-in — Open Design against Sable Studio Cloud and every seat-metered cloud design suite.<br>Apache-2.0 · Self-hosted or local · BYOK licensing · github.com/nexu-io/open-design</div>
+  </div>
+  <div class="cover-bento">
+    <div class="card dark">
+      <div class="row" style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <span class="card-label">GitHub Stars</span>
+        <span class="delta up">Apache-2.0</span>
+      </div>
+      <div class="kpi" style="font-size:44px;">60K<span class="unit">+</span></div>
+    </div>
+    <div class="card">
+      <span class="card-label">Active Contributors</span>
+      <div class="kpi">300<span class="unit">+</span></div>
+    </div>
+    <div class="card">
+      <span class="card-label">Ecosystem Plugins</span>
+      <div class="kpi">217<span class="unit">+</span></div>
+    </div>
+    <div class="card">
+      <span class="card-label">TCO vs. Cloud Suite</span>
+      <div class="kpi">-80<span class="unit">%</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 · Agenda ============ -->
+<section class="slide" data-screen-label="02 Agenda">
+  <div class="page-head">
+    <div>
+      <div class="kicker">AGENDA</div>
+      <h2 class="title">Where control, cost, and lock-in stand.</h2>
+    </div>
+    <div class="right">02 / 10</div>
+  </div>
+  <div class="agenda-grid">
+    <div class="card lg">
+      <div class="num">01</div>
+      <h3>The lock-in</h3>
+      <p>Every cloud-only design tool ties your roadmap to their servers, their pricing, and their outage windows. Sable Studio Cloud is no exception.</p>
+    </div>
+    <div class="card lg">
+      <div class="num">02</div>
+      <h3>The cost</h3>
+      <p>Seat licenses plus mandatory model credits compound fast — a 40-seat Sable Studio Cloud team runs near $20K a month before scaling.</p>
+    </div>
+    <div class="card lg">
+      <div class="num">03</div>
+      <h3>The proof</h3>
+      <p>Open Design already runs the same agent-native workflow in production, with 60K+ GitHub stars and 300+ contributors behind it.</p>
+    </div>
+    <div class="card lg">
+      <div class="num">04</div>
+      <h3>The ask</h3>
+      <p>A 2-week parallel pilot, BYOK licensing, and a migration path that keeps every existing file.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 · At-a-glance (bento master page) ============ -->
+<section class="slide" data-screen-label="03 At a Glance">
+  <div class="page-head">
+    <div>
+      <div class="kicker">CURRENT STATE · CLOSED CLOUD COST</div>
+      <h2 class="title">What Sable Studio Cloud <span class="thin">is costing you</span></h2>
+    </div>
+    <div class="right">03 / 10</div>
+  </div>
+  <div class="bento">
+    <div class="card lg dark a">
+      <div class="row">
+        <span class="card-label">Annual Contract Cost</span>
+        <span class="delta up">↑ 22% at last renewal</span>
+      </div>
+      <div class="kpi kpi-xl">$240<span class="unit">K/yr</span></div>
+      <svg class="spark" viewBox="0 0 280 72" preserveAspectRatio="none" aria-hidden="true" style="margin-top:28px;height:72px;">
+        <path d="M0,62 L35,58 L70,52 L105,46 L140,40 L175,30 L210,22 L245,14 L280,6" fill="none" stroke="#4C9FFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M0,62 L35,58 L70,52 L105,46 L140,40 L175,30 L210,22 L245,14 L280,6 L280,72 L0,72 Z" fill="#4C9FFF" opacity="0.14"/>
+      </svg>
+      <div class="foot">Three renewals, three price increases — no seat flexibility</div>
+    </div>
+    <div class="card b">
+      <div class="row">
+        <span class="card-label">Seats Locked to Vendor</span>
+        <span class="delta up">↑ Per-seat metering</span>
+      </div>
+      <div class="kpi kpi-lg">142</div>
+      <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true" style="margin-top:18px;height:40px;">
+        <path d="M0,34 L25,32 L50,30 L75,26 L100,24 L125,18 L150,14 L175,10 L200,4" fill="none" stroke="#1FA958" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="card c">
+      <div class="row">
+        <span class="card-label">Export Formats Supported</span>
+        <span class="delta up">↑ Format lock</span>
+      </div>
+      <div class="kpi kpi-lg">6<span class="unit">of 40</span></div>
+      <div class="foot">Editable source stays inside their cloud — templates and history don't leave</div>
+    </div>
+    <div class="card tb d">
+      <div class="icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/><path d="M9 11h.01M15 11h.01"/></svg></div>
+      <span class="card-label">Files Stored Off-Site</span>
+      <div class="kpi kpi-md">100<span class="unit">%</span></div>
+    </div>
+    <div class="card e">
+      <span class="card-label">Procurement Lock-in Score</span>
+      <div class="kpi kpi-md">8<span class="unit">/10</span></div>
+    </div>
+    <div class="card tg f">
+      <span class="card-label">Available Now: Cost Cut</span>
+      <div class="kpi kpi-md">-80%</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 · one-insight giant number ============ -->
+<section class="slide cream insight" data-screen-label="04 Key Insight">
+  <div class="kicker">THE PROPOSED CHANGE · WHAT MOVES</div>
+  <div class="giant">-80<span class="pct">%</span></div>
+  <div class="giant-label">Total cost of ownership, versus Sable Studio Cloud.</div>
+  <div class="giant-note">Same 40-seat team, same output — from $20,000 a month down to about $4,000. Models, agents, and media providers run BYOK end to end, every file stays on your own infrastructure, and the renewal conversation stops being adversarial.</div>
+  <div class="chip-row">
+    <span class="chip">Sable Studio Cloud <b>$20K</b>/mo</span>
+    <span class="chip">Open Design BYOK <b>~$4K</b>/mo</span>
+    <span class="chip">Self-hosted · <b>No seat tax</b></span>
+  </div>
+</section>
+
+<!-- ============ 05 · Growth ============ -->
+<section class="slide" data-screen-label="05 Community Growth">
+  <div class="page-head">
+    <div>
+      <div class="kicker">PROOF · ADOPTION</div>
+      <h2 class="title">An adoption curve the committee can verify.</h2>
+    </div>
+    <div class="right">05 / 10</div>
+  </div>
+  <div class="chart-grid">
+    <div class="card lg main">
+      <div class="row" style="display:flex;justify-content:space-between;">
+        <span class="card-label">GitHub Stars — public, verifiable adoption (illustrative trend)</span>
+        <span class="delta up">↑ 60K+ · Zero vendor lock-in</span>
+      </div>
+      <div class="bars">
+        <div class="bar-col"><span class="val">8K</span><div class="bar" style="height:12%;"></div><span class="q">T1</span></div>
+        <div class="bar-col"><span class="val">16K</span><div class="bar" style="height:24%;"></div><span class="q">T2</span></div>
+        <div class="bar-col"><span class="val">28K</span><div class="bar" style="height:42%;"></div><span class="q">T3</span></div>
+        <div class="bar-col"><span class="val">44K</span><div class="bar" style="height:66%;"></div><span class="q">T4</span></div>
+        <div class="bar-col hot"><span class="val">60K+</span><div class="bar" style="height:90%;"></div><span class="q">NOW</span></div>
+      </div>
+    </div>
+    <div class="card side">
+      <div class="row" style="display:flex;justify-content:space-between;">
+        <span class="card-label">Contributors</span>
+        <span class="delta up">↑ Not a single vendor</span>
+      </div>
+      <div class="kpi" style="font-size:56px;">300<span class="unit">+</span></div>
+      <div class="foot" style="font-size:14px;color:var(--muted);margin-top:12px;">Apache-2.0 · Fork or self-host if we ever go quiet</div>
+    </div>
+    <div class="card tw side">
+      <div class="row" style="display:flex;justify-content:space-between;">
+        <span class="card-label">Monthly Cost vs. Sable Studio Cloud</span>
+        <span class="delta down">↓ 80%</span>
+      </div>
+      <div class="kpi" style="font-size:56px;">$4K<span class="unit">/mo</span></div>
+      <div class="foot" style="font-size:14px;color:var(--muted);margin-top:12px;">Was $20K/mo · BYOK end to end — no seat tax, ever</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 · Outputs ============ -->
+<section class="slide" data-screen-label="06 Multimodal Outputs">
+  <div class="page-head">
+    <div>
+      <div class="kicker">PROOF · FEATURE PARITY</div>
+      <h2 class="title">Same outputs<span class="thin">. No cloud tax.</span></h2>
+    </div>
+    <div class="right">06 / 10</div>
+  </div>
+  <div class="product-grid">
+    <div class="card lg wide">
+      <div class="icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><circle cx="12" cy="12" r="3"/><path d="M12 15v6"/><path d="M5 6l4.2 4.2"/><path d="M14.8 13.8 19 18"/><path d="M19 6l-4.2 4.2"/><path d="M9.2 13.8 5 18"/></svg></div>
+      <h3>Prototype &amp; Live Artifact</h3>
+      <p>High-fidelity prototypes, interactive dashboards, and ops briefs — generated locally and previewed instantly, with no round-trip to Sable Studio Cloud's render queue and no seat-gated preview links.</p>
+      <div class="meta"><span>Real files · git-diffable</span><b>Instant local preview</b></div>
+    </div>
+    <div class="card">
+      <div class="icon g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><path d="M10 6.5h7a0 0 0 0 1 0 0v4a0 0 0 0 1 0 0"/><path d="M6.5 10v7a1 1 0 0 0 1 1H14"/></svg></div>
+      <h3>Slides</h3>
+      <p>Decks like this one, and QBR-ready reports — templated, generated on your machine, exportable without a vendor watermark.</p>
+      <div class="meta"><span>Decks · Reports</span><b>217+ Plugins</b></div>
+    </div>
+    <div class="card">
+      <div class="icon w"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8l-4 4 4 4"/><path d="M16 8l4 4-4 4"/><path d="M13.5 5.5l-3 13"/></svg></div>
+      <h3>Image</h3>
+      <p>Posters and mockups styled to your brand system — no per-image credit meter running on someone else's cloud.</p>
+      <div class="meta"><span>Posters · Mockups</span><b>129 Design Systems</b></div>
+    </div>
+    <div class="card tb wide">
+      <div class="icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M5 20V10"/><path d="M10 20V6"/><path d="M15 20v-8"/><path d="M20 20V4"/></svg></div>
+      <h3>HyperFrames &amp; Video</h3>
+      <p>Design output becomes shippable marketing video in the same pipeline — no export to a third-party renderer, no separate line item on the invoice.</p>
+      <div class="meta"><span>HTML → MP4</span><b>One pipeline, one bill</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 · Community voice ============ -->
+<section class="slide cream" data-screen-label="07 Community Voice">
+  <div class="page-head">
+    <div>
+      <div class="kicker">PROOF · CHAMPION QUOTE</div>
+      <h2 class="title">What the last committee said</h2>
+    </div>
+    <div class="right">07 / 10</div>
+  </div>
+  <div class="quote-grid">
+    <div class="card lg quote-card">
+      <div class="quote-mark"><svg viewBox="0 0 56 42" fill="currentColor" aria-hidden="true"><path d="M0 42V26.4C0 11.5 8.6 2.2 23.4 0l3 6.8C16.6 9.4 11.6 15 11 22h12v20H0Zm33 0V26.4C33 11.5 41.6 2.2 56.4 0l3 6.8C49.6 9.4 44.6 15 44 22h12v20H33Z" transform="scale(0.93)"/></svg></div>
+      <div class="quote-text">We killed the Sable Studio Cloud renewal the week procurement saw the BYOK math — <em>same output, no seat tax, no lock-in</em>.</div>
+      <div class="quote-attr">
+        <div class="avatar">MK</div>
+        <div class="who"><b>Design Ops Lead</b><span>Mid-market SaaS, 140-seat migration</span></div>
+      </div>
+    </div>
+    <div class="quote-side">
+      <div class="card">
+        <span class="card-label">Built-in Design Systems</span>
+        <div class="kpi">129</div>
+        <div class="foot" style="font-size:14px;color:var(--muted);margin-top:10px;">Import from GitHub / Figma / local — no migration tool needed</div>
+      </div>
+      <div class="card tg">
+        <span class="card-label">Coding Agents</span>
+        <div class="kpi">21</div>
+        <div class="foot" style="font-size:14px;color:var(--muted);margin-top:10px;">Auto-detects PATH · Works with agents you already pay for</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 · Capabilities 2×2 ============ -->
+<section class="slide" data-screen-label="08 Core Capabilities">
+  <div class="page-head">
+    <div>
+      <div class="kicker">THE ASK</div>
+      <h2 class="title">What we're proposing to the committee.</h2>
+    </div>
+    <div class="right">08 / 10</div>
+  </div>
+  <div class="eff-grid">
+    <div class="card lg">
+      <div class="row">
+        <span class="card-label">Pilot Scope · Zero-risk parallel run</span>
+        <span class="delta up">No procurement cycle</span>
+      </div>
+      <div class="kpi">10<span class="unit">seats</span></div>
+    </div>
+    <div class="card lg dark">
+      <div class="row">
+        <span class="card-label">Contract Term · No annual trap</span>
+        <span class="delta up">Cancel anytime</span>
+      </div>
+      <div class="kpi">0<span class="unit">mo lock-in</span></div>
+    </div>
+    <div class="card lg tg">
+      <div class="row">
+        <span class="card-label">License · Apache-2.0, source available</span>
+        <span class="delta up">Security review ready</span>
+      </div>
+      <div class="kpi">100<span class="unit">% auditable</span></div>
+    </div>
+    <div class="card lg">
+      <div class="row">
+        <span class="card-label">Commercial Terms · BYOK vs. Sable Studio Cloud</span>
+        <span class="delta up">$20K → $4K/mo</span>
+      </div>
+      <div class="kpi">-80<span class="unit">%</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 · Workflow ============ -->
+<section class="slide" data-screen-label="09 Workflow">
+  <div class="page-head">
+    <div>
+      <div class="kicker">ROLLOUT</div>
+      <h2 class="title">Retire the renewal in three sprints</h2>
+    </div>
+    <div class="right">09 / 10</div>
+  </div>
+  <div class="road-grid">
+    <div class="card lg">
+      <div class="q-tag">WEEK 1-2 · PILOT</div>
+      <h3>Stand up a parallel pilot</h3>
+      <ul>
+        <li>10 seats onboarded alongside the existing Sable Studio Cloud licenses</li>
+        <li>Design systems imported from Figma / GitHub — no data migration required</li>
+        <li>Security review runs in parallel against the Apache-2.0 source</li>
+      </ul>
+      <div class="target">Input: <b>10 seats</b>, zero downtime</div>
+    </div>
+    <div class="card lg">
+      <div class="q-tag">WEEK 3-4 · VALIDATE</div>
+      <h3>Match the cloud suite output 1:1</h3>
+      <ul>
+        <li>Pilot team reproduces its last quarter of deliverables on Open Design</li>
+        <li>Agent-native workflow reviewed side by side with the committee</li>
+        <li>Cost, control, and export freedom scored against the current vendor</li>
+      </ul>
+      <div class="target">Output: <b>signed-off parity report</b></div>
+    </div>
+    <div class="card lg">
+      <div class="q-tag">WEEK 5-6 · CUTOVER</div>
+      <h3>Retire the Sable Studio Cloud seats</h3>
+      <ul>
+        <li>Remaining 30 seats migrated, non-renewal notice sent to the vendor</li>
+        <li>BYOK spend replaces the seat-metered invoice</li>
+        <li>Savings booked and reported back to procurement</li>
+      </ul>
+      <div class="target">Savings: <b>$16K/mo</b> booked from week 6</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 · Closing ============ -->
+<section class="slide cream closing" data-screen-label="10 Closing">
+  <div class="kicker">NEXT STEP · DECISION NEEDED BEFORE RENEWAL</div>
+  <div>
+    <div class="display">Approve the pilot.<br>Keep the <span class="blue">savings</span>.</div>
+    <div class="subtitle" style="font-size:21px;margin-top:28px;">10-seat parallel pilot · 2 weeks · zero disruption to current Sable Studio Cloud seats until cutover is signed off</div>
+  </div>
+  <div>
+    <div class="sum-row">
+      <div class="card"><div class="kpi">-80%</div><span class="card-label">Cost vs. Sable Studio Cloud, BYOK</span></div>
+      <div class="card"><div class="kpi">0</div><span class="card-label">Migration lock-in · Apache-2.0</span></div>
+      <div class="card"><div class="kpi">2wk</div><span class="card-label">Time to pilot signal</span></div>
+    </div>
+    <div class="foot-row" style="margin-top:30px;">
+      <span>PREPARED FOR: EVALUATION COMMITTEE</span>
+      <span>CONTACT: DESIGN OPS · GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div id="keyhint">← → / SPACE</div>
+<div id="counter">01 <b>/</b> 10</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var counter = document.getElementById('counter');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var current = 0;
+
+  // fit(): scale the fixed 1920×1080 canvas into the viewport (letterbox)
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // go(i): activate slide i, sync counter + hash (#/N, 1-indexed)
+  function go(i, skipHash) {
+    current = Math.max(0, Math.min(total - 1, i));
+    for (var k = 0; k < total; k++) {
+      slides[k].classList.toggle('active', k === current);
+    }
+    counter.innerHTML = pad(current + 1) + ' <b>/</b> ' + pad(total);
+    if (!skipHash) {
+      var target = '#/' + (current + 1);
+      if (location.hash !== target) {
+        try { history.replaceState(null, '', target); }
+        catch (err) { location.hash = target; }
+      }
+    }
+  }
+
+  function fromHash() {
+    var m = location.hash.match(/^#\/(\d+)$/);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n >= 1 && n <= total) { go(n - 1, true); return; }
+    }
+    go(0, true);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        go(current + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        go(current - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(total - 1);
+        break;
+    }
+  });
+
+  // click: left third of the window goes back, the rest goes forward
+  stage.addEventListener('click', function (e) {
+    if (e.clientX < window.innerWidth / 3) { go(current - 1); }
+    else { go(current + 1); }
+  });
+
+  window.addEventListener('hashchange', fromHash);
+  window.addEventListener('resize', fit);
+
+  fit();
+  fromHash();
+})();
+</script>
+
+</body>
+</html>

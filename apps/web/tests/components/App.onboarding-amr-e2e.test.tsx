@@ -240,23 +240,30 @@ describe('onboarding -> home AMR selection (end to end)', () => {
   it('lands on the home agent picker with AMR selected after accepting the AMR default', async () => {
     render(<App />);
 
-    // Bootstrap routes a first-run user into onboarding; the AMR runtime is
-    // the recommended default and the mocked status reports it signed in.
-    const continueButton = await screen.findByRole(
+    // Bootstrap routes a first-run user into onboarding. AMR detection lags
+    // the first agent probe, so wait for the cloud sign-in CTA to resolve to
+    // the signed-in state before advancing past the Connect step.
+    const runtimeContinue = await screen.findByRole(
       'button',
-      { name: /^Continue$/i },
-      { timeout: 5000 },
+      { name: /Continue \(signed in\)/i },
+      { timeout: 10000 },
     );
-    fireEvent.click(continueButton);
+    await waitFor(() => {
+      expect((runtimeContinue as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(runtimeContinue);
 
     // About-you step is no longer the final step: advance past it to the
-    // newsletter step, which now hosts Finish setup.
+    // newsletter step, then the brand step that hosts Finish setup.
     const aboutYouContinue = await screen.findByRole('button', { name: /^Continue$/i });
     fireEvent.click(aboutYouContinue);
 
-    // Newsletter step -> finish.
-    const finish = await screen.findByRole('button', { name: /Finish setup/i });
-    fireEvent.click(finish);
+    // Newsletter step -> Brand step -> finish.
+    const newsletterContinue = await screen.findByRole('button', { name: /^Continue$/i });
+    fireEvent.click(newsletterContinue);
+
+    const finishToHome = await screen.findByRole('button', { name: /Go to home/i });
+    fireEvent.click(finishToHome);
 
     // Now on home: the inline model switcher chip must reflect AMR, not the
     // Claude default the App-level auto-select used to snap to while AMR was

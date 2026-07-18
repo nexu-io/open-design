@@ -3,11 +3,11 @@
 <head>
 <meta charset='utf-8' />
 <meta name='viewport' content='width=device-width, initial-scale=1' />
-<title>Open Design · kami deck — Vol. 01 / Issue Nº 26</title>
-<meta name='description' content='Open Design as a kami slide deck. Warm parchment with ink-blue cover and chapter slides, serif at one weight, no italic.' />
+<title>Turn a Study into a Lab Meeting Deck like a Senior Postdoc - Academic research</title>
+<meta name='description' content='A gut-microbiome lab-meeting research deck on kami parchment. Warm parchment with ink-blue cover and chapter slides, serif at one weight, no italic.' />
 <link rel='preconnect' href='https://fonts.googleapis.com' />
 <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin />
-<link href='https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet' />
+<link href='https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500&family=Source+Sans+3:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet' />
 <style>
 /*
  * kami-deck — single-file slide deck stylesheet.
@@ -25,12 +25,11 @@
   /* surface */
   --parchment: #f5f4ed;
   --ivory: #faf9f5;
-  --warm-sand: #e8e6dc;
-  --deep-dark: #141413;
 
   /* brand (single chromatic accent) */
   --brand: #1B365D;
   --brand-light: #2D5A8A;
+  --brand-steel: #B5C8DC; /* highlight ink on navy: cover/end .hl */
 
   /* text */
   --near-black: #141413;
@@ -45,7 +44,6 @@
   /* tag tints (solid hex, NEVER rgba) */
   --tag-08: #EEF2F7;
   --tag-14: #E4ECF5;
-  --tag-22: #D0DCE9;
 
   /* type */
   --serif: 'Source Serif 4', Charter, Georgia, Palatino, 'Times New Roman', serif;
@@ -119,7 +117,7 @@ strong { font-weight: 500; }
   z-index: 4;
   pointer-events: none;
 }
-.slide.dark .slide-chrome { color: rgba(250, 249, 245, 0.55); }
+.slide.dark .slide-chrome { color: rgba(250, 249, 245, 0.74); } /* 11px caps on navy: keep >= AA */
 .slide-chrome b { color: var(--near-black); font-weight: 500; }
 .slide.dark .slide-chrome b { color: var(--ivory); }
 .slide-chrome .left { display: inline-flex; align-items: center; gap: 12px; }
@@ -128,8 +126,10 @@ strong { font-weight: 500; }
   font-variant-numeric: tabular-nums;
 }
 .slide-chrome .mark {
-  width: 22px; height: 22px;
-  border-radius: 50%;
+  /* printer's mark: square hairline seal, not a generic pill chip */
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 2px;
   border: 1px solid currentColor;
   display: inline-flex;
   align-items: center;
@@ -137,7 +137,8 @@ strong { font-weight: 500; }
   font-family: var(--serif);
   font-weight: 500;
   font-size: 11px;
-  letter-spacing: 0;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
   opacity: 0.85;
 }
 .slide-foot {
@@ -155,7 +156,7 @@ strong { font-weight: 500; }
   z-index: 4;
   pointer-events: none;
 }
-.slide.dark .slide-foot { color: rgba(250, 249, 245, 0.55); }
+.slide.dark .slide-foot { color: rgba(250, 249, 245, 0.74); } /* 10.5px mono on navy: keep >= AA */
 .slide-foot .counter {
   font-family: var(--mono);
   letter-spacing: 0.04em;
@@ -163,7 +164,7 @@ strong { font-weight: 500; }
   background: var(--ivory);
   padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 2px; /* match the square hairline language of the mark */
 }
 .slide.dark .slide-foot .counter {
   color: var(--ivory);
@@ -196,17 +197,20 @@ strong { font-weight: 500; }
   display: flex;
   gap: 9px;
   padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(245, 244, 237, 0.78);
+  /* flat parchment strip with a hairline, square corners: the glassy
+     blurred pill was outside the kami print language */
+  border-radius: 2px;
+  background: rgba(245, 244, 237, 0.92);
   border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
 }
 #nav .dot {
   width: 7px; height: 7px;
   border-radius: 50%;
   background: rgba(27, 54, 93, 0.22);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   border: 0;
   padding: 0;
 }
@@ -217,22 +221,41 @@ strong { font-weight: 500; }
 #nav .dot.active {
   background: var(--brand);
   width: 22px;
-  border-radius: 999px;
+  border-radius: 1px; /* active marker reads as an ink dash, not a capsule */
 }
 
 #hint {
   position: fixed;
-  bottom: 36px; right: 28px;
+  bottom: 64px; right: 28px;
   z-index: 30;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--stone);
-  opacity: 0.75;
+  /* hint floats over both parchment and navy slides; bare stone text was
+     sub-AA on the dark cover/end, so it gets the same parchment hairline
+     chip language as the nav strip and counter */
+  background: rgba(245, 244, 237, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 5px 9px;
 }
 
 /* ---------- COVER slide (dark) ---------- */
+/* opening beat: transform+opacity only, ease-out, staggered 0.08s.
+   Scoped to the cover; the swipe track paints every slide at load, so
+   animating all of them would burn the effect off-screen. */
+@keyframes kami-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}
+.s-cover .slide-inner > * {
+  animation: kami-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.s-cover .slide-inner > *:nth-child(2) { animation-delay: 0.08s; }
+.s-cover .slide-inner > *:nth-child(3) { animation-delay: 0.16s; }
+.s-cover .slide-inner > *:nth-child(4) { animation-delay: 0.24s; }
 .s-cover .slide-inner {
   grid-template-columns: 1fr;
   text-align: left;
@@ -246,7 +269,7 @@ strong { font-weight: 500; }
   font-weight: 500;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: rgba(250, 249, 245, 0.65);
+  color: rgba(250, 249, 245, 0.74); /* small caps on navy: keep >= AA */
 }
 .s-cover h1 {
   font-family: var(--serif);
@@ -257,7 +280,7 @@ strong { font-weight: 500; }
   color: var(--ivory);
   margin: 0;
 }
-.s-cover h1 .hl { color: #B5C8DC; }
+.s-cover h1 .hl { color: var(--brand-steel); }
 .s-cover .tagline {
   font-family: var(--serif);
   font-weight: 500;
@@ -270,12 +293,13 @@ strong { font-weight: 500; }
   margin-top: 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 14px 20px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: rgba(250, 249, 245, 0.6);
+  color: rgba(250, 249, 245, 0.72); /* 11px mono on navy: keep >= AA */
   font-variant-numeric: tabular-nums;
 }
 .s-cover .meta .rule {
@@ -295,7 +319,7 @@ strong { font-weight: 500; }
   font-family: var(--serif);
   font-weight: 500;
   font-size: clamp(64px, 8vw, 130px);
-  color: rgba(250, 249, 245, 0.55);
+  color: rgba(250, 249, 245, 0.62); /* ghosted chapter numeral, kept >= 3:1 for large text */
   letter-spacing: -0.5px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -314,11 +338,10 @@ strong { font-weight: 500; }
   font-family: var(--serif);
   font-weight: 500;
   font-size: 19px;
-  color: rgba(250, 249, 245, 0.7);
+  color: rgba(250, 249, 245, 0.78);
   max-width: 42ch;
   margin: 0 auto;
   line-height: 1.5;
-  letter-spacing: 0.05em;
 }
 
 /* ---------- CONTENT slide ---------- */
@@ -342,7 +365,7 @@ strong { font-weight: 500; }
   font-weight: 500;
   font-size: clamp(36px, 4vw, 56px);
   line-height: 1.1;
-  letter-spacing: 0.4px;
+  letter-spacing: -0.6px;
   color: var(--near-black);
   margin: 0;
   max-width: 14ch;
@@ -386,9 +409,11 @@ strong { font-weight: 500; }
   color: var(--dark-warm);
 }
 .s-content ul.dash li::before {
-  content: '\2013';
-  position: absolute; left: 0;
-  color: var(--brand);
+  /* hairline tick instead of a literal dash glyph (anti-slop: no -/-- in visible text) */
+  content: '';
+  position: absolute; left: 0; top: 0.72em;
+  width: 10px; height: 1px;
+  background: var(--brand);
 }
 .s-content .body .tag-row { margin-top: 4px; }
 .s-content .tag {
@@ -397,7 +422,7 @@ strong { font-weight: 500; }
   font-size: 12px;
   font-weight: 500;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 2px;
   color: var(--brand);
   background: var(--tag-14);
   letter-spacing: 0.4px;
@@ -419,7 +444,7 @@ strong { font-weight: 500; }
   font-weight: 500;
   font-size: clamp(36px, 4.2vw, 60px);
   line-height: 1.1;
-  letter-spacing: 0.4px;
+  letter-spacing: -0.6px;
   color: var(--near-black);
   max-width: 22ch;
   margin: 0;
@@ -484,10 +509,10 @@ strong { font-weight: 500; }
   font-family: var(--serif);
   font-weight: 500;
   font-size: clamp(28px, 3.4vw, 42px);
-  line-height: 1.35;
+  line-height: 1.32;
   color: var(--near-black);
   margin: 0;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.4px; /* display serif tracks tight, matching h1/h2; loose +tracking was residue */
   max-width: 36ch;
 }
 .s-quote .author {
@@ -497,11 +522,13 @@ strong { font-weight: 500; }
   margin-top: 12px;
 }
 .s-quote .author .glyph {
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  background: var(--brand); color: var(--ivory);
+  /* hanko-style seal: hairline square in brand ink, not a solid avatar disc */
+  width: 40px; height: 40px;
+  border-radius: 3px;
+  border: 1px solid var(--brand);
+  background: transparent; color: var(--brand);
   font-family: var(--serif); font-weight: 500;
-  font-size: 18px;
+  font-size: 17px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -568,8 +595,8 @@ strong { font-weight: 500; }
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.4px;
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 11px 18px;
+  border-radius: 2px;
   border: 0;
   cursor: pointer;
   text-decoration: none;
@@ -599,14 +626,17 @@ strong { font-weight: 500; }
 .s-end .word {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: clamp(96px, 16vw, 240px);
+  /* 16vw clipped "Open Design." mid-glyph behind overflow-x: hidden at every
+     common width (needs ~0.93vw of run length vs ~0.85vw available after
+     padding); 13vw keeps the full word on screen. */
+  font-size: clamp(88px, 13vw, 210px);
   line-height: 1;
   letter-spacing: -1.2px;
   color: var(--ivory);
   white-space: nowrap;
   overflow-x: hidden;
 }
-.s-end .word .hl { color: #B5C8DC; }
+.s-end .word .hl { color: var(--brand-steel); }
 .s-end .colophon {
   border-top: 1px solid rgba(250, 249, 245, 0.22);
   padding-top: 22px;
@@ -615,7 +645,7 @@ strong { font-weight: 500; }
   font-weight: 500;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: rgba(250, 249, 245, 0.65);
+  color: rgba(250, 249, 245, 0.74); /* 11px caps colophon on navy: keep >= AA */
   font-variant-numeric: tabular-nums;
 }
 
@@ -623,8 +653,7 @@ strong { font-weight: 500; }
 #overview {
   position: fixed; inset: 0;
   z-index: 100;
-  background: rgba(245, 244, 237, 0.96);
-  backdrop-filter: blur(12px);
+  background: rgba(245, 244, 237, 0.98); /* near-solid parchment sheet, no glass blur */
   display: none;
   overflow-y: auto;
   padding: 60px 56px;
@@ -647,7 +676,7 @@ strong { font-weight: 500; }
 }
 #overview .ov-card {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 3px;
   overflow: hidden;
   border: 1px solid var(--border);
   transition: border-color 0.2s, transform 0.2s;
@@ -681,6 +710,16 @@ strong { font-weight: 500; }
 }
 #overview .ov-label b { color: var(--near-black); font-weight: 500; }
 
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  #deck { transition: none; }
+  .s-cover .slide-inner > * { animation: none; }
+  .deck-progress .bar { transition: none; }
+  #nav .dot { transition: none; }
+  #overview .ov-card { transition: none; }
+  #overview .ov-card:hover { transform: none; }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
   .slide { padding: 64px 56px; }
@@ -701,21 +740,21 @@ strong { font-weight: 500; }
   <!-- ===== 01 · COVER (dark) ===== -->
   <section class='slide s-cover dark' data-slide-kind='cover'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
-      <span class='eyebrow'>Open-source design studio · Nº 01</span>
-      <h1>Designing intelligence on warm <span class='hl'>paper</span>.</h1>
-      <p class='tagline'>The open-source studio for editorial documents and slide decks — typeset by your own coding agent.</p>
+      <span class='eyebrow'>Lab meeting · Raman Lab · Week 14</span>
+      <h1>Gut microbes track <span class='hl'>deep sleep</span>, not total sleep.</h1>
+      <p class='tagline'>A 6-week shotgun-metagenomics cohort linking the Bacteroides:Firmicutes ratio to slow-wave sleep duration — the design, the results, and what we still can't claim.</p>
       <div class='meta'>
-        <span>Berlin · 52.5200° N · 13.4050° E</span>
+        <span>n = 64 adults · PSG subsample n = 22</span>
         <span class='rule'></span>
-        <span>MMXXVI · Apache-2.0</span>
+        <span>Dept. of Neuroscience · Sleep & Microbiome Lab</span>
       </div>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>01 / 09</span>
     </div>
   </section>
@@ -723,16 +762,16 @@ strong { font-weight: 500; }
   <!-- ===== 02 · CHAPTER (dark) ===== -->
   <section class='slide s-chapter dark' data-slide-kind='chapter'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <p class='num'>01</p>
-      <h2>Why design needs another tool.</h2>
-      <p class='lede'>Because the strongest agents already live on your laptop — and they deserve a real workflow, not a chat window.</p>
+      <h2>The field: fast-moving, still noisy.</h2>
+      <p class='lede'>Rodent work shows the gut-brain axis can shape sleep causally, through short-chain fatty acids and vagal afferents. Human evidence stays correlational, small-n, and inconsistent across cohorts.</p>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>02 / 09</span>
     </div>
   </section>
@@ -740,33 +779,33 @@ strong { font-weight: 500; }
   <!-- ===== 03 · CONTENT ===== -->
   <section class='slide s-content' data-slide-kind='content'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <div class='head'>
         <p class='num'>01.1</p>
-        <h2>What it is.</h2>
-        <p class='lede'>A local-first design studio for the agent you already trust.</p>
+        <h2>The gap no cohort has closed.</h2>
+        <p class='lede'>Most human studies measure sleep by wristband, not EEG.</p>
       </div>
       <div class='body'>
         <p>
-          Open Design is the <strong>open-source alternative to Anthropic's Claude Design</strong>. It runs on your laptop. Your agent reads a folder of <code>SKILL.md</code> files and a folder of <code>DESIGN.md</code> systems, then produces real files — landing pages, decks, white papers, dashboards.
+          Prior cohorts (typically <strong>n &lt; 30</strong>) rely on consumer-grade actigraphy, which is blind to sleep stage — it cannot tell slow-wave sleep from light sleep. None have paired <code>16S</code>-or-deeper microbiome profiling with polysomnography-grade staging in the same participants, and few control for the confounders that move both gut and sleep at once.
         </p>
         <ul class='dash'>
-          <li>Files, not opaque prompts — every skill is a folder of Markdown.</li>
-          <li>Deterministic visual directions, not random generation.</li>
-          <li>Sandboxed iframe preview, real <code>cwd</code>, exportable artifacts.</li>
+          <li>Actigraphy-only designs can report "sleep quality" but not sleep architecture.</li>
+          <li>Diet, BMI, and antibiotic history are rarely logged as covariates.</li>
+          <li>No prior cohort repeated sampling across a full six-week window.</li>
         </ul>
         <div class='tag-row'>
-          <span class='tag'>Apache-2.0</span>
-          <span class='tag'>Local-first</span>
-          <span class='tag'>BYOK</span>
+          <span class='tag'>Metagenomics</span>
+          <span class='tag'>Polysomnography</span>
+          <span class='tag'>Gut-brain axis</span>
         </div>
       </div>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>03 / 09</span>
     </div>
   </section>
@@ -774,31 +813,31 @@ strong { font-weight: 500; }
   <!-- ===== 04 · CONTENT ===== -->
   <section class='slide s-content' data-slide-kind='content'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <div class='head'>
         <p class='num'>01.2</p>
-        <h2>How it feels.</h2>
-        <p class='lede'>Editorial discipline, not chat-window improvisation.</p>
+        <h2>Design: what we actually ran.</h2>
+        <p class='lede'>Six weeks, 64 adults, a polysomnography subsample.</p>
       </div>
       <div class='body'>
         <p>
-          A new project starts with a 30-second question form: brand, audience, scale, language. The agent picks one of five visual directions, locks the type stack, and writes the artifact to disk. <strong>You can read every file it touched.</strong>
+          Stool samples were collected at week 0 and week 6 and run through shotgun metagenomic sequencing. All 64 participants wore actigraphy nightly; a <strong>22-person subsample also underwent overnight polysomnography</strong> at both timepoints, giving us gold-standard sleep staging alongside microbial composition.
         </p>
         <p>
-          Every iteration is reviewed in a sandboxed iframe with comment-mode anchors on every editable element. Re-runs are deterministic — same brief, same output.
+          Diet was logged by 3-day food record each week. Linear mixed-effects models carry participant as a random intercept and adjust for BMI, dietary fiber intake, and antibiotic use in the prior 90 days.
         </p>
         <ul class='dash'>
-          <li>Brief → 30s question form locks brand + audience + scale.</li>
-          <li>Direction → 5 visual directions in OKLch + locked type stack.</li>
-          <li>Artifact → real file on disk, sandboxed preview, comment anchors.</li>
+          <li>Week 0 &amp; week 6 stool sampling, shotgun metagenomics (Illumina NovaSeq).</li>
+          <li>Nightly actigraphy, all 64; overnight PSG on a 22-person subsample.</li>
+          <li>LME models adjust for BMI, fiber intake, and 90-day antibiotic history.</li>
         </ul>
       </div>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>04 / 09</span>
     </div>
   </section>
@@ -806,40 +845,40 @@ strong { font-weight: 500; }
   <!-- ===== 05 · STATS ===== -->
   <section class='slide s-stats' data-slide-kind='stats'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <div class='head'>
         <p class='num'>01.3</p>
-        <h2>By the numbers.</h2>
+        <h2>What moved, and what didn't.</h2>
       </div>
       <div class='grid'>
         <div class='stat'>
-          <div class='v'>31</div>
-          <div class='l'>Skills</div>
-          <div class='s'>file-based, shippable today, drop-in compatible.</div>
+          <div class='v'>+18min</div>
+          <div class='l'>Slow-wave sleep</div>
+          <div class='s'>per SD increase in Bacteroides:Firmicutes ratio, PSG subsample.</div>
         </div>
         <div class='stat'>
-          <div class='v'>72</div>
-          <div class='l'>Design systems</div>
-          <div class='s'>portable DESIGN.md tokens — Linear, Vercel, Stripe, kami…</div>
+          <div class='v'>r=0.41</div>
+          <div class='l'>SCFA – SWS correlation</div>
+          <div class='s'>fecal butyrate vs. slow-wave minutes, FDR q &lt; 0.05.</div>
         </div>
         <div class='stat'>
-          <div class='v'>12</div>
-          <div class='l'>Agent CLIs</div>
-          <div class='s'>auto-detected on your $PATH; switch backends instantly.</div>
+          <div class='v'>n.s.</div>
+          <div class='l'>Total sleep time</div>
+          <div class='s'>no association with any measured microbial ratio, p = 0.61.</div>
         </div>
         <div class='stat'>
-          <div class='v'>3</div>
-          <div class='l'>Commands</div>
-          <div class='s'>from <code>git clone</code> to first artifact, locally.</div>
+          <div class='v'>22/64</div>
+          <div class='l'>PSG subsample</div>
+          <div class='s'>gold-standard staging; remainder actigraphy-only.</div>
         </div>
       </div>
-      <p class='caption'>Open Design v0.2.0 · Apache-2.0 · MMXXVI · figures as of Issue Nº 26.</p>
+      <p class='caption'>Raman Lab · shotgun metagenomics + PSG cohort · preprint in preparation · MMXXVI</p>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>05 / 09</span>
     </div>
   </section>
@@ -847,16 +886,16 @@ strong { font-weight: 500; }
   <!-- ===== 06 · CHAPTER (dark) ===== -->
   <section class='slide s-chapter dark' data-slide-kind='chapter'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <p class='num'>02</p>
-      <h2>What ships next.</h2>
-      <p class='lede'>Q2 2026 — packaging, multi-tenant tokens, daemon hardening. The roadmap is public.</p>
+      <h2>The claim we can actually make.</h2>
+      <p class='lede'>Gut composition tracks sleep architecture — slow-wave depth — not sleep quantity. A distinction prior actigraphy-only studies could never see.</p>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>06 / 09</span>
     </div>
   </section>
@@ -864,23 +903,23 @@ strong { font-weight: 500; }
   <!-- ===== 07 · QUOTE ===== -->
   <section class='slide s-quote' data-slide-kind='quote'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
       <blockquote>
-        Open Design helped us turn vague AI ideas into a visual system that felt sharp, believable, and genuinely new — without ever opening a chat window.
+        A correlation this size, in a subsample this small, does not tell us the microbiome causes deeper sleep. It tells us exactly where to point a causal experiment next.
       </blockquote>
       <div class='author'>
-        <span class='glyph'>m</span>
+        <span class='glyph'>e</span>
         <p>
-          Mina Kovac
-          <span>Creative Director · North Form, Berlin</span>
+          Dr. Elena Cho
+          <span>Principal Investigator · Sleep & Microbiome Lab</span>
         </p>
       </div>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>07 / 09</span>
     </div>
   </section>
@@ -888,22 +927,22 @@ strong { font-weight: 500; }
   <!-- ===== 08 · CTA ===== -->
   <section class='slide s-cta' data-slide-kind='cta'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
-      <span class='eyebrow'>Start a conversation · Nº 03</span>
-      <h2>Let's build something open and visually unforgettable.</h2>
+      <span class='eyebrow'>Next in the pipeline</span>
+      <h2>Can we move the ratio — and does sleep follow?</h2>
       <p class='body'>
-        Star the repo on GitHub, drop into the issues, or run <code>pnpm tools-dev</code> tonight. Three commands and the loop is yours.
+        Proposed follow-up: a 4-week fiber-supplementation crossover trial (n = 40, PSG on every participant) testing whether raising the Bacteroides:Firmicutes ratio causally increases slow-wave sleep. IRB submission targeted for Q3.
       </p>
       <div class='actions'>
-        <a class='btn btn-primary' href='https://github.com/nexu-io/open-design'>Star on GitHub</a>
-        <a class='btn btn-ghost' href='https://github.com/nexu-io/open-design/issues'>Open an issue</a>
+        <a class='btn btn-primary' href='#'>Review the IRB draft</a>
+        <a class='btn btn-ghost' href='#'>See the full dataset</a>
       </div>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>08 / 09</span>
     </div>
   </section>
@@ -911,15 +950,15 @@ strong { font-weight: 500; }
   <!-- ===== 09 · END (dark) ===== -->
   <section class='slide s-end dark' data-slide-kind='end'>
     <div class='slide-chrome'>
-      <span class='left'><span class='mark'>kami</span> <b>Open Design</b> · Vol. 01 / Issue Nº 26</span>
-      <span class='right'>Open Design · kami deck</span>
+      <span class='left'><span class='mark'>kami</span> <b>Raman Lab</b> · Lab Meeting · Week 14</span>
+      <span class='right'>Gut-Sleep Cohort · Academic research</span>
     </div>
     <div class='slide-inner'>
-      <div class='word'>Open <span class='hl'>Design.</span></div>
-      <p class='colophon'>Apache-2.0 · MMXXVI · Berlin · 52.5200° N · 13.4050° E · Composed in kami</p>
+      <div class='word'>Sleep, <span class='hl'>deeper.</span></div>
+      <p class='colophon'>Raman Lab · Dept. of Neuroscience · MMXXVI · Preprint in preparation · Lab meeting Nº 14</p>
     </div>
     <div class='slide-foot'>
-      <span>Berlin · MMXXVI</span>
+      <span>Raman Lab · MMXXVI</span>
       <span class='counter'>09 / 09</span>
     </div>
   </section>
@@ -1097,5 +1136,6 @@ strong { font-weight: 500; }
   applySlide(0);
 })();
 </script>
+
 </body>
 </html>

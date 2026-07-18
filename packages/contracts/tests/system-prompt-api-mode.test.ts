@@ -111,6 +111,13 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toMatch(/state.*plan.*prose|describe.*plan.*prose|plan.*as prose/i);
     });
 
+    it('keeps tool-unavailable details out of user-visible prose', () => {
+      const prompt = composeSystemPrompt({ streamFormat: 'plain' });
+      expect(prompt).toContain('Do not mention tool unavailability to the user');
+      expect(prompt).toContain('Avoid phrases such as "TodoWrite is unavailable"');
+      expect(prompt).toContain('without mentioning missing tools');
+    });
+
     it('explicitly invalidates later "call TodoWrite" / tool-use instructions', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
       // The override must say "ignore later instructions that tell you to

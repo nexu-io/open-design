@@ -18,75 +18,75 @@ import {
  * just keyed for the templates surface. */
 type ShareTemplate = (vars: { name: string; description: string; url: string }) => string;
 const SHARE_COPY: Record<LandingLocaleCode, ShareTemplate> = {
-  en:      ({ name, description, url }) => `🎨 Just forked ${name} from @opendesignai — the open-source Claude Design alternative.
+  en:      ({ name, description, url }) => `🎨 Just forked ${name} from @OpenDesignHQ — the open-source Claude Design alternative.
 ✨ Templates as files, not vendor docs. Fork → swap → ship.
 
 → ${url}`,
-  zh:      ({ name, description, url }) => `🎨 fork 了一个：@opendesignai 上的 ${name} —— Claude Design 的开源替代品。
+  zh:      ({ name, description, url }) => `🎨 fork 了一个：@OpenDesignHQ 上的 ${name} —— Claude Design 的开源替代品。
 ✨ 模板就是文件，不是 vendor 数据。Fork → 换数据 → 发。
 
 → ${url}`,
-  'zh-tw': ({ name, description, url }) => `🎨 fork 了一個：@opendesignai 上的 ${name} —— Claude Design 的開源替代品。
+  'zh-tw': ({ name, description, url }) => `🎨 fork 了一個：@OpenDesignHQ 上的 ${name} —— Claude Design 的開源替代品。
 ✨ 模板就是檔案，不是 vendor 資料。Fork → 換資料 → 發佈。
 
 → ${url}`,
-  ja:      ({ name, description, url }) => `🎨 @opendesignai の ${name} を fork —— オープンソースの Claude Design 代替。
+  ja:      ({ name, description, url }) => `🎨 @OpenDesignHQ の ${name} を fork —— オープンソースの Claude Design 代替。
 ✨ テンプレートはファイル、ベンダー DB じゃない。Fork → 差し替え → 出荷。
 
 → ${url}`,
-  ko:      ({ name, description, url }) => `🎨 @opendesignai의 ${name} fork —— 오픈 소스 Claude Design 대안.
+  ko:      ({ name, description, url }) => `🎨 @OpenDesignHQ의 ${name} fork —— 오픈 소스 Claude Design 대안.
 ✨ 템플릿은 파일, 벤더 DB가 아닙니다. Fork → 교체 → 출시.
 
 → ${url}`,
-  de:      ({ name, description, url }) => `🎨 Gerade ${name} von @opendesignai geforkt — die Open-Source-Alternative zu Claude Design.
+  de:      ({ name, description, url }) => `🎨 Gerade ${name} von @OpenDesignHQ geforkt — die Open-Source-Alternative zu Claude Design.
 ✨ Vorlagen als Dateien, nicht als Vendor-DB. Fork → swap → ship.
 
 → ${url}`,
-  fr:      ({ name, description, url }) => `🎨 Je viens de forker ${name} de @opendesignai — l'alternative open-source à Claude Design.
+  fr:      ({ name, description, url }) => `🎨 Je viens de forker ${name} de @OpenDesignHQ — l'alternative open-source à Claude Design.
 ✨ Modèles = fichiers, pas une base vendeur. Fork → swap → ship.
 
 → ${url}`,
-  ru:      ({ name, description, url }) => `🎨 Форкнул ${name} с @opendesignai — open-source альтернативу Claude Design.
+  ru:      ({ name, description, url }) => `🎨 Форкнул ${name} с @OpenDesignHQ — open-source альтернативу Claude Design.
 ✨ Шаблоны — это файлы, не vendor-DB. Fork → swap → ship.
 
 → ${url}`,
-  es:      ({ name, description, url }) => `🎨 Acabo de hacer fork de ${name} en @opendesignai — la alternativa open-source a Claude Design.
+  es:      ({ name, description, url }) => `🎨 Acabo de hacer fork de ${name} en @OpenDesignHQ — la alternativa open-source a Claude Design.
 ✨ Plantillas como archivos, no como vendor DB. Fork → swap → ship.
 
 → ${url}`,
-  'pt-br': ({ name, description, url }) => `🎨 Acabei de dar fork em ${name} do @opendesignai — a alternativa open-source ao Claude Design.
+  'pt-br': ({ name, description, url }) => `🎨 Acabei de dar fork em ${name} do @OpenDesignHQ — a alternativa open-source ao Claude Design.
 ✨ Templates como arquivos, não como vendor DB. Fork → swap → ship.
 
 → ${url}`,
-  it:      ({ name, description, url }) => `🎨 Ho appena forkato ${name} da @opendesignai — l'alternativa open-source a Claude Design.
+  it:      ({ name, description, url }) => `🎨 Ho appena forkato ${name} da @OpenDesignHQ — l'alternativa open-source a Claude Design.
 ✨ Template come file, non come DB vendor. Fork → swap → ship.
 
 → ${url}`,
-  vi:      ({ name, description, url }) => `🎨 Vừa fork ${name} từ @opendesignai — giải pháp mã nguồn mở thay thế Claude Design.
+  vi:      ({ name, description, url }) => `🎨 Vừa fork ${name} từ @OpenDesignHQ — giải pháp mã nguồn mở thay thế Claude Design.
 ✨ Template là file, không phải DB của vendor. Fork → đổi data → ship.
 
 → ${url}`,
-  pl:      ({ name, description, url }) => `🎨 Właśnie sforkowałem ${name} z @opendesignai — open-source'ową alternatywę dla Claude Design.
+  pl:      ({ name, description, url }) => `🎨 Właśnie sforkowałem ${name} z @OpenDesignHQ — open-source'ową alternatywę dla Claude Design.
 ✨ Szablony jako pliki, nie vendor DB. Fork → swap → ship.
 
 → ${url}`,
-  id:      ({ name, description, url }) => `🎨 Baru fork ${name} dari @opendesignai — alternatif open-source untuk Claude Design.
+  id:      ({ name, description, url }) => `🎨 Baru fork ${name} dari @OpenDesignHQ — alternatif open-source untuk Claude Design.
 ✨ Template itu file, bukan vendor DB. Fork → tukar data → ship.
 
 → ${url}`,
-  nl:      ({ name, description, url }) => `🎨 Net ${name} geforkt van @opendesignai — het open-source alternatief voor Claude Design.
+  nl:      ({ name, description, url }) => `🎨 Net ${name} geforkt van @OpenDesignHQ — het open-source alternatief voor Claude Design.
 ✨ Templates als bestanden, niet als vendor-DB. Fork → swap → ship.
 
 → ${url}`,
-  ar:      ({ name, description, url }) => `🎨 ‏fork للتو ${name} من @opendesignai — البديل مفتوح المصدر لـ Claude Design.
+  ar:      ({ name, description, url }) => `🎨 ‏fork للتو ${name} من @OpenDesignHQ — البديل مفتوح المصدر لـ Claude Design.
 ✨ القوالب ملفات، ليست قاعدة بيانات للمزوّد. Fork → swap → ship.
 
 → ${url}`,
-  tr:      ({ name, description, url }) => `🎨 ${name} fork'ladım (@opendesignai) — Claude Design'a açık kaynaklı alternatif.
+  tr:      ({ name, description, url }) => `🎨 ${name} fork'ladım (@OpenDesignHQ) — Claude Design'a açık kaynaklı alternatif.
 ✨ Şablonlar dosya, vendor DB değil. Fork → swap → ship.
 
 → ${url}`,
-  uk:      ({ name, description, url }) => `🎨 Форкнув ${name} з @opendesignai — open-source альтернативу Claude Design.
+  uk:      ({ name, description, url }) => `🎨 Форкнув ${name} з @OpenDesignHQ — open-source альтернативу Claude Design.
 ✨ Шаблони — це файли, а не vendor-DB. Fork → swap → ship.
 
 → ${url}`,

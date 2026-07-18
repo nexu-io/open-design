@@ -15,7 +15,7 @@
 // reads as a single row.
 
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';

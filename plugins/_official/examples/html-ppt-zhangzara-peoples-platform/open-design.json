@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-peoples-platform",
-  "title": "Html Ppt Zhangzara Peoples Platform",
+  "title": "Make a Public-Transit Funding Case like a Transportation Policy Lead",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara 人民平台",
-    "zh-TW": "Html Ppt Zhangzara 人民平台",
-    "ja": "Html Ppt Zhangzara 人民プラットフォーム",
-    "ko": "Html Ppt Zhangzara 인민 플랫폼",
-    "de": "Html Ppt Zhangzara Peoples Platform",
-    "fr": "Html Ppt Zhangzara Peoples Platform",
-    "ru": "Html Ppt Zhangzara Peoples Platform",
-    "es": "Html Ppt Zhangzara Peoples Platform",
-    "pt-BR": "Html Ppt Zhangzara Peoples Platform",
-    "it": "Html Ppt Zhangzara Peoples Platform",
-    "vi": "Html Ppt Zhangzara Peoples Platform",
-    "pl": "Html Ppt Zhangzara Peoples Platform",
-    "id": "Html Ppt Zhangzara Peoples Platform",
-    "nl": "Html Ppt Zhangzara Peoples Platform",
-    "ar": "Html Ppt Zhangzara Peoples Platform",
-    "tr": "Html Ppt Zhangzara Peoples Platform",
-    "uk": "Html Ppt Zhangzara Peoples Platform",
-    "en": "Html Ppt Zhangzara Peoples Platform"
+    "en": "Make a Public-Transit Funding Case like a Transportation Policy Lead",
+    "zh-CN": "像交通政策负责人一样做公共交通投资论证",
+    "zh-TW": "像交通政策负责人一样做公共交通投资论证"
   },
   "version": "0.1.0",
-  "description": "People's Platform (Block & Bold) — Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush. Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Built as a decision-grade policy briefing deck for city council, public board.",
   "description_i18n": {
-    "zh-CN": "人民平台（块状粗体风格）——活动海报能量：奶油色背景上的蓝、橙、红配色，使用 Alfa Slab + Caveat Brush 字体。适合需要真诚、响亮和图形化表达的内容：文化评论、宣言、社区演示、设计演讲、活动提案。",
-    "zh-TW": "人民平台（區塊粗體風格）——活動海報能量：奶油色背景上的藍、橙、紅配色，使用 Alfa Slab + Caveat Brush 字體。適合需要真誠、響亮和圖形化表達的內容：文化評論、宣言、社區簡報、設計演講、活動提案。",
-    "ja": "人民プラットフォーム（ブロック＆ボールド）— アクティビストポスターエネルギー：クリーム色の背景に青、オレンジ、赤を配色し、Alfa Slab + Caveat Brush フォントを使用。率直でラウドでグラフィカルな表現に最適：文化評論、マニフェスト、コミュニティプレゼン、デザイントーク、キャンペーン提案。",
-    "ko": "인민 플랫폼(블록 & 볼드) — 활동가 포스터 에너지: 크림색 바탕에 파랑, 주황, 빨강 배색과 Alfa Slab + Caveat Brush 폰트 사용. 솔직하고 강렬하며 그래픽적인 표현이 필요한 콘텐츠에 적합: 문화 비평, 선언문, 시민 커뮤니티 프레젠테이션, 디자인 강연, 캠페인 제안.",
-    "de": "People's Platform (Block & Bold) — Aktivisten-Poster-Energie: Blau, Orange, Rot auf Creme mit Alfa Slab + Caveat Brush. Für ehrliche, laute und grafische Inhalte: Kulturkommentare, Manifeste, Community-Präsentationen, Design-Talks, Kampagnen-Pitches.",
-    "fr": "People's Platform (Block & Bold) — Énergie d'affiche militante : bleu, orange, rouge sur crème, avec Alfa Slab + Caveat Brush. Pour tout contenu honnête, audacieux et graphique : commentaires culturels, manifestes, présentations communautaires, conférences design, pitchs de campagne.",
-    "ru": "People's Platform (Block & Bold) — Энергия активистского постера: синий, оранжевый, красный на кремовом фоне с Alfa Slab + Caveat Brush. Для честного, громкого и графического контента: культурные комментарии, манифесты, общественные презентации, дизайн-доклады, презентации кампаний.",
-    "es": "People's Platform (Block & Bold) — Energía de cartel activista: azul, naranja, rojo sobre crema, con Alfa Slab + Caveat Brush. Para contenido honesto, audaz y gráfico: comentarios culturales, manifiestos, presentaciones comunitarias, charlas de diseño, propuestas de campañas.",
-    "pt-BR": "People's Platform (Block & Bold) — Energia de pôster ativista: azul, laranja, vermelho sobre creme, com Alfa Slab + Caveat Brush. Para conteúdo honesto, alto e gráfico: comentários culturais, manifestos, apresentações comunitárias, palestras de design, pitches de campanha.",
-    "it": "People's Platform (Block & Bold) — Energia da poster attivista: blu, arancione, rosso su crema, con Alfa Slab + Caveat Brush. Per contenuti onesti, audaci e grafici: commenti culturali, manifesti, presentazioni comunitarie, talk di design, pitch di campagne.",
-    "vi": "People's Platform (Block & Bold) — Năng lượng poster vận động: xanh dương, cam, đỏ trên nền kem, với Alfa Slab + Caveat Brush. Cho nội dung chân thật, mạnh mẽ và đồ họa: bình luận văn hóa, tuyên ngôn, bài thuyết trình cộng đồng, buổi nói chuyện thiết kế, đề xuất chiến dịch.",
-    "pl": "People's Platform (Block & Bold) — Energia plakatu aktywistycznego: niebieski, pomarańczowy, czerwony na kremowym tle, z Alfa Slab + Caveat Brush. Do szczerych, głośnych i graficznych treści: komentarze kulturowe, manifesty, prezentacje społeczne, wykłady o designie, pitche kampanii.",
-    "id": "People's Platform (Block & Bold) — Energi poster aktivis: biru, oranye, merah di atas krem, dengan Alfa Slab + Caveat Brush. Untuk konten yang jujur, tegas, dan grafis: komentar budaya, manifesto, presentasi komunitas, ceramah desain, pitch kampanye.",
-    "nl": "People's Platform (Block & Bold) — Activistische poster-energie: blauw, oranje, rood op crème, met Alfa Slab + Caveat Brush. Voor eerlijke, luide en grafische content: cultureel commentaar, manifesten, gemeenschapspresentaties, designtalks, campagnepitches.",
-    "ar": "People's Platform (Block & Bold) — طاقة ملصق ناشط: أزرق وبرتقالي وأحمر على خلفية كريمية، مع Alfa Slab + Caveat Brush. للمحتوى الصادق والجريء والرسومي: التعليقات الثقافية، البيانات، العروض المجتمعية، محاضرات التصميم، عروض الحملات.",
-    "tr": "People's Platform (Block & Bold) — Aktivist poster enerjisi: krem zemin üzerine mavi, turuncu, kırmızı, Alfa Slab + Caveat Brush ile. Dürüst, gürültülü ve grafik içerik için: kültürel yorumlar, manifestolar, topluluk sunumları, tasarım konuşmaları, kampanya sunumları.",
-    "uk": "People's Platform (Block & Bold) — Енергія активістського постера: синій, помаранчевий, червоний на кремовому тлі з Alfa Slab + Caveat Brush. Для чесного, гучного та графічного контенту: культурні коментарі, маніфести, громадські презентації, дизайн-доповіді, презентації кампаній.",
-    "en": "People's Platform (Block & Bold) — Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush. Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches."
+    "en": "A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Built as a decision-grade policy briefing deck for city council, public board.",
+    "zh-CN": "像交通政策负责人一样做公共交通投资论证——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像交通政策负责人一样做公共交通投资论证——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -68,7 +39,19 @@
     "manifesto",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "pitch-deck",
+    "fundraising",
+    "investor-deck",
+    "finance",
+    "html-ppt-zhangzara-peoples-platform",
+    "government-policy",
+    "policy-briefing-deck",
+    "policy",
+    "regulatory",
+    "risk-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -81,7 +64,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "policy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -89,13 +72,18 @@
     },
     "useCase": {
       "query": {
-        "en": "People's Platform (Block & Bold) — Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush. Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches.",
-        "zh-CN": "使用这个插件完成以下任务：People's Platform (Block & Bold) — Activist poster energy: blue, orange, red on cream, with Alfa Slab + Caveat Brush. Anything that should feel honest, loud, and graphic: cultural commentary, manifestos, civic and community decks, design talks, campaign pitches."
+        "en": "Create \"Make a Public-Transit Funding Case like a Transportation Policy Lead\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. Audience: city council, public board. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat.",
+        "zh-CN": "像交通政策负责人一样做公共交通投资论证。像交通政策负责人一样做公共交通投资论证——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。 主题：A public-transit funding proposal for a city council — ridership need, the plan, the risk controls, and the ask. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Peoples Platform"
+          "title": "Make a Public-Transit Funding Case like a Transportation Policy Lead",
+          "title_i18n": {
+            "en": "Make a Public-Transit Funding Case like a Transportation Policy Lead",
+            "zh-CN": "像交通政策负责人一样做公共交通投资论证",
+            "zh-TW": "像交通政策负责人一样做公共交通投资论证"
+          }
         }
       ]
     },
@@ -124,6 +112,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "government-policy"
   }
 }

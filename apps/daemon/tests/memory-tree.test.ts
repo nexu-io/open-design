@@ -103,7 +103,9 @@ describe('memory tree helpers', () => {
     await fsp.rm(memoryDir(dataDir), { recursive: true, force: true });
     const tree = await buildMemoryTree(dataDir);
 
-    expect(tree.filter((node) => node.kind === 'folder')).toHaveLength(4);
+    // One folder per memory type: profile, user, feedback, project, reference,
+    // rule (the two new types — profile + rule — added two folders).
+    expect(tree.filter((node) => node.kind === 'folder')).toHaveLength(6);
     expect(tree.filter((node) => node.kind === 'entry')).toHaveLength(0);
   });
 });

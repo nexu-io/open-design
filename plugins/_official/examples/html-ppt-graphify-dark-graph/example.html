@@ -1,244 +1,177 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Graphify Dark Graph</title>
-<style>/* html-ppt :: shared webfonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
-
-</style>
-<style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
-/* Default tokens. Themes in assets/themes/*.css override the :root block. */
-:root {
-  --bg: #ffffff;
-  --bg-soft: #f7f7f8;
-  --surface: #ffffff;
-  --surface-2: #f2f2f4;
-  --border: rgba(0,0,0,.08);
-  --border-strong: rgba(0,0,0,.16);
-  --text-1: #111216;
-  --text-2: #55596a;
-  --text-3: #8a8f9e;
-  --accent: #3b6cff;
-  --accent-2: #7a5cff;
-  --accent-3: #ff5c8a;
-  --good: #1aaf6c;
-  --warn: #f5a524;
-  --bad:  #e0445a;
-  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
-  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
-  --radius: 18px;
-  --radius-sm: 12px;
-  --radius-lg: 26px;
-  --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
-  --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
-  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
-  --font-display: var(--font-sans);
-  --letter-tight: -.03em;
-  --letter-normal: -.01em;
-  --ease: cubic-bezier(.4,0,.2,1);
-}
-
-*,*::before,*::after{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
-  font-family:var(--font-sans);font-weight:400;line-height:1.6;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-  letter-spacing:var(--letter-normal)}
-img,svg,video{max-width:100%;display:block}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-code,kbd,pre,samp{font-family:var(--font-mono)}
-
-/* ================= SLIDE SYSTEM ================= */
-.deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
-.slide{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;justify-content:center;
-  padding:72px 96px;
-  box-sizing:border-box;
-  opacity:0;pointer-events:none;
-  transition:opacity .5s var(--ease), transform .5s var(--ease);
-  transform:translateX(30px);
-  overflow:hidden;
-}
-.slide.is-active{opacity:1;pointer-events:auto;transform:translateX(0);z-index:2}
-.slide.is-prev{transform:translateX(-30px)}
-
-/* single-page standalone (used when a layout file is opened directly) */
-body.single .slide{position:relative;width:100vw;height:100vh;opacity:1;transform:none;pointer-events:auto}
-
-/* ================= TYPOGRAPHY ================= */
-.eyebrow{font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
-.kicker{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
-h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1)}
-h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
-h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
-h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
-.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
-.dim{color:var(--text-2)}
-.dim2{color:var(--text-3)}
-.mono{font-family:var(--font-mono)}
-.serif{font-family:var(--font-serif)}
-.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
-
-/* ================= LAYOUT PRIMITIVES ================= */
-.stack>*+*{margin-top:14px}
-.row{display:flex;gap:24px;align-items:center}
-.row.wrap{flex-wrap:wrap}
-.grid{display:grid;gap:24px}
-.g2{grid-template-columns:repeat(2,1fr)}
-.g3{grid-template-columns:repeat(3,1fr)}
-.g4{grid-template-columns:repeat(4,1fr)}
-.center{display:flex;align-items:center;justify-content:center;text-align:center}
-.fill{flex:1}
-.sp-t{padding-top:24px}.sp-b{padding-bottom:24px}
-.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
-.mb-s{margin-bottom:8px}.mb-m{margin-bottom:18px}.mb-l{margin-bottom:32px}
-
-/* ================= CARDS ================= */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.card-soft{background:var(--surface-2);border:1px solid var(--border)}
-.card-outline{background:transparent;border:1.5px solid var(--border-strong);box-shadow:none}
-.card-accent{background:var(--surface);border-top:3px solid var(--accent)}
-.card-hover{transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
-.card-hover:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
-
-.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;
-  background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
-.pill-accent{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
-
-/* ================= BARS / DIVIDERS ================= */
-.divider{height:1px;background:var(--border);width:100%}
-.divider-accent{height:3px;width:72px;background:var(--accent);border-radius:2px}
-
-/* ================= CHROME (header/footer/progress) ================= */
-.deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
-  font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
-.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
-  font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
-.slide-number::before{content:attr(data-current)}
-.slide-number::after{content:" / " attr(data-total)}
-.progress-bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:transparent;z-index:20}
-.progress-bar > span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
-
-/* ================= PRESENTER / OVERVIEW ================= */
-.notes{display:none!important}
-.notes-overlay{position:fixed;inset:auto 0 0 0;max-height:42vh;background:rgba(20,22,30,.95);color:#e8ebf4;
-  padding:20px 32px;font-size:16px;line-height:1.6;border-top:1px solid rgba(255,255,255,.1);transform:translateY(100%);
-  transition:transform .3s var(--ease);z-index:40;overflow:auto;font-family:var(--font-sans)}
-.notes-overlay.open{transform:translateY(0)}
-.overview{position:fixed;inset:0;background:rgba(10,12,18,.92);backdrop-filter:blur(12px);z-index:50;
-  display:none;padding:40px;overflow:auto}
-.overview.open{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-content:start}
-.overview .thumb{background:var(--surface);border:1px solid var(--border);border-radius:12px;
-  aspect-ratio:16/9;overflow:hidden;cursor:pointer;position:relative;color:var(--text-1);padding:16px;
-  font-size:11px;transition:transform .2s var(--ease)}
-.overview .thumb:hover{transform:scale(1.04)}
-.overview .thumb .n{position:absolute;top:8px;left:10px;font-weight:700;font-size:14px;color:var(--text-3)}
-.overview .thumb .t{position:absolute;bottom:10px;left:14px;right:14px;font-weight:600;color:var(--text-1)}
-
-/* ================= PRESENTER VIEW ================= */
-/* Presenter view opens in a separate popup window (S key).
- * All presenter styles are self-contained in the popup HTML generated by runtime.js.
- * The audience window (this file) is NOT affected — it stays as normal deck view.
- * Only the .notes class below is needed to hide speaker notes from audience. */
-
-/* ================= UTILITY ================= */
-.hidden{display:none!important}
-.nowrap{white-space:nowrap}
-.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
-.uppercase{text-transform:uppercase;letter-spacing:.12em}
-
-/* ================= PRINT ================= */
-@media print{
-  .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
-  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
-}
-
-</style>
-<style>/* graphify-dark-graph — 暗底玻璃 + 力导向知识图谱 */
-.tpl-graphify-dark-graph{
-  --gd-bg:#06060c;
-  --gd-bg2:#0e1020;
-  --gd-text:#f0ece4;
-  --gd-text2:#b0a99e;
-  --gd-text3:#7a746c;
-  --gd-warm:#e8a87c;
-  --gd-blue:#7eb8da;
-  --gd-green:#7ed3a4;
-  --gd-rose:#d4a0b9;
-  --gd-purple:#b8a4d6;
-  --gd-danger:#e07070;
-  background:var(--gd-bg);
-  color:var(--gd-text);
-  font-family:'Inter','Noto Sans SC',-apple-system,sans-serif;
-  letter-spacing:-.01em;
-}
-.tpl-graphify-dark-graph .slide{background:linear-gradient(160deg,#08080f,#0e1020 50%,#08080f);color:var(--gd-text);padding:64px 88px;overflow:hidden}
-.tpl-graphify-dark-graph .gd-ambient{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-.tpl-graphify-dark-graph .gd-orb{position:absolute;border-radius:50%;filter:blur(110px);opacity:.35;animation:gdDrift 22s ease-in-out infinite alternate}
-.tpl-graphify-dark-graph .gd-orb-1{width:520px;height:520px;background:radial-gradient(circle,rgba(126,184,218,.55),transparent 70%);top:-12%;left:-6%}
-.tpl-graphify-dark-graph .gd-orb-2{width:460px;height:460px;background:radial-gradient(circle,rgba(232,168,124,.45),transparent 70%);top:55%;right:-8%;animation-delay:-6s}
-.tpl-graphify-dark-graph .gd-orb-3{width:420px;height:420px;background:radial-gradient(circle,rgba(184,164,214,.4),transparent 70%);bottom:-8%;left:30%;animation-delay:-11s}
-@keyframes gdDrift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(25px,-20px) scale(1.08)}}
-.tpl-graphify-dark-graph .slide > *{position:relative;z-index:2}
-.tpl-graphify-dark-graph .gd-snum{position:absolute;top:28px;right:40px;font-size:12px;letter-spacing:.25em;color:var(--gd-text3);z-index:3}
-.tpl-graphify-dark-graph .gd-eyebrow{font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gd-text3);font-weight:500}
-.tpl-graphify-dark-graph .gd-h1{font-size:74px;font-weight:800;line-height:1.08;letter-spacing:-.02em;margin:16px 0 10px;color:var(--gd-text)}
-.tpl-graphify-dark-graph .gd-h2{font-size:52px;font-weight:700;line-height:1.12;margin:0 0 14px}
-.tpl-graphify-dark-graph .gd-lede{font-size:22px;line-height:1.65;font-weight:300;color:var(--gd-text2);max-width:850px}
-.tpl-graphify-dark-graph .gd-rainbow{background:linear-gradient(90deg,#ff0080,#ff4d00,#ff9900,#ffe600,#00c853,#0091ea,#6200ea,#ff0080);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gdRainbow 4s linear infinite}
-@keyframes gdRainbow{0%{background-position:0% center}100%{background-position:200% center}}
-.tpl-graphify-dark-graph .gd-grad{background:linear-gradient(135deg,var(--gd-warm),var(--gd-rose),var(--gd-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.tpl-graphify-dark-graph .gd-accent{color:var(--gd-warm);font-weight:500}
-.tpl-graphify-dark-graph .gd-green{color:var(--gd-green)}
-.tpl-graphify-dark-graph .gd-blue{color:var(--gd-blue)}
-.tpl-graphify-dark-graph .gd-dim{color:var(--gd-text2)}
-.tpl-graphify-dark-graph .gd-mono{font-family:'JetBrains Mono',monospace}
-.tpl-graphify-dark-graph .gd-glass{position:relative;overflow:hidden;border-radius:20px;padding:22px 26px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px) saturate(160%);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.08)}
-.tpl-graphify-dark-graph .gd-glass::before{content:'';position:absolute;top:0;left:0;right:0;height:50%;background:linear-gradient(180deg,rgba(255,255,255,.05),transparent);pointer-events:none}
-.tpl-graphify-dark-graph .gd-glass-warm{background:rgba(232,168,124,.06);border-color:rgba(232,168,124,.2)}
-.tpl-graphify-dark-graph .gd-glass-green{background:rgba(126,211,164,.06);border-color:rgba(126,211,164,.2)}
-.tpl-graphify-dark-graph .gd-glass-blue{background:rgba(126,184,218,.06);border-color:rgba(126,184,218,.2)}
-.tpl-graphify-dark-graph .gd-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
-.tpl-graphify-dark-graph .gd-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:24px}
-.tpl-graphify-dark-graph .gd-tag{display:inline-block;border-radius:999px;padding:5px 14px;font-size:12px;font-weight:500;margin:2px 4px 2px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--gd-text2)}
-.tpl-graphify-dark-graph .gd-cmd{font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:700;color:var(--gd-green);text-shadow:0 0 30px rgba(126,211,164,.45),0 0 60px rgba(126,211,164,.15);letter-spacing:-.01em}
-.tpl-graphify-dark-graph .gd-big{font-size:120px;font-weight:900;letter-spacing:-.04em;line-height:1}
-.tpl-graphify-dark-graph .gd-codebox{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px 26px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.8;color:#d8d4c8}
-.tpl-graphify-dark-graph .gd-codebox .cm{color:#6b6a62}
-.tpl-graphify-dark-graph .gd-codebox .kw{color:var(--gd-warm)}
-.tpl-graphify-dark-graph .gd-codebox .st{color:var(--gd-green)}
-.tpl-graphify-dark-graph .gd-codebox .fn{color:var(--gd-blue)}
-
-</style>
+<title>Write a Feature Business Case like a Principal PM - Product management</title>
 <style>
-/* Static-preview fallback (runtime.js is absent — keep every slide visible) */
-.deck{height:auto;min-height:100vh;overflow:visible}
-.slide{position:relative;inset:auto;opacity:1;pointer-events:auto;transform:none;height:100vh;page-break-after:always}
-.deck-header,.deck-footer,.slide-number,.progress-bar,.notes-overlay,.overview{pointer-events:none}
-.notes{display:none!important}
-</style></head>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* graphify-dark-graph :: dark ground + force-directed graph signature
+   tokens: green-tinted off-black, single emerald accent, hairlines over glass */
+:root{
+  --bg:#0f1211;
+  --text:#eef1ee;
+  --text-2:#a2aba4;
+  --text-3:#7d8780;
+  --line:rgba(238,241,238,.1);
+  --line-strong:rgba(238,241,238,.24);
+  --accent:#3ecf8e;
+  --accent-dim:rgba(62,207,142,.16);
+  --font-display:'Archivo','Inter',sans-serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+a{color:inherit;text-decoration:none}
+img,svg{max-width:100%;display:block}
+
+/* ============ deck (static preview: slides stacked) ============ */
+.deck{width:100vw}
+.slide{position:relative;width:100vw;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(rgba(238,241,238,.045) 1px,transparent 1px) 0 0/28px 28px,
+    var(--bg)}
+
+/* slide number, top right */
+.snum{position:absolute;top:34px;right:48px;font-family:var(--font-mono);
+  font-size:11.5px;letter-spacing:.22em;color:var(--text-3)}
+
+/* ============ type ============ */
+.eyebrow{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 18px}
+.eyebrow.quiet{color:var(--text-3)}
+.h1{font-family:var(--font-display);font-weight:700;letter-spacing:-.02em;line-height:1.04;
+  font-size:clamp(60px,7vw,92px);margin:0;color:var(--text)}
+.h2{font-family:var(--font-display);font-weight:700;letter-spacing:-.015em;line-height:1.1;
+  font-size:clamp(38px,4.4vw,54px);margin:0}
+.lede{font-size:20px;line-height:1.7;color:var(--text-2);font-weight:400;max-width:60ch;margin:0}
+.ac{color:var(--accent)}
+
+/* ============ graph motif primitives ============ */
+.node-dot{display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);flex:none}
+.node-dot.hollow{background:transparent;border:1.5px solid var(--text-3);box-shadow:none}
+
+/* callout: edge-line into a node */
+.callout{display:flex;gap:18px;align-items:baseline;border-top:1px solid var(--line-strong);
+  padding-top:22px;margin-top:34px;max-width:72ch}
+.callout .node-dot{transform:translateY(-1px)}
+.callout p{margin:0;font-size:17px;line-height:1.7;color:var(--text-2)}
+.callout p .ac{color:var(--accent)}
+
+/* ============ entrance motion: transform+opacity only, staggered ============ */
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.slide .in{animation:rise .65s var(--ease) both}
+.slide .in:nth-child(2){animation-delay:.06s}
+.slide .in:nth-child(3){animation-delay:.12s}
+.slide .in:nth-child(4){animation-delay:.18s}
+.slide .in:nth-child(5){animation-delay:.24s}
+@media (prefers-reduced-motion:reduce){.slide .in{animation:none}}
+
+/* ============ S1 cover ============ */
+.cover-graph{position:absolute;inset:0;width:100%;height:100%;opacity:.55;pointer-events:none}
+.cover-inner{position:relative;margin-top:auto;padding-bottom:24px}
+.cover .h1{font-size:clamp(54px,5.6vw,72px)}
+
+/* ============ S3 capability grid ============ */
+.cap-grid{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line-strong);
+  border-bottom:1px solid var(--line);margin-top:36px}
+.cap{padding:28px 26px 30px 0;display:flex;flex-direction:column;gap:10px}
+.cap+.cap{border-left:1px solid var(--line);padding-left:26px}
+.cap .idx{font-family:var(--font-mono);font-size:12px;color:var(--text-3);letter-spacing:.08em;
+  display:flex;align-items:center;gap:10px}
+.cap h4{font-family:var(--font-display);font-weight:600;font-size:18.5px;letter-spacing:-.01em;
+  line-height:1.3;margin:6px 0 0;color:var(--text)}
+.cap p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-2)}
+
+/* ============ S4 code ============ */
+.cmd{font-family:var(--font-mono);font-size:clamp(20px,2.4vw,28px);font-weight:600;
+  color:var(--accent);letter-spacing:-.01em;margin:14px 0 0}
+.codebox{background:#0b0e0d;border:1px solid var(--line);border-radius:4px;
+  padding:24px 28px;font-family:var(--font-mono);font-size:14px;line-height:1.85;
+  color:#ccd4ce;margin:26px 0 0;max-width:760px;overflow:hidden}
+.codebox .cm{color:var(--text-3)}
+.codebox .kw{color:var(--accent)}
+.codebox .st{color:#dfe5e0}
+.codebox .fn{color:var(--text-2)}
+
+/* ============ S5 race tracks + stat board ============ */
+.race{max-width:920px;margin-top:38px}
+.track{display:grid;grid-template-columns:96px 1fr;gap:24px;align-items:center;padding:26px 0}
+.track+.track{border-top:1px solid var(--line)}
+.track .who{font-family:var(--font-display);font-weight:600;font-size:16px;line-height:1.35;
+  text-align:right;color:var(--text-2)}
+.track.open .who{color:var(--text)}
+.track .lane{position:relative;height:40px}
+.track .lane::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line-strong)}
+.track .lane .marker{position:absolute;top:50%;transform:translate(-50%,-50%);
+  width:11px;height:11px;border-radius:50%}
+.track.closed .lane .marker{left:26%;background:transparent;border:1.5px solid var(--text-3)}
+.track.open .lane .marker{left:calc(100% - 6px);background:var(--accent);box-shadow:0 0 0 5px var(--accent-dim)}
+.track .lane .lbl{position:absolute;top:-12px;font-family:var(--font-mono);font-size:13px;letter-spacing:.02em}
+.track.closed .lane .lbl{left:calc(26% + 18px);color:var(--text-3)}
+.track.open .lane .lbl{right:26px;color:var(--accent)}
+
+.stat-board{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line-strong);
+  margin-top:40px;max-width:920px}
+.stat{padding:28px 32px 6px 0}
+.stat+.stat{border-left:1px solid var(--line);padding-left:32px}
+.stat .v{font-family:var(--font-display);font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-size:clamp(52px,5.4vw,76px);color:var(--text)}
+.stat:first-child .v{color:var(--accent)}
+.stat .l{font-size:13.5px;color:var(--text-2);margin-top:10px}
+
+/* ============ S6 pipeline: steps as nodes on one edge ============ */
+.pipe{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:40px;margin-top:64px}
+.pipe::before{content:'';position:absolute;top:6px;left:8px;right:8px;height:1px;background:var(--line-strong)}
+.step{position:relative;padding-top:34px}
+.step::before{content:'';position:absolute;top:0;left:0;width:13px;height:13px;border-radius:50%;
+  background:var(--bg);border:1.5px solid var(--text-3)}
+.step.last::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 5px var(--accent-dim)}
+.step .sn{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.16em;color:var(--text-3)}
+.step h4{font-family:var(--font-display);font-weight:600;font-size:21px;letter-spacing:-.01em;margin:8px 0 6px;color:var(--text)}
+.step p{margin:0;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+
+/* ============ S7 CTA ============ */
+.cta-dl{font-family:var(--font-mono);font-size:clamp(18px,2.1vw,24px);font-weight:600;
+  color:var(--text);margin:12px 0 0;letter-spacing:-.01em}
+.tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:40px}
+.tag{font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;color:var(--text-2);
+  border:1px solid var(--line-strong);border-radius:2px;padding:7px 14px}
+
+/* ============ S8 thanks ============ */
+.thanks{text-align:center;align-items:center}
+.thanks .big{font-family:var(--font-display);font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-size:clamp(110px,15vw,190px);margin:0}
+.thanks .lede{margin:30px auto 0}
+
+@media print{.slide{page-break-after:always}}
+@media (max-width:768px){
+  .slide{padding:48px 28px;height:auto;min-height:100vh}
+  .snum{right:28px}
+  .cap-grid,.stat-board,.pipe{grid-template-columns:1fr}
+  .cap+.cap,.stat+.stat{border-left:none;padding-left:0;border-top:1px solid var(--line)}
+  .pipe::before{display:none}
+  .track{grid-template-columns:1fr;gap:8px}
+  .track .who{text-align:left}
+}
+</style>
+</head>
 <body class="tpl-graphify-dark-graph">
 <div class="deck">
 
   <!-- 1. COVER -->
-  <section class="slide is-active">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-2"></div><div class="gd-orb gd-orb-3"></div></div>
-    <!-- live force-directed graph bg -->
-    <svg viewBox="0 0 1600 900" style="position:absolute;inset:0;width:100%;height:100%;opacity:.38;z-index:1" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="#7eb8da" stroke-width="1" stroke-opacity=".5" fill="none">
+  <section class="slide is-active cover">
+    <!-- force-directed graph signature: hairline edges, neutral nodes, accent hubs -->
+    <svg class="cover-graph" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g stroke="rgba(238,241,238,.15)" stroke-width="1" fill="none">
         <line x1="300" y1="200" x2="520" y2="340"/>
         <line x1="520" y1="340" x2="780" y2="260"/>
         <line x1="780" y1="260" x2="1040" y2="420"/>
@@ -253,146 +186,172 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         <line x1="360" y1="640" x2="640" y2="560"/>
       </g>
       <g>
-        <circle cx="300" cy="200" r="10" fill="#e8a87c"/>
-        <circle cx="520" cy="340" r="14" fill="#7eb8da"/>
-        <circle cx="780" cy="260" r="9" fill="#7ed3a4"/>
-        <circle cx="1040" cy="420" r="18" fill="#b8a4d6"/>
-        <circle cx="640" cy="560" r="11" fill="#d4a0b9"/>
-        <circle cx="900" cy="620" r="12" fill="#e8a87c"/>
-        <circle cx="1260" cy="300" r="8" fill="#7ed3a4"/>
-        <circle cx="1380" cy="500" r="10" fill="#7eb8da"/>
-        <circle cx="1120" cy="720" r="9" fill="#d4a0b9"/>
-        <circle cx="200" cy="420" r="8" fill="#b8a4d6"/>
-        <circle cx="360" cy="640" r="11" fill="#7eb8da"/>
+        <circle cx="300" cy="200" r="7" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="520" cy="340" r="10" fill="#3ecf8e" opacity=".9"/>
+        <circle cx="780" cy="260" r="6" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="1040" cy="420" r="13" fill="#3ecf8e" opacity=".55"/>
+        <circle cx="640" cy="560" r="8" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="900" cy="620" r="9" fill="none" stroke="rgba(62,207,142,.7)" stroke-width="1.5"/>
+        <circle cx="1260" cy="300" r="5" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="1380" cy="500" r="7" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="1120" cy="720" r="6" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="200" cy="420" r="5" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="360" cy="640" r="8" fill="none" stroke="rgba(62,207,142,.7)" stroke-width="1.5"/>
       </g>
     </svg>
-    <div class="gd-snum">01 / 08</div>
-    <div style="margin-top:auto">
-      <p class="gd-eyebrow">Tech Sharing · 纯干货</p>
-      <h1 class="gd-h1" style="font-size:88px"><span class="gd-rainbow">手把手用 Graphify<br>搭建个人知识图谱</span></h1>
-      <p class="gd-lede" style="margin-top:20px">一行命令 · 全多模态 · 诚实审计 —— <span class="gd-accent">把任何文件夹变成可导航的知识网络。</span></p>
-      <p class="gd-eyebrow" style="margin-top:26px">↑ 背景就是 Graphify 真实跑出来的知识图谱</p>
+    <div class="snum">01 / 08</div>
+    <div class="cover-inner">
+      <p class="eyebrow in">Product Management · Business Case</p>
+      <h1 class="h1 in">Feature Business Case<br><span class="ac">Plugin Marketplace</span></h1>
+      <p class="lede in" style="margin-top:24px">Should Open Design open a first-party plugin marketplace in Q3? <span style="color:var(--text)">The case for PM, Eng, Design, and Leadership to land on one option.</span></p>
+      <p class="eyebrow quiet in" style="margin:30px 0 0">Decision owner: PM · Reviewers: Eng, Design, Leadership</p>
     </div>
   </section>
 
   <!-- 2. SECTION DIVIDER -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-2"></div></div>
-    <div class="gd-snum">02 / 08</div>
+    <div class="snum">02 / 08</div>
     <div style="margin:auto 0">
-      <div class="gd-eyebrow">Part 01</div>
-      <h1 class="gd-h1" style="font-size:120px">Why <span class="gd-grad">Graph</span>?</h1>
-      <p class="gd-lede">folder → tree → graph，人类认知的下一步</p>
+      <p class="eyebrow quiet in">Decision needed</p>
+      <h1 class="h1 in" style="font-size:clamp(88px,10vw,128px)">Ship a <span class="ac">marketplace</span>, or hold the line?</h1>
+      <p class="lede in" style="margin-top:24px">217+ plugins already exist, built for free by the community. Today they're only discoverable through a static home rail — no ratings, no revenue share, no owner of record. We need one call before Q3 planning locks.</p>
     </div>
   </section>
 
   <!-- 3. CONTENT — plugin grid -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div><div class="gd-orb gd-orb-3"></div></div>
-    <div class="gd-snum">03 / 08</div>
-    <p class="gd-eyebrow">Feature Map</p>
-    <h2 class="gd-h2">一个工具，<span class="gd-grad">四件事</span></h2>
-    <div class="gd-grid-4">
-      <div class="gd-glass gd-glass-warm"><div style="font-size:30px">📂</div><h4 style="margin:10px 0 6px">Folder Ingest</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">递归扫描任意路径，支持 md / pdf / 代码 / 图片</p></div>
-      <div class="gd-glass gd-glass-blue"><div style="font-size:30px">🧠</div><h4 style="margin:10px 0 6px">Entity Extract</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">用 LLM 抽概念、人物、事件、关系</p></div>
-      <div class="gd-glass gd-glass-green"><div style="font-size:30px">🕸️</div><h4 style="margin:10px 0 6px">Force Graph</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">D3 力导向，点击即跳转原文</p></div>
-      <div class="gd-glass"><div style="font-size:30px">🔍</div><h4 style="margin:10px 0 6px">Audit Trail</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">每条边都能追溯到 source span</p></div>
+    <div class="snum">03 / 08</div>
+    <p class="eyebrow in">The Pain</p>
+    <h2 class="h2 in">Four ways the current model <span class="ac">breaks down</span></h2>
+    <div class="cap-grid in">
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.01</span>
+        <h4>Discovery dead-ends</h4>
+        <p>68% of installs come from the top 6 home-rail plugins; the other 211 get near-zero traffic</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.02</span>
+        <h4>No trust signal</h4>
+        <p>No ratings, no verification badge — support tickets show users afraid to install unfamiliar plugin code</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.03</span>
+        <h4>Zero creator incentive</h4>
+        <p>38 external contributors shipped a plugin this year; only 4 shipped a second one</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot"></span>n.04</span>
+        <h4>Unowned support load</h4>
+        <p>112 GitHub issues this quarter trace back to plugins with no listed maintainer of record</p>
+      </div>
     </div>
-    <div class="gd-glass gd-glass-warm" style="margin-top:24px"><p style="font-size:18px;line-height:1.6">它不是「又一个 RAG」—— 它是 <span class="gd-accent">把检索结果画出来，让你一眼就知道信息长什么样</span>。</p></div>
+    <div class="callout in">
+      <span class="node-dot"></span>
+      <p>Every pain point traces to the same root cause: <span class="ac">plugins have no marketplace, so they have no owner, no signal, and no incentive</span>.</p>
+    </div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div></div>
-    <div class="gd-snum">04 / 08</div>
-    <p class="gd-eyebrow">One command</p>
-    <h2 class="gd-h2">从 0 到图谱，<span class="gd-grad">大概 90 秒</span></h2>
-    <p class="gd-cmd" style="margin:16px 0 22px">$ graphify ~/notes --out ./graph</p>
-    <pre class="gd-codebox"><span class="cm"># graphify.config.yaml</span>
-<span class="kw">ingest</span>:
-  paths: [<span class="st">~/notes</span>, <span class="st">~/code/docs</span>]
-  include: [<span class="st">"*.md"</span>, <span class="st">"*.pdf"</span>, <span class="st">"*.py"</span>]
+    <div class="snum">04 / 08</div>
+    <p class="eyebrow in">Options Considered</p>
+    <h2 class="h2 in">Three shapes, <span class="ac">one recommendation</span></h2>
+    <p class="cmd in">$ od plugin marketplace --compare-options</p>
+    <pre class="codebox in"><span class="cm"># three options weighed for Q3</span>
+<span class="kw">option_a</span>: <span class="st">status_quo</span>       <span class="cm"># home rail only, curated by us</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">none</span>   effort: <span class="fn">low</span>
 
-<span class="kw">extract</span>:
-  model: <span class="st">claude-opus-4-6</span>
-  schema: [<span class="st">concept</span>, <span class="st">person</span>, <span class="st">event</span>, <span class="st">relation</span>]
+<span class="kw">option_b</span>: <span class="st">reviewed_marketplace</span>  <span class="cm"># submission queue + revenue share</span>
+  trust_signal: <span class="fn">verified_badge</span>   creator_incentive: <span class="fn">70/30_split</span>   effort: <span class="fn">medium</span>
 
-<span class="kw">render</span>:
-  engine: <span class="st">d3-force</span>
-  audit: <span class="fn">true</span>     <span class="cm"># 每条边带 source span</span></pre>
+<span class="kw">option_c</span>: <span class="st">open_federation</span>   <span class="cm"># npm-style, no review, self-serve</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">tips_only</span>   effort: <span class="fn">low</span>
+
+<span class="kw">recommended</span>: option_b     <span class="cm"># only option that fixes trust AND incentive</span></pre>
   </section>
 
   <!-- 5. CHART — race diagram -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-3"></div></div>
-    <div class="gd-snum">05 / 08</div>
-    <p class="gd-eyebrow">Efficiency Race</p>
-    <h2 class="gd-h2">没有知识库 vs 有知识库</h2>
-    <div style="max-width:900px;margin-top:30px">
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-danger)">没有<br>知识库</div>
-        <div style="flex:1;position:relative;height:70px;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.2);border-radius:16px">
-          <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:32px">🛵</div>
-          <div style="position:absolute;left:72px;top:50%;transform:translateY(-50%);color:var(--gd-danger);font-size:14px">反复喂信息…整理…又忘了…</div>
+    <div class="snum">05 / 08</div>
+    <p class="eyebrow in">Tradeoffs</p>
+    <h2 class="h2 in">Option B wins trust, <span class="ac">costs speed</span></h2>
+    <div class="race in">
+      <div class="track closed">
+        <div class="who">Options<br>A / C</div>
+        <div class="lane">
+          <span class="marker"></span>
+          <span class="lbl">Ship in 2 weeks · no review gate · no trust signal</span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:16px">
-        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-green)">有<br>知识库</div>
-        <div style="flex:1;position:relative;height:70px;background:rgba(126,211,164,.06);border:1px solid rgba(126,211,164,.25);border-radius:16px">
-          <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:32px">🏎️</div>
-          <div style="position:absolute;right:72px;top:50%;transform:translateY(-50%);color:var(--gd-green);font-size:14px">AI 自己找 → 确认 → 干活!</div>
+      <div class="track open">
+        <div class="who">Option<br>B</div>
+        <div class="lane">
+          <span class="marker"></span>
+          <span class="lbl">Ship in 6 weeks · review gate · verified badge + revenue share</span>
         </div>
       </div>
     </div>
-    <div class="gd-grid-3" style="margin-top:36px">
-      <div class="gd-glass gd-glass-warm"><div class="gd-big gd-grad">5×</div><p class="gd-dim" style="margin-top:6px">速度提升</p></div>
-      <div class="gd-glass gd-glass-green"><div class="gd-big gd-grad">-80%</div><p class="gd-dim" style="margin-top:6px">重复喂信息</p></div>
-      <div class="gd-glass gd-glass-blue"><div class="gd-big gd-grad">∞</div><p class="gd-dim" style="margin-top:6px">记忆持久化</p></div>
+    <div class="stat-board in">
+      <div class="stat"><div class="v">+4wk</div><p class="l">added time-to-ship for review tooling</p></div>
+      <div class="stat"><div class="v">70/30</div><p class="l">creator revenue split, our favor 30%</p></div>
+      <div class="stat"><div class="v">20</div><p class="l">creators committed for private beta</p></div>
     </div>
   </section>
 
   <!-- 6. PIPELINE -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
-    <div class="gd-snum">06 / 08</div>
-    <p class="gd-eyebrow">Pipeline</p>
-    <h2 class="gd-h2">端到端 <span class="gd-grad">4 步走</span></h2>
-    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:36px">
-      <div class="gd-glass" style="flex:1;text-align:center"><div style="font-size:34px">📂</div><div style="font-weight:600;margin-top:8px">Scan</div><div class="gd-dim" style="font-size:13px">递归读文件</div></div>
-      <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-blue" style="flex:1;text-align:center"><div style="font-size:34px">🔬</div><div style="font-weight:600;margin-top:8px">Extract</div><div class="gd-dim" style="font-size:13px">LLM 抽实体</div></div>
-      <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-green" style="flex:1;text-align:center"><div style="font-size:34px">🕸️</div><div style="font-weight:600;margin-top:8px">Build</div><div class="gd-dim" style="font-size:13px">构图 + 去重</div></div>
-      <div style="color:var(--gd-text3);font-size:24px">→</div>
-      <div class="gd-glass gd-glass-warm" style="flex:1;text-align:center"><div style="font-size:34px">🎨</div><div style="font-weight:600;margin-top:8px">Render</div><div class="gd-dim" style="font-size:13px">D3 交互图</div></div>
+    <div class="snum">06 / 08</div>
+    <p class="eyebrow in">Recommendation</p>
+    <h2 class="h2 in">Ship Option B in <span class="ac">4 phases</span></h2>
+    <div class="pipe in">
+      <div class="step">
+        <span class="sn">STEP 01</span>
+        <h4>Freeze scope</h4>
+        <p>Review rubric &amp; revenue-share terms locked with legal by Jul 21</p>
+      </div>
+      <div class="step">
+        <span class="sn">STEP 02</span>
+        <h4>Build the queue</h4>
+        <p>Submission form, review dashboard, verified badge shipped by Aug 11</p>
+      </div>
+      <div class="step">
+        <span class="sn">STEP 03</span>
+        <h4>Private beta</h4>
+        <p>20 committed creators list one plugin each; review SLA measured live</p>
+      </div>
+      <div class="step last">
+        <span class="sn">STEP 04</span>
+        <h4>GA rollout</h4>
+        <p>Open submissions to all 217+ creators; revenue share turns on</p>
+      </div>
     </div>
-    <div class="gd-glass" style="margin-top:32px"><p style="font-size:16px;line-height:1.6;color:var(--gd-text2)">每一步都有 audit log：你永远知道某个节点为什么存在、它来自哪个文件的哪一行。</p></div>
+    <div class="callout in">
+      <span class="node-dot"></span>
+      <p>This is the irreversible step: once revenue share is live, pulling the marketplace back costs trust we won't get back. <span class="ac">Sign off here, not after Aug.</span></p>
+    </div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-3"></div></div>
-    <div class="gd-snum">07 / 08</div>
-    <p class="gd-eyebrow">Try it tonight</p>
-    <h2 class="gd-h1" style="font-size:80px">Graphify <span class="gd-grad">your folders</span></h2>
-    <p class="gd-cmd" style="margin-top:22px">$ npm i -g @lewis/graphify</p>
-    <p class="gd-cmd" style="margin-top:10px;color:var(--gd-warm);text-shadow:0 0 30px rgba(232,168,124,.45)">$ graphify ~/obsidian-vault</p>
-    <div style="margin-top:32px">
-      <span class="gd-tag">#knowledge-graph</span>
-      <span class="gd-tag">#open-source</span>
-      <span class="gd-tag">#claude-agent</span>
-      <span class="gd-tag">#obsidian</span>
-      <span class="gd-tag">#d3-force</span>
+    <div class="snum">07 / 08</div>
+    <p class="eyebrow in">Measure of Success</p>
+    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">North star: <span class="ac">long-tail install share</span></h2>
+    <p class="cmd in" style="margin-top:30px">$ od plugin marketplace --track long-tail-install-share</p>
+    <p class="cta-dl in">→ Target: long-tail install share 24% → 45% by Q4</p>
+    <div class="tags in">
+      <span class="tag">#review-sla-under-72h</span>
+      <span class="tag">#creator-payout-on-time</span>
+      <span class="tag">#support-tickets-flat</span>
+      <span class="tag">#nps-unchanged</span>
     </div>
   </section>
 
   <!-- 8. THANKS -->
-  <section class="slide">
-    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
-    <div class="gd-snum">08 / 08</div>
-    <div style="margin:auto 0;text-align:center">
-      <div class="gd-big gd-rainbow" style="font-size:180px">Thanks.</div>
-      <p class="gd-lede" style="margin:28px auto 0">github.com/lewis/graphify · 欢迎 star / issue / PR</p>
+  <section class="slide thanks">
+    <div class="snum">08 / 08</div>
+    <div style="margin:auto 0">
+      <h1 class="big in">Approve<span class="ac">.</span></h1>
+      <p class="lede in">Option B — reviewed marketplace with revenue share. Sign-off requested from PM, Eng, Design, and Leadership by Jul 21.</p>
     </div>
   </section>
 

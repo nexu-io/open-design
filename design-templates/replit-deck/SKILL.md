@@ -1,25 +1,34 @@
 ---
 name: replit-deck
+en_name: "Write a Feature Business Case like a Principal PM"
+zh_name: "像 Principal PM 一样写功能商业论证"
 description: |
-  Single-file horizontal-swipe HTML deck in the style of Replit Slides's
-  landing-page template gallery. Eight distinct themes (helix, holm, vance,
-  bevel, world-dark, world-mint, atlas, bluehouse) — each a complete visual
-  system (palette + type + accent) captured from replit.com/slides. Pick one
-  theme, do not mix. For pitch decks, board reports, brand memos, campaign
-  reveals — when the user explicitly wants "Replit Slides style".
+  For product and technical management work: turn PRDs, roadmaps, RFCs, architecture reviews, and retros into decision documents. Built around the core query "pm-feature-business-case-deck", with product strategy lead judgment, buyer-ready proof, and this outcome: approve the feature, architecture, roadmap, or incident follow-up.
+en_description: |
+  For product and technical management work: turn PRDs, roadmaps, RFCs, architecture reviews, and retros into decision documents. Built around the core query "pm-feature-business-case-deck", with product strategy lead judgment, buyer-ready proof, and this outcome: approve the feature, architecture, roadmap, or incident follow-up.
+zh_description: |
+  产品/技术管理场景：围绕 core query「pm-feature-business-case-deck」把粗糙材料整理成“像 Principal PM 一样写功能商业论证”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。
+tags:
+  - "product-management"
+  - "pm-feature-business-case-deck"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "replit-deck"
 triggers:
-  - "replit deck"
-  - "replit slides"
-  - "replit 风格 ppt"
-  - "replit style deck"
-  - "helix deck"
-  - "holm memo"
-  - "atlas chapter"
-  - "bluehouse"
-  - "bevel campaign"
+  - "pm-feature-business-case-deck"
+  - "product-management"
+  - "Write a Feature Business Case like a Principal PM"
+  - "像 Principal PM 一样写功能商业论证"
+  - "product"
+  - "roadmap"
+  - "architecture"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: product
   preview:
     type: html
     entry: index.html
@@ -47,6 +56,8 @@ od:
       # 6 is a board-update baseline. Memos and campaign decks usually land
       # at 3–4 (see example-holm / example-bluehouse). Long-form chapters
       # (atlas) can run 8–12. Don't pad to hit the default.
+  scenario: "product"
+  example_prompt: "Create \"Write a Feature Business Case like a Principal PM\" as a Product and technical management deck in the Replit Deck visual system. Scene: pm-feature-business-case-deck. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 
 # Replit Deck Skill

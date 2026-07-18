@@ -3,22 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Presentation Template</title>
+  <title>Present a Quarterly Business Review like a Chief of Staff - Corporate strategy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
     :root {
       --bg: #fdfae7;
-      --primary: #1e2bfa;
-      --text: #111111;
-      --text-muted: #6b6b6b;
-      --text-light: #9a9a9a;
-      --accent-light: rgba(30, 43, 250, 0.08);
-      --accent-medium: rgba(30, 43, 250, 0.15);
-      --border: rgba(30, 43, 250, 0.2);
-      --card-bg: rgba(30, 43, 250, 0.04);
+      --primary: #002fa7;
+      --text: #181610;
+      --text-muted: #54513f;
+      --text-light: #6e6a59;
+      --accent-light: rgba(0, 47, 167, 0.06);
+      --accent-medium: rgba(0, 47, 167, 0.14);
+      --border: rgba(0, 47, 167, 0.28);
+      --hairline: rgba(24, 22, 16, 0.16);
+      --font-display: 'Archivo', 'Helvetica Neue', sans-serif;
+      --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
     }
 
     * {
@@ -31,9 +33,10 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: 'Inter', sans-serif;
+      font-family: var(--font-display);
       background: var(--bg);
       color: var(--text);
+      -webkit-font-smoothing: antialiased;
     }
 
     /* Slide container */
@@ -59,7 +62,7 @@
       opacity: 0;
       pointer-events: none;
       transform: translateX(40px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
+      transition: opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1);
       overflow: hidden;
     }
 
@@ -76,33 +79,39 @@
 
     /* Typography */
     h1, h2, h3, h4 {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-weight: 600;
       line-height: 1.1;
       letter-spacing: -0.02em;
     }
 
     h1 {
-      font-size: clamp(2.8rem, 5vw, 4.2rem);
-      font-weight: 700;
+      font-size: clamp(2.8rem, 5.2vw, 4.4rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 0.98;
     }
 
     h2 {
       font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
       margin-bottom: 1.5rem;
+      max-width: 30ch;
     }
 
     h3 {
       font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-      font-weight: 500;
+      font-weight: 600;
       line-height: 1.3;
     }
 
     h4 {
-      font-size: clamp(0.85rem, 1.2vw, 1rem);
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: clamp(0.72rem, 1vw, 0.82rem);
+      font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.14em;
       color: var(--primary);
     }
 
@@ -126,13 +135,15 @@
     }
 
     .slide-header .tag {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
       font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
       color: var(--primary);
-      background: var(--accent-light);
-      padding: 0.35rem 0.9rem;
-      border-radius: 100px;
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.8rem;
+      border-radius: 0;
     }
 
     /* Slide content area */
@@ -157,15 +168,15 @@
     .nav-btn {
       width: 44px;
       height: 44px;
-      border-radius: 50%;
-      border: 1.5px solid var(--border);
+      border-radius: 0;
+      border: 1px solid var(--border);
       background: var(--bg);
       color: var(--primary);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s ease;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1), color 0.2s cubic-bezier(.16,1,.3,1), border-color 0.2s cubic-bezier(.16,1,.3,1);
       font-size: 1.1rem;
     }
 
@@ -181,8 +192,8 @@
     }
 
     .slide-counter {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
       font-weight: 500;
       color: var(--text-muted);
       letter-spacing: 0.05em;
@@ -204,10 +215,9 @@
 
     /* Decorative elements */
     .accent-line {
-      width: 60px;
-      height: 4px;
+      width: 56px;
+      height: 3px;
       background: var(--primary);
-      border-radius: 2px;
       margin-bottom: 1.5rem;
     }
 
@@ -215,7 +225,6 @@
       width: 8px;
       height: 8px;
       background: var(--primary);
-      border-radius: 50%;
       display: inline-block;
     }
 
@@ -243,37 +252,31 @@
     }
 
     .layout-cover .meta {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
-      color: var(--text-light);
-      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .layout-cover .cover-decoration {
       position: absolute;
       top: 0;
       right: 0;
-      width: 35vw;
+      width: 30vw;
       height: 100vh;
-      background: var(--accent-light);
-      clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
-    }
-
-    .layout-cover .cover-dots {
-      position: absolute;
-      bottom: 12vh;
-      right: 8vw;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      opacity: 0.25;
-    }
-
-    .layout-cover .cover-dots .dot {
-      width: 6px;
-      height: 6px;
       background: var(--primary);
-      border-radius: 50%;
+      clip-path: polygon(42% 0, 100% 0, 100% 100%, 0% 100%);
+    }
+
+    .layout-cover .cover-mark {
+      position: absolute;
+      top: 8vh;
+      right: 5vw;
+      z-index: 2;
+      width: 44px;
+      height: 3px;
+      background: var(--bg);
     }
 
     /* ============================================================
@@ -293,23 +296,23 @@
       display: flex;
       gap: 1.2rem;
       align-items: center;
-      padding: 1rem 1.2rem;
-      border-radius: 12px;
-      transition: background 0.2s ease;
-      border-bottom: 1px solid var(--border);
+      padding: 1rem 0.4rem;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1);
+      border-bottom: 1px solid var(--hairline);
     }
 
     .agenda-item:hover {
-      background: var(--card-bg);
+      background: var(--accent-light);
     }
 
     .agenda-num {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.8rem;
-      font-weight: 700;
+      font-family: var(--font-mono);
+      font-size: 1.45rem;
+      font-weight: 500;
       color: var(--primary);
       line-height: 1;
-      min-width: 36px;
+      min-width: 44px;
+      font-variant-numeric: tabular-nums;
     }
 
     .agenda-item h3 {
@@ -343,18 +346,22 @@
       display: flex;
       flex-direction: column;
       gap: 0.7rem;
-      padding: 1.5rem 1.6rem;
-      border-radius: 14px;
-      border: 1.5px solid var(--border);
-      background: var(--card-bg);
+      padding: 1.5rem 1.6rem 1.5rem 0;
+      border-top: 2px solid var(--text);
+    }
+
+    .metric-card:first-child {
+      border-top-color: var(--primary);
     }
 
     .metric-card .metric-value {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(2.2rem, 3.4vw, 3rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.03em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .metric-card .metric-label {
@@ -377,7 +384,7 @@
       gap: 0.45rem;
       margin: 0.2rem 0 0;
       padding: 0.7rem 0 0;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     .metric-card .metric-supports li {
@@ -389,24 +396,27 @@
     }
 
     .metric-card .metric-supports li::before {
-      content: '—';
+      content: '';
       position: absolute;
       left: 0;
-      color: var(--text-light);
+      top: 0.65em;
+      width: 10px;
+      height: 1px;
+      background: var(--primary);
     }
 
     .metric-card .metric-change {
       display: inline-flex;
       align-items: center;
       gap: 0.3rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       margin-top: 0.3rem;
     }
 
-    .metric-change.positive { color: #059669; }
-    .metric-change.negative { color: #dc2626; }
+    .metric-change.positive { color: var(--primary); }
+    .metric-change.negative { color: var(--primary); }
 
     /* ============================================================
        LAYOUT 4: Data Dashboard (6 stat grid)
@@ -430,10 +440,8 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-      padding: 1.4rem 1.5rem;
-      border-radius: 12px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1.4rem 1.5rem 1.4rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .stat-cell .stat-top {
@@ -443,11 +451,13 @@
     }
 
     .stat-cell .stat-num {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.4vw, 2.1rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.025em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-cell .stat-unit {
@@ -468,7 +478,7 @@
       color: var(--text-light);
       line-height: 1.4;
       padding-top: 0.4rem;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     /* ============================================================
@@ -496,7 +506,7 @@
 
     .split-right {
       padding-left: 2.5rem;
-      border-left: 2px solid var(--border);
+      border-left: 1px solid var(--hairline);
     }
 
     .insight-list {
@@ -522,24 +532,23 @@
       position: absolute;
       left: 0;
       top: 0;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       color: var(--primary);
       letter-spacing: 0.05em;
-      line-height: 1.7;
+      line-height: 1.85;
     }
 
     .split-highlight {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.15rem, 1.55vw, 1.5rem);
       font-weight: 500;
       color: var(--text);
       line-height: 1.4;
       padding: 1.3rem 1.5rem;
       background: var(--accent-light);
-      border-radius: 12px;
-      border-left: 4px solid var(--primary);
+      border-left: 3px solid var(--primary);
     }
 
     .split-highlight cite {
@@ -561,18 +570,18 @@
     }
 
     .mini-stat {
-      padding: 0.9rem 1rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 0.9rem 1rem 0.9rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .mini-stat .mini-val {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.5rem;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.02em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .mini-stat .mini-label {
@@ -610,9 +619,8 @@
     }
 
     .bar-track {
-      height: 28px;
+      height: 26px;
       background: var(--accent-light);
-      border-radius: 6px;
       overflow: hidden;
       position: relative;
     }
@@ -620,17 +628,17 @@
     .bar-fill {
       height: 100%;
       background: var(--primary);
-      border-radius: 6px;
-      transition: width 0.8s ease;
+      transition: width 0.8s cubic-bezier(.16,1,.3,1);
     }
 
     .bar-pct {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.95rem;
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
       font-weight: 600;
       color: var(--primary);
       min-width: 45px;
       text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .bar-note {
@@ -649,17 +657,16 @@
     }
 
     .layout-quote .quote-mark {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 8rem;
+      font-family: var(--font-display);
+      font-size: 3.4rem;
       font-weight: 700;
       color: var(--primary);
-      opacity: 0.15;
-      line-height: 0.5;
-      margin-bottom: 1rem;
+      line-height: 0.6;
+      margin-bottom: 1.6rem;
     }
 
     .layout-quote blockquote {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.8vw, 2.4rem);
       font-weight: 500;
       line-height: 1.35;
@@ -678,24 +685,12 @@
       font-weight: 600;
     }
 
-    .layout-quote .quote-decoration {
-      position: absolute;
-      top: 10vh;
-      left: 5vw;
-      width: 80px;
-      height: 80px;
-      border: 2px solid var(--border);
-      border-radius: 50%;
-    }
-
-    .layout-quote .quote-decoration-2 {
-      position: absolute;
-      bottom: 12vh;
-      right: 6vw;
-      width: 60px;
-      height: 60px;
-      background: var(--accent-light);
-      border-radius: 50%;
+    /* Quote slide chrome: a single hairline rule above the attribution,
+       in place of the former floating decoration squares. */
+    .layout-quote .quote-source {
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--hairline);
+      min-width: 280px;
     }
 
     /* ============================================================
@@ -705,9 +700,10 @@
       display: flex;
       gap: 1.5rem;
       flex: 1;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       margin-top: 0.5rem;
+      padding-top: 8vh;
     }
 
     .timeline-step {
@@ -725,32 +721,33 @@
       top: 28px;
       right: -0.75rem;
       width: 1.5rem;
-      height: 2px;
-      background: var(--border);
+      height: 1px;
+      background: var(--text);
     }
 
     .step-circle {
       width: 56px;
       height: 56px;
-      border-radius: 50%;
       background: var(--primary);
       color: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.3rem;
       font-weight: 700;
       margin-bottom: 1.2rem;
       flex-shrink: 0;
     }
 
-    .timeline-step:nth-child(2) .step-circle { opacity: 0.85; }
-    .timeline-step:nth-child(3) .step-circle { opacity: 0.7; }
-    .timeline-step:nth-child(4) .step-circle { opacity: 0.55; }
+    .timeline-step:nth-child(n+2) .step-circle {
+      background: var(--bg);
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
 
     .step-title {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(0.95rem, 1.4vw, 1.15rem);
       font-weight: 600;
       color: var(--text);
@@ -783,10 +780,8 @@
     }
 
     .detail-block {
-      padding: 1rem 1.2rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1rem 1.2rem 1rem 1.1rem;
+      border-left: 2px solid var(--primary);
     }
 
     .detail-block h3 {
@@ -813,10 +808,9 @@
       content: '';
       position: absolute;
       left: 0;
-      top: 0.55rem;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
+      top: 0.65rem;
+      width: 8px;
+      height: 1px;
       background: var(--primary);
     }
 
@@ -846,21 +840,20 @@
 
     .layout-closing .cta-btn {
       display: inline-block;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 0.95rem;
       font-weight: 600;
       color: var(--bg);
       background: var(--primary);
       padding: 0.9rem 2.2rem;
-      border-radius: 100px;
       text-decoration: none;
       letter-spacing: 0.02em;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s cubic-bezier(.16,1,.3,1), opacity 0.2s cubic-bezier(.16,1,.3,1);
     }
 
     .layout-closing .cta-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(30, 43, 250, 0.25);
+      opacity: 0.9;
     }
 
     .layout-closing .closing-contact {
@@ -869,29 +862,16 @@
       color: var(--text-light);
     }
 
+    /* Closing slide mirrors the cover: same cobalt diagonal panel,
+       anchored to the left edge, instead of concentric rotated squares. */
     .layout-closing .closing-decoration {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 500px;
-      height: 500px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.4;
-      pointer-events: none;
-    }
-
-    .layout-closing .closing-decoration-2 {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 360px;
-      height: 360px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.3;
+      top: 0;
+      left: 0;
+      width: 18vw;
+      height: 62vh;
+      background: var(--primary);
+      clip-path: polygon(0 0, 100% 0, 0 100%);
       pointer-events: none;
     }
 
@@ -907,15 +887,29 @@
       opacity: 0.6;
     }
 
+    /* Reduced motion: keep slide swaps instant, no translate */
+    @media (prefers-reduced-motion: reduce) {
+      .slide,
+      .bar-fill,
+      .nav-btn,
+      .agenda-item,
+      .layout-closing .cta-btn,
+      .progress-bar {
+        transition: none !important;
+      }
+      .slide { transform: none; }
+      .slide.prev { transform: none; }
+    }
+
     /* Responsive adjustments for very small heights */
     @media (max-height: 700px) {
       .slide { padding: 2.5vh 3vw; }
       .layout-agenda .agenda-grid { gap: 0.8rem 2rem; }
-      .agenda-item { padding: 0.8rem; }
-      .metric-card { padding: 1rem; }
+      .agenda-item { padding: 0.8rem 0.4rem; }
+      .metric-card { padding: 1rem 1rem 1rem 0; }
       .layout-bars .bars-container { gap: 0.5rem; }
       .bar-item { padding: 0.4rem 0; }
-      .detail-block { padding: 0.8rem 1rem; }
+      .detail-block { padding: 0.8rem 1rem 0.8rem 1.1rem; }
     }
   </style>
 </head>
@@ -926,15 +920,11 @@
     <!-- SLIDE 1: Cover -->
     <div class="slide layout-cover active">
       <div class="cover-decoration"></div>
-      <div class="cover-dots">
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-      </div>
+      <div class="cover-mark"></div>
       <div class="accent-line"></div>
-      <h1>Market Outlook &amp;<br>Strategic Priorities</h1>
-      <p class="subtitle">An analytical overview of emerging trends, shifting investor sentiment, and the key decisions shaping the next growth cycle.</p>
-      <p class="meta">Q2 2026 &nbsp;&middot;&nbsp; Confidential</p>
+      <h1>Q2 FY26 Quarterly Business Review</h1>
+      <p class="subtitle">Open Design: what moved, what stalled, and the resource reallocation ask for the second half of the year.</p>
+      <p class="meta">Office of the Chief of Staff &nbsp;&middot;&nbsp; For the Executive Committee &nbsp;&middot;&nbsp; Confidential</p>
     </div>
 
     <!-- SLIDE 2: Agenda -->
@@ -949,43 +939,43 @@
           <div class="agenda-item">
             <span class="agenda-num">01</span>
             <div>
-              <h3>Executive Summary</h3>
-              <p>High-level findings and key takeaways from the latest quarterly assessment.</p>
+              <h3>The Answer</h3>
+              <p>This quarter in one line: adoption compounded, conversion to paid stalled.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">02</span>
             <div>
-              <h3>Macroeconomic Sentiment</h3>
-              <p>Investor perspectives on growth, inflation, and risk factors in the current environment.</p>
+              <h3>The Evidence</h3>
+              <p>Twelve numbers explaining why growth beat plan while revenue readiness lagged.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">03</span>
             <div>
-              <h3>Capital Allocation Trends</h3>
-              <p>How portfolios are shifting in response to policy changes and volatility signals.</p>
+              <h3>The Options</h3>
+              <p>Three paths to close the BYOK-to-paid gap, ranked by projected lift per dollar.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">04</span>
             <div>
-              <h3>Strategic Recommendations</h3>
-              <p>Actionable priorities for leadership teams navigating an uncertain landscape.</p>
+              <h3>The Risks</h3>
+              <p>Where the plan breaks: contributor concentration, provider exposure, channel dependence.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">05</span>
             <div>
-              <h3>Risk &amp; Opportunity Matrix</h3>
-              <p>Evaluating the trade-offs between defensive positioning and offensive growth bets.</p>
+              <h3>The Decision Ask</h3>
+              <p>The specific reallocation the committee is asked to approve today.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">06</span>
             <div>
-              <h3>Conclusion &amp; Next Steps</h3>
-              <p>Summary of implications and recommended follow-up actions for stakeholders.</p>
+              <h3>Owners &amp; Timeline</h3>
+              <p>Who is accountable for each workstream, and the gate date for the next review.</p>
             </div>
           </div>
         </div>
@@ -995,49 +985,49 @@
     <!-- SLIDE 3: Key Metrics -->
     <div class="slide layout-metrics">
       <div class="slide-header">
-        <h4>Executive Summary</h4>
-        <span class="tag">Key Findings</span>
+        <h4>The Answer</h4>
+        <span class="tag">What Moved</span>
       </div>
       <div class="slide-content">
-        <h2>Sentiment has shifted measurably from the prior quarter</h2>
+        <h2>Community growth outpaced plan; monetization readiness did not</h2>
         <div class="metrics-row">
           <div class="metric-card">
-            <div class="metric-value">73%</div>
-            <div class="metric-label">Bullish on three-year outlook</div>
-            <div class="metric-desc">An all-time series high, reflecting renewed confidence in medium-term fundamentals despite near-term uncertainty.</div>
+            <div class="metric-value">68K</div>
+            <div class="metric-label">GitHub stars, up from 61K last quarter</div>
+            <div class="metric-desc">Organic adoption accelerated with no paid marketing spend, driven by two integration threads that went viral on their own.</div>
             <ul class="metric-supports">
-              <li>Highest reading since the survey began in 2018</li>
-              <li>Cross-sector consensus, led by tech and industrials</li>
-              <li>Driven by clarity on rate trajectory and AI capex</li>
+              <li>Beat the quarterly plan of 65K by 3K</li>
+              <li>Fastest single-quarter gain since launch</li>
+              <li>No paid acquisition dollars behind the spike</li>
             </ul>
             <div class="metric-change positive">
-              <span>&uarr;</span> +11 pts vs. prior quarter
+              <span>&uarr;</span> +7K stars this quarter, ahead of plan
             </div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">55%</div>
-            <div class="metric-label">Expect recession before year-end</div>
-            <div class="metric-desc">Down significantly from the prior reading, indicating easing fears of a severe or prolonged contraction.</div>
+            <div class="metric-value">312</div>
+            <div class="metric-label">Active contributors merging code</div>
+            <div class="metric-desc">The contributor base held roughly flat even as the plugin catalog nearly doubled, a sign the community ceiling is close.</div>
             <ul class="metric-supports">
-              <li>Soft-landing scenario now the modal expectation</li>
-              <li>Median timeline pushed from Q2 to Q4</li>
-              <li>Severity expectations also moderated meaningfully</li>
-            </ul>
-            <div class="metric-change positive">
-              <span>&darr;</span> -36 pts vs. prior quarter
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">4.5%</div>
-            <div class="metric-label">Median inflation expectation</div>
-            <div class="metric-desc">Investors expect price pressures to remain elevated through the end of the current calendar year.</div>
-            <ul class="metric-supports">
-              <li>Wage and services inflation remain the stickiest</li>
-              <li>Energy disinflation slower than originally modeled</li>
-              <li>Long-run anchor steady at 3% for the next decade</li>
+              <li>+8 contributors vs. a planned +40</li>
+              <li>Top 5 contributors now ship 40% of merged PRs</li>
+              <li>Onboarding time to first merge improved sharply</li>
             </ul>
             <div class="metric-change negative">
-              <span>&uarr;</span> +0.3 pts vs. prior quarter
+              <span>&rarr;</span> 32 contributors short of the Q2 plan
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">6%</div>
+            <div class="metric-label">BYOK users who added any paid connector</div>
+            <div class="metric-desc">Conversion from free local usage to a paid surface is the quarter's clearest shortfall against the target we set entering Q2.</div>
+            <ul class="metric-supports">
+              <li>Target for the quarter was 15%</li>
+              <li>Enterprise pilot conversations: 3 opened, 0 closed</li>
+              <li>Root cause traced to the split slide next</li>
+            </ul>
+            <div class="metric-change negative">
+              <span>&darr;</span> 9 pts below the target we set in Q1
             </div>
           </div>
         </div>
@@ -1047,59 +1037,59 @@
     <!-- SLIDE 4: Dashboard -->
     <div class="slide layout-dashboard">
       <div class="slide-header">
-        <h4>Macroeconomic Sentiment</h4>
-        <span class="tag">Data Overview</span>
+        <h4>The Evidence</h4>
+        <span class="tag">By The Numbers</span>
       </div>
       <div class="slide-content">
-        <h2>Current perspectives on the economy and markets</h2>
+        <h2>Twelve numbers the committee should hold in their head</h2>
         <div class="stats-grid">
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">22%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">232</span>
+              <span class="stat-unit">in the catalog</span>
             </div>
-            <div class="stat-name">Bullish for the current calendar year</div>
-            <div class="stat-context">Steady from prior quarter, anchored by tariff and policy uncertainty.</div>
+            <div class="stat-name">Community plugins shipped</div>
+            <div class="stat-context">Up from 134 last quarter, the fastest catalog growth since launch.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">51%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">142</span>
+              <span class="stat-unit">ready to use</span>
             </div>
-            <div class="stat-name">Bullish for the next calendar year</div>
-            <div class="stat-context">Up from 38% last quarter as the rate path firms up.</div>
+            <div class="stat-name">Design systems available</div>
+            <div class="stat-context">Up from 96 last quarter, imported from GitHub, Figma, and local files.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">60%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">4.8</span>
+              <span class="stat-unit">days, median</span>
             </div>
-            <div class="stat-name">More bullish on the economy than three months ago</div>
-            <div class="stat-context">A 22-point improvement, the largest sentiment swing in two years.</div>
+            <div class="stat-name">Time to a contributor's first merged PR</div>
+            <div class="stat-context">Down from 9.1 days after the new onboarding doc shipped in April.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">53%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">21</span>
+              <span class="stat-unit">zero config</span>
             </div>
-            <div class="stat-name">More bullish on equities than three months ago</div>
-            <div class="stat-context">Tech and financials led the upgrade; energy and utilities lag.</div>
+            <div class="stat-name">Coding agents supported</div>
+            <div class="stat-context">Auto-detected from PATH; unchanged this quarter, a stable foundation.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">3.6%</span>
-              <span class="stat-unit">median</span>
+              <span class="stat-num">3</span>
+              <span class="stat-unit">opened, 0 closed</span>
             </div>
-            <div class="stat-name">Expected inflation rate for the next two years</div>
-            <div class="stat-context">Down 0.4 pts; long-run expectations remain anchored at 3.0%.</div>
+            <div class="stat-name">Enterprise pilot conversations</div>
+            <div class="stat-context">All three are actively engaged; none has reached a signed pilot yet.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">2.7%</span>
-              <span class="stat-unit">median</span>
+              <span class="stat-num">-18%</span>
+              <span class="stat-unit">per active workspace</span>
             </div>
-            <div class="stat-name">Expected real GDP growth for the next two years</div>
-            <div class="stat-context">A modest upgrade reflecting easing recession fears.</div>
+            <div class="stat-name">Quarterly infrastructure cost</div>
+            <div class="stat-context">BYOK keeps hosting costs down as usage grows, freeing budget to reallocate.</div>
           </div>
         </div>
       </div>
@@ -1108,42 +1098,42 @@
     <!-- SLIDE 5: Two Column -->
     <div class="slide layout-split">
       <div class="slide-header">
-        <h4>Investor Priorities</h4>
-        <span class="tag">Analysis</span>
+        <h4>What Stalled</h4>
+        <span class="tag">Root Cause</span>
       </div>
       <div class="slide-content">
-        <h2>What investors want companies to focus on right now</h2>
+        <h2>The funnel breaks at the handoff from installed to paid</h2>
         <div class="split-body">
           <div class="split-left">
             <ul class="insight-list">
-              <li>Growth and protecting the top line remain the leading priority, cited by a clear majority as essential in the current cycle.</li>
-              <li>Cash flow resilience has risen sharply in importance as liquidity conditions tightened across credit markets through Q3.</li>
-              <li>Supply chain stability ranks consistently high, reflecting the lasting operational scars of recent global disruptions.</li>
-              <li>Margin preservation and cost discipline have moved from defensive levers to first-line strategy in investor conversations.</li>
-              <li>AI capex remains the most-discussed structural theme, but with rising attention to monetization timelines.</li>
+              <li>Most new users install locally, connect their own model keys, and never see a moment that asks them to upgrade.</li>
+              <li>There is no in-product nudge at the point where a workspace outgrows a single BYOK connector.</li>
+              <li>Enterprise buyers ask for SSO, seat management, and a support SLA &mdash; none of which exist today.</li>
+              <li>The three open enterprise conversations have stalled on procurement, not on product interest.</li>
+              <li>The growth spike this quarter came from a single external thread, not a repeatable channel.</li>
             </ul>
           </div>
           <div class="split-right">
             <div class="split-highlight">
-              "The shift from growth-at-all-costs to profitable, sustainable expansion is the defining theme of this cycle."
-              <cite>Senior PM, multi-strategy fund</cite>
+              "Our funnel isn't broken at the top. It's broken at the handoff from 'installed' to 'depends on us.'"
+              <cite>Head of Product, Open Design</cite>
             </div>
             <div class="mini-stat-row">
               <div class="mini-stat">
-                <div class="mini-val">63%</div>
-                <div class="mini-label">Prioritize top-line growth</div>
+                <div class="mini-val">0</div>
+                <div class="mini-label">In-app upgrade prompts today</div>
               </div>
               <div class="mini-stat">
-                <div class="mini-val">55%</div>
-                <div class="mini-label">Prioritize cash flow resilience</div>
+                <div class="mini-val">3</div>
+                <div class="mini-label">Enterprise asks for SSO / SLA</div>
               </div>
               <div class="mini-stat">
-                <div class="mini-val">33%</div>
-                <div class="mini-label">Prioritize supply chain stability</div>
+                <div class="mini-val">1</div>
+                <div class="mini-label">Channel behind this quarter's growth</div>
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.55; margin: 0;">
-              Notably absent from the top of the list: ESG-led capital allocation, which has dropped 24 points year-over-year as investors recalibrate toward returns-first mandates.
+              None of this is a demand problem. It is a resourcing problem: no one on the team currently owns activation.
             </p>
           </div>
         </div>
@@ -1153,60 +1143,60 @@
     <!-- SLIDE 6: Bar Chart -->
     <div class="slide layout-bars">
       <div class="slide-header">
-        <h4>Risk Factors</h4>
-        <span class="tag">Ranking</span>
+        <h4>The Options</h4>
+        <span class="tag">Resource Reallocation</span>
       </div>
       <div class="slide-content">
-        <h2>Most important macroeconomic concerns among investors</h2>
+        <h2>Three paths to close the gap, ranked by projected lift per dollar</h2>
         <div class="bars-container">
           <div class="bar-item">
-            <div class="bar-label">Consumer price inflation</div>
+            <div class="bar-label">In-app upgrade nudges at BYOK setup</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 79%"></div>
+              <div class="bar-fill" style="width: 82%"></div>
             </div>
-            <div class="bar-pct">79%</div>
+            <div class="bar-pct">82</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Interest rates &amp; central bank policy</div>
+            <div class="bar-label">Enterprise packaging &mdash; SSO, seats, SLA</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 69%"></div>
+              <div class="bar-fill" style="width: 74%"></div>
             </div>
-            <div class="bar-pct">69%</div>
+            <div class="bar-pct">74</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Geopolitical risks</div>
+            <div class="bar-label">Paid connector marketplace revenue share</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 39%"></div>
+              <div class="bar-fill" style="width: 61%"></div>
             </div>
-            <div class="bar-pct">39%</div>
+            <div class="bar-pct">61</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Liquidity tightening in capital markets</div>
+            <div class="bar-label">Usage-based hosted tier for teams</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 37%"></div>
+              <div class="bar-fill" style="width: 55%"></div>
             </div>
-            <div class="bar-pct">37%</div>
+            <div class="bar-pct">55</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Asset price volatility</div>
+            <div class="bar-label">Direct outreach to top 200 workspaces</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 25%"></div>
+              <div class="bar-fill" style="width: 47%"></div>
             </div>
-            <div class="bar-pct">25%</div>
+            <div class="bar-pct">47</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Public-sector debt &amp; spending</div>
+            <div class="bar-label">Paid design-system marketplace</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 22%"></div>
+              <div class="bar-fill" style="width: 33%"></div>
             </div>
-            <div class="bar-pct">22%</div>
+            <div class="bar-pct">33</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Climate &amp; ESG-related risks</div>
+            <div class="bar-label">Sponsored plugin placements on home rail</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 18%"></div>
+              <div class="bar-fill" style="width: 21%"></div>
             </div>
-            <div class="bar-pct">18%</div>
+            <div class="bar-pct">21</div>
           </div>
         </div>
       </div>
@@ -1214,43 +1204,41 @@
 
     <!-- SLIDE 7: Quote -->
     <div class="slide layout-quote">
-      <div class="quote-decoration"></div>
-      <div class="quote-decoration-2"></div>
       <div class="quote-mark">&ldquo;</div>
       <blockquote>
-        In this environment, the companies that will win are those that can balance operational discipline with strategic flexibility.
+        We don't need more top-of-funnel. We need two engineers on activation, funded by pausing paid acquisition for two quarters.
       </blockquote>
-      <p class="quote-source"><strong>Senior Partner, Strategy Practice</strong> &mdash; Global Investment Forum 2026</p>
+      <p class="quote-source"><strong>Head of Growth</strong> &mdash; Open Design, Q2 planning review</p>
     </div>
 
     <!-- SLIDE 8: Timeline -->
     <div class="slide layout-timeline">
       <div class="slide-header">
-        <h4>Strategic Roadmap</h4>
-        <span class="tag">Process</span>
+        <h4>The Decision Ask</h4>
+        <span class="tag">Roadmap</span>
       </div>
       <div class="slide-content">
-        <h2>Recommended approach to navigating the current cycle</h2>
+        <h2>What approval today sets in motion</h2>
         <div class="timeline-track">
           <div class="timeline-step">
             <div class="step-circle">1</div>
-            <div class="step-title">Assess Resilience</div>
-            <div class="step-desc">Evaluate balance sheet strength and operational buffers under stress scenarios.</div>
+            <div class="step-title">Approve the Reallocation</div>
+            <div class="step-desc">Shift $180K per quarter from paid acquisition into a dedicated activation pod, effective next sprint.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">2</div>
-            <div class="step-title">Protect Core Revenue</div>
-            <div class="step-desc">Defend market position and pricing power in segments with durable demand.</div>
+            <div class="step-title">Stand Up the Pod</div>
+            <div class="step-desc">Two engineers and one PM move from growth marketing into product, reporting to the Head of Product.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">3</div>
-            <div class="step-title">Optimize Costs</div>
-            <div class="step-desc">Streamline overhead while preserving capacity for high-return investments.</div>
+            <div class="step-title">Ship &amp; Measure</div>
+            <div class="step-desc">Launch upgrade nudges and enterprise packaging; track conversion weekly against the 10% gate.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">4</div>
-            <div class="step-title">Selective Growth</div>
-            <div class="step-desc">Deploy capital toward opportunities with clear path to profitability.</div>
+            <div class="step-title">Go / No-Go Review</div>
+            <div class="step-desc">Keep the pod funded if conversion clears 10% by the Q4 QBR; otherwise return the budget to acquisition.</div>
           </div>
         </div>
       </div>
@@ -1259,61 +1247,61 @@
     <!-- SLIDE 9: Detail -->
     <div class="slide layout-detail">
       <div class="slide-header">
-        <h4>Deep Dive</h4>
-        <span class="tag">Detailed Analysis</span>
+        <h4>Risks &amp; Owners</h4>
+        <span class="tag">Before You Approve</span>
       </div>
       <div class="slide-content">
-        <h2>Changes in investment practices and valuation frameworks</h2>
+        <h2>What could break this plan, and who is accountable</h2>
         <div class="detail-body">
           <div class="detail-col">
             <div class="detail-block">
-              <h3>Assuming higher cost of capital</h3>
+              <h3>Contributor concentration</h3>
               <ul>
-                <li>Using elevated discount rates to reflect tighter monetary conditions</li>
-                <li>Shifting hurdle rates for internal capital allocation decisions</li>
-                <li>Emphasizing shorter payback periods for new projects</li>
+                <li>Top 5 contributors ship 40% of merged code</li>
+                <li>No documented succession for core maintainers</li>
+                <li>Mitigation: formalize a second-tier maintainer track this quarter</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>More conservative valuation approach</h3>
+              <h3>Provider pricing exposure</h3>
               <ul>
-                <li>Greater weight assigned to downside and bear-case scenarios</li>
-                <li>Reduced reliance on long-dated terminal value assumptions</li>
-                <li>Increased sensitivity analysis around key drivers</li>
+                <li>BYOK savings depend on two model providers' current pricing</li>
+                <li>A pricing change could erase the 18% infra cost gain</li>
+                <li>Mitigation: keep at least three providers at production parity</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Value over growth momentum</h3>
+              <h3>Channel dependence</h3>
               <ul>
-                <li>Pivoting toward earnings-supported valuations</li>
-                <li>Favoring demonstrable unit economics over scale narratives</li>
-                <li>Reassessing premium multiples for unprofitable segments</li>
+                <li>This quarter's star growth traces to one external thread</li>
+                <li>No repeatable acquisition motion behind the spike</li>
+                <li>Mitigation: the pod also owns a lightweight referral loop</li>
               </ul>
             </div>
           </div>
           <div class="detail-col">
             <div class="detail-block">
-              <h3>Cash flow &amp; balance sheet focus</h3>
+              <h3>Head of Product &mdash; Activation Pod</h3>
               <ul>
-                <li>Prioritizing free cash flow generation as a key screening metric</li>
-                <li>Analyzing working capital needs under inflationary input costs</li>
-                <li>Reviewing leverage ratios and refinancing schedules</li>
+                <li>Owns the 10% conversion gate and weekly reporting</li>
+                <li>Ships upgrade nudges and enterprise packaging</li>
+                <li>Reports status at the monthly leadership sync</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Bottom-up stock selection</h3>
+              <h3>Head of Platform Engineering &mdash; Provider Diversification</h3>
               <ul>
-                <li>Reducing macro-driven top-down factor exposures</li>
-                <li>Intensifying fundamental research at the security level</li>
-                <li>Building conviction through differentiated data sources</li>
+                <li>Owns the three-provider parity commitment</li>
+                <li>Runs quarterly pricing and reliability reviews</li>
+                <li>Escalates any single-provider dependency risk</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Shorter-term orientation</h3>
+              <h3>CFO / Operations &mdash; Budget &amp; Gate Tracking</h3>
               <ul>
-                <li>Narrowing forecasting windows for revenue and margin</li>
-                <li>More frequent reassessment of position sizing</li>
-                <li>Active hedging around event-driven volatility</li>
+                <li>Owns the $180K reallocation and its reversal criteria</li>
+                <li>Tracks spend against the two-quarter pilot window</li>
+                <li>Prepares the Go / No-Go materials for the Q4 QBR</li>
               </ul>
             </div>
           </div>
@@ -1324,12 +1312,11 @@
     <!-- SLIDE 10: Closing -->
     <div class="slide layout-closing">
       <div class="closing-decoration"></div>
-      <div class="closing-decoration-2"></div>
       <div class="accent-line" style="margin: 0 auto 1.5rem;"></div>
-      <h1>Thank You</h1>
-      <p class="closing-sub">For questions or a deeper discussion of these findings, please reach out to the research team.</p>
-      <a href="#" class="cta-btn">Download Full Report</a>
-      <p class="closing-contact">research@company.com &nbsp;&middot;&nbsp; www.company.com</p>
+      <h1>Approve the Reallocation</h1>
+      <p class="closing-sub">$180K per quarter, moved from paid acquisition to a two-person activation pod, with a 10% conversion gate at the Q4 QBR.</p>
+      <a href="#" class="cta-btn">Approve the Reallocation</a>
+      <p class="closing-contact">Office of the Chief of Staff &nbsp;&middot;&nbsp; Next review: Q4 FY26 QBR</p>
     </div>
 
   </div>

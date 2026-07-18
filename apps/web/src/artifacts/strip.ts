@@ -176,11 +176,16 @@ export interface PersistedArtifactFileRef {
 
 // Mirrors ProjectView's artifactExtensionFor: the on-disk extension the
 // persist path picks from the artifact's type/identifier.
-function artifactExtensionForAttrs(attrs: Record<string, string>): '.html' | '.jsx' | '.tsx' {
+function artifactExtensionForAttrs(
+  attrs: Record<string, string>,
+): '.html' | '.jsx' | '.tsx' | '.css' | '.svg' | '.md' {
   const type = (attrs['type'] || '').toLowerCase();
   const identifier = (attrs['identifier'] || '').toLowerCase();
   if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
   if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) return '.jsx';
+  if (type.includes('css') || identifier.endsWith('.css')) return '.css';
+  if (type.includes('svg') || identifier.endsWith('.svg')) return '.svg';
+  if (type.includes('markdown') || type === 'md' || identifier.endsWith('.md')) return '.md';
   return '.html';
 }
 

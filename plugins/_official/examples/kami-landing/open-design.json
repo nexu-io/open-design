@@ -24,6 +24,7 @@
     "en": "Kami Landing"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Produce a print-grade single-page kami (紙 / 纸) document — warm parchment canvas, ink-blue accent, serif at one weight, no italic, no cool grays. The output reads like a professional white paper or studio one-pager, not an app UI. Multilingual by design (EN · zh-CN · ja). One self-contained HTML file, zero dependencies.",
   "description_i18n": {
     "zh-CN": "生成印刷级单页纸质文档——温暖羊皮纸底色、墨蓝强调色、单一衬线字重，无斜体，无冷灰。输出呈现专业白皮书或工作室单页效果，而非应用 UI。原生多语言支持（EN · zh-CN · ja）。单个独立 HTML 文件，零依赖。",

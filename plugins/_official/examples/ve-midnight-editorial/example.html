@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Present a Financial Review like a Startup CFO - Data, KPI &amp; finance</title>
+<!--
+  ve-midnight-editorial — seed deck for the Open Design plugin.
+  The "midnight-editorial" preset from nicobailon/visual-explainer
+  (plugins/visual-explainer/templates/slide-deck.html), locked as a
+  single-aesthetic deck plugin.
+
+  Signature devices kept intact:
+  - Deep navy #0f1729 page + warm gold #d4a73a accent
+  - Instrument Serif 120px display dropping straight to 14px mono labels
+  - Gold radial accent glow, gold SVG corner marks, ghost section numerals
+  - Cinematic transitions: fade + translateY + scale, staggered child reveals
+  - SlideEngine: keyboard/touch nav, progress bar, dots, counter, hints,
+    hash routing (#/N), explicit dark/light dual theme (T key / ◐ button)
+  - Light mode = cream #faf8f2 + dark gold #b8860b (the locked second skin)
+
+  Changes vs upstream template: mermaid removed entirely — the diagram
+  slide is rebuilt as a pure CSS/SVG pipeline page. Zero external JS.
+  Only external references: Google Fonts @import.
+-->
+<style>
+/* ve-midnight-editorial :: webfonts (Google Fonts @import only — no other external deps) */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+</style>
+<style>
+  /* ============================================================
+     MIDNIGHT EDITORIAL — LOCKED TOKEN SHEET (dark, the default)
+     Preset from nicobailon/visual-explainer slide-deck template.
+     Do not introduce colors or fonts outside this block.
+     ============================================================ */
+  :root {
+    --font-body: 'Instrument Serif', Georgia, serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --bg: #0f1729;
+    --surface: #162040;
+    --surface2: #1d2b52;
+    --surface-elevated: #243362;
+    --border: rgba(200, 180, 140, 0.08);
+    --border-bright: rgba(200, 180, 140, 0.16);
+    --text: #e8e4d8;
+    --text-dim: #9a9484;
+    --accent: #d4a73a;
+    --accent-dim: rgba(212, 167, 58, 0.1);
+    --code-bg: #0a0f1e;
+    --code-text: #d4d0c4;
+    --green: #4ade80;
+    --green-dim: rgba(74, 222, 128, 0.1);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.1);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96, 165, 250, 0.1);
+  }
+
+  /* ============ LOCKED LIGHT THEME (cream / dark gold) ============ */
+  html[data-theme="light"] {
+    --bg: #faf8f2;
+    --surface: #ffffff;
+    --surface2: #f5f0e6;
+    --surface-elevated: #fffdf5;
+    --border: rgba(30, 30, 50, 0.08);
+    --border-bright: rgba(30, 30, 50, 0.16);
+    --text: #1a1814;
+    --text-dim: #6e685c;
+    --accent: #b8860b;
+    --accent-dim: rgba(184, 134, 11, 0.08);
+    --code-bg: #2a2520;
+    --code-text: #e8e4d8;
+    --green: #16a34a;
+    --green-dim: rgba(22, 163, 74, 0.08);
+    --red: #dc2626;
+    --red-dim: rgba(220, 38, 38, 0.08);
+    --blue: #2563eb;
+    --blue-dim: rgba(37, 99, 235, 0.08);
+  }
+
+  /* No-JS fallback: follow OS preference when no explicit theme is set */
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme]) {
+      --bg: #faf8f2;
+      --surface: #ffffff;
+      --surface2: #f5f0e6;
+      --surface-elevated: #fffdf5;
+      --border: rgba(30, 30, 50, 0.08);
+      --border-bright: rgba(30, 30, 50, 0.16);
+      --text: #1a1814;
+      --text-dim: #6e685c;
+      --accent: #b8860b;
+      --accent-dim: rgba(184, 134, 11, 0.08);
+      --code-bg: #2a2520;
+      --code-text: #e8e4d8;
+      --green: #16a34a;
+      --green-dim: rgba(22, 163, 74, 0.08);
+      --red: #dc2626;
+      --red-dim: rgba(220, 38, 38, 0.08);
+      --blue: #2563eb;
+      --blue-dim: rgba(37, 99, 235, 0.08);
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+    transition: background 0.4s ease, color 0.4s ease;
+  }
+
+  /* ============ DECK ENGINE ============ */
+  .deck {
+    height: 100dvh;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .slide {
+    height: 100dvh;
+    scroll-snap-align: start;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 120px);
+    isolation: isolate;
+    opacity: 0;
+    transform: translateY(40px) scale(0.98);
+    transition:
+      opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .slide.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .slide .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition:
+      opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .slide.visible .reveal { opacity: 1; transform: none; }
+  .slide.visible .reveal:nth-child(1) { transition-delay: 0.1s; }
+  .slide.visible .reveal:nth-child(2) { transition-delay: 0.2s; }
+  .slide.visible .reveal:nth-child(3) { transition-delay: 0.3s; }
+  .slide.visible .reveal:nth-child(4) { transition-delay: 0.4s; }
+  .slide.visible .reveal:nth-child(5) { transition-delay: 0.5s; }
+  .slide.visible .reveal:nth-child(6) { transition-delay: 0.6s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide, .slide .reveal {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    /* Ghost devices keep their locked ghost opacity even with motion off. */
+    .slide__quote-mark { opacity: 0.06 !important; }
+    .deck { scroll-behavior: auto; }
+    .deck-progress, .deck-dot { transition: none; }
+  }
+
+  /* ============ NAV CHROME ============ */
+  .deck-progress {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: var(--accent); z-index: 100;
+    transition: width 0.3s ease; pointer-events: none;
+  }
+
+  .deck-dots {
+    position: fixed; right: clamp(12px, 2vw, 24px); top: 50%;
+    transform: translateY(-50%); display: flex; flex-direction: column;
+    gap: 8px; z-index: 100; padding: 8px;
+    background: color-mix(in srgb, var(--bg) 60%, transparent 40%);
+    border-radius: 20px;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+
+  .deck-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim); opacity: 0.3; border: none; padding: 0;
+    cursor: pointer; transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .deck-dot:hover { opacity: 0.6; }
+  .deck-dot.active { opacity: 1; transform: scale(1.5); background: var(--accent); }
+
+  .deck-counter {
+    position: fixed; bottom: clamp(12px, 2vh, 24px); right: clamp(12px, 2vw, 24px);
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+    z-index: 100; font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .deck-hints {
+    position: fixed; bottom: clamp(12px, 2vh, 24px); left: 50%;
+    transform: translateX(-50%); font-family: var(--font-mono);
+    font-size: 11px; color: var(--text-dim); opacity: 0.6; z-index: 100;
+    transition: opacity 0.5s ease; white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .deck-hints.faded { opacity: 0; pointer-events: none; }
+
+  .deck-theme {
+    position: fixed; top: clamp(12px, 2vh, 24px); right: clamp(12px, 2vw, 24px);
+    z-index: 100; border: 1px solid var(--border-bright);
+    background: color-mix(in srgb, var(--bg) 60%, transparent 40%);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    color: var(--text-dim); font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 6px 12px; border-radius: 16px; cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .deck-theme:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Text shadows on chrome are for the dark page only; cream pages stay clean. */
+  html[data-theme="light"] .deck-counter,
+  html[data-theme="light"] .deck-hints { text-shadow: none; }
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme]) .deck-counter,
+    html:not([data-theme]) .deck-hints { text-shadow: none; }
+  }
+
+  /* ============ SHARED SLIDE ELEMENTS ============ */
+  .slide__display {
+    font-size: clamp(48px, 10vw, 120px);
+    font-weight: 400;
+    letter-spacing: -2px;
+    line-height: 0.95;
+    text-wrap: balance;
+  }
+
+  .slide__heading {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 400;
+    letter-spacing: -0.5px;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .slide__body {
+    font-size: clamp(16px, 2.2vw, 22px);
+    line-height: 1.6;
+    color: var(--text-dim);
+    text-wrap: pretty;
+  }
+
+  .slide__subtitle {
+    font-family: var(--font-mono);
+    font-size: clamp(12px, 1.5vw, 18px);
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .slide__label {
+    font-family: var(--font-mono);
+    font-size: clamp(10px, 1.2vw, 13px);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  /* ============ DECORATIVE SVG ============ */
+  .slide__decor {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ============ SLIDE TYPE: TITLE ============ */
+  .slide--title {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background-image: radial-gradient(ellipse at 50% 30%, var(--accent-dim) 0%, transparent 50%);
+  }
+
+  .slide--title .slide__display { color: var(--accent); }
+
+  /* ============ SLIDE TYPE: TOC ============ */
+  .slide--toc {
+    background-image: radial-gradient(ellipse at 85% 20%, var(--accent-dim) 0%, transparent 45%);
+  }
+
+  .slide__toc {
+    list-style: none;
+    padding: 0;
+    margin-top: clamp(20px, 4vh, 48px);
+    max-width: 760px;
+  }
+
+  .slide__toc li {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(16px, 3vw, 40px);
+    padding: clamp(12px, 2.2vh, 22px) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: clamp(20px, 3vw, 32px);
+    line-height: 1.3;
+  }
+  .slide__toc li:last-child { border-bottom: none; }
+
+  .slide__toc-num {
+    font-family: var(--font-mono);
+    font-size: clamp(11px, 1.4vw, 14px);
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slide__toc-hint {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: clamp(10px, 1.2vw, 13px);
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ============ SLIDE TYPE: DIVIDER ============ */
+  .slide--divider { justify-content: center; }
+
+  .slide--divider .slide__number {
+    font-size: clamp(100px, 22vw, 260px);
+    font-weight: 200;
+    line-height: 0.85;
+    opacity: 0.06;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -55%);
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+
+  /* ============ SLIDE TYPE: CONTENT ============ */
+  .slide--content .slide__inner {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: clamp(24px, 4vw, 60px);
+    align-items: center;
+    width: 100%;
+  }
+
+  .slide__bullets {
+    list-style: none;
+    padding: 0;
+  }
+
+  .slide__bullets li {
+    padding: 10px 0 10px 24px;
+    position: relative;
+    font-size: clamp(16px, 2vw, 22px);
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+
+  .slide__bullets li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 20px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .slide__aside {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+  }
+
+  /* ============ SLIDE TYPE: SPLIT ============ */
+  .slide--split { padding: 0; }
+
+  .slide--split .slide__panels {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    height: 100%;
+  }
+
+  .slide--split .slide__panel {
+    padding: clamp(40px, 6vh, 80px) clamp(32px, 4vw, 60px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .slide--split .slide__panel--primary { background: var(--surface); }
+  .slide--split .slide__panel--secondary {
+    background: var(--surface2);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ============ SLIDE TYPE: DIAGRAM (pure CSS/SVG pipeline) ============ */
+  .slide--diagram {
+    padding: clamp(24px, 4vh, 48px) clamp(24px, 4vw, 60px);
+  }
+  .slide--diagram .slide__heading { margin-bottom: clamp(8px, 1.5vh, 20px); }
+
+  .pipeline-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: clamp(20px, 4vh, 40px) clamp(20px, 3vw, 40px);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(20px, 4vh, 40px);
+  }
+
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .pipeline__node {
+    flex: 1;
+    max-width: 220px;
+    background: var(--surface2);
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    padding: clamp(12px, 2.2vh, 22px) clamp(10px, 1.5vw, 18px);
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pipeline__node--secondary { border-color: var(--blue); background: var(--blue-dim); }
+  .pipeline__node--storage { border-color: var(--green); background: var(--green-dim); }
+
+  .pipeline__node-title {
+    font-size: clamp(16px, 2.2vw, 24px);
+    line-height: 1.2;
+  }
+
+  .pipeline__node-sub {
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 1.1vw, 12px);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .pipeline__edge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: clamp(48px, 8vw, 112px);
+    position: relative;
+  }
+
+  .pipeline__edge::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 12px; top: 50%;
+    height: 2px;
+    background: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .pipeline__edge::after {
+    content: '';
+    position: absolute;
+    right: 4px; top: 50%;
+    width: 9px; height: 9px;
+    border-top: 2px solid var(--text-dim);
+    border-right: 2px solid var(--text-dim);
+    opacity: 0.5;
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  .pipeline__edge-label {
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 0.85vw, 11px);
+    color: var(--text-dim);
+    background: var(--surface);
+    padding: 2px 6px;
+    position: relative;
+    z-index: 1;
+    transform: translateY(-130%);
+    white-space: nowrap;
+  }
+
+  .pipeline--sub .pipeline__node { border-width: 1.5px; }
+
+  .pipeline__legend {
+    display: flex;
+    justify-content: center;
+    gap: clamp(16px, 3vw, 40px);
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 1.1vw, 12px);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .pipeline__legend span { display: flex; align-items: center; gap: 8px; }
+  .pipeline__legend i {
+    width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+  }
+
+  /* ============ SLIDE TYPE: DASHBOARD ============ */
+  .slide--dashboard .slide__kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 20vw, 220px), 1fr));
+    gap: clamp(12px, 2vw, 24px);
+  }
+
+  .slide__kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: clamp(16px, 3vh, 32px) clamp(16px, 2vw, 24px);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .slide__kpi-val {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 400;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .slide__kpi-label {
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 1.2vw, 13px);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  .slide__kpi-trend {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  /* ============ SLIDE TYPE: CHART (pure CSS bars) ============ */
+  .slide--chart { padding: clamp(24px, 4vh, 48px) clamp(24px, 4vw, 60px); }
+
+  .chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: clamp(20px, 4vh, 40px) clamp(20px, 3vw, 48px);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: clamp(8px, 1.5vh, 20px);
+  }
+
+  .bar-chart {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: clamp(10px, 2vw, 28px);
+    border-bottom: 2px solid var(--border-bright);
+    padding: 0 clamp(8px, 2vw, 24px);
+    min-height: 0;
+  }
+
+  .bar-chart__col {
+    flex: 1;
+    max-width: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    height: 100%;
+    gap: 8px;
+  }
+
+  .bar-chart__val {
+    font-family: var(--font-mono);
+    font-size: clamp(10px, 1.3vw, 14px);
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bar-chart__bar {
+    width: 100%;
+    border-radius: 6px 6px 0 0;
+    background: linear-gradient(to top, var(--accent-dim), var(--accent));
+    border: 1px solid var(--border-bright);
+    border-bottom: none;
+    min-height: 6px;
+  }
+
+  .bar-chart__bar--ghost {
+    background: var(--surface2);
+    border: 1px dashed var(--border-bright);
+  }
+
+  .bar-chart__labels {
+    display: flex;
+    justify-content: space-around;
+    gap: clamp(10px, 2vw, 28px);
+    padding: 10px clamp(8px, 2vw, 24px) 0;
+  }
+
+  .bar-chart__labels span {
+    flex: 1;
+    max-width: 110px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 1.2vw, 13px);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ============ SLIDE TYPE: TABLE (available master) ============ */
+  .slide--table { padding: clamp(24px, 4vh, 48px) clamp(24px, 4vw, 60px); }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+  .table-scroll { overflow-x: auto; }
+
+  .data-table { width: 100%; border-collapse: collapse; }
+
+  .data-table th {
+    background: var(--surface2);
+    font-family: var(--font-mono);
+    font-size: clamp(10px, 1.3vw, 14px);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-align: left;
+    padding: clamp(10px, 1.5vh, 16px) clamp(14px, 2vw, 24px);
+    border-bottom: 2px solid var(--border-bright);
+    white-space: nowrap;
+  }
+
+  .data-table td {
+    padding: clamp(10px, 1.5vh, 16px) clamp(14px, 2vw, 24px);
+    border-bottom: 1px solid var(--border);
+    font-size: clamp(14px, 1.8vw, 20px);
+    vertical-align: top;
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:nth-child(even) { background: var(--surface2); }
+  .data-table tbody tr { transition: background 0.15s; }
+  .data-table tbody tr:hover { background: var(--accent-dim); }
+  .data-table code {
+    font-family: var(--font-mono); font-size: 0.85em;
+    background: var(--accent-dim); color: var(--accent);
+    padding: 1px 5px; border-radius: 3px;
+  }
+
+  /* ============ SLIDE TYPE: CODE (available master) ============ */
+  .slide--code { align-items: center; }
+
+  .slide__code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: clamp(24px, 4vh, 48px) clamp(24px, 4vw, 48px);
+    max-width: 900px;
+    width: 100%;
+    position: relative;
+  }
+
+  .slide__code-filename {
+    position: absolute;
+    top: -12px; left: 24px;
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 600;
+    padding: 4px 12px; border-radius: 4px;
+    background: var(--accent); color: var(--bg);
+  }
+
+  .slide__code-block pre { margin: 0; overflow-x: auto; }
+  .slide__code-block code {
+    font-family: var(--font-mono);
+    font-size: clamp(14px, 1.6vw, 18px);
+    line-height: 1.7;
+    color: var(--code-text);
+  }
+  .slide__code-block .hl { color: var(--accent); }
+  .slide__code-block .cm { color: var(--text-dim); }
+
+  /* ============ SLIDE TYPE: QUOTE ============ */
+  .slide--quote {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: clamp(60px, 10vh, 120px) clamp(60px, 12vw, 200px);
+  }
+
+  .slide__quote-mark {
+    font-size: clamp(80px, 14vw, 180px);
+    line-height: 0.5;
+    opacity: 0.06;
+    font-family: Georgia, serif;
+    pointer-events: none;
+    margin-bottom: -20px;
+    color: var(--accent);
+  }
+
+  /* The ghost mark stays ghost: the .reveal stagger must land at the locked
+     0.06 opacity, not the generic 1 (".slide.visible .reveal" would win otherwise). */
+  .slide.visible .slide__quote-mark.reveal { opacity: 0.06; }
+
+  .slide--quote blockquote {
+    font-size: clamp(24px, 4vw, 48px);
+    font-weight: 400;
+    line-height: 1.35;
+    font-style: italic;
+  }
+
+  .slide--quote cite {
+    font-family: var(--font-mono);
+    font-size: clamp(11px, 1.4vw, 14px);
+    font-style: normal;
+    margin-top: clamp(16px, 3vh, 32px);
+    display: block;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ============ SLIDE TYPE: FULL-BLEED ============ */
+  .slide--bleed {
+    padding: 0;
+    justify-content: flex-end;
+  }
+
+  .slide__bg {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    z-index: 0;
+  }
+
+  .slide__bg--gradient {
+    /* In-family navy gradient: --code-bg -> --bg -> --surface (no off-family violet). */
+    background: linear-gradient(135deg, #0a0f1e 0%, #0f1729 40%, #162040 100%);
+  }
+
+  .slide__scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 40%, transparent 100%);
+    z-index: 1;
+  }
+
+  .slide--bleed .slide__content {
+    position: relative; z-index: 2;
+    padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 120px);
+    color: #ffffff;
+  }
+  .slide--bleed .slide__heading { color: #ffffff; }
+  .slide--bleed .slide__subtitle { color: rgba(255,255,255,0.7); }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-height: 700px) {
+    .slide { padding: clamp(24px, 4vh, 40px) clamp(32px, 6vw, 80px); }
+    .slide__display { font-size: clamp(36px, 8vw, 72px); }
+    .slide--divider .slide__number { font-size: clamp(80px, 16vw, 160px); }
+  }
+
+  @media (max-height: 600px) {
+    .slide__decor { display: none; }
+    .slide--quote { padding: clamp(32px, 6vh, 60px) clamp(40px, 8vw, 100px); }
+    .slide__quote-mark { display: none; }
+    .pipeline__edge-label { display: none; }
+  }
+
+  @media (max-height: 500px) {
+    .slide { padding: clamp(16px, 3vh, 24px) clamp(24px, 5vw, 48px); }
+    .deck-dots { display: none; }
+    .slide__display { font-size: clamp(28px, 7vw, 48px); }
+  }
+
+  @media (max-width: 768px) {
+    .slide--content .slide__inner { grid-template-columns: 1fr; }
+    .slide--content .slide__aside { display: none; }
+    .slide--split .slide__panels { grid-template-columns: 1fr; }
+    .slide--dashboard .slide__kpis { grid-template-columns: repeat(2, 1fr); }
+    .pipeline { flex-wrap: wrap; }
+    .pipeline__edge { display: none; }
+    .pipeline__node { max-width: none; min-width: 40%; margin: 4px; }
+  }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- SLIDE 1: TITLE -->
+  <section class="slide slide--title">
+    <svg class="slide__decor" style="top:0;right:0;" width="120" height="120" viewBox="0 0 120 120">
+      <line x1="120" y1="0" x2="120" y2="40" stroke="var(--accent)" stroke-width="2" opacity="0.15"/>
+      <line x1="80" y1="0" x2="120" y2="0" stroke="var(--accent)" stroke-width="2" opacity="0.15"/>
+    </svg>
+    <svg class="slide__decor" style="bottom:0;left:0;" width="120" height="120" viewBox="0 0 120 120">
+      <line x1="0" y1="80" x2="0" y2="120" stroke="var(--accent)" stroke-width="2" opacity="0.15"/>
+      <line x1="0" y1="120" x2="40" y2="120" stroke="var(--accent)" stroke-width="2" opacity="0.15"/>
+    </svg>
+    <div class="reveal">
+      <p class="slide__subtitle" style="margin-bottom:clamp(16px,2vh,32px);">Board Financial Review &middot; Q2 FY26 &middot; Data, KPI &amp; Finance</p>
+    </div>
+    <h1 class="slide__display reveal">18 Months of Runway, By Design</h1>
+    <div class="reveal">
+      <p class="slide__subtitle" style="margin-top:clamp(16px,2vh,32px);">Open Design's burn, runway, and the plan that keeps the project independent</p>
+    </div>
+  </section>
+
+  <!-- SLIDE 2: TOC -->
+  <section class="slide slide--toc">
+    <p class="slide__label reveal">This Review</p>
+    <h2 class="slide__heading reveal">Four Acts, One Number</h2>
+    <ol class="slide__toc">
+      <li class="reveal"><span class="slide__toc-num">01</span> The Headline Answer <span class="slide__toc-hint">Runway holds at 18 months</span></li>
+      <li class="reveal"><span class="slide__toc-num">02</span> The Metric Proof <span class="slide__toc-hint">Cash, burn, coverage</span></li>
+      <li class="reveal"><span class="slide__toc-num">03</span> The Driver Tree <span class="slide__toc-hint">What moves the burn</span></li>
+      <li class="reveal"><span class="slide__toc-num">04</span> The Forecast &amp; The Ask <span class="slide__toc-hint">The recommended move</span></li>
+    </ol>
+  </section>
+
+  <!-- SLIDE 3: SECTION DIVIDER -->
+  <section class="slide slide--divider" style="background-image:radial-gradient(ellipse at 80% 60%, var(--accent-dim) 0%, transparent 40%);">
+    <span class="slide__number">01</span>
+    <div>
+      <h2 class="slide__heading reveal">The Headline Answer</h2>
+      <p class="slide__subtitle reveal" style="margin-top:12px;">Runway holds at 18 months without a new raise</p>
+    </div>
+  </section>
+
+  <!-- SLIDE 4: CONTENT (left-heavy asymmetric) -->
+  <section class="slide slide--content" style="background-image:radial-gradient(ellipse at 20% 80%, var(--accent-dim) 0%, transparent 45%);">
+    <div class="slide__inner">
+      <div>
+        <p class="slide__label reveal">The Answer</p>
+        <h2 class="slide__heading reveal">Structurally Low Burn Is the Reason Runway Holds</h2>
+        <ul class="slide__bullets">
+          <li class="reveal">BYOK shifts an estimated $2.1M/yr of model-inference cost onto users, off our P&amp;L entirely</li>
+          <li class="reveal">Apache-2.0 core lets 300+ community contributors ship features we never pay engineering time for</li>
+          <li class="reveal">Local-first architecture removes the cloud-hosting bill that would otherwise scale with every new user</li>
+          <li class="reveal">Net effect: burn multiple sits at 0.4x the industry median for our ARR stage</li>
+        </ul>
+      </div>
+      <div class="slide__aside reveal">
+        <svg viewBox="0 0 220 160" width="220" height="160">
+          <circle cx="110" cy="74" r="54" fill="none" stroke="var(--green)" stroke-width="2" opacity="0.3"/>
+          <circle cx="110" cy="74" r="36" fill="none" stroke="var(--green)" stroke-width="1.5" opacity="0.2" stroke-dasharray="4 4"/>
+          <circle cx="110" cy="74" r="8" fill="var(--green)" opacity="0.4"/>
+          <text x="110" y="150" text-anchor="middle" style="font-family:var(--font-mono);" font-size="11" fill="var(--text-dim)">$61K/MO &middot; 18-MONTH RUNWAY</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 5: SPLIT (before/after) -->
+  <section class="slide slide--split">
+    <div class="slide__panels">
+      <div class="slide__panel slide__panel--primary">
+        <p class="slide__label reveal" style="color:var(--red);">Before &middot; Traditional Cost Model</p>
+        <h2 class="slide__heading reveal" style="font-size:clamp(22px,3.5vw,36px);">Cloud Inference On Our Books</h2>
+        <ul class="slide__bullets" style="margin-top:16px;">
+          <li class="reveal">Model inference fully on the company's P&amp;L: ~$2.1M/yr</li>
+          <li class="reveal">Compute scales linearly with every new user</li>
+          <li class="reveal">Single vendor, no BYOK, no cost pass-through</li>
+          <li class="reveal">Effective burn: ~$310K/month</li>
+        </ul>
+      </div>
+      <div class="slide__panel slide__panel--secondary">
+        <p class="slide__label reveal" style="color:var(--green);">After &middot; Open Design's Structure</p>
+        <h2 class="slide__heading reveal" style="font-size:clamp(22px,3.5vw,36px);">Cost Shifted Off the P&amp;L</h2>
+        <ul class="slide__bullets" style="margin-top:16px;">
+          <li class="reveal">BYOK: users bring their own model keys, inference cost off our books</li>
+          <li class="reveal">Local-first: no per-seat hosting bill to carry</li>
+          <li class="reveal">Apache-2.0 core: community ships ~40% of new features unpaid</li>
+          <li class="reveal">Effective burn: ~$61K/month (-80%)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 6: SECTION DIVIDER -->
+  <section class="slide slide--divider" style="background-image:radial-gradient(ellipse at 30% 40%, var(--accent-dim) 0%, transparent 40%);">
+    <span class="slide__number">02</span>
+    <div>
+      <h2 class="slide__heading reveal">The Driver Tree</h2>
+      <p class="slide__subtitle reveal" style="margin-top:12px;">What actually moves monthly burn</p>
+    </div>
+  </section>
+
+  <!-- SLIDE 7: DIAGRAM (pure CSS/SVG pipeline — no mermaid) -->
+  <section class="slide slide--diagram">
+    <h2 class="slide__heading reveal">Payroll Minus Community Leverage Equals Burn</h2>
+    <div class="pipeline-wrap reveal">
+      <div class="pipeline">
+        <div class="pipeline__node">
+          <div class="pipeline__node-title">Cash In</div>
+          <div class="pipeline__node-sub">sponsorships &middot; enterprise support &middot; grants</div>
+        </div>
+        <div class="pipeline__edge"><span class="pipeline__edge-label">funds</span></div>
+        <div class="pipeline__node pipeline__node--secondary">
+          <div class="pipeline__node-title">Core Team Payroll</div>
+          <div class="pipeline__node-sub">11 FTE &middot; $54K/wk</div>
+        </div>
+        <div class="pipeline__edge"><span class="pipeline__edge-label">offset by</span></div>
+        <div class="pipeline__node pipeline__node--secondary">
+          <div class="pipeline__node-title">Community Contributions</div>
+          <div class="pipeline__node-sub">300+ contributors &middot; unpaid</div>
+        </div>
+        <div class="pipeline__edge"><span class="pipeline__edge-label">reduces to</span></div>
+        <div class="pipeline__node pipeline__node--storage">
+          <div class="pipeline__node-title">Net Monthly Burn</div>
+          <div class="pipeline__node-sub">$61K/mo &middot; 18-mo runway</div>
+        </div>
+      </div>
+      <div class="pipeline pipeline--sub">
+        <div class="pipeline__node pipeline__node--storage" style="max-width:280px;">
+          <div class="pipeline__node-title">Cash Reserve</div>
+          <div class="pipeline__node-sub">$1.1M on hand today</div>
+        </div>
+        <div class="pipeline__edge"><span class="pipeline__edge-label">divided by burn</span></div>
+        <div class="pipeline__node" style="max-width:280px;">
+          <div class="pipeline__node-title">Runway</div>
+          <div class="pipeline__node-sub">18 months at current burn</div>
+        </div>
+      </div>
+      <div class="pipeline__legend">
+        <span><i style="background:var(--accent);"></i> Cash source</span>
+        <span><i style="background:var(--blue);"></i> Cost driver</span>
+        <span><i style="background:var(--green);"></i> Net outcome</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 8: DASHBOARD (big numbers) -->
+  <section class="slide slide--dashboard" style="background-image:radial-gradient(ellipse at 70% 30%, var(--accent-dim) 0%, transparent 40%);">
+    <p class="slide__label reveal">02 &middot; The Metric Proof</p>
+    <h2 class="slide__heading reveal" style="margin-bottom:clamp(12px,2vh,28px);">The Board's Four Numbers</h2>
+    <div class="slide__kpis">
+      <div class="slide__kpi reveal">
+        <div class="slide__kpi-val" style="color:var(--accent);">$1.1M</div>
+        <div class="slide__kpi-label">Cash Reserve</div>
+        <div class="slide__kpi-trend" style="color:var(--green);">Above the $400K board floor</div>
+      </div>
+      <div class="slide__kpi reveal">
+        <div class="slide__kpi-val" style="color:var(--green);">18 mo</div>
+        <div class="slide__kpi-label">Runway at Current Burn</div>
+        <div class="slide__kpi-trend" style="color:var(--green);">+6 mo vs. last review</div>
+      </div>
+      <div class="slide__kpi reveal">
+        <div class="slide__kpi-val" style="color:var(--blue);">$61K</div>
+        <div class="slide__kpi-label">Net Monthly Burn</div>
+        <div class="slide__kpi-trend" style="color:var(--green);">-80% since the BYOK shift</div>
+      </div>
+      <div class="slide__kpi reveal">
+        <div class="slide__kpi-val" style="color:var(--accent);">3.1x</div>
+        <div class="slide__kpi-label">Contributor Leverage</div>
+        <div class="slide__kpi-trend" style="color:var(--text-dim);">unpaid dev-hours vs. payroll $</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 9: CHART (pure CSS bars) -->
+  <section class="slide slide--chart" style="background-image:radial-gradient(ellipse at 15% 25%, var(--accent-dim) 0%, transparent 40%);">
+    <h2 class="slide__heading reveal">Two Enterprise Sponsors Turn 18 Months of Runway into 30+</h2>
+    <div class="chart-wrap reveal">
+      <div class="bar-chart" aria-label="Projected cash reserve by quarter; the dashed ghost bar is the do-nothing baseline, solid bars are the sponsor-funded plan reaching 1.4M by Q6">
+        <div class="bar-chart__col"><span class="bar-chart__val">$640K</span><div class="bar-chart__bar bar-chart__bar--ghost" style="height:8%;"></div></div>
+        <div class="bar-chart__col"><span class="bar-chart__val">$780K</span><div class="bar-chart__bar" style="height:18%;"></div></div>
+        <div class="bar-chart__col"><span class="bar-chart__val">$920K</span><div class="bar-chart__bar" style="height:34%;"></div></div>
+        <div class="bar-chart__col"><span class="bar-chart__val">$1.05M</span><div class="bar-chart__bar" style="height:53%;"></div></div>
+        <div class="bar-chart__col"><span class="bar-chart__val">$1.2M</span><div class="bar-chart__bar" style="height:71%;"></div></div>
+        <div class="bar-chart__col"><span class="bar-chart__val">$1.4M+</span><div class="bar-chart__bar" style="height:88%;"></div></div>
+      </div>
+      <div class="bar-chart__labels">
+        <span>Baseline</span><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span><span>Q6 w/ sponsors</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 10: QUOTE -->
+  <section class="slide slide--quote" style="background-image:radial-gradient(ellipse at 50% 50%, var(--accent-dim) 0%, transparent 35%);">
+    <div class="slide__quote-mark reveal">&ldquo;</div>
+    <blockquote class="reveal">
+      Runway isn't destiny once you control your own burn.
+    </blockquote>
+    <cite class="reveal">&mdash; CFO, Open Design Foundation board</cite>
+  </section>
+
+  <!-- SLIDE 11: FULL-BLEED CLOSING -->
+  <section class="slide slide--bleed">
+    <div class="slide__bg slide__bg--gradient"></div>
+    <div class="slide__scrim"></div>
+    <div class="slide__content">
+      <p class="slide__label reveal" style="color:rgba(255,255,255,0.6);">04 &middot; The Forecast &amp; The Ask</p>
+      <h2 class="slide__heading reveal">Approve the 12-Month Reserve Floor, No New Raise This Cycle</h2>
+      <p class="slide__subtitle reveal" style="color:rgba(255,255,255,0.6); margin-top:12px;">Lock two enterprise sponsors by Q3 to extend runway past 30 months &middot; hold headcount at 11 FTE &middot; next review in 90 days</p>
+    </div>
+  </section>
+
+</div><!-- /deck -->
+
+<script>
+  // Explicit dual theme: default follows OS, T key / button toggles.
+  (function () {
+    var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    document.documentElement.setAttribute('data-theme', prefersLight ? 'light' : 'dark');
+  })();
+
+  function toggleTheme() {
+    var root = document.documentElement;
+    var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    var btn = document.querySelector('.deck-theme');
+    if (btn) btn.textContent = '◐ ' + next;
+  }
+
+  // SlideEngine — keyboard/touch nav, progress bar, dots, counter, hints,
+  // hash routing (#/N), theme toggle chrome.
+  function SlideEngine() {
+    this.deck = document.querySelector('.deck');
+    this.slides = [].slice.call(document.querySelectorAll('.slide'));
+    this.current = 0;
+    this.total = this.slides.length;
+    this.buildChrome();
+    this.bindEvents();
+    this.observe();
+    this.restoreHash();
+    this.update();
+  }
+  SlideEngine.prototype.buildChrome = function () {
+    var bar = document.createElement('div'); bar.className = 'deck-progress'; document.body.appendChild(bar); this.bar = bar;
+    var dots = document.createElement('div'); dots.className = 'deck-dots'; var self = this;
+    this.slides.forEach(function (_, i) { var d = document.createElement('button'); d.className = 'deck-dot'; d.title = 'Slide ' + (i + 1); d.onclick = function () { self.goTo(i); }; dots.appendChild(d); });
+    document.body.appendChild(dots); this.dots = [].slice.call(dots.children);
+    var ctr = document.createElement('div'); ctr.className = 'deck-counter'; document.body.appendChild(ctr); this.counter = ctr;
+    var theme = document.createElement('button'); theme.className = 'deck-theme';
+    theme.textContent = '◐ ' + document.documentElement.getAttribute('data-theme');
+    theme.title = 'Toggle dark / light (T)'; theme.onclick = toggleTheme;
+    document.body.appendChild(theme);
+    var hints = document.createElement('div'); hints.className = 'deck-hints'; hints.textContent = '← → space to navigate · T theme'; document.body.appendChild(hints); this.hints = hints;
+    this.hintTimer = setTimeout(function () { hints.classList.add('faded'); }, 4000);
+  };
+  SlideEngine.prototype.bindEvents = function () {
+    var self = this;
+    document.addEventListener('keydown', function (e) {
+      if (e.target.closest('.table-scroll,input,textarea,[contenteditable]')) return;
+      if (['ArrowDown', 'ArrowRight', ' ', 'PageDown'].indexOf(e.key) > -1) { e.preventDefault(); self.next(); }
+      else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) > -1) { e.preventDefault(); self.prev(); }
+      else if (e.key === 'Home') { e.preventDefault(); self.goTo(0); }
+      else if (e.key === 'End') { e.preventDefault(); self.goTo(self.total - 1); }
+      else if (e.key === 't' || e.key === 'T') { toggleTheme(); }
+      self.fadeHints();
+    });
+    var tY;
+    this.deck.addEventListener('touchstart', function (e) { tY = e.touches[0].clientY; }, { passive: true });
+    this.deck.addEventListener('touchend', function (e) { var dy = tY - e.changedTouches[0].clientY; if (Math.abs(dy) > 50) { dy > 0 ? self.next() : self.prev(); } });
+    window.addEventListener('hashchange', function () { self.restoreHash(); });
+  };
+  SlideEngine.prototype.observe = function () {
+    var self = this;
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          self.current = self.slides.indexOf(entry.target);
+          self.update();
+        }
+      });
+    }, { threshold: 0.5 });
+    this.slides.forEach(function (s) { obs.observe(s); });
+  };
+  SlideEngine.prototype.restoreHash = function () {
+    var m = location.hash.match(/^#\/(\d+)$/);
+    if (m) {
+      var i = parseInt(m[1], 10) - 1;
+      if (i >= 0 && i < this.total && i !== this.current) this.goTo(i);
+    }
+  };
+  SlideEngine.prototype.goTo = function (i) { this.slides[Math.max(0, Math.min(i, this.total - 1))].scrollIntoView({ behavior: 'smooth' }); };
+  SlideEngine.prototype.next = function () { if (this.current < this.total - 1) this.goTo(this.current + 1); };
+  SlideEngine.prototype.prev = function () { if (this.current > 0) this.goTo(this.current - 1); };
+  SlideEngine.prototype.update = function () {
+    this.bar.style.width = ((this.current + 1) / this.total * 100) + '%';
+    var c = this.current; this.dots.forEach(function (d, i) { d.classList.toggle('active', i === c); });
+    this.counter.textContent = (this.current + 1) + ' / ' + this.total;
+    if (history.replaceState) history.replaceState(null, '', '#/' + (this.current + 1));
+  };
+  SlideEngine.prototype.fadeHints = function () { clearTimeout(this.hintTimer); this.hints.classList.add('faded'); };
+
+  // Auto-fit guards (KPI values, long quotes) — keep from upstream.
+  function autoFit() {
+    document.querySelectorAll('.slide__kpi-val').forEach(function (el) {
+      if (el.scrollWidth > el.clientWidth) {
+        var s = el.clientWidth / el.scrollWidth;
+        el.style.transform = 'scale(' + s + ')';
+        el.style.transformOrigin = 'left top';
+      }
+    });
+    document.querySelectorAll('.slide--quote blockquote').forEach(function (el) {
+      var len = el.textContent.trim().length;
+      if (len > 100) {
+        var scale = Math.max(0.5, 100 / len);
+        var fs = parseFloat(getComputedStyle(el).fontSize);
+        el.style.fontSize = Math.max(16, Math.round(fs * scale)) + 'px';
+      }
+    });
+  }
+
+  autoFit();
+  new SlideEngine();
+</script>
+
+</body>
+</html>

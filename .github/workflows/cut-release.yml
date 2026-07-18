@@ -1,0 +1,123 @@
+name: cut-release
+# Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main HEAD:
+#   1. Compute version (highest release/vX.Y.Z -> bump minor -> X.(Y+1).0; e.g. 0.11.0 -> 0.12.0)
+#   2. Create release/vX.Y.Z, bump apps/packaged/package.json, push
+#   3. Create the "backport release/vX.Y.Z" label
+# The push uses the App token (not GITHUB_TOKEN), so it triggers notify-release-feishu
+# -> builds a nightly package and posts the Feishu card.
+
+on:
+  schedule:
+    - cron: '0 1 * * 2'        # 01:00 UTC = 09:00 Asia/Shanghai, Tuesday
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Full version x.y.z (empty = bump minor of the highest release branch)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read               # actual writes go through the App token below
+
+jobs:
+  cut:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main            # always cut from main HEAD, even on a manual dispatch from another branch
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Compute next version
+        id: ver
+        env:
+          # Never interpolate the raw input into the shell; pass via env and validate.
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_VERSION" ]; then
+            # Strict x.y.z, digits only — rejects shell metacharacters, newlines, etc.
+            if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::Invalid version '$INPUT_VERSION' (expected x.y.z, digits only)"
+              exit 1
+            fi
+            V="$INPUT_VERSION"
+          else
+            latest=$(git ls-remote --heads origin 'release/v*' \
+              | sed -E 's#.*/release/v##' \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+            major=${latest%%.*}; rest=${latest#*.}; minor=${rest%%.*}
+            V="${major}.$((minor+1)).0"
+          fi
+          # V is now guaranteed to match ^[0-9]+\.[0-9]+\.[0-9]+$
+          echo "version=$V"          >> "$GITHUB_OUTPUT"
+          echo "branch=release/v$V"  >> "$GITHUB_OUTPUT"
+          echo "Cutting v$V (branch release/v$V)"
+
+      - name: Bail out if the branch already exists
+        env:
+          BRANCH: ${{ steps.ver.outputs.branch }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::$BRANCH already exists, skipping"
+            exit 1
+          fi
+
+      - name: Create branch + bump version + push
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          BRANCH: ${{ steps.ver.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name  'open-design-release-bot[bot]'
+          git config user.email 'open-design-release-bot[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          ( cd apps/packaged && npm pkg set version="$VERSION" )
+          git commit -am "chore(release): v$VERSION"
+          git push origin "$BRANCH"   # App token push -> triggers notify-release-feishu (nightly + Feishu)
+
+      - name: Create backport label
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh label create "backport release/v$VERSION" \
+            --repo nexu-io/open-design \
+            --color 0E8A16 \
+            --description "Backport this fix to release/v$VERSION" \
+            --force
+
+      # Post an immediate "branch cut" card so the team is notified the moment the
+      # release branch exists, without waiting ~20-40 min for notify-release-feishu
+      # to finish the prerelease build. The download card still follows from that
+      # build. feishu-notice.ts only imports node:crypto, so the setup-node above
+      # is all it needs.
+      - name: Notify Feishu that the branch was cut
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NOTICE_TITLE: "🌿 已切出 release 分支 v${{ steps.ver.outputs.version }}(大版本 minor)"
+          NOTICE_TEMPLATE: "green"
+          NOTICE_BODY: |
+            **分支**:[`release/v${{ steps.ver.outputs.version }}`](${{ github.server_url }}/${{ github.repository }}/tree/release/v${{ steps.ver.outputs.version }})(从 main 切出,大版本 / minor)
+
+            **Backport label**:`backport release/v${{ steps.ver.outputs.version }}` —— 要回灌到这个版本的修复,给 PR 打这个 label。
+
+            Prerelease 打包已开始(约 20–40 分钟);完成后会再发一张带各平台下载链接的卡片。
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts

@@ -74,8 +74,11 @@ Before creating files, decide whether the user actually wants a live artifact or
    - Ask the user a data-source question only when no matching connected connector exists, multiple connected candidates fit equally well, or the requested artifact has no usable topic/query to search for. If you must ask, be specific: ask for the page/database/topic or permission to search broadly, not “where is the Notion data source?”
 
 2. **Author the source files**
-   - Write `template.html` as the human-designed HTML template.
-   - Write `data.json` as the canonical preview data used by `{{data.path}}` bindings.
+   - Write `template.html` as the human-designed HTML template. The daemon hydrates it with `data.json` using the `html_template_v1` binding contract — stay inside it or hydration fails and the raw template ships with visible `{{…}}` tokens:
+     - Scalars: `{{data.path.to.value}}`. Paths start with `data`, dot-separated; numeric array indexes are allowed (`{{data.kpis.0.value}}`). Every binding must resolve to a single string/number, not an object or array.
+     - Lists: repeat one element with `data-od-repeat="item in data.items"`, then bind loop-scoped fields inside it as `{{item.label}}` (or `{{item}}` for a scalar array). One level only; `data.*` still works inside the repeat for globals.
+     - Do NOT hand-loop in a `<script>` (scripts are stripped from previews), and do NOT reference a bare loop variable like `{{metric.value}}` without a matching `data-od-repeat` scope — that binding is unresolvable. Nested repeats, conditionals, filters, helpers, and raw/triple-brace interpolation are unsupported.
+   - Write `data.json` as the canonical preview data used by those bindings — real values, not placeholders.
    - Write `artifact.json` with the live artifact metadata, preview declaration, document declaration, and safe source descriptors.
    - Write `provenance.json` with concise source notes, timestamps, non-sensitive connector references, and transformation notes.
    - Do not author `index.html` as source. The daemon derives `index.html` from `template.html` and `data.json`.

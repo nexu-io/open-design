@@ -2,116 +2,746 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Swiss International · Open Design 2026</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<title>Write a Board Pre-Read like a Fortune-500 Board Chair - Corporate strategy</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
-  body { font-family: 'Inter Tight','Inter','Noto Sans SC',system-ui,sans-serif; background:#0a0a0a; color:#fafaf8; margin:0; }
-  .slide { width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto; position:relative; overflow:hidden; }
-  .ikb { background:#002FA7; color:#fafaf8; }
-  .paper { background:#fafaf8; color:#0a0a0a; }
-  .mono { font-family:'JetBrains Mono', ui-monospace, monospace; }
-  .hairline-b { border-bottom:1px solid currentColor; }
-  .hairline-t { border-top:1px solid currentColor; }
-  /* ASCII dot field */
-  .ascii { font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1; letter-spacing:6px; opacity:0.2; }
-  .bar { width:60px; background:#002FA7; }
-  .deck { display:grid; gap:24px; padding:24px; }
+  /* Swiss International tokens (locked family: IKB accent, paper, ink, hairlines, right angles) */
+  :root{
+    --ikb:#002FA7;
+    --paper:#fafaf8;
+    --ink:#0a0a0a;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+  }
+  *,*::before,*::after{ box-sizing:border-box; }
+  body{
+    font-family:'Inter Tight','Inter',system-ui,sans-serif;
+    background:var(--ink); color:var(--paper); margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .deck{ display:grid; gap:24px; padding:24px; }
+  .slide{
+    width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto;
+    position:relative; overflow:hidden; border-radius:0;
+  }
+  .ikb{ background:var(--ikb); color:var(--paper); }
+  .paper{ background:var(--paper); color:var(--ink); }
+  .mono{ font-family:'JetBrains Mono', ui-monospace, monospace; }
+  .hairline-b{ border-bottom:1px solid currentColor; }
+  .hairline-t{ border-top:1px solid currentColor; }
+
+  /* shared chrome */
+  .frame{ position:absolute; inset:0; padding:48px; display:flex; flex-direction:column; justify-content:space-between; }
+  .chrome{
+    display:flex; align-items:baseline; justify-content:space-between;
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em;
+  }
+  .chrome-foot{ padding-top:12px; }
+  .kicker{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:12px; text-transform:uppercase; letter-spacing:0.18em;
+  }
+
+  /* ASCII dot field (family signature: breathing dot matrix) */
+  .ascii{
+    font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1;
+    letter-spacing:6px; opacity:0.22; margin:0;
+    animation:breathe 6s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ opacity:0.12; } 50%{ opacity:0.28; } }
+
+  /* S01 cover */
+  .cover-title{
+    margin:12px 0 0; font-weight:900; line-height:0.95; letter-spacing:-0.02em;
+    font-size:clamp(48px,7.5vw,124px);
+  }
+  .cover-lede{
+    margin:20px 0 0; max-width:640px; font-family:'Inter',sans-serif;
+    font-size:15px; line-height:1.5; opacity:0.92;
+  }
+  .cover .kicker{ opacity:0.8; }
+  .cover .chrome-foot{ opacity:0.75; }
+
+  /* shared paper headline (smaller than tower-h2, for content pages) */
+  .h2{
+    margin:8px 0 0; font-weight:900; line-height:1.06; letter-spacing:-0.02em;
+    font-size:clamp(28px,3.4vw,44px);
+  }
+  .body-copy{ font-family:'Inter',sans-serif; font-size:14px; line-height:1.55; }
+
+  /* S06 KPI tower */
+  .tower-h2{
+    margin:8px 0 0; font-weight:900; line-height:1; letter-spacing:-0.02em;
+    font-size:clamp(36px,4.8vw,80px);
+  }
+  .accent{ color:var(--ikb); }
+  .towers{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:40px;
+    align-items:end; margin-top:24px;
+  }
+  .tower{ text-align:center; }
+  .tower .glyph{ height:32px; margin:0 auto 12px; }
+  .tower .glyph svg{ width:28px; height:28px; display:block; margin:0 auto; }
+  .bar{ width:60px; margin:0 auto; background:var(--ikb); }
+  .tower .value{
+    margin-top:12px; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:32px; font-weight:700; color:var(--ikb); line-height:1.1;
+  }
+  .tower .label{
+    margin-top:4px; padding-top:4px; border-top:1px solid currentColor;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.16em; opacity:0.72;
+  }
+  .paper .chrome-foot{ opacity:0.72; margin-top:16px; }
+
+  /* S03 statement */
+  .statement-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .statement{
+    margin:0; font-weight:900; line-height:1.04; letter-spacing:-0.03em;
+    text-align:center; font-size:clamp(40px,5.6vw,76px);
+  }
+  .statement-note{
+    display:flex; gap:32px; align-items:baseline; justify-content:space-between;
+    border-top:1px solid var(--ink); padding-top:14px; margin-top:8px;
+  }
+  .statement-note .note-label{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--ikb);
+    white-space:nowrap;
+  }
+  .statement-note p{ margin:0; max-width:620px; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+
+  /* S19 four cards */
+  .cards4{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-top:28px; }
+  .card{
+    border:1px solid var(--ink); padding:20px; min-height:230px;
+    display:flex; flex-direction:column;
+  }
+  .card .meta{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .card h3{ margin:12px 0 10px; font-size:21px; font-weight:800; letter-spacing:-0.01em; line-height:1.1; }
+  .card p{ margin:0; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .card .card-foot{
+    margin-top:auto; padding-top:10px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.6;
+  }
+
+  /* S04 six cells */
+  .cells{ display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--ink); margin-top:24px; }
+  .cell{ padding:20px 22px 18px; border-right:1px solid var(--ink); border-bottom:1px solid var(--ink); }
+  .cell:nth-child(3n){ border-right:0; }
+  .cell:nth-child(n+4){ border-bottom:0; }
+  .cell-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cell-top svg{ width:22px; height:22px; display:block; }
+  .cell-top .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.14em; color:var(--ikb);
+  }
+  .cell h3{ margin:0 0 6px; font-size:17px; font-weight:800; letter-spacing:-0.01em; }
+  .cell p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+
+  /* S11 horizontal timeline */
+  .tl{ margin-top:64px; }
+  .tl-row{ display:grid; grid-template-columns:repeat(5,1fr); border-top:1px solid var(--ink); }
+  .tl-step{ position:relative; padding:26px 18px 0 0; }
+  .tl-step::before{
+    content:""; position:absolute; top:-6px; left:0;
+    width:11px; height:11px; background:var(--ikb);
+  }
+  .tl-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .tl-step h3{ margin:8px 0 6px; font-size:16px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
+  .tl-step p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+
+  /* S08 duo compare */
+  .duo{ flex:1; display:grid; grid-template-columns:repeat(16,1fr); margin-top:16px; }
+  .duo-col{
+    grid-column:span 8; padding:28px 44px 20px 0;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .duo-col + .duo-col{ border-left:1px solid var(--ink); padding:28px 0 20px 44px; }
+  .duo-body{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .duo .tag{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; opacity:0.65;
+  }
+  .duo .tag b{ font-weight:700; opacity:1; }
+  .duo .big{
+    margin:18px 0 0; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-weight:700; line-height:1; font-size:clamp(56px,6.4vw,88px); letter-spacing:-0.04em;
+  }
+  .duo .delta{
+    display:inline-block; margin-left:16px; padding:4px 10px; vertical-align:middle;
+    border:1px solid var(--ikb); color:var(--ikb);
+    font-size:16px; letter-spacing:0; font-weight:700;
+  }
+  .duo p{ margin:18px 0 0; max-width:380px; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .duo .duo-foot{
+    margin-top:auto; padding-top:12px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.6;
+  }
+
+  /* S14 loop diagram */
+  .loop{ flex:1; display:grid; grid-template-columns:repeat(16,1fr); align-items:center; margin-top:8px; }
+  .loop-steps{ grid-column:1/8; }
+  .loop-step{ display:flex; gap:18px; padding:14px 0; border-bottom:1px solid var(--ink); }
+  .loop-step:last-child{ border-bottom:0; }
+  .loop-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:12px; font-weight:700; color:var(--ikb); padding-top:2px;
+  }
+  .loop-step h3{ margin:0 0 3px; font-size:16px; font-weight:800; }
+  .loop-step p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+  .loop-art{ grid-column:9/17; display:flex; justify-content:center; }
+  .loop-art svg{ display:block; }
+
+  /* S18 why now */
+  .why{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:26px; }
+  .why-col{ border-top:1px solid var(--ink); padding-top:16px; display:flex; flex-direction:column; min-height:300px; }
+  .why-col .cat{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--ikb);
+  }
+  .why-col h3{ margin:12px 0 10px; font-size:21px; font-weight:800; line-height:1.15; letter-spacing:-0.01em; }
+  .why-col p{ margin:0; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .why-col .num{
+    margin-top:auto; padding-top:14px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:40px; font-weight:700; line-height:1;
+  }
+  .why-col .num-label{
+    margin-top:6px; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.65;
+  }
+  .why-col.why-accent{
+    background:var(--ikb); color:var(--paper);
+    border-top-color:var(--ikb); padding:16px 20px 20px; margin:-1px -2px 0;
+  }
+  .why-col.why-accent .cat{ color:var(--paper); opacity:0.85; }
+  .why-col.why-accent p{ opacity:0.88; }
+  .why-col.why-accent .num{ border-top-color:var(--paper); }
+  .why-col.why-accent .num-label{ opacity:0.8; }
+
+  /* S09 closing manifesto */
+  .closing{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(16,1fr); }
+  .closing-left{
+    grid-column:1/8; background:var(--ikb); color:var(--paper);
+    padding:48px; display:flex; flex-direction:column; justify-content:space-between;
+    position:relative;
+  }
+  .closing-left .manifesto{
+    margin:20px 0 0; font-weight:900; line-height:1.04; letter-spacing:-0.02em;
+    font-size:clamp(30px,3.8vw,50px);
+  }
+  .closing-left .meta{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.16em; opacity:0.78;
+    border-top:1px solid currentColor; padding-top:12px;
+  }
+  .closing-right{
+    grid-column:8/17; background:var(--paper); color:var(--ink);
+    padding:48px; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .next-steps{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:0; }
+  .next-step{ padding:22px 0; border-bottom:1px solid var(--ink); }
+  .next-step:first-child{ border-top:1px solid var(--ink); }
+  .next-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .next-step h3{ margin:6px 0 4px; font-size:18px; font-weight:800; letter-spacing:-0.01em; }
+  .next-step a{
+    color:var(--ikb); font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:13px; font-weight:700; text-decoration:underline; text-underline-offset:3px;
+  }
+  .next-step p{ margin:6px 0 0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.72; }
+
+  /* motion discipline: transform+opacity only, staggered ease-out */
+  .in{ animation:rise 0.7s var(--ease-out) both; }
+  .in-1{ animation-delay:0.05s; }
+  .in-2{ animation-delay:0.12s; }
+  .in-3{ animation-delay:0.19s; }
+  .in-4{ animation-delay:0.26s; }
+  .in-5{ animation-delay:0.33s; }
+  .in-6{ animation-delay:0.40s; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(20px); } to{ opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce){
+    .in,.in-1,.in-2,.in-3,.in-4,.in-5,.in-6{ animation:none; }
+    .ascii{ animation:none; opacity:0.2; }
+  }
+
+  @media print{
+    body{ background:var(--paper); }
+    .deck{ gap:0; padding:0; }
+    .slide{ page-break-after:always; }
+    .in,.in-1,.in-2,.in-3,.in-4,.in-5,.in-6,.ascii{ animation:none; }
+  }
 </style>
 </head>
 <body>
 <div class="deck">
 
-  <!-- S01 Cover · Full IKB -->
-  <section class="slide ikb">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
-        <span>OPEN DESIGN — 2026 ROADMAP</span>
-        <span>S01 / 22</span>
-        <span>2026.05.11</span>
+  <!-- №01 · S01 Cover · Full IKB -->
+  <section class="slide ikb cover">
+    <div class="frame">
+      <header class="chrome">
+        <span>OPEN DESIGN, INC. — BOARD PRE-READ</span>
+        <span>S01 / 10</span>
+        <span>2026.07.09</span>
       </header>
       <!-- ascii dot matrix top-right -->
-      <pre class="absolute top-20 right-12 ascii">▒▓█▓▒░░▒▓█▓▒
+      <pre class="ascii" style="position:absolute; top:80px; right:48px;">▒▓█▓▒░░▒▓█▓▒
 ▒▒▓█▓▒░░▒▓█▓▒
 ░▒▓█▓▒░░▒▓█▓▒
 ░░▒▓█▓▒░░▒▓█▓
 ▒░░▒▓█▓▒░░▒▓
 ▒▒░░▒▓█▓▒░░▒</pre>
       <div>
-        <div class="mono text-[12px] uppercase tracking-[0.18em] opacity-80">№01 · A LANDMARK</div>
-        <h1 class="mt-3 font-black leading-[0.95] tracking-[-0.02em]" style="font-size:clamp(48px,7.5vw,124px)">
-          Designing<br/>intelligence<br/>on warm paper.
+        <div class="kicker in">№01 · FY26 BOARD PRE-READ</div>
+        <h1 class="cover-title in in-1">
+          The Open-Core Bet.<br/>Growth vs Burn.<br/>One Decision.
         </h1>
-        <p class="mt-5 max-w-[640px] text-[15px] opacity-90 leading-snug">
-          75 个世界级 HTML 模板 · 17 个本地 AI agent 适配 · 0 API 成本 · 一键发布到任何平台。
+        <p class="cover-lede in in-2">
+          FY26 Q3 board pre-read: the case for funding Open Design's enterprise edition — the growth evidence, the burn math, the options on the table, and the single approval the board must make before page five.
         </p>
       </div>
-      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-70 hairline-t pt-3">
-        <span>OPEN-DESIGN.STUDIO</span>
-        <span>BERLIN · 52.5200° N · 13.4050° E</span>
-        <span>VOL. 01</span>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>PREPARED FOR THE BOARD OF DIRECTORS</span>
+        <span>APACHE-2.0 CORE STAYS OPEN · RUNS LOCALLY · BYOK</span>
+        <span>CONFIDENTIAL</span>
       </footer>
     </div>
   </section>
 
-  <!-- S06 KPI Tower · paper bg, 4 IKB bars -->
+  <!-- №02 · S06 KPI Tower · paper bg, 4 IKB bars -->
   <section class="slide paper">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
-        <span>KPI TOWER — Q1-Q4 OUTLOOK</span>
-        <span>S06 / 22</span>
-        <span>FY 2026</span>
+    <div class="frame">
+      <header class="chrome">
+        <span>STAT TOWER — FY26 SCORECARD</span>
+        <span>S02 / 10</span>
+        <span>2026</span>
       </header>
       <div>
-        <div class="mono text-[12px] uppercase tracking-[0.18em]" style="color:#002FA7">№06 · GROWTH METRICS</div>
-        <h2 class="mt-2 font-black leading-[1] tracking-[-0.02em]" style="font-size:clamp(36px,4.8vw,80px)">
-          四根柱子, 一个目标 ——<br/>
-          做<span style="color:#002FA7">最被信任</span>的 HTML 生产线。
+        <div class="kicker accent">№02 · THE EVIDENCE</div>
+        <h2 class="tower-h2">
+          Four numbers the board already trusts —<br/>
+          and one that must move: <span class="accent">1.6x burn multiple</span>.
         </h2>
       </div>
-      <!-- bars -->
-      <div class="grid grid-cols-4 gap-10 items-end mt-6">
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="16" y="2" width="4" height="18"/></svg>
+      <!-- bars: heights proportional to real values (76K stars / $9.2M ARR / 214 plugins / 11mo runway) -->
+      <div class="towers">
+        <div class="tower in in-1">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="16" y="2" width="4" height="18"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:60px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">75</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · 现在</div>
+          <div class="bar" style="height:280px"></div>
+          <div class="value">76K+</div>
+          <div class="label">GitHub Stars</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><circle cx="12" cy="12" r="9" fill="none" stroke="#002FA7" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="tower in in-2">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><circle cx="12" cy="12" r="9" fill="none" stroke="#002FA7" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:140px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">200</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · Q4 目标</div>
+          <div class="bar" style="height:180px"></div>
+          <div class="value">$9.2M</div>
+          <div class="label">FY26 ARR (3x YoY)</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
+        <div class="tower in in-3">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:230px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">25K</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">GH Stars · 目标</div>
+          <div class="bar" style="height:120px"></div>
+          <div class="value">214+</div>
+          <div class="label">Plugins Shipped</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M5 3l10 9-10 9z"/></svg>
+        <div class="tower in in-4">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M5 3l10 9-10 9z"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:280px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">80K</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">WAU · 目标</div>
+          <div class="bar" style="height:70px"></div>
+          <div class="value">11mo</div>
+          <div class="label">Runway At Current Burn</div>
         </div>
       </div>
-      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-60 hairline-t pt-3 mt-4">
-        <span>SOURCE — INTERNAL ANALYTICS / 2026-04</span>
-        <span>OPEN-DESIGN.STUDIO</span>
-        <span>№06 / 22</span>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>SOURCE — FINANCE &amp; OPS / FY26 Q3 CLOSE</span>
+        <span>OPEN DESIGN, INC. — BOARD OF DIRECTORS</span>
+        <span>№02 / 10</span>
       </footer>
+    </div>
+  </section>
+
+  <!-- №03 · S03 Statement · giant centered thesis -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>STATEMENT — THE RECOMMENDATION</span>
+        <span>S03 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="statement-wrap">
+        <h2 class="statement in">
+          Fund the enterprise edition now,<br/>or fund a <span class="accent">down round</span> later.
+        </h2>
+      </div>
+      <div>
+        <div class="statement-note in in-2">
+          <span class="note-label">Recommendation</span>
+          <p>Management asks the board to approve $18M in incremental FY26 spend to ship SSO, audit logging and on-prem deploy — converting 76,000 GitHub stars and 1,240 paid teams into the enterprise revenue that closes our burn-multiple gap before Q2 FY27.</p>
+        </div>
+        <footer class="chrome chrome-foot hairline-t">
+          <span>OPEN DESIGN, INC. — DECISION MEMO</span>
+          <span>SCOPE: SSO · AUDIT LOG · ON-PREM</span>
+          <span>№03 / 10</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- №04 · S19 Four Cards · accent hairline + 4 equal cards -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome" style="border-top:1px solid #002FA7; padding-top:10px;">
+        <span>OPTIONS — WHAT THE BOARD CAN APPROVE</span>
+        <span>S04 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№04 · FOUR PATHS TO FY27</div>
+        <h2 class="h2">Four paths forward. One keeps the mission intact.</h2>
+        <div class="cards4">
+          <div class="card in in-1">
+            <div class="meta">Option A / Status quo</div>
+            <h3>Hold the roadmap</h3>
+            <p>Keep shipping community features only. ARR grows to ~$12M organically, but runway falls to 6 months by Q1 FY27.</p>
+            <div class="card-foot">Runway risk: high</div>
+          </div>
+          <div class="card in in-2">
+            <div class="meta">Option B / Recommended</div>
+            <h3>Fund the enterprise edition</h3>
+            <p>$18M to ship SSO, audit log and on-prem in two quarters — converts pipeline into ARR and extends runway to 19 months.</p>
+            <div class="card-foot">Board approval requested</div>
+          </div>
+          <div class="card in in-3">
+            <div class="meta">Option C / Close the core</div>
+            <h3>License the daemon</h3>
+            <p>Close-source the daemon and charge per seat. Solves burn fast but breaks the Apache-2.0 promise that drives our growth.</p>
+            <div class="card-foot">Reputational risk: high</div>
+          </div>
+          <div class="card in in-4">
+            <div class="meta">Option D / Raise now</div>
+            <h3>Take a down round</h3>
+            <p>Raise on current terms to buy time without changing the plan. Preserves optionality but dilutes the cap table by ~22%.</p>
+            <div class="card-foot">Dilution: −22%</div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN, INC. — OPTIONS</span>
+        <span>MANAGEMENT RECOMMENDS OPTION B</span>
+        <span>№04 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №05 · S04 Six Cells · 2×3 capability grid -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>SEGMENTS — WHERE THE PIPELINE LIVES</span>
+        <span>S05 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№05 · PIPELINE BY SEGMENT</div>
+        <h2 class="h2">$14M in enterprise pipeline, six segments deep.</h2>
+        <div class="cells">
+          <div class="cell in in-1">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8" fill="none" stroke="#002FA7" stroke-width="2"/></svg>
+              <span class="num">$3.4M</span>
+            </div>
+            <h3>Fintech</h3>
+            <p>Compliance teams need audit logs before they will self-host anything.</p>
+          </div>
+          <div class="cell in in-2">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#002FA7" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+              <span class="num">$2.1M</span>
+            </div>
+            <h3>Healthcare</h3>
+            <p>HIPAA-adjacent buyers want on-prem, not another SaaS vendor.</p>
+          </div>
+          <div class="cell in in-3">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="2" y="5" width="20" height="12"/><rect x="9" y="19" width="6" height="2"/></svg>
+              <span class="num">$2.8M</span>
+            </div>
+            <h3>Public sector</h3>
+            <p>Procurement requires SSO and a signed DPA before any pilot converts.</p>
+          </div>
+          <div class="cell in in-4">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#002FA7" stroke-width="2"><rect x="5" y="2" width="14" height="20"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              <span class="num">$2.6M</span>
+            </div>
+            <h3>Design agencies</h3>
+            <p>220-seat deals are blocked on team roles and billing, not price.</p>
+          </div>
+          <div class="cell in in-5">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M6 4l14 8-14 8z"/></svg>
+              <span class="num">$1.9M</span>
+            </div>
+            <h3>Dev tooling</h3>
+            <p>Platform teams want a stable API contract, not a UI license.</p>
+          </div>
+          <div class="cell in in-6">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></svg>
+              <span class="num">$1.2M</span>
+            </div>
+            <h3>Education</h3>
+            <p>Campus IT wants SSO through existing SAML, nothing exotic.</p>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN, INC. — PIPELINE</span>
+        <span>SOURCE — REVENUE OPS / FY26 Q3</span>
+        <span>№05 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №06 · S11 Horizontal Timeline · 5-step workflow -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>PLAN — 90 DAYS TO ENTERPRISE-READY</span>
+        <span>S06 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№06 · EXECUTION PLAN</div>
+        <h2 class="h2">Five moves from approval to first enterprise contract.</h2>
+        <div class="tl">
+          <div class="tl-row">
+            <div class="tl-step in in-1">
+              <div class="num">01</div>
+              <h3>Approve</h3>
+              <p>Board signs off on $18M and the two-quarter scope.</p>
+            </div>
+            <div class="tl-step in in-2">
+              <div class="num">02</div>
+              <h3>Staff</h3>
+              <p>Hire six engineers against SSO, audit log and on-prem in Q3.</p>
+            </div>
+            <div class="tl-step in in-3">
+              <div class="num">03</div>
+              <h3>Ship</h3>
+              <p>SSO and audit logging reach general availability by Q4.</p>
+            </div>
+            <div class="tl-step in in-4">
+              <div class="num">04</div>
+              <h3>Pilot</h3>
+              <p>Convert five pipeline accounts to paid pilots by Q1 FY27.</p>
+            </div>
+            <div class="tl-step in in-5">
+              <div class="num">05</div>
+              <h3>Renew</h3>
+              <p>First annual enterprise contracts sign by Q2 FY27.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN, INC. — PLAN</span>
+        <span>TWO QUARTERS FROM APPROVAL TO REVENUE</span>
+        <span>№06 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №07 · S08 Duo Compare · before / after split -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>COMPARE — GROWTH VS BURN</span>
+        <span>S07 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="duo">
+        <div class="duo-col in in-1">
+          <div class="duo-body">
+            <div class="tag"><b>Before</b> — Community-only model</div>
+            <div class="big">1.6x</div>
+            <p>Every $1 of new ARR costs $1.60 in net burn — the math of giving away the core with no enterprise layer to monetize it.</p>
+          </div>
+          <div class="duo-foot">Burn multiple, FY26 H1</div>
+        </div>
+        <div class="duo-col in in-2">
+          <div class="duo-body">
+            <div class="tag"><b>After</b> — Enterprise edition funded</div>
+            <div class="big accent">0.7x<span class="delta">−0.9x</span></div>
+            <p>Enterprise contracts convert at 3–5x the revenue per account of community upgrades, halving the burn multiple within two quarters of GA.</p>
+          </div>
+          <div class="duo-foot">Burn multiple, projected FY26 Q4</div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>SOURCE — FINANCE MODEL / FY26 SCENARIO</span>
+        <span>1.6x → 0.7x</span>
+        <span>№07 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №08 · S14 Loop Diagram · numbered steps + SVG concentric rings -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>SYSTEM — HOW THE BOARD TRACKS THIS</span>
+        <span>S08 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="loop">
+        <div class="loop-steps">
+          <div class="kicker accent">№08 · GOVERNANCE CADENCE</div>
+          <h2 class="h2" style="margin-bottom:18px;">Approval isn't the end<br/>of oversight. It's a loop.</h2>
+          <div class="loop-step in in-1">
+            <span class="num">01</span>
+            <div><h3>Report</h3><p>Finance reports burn multiple and pipeline monthly.</p></div>
+          </div>
+          <div class="loop-step in in-2">
+            <span class="num">02</span>
+            <div><h3>Compare</h3><p>Actuals are compared against the 19-month runway model.</p></div>
+          </div>
+          <div class="loop-step in in-3">
+            <span class="num">03</span>
+            <div><h3>Flag</h3><p>Any 10% variance triggers an off-cycle board memo.</p></div>
+          </div>
+          <div class="loop-step in in-4">
+            <span class="num">04</span>
+            <div><h3>Adjust</h3><p>The board can pause funding at either quarterly gate.</p></div>
+          </div>
+        </div>
+        <div class="loop-art in in-2">
+          <svg width="380" height="380" viewBox="0 0 380 380" role="img" aria-label="Concentric loop diagram">
+            <circle cx="190" cy="190" r="172" fill="none" stroke="#0a0a0a" stroke-width="1"/>
+            <circle cx="190" cy="190" r="128" fill="none" stroke="#002FA7" stroke-width="2"/>
+            <circle cx="190" cy="190" r="84" fill="none" stroke="#0a0a0a" stroke-width="1"/>
+            <rect x="184" y="12" width="12" height="12" fill="#002FA7"/>
+            <rect x="356" y="184" width="12" height="12" fill="#002FA7"/>
+            <rect x="184" y="356" width="12" height="12" fill="#002FA7"/>
+            <rect x="12" y="184" width="12" height="12" fill="#002FA7"/>
+            <text x="190" y="186" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" letter-spacing="6" fill="#0a0a0a">GATE</text>
+            <text x="190" y="206" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" letter-spacing="2" fill="#002FA7">QUARTERLY REVIEW</text>
+          </svg>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN, INC. — GOVERNANCE</span>
+        <span>TWO QUARTERLY GATES BEFORE FULL RELEASE</span>
+        <span>№08 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №09 · S18 Why Now · 3 columns, last column accent -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>RISKS — WHAT COULD GO WRONG</span>
+        <span>S09 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№09 · RISKS TO THE PLAN</div>
+        <h2 class="h2">Three risks the board should weigh before approving.</h2>
+        <div class="why">
+          <div class="why-col in in-1">
+            <div class="cat">Execution</div>
+            <h3>Six hires in one quarter is tight.</h3>
+            <p>SSO and audit-log work needs senior platform engineers; the talent market for local-first infra is thin.</p>
+            <div class="num">6</div>
+            <div class="num-label">Open engineering reqs</div>
+          </div>
+          <div class="why-col in in-2">
+            <div class="cat">Market</div>
+            <h3>Enterprise buyers move slower than pipeline suggests.</h3>
+            <p>Procurement cycles for on-prem deploys average 4-6 months; pilots may slip past Q1 FY27.</p>
+            <div class="num">4-6mo</div>
+            <div class="num-label">Avg. enterprise sales cycle</div>
+          </div>
+          <div class="why-col why-accent in in-3">
+            <div class="cat">Runway</div>
+            <h3>If the burn multiple doesn't move, 11 months is the real deadline.</h3>
+            <p>Without enterprise conversion, current runway forces a down round or a reduction in force before FY27 opens.</p>
+            <div class="num">11mo</div>
+            <div class="num-label">Runway if the plan misses</div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN, INC. — RISKS</span>
+        <span>REVIEWED WITH FINANCE &amp; ENGINEERING LEADS</span>
+        <span>№09 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №10 · S09 Closing Manifesto · IKB block + next steps -->
+  <section class="slide">
+    <div class="closing">
+      <div class="closing-left">
+        <div>
+          <div class="kicker in" style="opacity:0.85;">№10 · CLOSING</div>
+          <h2 class="manifesto in in-1">Approve.<br/>Fund.<br/>Convert.</h2>
+        </div>
+        <pre class="ascii" style="position:absolute; bottom:120px; left:48px;">█▓▒░░▒▓█▓▒░
+▓█▓▒░░▒▓█▓▒
+▒▓█▓▒░░▒▓█▓
+░▒▓█▓▒░░▒▓█</pre>
+        <div class="meta">Apache-2.0 core stays open · Enterprise edition funds the mission</div>
+      </div>
+      <div class="closing-right">
+        <header class="chrome">
+          <span>DECISION &amp; OWNERS</span>
+          <span>S10 / 10</span>
+          <span>2026</span>
+        </header>
+        <div class="next-steps">
+          <div class="next-step in in-1">
+            <div class="num">01 / Decision requested</div>
+            <h3><a href="#fy26-decision-record">Approve $18M for the enterprise edition</a></h3>
+            <p>Two-quarter scope: SSO, audit logging, on-prem deploy — funded against existing runway plus this allocation.</p>
+          </div>
+          <div class="next-step in in-2">
+            <div class="num">02 / Owner — Engineering</div>
+            <h3><a href="#owner-engineering">VP Engineering, M. Alvarez</a></h3>
+            <p>Accountable for GA of SSO and audit logging by end of Q4 FY26.</p>
+          </div>
+          <div class="next-step in in-3">
+            <div class="num">03 / Owner — Revenue</div>
+            <h3><a href="#owner-revenue">VP Sales, R. Okafor</a></h3>
+            <p>Accountable for converting five pipeline accounts to paid pilots by Q1 FY27.</p>
+          </div>
+        </div>
+        <footer class="chrome chrome-foot hairline-t">
+          <span>OPEN DESIGN, INC. — FY26</span>
+          <span>№10 / 10</span>
+        </footer>
+      </div>
     </div>
   </section>
 
 </div>
+
 </body>
 </html>

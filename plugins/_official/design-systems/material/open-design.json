@@ -24,6 +24,7 @@
     "en": "Material"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Google's Material Design with layered surfaces, dynamic theming, built-in motion, and responsive cross-platform patterns.",
   "description_i18n": {
     "zh-CN": "Google 的 Material Design，包含分层界面、动态主题、内置动效和响应式跨平台设计模式。",

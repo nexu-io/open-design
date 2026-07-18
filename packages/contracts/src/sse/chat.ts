@@ -1,4 +1,5 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
+import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -30,6 +31,15 @@ export interface LiveArtifactRefreshSsePayload {
   title?: string;
   refreshedSourceCount?: number;
   error?: string;
+}
+
+export interface PlainStreamArtifactSsePayload {
+  type: 'artifact';
+  source: 'plain-stream';
+  name: string;
+  path?: string;
+  identifier?: string;
+  artifactType?: string;
 }
 
 /**
@@ -71,20 +81,37 @@ export interface ChatSseEndPayload {
   code: number | null;
   signal?: string | null;
   status?: 'succeeded' | 'failed' | 'canceled';
+  /** Authoritative count of artifact files created or modified by this run.
+   *  Present when the daemon resolved the run's filesystem/tool-stream diff
+   *  before publishing the terminal frame. */
+  artifactCount?: number;
   /** True when a `failed` run can be recovered by resuming the agent's CLI
    *  session (transient upstream drop / inactivity on a session-resuming
    *  runtime). Lets the chat offer a Continue affordance without a separate
    *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** True when this terminal run ended with unfinished declared work (a
+   *  non-`completed` TodoWrite task, or a max_tokens truncation). The browser
+   *  reads it straight off the terminal frame and carries it onto the persisted
+   *  assistant message so every status surface avoids showing "Completed" for an
+   *  incomplete run. Mirrors ChatRunStatusResponse.endedWithUnfinishedWork. */
+  endedWithUnfinishedWork?: boolean;
+  /** Daemon failure classification for a `failed` run, so the chat can render
+   *  specific guidance straight off the terminal frame without a status refetch.
+   *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
+  failureCategory?: RunFailureCategory | null;
+  failureDetail?: RunFailureDetail | null;
 }
 
 export type DaemonAgentPayload =
   | { type: 'status'; label: string; model?: string; ttftMs?: number; detail?: string }
   | { type: 'text_delta'; delta: string }
+  | { type: 'conversation_title'; title: string }
   | { type: 'thinking_delta'; delta: string }
   | { type: 'thinking_start' }
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
+  | PlainStreamArtifactSsePayload
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still
@@ -98,8 +125,21 @@ export type DaemonAgentPayload =
    */
   | { type: 'tool_input_delta'; id: string; name: string; delta: string }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
-  | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
+  | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number; stopReason?: string | null }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }
+  // The agent is stuck repeating failing tool calls (see tool-loop-guard.ts).
+  // `action: 'warn'` is an early heads-up the run may be looping; `'halt'` means
+  // the daemon terminated the run at the hard ceiling. `signature` is a
+  // truncated, human-readable form of the repeated action; `count` is how many
+  // times it failed (consecutive run, or repeats of this exact action).
+  | {
+      type: 'tool_loop';
+      reason: 'consecutive-errors' | 'repeated-failure';
+      action: 'warn' | 'halt';
+      toolName: string;
+      signature: string;
+      count: number;
+    }
   | { type: 'raw'; line: string };
 
 export type ChatSseEvent =

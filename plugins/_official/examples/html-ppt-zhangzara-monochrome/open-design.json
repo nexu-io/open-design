@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-monochrome",
-  "title": "Html Ppt Zhangzara Monochrome",
+  "title": "Write a Grant Committee Brief like a Funded Principal Investigator",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Monochrome",
-    "zh-TW": "Html Ppt Zhangzara Monochrome",
-    "ja": "Html Ppt Zhangzara Monochrome",
-    "ko": "Html Ppt Zhangzara Monochrome",
-    "de": "Html Ppt Zhangzara Monochrome",
-    "fr": "Html Ppt Zhangzara Monochrome",
-    "ru": "Html Ppt Zhangzara Monochrome",
-    "es": "Html Ppt Zhangzara Monochrome",
-    "pt-BR": "Html Ppt Zhangzara Monochrome",
-    "it": "Html Ppt Zhangzara Monochrome",
-    "vi": "Html Ppt Zhangzara Monochrome",
-    "pl": "Html Ppt Zhangzara Monochrome",
-    "id": "Html Ppt Zhangzara Monochrome",
-    "nl": "Html Ppt Zhangzara Monochrome",
-    "ar": "Html Ppt Zhangzara Monochrome",
-    "tr": "Html Ppt Zhangzara Monochrome",
-    "uk": "Html Ppt Zhangzara Monochrome",
-    "en": "Html Ppt Zhangzara Monochrome"
+    "en": "Write a Grant Committee Brief like a Funded Principal Investigator",
+    "zh-CN": "像拿到资助的 PI 一样写基金评审简报",
+    "zh-TW": "像拿到资助的 PI 一样写基金评审简报"
   },
   "version": "0.1.0",
-  "description": "Monochrome — Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all. Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Built as a decision-grade academic research deck for grant review committee.",
   "description_i18n": {
-    "zh-CN": "单色主题——象牙色账本纸配纯黑字体；标题使用 Lora 衬线字体，正文使用 Jost，完全无彩色。适用于手工排版账本风格的内容：用户研究综述、白皮书、长篇报告、学术和政策简报、咨询交付物、中英双语报告。",
-    "zh-TW": "單色主題——象牙色帳本紙配純黑字體；標題使用 Lora 襯線字體，內文使用 Jost，完全無彩色。適用於手工排版帳本風格的內容：使用者研究綜述、白皮書、長篇報告、學術和政策簡報、諮詢交付物、中英雙語報告。",
-    "ja": "モノクローム——アイボリーの台帳用紙に純黒の文字。見出しは Lora セリフ体、本文は Jost、完全な無彩色。手組み台帳のような雰囲気が必要なコンテンツに最適：ユーザー調査の総括、ホワイトペーパー、長文レポート、学術・政策ブリーフ、コンサルティング成果物、英中バイリンガルレポート。",
-    "ko": "모노크롬 — 아이보리 원장지에 순수 검은색 타이포그래피. 제목은 Lora 세리프체, 본문은 Jost, 색상 완전 배제. 수기 조판 원장 느낌이 필요한 콘텐츠에 적합: 사용자 리서치 종합, 백서, 장문 보고서, 학술 및 정책 브리프, 컨설팅 결과물, 한영 이중언어 보고서.",
-    "de": "Monochrome — Elfenbeinfarbenes Kontobuchpapier mit rein schwarzer Schrift; Lora-Serifen-Überschriften, Jost-Fließtext, keine Farben. Ideal für handgesetzte Kontobuch-Ästhetik: User-Research-Synthesen, Whitepapers, Langform-Berichte, akademische und Policy-Briefs, Beratungslieferungen, zweisprachige EN/CN-Berichte.",
-    "fr": "Monochrome — Papier grand livre ivoire avec typographie entièrement noire ; titres en Lora serif, corps en Jost, aucune couleur. Idéal pour l'esthétique des registres composés à la main : synthèses de recherche utilisateur, livres blancs, rapports longs, notes académiques et politiques, livrables de conseil, rapports bilingues EN/CN.",
-    "ru": "Монохром — бумага цвета слоновой кости с чисто чёрным шрифтом; заголовки Lora с засечками, основной текст Jost, без цвета. Для документов в стиле рукописной бухгалтерской книги: синтез пользовательских исследований, white papers, длинные отчёты, академические и политические брифы, консалтинговые материалы, двуязычные отчёты EN/CN.",
-    "es": "Monocromático — papel de libro mayor marfil con tipografía completamente negra; títulos Lora serif, cuerpo Jost, sin color. Para contenidos con estética de libro mayor tipografiado a mano: síntesis de investigación de usuarios, white papers, informes largos, briefs académicos y de políticas, entregables de consultoría, informes bilingües EN/CN.",
-    "pt-BR": "Monocromático — papel livro-razão marfim com tipografia totalmente preta; títulos Lora serifada, corpo Jost, sem cor alguma. Para conteúdos com estética de livro-razão tipografado à mão: sínteses de pesquisa de usuários, white papers, relatórios longos, briefs acadêmicos e de políticas, entregas de consultoria, relatórios bilíngues EN/CN.",
-    "it": "Monocromatico — carta da registro avorio con tipografia completamente nera; titoli Lora serif, corpo Jost, nessun colore. Per contenuti con estetica da registro tipografico manuale: sintesi di ricerca utente, white paper, report lunghi, brief accademici e politici, deliverable consulenziali, report bilingue EN/CN.",
-    "vi": "Đơn sắc — giấy sổ cái màu ngà với kiểu chữ hoàn toàn đen; tiêu đề Lora serif, nội dung Jost, không màu sắc. Dành cho nội dung có cảm giác sổ cái chữ in thủ công: tổng hợp nghiên cứu người dùng, white paper, báo cáo dài, tóm tắt học thuật và chính sách, sản phẩm tư vấn, báo cáo song ngữ EN/CN.",
-    "pl": "Monochromatyczny — papier księgi głównej w kolorze kości słoniowej z całkowicie czarną typografią; nagłówki Lora serif, treść Jost, bez koloru. Do treści o estetyce ręcznie składanej księgi: synteza badań użytkowników, white papers, długie raporty, briefingi akademickie i polityczne, deliverables doradcze, raporty dwujęzyczne EN/CN.",
-    "id": "Monokrom — kertas buku besar gading dengan tipografi hitam pekat; judul Lora serif, body Jost, tanpa warna sama sekali. Untuk konten berkesan buku besar yang diset manual: sintesis riset pengguna, white paper, laporan panjang, brief akademis dan kebijakan, deliverable konsultansi, laporan bilingual EN/CN.",
-    "nl": "Monochromatisch — ivoorkleurig grootboekpapier met volledig zwarte typografie; Lora serif koppen, Jost body, geen kleur. Voor content met handgezet grootboek-esthetiek: gebruikersonderzoeksynthese, whitepapers, lange rapporten, academische en beleidsbriefs, adviesdeliverables, tweetalige EN/CN-rapporten.",
-    "ar": "أحادي اللون — ورق دفتر أستاذ عاجي بطباعة سوداء بالكامل؛ عناوين Lora serif، متن Jost، بدون ألوان على الإطلاق. للمحتوى بمظهر دفتر الأستاذ المنضد يدويًا: تجميع أبحاث المستخدمين، الأوراق البيضاء، التقارير الطويلة، الملخصات الأكاديمية والسياسية، مخرجات الاستشارات، التقارير ثنائية اللغة EN/CN.",
-    "tr": "Monokrom — fildişi defter kağıdı ve tamamen siyah tipografi; Lora serif başlıklar, Jost gövde metni, hiç renk yok. Elle dizilmiş defter hissi gereken içerikler için: kullanıcı araştırma sentezi, white paper'lar, uzun raporlar, akademik ve politika özetleri, danışmanlık çıktıları, iki dilli EN/CN raporlar.",
-    "uk": "Монохром — папір кольору слонової кістки з повністю чорним шрифтом; заголовки Lora з засічками, основний текст Jost, без кольору. Для документів у стилі рукописної облікової книги: синтез користувацьких досліджень, white papers, довгі звіти, академічні та політичні брифи, консалтингові матеріали, двомовні звіти EN/CN.",
-    "en": "Monochrome — Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all. Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports."
+    "en": "A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Built as a decision-grade academic research deck for grant review committee.",
+    "zh-CN": "像拿到资助的 PI 一样写基金评审简报——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像拿到资助的 PI 一样写基金评审简报——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -66,7 +37,18 @@
     "white-paper",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "board",
+    "strategy",
+    "business-review",
+    "html-ppt-zhangzara-monochrome",
+    "academic-research",
+    "academic-review-deck",
+    "research",
+    "grant",
+    "review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -79,7 +61,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "research",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -87,13 +69,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Monochrome — Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all. Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports.",
-        "zh-CN": "使用这个插件完成以下任务：Monochrome — Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all. Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports."
+        "en": "Create \"Write a Grant Committee Brief like a Funded Principal Investigator\" as a decision-grade Academic research deck in this template's own visual system. Subject: A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Audience: grant review committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming.",
+        "zh-CN": "像拿到资助的 PI 一样写基金评审简报。像拿到资助的 PI 一样写基金评审简报——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。 主题：A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Monochrome"
+          "title": "Write a Grant Committee Brief like a Funded Principal Investigator",
+          "title_i18n": {
+            "en": "Write a Grant Committee Brief like a Funded Principal Investigator",
+            "zh-CN": "像拿到资助的 PI 一样写基金评审简报",
+            "zh-TW": "像拿到资助的 PI 一样写基金评审简报"
+          }
         }
       ]
     },
@@ -121,6 +108,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "academic-research"
   }
 }

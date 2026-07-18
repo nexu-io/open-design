@@ -2,22 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Long Table — Slide Template</title>
+<title>Present a Unit-Economics Model like an FP&amp;A Partner - Data, KPI &amp; finance</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --paper:    #FAF1E2;   /* warm buttery cream paper */
-    --paper-d:  #F2E5CF;   /* slightly darker cream */
-    --paper-vd: #E8D7B6;   /* deeper cream for accents */
-    --ink:      #B53D2A;   /* warm rust / terracotta red — the only ink colour */
-    --ink-dp:   #8E2D1F;   /* deeper red for emphasis */
-    --rule:     #B53D2A;
+    --paper: #FAF1E2;   /* warm buttery cream paper */
+    --ink:   #B53D2A;   /* warm rust / terracotta red, the only ink colour */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  h1, h2, p { margin: 0; } /* spacing is owned by flex/grid gaps, not UA margins */
   body {
     font-family: 'Fraunces', Georgia, serif;
     color: var(--ink);
@@ -33,7 +30,9 @@
     background: var(--paper);
   }
 
-  /* Subtle paper texture */
+  /* Subtle paper texture. Sits ABOVE the slide backgrounds (slides paint
+     var(--paper) at z-index 2, so a z-index 1 grain would never render);
+     pointer-events none, 10% opacity, reads as print grain. */
   .stage::before {
     content: '';
     position: absolute; inset: 0;
@@ -41,38 +40,55 @@
     opacity: 0.10;
     background-image: radial-gradient(circle at 1px 1px, rgba(181,61,42,0.5) 0.5px, transparent 1px);
     background-size: 4px 4px;
-    z-index: 1;
+    z-index: 3;
+  }
+  /* On the inverted closing slide the grain flips to paper-coloured dots. */
+  .stage:has(.s-closing.active)::before {
+    background-image: radial-gradient(circle at 1px 1px, rgba(250,241,226,0.5) 0.5px, transparent 1px);
+    opacity: 0.07;
   }
 
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 300ms cubic-bezier(.16, 1, .3, 1);
     z-index: 2;
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
-  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
-  .disp {
-    font-family: 'Bricolage Grotesque', sans-serif;
-    font-weight: 800;
-    line-height: 0.92;
-    letter-spacing: -0.01em;
-    text-transform: uppercase;
-    color: var(--ink);
+  /* Entrance rhythm: direct children of each slide's layout root rise in
+     with a short stagger. Transform + opacity only. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
+  .slide.active .grid > *,
+  .slide.active .frame > *,
+  .slide.active .footer-line {
+    animation: rise 560ms cubic-bezier(.16, 1, .3, 1) both;
+  }
+  .slide.active .grid > :nth-child(2),
+  .slide.active .frame > :nth-child(2) { animation-delay: 70ms; }
+  .slide.active .grid > :nth-child(3),
+  .slide.active .frame > :nth-child(3) { animation-delay: 140ms; }
+  .slide.active .grid > :nth-child(4),
+  .slide.active .frame > :nth-child(4) { animation-delay: 210ms; }
+  .slide.active .grid > :nth-child(5),
+  .slide.active .frame > :nth-child(5) { animation-delay: 280ms; }
+  .slide.active .footer-line           { animation-delay: 210ms; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active .grid > *,
+    .slide.active .frame > *,
+    .slide.active .footer-line { animation: none; }
+  }
+
+  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
   .body-it {
     font-family: 'Fraunces', Georgia, serif;
     font-style: italic;
     font-weight: 400;
     line-height: 1.45;
-    color: var(--ink);
-  }
-  .body-ro {
-    font-family: 'Fraunces', Georgia, serif;
-    font-style: normal;
-    font-weight: 400;
-    line-height: 1.5;
     color: var(--ink);
   }
 
@@ -97,10 +113,12 @@
     font-size: clamp(11px, 0.78vw, 13px);
     color: var(--ink);
     letter-spacing: 0.02em;
-    opacity: 0.45;
+    opacity: 0.72;
     z-index: 12;
     pointer-events: none;
   }
+  /* The closing slide inverts ink/paper; the fixed hint must follow suit. */
+  body:has(.s-closing.active) .nav-hint { color: #FAF1E2; }
 
   /* ─── REUSABLE: pill button (outlined rounded rectangle) ────── */
   .pill {
@@ -161,7 +179,7 @@
 
   .s-cover .grid {
     position: absolute;
-    inset: clamp(60px, 6vh, 100px) clamp(60px, 5vw, 110px) clamp(110px, 11vh, 170px);
+    inset: clamp(48px, 5.4vh, 90px) clamp(60px, 5vw, 110px) clamp(96px, 10.5vh, 160px);
     display: grid;
     grid-template-columns: 1.05fr 1fr;
     gap: clamp(40px, 4vw, 80px);
@@ -169,7 +187,8 @@
   }
   .s-cover .left {
     display: flex; flex-direction: column;
-    gap: clamp(18px, 2vh, 30px);
+    gap: clamp(14px, 1.8vh, 26px);
+    min-height: 0;
   }
   .s-cover .ed-row {
     display: flex; align-items: center; gap: clamp(12px, 1.2vw, 18px);
@@ -185,7 +204,7 @@
     font-family: 'Bricolage Grotesque', sans-serif;
     font-weight: 800;
     text-transform: uppercase;
-    font-size: clamp(82px, min(8.8vw, 15vh), 180px);
+    font-size: clamp(72px, min(8.2vw, 12.5vh), 168px);
     line-height: 0.92;
     letter-spacing: -0.012em;
     color: var(--ink);
@@ -355,7 +374,7 @@
     grid-template-rows: auto;
     gap: clamp(20px, 2.4vw, 36px);
     align-self: center;
-    align-items: start;
+    align-items: stretch; /* equal card heights; meta-row anchors to the bottom via margin-top:auto */
   }
   .s-index .card {
     border: 1.5px solid var(--ink);
@@ -364,7 +383,7 @@
   }
   .s-index .card .card-top {
     display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
-    border-bottom: 1px solid rgba(181, 61, 42, 0.32);
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
     padding-bottom: clamp(10px, 1.2vh, 16px);
   }
   .s-index .card .card-top .num-tag {
@@ -400,7 +419,7 @@
   .s-index .card .meta-row {
     display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
     margin-top: auto;
-    border-top: 1px dashed rgba(181, 61, 42, 0.32);
+    border-top: 1px dashed rgba(181, 61, 42, 0.40);
     padding-top: clamp(10px, 1.2vh, 16px);
   }
   .s-index .card .meta-row .seats-tag,
@@ -472,7 +491,7 @@
     grid-template-columns: auto 1fr;
     gap: clamp(20px, 2vw, 36px);
     align-items: baseline;
-    border-bottom: 1px dashed rgba(181, 61, 42, 0.32);
+    border-bottom: 1px dashed rgba(181, 61, 42, 0.40);
     padding-bottom: clamp(12px, 1.4vh, 20px);
   }
   .s-featured .right .info-row:last-child { border-bottom: none; padding-bottom: 0; }
@@ -481,7 +500,6 @@
     font-style: italic;
     font-size: clamp(14px, 0.95vw, 16px);
     color: var(--ink);
-    letter-spacing: 0.02em;
     text-transform: uppercase;
     letter-spacing: 0.16em;
   }
@@ -509,14 +527,15 @@
      ────────────────────────────────────────────────────────────── */
   .s-menu { background: var(--paper); }
   .s-menu .frame {
-    /* Stack content from the top with natural spacing — no flex-stretch on
-       course rows, so the menu sits up against the title instead of the
-       rows being pushed apart by space-between distribution. */
+    /* Centre the whole menu block in its band: no flex-stretch on course
+       rows (space-between would tear the ledger apart), the block floats
+       as one unit so top and bottom whitespace stay balanced. */
     position: absolute;
     inset: clamp(40px, 4vh, 70px) clamp(120px, 12vw, 280px) clamp(110px, 11vh, 170px);
     display: flex;
     flex-direction: column;
-    gap: clamp(14px, 1.6vh, 24px);
+    justify-content: center;
+    gap: clamp(20px, 2.6vh, 40px);
     z-index: 5;
   }
   .s-menu .top-row {
@@ -549,7 +568,7 @@
     gap: clamp(14px, 1.4vw, 28px);
     align-items: center;
     padding: clamp(14px, 1.6vh, 24px) 0;
-    border-bottom: 1px solid rgba(181, 61, 42, 0.32);
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
   }
   .s-menu .course .num-tag {
     font-family: 'Fraunces', Georgia, serif;
@@ -585,7 +604,6 @@
     color: var(--ink);
     text-align: right;
     white-space: nowrap;
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -593,9 +611,10 @@
      ────────────────────────────────────────────────────────────── */
   .s-quote { background: var(--paper); }
   .s-quote .frame {
-    /* Single centred quote — no illustration. */
+    /* Single centred quote, balanced band: equal top/bottom insets so the
+       quote sits on the true centre instead of riding high. */
     position: absolute;
-    inset: clamp(96px, 10vh, 160px) clamp(120px, 12vw, 280px) clamp(150px, 14vh, 220px);
+    inset: clamp(96px, 10vh, 160px) clamp(120px, 12vw, 280px) clamp(96px, 10vh, 160px);
     display: flex; flex-direction: column;
     justify-content: center;
     align-items: center;
@@ -650,7 +669,6 @@
     font-style: italic;
     font-size: clamp(14px, 0.95vw, 16px);
     color: var(--ink);
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -697,7 +715,7 @@
     gap: clamp(14px, 1.4vw, 28px);
     align-items: center;
     padding: clamp(11px, 1.3vh, 18px) 0;
-    border-bottom: 1px solid rgba(181, 61, 42, 0.30);
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
     flex: 1 1 0;
     min-height: clamp(56px, 7vh, 90px);
   }
@@ -752,17 +770,19 @@
     line-height: 1;
     white-space: nowrap;
   }
-  .s-cal .row .seats-pill.sold-out {
-    background: var(--ink);
-    color: var(--paper);
-    font-style: normal;
-    font-weight: 600;
-  }
 
   /* ──────────────────────────────────────────────────────────────
      SLIDE 8 — CLOSING / RSVP
      ────────────────────────────────────────────────────────────── */
-  .s-closing { background: var(--paper); }
+  /* Closing slide is the deck's single inverted page: the two inks swap.
+     Every rule below already paints with var(--ink) / var(--paper), so the
+     scoped variable swap flips type, badges, pills, hairlines and the page
+     number together with no per-element overrides. */
+  .s-closing {
+    --ink: #FAF1E2;
+    --paper: #B53D2A;
+    background: var(--paper);
+  }
   /* Frame ends well above the footer-line; footer-line ends well above the
      page-num chrome. Three discrete bands, no overlap zones. */
   .s-closing .frame {
@@ -770,7 +790,7 @@
     left: clamp(80px, 7vw, 160px);
     right: clamp(80px, 7vw, 160px);
     top: clamp(96px, 10vh, 160px);
-    bottom: clamp(280px, 28vh, 400px);
+    bottom: clamp(220px, 23vh, 330px);
     display: flex; flex-direction: column;
     justify-content: center;
     z-index: 5;
@@ -807,11 +827,6 @@
     display: flex; gap: clamp(12px, 1.2vw, 20px); align-items: center;
     flex-wrap: wrap;
   }
-  .s-closing .right {
-    display: grid; place-items: center;
-    color: var(--ink);
-  }
-  .s-closing .right svg { width: 100%; height: auto; max-height: 100%; }
   .s-closing .footer-line {
     /* Footer band sits above the page-num chrome; clear gap below. */
     position: absolute;
@@ -849,29 +864,29 @@
       <div class="grid">
         <div class="left">
           <div class="ed-row">
-            <div class="ed-badge caption">5</div>
-            <div class="ed-label caption">december edition</div>
+            <div class="ed-badge caption">OD</div>
+            <div class="ed-label caption">data, kpi &amp; finance</div>
           </div>
-          <h1 class="title">Long Table</h1>
+          <h1 class="title">Unit Economics</h1>
           <div class="actions">
-            <span class="pill caption">Lisbon</span>
+            <span class="pill caption">BYOK Model</span>
             <span class="pill-divider caption">|</span>
-            <span class="pill caption">Apply now</span>
+            <span class="pill caption">FP&amp;A Pre-Read</span>
           </div>
           <div class="stats body-it">
-            <span class="num">22 seats only</span><br/>
-            More than dinner, it's a long evening.
+            <span class="num">97.8% gross margin</span><br/>
+            Zero AI cost of goods sold on our books, by design.
           </div>
           <div class="bottom-block">
-            <span class="rect-tag caption">Not a meal, an evening</span>
-            <p class="tagline">Where ten strangers, one cook, and a long evening meet under low light. Twice a month, by application.</p>
+            <span class="rect-tag caption">Q1 FY26 · prepared for the board</span>
+            <p class="tagline">Present a unit-economics model like an FP&amp;A partner: the assumptions, the sensitivity, and why it scales.</p>
           </div>
         </div>
 
         <div class="right">
-          <div class="big-edition">No. 05</div>
-          <div class="big-edition-lab caption">December · Lisbon · Edition</div>
-          <div class="big-edition-meta">Twice a month, ten strangers, one cook, one long table. By application.</div>
+          <div class="big-edition">97.8%</div>
+          <div class="big-edition-lab caption">Gross Margin · BYOK Model</div>
+          <div class="big-edition-meta">$0.42 infra cost per seat. $0 AI COGS. Margin holds as usage climbs.</div>
         </div>
       </div>
 
@@ -884,17 +899,17 @@
         <div class="left">
           <div class="ed-row">
             <div class="ed-badge caption">·</div>
-            <div class="ed-label caption">a letter from the table</div>
+            <div class="ed-label caption">the headline answer</div>
           </div>
-          <h2 class="h">A note<br/>before<br/>we sit.</h2>
+          <h2 class="h">The answer,<br/>before<br/>the model.</h2>
         </div>
         <div class="right">
-          <p>We started Long Table in a borrowed kitchen, with <span class="empha">six chairs we'd carried up the stairs</span>, and the conviction that an evening is more than the food on the plates.</p>
-          <p>Three years on we've seated almost <span class="empha">two thousand strangers</span> across nine cities, and we've learned that the chairs are sometimes the most important part.</p>
-          <p>This deck is the small handbook we send our hosts before each edition. It is also, quietly, an invitation.</p>
+          <p>Every AI design tool carries the same tension: usage grows, and the AI inference bill grows with it. Open Design breaks that link with <span class="empha">BYOK — bring your own key</span>.</p>
+          <p>Under BYOK, model inference is billed straight from the user's own provider account, never resold through our infrastructure. Our own cost per seat is <span class="empha">$0.42 a month</span> — storage, sync, relay, nothing more.</p>
+          <p>The result: gross margin holds at 97.8% whether a seat runs ten generations a month or ten thousand. This deck walks the assumptions, the sensitivity, and the forecast.</p>
           <div class="sig">
-            <div class="who-tag">Iris &amp; Theo</div>
-            <div>founders · written from a kitchen in Lisbon, November 2025</div>
+            <div class="who-tag">Prepared for the board</div>
+            <div>FP&amp;A · Q1 FY26 · confidential draft</div>
           </div>
         </div>
       </div>
@@ -905,44 +920,44 @@
     <section class="slide s-index">
       <div class="frame">
         <div class="topbar">
-          <div class="h">Three recent editions</div>
-          <div class="lab-tag caption">Long Table · 2025 · selected</div>
+          <div class="h">The three cost drivers</div>
+          <div class="lab-tag caption">unit-economics · driver tree</div>
         </div>
         <div class="grid">
           <div class="card">
             <div class="card-top">
+              <div class="num-tag caption">No. 01</div>
+              <div class="city-tag caption">Compute</div>
+            </div>
+            <div class="nm">Zero-Cost<br/>Compute</div>
+            <div class="desc body-it">Model inference runs against the user's own API key. Every token and every generation is billed to their provider account, not ours.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">BYOK</div>
+              <div class="date-tag caption">$0 AI COGS</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 02</div>
+              <div class="city-tag caption">Infra</div>
+            </div>
+            <div class="nm">Thin-Cloud<br/>Infra</div>
+            <div class="desc body-it">Our infra bill is sync, relay, and storage only — the daemon and agent runtime execute locally on the user's own machine.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">Local-first</div>
+              <div class="date-tag caption">$0.42 / seat / mo</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
               <div class="num-tag caption">No. 03</div>
-              <div class="city-tag caption">Mexico City</div>
+              <div class="city-tag caption">Retention</div>
             </div>
-            <div class="nm">A Plate<br/>of Quiet</div>
-            <div class="desc body-it">Eight courses cooked entirely on a single induction ring. The room agreed not to use phones for the entire evening, and almost kept the agreement.</div>
+            <div class="nm">Compounding<br/>Retention</div>
+            <div class="desc body-it">Design systems and memory accumulate per account, raising switching cost and expansion revenue without raising our marginal cost.</div>
             <div class="meta-row">
-              <div class="seats-tag caption">22 seats</div>
-              <div class="date-tag caption">14 March 2025</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-top">
-              <div class="num-tag caption">No. 04</div>
-              <div class="city-tag caption">Tokyo</div>
-            </div>
-            <div class="nm">A Soup<br/>of Letters</div>
-            <div class="desc body-it">A reading evening, with a single course served slowly. Four guest writers, one bowl per person, and the longest pause we have ever held between courses.</div>
-            <div class="meta-row">
-              <div class="seats-tag caption">18 seats</div>
-              <div class="date-tag caption">06 July 2025</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-top">
-              <div class="num-tag caption">No. 05</div>
-              <div class="city-tag caption">Lisbon</div>
-            </div>
-            <div class="nm">December<br/>Edition</div>
-            <div class="desc body-it">A long winter dinner. Twenty-two seats, one shared roast, and a quiet bookshop next door we'll wander to between courses, when the rain agrees.</div>
-            <div class="meta-row">
-              <div class="seats-tag caption">22 seats</div>
-              <div class="date-tag caption">11 December 2025</div>
+              <div class="seats-tag caption">129 design systems</div>
+              <div class="date-tag caption">NDR trending up</div>
             </div>
           </div>
         </div>
@@ -955,36 +970,36 @@
       <div class="frame">
         <div class="left">
           <div class="ed-row">
-            <div class="ed-badge caption">5</div>
-            <div class="ed-label caption">december · the featured edition</div>
+            <div class="ed-badge caption">№</div>
+            <div class="ed-label caption">the model · every assumption stated</div>
           </div>
-          <h2 class="ttl">An evening<br/>for the rain.</h2>
-          <p class="lede">A long winter dinner in a converted printing room above a bookshop. One shared roast, an unhurried wine list, and a single intermission that may, if the weather agrees, become a walk to the harbour and back.</p>
+          <h2 class="ttl">The metric<br/>behind the claim.</h2>
+          <p class="lede">The chart only matters if the assumptions hold. Here is every input to the model, published in full — nothing modeled here that we would not show a CFO directly.</p>
           <div class="stats-line">
-            <span class="pill caption">Apply by 28 November</span>
-            <span class="pill caption">Twelve seats left</span>
+            <span class="pill caption">$19 / seat / month</span>
+            <span class="pill caption">97.8% gross margin</span>
           </div>
         </div>
         <div class="right">
           <div class="info-row">
-            <div class="k caption">When</div>
-            <div class="v it">11 December 2025</div>
+            <div class="k caption">Revenue per seat</div>
+            <div class="v it">$19.00 / mo</div>
           </div>
           <div class="info-row">
-            <div class="k caption">Where</div>
-            <div class="v it">A printing room, Bairro Alto · Lisbon</div>
+            <div class="k caption">Infra COGS per seat</div>
+            <div class="v it">$0.42 / mo</div>
           </div>
           <div class="info-row">
-            <div class="k caption">Who</div>
-            <div class="v it">Twenty-two seats, by application</div>
+            <div class="k caption">AI COGS per seat (BYOK)</div>
+            <div class="v it">$0.00 / mo</div>
           </div>
           <div class="info-row">
-            <div class="k caption">How long</div>
-            <div class="v it">From eight, well into the evening</div>
+            <div class="k caption">Gross margin</div>
+            <div class="v it">97.8%</div>
           </div>
           <div class="info-row">
-            <div class="k caption">Seat</div>
-            <div class="v">€84</div>
+            <div class="k caption">Payback period</div>
+            <div class="v">1.1 mo</div>
           </div>
         </div>
       </div>
@@ -995,49 +1010,49 @@
     <section class="slide s-menu">
       <div class="frame">
         <div class="top-row">
-          <div class="kicker caption">A Menu, in Five Slow Movements</div>
-          <h2 class="h">December · Lisbon</h2>
+          <div class="kicker caption">The Model, Built in Five Lines</div>
+          <h2 class="h">How We Get to 98%</h2>
         </div>
         <div class="courses">
           <div class="course">
             <div class="num-tag caption">i.</div>
             <div class="item">
-              <div class="nm">Roasted chestnut soup</div>
-              <div class="desc body-it">with brown butter, sage, and a single thin disc of pear</div>
+              <div class="nm">Start with list price</div>
+              <div class="desc body-it">$19 per seat per month, mid-market design-tool pricing</div>
             </div>
-            <div class="pair-tag caption">unoaked white</div>
+            <div class="pair-tag caption">$19.00</div>
           </div>
           <div class="course">
             <div class="num-tag caption">ii.</div>
             <div class="item">
-              <div class="nm">A small bread, hot</div>
-              <div class="desc body-it">made the morning of, with cultured butter and a coarse salt</div>
+              <div class="nm">Subtract infra COGS</div>
+              <div class="desc body-it">sync, storage, and relay, metered per active seat</div>
             </div>
-            <div class="pair-tag caption">water, lemon</div>
+            <div class="pair-tag caption">-$0.42</div>
           </div>
           <div class="course">
             <div class="num-tag caption">iii.</div>
             <div class="item">
-              <div class="nm">Mackerel, lightly cured</div>
-              <div class="desc body-it">on toasted rye, with parsley oil and pickled celery</div>
+              <div class="nm">Subtract AI COGS</div>
+              <div class="desc body-it">BYOK routes every inference call to the user's own key</div>
             </div>
-            <div class="pair-tag caption">vinho verde</div>
+            <div class="pair-tag caption">-$0.00</div>
           </div>
           <div class="course">
             <div class="num-tag caption">iv.</div>
             <div class="item">
-              <div class="nm">A long roast, the centre course</div>
-              <div class="desc body-it">slow lamb shoulder, root vegetables under it, served family-style</div>
+              <div class="nm">Land on gross profit</div>
+              <div class="desc body-it">per seat, per month, before sales, support, and marketing</div>
             </div>
-            <div class="pair-tag caption">douro red</div>
+            <div class="pair-tag caption">$18.58</div>
           </div>
           <div class="course">
             <div class="num-tag caption">v.</div>
             <div class="item">
-              <div class="nm">Cheese, two only</div>
-              <div class="desc body-it">a soft, a hard, both local; quince paste and walnuts in the half-shell</div>
+              <div class="nm">Compute the margin</div>
+              <div class="desc body-it">gross profit over revenue, held flat as usage scales</div>
             </div>
-            <div class="pair-tag caption">port, late bottled</div>
+            <div class="pair-tag caption">97.8%</div>
           </div>
         </div>
       </div>
@@ -1048,11 +1063,11 @@
     <section class="slide s-quote">
       <div class="frame">
         <div class="right">
-          <div class="kicker caption">A guest writes</div>
-          <p class="qbody">An evening I keep <span class="it-emph">describing,</span> badly, to people who weren't there.</p>
+          <div class="kicker caption">The sensitivity, in one line</div>
+          <p class="qbody">Usage can grow tenfold and margin does not move — because <span class="it-emph">the AI bill isn't ours.</span></p>
           <div class="who-row">
-            <div class="who-tag">Hana Brennan</div>
-            <div class="meta-tag caption">long-table guest · Edition No. 04 · Tokyo</div>
+            <div class="who-tag">FP&amp;A</div>
+            <div class="meta-tag caption">sensitivity analysis · BYOK cost model</div>
           </div>
         </div>
       </div>
@@ -1063,58 +1078,58 @@
     <section class="slide s-cal">
       <div class="frame">
         <div class="topbar">
-          <div class="h">What's coming up</div>
-          <div class="lab-tag caption">2026 calendar · subject to weather</div>
+          <div class="h">The four-quarter forecast</div>
+          <div class="lab-tag caption">FY26 model · seats × margin</div>
         </div>
         <div class="ledger">
           <div class="row headrow">
             <div class="caption">No.</div>
-            <div class="caption">City</div>
-            <div class="caption">Theme</div>
-            <div class="caption">Date</div>
+            <div class="caption">Period</div>
+            <div class="caption">Volume &amp; revenue</div>
+            <div class="caption">Margin</div>
             <div class="caption">Status</div>
           </div>
           <div class="row">
+            <div class="num-tag caption">01</div>
+            <div class="city-tag">Q1 FY26</div>
+            <div class="theme">3,200 seats · $60.8K MRR</div>
+            <div class="date-tag caption">97.8%</div>
+            <div><span class="seats-pill caption">Actual</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">02</div>
+            <div class="city-tag">Q2 FY26</div>
+            <div class="theme">4,900 seats · $93.1K MRR</div>
+            <div class="date-tag caption">97.8%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">03</div>
+            <div class="city-tag">Q3 FY26</div>
+            <div class="theme">7,400 seats · $140.6K MRR</div>
+            <div class="date-tag caption">97.9%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">04</div>
+            <div class="city-tag">Q4 FY26</div>
+            <div class="theme">11,000 seats · $209.0K MRR</div>
+            <div class="date-tag caption">98.0%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">05</div>
+            <div class="city-tag">Downside</div>
+            <div class="theme">5,500 seats · growth cut 25%</div>
+            <div class="date-tag caption">97.6%</div>
+            <div><span class="seats-pill caption">Stress case</span></div>
+          </div>
+          <div class="row">
             <div class="num-tag caption">06</div>
-            <div class="city-tag">Lisbon</div>
-            <div class="theme">A long winter dinner, with a roast and a walk</div>
-            <div class="date-tag caption">11 December 2025</div>
-            <div><span class="seats-pill sold-out caption">Sold out</span></div>
-          </div>
-          <div class="row">
-            <div class="num-tag caption">07</div>
-            <div class="city-tag">Brooklyn</div>
-            <div class="theme">A reading evening, with one quiet course</div>
-            <div class="date-tag caption">17 January 2026</div>
-            <div><span class="seats-pill caption">12 seats left</span></div>
-          </div>
-          <div class="row">
-            <div class="num-tag caption">08</div>
-            <div class="city-tag">Mexico City</div>
-            <div class="theme">A small breakfast, taken slowly</div>
-            <div class="date-tag caption">22 February 2026</div>
-            <div><span class="seats-pill caption">Apply now</span></div>
-          </div>
-          <div class="row">
-            <div class="num-tag caption">09</div>
-            <div class="city-tag">Athens</div>
-            <div class="theme">A spring supper, on a roof, with wind</div>
-            <div class="date-tag caption">14 March 2026</div>
-            <div><span class="seats-pill caption">Apply now</span></div>
-          </div>
-          <div class="row">
-            <div class="num-tag caption">10</div>
-            <div class="city-tag">Seoul</div>
-            <div class="theme">A small soup of late letters</div>
-            <div class="date-tag caption">06 May 2026</div>
-            <div><span class="seats-pill caption">Apply soon</span></div>
-          </div>
-          <div class="row">
-            <div class="num-tag caption">11</div>
-            <div class="city-tag">Paris</div>
-            <div class="theme">An afternoon, mostly cheese and wind</div>
-            <div class="date-tag caption">18 June 2026</div>
-            <div><span class="seats-pill caption">Wait list</span></div>
+            <div class="city-tag">Upside</div>
+            <div class="theme">15,000 seats · BYOK adoption up</div>
+            <div class="date-tag caption">98.3%</div>
+            <div><span class="seats-pill caption">Upside case</span></div>
           </div>
         </div>
       </div>
@@ -1127,29 +1142,29 @@
         <div class="left">
           <div class="ed-row">
             <div class="ed-badge caption">·</div>
-            <div class="ed-label caption">come and sit with us</div>
+            <div class="ed-label caption">the recommended move</div>
           </div>
-          <h2 class="h">See you<br/>at the table.</h2>
-          <p class="desc-it">Every Long Table evening is by application. We read each one, and we usually answer within a week. The next room opens for Brooklyn on the seventeenth of January.</p>
+          <h2 class="h">The move<br/>we recommend.</h2>
+          <p class="desc-it">Hold pricing flat at $19 per seat, lean on BYOK as the retention lever, and let team expansion — not AI resale — drive revenue. The model holds at 97.8% margin through 15,000 seats.</p>
           <div class="actions">
-            <span class="pill caption">long-table.co</span>
-            <span class="pill caption">Apply for Brooklyn</span>
+            <a class="pill caption" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Review the model</a>
+            <a class="pill caption" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">See the BYOK docs</a>
           </div>
         </div>
       </div>
 
       <div class="footer-line">
         <div class="colf">
-          <span class="ftag caption">Founded</span>
-          By Iris &amp; Theo, 2022, in a borrowed kitchen in Lisbon.
+          <span class="ftag caption">Governance</span>
+          Apache-2.0, self-hostable — no vendor lock-in risk in the model.
         </div>
         <div class="colf">
           <span class="ftag caption">Set</span>
           In Bricolage Grotesque &amp; Fraunces, with one rust-red ink.
         </div>
         <div class="colf">
-          <span class="ftag caption">Until then</span>
-          Dress for the rain. Bring a hand-written question.
+          <span class="ftag caption">Contact</span>
+          finance@opendesign.dev · nexu-io/open-design · deck v1.2
         </div>
       </div>
 

@@ -11,7 +11,7 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 DEFAULT_PORT=7456
-DEFAULT_IMAGE="docker.io/vanjayak/open-design:latest"
+DEFAULT_IMAGE="ghcr.io/nexu-io/od:latest"
 DEFAULT_MEM_LIMIT="384m"
 HEALTH_TIMEOUT=60
 
@@ -19,10 +19,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
 
 # Build the -f argument list: always include the base file,
-# and add the override if it exists (used by tests for isolation).
+# add the Linux host-network override, and add docker-compose.override.yml if present
+# (used by tests for isolation).
 COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+fi
 if [ -f "$OVERRIDE_FILE" ]; then
   COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
 fi
@@ -259,6 +264,26 @@ if ! detect_compose; then
   exit 1
 fi
 
+# The Linux host-network override uses the !reset YAML tag (Docker Compose
+# v2.17+). Reject legacy docker-compose v1 and podman-compose early so users
+# get a clear message instead of a YAML parse error mid-install.
+if [ "$OS" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  if [ "$COMPOSE_CMD" != "docker compose" ]; then
+    error "The Linux host-network override requires 'docker compose' v2."
+    error "Found: ${COMPOSE_CMD}"
+    step "Install the Docker Compose plugin: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+  _compose_ver="$($COMPOSE_CMD version --short 2>/dev/null || echo "0.0.0")"
+  _compose_major="$(echo "$_compose_ver" | cut -d. -f1)"
+  _compose_minor="$(echo "$_compose_ver" | cut -d. -f2)"
+  if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 17 ]; }; then
+    error "Docker Compose v2.17 or later required for the Linux override (found v${_compose_ver})."
+    step "Upgrade: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+fi
+
 if ! check_runtime_running; then
   warn "${CONTAINER_RUNTIME} is not running."
   case "$DISTRO" in
@@ -464,13 +489,18 @@ if [ "$OS" = "Linux" ] && [ "$OPT_NO_SYSTEMD" = "0" ]; then
       echo "Type=oneshot"
       echo "RemainAfterExit=yes"
       echo "WorkingDirectory=${DEPLOY_DIR}"
-      if [ -f "$OVERRIDE_FILE" ]; then
-        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} up -d --no-build"
-        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} down"
-      else
-        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build"
-        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down"
+      # Build the compose -f list to match what the installer used at install
+      # time, so systemd restarts use the same file set (including the Linux
+      # host-network override when present).
+      _COMPOSE_ARGS="-f ${COMPOSE_FILE}"
+      if [ -f "$LINUX_OVERRIDE_FILE" ]; then
+        _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${LINUX_OVERRIDE_FILE}"
       fi
+      if [ -f "$OVERRIDE_FILE" ]; then
+        _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${OVERRIDE_FILE}"
+      fi
+      echo "ExecStart=${CONTAINER_BIN} compose ${_COMPOSE_ARGS} up -d --no-build"
+      echo "ExecStop=${CONTAINER_BIN} compose ${_COMPOSE_ARGS} down"
       echo "TimeoutStartSec=120"
       echo ""
       echo "[Install]"

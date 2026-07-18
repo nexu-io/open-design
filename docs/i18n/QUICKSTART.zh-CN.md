@@ -1,6 +1,6 @@
 # 快速上手 · Quickstart
 
-<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <b>简体中文</b> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.ko.md">한국어</a> · <b>简体中文</b> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
 
 在本地运行完整的产品。
 
@@ -185,7 +185,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Docker 镜像标签
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
 # Daemon 安全所需的 API 令牌
 # 使用以下命令生成：openssl rand -hex 32

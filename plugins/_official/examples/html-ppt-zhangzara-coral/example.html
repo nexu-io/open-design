@@ -3,19 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presentation Template</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <title>Plan a Community-Growth Campaign like a Head of Growth - Marketing &amp; GTM</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Bebas+Neue&display=swap');
 
         :root {
             --coral: #E85D5D;
-            --coral-dark: #D44A4A;
+            /* Darkened from #D44A4A so small coral text on cream clears
+               WCAG AA (was ~3.8:1, now ~5.2:1). Large coral display text
+               keeps using --coral unchanged. */
+            --coral-dark: #B23A3A;
             --cream: #F5F0E8;
             --cream-dark: #E8E0D4;
+            --warm-white: #FFFDF7;
             --black: #1A1A1A;
-            --gray: #6B6B6B;
-            --light-gray: #B0B0B0;
+            /* Warm gray (was cool #6B6B6B at ~4.7:1 on cream); matches the
+               cream/coral palette temperature and clears AA at ~6:1. */
+            --gray: #5E5A52;
+            --gray-on-dark: #A8A39A;
+            --ease-out: cubic-bezier(.16, 1, .3, 1);
         }
 
         * {
@@ -28,7 +34,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             background: var(--black);
             color: var(--black);
         }
@@ -47,13 +53,32 @@
             left: 0;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.6s ease, visibility 0.6s ease;
+            transition: opacity 0.6s var(--ease-out), visibility 0.6s var(--ease-out);
             overflow: hidden;
         }
 
         .slide.active {
             opacity: 1;
             visibility: visible;
+        }
+
+        /* Entrance motion: transform+opacity only, staggered ease-out rise. */
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(22px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .slide.active > * {
+            animation: rise 0.65s var(--ease-out) both;
+        }
+
+        .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+        .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+        .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active > * { animation: none; }
+            .slide { transition: none; }
         }
 
         /* Navigation */
@@ -75,7 +100,7 @@
             background: rgba(255,255,255,0.3);
             border: 2px solid rgba(255,255,255,0.5);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
         }
 
         .nav-dot.active {
@@ -129,13 +154,14 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s var(--ease-out), border-color 0.3s var(--ease-out), color 0.3s var(--ease-out);
             font-size: 18px;
         }
 
         .nav-arrow:hover {
             background: var(--coral);
             border-color: var(--coral);
+            color: var(--black);
         }
 
         .nav-arrow.dark {
@@ -147,7 +173,52 @@
         .nav-arrow.dark:hover {
             background: var(--coral);
             border-color: var(--coral);
-            color: white;
+            color: var(--black);
+        }
+
+        /* Slides 1, 5 and 10 expose cream/coral where the nav chrome sits,
+           but the engine's isLight list only covers 2/4/6/8. Fix contrast in
+           CSS only (the engine script stays untouched). */
+        body:has(.slide-1.active) .nav-dot,
+        body:has(.slide-5.active) .nav-dot,
+        body:has(.slide-10.active) .nav-dot {
+            background: rgba(26,26,26,0.2);
+            border-color: rgba(26,26,26,0.4);
+        }
+
+        body:has(.slide-1.active) .nav-dot.active,
+        body:has(.slide-5.active) .nav-dot.active,
+        body:has(.slide-10.active) .nav-dot.active {
+            background: var(--coral);
+            border-color: var(--coral);
+        }
+
+        body:has(.slide-1.active) .slide-counter,
+        body:has(.slide-5.active) .slide-counter,
+        body:has(.slide-10.active) .slide-counter {
+            color: rgba(26,26,26,0.5);
+        }
+
+        /* Slides 3 and 7 are coral-left splits: only the bottom-left arrows
+           sit on coral there, so just the arrows go dark. */
+        body:has(.slide-1.active) .nav-arrow,
+        body:has(.slide-3.active) .nav-arrow,
+        body:has(.slide-5.active) .nav-arrow,
+        body:has(.slide-7.active) .nav-arrow,
+        body:has(.slide-10.active) .nav-arrow {
+            background: rgba(26,26,26,0.05);
+            border-color: rgba(26,26,26,0.3);
+            color: var(--black);
+        }
+
+        body:has(.slide-1.active) .nav-arrow:hover,
+        body:has(.slide-3.active) .nav-arrow:hover,
+        body:has(.slide-5.active) .nav-arrow:hover,
+        body:has(.slide-7.active) .nav-arrow:hover,
+        body:has(.slide-10.active) .nav-arrow:hover {
+            background: var(--coral);
+            border-color: var(--coral);
+            color: var(--black);
         }
 
         /* ===== SLIDE 1: TITLE / COVER ===== */
@@ -181,7 +252,7 @@
         }
 
         .slide-1 .brand-mark {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 4px;
@@ -193,7 +264,8 @@
 
         .slide-1 .bottom-section {
             background: var(--cream);
-            padding: clamp(28px, 4.5vh, 60px) clamp(40px, 8vw, 100px) clamp(24px, 3.5vh, 44px);
+            /* Bottom padding clears the fixed nav arrows (24px + 44px tall). */
+            padding: clamp(28px, 4.5vh, 60px) clamp(40px, 8vw, 100px) clamp(80px, 11vh, 96px);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -242,7 +314,7 @@
         }
 
         .slide-1 .meta-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 11px;
             font-weight: 600;
             letter-spacing: 3px;
@@ -271,16 +343,20 @@
             background: var(--cream);
             display: flex;
             flex-direction: column;
-            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+            /* Bottom padding clears the fixed nav arrows (24px + 44px tall)
+               so the coral accent line never sits behind the arrow circles. */
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px) clamp(80px, 11vh, 96px);
         }
 
         .slide-2 .section-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 4px;
             text-transform: uppercase;
-            color: var(--coral);
+            /* Small coral type on cream fails AA at 3:1; the darker coral
+               keeps the family hue while passing. */
+            color: var(--coral-dark);
             margin-bottom: 24px;
         }
 
@@ -295,7 +371,7 @@
         }
 
         .slide-2 .body-text {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(15px, 1.4vw, 20px);
             line-height: 1.7;
             color: var(--gray);
@@ -376,7 +452,7 @@
         }
 
         .slide-3 .right-col .item-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 3px;
@@ -386,7 +462,7 @@
         }
 
         .slide-3 .right-col .item-text {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(14px, 1.2vw, 18px);
             color: var(--cream);
             line-height: 1.6;
@@ -408,12 +484,12 @@
         }
 
         .slide-4 .header-left .section-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 4px;
             text-transform: uppercase;
-            color: var(--coral);
+            color: var(--coral-dark);
             margin-bottom: 12px;
         }
 
@@ -437,7 +513,7 @@
         }
 
         .slide-4 .stat-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             color: var(--gray);
             letter-spacing: 2px;
@@ -456,10 +532,94 @@
             flex: 2;
             position: relative;
             min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
 
-        .slide-4 .chart-wrapper canvas {
-            max-height: 100%;
+        /* CSS-only grouped bar chart (no chart library): flat fills,
+           square corners, coral for stars + black for plugins. */
+        .slide-4 .bar-legend {
+            display: flex;
+            gap: 28px;
+            margin-bottom: 20px;
+        }
+
+        .slide-4 .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Archivo', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            letter-spacing: 0.5px;
+        }
+
+        .slide-4 .legend-swatch {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+        }
+
+        .slide-4 .legend-swatch.coral { background: var(--coral); }
+        .slide-4 .legend-swatch.black { background: var(--black); }
+
+        .slide-4 .bar-chart {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            gap: clamp(12px, 2vw, 32px);
+            border-bottom: 3px solid var(--black);
+            min-height: 0;
+            padding: 34px 0 0;
+        }
+
+        .slide-4 .bar-group {
+            flex: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .slide-4 .bar-pair {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 6px;
+            min-height: 0;
+        }
+
+        .slide-4 .bar {
+            width: clamp(16px, 2.4vw, 34px);
+            position: relative;
+            min-height: 4px;
+        }
+
+        .slide-4 .bar.stars { background: var(--coral); }
+        .slide-4 .bar.plugins { background: var(--black); }
+
+        .slide-4 .bar .bar-value {
+            position: absolute;
+            top: -26px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(13px, 1.2vw, 17px);
+            letter-spacing: 1px;
+            color: var(--black);
+            white-space: nowrap;
+        }
+
+        .slide-4 .bar.stars .bar-value { color: var(--coral-dark); }
+
+        .slide-4 .bar-month {
+            font-family: 'Archivo', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            text-align: center;
+            padding: 10px 0 0;
+            letter-spacing: 1px;
         }
 
         .slide-4 .chart-sidebar {
@@ -471,7 +631,7 @@
         }
 
         .slide-4 .sidebar-item {
-            background: white;
+            background: var(--warm-white);
             padding: 20px 24px;
             border-left: 4px solid var(--coral);
         }
@@ -484,7 +644,7 @@
         }
 
         .slide-4 .sidebar-item .label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             color: var(--gray);
             margin-top: 4px;
@@ -499,7 +659,7 @@
         }
 
         .slide-5 .visual-area {
-            background: linear-gradient(135deg, var(--coral-dark) 0%, var(--coral) 100%);
+            background: var(--coral);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -549,7 +709,7 @@
         }
 
         .slide-5 .info-bar .bar-meta {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             color: var(--gray);
             letter-spacing: 2px;
@@ -575,7 +735,7 @@
         }
 
         .slide-6 .slide-subtitle {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 14px;
             color: var(--gray);
             letter-spacing: 2px;
@@ -590,7 +750,7 @@
         }
 
         .slide-6 .column-card {
-            background: white;
+            background: var(--warm-white);
             padding: clamp(24px, 3vh, 40px);
             border-top: 5px solid var(--coral);
             display: flex;
@@ -607,7 +767,9 @@
             justify-content: center;
             font-family: 'Bebas Neue', sans-serif;
             font-size: 24px;
-            color: white;
+            /* Off-black on coral (~4.6:1) instead of pure white (~2.9:1);
+               also matches the deck's coral+black block language. */
+            color: var(--black);
         }
 
         .slide-6 .column-card .card-title {
@@ -620,7 +782,7 @@
         }
 
         .slide-6 .column-card .card-text {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(13px, 1.1vw, 16px);
             color: var(--gray);
             line-height: 1.6;
@@ -686,17 +848,17 @@
         }
 
         .slide-7 .quote-text {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(20px, 2.5vw, 36px);
-            font-weight: 300;
+            font-weight: 400;
             color: var(--cream);
-            line-height: 1.5;
-            font-style: italic;
+            line-height: 1.45;
             margin-bottom: 40px;
+            max-width: 30ch;
         }
 
         .slide-7 .quote-author {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 14px;
             font-weight: 600;
             color: var(--coral);
@@ -705,9 +867,9 @@
         }
 
         .slide-7 .quote-role {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
-            color: var(--gray);
+            color: var(--gray-on-dark);
             margin-top: 4px;
             letter-spacing: 1px;
         }
@@ -732,12 +894,12 @@
         }
 
         .slide-8 .section-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 4px;
             text-transform: uppercase;
-            color: var(--coral);
+            color: var(--coral-dark);
             margin-bottom: 12px;
         }
 
@@ -828,23 +990,23 @@
             justify-content: center;
             font-family: 'Bebas Neue', sans-serif;
             font-size: clamp(20px, 2vw, 32px);
-            color: white;
+            color: var(--black);
             border: 4px solid var(--black);
             flex-shrink: 0;
         }
 
         .slide-8 .t-info .t-phase {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: var(--coral);
+            color: var(--coral-dark);
             margin-bottom: 4px;
         }
 
         .slide-8 .t-info .t-desc {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(12px, 1vw, 14px);
             color: var(--gray);
             line-height: 1.4;
@@ -868,9 +1030,9 @@
         }
 
         .slide-9 .slide-subtitle {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 14px;
-            color: var(--gray);
+            color: var(--gray-on-dark);
             letter-spacing: 2px;
             margin-bottom: 48px;
         }
@@ -883,18 +1045,18 @@
         }
 
         .slide-9 .team-member {
-            background: rgba(245, 240, 232, 0.05);
+            /* Flat hairline tiles; the translucent panel fill was the one
+               glassmorphism-lite residue outside this poster family. */
             padding: clamp(20px, 2vh, 32px);
-            border: 1px solid rgba(245, 240, 232, 0.1);
+            border: 1px solid rgba(245, 240, 232, 0.22);
             display: flex;
             flex-direction: column;
             align-items: center;
             text-align: center;
-            transition: all 0.3s ease;
+            transition: border-color 0.3s var(--ease-out);
         }
 
         .slide-9 .team-member:hover {
-            background: rgba(232, 93, 93, 0.1);
             border-color: var(--coral);
         }
 
@@ -902,18 +1064,18 @@
             width: clamp(60px, 8vw, 100px);
             height: clamp(60px, 8vw, 100px);
             border-radius: 50%;
-            background: linear-gradient(135deg, var(--coral) 0%, var(--coral-dark) 100%);
+            background: var(--coral);
             margin-bottom: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-family: 'Bebas Neue', sans-serif;
             font-size: clamp(28px, 3vw, 40px);
-            color: white;
+            color: var(--black);
         }
 
         .slide-9 .member-name {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 16px;
             font-weight: 600;
             color: var(--cream);
@@ -921,9 +1083,9 @@
         }
 
         .slide-9 .member-role {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
-            color: var(--gray);
+            color: var(--gray-on-dark);
             letter-spacing: 1px;
         }
 
@@ -953,7 +1115,7 @@
         }
 
         .slide-10 .left-panel .closing-subtitle {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: clamp(14px, 1.3vw, 20px);
             color: rgba(0,0,0,0.7);
             line-height: 1.6;
@@ -986,7 +1148,7 @@
         }
 
         .slide-10 .contact-label {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 3px;
@@ -1016,17 +1178,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Archivo', sans-serif;
             font-size: 12px;
             font-weight: 700;
             color: var(--black);
-            transition: all 0.3s ease;
+            transition: background-color 0.3s var(--ease-out), color 0.3s var(--ease-out);
         }
 
         .slide-10 .social-icon:hover {
             background: var(--coral);
-            border-color: var(--coral);
-            color: white;
+            color: var(--black);
         }
 
         /* Responsive */
@@ -1086,21 +1247,21 @@
                                   fill="none" stroke="#1A1A1A" stroke-width="12" stroke-linejoin="miter" stroke-linecap="butt" opacity="0.15"/>
                     </svg>
                 </div>
-                <div class="brand-mark">VENTURE</div>
+                <div class="brand-mark">OPEN DESIGN</div>
             </div>
             <div class="bottom-section">
                 <div>
-                    <div class="main-title">QUARTERLY<br>STRATEGY<br>SESSION 2026</div>
+                    <div class="main-title">GROWTH<br>CAMPAIGN</div>
                     <div class="title-rule"></div>
                 </div>
                 <div class="meta-row">
                     <div class="meta-left">
-                        <div class="meta-label">Location</div>
-                        <div class="meta-value">7TH FLOOR</div>
+                        <div class="meta-label">A community-growth campaign plan across GitHub, Discord &amp; X</div>
+                        <div class="meta-value">MARKETING &amp; GTM</div>
                     </div>
                     <div class="meta-right">
-                        <div class="meta-label">May 15 / 09:00 Start</div>
-                        <div class="meta-date">2026</div>
+                        <div class="meta-label">Prepared for: Growth Team &amp; Community Lead</div>
+                        <div class="meta-date">Q3 2026</div>
                     </div>
                 </div>
             </div>
@@ -1108,12 +1269,14 @@
 
         <!-- Slide 2: Introduction -->
         <div class="slide slide-2">
-            <div class="section-label">01 / Overview</div>
-            <div class="big-statement">REDEFINING THE BOUNDARIES OF WHAT IS POSSIBLE</div>
+            <div class="section-label">01 / Market Moment</div>
+            <div class="big-statement">DEVELOPER TRUST IS BUILT IN PUBLIC, NOT IN A DEMO</div>
             <div class="body-text">
-                We bring together diverse perspectives and bold ideas to create meaningful impact. 
-                Our approach combines strategic thinking with creative execution, ensuring every initiative 
-                delivers measurable results and lasting value for our partners and community.
+                Claude Design proved in April 2026 that an LLM can produce real design artifacts &mdash;
+                but locked behind a closed, paid, cloud-only product. Open Design ships that same
+                capability as Apache-2.0, local-first, BYOK software. The fastest path to category
+                ownership isn't paid acquisition &mdash; it's a visible, repeatable growth loop across
+                GitHub, Discord, and X that developers can watch, join, and re-share.
             </div>
             <div class="accent-line"></div>
         </div>
@@ -1122,20 +1285,20 @@
         <div class="slide slide-3">
             <div class="left-col">
                 <div class="number">03</div>
-                <div class="col-title">CORE<br>PILLARS</div>
+                <div class="col-title">TARGET<br>RINGS</div>
             </div>
             <div class="right-col">
                 <div class="item">
-                    <div class="item-label">Innovation</div>
-                    <div class="item-text">Pushing boundaries with cutting-edge solutions and forward-thinking methodologies.</div>
+                    <div class="item-label">Inner ring: plugin builders</div>
+                    <div class="item-text">Devs already shipping an Open Design plugin or design-system PR; highest intent, first to see beta features and case studies.</div>
                 </div>
                 <div class="item">
-                    <div class="item-label">Collaboration</div>
-                    <div class="item-text">Building strong partnerships across teams, disciplines, and industries.</div>
+                    <div class="item-label">Middle ring: design-systems teams</div>
+                    <div class="item-text">Teams evaluating a self-hosted alternative to closed AI-design tools; convert via the GitHub README and Discord #showcase.</div>
                 </div>
                 <div class="item">
-                    <div class="item-label">Execution</div>
-                    <div class="item-text">Delivering results with precision, speed, and uncompromising quality.</div>
+                    <div class="item-label">Outer ring: AI-curious builders</div>
+                    <div class="item-text">Followers of the broader agentic-coding conversation on X; enter through a 30-second demo clip, not a doc page.</div>
                 </div>
             </div>
         </div>
@@ -1144,30 +1307,77 @@
         <div class="slide slide-4">
             <div class="slide-header">
                 <div class="header-left">
-                    <div class="section-label">02 / Performance</div>
-                    <div class="slide-title">GROWTH METRICS</div>
+                    <div class="section-label">02 / Pipeline Math</div>
+                    <div class="slide-title">THE GROWTH FUNNEL</div>
                 </div>
                 <div class="header-right">
-                    <div class="stat-number">+147%</div>
-                    <div class="stat-label">Year Over Year</div>
+                    <div class="stat-number">4.8%</div>
+                    <div class="stat-label">X view &rarr; star rate</div>
                 </div>
             </div>
             <div class="chart-container">
                 <div class="chart-wrapper">
-                    <canvas id="growthChart"></canvas>
+                    <div class="bar-legend">
+                        <div class="legend-item"><span class="legend-swatch coral"></span>GitHub Stars (K, demo data)</div>
+                        <div class="legend-item"><span class="legend-swatch black"></span>Discord Joins (x10/week, demo data)</div>
+                    </div>
+                    <div class="bar-chart" role="img" aria-label="GitHub stars and Discord joins by month, demo data">
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:3.7%"><span class="bar-value">8</span></div>
+                                <div class="bar plugins" style="height:18.4%"><span class="bar-value">40</span></div>
+                            </div>
+                            <div class="bar-month">Jan</div>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:7.4%"><span class="bar-value">16</span></div>
+                                <div class="bar plugins" style="height:34.6%"><span class="bar-value">75</span></div>
+                            </div>
+                            <div class="bar-month">Feb</div>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:12.4%"><span class="bar-value">27</span></div>
+                                <div class="bar plugins" style="height:50.7%"><span class="bar-value">110</span></div>
+                            </div>
+                            <div class="bar-month">Mar</div>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:18%"><span class="bar-value">39</span></div>
+                                <div class="bar plugins" style="height:69.1%"><span class="bar-value">150</span></div>
+                            </div>
+                            <div class="bar-month">Apr</div>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:23%"><span class="bar-value">50</span></div>
+                                <div class="bar plugins" style="height:85.3%"><span class="bar-value">185</span></div>
+                            </div>
+                            <div class="bar-month">May</div>
+                        </div>
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar stars" style="height:27.6%"><span class="bar-value">60</span></div>
+                                <div class="bar plugins" style="height:100%"><span class="bar-value">217</span></div>
+                            </div>
+                            <div class="bar-month">Jun</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="chart-sidebar">
                     <div class="sidebar-item">
-                        <div class="value">2.4M</div>
-                        <div class="label">Total Reach</div>
+                        <div class="value">18%</div>
+                        <div class="label">Star &rarr; Discord click-through</div>
                     </div>
                     <div class="sidebar-item">
-                        <div class="value">89%</div>
-                        <div class="label">Retention Rate</div>
+                        <div class="value">6.4%</div>
+                        <div class="label">Discord &rarr; first PR/plugin</div>
                     </div>
                     <div class="sidebar-item">
-                        <div class="value">156</div>
-                        <div class="label">New Partners</div>
+                        <div class="value">3.1x</div>
+                        <div class="label">Referral loop compounding / qtr</div>
                     </div>
                 </div>
             </div>
@@ -1177,36 +1387,36 @@
         <div class="slide slide-5">
             <div class="visual-area">
                 <div class="pattern-overlay"></div>
-                <div class="center-text">IMPACT</div>
+                <div class="center-text">3.1X</div>
             </div>
             <div class="info-bar">
-                <div class="bar-title">GLOBAL INITIATIVE 2026</div>
-                <div class="bar-meta">Phase One / Launch Q2<br>12 Cities / 4 Continents</div>
+                <div class="bar-title">REFERRAL LOOP COMPOUNDING PER QUARTER</div>
+                <div class="bar-meta">1 star invite unlocks a Pro plugin template<br>Tracked via UTM tags + Discord invite codes</div>
             </div>
         </div>
 
         <!-- Slide 6: Three Columns -->
         <div class="slide slide-6">
-            <div class="slide-title">KEY OBJECTIVES</div>
-            <div class="slide-subtitle">Strategic priorities for the upcoming fiscal period</div>
+            <div class="slide-title">THREE CHANNELS, ONE LOOP</div>
+            <div class="slide-subtitle">Every post ships once and reshapes three times, GitHub &rarr; Discord &rarr; X</div>
             <div class="columns-grid">
                 <div class="column-card">
                     <div class="card-icon">A</div>
-                    <div class="card-title">EXPAND REACH</div>
-                    <div class="card-text">Enter new markets and establish presence in emerging territories through targeted campaigns.</div>
-                    <div class="card-stat">24</div>
+                    <div class="card-title">GITHUB</div>
+                    <div class="card-text">Weekly release notes and "built with Open Design" showcase issues drive stars and pull first-time contributors straight into the repo.</div>
+                    <div class="card-stat">60K+</div>
                 </div>
                 <div class="column-card">
                     <div class="card-icon">B</div>
-                    <div class="card-title">DEEPEN ENGAGEMENT</div>
-                    <div class="card-text">Strengthen relationships with existing partners through enhanced service offerings.</div>
-                    <div class="card-stat">+45%</div>
+                    <div class="card-title">DISCORD</div>
+                    <div class="card-text">#showcase and #plugin-lab turn stargazers into a standing community; weekly office hours convert lurkers into PR authors.</div>
+                    <div class="card-stat">8.9K</div>
                 </div>
                 <div class="column-card">
                     <div class="card-icon">C</div>
-                    <div class="card-title">OPTIMIZE FLOW</div>
-                    <div class="card-text">Streamline internal processes to improve delivery times and resource allocation.</div>
-                    <div class="card-stat">3.2x</div>
+                    <div class="card-title">X (TWITTER)</div>
+                    <div class="card-text">Short demo clips and build-in-public threads seed the top of funnel; every clip links back to the GitHub README, never a landing page.</div>
+                    <div class="card-stat">1.4M</div>
                 </div>
             </div>
         </div>
@@ -1218,54 +1428,54 @@
             </div>
             <div class="quote-right">
                 <div class="quote-accent"></div>
-                <div class="quote-text">The best way to predict the future is to create it with intention, precision, and the courage to challenge convention.</div>
-                <div class="quote-author">Alexandra Chen</div>
-                <div class="quote-role">Chief Strategy Officer</div>
+                <div class="quote-text">We linked a Discord #showcase post to a merged GitHub PR within 48 hours &mdash; no ads, no landing page, just the loop doing its job.</div>
+                <div class="quote-author">Community Lead</div>
+                <div class="quote-role">Open Design Discord</div>
             </div>
         </div>
 
         <!-- Slide 8: Timeline / Diagram -->
         <div class="slide slide-8">
             <div class="slide-header">
-                <div class="section-label">03 / Roadmap</div>
-                <div class="slide-title">PROJECT TIMELINE</div>
+                <div class="section-label">03 / Launch Calendar</div>
+                <div class="slide-title">SIX-WEEK COMMUNITY SPRINT</div>
             </div>
             <div class="timeline-container">
                 <div class="timeline-line"></div>
                 <div class="timeline-points">
                     <div class="t-point">
-                        <div class="t-bubble">Q1</div>
+                        <div class="t-bubble">01</div>
                         <div class="t-info">
-                            <div class="t-phase">Discovery</div>
-                            <div class="t-desc">Research &amp; planning phase with stakeholder alignment</div>
+                            <div class="t-phase">Week 1 &mdash; Seed</div>
+                            <div class="t-desc">Publish release notes on GitHub and a Discord announcement; pin a #showcase call for entries</div>
                         </div>
                     </div>
                     <div class="t-point">
-                        <div class="t-bubble">Q2</div>
+                        <div class="t-bubble">02</div>
                         <div class="t-info">
-                            <div class="t-phase">Design</div>
-                            <div class="t-desc">Concept development and prototype validation</div>
+                            <div class="t-phase">Week 2 &mdash; Showcase</div>
+                            <div class="t-desc">Feature 5 community plugins in a GitHub Discussions thread and the Discord #showcase channel</div>
                         </div>
                     </div>
                     <div class="t-point">
-                        <div class="t-bubble">Q3</div>
+                        <div class="t-bubble">03</div>
                         <div class="t-info">
-                            <div class="t-phase">Build</div>
-                            <div class="t-desc">Full implementation and iterative refinement</div>
+                            <div class="t-phase">Week 3 &mdash; Amplify</div>
+                            <div class="t-desc">Turn showcase entries into 10 short X clips; each one links back to the GitHub README</div>
                         </div>
                     </div>
                     <div class="t-point">
-                        <div class="t-bubble">Q4</div>
+                        <div class="t-bubble">04</div>
                         <div class="t-info">
-                            <div class="t-phase">Launch</div>
-                            <div class="t-desc">Market release and performance monitoring</div>
+                            <div class="t-phase">Week 4 &mdash; Contributor push</div>
+                            <div class="t-desc">Discord office hours convert engaged members into first-time PR authors</div>
                         </div>
                     </div>
                     <div class="t-point">
-                        <div class="t-bubble">+</div>
+                        <div class="t-bubble">05</div>
                         <div class="t-info">
-                            <div class="t-phase">Scale</div>
-                            <div class="t-desc">Expansion and long-term optimization</div>
+                            <div class="t-phase">Week 5 &mdash; Recap &amp; repeat</div>
+                            <div class="t-desc">Publish a growth recap with funnel numbers and queue the next sprint's showcase call</div>
                         </div>
                     </div>
                 </div>
@@ -1274,28 +1484,28 @@
 
         <!-- Slide 9: Team Grid -->
         <div class="slide slide-9">
-            <div class="slide-title">LEADERSHIP</div>
-            <div class="slide-subtitle">The people driving our vision forward</div>
+            <div class="slide-title">FOUR LOOPS THAT COMPOUND</div>
+            <div class="slide-subtitle">Each loop feeds the next channel's top of funnel</div>
             <div class="team-grid">
                 <div class="team-member">
-                    <div class="member-avatar">JD</div>
-                    <div class="member-name">Jordan Davis</div>
-                    <div class="member-role">Chief Executive</div>
+                    <div class="member-avatar">CL</div>
+                    <div class="member-name">Content Loop</div>
+                    <div class="member-role">Release notes &rarr; clips &rarr; replies</div>
                 </div>
                 <div class="team-member">
-                    <div class="member-avatar">MK</div>
-                    <div class="member-name">Morgan Kim</div>
-                    <div class="member-role">Head of Product</div>
+                    <div class="member-avatar">RL</div>
+                    <div class="member-name">Referral Loop</div>
+                    <div class="member-role">Star invite &rarr; Discord role &rarr; plugin access</div>
                 </div>
                 <div class="team-member">
-                    <div class="member-avatar">SR</div>
-                    <div class="member-name">Sam Rivera</div>
-                    <div class="member-role">Creative Director</div>
+                    <div class="member-avatar">PL</div>
+                    <div class="member-name">Proof Loop</div>
+                    <div class="member-role">Showcase entry &rarr; case study &rarr; PR</div>
                 </div>
                 <div class="team-member">
-                    <div class="member-avatar">TW</div>
-                    <div class="member-name">Taylor Wong</div>
-                    <div class="member-role">Operations Lead</div>
+                    <div class="member-avatar">SL</div>
+                    <div class="member-name">Support Loop</div>
+                    <div class="member-role">Office hours &rarr; contributor &rarr; mentor</div>
                 </div>
             </div>
         </div>
@@ -1303,29 +1513,29 @@
         <!-- Slide 10: Closing -->
         <div class="slide slide-10">
             <div class="left-panel">
-                <div class="closing-title">THANK<br>YOU</div>
-                <div class="closing-subtitle">Let's build something extraordinary together. Reach out to start the conversation.</div>
+                <div class="closing-title">SEED IT.<br>SHOWCASE IT.<br>SCALE IT.</div>
+                <div class="closing-subtitle">A six-week loop across GitHub, Discord, and X &mdash; no ad spend, just compounding proof. Approve the sprint calendar to kick off Week 1.</div>
                 <svg class="zigzag-deco" viewBox="0 0 400 60" preserveAspectRatio="none">
                     <path d="M0,30 L40,10 L80,30 L120,10 L160,30 L200,10 L240,30 L280,10 L320,30 L360,10 L400,30 L400,60 L0,60 Z" fill="black"/>
                 </svg>
             </div>
             <div class="right-panel">
                 <div class="contact-block">
-                    <div class="contact-label">Email</div>
-                    <div class="contact-value">HELLO@VENTURE.IO</div>
+                    <div class="contact-label">GitHub</div>
+                    <div class="contact-value">GITHUB.COM/NEXU-IO/OPEN-DESIGN</div>
                 </div>
                 <div class="contact-block">
-                    <div class="contact-label">Phone</div>
-                    <div class="contact-value">+1 (555) 014-2298</div>
+                    <div class="contact-label">Discord</div>
+                    <div class="contact-value">DISCORD.GG/QHBCCH8AM4</div>
                 </div>
                 <div class="contact-block">
-                    <div class="contact-label">Office</div>
-                    <div class="contact-value">SEATTLE, WA</div>
+                    <div class="contact-label">X</div>
+                    <div class="contact-value">X.COM/NEXUDOTIO</div>
                 </div>
                 <div class="social-row">
-                    <div class="social-icon">LI</div>
-                    <div class="social-icon">TW</div>
-                    <div class="social-icon">IG</div>
+                    <a class="social-icon" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">GH</a>
+                    <a class="social-icon" href="https://discord.gg/mHAjSMV6gz" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">DC</a>
+                    <a class="social-icon" href="https://x.com/nexudotio" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">X</a>
                 </div>
             </div>
         </div>
@@ -1410,78 +1620,11 @@
             }
         });
 
-        // Chart.js initialization for Slide 4
-        function initChart() {
-            const ctx = document.getElementById('growthChart');
-            if (!ctx) return;
-
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                    datasets: [{
-                        label: 'Revenue (K)',
-                        data: [45, 62, 55, 78, 95, 112],
-                        backgroundColor: '#E85D5D',
-                        borderColor: '#1A1A1A',
-                        borderWidth: 2,
-                        borderRadius: 0,
-                        borderSkipped: false,
-                    }, {
-                        label: 'Target (K)',
-                        data: [50, 58, 65, 72, 85, 100],
-                        backgroundColor: '#1A1A1A',
-                        borderColor: '#1A1A1A',
-                        borderWidth: 2,
-                        borderRadius: 0,
-                        borderSkipped: false,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                            labels: {
-                                font: { family: 'Inter', size: 12 },
-                                color: '#6B6B6B',
-                                usePointStyle: true,
-                                pointStyle: 'rect',
-                                padding: 20
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: {
-                                font: { family: 'Inter', size: 12 },
-                                color: '#6B6B6B'
-                            }
-                        },
-                        y: {
-                            border: { display: false },
-                            grid: {
-                                color: 'rgba(26,26,26,0.08)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                font: { family: 'Inter', size: 11 },
-                                color: '#B0B0B0',
-                                callback: function(value) { return '$' + value + 'K'; }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Initialize chart after a short delay to ensure canvas is visible
-        setTimeout(initChart, 300);
+        // Slide 4 chart is pure CSS bars now; no chart library needed.
 
         // Initial nav update
         updateNav();
     </script>
+
 </body>
 </html>

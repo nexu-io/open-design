@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from '../../src/artifacts/strip';
+import {
+  splitStreamingArtifact,
+  stripArtifact,
+  stripRecoveredHtmlFallbackForDisplay,
+  summarizeArtifactsForTranscript,
+} from '../../src/artifacts/strip';
 
 const completeHtml = '<!doctype html><html><head><title>X</title></head><body><h1>X</h1></body></html>';
 
@@ -223,5 +228,34 @@ describe('stripRecoveredHtmlFallbackForDisplay', () => {
   it('leaves multiple complete html fences unchanged instead of guessing', () => {
     const input = ['```html', completeHtml, '```', '```html', completeHtml, '```'].join('\n');
     expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe(input);
+  });
+});
+
+describe('summarizeArtifactsForTranscript', () => {
+  it('summarizes persisted css, svg, and markdown artifacts', () => {
+    const input = [
+      '<artifact identifier="theme" type="text/css" title="Theme">',
+      'body { color: red; }',
+      '</artifact>',
+      '<artifact identifier="logo" type="image/svg+xml" title="Logo">',
+      '<svg viewBox="0 0 10 10"></svg>',
+      '</artifact>',
+      '<artifact identifier="brief" type="text/markdown" title="Brief">',
+      '# Brief',
+      '</artifact>',
+    ].join('\n');
+
+    const out = summarizeArtifactsForTranscript(input, [
+      { name: 'theme.css' },
+      { name: 'logo.svg' },
+      { name: 'brief.md' },
+    ]);
+
+    expect(out).toContain('project file "theme.css"');
+    expect(out).toContain('project file "logo.svg"');
+    expect(out).toContain('project file "brief.md"');
+    expect(out).not.toContain('body { color: red; }');
+    expect(out).not.toContain('<svg viewBox="0 0 10 10"></svg>');
+    expect(out).not.toContain('# Brief');
   });
 });

@@ -24,6 +24,7 @@
     "en": "Mission Control Design System"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Space/aerospace mission monitoring. Dark command center, amber telemetry, monospace precision. Functional clarity above all else.",
   "description_i18n": {
     "zh-CN": "太空/航空任务监控。深色指挥中心，琥珀色遥测数据，等宽字体精度。功能清晰至上。",

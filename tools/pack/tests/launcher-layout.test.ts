@@ -58,7 +58,7 @@ describe("tools-pack launcher layout", () => {
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-preview.1"))).toBe("preview");
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2"))).toBe("beta");
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "default", "0.8.1"))).toBe("stable");
-    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-nightly", undefined))).toBe("nightly");
+    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-prerelease", undefined))).toBe("prerelease");
   });
 
   it("uses the channel root above namespaces for launcher state", () => {

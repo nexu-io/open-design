@@ -24,6 +24,7 @@
     "en": "Replicate"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Run ML models via API. Clean white canvas, code-forward.",
   "description_i18n": {
     "zh-CN": "通过 API 运行机器学习模型。简洁白色画布，代码优先。",

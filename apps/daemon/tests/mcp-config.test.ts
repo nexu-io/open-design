@@ -475,6 +475,48 @@ describe('buildOpenCodeMcpConfigContent', () => {
     });
   });
 
+  it('merges run-scoped OpenCode provider config with MCP and permissions', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [
+        {
+          id: 'basic-memory',
+          transport: 'stdio',
+          enabled: true,
+          command: 'uvx',
+          args: ['basic-memory', 'mcp'],
+        },
+      ],
+      {},
+      {
+        allowedDirectories: ['/tmp/od-project'],
+        extraConfig: {
+          provider: {
+            'open-design-byok': {
+              name: 'Open Design BYOK',
+              npm: '@ai-sdk/openai-compatible',
+              options: { apiKey: '{env:OPEN_DESIGN_BYOK_API_KEY}' },
+              models: { 'gpt-4o-mini': { name: 'gpt-4o-mini' } },
+            },
+          },
+        },
+      },
+    );
+
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as {
+      provider?: Record<string, unknown>;
+      mcp?: Record<string, unknown>;
+      permission?: { external_directory?: Record<string, string> };
+    };
+
+    expect(parsed.provider?.['open-design-byok']).toMatchObject({
+      name: 'Open Design BYOK',
+      npm: '@ai-sdk/openai-compatible',
+    });
+    expect(parsed.mcp?.['basic-memory']).toBeTruthy();
+    expect(parsed.permission?.external_directory?.['/tmp/od-project']).toBe('allow');
+  });
+
   it('serialises a stdio server to OpenCode local schema (type=local, command=[cmd,...args])', () => {
     const raw = buildOpenCodeMcpConfigContent([
       {

@@ -11,7 +11,7 @@
 // during manual demos: "Sign in" → "Signed in" → hover-only "Sign out"
 // label flip → "Sign in" again on logout.
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
@@ -141,7 +141,7 @@ test('[P1] AMR card authorizes through daemon login status and returns to author
 
   const amrCard = dialog
     .locator('.amr-agent-card, .agent-card-installed')
-    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .filter({ hasText: /Open Design|AMR \(vela\)/i })
     .first();
   await expect(amrCard).toBeVisible();
 

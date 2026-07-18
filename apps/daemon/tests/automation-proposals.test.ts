@@ -10,7 +10,7 @@ import {
   rejectAutomationProposal,
 } from '../src/automation-proposals.js';
 import { listAllAutomationTemplates } from '../src/automation-templates.js';
-import { listDesignSystems } from '../src/design-systems.js';
+import { listDesignSystems } from '../src/design-systems/index.js';
 import { readMemoryEntry } from '../src/memory.js';
 import { listSkills } from '../src/skills.js';
 

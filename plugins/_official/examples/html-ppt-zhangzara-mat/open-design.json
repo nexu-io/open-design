@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-mat",
-  "title": "Html Ppt Zhangzara Mat",
+  "title": "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Mat",
-    "zh-TW": "Html Ppt Zhangzara Mat",
-    "ja": "Html Ppt Zhangzara Mat",
-    "ko": "Html Ppt Zhangzara Mat",
-    "de": "Html Ppt Zhangzara Mat",
-    "fr": "Html Ppt Zhangzara Mat",
-    "ru": "Html Ppt Zhangzara Mat",
-    "es": "Html Ppt Zhangzara Mat",
-    "pt-BR": "Html Ppt Zhangzara Mat",
-    "it": "Html Ppt Zhangzara Mat",
-    "vi": "Html Ppt Zhangzara Mat",
-    "pl": "Html Ppt Zhangzara Mat",
-    "id": "Html Ppt Zhangzara Mat",
-    "nl": "Html Ppt Zhangzara Mat",
-    "ar": "Html Ppt Zhangzara Mat",
-    "tr": "Html Ppt Zhangzara Mat",
-    "uk": "Html Ppt Zhangzara Mat",
-    "en": "Html Ppt Zhangzara Mat"
+    "en": "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager",
+    "zh-CN": "像麦肯锡项目经理一样写利润率修复终稿",
+    "zh-TW": "像麦肯锡项目经理一样写利润率修复终稿"
   },
   "version": "0.1.0",
-  "description": "Mat — Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones. Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Built as a decision-grade consulting deck for client sponsor, steering committee.",
   "description_i18n": {
-    "zh-CN": "Mat — 深鼠尾草绿画布，搭配骨白纸张和焦橙色点缀；木质基调的中世纪现代风格。适用于需要中世纪、触感和精心设计感的场景：设计工作室作品集、建筑/室内设计品牌、陶瓷/手工艺/家具、咨询演示文稿。",
-    "zh-TW": "Mat — 深鼠尾草綠畫布，搭配骨白紙張和焦橙色點綴；木質基調的中世紀現代風格。適用於需要中世紀、觸感和精心設計感的場景：設計工作室作品集、建築/室內設計品牌、陶瓷/手工藝/家具、諮詢簡報。",
-    "ja": "Mat — ダークセージのキャンバスに、ボーンペーパーとバーントオレンジのアクセント。ウッドトーンを基調としたミッドセンチュリーモダン。デザインスタジオのポートフォリオ、建築・インテリアブランド、陶器・クラフト・家具、コンサルティング資料など、ミッドセンチュリーで触覚的、意図的な雰囲気が必要な場面に最適。",
-    "ko": "Mat — 다크 세이지 캔버스에 본 페이퍼와 번트 오렌지 액센트를 더한 우드 톤의 미드센추리 모던 스타일. 디자인 스튜디오 포트폴리오, 건축/인테리어 브랜드, 도자기/공예/가구, 컨설팅 자료 등 미드센추리적이고 촉각적이며 의도적인 느낌이 필요한 모든 것에 적합합니다.",
-    "de": "Mat – Dunkelgrüne Salbei-Leinwand mit knochenfarbenem Papier und verbranntem Orange-Akzent; Mid-Century-Modern mit Holzuntertönen. Perfekt für alles, was sich nach Mid-Century, haptisch und durchdacht anfühlen soll: Design-Studio-Referenzen, Architektur-/Interieur-Marken, Keramik/Handwerk/Möbel, Beratungspräsentationen.",
-    "fr": "Mat — Toile sauge foncée avec papier os et accent orange brûlé ; moderne du milieu du siècle avec des nuances de bois. Pour tout ce qui doit évoquer le mid-century, le tactile et l'intentionnel : références de studios de design, marques d'architecture/intérieur, céramique/artisanat/mobilier, présentations de conseil.",
-    "ru": "Mat — холст темного шалфея с костной бумагой и акцентом жженого оранжевого; модерн середины века с древесными оттенками. Для всего, что должно выглядеть в стиле mid-century, тактильно и продуманно: портфолио дизайн-студий, архитектурные/интерьерные бренды, керамика/ремесла/мебель, консалтинговые презентации.",
-    "es": "Mat — Lienzo verde salvia oscuro con papel hueso y acento naranja quemado; estilo mid-century moderno con matices de madera. Para todo lo que deba sentirse mid-century, táctil e intencional: credenciales de estudios de diseño, marcas de arquitectura/interiorismo, cerámica/artesanía/muebles, presentaciones consultivas.",
-    "pt-BR": "Mat — Tela verde-sálvia escuro com papel osso e acento laranja queimado; mid-century moderno com tons amadeirados. Para tudo que deve parecer mid-century, tátil e intencional: portfólios de estúdios de design, marcas de arquitetura/interiores, cerâmica/artesanato/móveis, apresentações consultivas.",
-    "it": "Mat — Tela verde salvia scuro con carta color osso e accento arancio bruciato; stile mid-century moderno con sfumature di legno. Per tutto ciò che deve avere un'atmosfera mid-century, tattile e intenzionale: portfolio di studi di design, brand architettura/interni, ceramiche/artigianato/mobili, presentazioni consulenziali.",
-    "vi": "Mat — Canvas xanh xám đậm với giấy màu xương và điểm nhấn cam cháy; phong cách hiện đại giữa thế kỷ với âm hưởng gỗ. Dành cho mọi thứ cần cảm giác mid-century, xúc giác và chủ đích: hồ sơ studio thiết kế, thương hiệu kiến trúc/nội thất, gốm sứ/thủ công/nội thất, bản trình bày tư vấn.",
-    "pl": "Mat — Ciemnozielone płótno z papierem kości słoniowej i akcentem spalonej pomarańczy; mid-century modern z drewnianymi podtonami. Do wszystkiego, co powinno być w stylu mid-century, dotykalne i przemyślane: portfolio studiów projektowych, marki architektoniczne/wnętrzarskie, ceramika/rzemiosło/meble, prezentacje doradcze.",
-    "id": "Mat — Kanvas hijau sage gelap dengan kertas tulang dan aksen oranye hangus; gaya mid-century modern dengan nuansa kayu. Untuk apa pun yang harus terasa mid-century, taktil, dan disengaja: kredensial studio desain, merek arsitektur/interior, keramik/kerajinan/furnitur, presentasi konsultasi.",
-    "nl": "Mat — Donker saliegroene canvas met botkleurig papier en verbrand oranje accent; mid-century modern met houtachtige ondertonen. Voor alles dat mid-century, tactiel en doordacht moet aanvoelen: portfolio's van ontwerpstudio's, architectuur-/interieurmerken, keramiek/ambacht/meubels, adviesdecks.",
-    "ar": "Mat — لوحة خضراء داكنة بورق عظمي ولمسة برتقالية محروقة؛ طراز منتصف القرن الحديث بنغمات خشبية. لكل ما يجب أن يبدو من طراز منتصف القرن، ملموساً ومقصوداً: بيانات استوديوهات التصميم، علامات العمارة/التصميم الداخلي، السيراميك/الحرف اليدوية/الأثاث، العروض الاستشارية.",
-    "tr": "Mat — Koyu adaçayı kanvas, kemik kağıt ve yanık turuncu vurguyla; ahşap tonları olan mid-century modern stil. Mid-century, dokunsal ve kasıtlı hissetmesi gereken her şey için: tasarım stüdyosu portföyleri, mimarlık/iç mekan markaları, seramik/el sanatları/mobilya, danışmanlık sunumları.",
-    "uk": "Mat — полотно темного шавлії з кістковим папером і акцентом обпаленого помаранчевого; модерн середини століття з деревними відтінками. Для всього, що має відчуватися як mid-century, тактильне та продумане: портфоліо дизайн-студій, архітектурні/інтер'єрні бренди, кераміка/ремесла/меблі, консалтингові презентації.",
-    "en": "Mat — Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones. Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks."
+    "en": "A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Built as a decision-grade consulting deck for client sponsor, steering committee.",
+    "zh-CN": "像麦肯锡项目经理一样写利润率修复终稿——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像麦肯锡项目经理一样写利润率修复终稿——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "architecture-interior-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-mat",
+    "consulting",
+    "consulting-final-deck",
+    "strategy",
+    "consulting-deliverable",
+    "client",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "strategy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Mat — Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones. Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks.",
-        "zh-CN": "使用这个插件完成以下任务：Mat — Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones. Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks."
+        "en": "Create \"Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager\" as a decision-grade Consulting deck in this template's own visual system. Subject: A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. Audience: client sponsor, steering committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning.",
+        "zh-CN": "像麦肯锡项目经理一样写利润率修复终稿。像麦肯锡项目经理一样写利润率修复终稿——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A margin-recovery diagnosis for a regional grocery chain — the governing thought, the driver tree, the priorities, and the roadmap. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Mat"
+          "title": "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager",
+          "title_i18n": {
+            "en": "Write a Margin-Recovery Final Deck like a McKinsey Engagement Manager",
+            "zh-CN": "像麦肯锡项目经理一样写利润率修复终稿",
+            "zh-TW": "像麦肯锡项目经理一样写利润率修复终稿"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "consulting"
   }
 }

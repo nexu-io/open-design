@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
   <rect width="1920" height="1080" fill="#F2F2F2" />
-  
+
   <g id="thin-grid-lines" stroke="#0A1E3D" stroke-width="1" opacity="0.1">
     <line id="v-thin-1" x1="60" y1="0" x2="60" y2="1080" />
     <line id="v-thin-2" x1="120" y1="0" x2="120" y2="1080" />
@@ -40,7 +40,7 @@
     <line id="h-thin-15" x1="0" y1="900" x2="1920" y2="900" />
     <line id="h-thin-17" x1="0" y1="1020" x2="1920" y2="1020" />
   </g>
-  
+
   <g id="thick-grid-lines" stroke="#0A1E3D" stroke-width="3" opacity="0.2">
     <line id="v-thick-1" x1="240" y1="0" x2="240" y2="1080" />
     <line id="v-thick-2" x1="480" y1="0" x2="480" y2="1080" />
@@ -54,7 +54,7 @@
     <line id="h-thick-3" x1="0" y1="720" x2="1920" y2="720" />
     <line id="h-thick-4" x1="0" y1="960" x2="1920" y2="960" />
   </g>
-  
+
   <g id="intersections" stroke="#0A1E3D" stroke-width="2" opacity="0.3">
     <line x1="230" y1="240" x2="250" y2="240" />
     <line x1="240" y1="230" x2="240" y2="250" />

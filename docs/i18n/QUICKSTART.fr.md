@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <b>Français</b> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <b>Français</b> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.ko.md">한국어</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
 
 Exécutez le produit complet localement.
 
@@ -186,7 +186,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Tag de l'image Docker
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
 # Token API requis pour la sécurité du daemon
 # Générez-en un avec : openssl rand -hex 32

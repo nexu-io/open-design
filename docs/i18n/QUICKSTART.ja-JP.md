@@ -1,6 +1,6 @@
 # クイックスタート
 
-<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b> · <a href="QUICKSTART.ko.md">한국어</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
 
 製品全体をローカルで実行します。
 
@@ -185,7 +185,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Docker イメージタグ
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
 # Daemon セキュリティに必要な API トークン
 # 次のコマンドで生成：openssl rand -hex 32

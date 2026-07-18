@@ -1,0 +1,171 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-keynote-black",
+  "title": "Run an All-Hands Town Hall like a World-Class Founder-CEO",
+  "title_i18n": {
+    "en": "Run an All-Hands Town Hall like a World-Class Founder-CEO",
+    "zh-CN": "像世界级创始人 CEO 一样开全员大会",
+    "zh-TW": "像世界级创始人 CEO 一样开全员大会"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
+  "description_i18n": {
+    "en": "Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
+    "zh-CN": "像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "keynote",
+    "dark",
+    "big-number",
+    "huashu",
+    "board",
+    "strategy",
+    "business-review",
+    "huashu-keynote-black",
+    "corporate-strategy",
+    "board-pre-read-deck",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "strategy",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Run an All-Hands Town Hall like a World-Class Founder-CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Audience: whole company. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像世界级创始人 CEO 一样开全员大会。像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Run an All-Hands Town Hall like a World-Class Founder-CEO",
+          "title_i18n": {
+            "en": "Run an All-Hands Town Hall like a World-Class Founder-CEO",
+            "zh-CN": "像世界级创始人 CEO 一样开全员大会",
+            "zh-TW": "像世界级创始人 CEO 一样开全员大会"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product launch keynote",
+          "thought-leadership talk",
+          "all-hands / town hall deck",
+          "year-in-review deck",
+          "pitch climax deck"
+        ],
+        "default": "product launch keynote"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：新一代随身 AI 终端发布",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "发布会观众 / 全员大会 / 大会听众",
+        "default": "a live audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      },
+      {
+        "name": "accent",
+        "label": "Accent color",
+        "type": "select",
+        "required": true,
+        "options": [
+          "Mi orange #FF6900",
+          "Spotify green #1ED760",
+          "Apple blue #2997FF"
+        ],
+        "default": "Mi orange #FF6900"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "corporate-strategy"
+  }
+}

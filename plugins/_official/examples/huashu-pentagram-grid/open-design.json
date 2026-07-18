@@ -1,0 +1,161 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-pentagram-grid",
+  "title": "Build a Positioning & Messaging System like a Brand Strategist",
+  "title_i18n": {
+    "en": "Build a Positioning & Messaging System like a Brand Strategist",
+    "zh-CN": "像品牌策略师一样搭建定位与信息体系",
+    "zh-TW": "像品牌策略师一样搭建定位与信息体系"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Built as a decision-grade marketing & GTM deck for brand & marketing team.",
+  "description_i18n": {
+    "en": "Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Built as a decision-grade marketing & GTM deck for brand & marketing team.",
+    "zh-CN": "像品牌策略师一样搭建定位与信息体系——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像品牌策略师一样搭建定位与信息体系——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "swiss-grid",
+    "data-report",
+    "minimal",
+    "huashu",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "huashu-pentagram-grid",
+    "marketing-and-gtm",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Build a Positioning & Messaging System like a Brand Strategist\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. Audience: brand & marketing team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像品牌策略师一样搭建定位与信息体系。像品牌策略师一样搭建定位与信息体系——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's positioning & messaging system: the one-line promise, the pillars, and the proof — the source of truth for all copy. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Build a Positioning & Messaging System like a Brand Strategist",
+          "title_i18n": {
+            "en": "Build a Positioning & Messaging System like a Brand Strategist",
+            "zh-CN": "像品牌策略师一样搭建定位与信息体系",
+            "zh-TW": "像品牌策略师一样搭建定位与信息体系"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "data / benchmark report deck",
+          "annual report deck",
+          "KPI / business review deck",
+          "product metrics deck",
+          "research findings deck"
+        ],
+        "default": "data / benchmark report deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：2026 年度增长数据复盘",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "董事会 / 投资人 / 全员大会",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "marketing-gtm"
+  }
+}

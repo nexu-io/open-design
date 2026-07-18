@@ -1,0 +1,1931 @@
+/* Rich brand preview card. Shared by the Brand Kit tab ('panel' variant) and
+   every design-system picker popover ('compact' variant). The panel layout
+   matches the full Brand Kit detail; the compact layout trims sizing so the
+   identity / logo / typography / palette read cleanly inside a narrow popover
+   preview pane. */
+.previewInner {
+  --logo-display-surface:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 242, 232, 0.96)),
+    conic-gradient(
+      from 45deg,
+      rgba(25, 23, 19, 0.07) 0 25%,
+      rgba(255, 255, 255, 0.42) 0 50%,
+      rgba(25, 23, 19, 0.07) 0 75%,
+      rgba(255, 255, 255, 0.42) 0
+    )
+      0 0 / 22px 22px;
+  --logo-display-border: color-mix(in srgb, var(--border) 72%, #fff 28%);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  animation: previewIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.previewInnerSticky {
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.previewInnerSticky > :not(.previewHeadSticky) {
+  width: min(1040px, calc(100% - 64px));
+  margin-right: auto;
+  margin-left: auto;
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 208px;
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--logo-display-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
+}
+
+.coverLogo {
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+}
+
+.coverLogoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  font-size: 44px;
+  font-weight: 680;
+}
+
+.coverImageButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.coverImageButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+}
+
+.previewHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.previewHeadSticky {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  align-items: center;
+  flex-wrap: nowrap;
+  width: 100%;
+  min-height: 48px;
+  margin: -2px 0 0;
+  padding: 8px max(32px, calc((100% - 1040px) / 2));
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.previewHeadStuck {
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text-strong) 6%, transparent);
+  backdrop-filter: saturate(140%) blur(14px);
+}
+
+.previewHeadIdentity {
+  /* Floor the identity column so a crowded action row can never squeeze the
+     title/tagline down to one-word-per-line. When the actions no longer fit
+     beside it, the parent wraps them onto their own row instead. */
+  min-width: 0;
+  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.previewHeadLogo {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--logo-display-border);
+  border-radius: var(--radius-sm);
+  background: var(--logo-display-surface);
+}
+
+.previewHeadLogoImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+}
+
+.previewHeadLogoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-soft);
+  font-size: 18px;
+  font-weight: 680;
+}
+
+.previewHeadSticky .previewHeadIdentity {
+  flex: 1 1 auto;
+  gap: 9px;
+}
+
+.previewHeadSticky .previewHeadLogo {
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
+}
+
+.previewHeadSticky .previewHeadLogoFallback {
+  font-size: 14px;
+}
+
+.previewHeadSticky .previewHeadText {
+  gap: 0;
+}
+
+.previewHeadSticky .previewTitleRow {
+  flex-wrap: nowrap;
+}
+
+.previewHeadSticky .previewName {
+  max-width: min(32vw, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.previewHeadText {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.previewTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.previewName {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: 0;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.previewTagline {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.previewDomain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.previewDomain:hover {
+  color: var(--accent);
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.badgeBusy {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border));
+}
+
+.badgeFailed {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-border);
+}
+
+.previewActions {
+  display: flex;
+  flex: 1 1 320px;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  /* Keep actions right-aligned whether they sit beside the identity column or
+     wrap onto their own row beneath it. */
+  margin-left: auto;
+}
+
+.previewActions > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.previewHeadSticky .previewActions {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  max-width: min(70%, 760px);
+  /* Must stay `visible`: the header's "?" shortcuts hint and "More" menu open
+     absolutely-positioned popovers that hang BELOW this row. Any scroll/clip
+     value here (e.g. overflow-x: auto) forces overflow-y to compute to `auto`
+     too, which silently clips those popovers — making both buttons look dead on
+     click. The action row only ever holds a few compact controls, so it never
+     needs to scroll. */
+  overflow: visible;
+}
+
+.previewHeadSticky .previewActions > * {
+  flex: 0 0 auto;
+}
+
+/* ── Header "More" overflow dropdown ──────────────────────────────────
+   Promotes a couple of primary actions and folds the rest into a compact
+   menu so each entry keeps its icon + full label instead of crowding the
+   header as anonymous icon squares. */
+.headerMenu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.headerMenuTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.headerMenuTrigger:hover,
+.headerMenuTrigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.headerMenuTrigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.headerMenuPopover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 224px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--text-strong) 14%, transparent);
+  transform-origin: top right;
+  animation: headerMenuIn 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes headerMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.headerMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.headerMenuItem:hover:not(:disabled),
+.headerMenuItem:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.headerMenuItem:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.headerMenuItemIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.headerMenuItem[aria-busy='true'] .headerMenuItemIcon svg,
+.moduleAction[aria-busy='true'] svg,
+.shotDelete[aria-busy='true'] svg {
+  animation: designKitActionSpin 0.8s linear infinite;
+}
+
+.headerMenuItem:hover:not(:disabled) .headerMenuItemIcon {
+  color: var(--accent);
+}
+
+.headerMenuItemLabel {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.headerMenuItemCheck {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.headerMenuDivider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--border);
+}
+
+.missingProjectNotice {
+  padding: 10px 12px;
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius);
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ── Detail sections ──────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.sectionEditFocus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      color-mix(in srgb, var(--accent) 7%, transparent)
+    ),
+    var(--bg-subtle);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent),
+    0 12px 30px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sectionEditFocus:focus {
+  outline: none;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 660;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.moduleActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Tuck the per-module action buttons away until the section is hovered or
+   focused, so the resting kit reads clean instead of a wall of always-on
+   buttons (Copy / Edit / Upload / Delete repeated on every module). Scoped to
+   hover-capable pointers — touch devices keep the buttons visible — and
+   :focus-within keeps them reachable by keyboard Tab. */
+@media (hover: hover) {
+  .section .moduleActions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-quick, 140ms) var(--ease-out, ease);
+  }
+  .section:hover .moduleActions,
+  .section:focus-within .moduleActions,
+  .sectionEditFocus .moduleActions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.editFocusHint {
+  flex: 1 1 auto;
+  min-width: 160px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.moduleAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.moduleAction:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.moduleAction:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.moduleActionLoading {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.moduleAction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* A subtle inline section-header affordance (e.g. "Show all"). */
+.sectionAction {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur-quick) var(--ease-out);
+}
+
+.sectionAction:hover {
+  opacity: 0.78;
+}
+
+.subTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 620;
+  color: var(--text-soft);
+}
+
+/* ── Logo section ─────────────────────────────────────────────────── */
+.logoStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 158px;
+  padding: 28px;
+  border: 1px solid var(--logo-display-border);
+  border-radius: var(--radius);
+  background: var(--logo-display-surface);
+}
+
+.logoStageButton {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.logoStageButton:hover {
+  border-color: var(--accent);
+}
+
+.logoStageButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.logoStageImg {
+  max-width: 100%;
+  max-height: 96px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+}
+
+.logoThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.logoThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 7px;
+  border: 1px solid var(--logo-display-border);
+  border-radius: var(--radius-sm);
+  background: var(--logo-display-surface);
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+.logoThumb:hover {
+  border-color: var(--accent);
+}
+
+.logoThumbActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.logoThumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+}
+
+.logoNotes {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* ── Typography: big "Ag" specimen tiles ──────────────────────────── */
+.fontTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.fontTile {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.fontTileAg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 104px;
+  font-size: 56px;
+  line-height: 1;
+  color: var(--text-strong);
+  background: var(--bg);
+}
+
+.fontTileMeta {
+  padding: 9px 12px 11px;
+}
+
+.fontTileName {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.fontTileRole {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.fontList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fontItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fontItemHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.fontRole {
+  font-size: 11px;
+  font-weight: 660;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.fontFamily {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.fontWeights {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.fontSpecimen {
+  font-size: 30px;
+  line-height: 1.2;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Palette: swatches with role + usage ──────────────────────────── */
+.paletteGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.swatch {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.swatchChip {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 84px;
+  padding: 8px;
+}
+
+.swatchPicker {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
+  color: currentColor;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.swatchPicker:hover {
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  border-color: color-mix(in srgb, currentColor 38%, transparent);
+  transform: translateY(-1px);
+}
+
+.swatchHex {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.swatchBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px 12px;
+}
+
+.swatchName {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.swatchRole {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.swatchUsage {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ── Voice & tone ─────────────────────────────────────────────────── */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.aesthetic {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.pillars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.pillars li {
+  position: relative;
+  padding-left: 14px;
+  line-height: 1.5;
+}
+
+.pillars li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.vocab {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.vocabCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vocabUse,
+.vocabAvoid {
+  font-size: 12px;
+  font-weight: 660;
+}
+
+.vocabUse {
+  color: var(--green, #3d7a4f);
+}
+
+.vocabAvoid {
+  color: var(--red);
+}
+
+.vocabVals {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── Imagery & layout ─────────────────────────────────────────────── */
+.imageryLine {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.imageryKey {
+  font-weight: 640;
+  color: var(--text-strong);
+}
+
+.imageryKeyAvoid {
+  font-weight: 640;
+  color: var(--red);
+}
+
+.posture {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.postureList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Imagery samples gallery ──────────────────────────────────────── */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.shot {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  transition: border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.shot:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.shotFrame {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  background: var(--bg);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.shotFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.shot:hover .shotFrame img {
+  transform: scale(1.04);
+}
+
+.shotDelete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+
+.shot:hover .shotDelete,
+.shotDelete:focus-visible {
+  opacity: 1;
+}
+
+.shotDelete:hover {
+  color: var(--red);
+  border-color: var(--red-border);
+}
+
+.shotDelete:disabled {
+  cursor: default;
+}
+
+.shotDeleteLoading {
+  opacity: 1;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.shotMeta {
+  padding: 8px 11px 10px;
+}
+
+.shotCap {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-strong);
+}
+
+.shotKind {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ── Design system preview ────────────────────────────────────────── */
+.dsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dsFrameWrap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.dsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dsTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.dsTab {
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.dsTab:hover {
+  color: var(--text-strong);
+}
+
+.dsTabActive,
+.dsTabActive:hover {
+  background: var(--bg-panel);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.dsCap {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dsFrame {
+  width: 100%;
+  height: 520px;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.dsTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.tokSwatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.tokText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.tokKey {
+  font-size: 11px;
+  font-weight: 660;
+  color: var(--text-strong);
+}
+
+.tokHex {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tokValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Brand assets grid ────────────────────────────────────────────── */
+.assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.asset {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.asset:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.asset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.assetFrame {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.assetFrame iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  border: 0;
+  transform: scale(0.5);
+  transform-origin: top left;
+  pointer-events: none;
+  background: #fff;
+}
+
+.assetMeta {
+  padding: 11px 13px;
+}
+
+.assetName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* Image lightbox overlay. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  /* Must clear the chat composer, which rises to z-index 1500 with its
+     mode-toggle popover (1700 for the home-hero composer); preview modals
+     (.ds-modal-backdrop) sit at 1700, so 1800 keeps this overlay above every
+     composer/popover state. This z-index only resolves correctly because
+     DesignKitView portals these overlays to <body> — rendered inline, the host
+     pane traps them in a lower stacking context and the composer paints over
+     them regardless of z-index. Keep the portal. */
+  z-index: 1800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(10, 10, 12, 0.74);
+  backdrop-filter: blur(3px);
+  animation: lightboxIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes lightboxIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lightboxStage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(1100px, 92vw);
+  max-height: 86vh;
+}
+
+.lightboxImg {
+  max-width: 100%;
+  max-height: calc(86vh - 44px);
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  animation: lightboxImgIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes lightboxImgIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lightboxClose {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+.lightboxClose:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.lightboxNav {
+  position: fixed;
+  top: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.lightboxNav:hover {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.lightboxNavPrev {
+  left: 28px;
+}
+
+.lightboxNavNext {
+  right: 28px;
+}
+
+.lightboxNavPrev:hover {
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.lightboxNavNext:hover {
+  transform: translateY(-50%) translateX(2px);
+}
+
+.lightboxInfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.lightboxCaption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lightboxCount {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .lightbox {
+    padding: 24px;
+  }
+
+  .lightboxStage {
+    max-width: 100%;
+  }
+
+  .lightboxNav {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lightboxNavPrev {
+    left: 12px;
+  }
+
+  .lightboxNavNext {
+    right: 12px;
+  }
+}
+
+/* HTML asset preview overlay. */
+.assetModal {
+  position: fixed;
+  inset: 0;
+  /* See .lightbox: stay above the chat composer's elevated z-index (up to 1700)
+     so the artifact preview (e.g. "Pitch deck") is never covered by the input. */
+  z-index: 1800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(10, 10, 12, 0.66);
+  backdrop-filter: blur(3px);
+  animation: lightboxIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.assetModalPanel {
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 94vw);
+  height: min(820px, 88vh);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+  animation: lightboxImgIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.assetModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.assetModalHeader h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetModalHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.assetModalClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.assetModalClose:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.assetModalFrame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+
+.designMdModalPanel {
+  max-width: min(980px, 94vw);
+}
+
+.designMdTextarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 18px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: none;
+}
+
+.designMdModalBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.colorModalPanel {
+  width: min(460px, 92vw);
+  height: auto;
+  min-height: 0;
+}
+
+.colorModalBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.colorModalPreview {
+  display: flex;
+  align-items: flex-end;
+  min-height: 130px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.colorModalPreview span {
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.colorModalField {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.colorModalField input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.colorModalField input[type="color"] {
+  padding: 3px;
+  cursor: pointer;
+}
+
+.colorModalField input[type="text"] {
+  padding: 0 10px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.colorModalError {
+  margin: 0;
+  color: var(--danger, #c0392b);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ══ Compact variant ══════════════════════════════════════════════════
+   Trims the panel layout to read cleanly inside a narrow picker popover
+   preview pane (~220-260px). Keeps cover / identity / typography / palette
+   single-column with reduced sizing. */
+.compact {
+  gap: 12px;
+  max-width: none;
+  padding: 0;
+  animation: none;
+}
+
+.compact .cover {
+  height: 96px;
+  padding: 16px;
+  border-radius: var(--radius);
+}
+
+.compact .coverLogo {
+  max-height: 64px;
+}
+
+.compact .coverLogoFallback {
+  width: 56px;
+  height: 56px;
+  font-size: 26px;
+}
+
+.compact .previewHead {
+  gap: 8px;
+}
+
+.compact .previewName {
+  font-size: 15px;
+}
+
+.compact .previewTagline {
+  font-size: 12px;
+}
+
+.compact .section {
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: var(--radius);
+}
+
+.compact .logoStage {
+  min-height: 96px;
+  padding: 16px;
+}
+
+.compact .logoStageImg {
+  max-height: 56px;
+}
+
+.compact .logoNotes {
+  font-size: 11px;
+}
+
+.compact .description {
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.compact .fontTiles {
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.compact .fontTileAg {
+  height: 64px;
+  font-size: 34px;
+}
+
+.compact .fontTileMeta {
+  padding: 6px 8px 8px;
+}
+
+.compact .fontTileName {
+  font-size: 11.5px;
+}
+
+.compact .paletteGrid {
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+}
+
+.compact .swatchChip {
+  height: 48px;
+  padding: 6px;
+}
+
+.compact .swatchBody {
+  padding: 6px 8px 8px;
+}
+
+.compact .swatchName {
+  font-size: 11.5px;
+}
+
+/* ══ Showcase cover (design systems) ═══════════════════════════════════
+   When the cover holds a live showcase iframe instead of a logo, fill the
+   frame edge-to-edge and give it a touch more height to read as a hero. */
+.cover:has(.coverFrameViewport) {
+  position: relative;
+  padding: 0;
+  height: 280px;
+  overflow: hidden;
+}
+
+.coverFrameViewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+
+.coverFrame {
+  width: 142.857%;
+  height: 142.857%;
+  border: 0;
+  display: block;
+  background: #fff;
+  pointer-events: none;
+  transform: scale(0.7);
+  transform-origin: top left;
+}
+
+.compact .cover:has(.coverFrameViewport) {
+  height: 120px;
+}
+
+/* Hover affordance over the (non-interactive, scaled) showcase cover. The
+   inline preview can't scroll, so reveal a button on hover/focus that opens a
+   full, scrollable preview. */
+.coverPreviewBtn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--text-strong) 20%, transparent);
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cover:has(.coverFrameViewport):hover .coverPreviewBtn,
+.coverPreviewBtn:focus-visible {
+  opacity: 1;
+}
+
+.coverPreviewPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--text-strong) 22%, transparent);
+  transform: translateY(5px);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cover:has(.coverFrameViewport):hover .coverPreviewPill,
+.coverPreviewBtn:focus-visible .coverPreviewPill {
+  transform: translateY(0);
+}
+
+/* ══ DESIGN.md mode toggle (Visualize / Edit / Source) ═════════════════ */
+.modeToggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.modeToggleBtn {
+  border: 0;
+  padding: 5px 14px;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.modeToggleBtn:hover {
+  color: var(--text-strong);
+}
+
+.modeToggleBtnActive,
+.modeToggleBtnActive:hover {
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ══ DESIGN.md editor + source ═════════════════════════════════════════ */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editorTextarea {
+  width: 100%;
+  min-height: 440px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.editorBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editorHint {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sourceWrap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+/* ══ Empty module + upload affordance ══════════════════════════════════ */
+.emptyModule {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.emptyModuleText {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.uploadBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.uploadBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes designKitActionSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

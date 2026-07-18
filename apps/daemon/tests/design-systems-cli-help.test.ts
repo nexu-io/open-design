@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DESIGN_SYSTEMS_USAGE,
   isDesignSystemsHelpArg,
-} from '../src/design-systems-cli-help.js';
+} from '../src/cli-help/index.js';
 
 describe('od design-systems help surface', () => {
   it('routes help, --help, and -h to the usage text', () => {
@@ -23,6 +23,7 @@ describe('od design-systems help surface', () => {
     expect(DESIGN_SYSTEMS_USAGE).toContain('list');
     expect(DESIGN_SYSTEMS_USAGE).toContain('show');
     expect(DESIGN_SYSTEMS_USAGE).toContain('rename');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('download');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-local');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-github');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-shadcn');

@@ -10,11 +10,14 @@ import type {
   ApplyResult,
   ChatSessionMode,
   CreateConversationRequest,
+  CreateDesignSystemProjectFromProjectResponse,
+  DuplicateProjectResponse,
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  PluginDuplicateProjectResponse,
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
@@ -33,13 +36,17 @@ import type {
 export type { PluginInstallOutcome } from '@open-design/contracts';
 export type { PluginShareAction } from '@open-design/contracts';
 
-export async function listProjects(): Promise<Project[]> {
+export async function listProjects(options?: { throwOnError?: boolean }): Promise<Project[]> {
   try {
     const resp = await fetch('/api/projects');
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      if (options?.throwOnError) throw new Error(`projects ${resp.status}`);
+      return [];
+    }
     const json = (await resp.json()) as { projects: Project[] };
     return json.projects ?? [];
-  } catch {
+  } catch (err) {
+    if (options?.throwOnError) throw err;
     return [];
   }
 }
@@ -50,6 +57,27 @@ export async function getProject(id: string): Promise<Project | null> {
     if (!resp.ok) return null;
     const json = (await resp.json()) as { project: Project };
     return json.project;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectDetail(
+  id: string,
+  opts?: { ensureDir?: boolean },
+): Promise<{ project: Project; resolvedDir: string | null } | null> {
+  try {
+    // `ensureDir` asks the daemon to materialize a managed project's folder
+    // before resolving it, so referencing a brand-new (empty) project yields a
+    // real on-disk directory instead of a path that fails existence checks.
+    const query = opts?.ensureDir ? '?ensureDir=1' : '';
+    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}${query}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { project: Project; resolvedDir?: unknown };
+    return {
+      project: json.project,
+      resolvedDir: typeof json.resolvedDir === 'string' ? json.resolvedDir : null,
+    };
   } catch {
     return null;
   }
@@ -108,6 +136,78 @@ export async function createProject(input: {
     };
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
+  }
+}
+
+export async function createDesignSystemProjectFromProject(
+  projectId: string,
+  input: { name?: string; pendingPrompt?: string } = {},
+): Promise<CreateDesignSystemProjectFromProjectResponse> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/design-system-copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      let message = 'Could not create design system';
+      try {
+        const body = await resp.json() as { error?: unknown };
+        if (
+          body.error &&
+          typeof body.error === 'object' &&
+          'message' in body.error &&
+          typeof body.error.message === 'string' &&
+          body.error.message.trim()
+        ) {
+          message = body.error.message;
+        } else if (typeof body.error === 'string' && body.error.trim()) {
+          message = body.error;
+        }
+      } catch {
+        // Keep the generic fallback when the error body is absent or invalid.
+      }
+      throw new Error(message);
+    }
+    return (await resp.json()) as CreateDesignSystemProjectFromProjectResponse;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Could not create design system');
+  }
+}
+
+export async function duplicateProject(
+  projectId: string,
+  input: { name?: string } = {},
+): Promise<DuplicateProjectResponse> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      let message = 'Could not duplicate project';
+      try {
+        const body = await resp.json() as { error?: unknown };
+        if (
+          body.error &&
+          typeof body.error === 'object' &&
+          'message' in body.error &&
+          typeof body.error.message === 'string' &&
+          body.error.message.trim()
+        ) {
+          message = body.error.message;
+        } else if (typeof body.error === 'string' && body.error.trim()) {
+          message = body.error;
+        }
+      } catch {
+        // Keep the generic fallback when the error body is absent or invalid.
+      }
+      throw new Error(message);
+    }
+    return (await resp.json()) as DuplicateProjectResponse;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Could not duplicate project');
   }
 }
 
@@ -674,6 +774,16 @@ export interface ListPluginsOptions {
   includeHidden?: boolean;
 }
 
+// Module-level cache of the visible plugin list. The `/api/plugins` payload is
+// large (all bundled manifests), so re-fetching + parsing it on every Home
+// remount left the create rail greyed for 1-2s each time. `listPluginsFresh`
+// serves this cache without a network round trip while it is warm, so a Home
+// remount clears `pluginsLoading` within a frame instead of after the heavy
+// fetch+parse.
+let cachedVisiblePlugins: InstalledPluginRecord[] | null = null;
+let cachedVisibleAt = 0;
+const PLUGINS_CACHE_TTL_MS = 10_000;
+
 export async function listPlugins(
   options: ListPluginsOptions = {},
 ): Promise<InstalledPluginRecord[]> {
@@ -682,15 +792,61 @@ export async function listPlugins(
     if (!resp.ok) return [];
     const json = (await resp.json()) as { plugins?: InstalledPluginRecord[] };
     const plugins = json.plugins ?? [];
-    return options.includeHidden ? plugins : plugins.filter(isVisiblePlugin);
+    const visible = plugins.filter(isVisiblePlugin);
+    cachedVisiblePlugins = visible;
+    cachedVisibleAt = Date.now();
+    return options.includeHidden ? plugins : visible;
   } catch {
     return [];
   }
 }
 
+// Return the cached visible plugins without hitting the network when the cache
+// is still within its TTL; otherwise fetch (which refreshes the cache). Used by
+// surfaces that mount often (Home) where a slightly stale list is fine and the
+// heavy `/api/plugins` round trip per mount is not.
+export async function listPluginsFresh(): Promise<InstalledPluginRecord[]> {
+  if (cachedVisiblePlugins !== null && Date.now() - cachedVisibleAt < PLUGINS_CACHE_TTL_MS) {
+    return cachedVisiblePlugins;
+  }
+  return listPlugins();
+}
+
+// Test-only: drop the warm visible-plugins cache so each case starts cold. The
+// module-level cache intentionally survives Home remounts in the app, but that
+// same persistence leaks across test cases in a worker (a case's mocked
+// `/api/plugins` payload would satisfy the next case via `listPluginsFresh`).
+// The web vitest setup calls this in a global `afterEach`.
+export function resetPluginsCache(): void {
+  cachedVisiblePlugins = null;
+  cachedVisibleAt = 0;
+}
+
 export function isVisiblePlugin(plugin: InstalledPluginRecord): boolean {
   const od = (plugin.manifest?.od ?? {}) as Record<string, unknown>;
   return od.hidden !== true;
+}
+
+export async function duplicatePluginAsProject(
+  pluginId: string,
+  input: { name?: string } = {},
+): Promise<PluginDuplicateProjectResponse> {
+  const resp = await fetch(
+    `/api/plugins/${encodeURIComponent(pluginId)}/duplicate-project`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(await readErrorMessage(resp));
+  }
+  const json = (await resp.json()) as PluginDuplicateProjectResponse;
+  if (!json?.ok || !json.projectId) {
+    throw new Error('Could not duplicate this template.');
+  }
+  return json;
 }
 
 interface PluginInstallEvent {

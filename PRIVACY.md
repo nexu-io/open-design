@@ -5,17 +5,23 @@ when it collects it, and how you stay in control. It documents the behavior
 shipped in the app — the same controls live under **Settings → Privacy**.
 
 Open Design is **local-first**. Your projects, generated files, and BYOK API
-keys stay on your machine. The app works fully offline; nothing in this page
-applies unless you explicitly turn telemetry on.
+keys stay on your machine, and the app works fully offline. Usage telemetry,
+described below, is the one category of data the app may send — it is **on by
+default**, and you can turn it off at any time under **Settings → Privacy**.
 
-## Telemetry is opt-in
+## Telemetry is opt-out
 
-Usage telemetry is **off by default**. On first run the app shows a privacy
-consent banner asking you to make a choice — it never starts sending anything
-before you do. You can change your decision at any time under
-**Settings → Privacy**, where each category below has its own toggle.
+Usage telemetry is **on by default**. On first run the app shows a privacy
+disclosure banner so you can see what is collected before doing anything else.
+The banner asks you to choose **Share** or **Don’t share**.
+Choosing **Share** keeps telemetry enabled; choosing **Don’t share**
+turns telemetry off.
 
-## What is collected when you opt in
+You stay in control: the banner points you to **Settings → Privacy**, where you
+can turn telemetry off and toggle each category below — and you can change your
+decision at any time.
+
+## What is collected
 
 When telemetry is enabled, the app may send the following to the Open Design
 team. Each category is independently controllable in Settings.
@@ -62,6 +68,16 @@ policy.
 Open Design is BYOK at every layer. The API keys you configure for coding
 agents and model providers are stored locally and used only to talk to those
 providers directly. They are never sent to the Open Design team.
+
+## Open Design AMR
+
+“Open Design AMR” is Open Design’s official, first-party model service. Because
+the two are part of the same product family operated by the same team, we may
+share information between them as needed to provide, connect, and improve the
+combined experience — for example, to recognize that you arrived from Open
+Design, to help you get set up, and to keep the products working well together.
+This sharing is between our own products, not with unrelated third parties, and
+any data involved still follows the controls described on this page.
 
 ## Changes to this page
 

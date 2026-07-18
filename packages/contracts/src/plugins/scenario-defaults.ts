@@ -46,6 +46,7 @@ export type DefaultScenarioPluginId =
   | 'od-tune-collab'
   | 'example-live-artifact'
   | 'example-simple-deck'
+  | 'example-web-clone'
   | 'example-web-prototype';
 
 export const DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID =
@@ -61,6 +62,7 @@ export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenari
   // "headline + subtitle + absolute footer" collision).
   deck:      'example-simple-deck',
   template:  'od-new-generation',
+  brand:     'od-new-generation',
   image:     'od-media-generation',
   video:     'od-media-generation',
   audio:     'od-media-generation',
@@ -85,6 +87,7 @@ export function defaultScenarioPluginIdForProjectMetadata(
   metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
 ): DefaultScenarioPluginId | null {
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
+  if (metadata?.intent === 'web-clone') return 'example-web-clone';
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }
 

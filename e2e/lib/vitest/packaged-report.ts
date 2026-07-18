@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 
 import { createReport, type E2eReport } from './report.ts';
-import { e2eWorkspaceRoot } from './smoke-suite.ts';
+import { e2eWorkspaceRoot } from './suite.ts';
 
 export type PackagedReportPlatform = 'mac' | 'win';
 

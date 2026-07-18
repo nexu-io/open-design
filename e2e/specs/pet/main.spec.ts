@@ -9,7 +9,7 @@ import {
   readCodexPetSpritesheet,
   writeCodexPetFixture,
 } from '@/vitest/pets';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 const USER_PET_ID = 'qa-inspect-pet';
 const USER_PET_NAME = 'QA Inspect Pet';

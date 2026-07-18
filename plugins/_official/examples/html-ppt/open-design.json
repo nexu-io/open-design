@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt",
-  "title": "Html Ppt",
+  "title": "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead",
   "title_i18n": {
-    "zh-CN": "Html Ppt",
-    "zh-TW": "Html Ppt",
-    "ja": "Html Ppt",
-    "ko": "Html Ppt",
-    "de": "Html Ppt",
-    "fr": "Html Ppt",
-    "ru": "Html Ppt",
-    "es": "Html Ppt",
-    "pt-BR": "Html Ppt",
-    "it": "Html Ppt",
-    "vi": "Html Ppt",
-    "pl": "Html Ppt",
-    "id": "Html Ppt",
-    "nl": "Html Ppt",
-    "ar": "Html Ppt",
-    "tr": "Html Ppt",
-    "uk": "Html Ppt",
-    "en": "Html Ppt"
+    "en": "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead",
+    "zh-CN": "像一线咨询 AI 行业负责人一样讲清行业 AI",
+    "zh-TW": "像一线咨询 AI 行业负责人一样讲清行业 AI"
   },
   "version": "0.1.0",
-  "description": "HTML PPT Studio — author professional static HTML presentations in many styles, layouts, and animations, all driven by templates. Use when the user asks for a presentation, PPT, slides, keynote, deck, slideshow, \"幻灯片\", \"演讲稿\", \"做一份 PPT\", \"做一份 slides\", a reveal-style HTML deck, a 小红书 图文, or any kind of multi-slide pitch/report/sharing document that should look tasteful and be usable with keyboard navigation. Triggers include keywords like \"presentation\", \"ppt\", \"slides\", \"deck\", \"keynote\", \"reveal\", \"slideshow\", \"幻灯片\", \"演讲稿\", \"分享稿\", \"小红书图文\", \"talk slides\", \"pitch deck\", \"tech sharing\", \"technical presentation\".",
+  "publishedAt": "2026-05-12T05:25:44Z",
+  "description": "For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query \"consulting-final-deck\", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.",
   "description_i18n": {
-    "zh-CN": "HTML PPT Studio — 制作专业的静态 HTML 演示文稿，提供多种样式、布局和动画效果，所有内容均由模板驱动。适用于制作演示文稿、PPT、幻灯片、keynote、slides、演讲稿、reveal 风格的 HTML 演示、小红书图文等多种形式的分享文档，支持键盘导航。",
-    "zh-TW": "HTML PPT Studio — 製作專業的靜態 HTML 簡報，提供多種樣式、版面配置和動畫效果，所有內容均由範本驅動。適用於製作簡報、PPT、幻燈片、keynote、slides、演講稿、reveal 風格的 HTML 簡報等多種形式的分享文件，支援鍵盤導覽。",
-    "ja": "HTML PPT Studio — 多様なスタイル、レイアウト、アニメーションを備えたプロフェッショナルな静的HTMLプレゼンテーションを作成。テンプレート駆動で、プレゼンテーション、スライド、keynote、reveal形式のHTMLデッキなど、キーボードナビゲーション対応の資料作成に最適。",
-    "ko": "HTML PPT Studio — 다양한 스타일, 레이아웃, 애니메이션을 제공하는 전문 정적 HTML 프레젠테이션 제작 도구. 템플릿 기반으로 프레젠테이션, PPT, 슬라이드, keynote, reveal 스타일 HTML 덱 등 키보드 탐색을 지원하는 발표 자료 제작에 적합.",
-    "de": "HTML PPT Studio — Erstellen Sie professionelle statische HTML-Präsentationen mit vielen Stilen, Layouts und Animationen, alle vorlagengesteuert. Ideal für Präsentationen, Slides, Keynotes, Decks, Slideshows und Pitch-Dokumente mit Tastaturnavigation.",
-    "fr": "HTML PPT Studio — Créez des présentations HTML statiques professionnelles avec de nombreux styles, mises en page et animations, le tout basé sur des modèles. Idéal pour les présentations, slides, keynotes, decks, slideshows et documents de pitch avec navigation au clavier.",
-    "ru": "HTML PPT Studio — создавайте профессиональные статические HTML-презентации с множеством стилей, макетов и анимаций на основе шаблонов. Подходит для презентаций, слайдов, keynote, reveal-презентаций и любых докладов с навигацией с клавиатуры.",
-    "es": "HTML PPT Studio — Crea presentaciones HTML estáticas profesionales con múltiples estilos, diseños y animaciones, todo basado en plantillas. Ideal para presentaciones, slides, keynotes, decks, slideshows y documentos de pitch con navegación por teclado.",
-    "pt-BR": "HTML PPT Studio — Crie apresentações HTML estáticas profissionais com diversos estilos, layouts e animações, tudo baseado em templates. Ideal para apresentações, slides, keynotes, decks, slideshows e documentos de pitch com navegação por teclado.",
-    "it": "HTML PPT Studio — Crea presentazioni HTML statiche professionali con numerosi stili, layout e animazioni, tutto basato su template. Ideale per presentazioni, slide, keynote, deck, slideshow e documenti di pitch con navigazione da tastiera.",
-    "vi": "HTML PPT Studio — Tạo bản trình bày HTML tĩnh chuyên nghiệp với nhiều phong cách, bố cục và hoạt ảnh, tất cả dựa trên mẫu. Phù hợp cho bài thuyết trình, slides, keynote, deck, slideshow và tài liệu pitch với điều hướng bàn phím.",
-    "pl": "HTML PPT Studio — Twórz profesjonalne statyczne prezentacje HTML z wieloma stylami, layoutami i animacjami, wszystko oparte na szablonach. Idealne do prezentacji, slajdów, keynote, decków, slideshowów i dokumentów pitch z nawigacją klawiaturową.",
-    "id": "HTML PPT Studio — Buat presentasi HTML statis profesional dengan berbagai gaya, tata letak, dan animasi, semua berbasis template. Ideal untuk presentasi, slides, keynote, deck, slideshow, dan dokumen pitch dengan navigasi keyboard.",
-    "nl": "HTML PPT Studio — Maak professionele statische HTML-presentaties met vele stijlen, lay-outs en animaties, allemaal aangestuurd door templates. Ideaal voor presentaties, slides, keynotes, decks, slideshows en pitch-documenten met toetsenbordnavigatie.",
-    "ar": "HTML PPT Studio — أنشئ عروضًا تقديمية HTML ثابتة احترافية بأنماط وتخطيطات ورسوم متحركة متعددة، كلها مدفوعة بالقوالب. مثالي للعروض التقديمية والشرائح وعروض keynote وعروض reveal والمستندات التقديمية مع التنقل بلوحة المفاتيح.",
-    "tr": "HTML PPT Studio — Birçok stil, düzen ve animasyona sahip profesyonel statik HTML sunumları oluşturun, tümü şablon tabanlı. Sunumlar, slaytlar, keynote, deck, slideshow ve klavye navigasyonlu sunum belgeleri için ideal.",
-    "uk": "HTML PPT Studio — створюйте професійні статичні HTML-презентації з багатьма стилями, макетами та анімаціями на основі шаблонів. Ідеально для презентацій, слайдів, keynote, reveal-презентацій та будь-яких доповідей з навігацією з клавіатури.",
-    "en": "HTML PPT Studio — author professional static HTML presentations in many styles, layouts, and animations, all driven by templates. Use when the user asks for a presentation, PPT, slides, keynote, deck, slideshow, \"幻灯片\", \"演讲稿\", \"做一份 PPT\", \"做一份 slides\", a reveal-style HTML deck, a 小红书 图文, or any kind of multi-slide pitch/report/sharing document that should look tasteful and be usable with keyboard navigation. Triggers include keywords like \"presentation\", \"ppt\", \"slides\", \"deck\", \"keynote\", \"reveal\", \"slideshow\", \"幻灯片\", \"演讲稿\", \"分享稿\", \"小红书图文\", \"talk slides\", \"pitch deck\", \"tech sharing\", \"technical presentation\"."
+    "en": "For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query \"consulting-final-deck\", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.",
+    "zh-CN": "咨询/客户交付场景：围绕 core query「consulting-final-deck」把粗糙材料整理成“像一线咨询 AI 行业负责人一样讲清行业 AI”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。",
+    "zh-TW": "咨询/客户交付场景：围绕 core query「consulting-final-deck」把粗糙材料整理成“像一线咨询 AI 行业负责人一样讲清行业 AI”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,16 @@
     "talk-slides",
     "pitch-deck",
     "tech-sharing",
-    "technical-presentation"
+    "technical-presentation",
+    "consulting",
+    "consulting-final-deck",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "decision-deck",
+    "commercial-slide-agent",
+    "html-ppt",
+    "consulting-delivery"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +60,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "strategy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,9 +68,20 @@
     },
     "useCase": {
       "query": {
-        "en": "Use html-ppt to create a 12-page HTML PPT. First confirm three things with me: content/page count/audience, theme choice (recommend 2-3 from the 36 available themes), and the starting full-deck template (choose from pitch-deck, tech-sharing, weekly-report, xhs-post, or presenter-mode-reveal). After alignment, start writing the slides.",
-        "zh-CN": "用 html-ppt 做一份 12 页的 HTML PPT。先帮我确认三件事：内容/页数/受众、主题（从 36 套里推荐 2-3 个）、起点全 deck 模板（pitch-deck / tech-sharing / weekly-report / xhs-post / presenter-mode-reveal 任选一个），对齐之后再开始写 slides。"
-      }
+        "en": "Create \"Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead\" as a Consulting delivery deck in the Html Ppt visual system. Scene: consulting-final-deck. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: would a client know what to do Monday morning.",
+        "zh-CN": "像一线咨询 AI 行业负责人一样讲清行业 AI。咨询/客户交付场景：围绕 core query「consulting-final-deck」把粗糙材料整理成“像一线咨询 AI 行业负责人一样讲清行业 AI”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead",
+          "title_i18n": {
+            "en": "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead",
+            "zh-CN": "像一线咨询 AI 行业负责人一样讲清行业 AI",
+            "zh-TW": "像一线咨询 AI 行业负责人一样讲清行业 AI"
+          }
+        }
+      ]
     },
     "context": {
       "skills": [

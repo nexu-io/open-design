@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="true-blueprint">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Present an Engineering Blueprint like a Principal Architect - Product management</title>
+<style>
+/* hps-true-blueprint :: webfonts (Google Fonts @import only — no other external deps) */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;0,800;1,400&display=swap');
+</style>
+<style>
+/* ============================================================
+   TRUE BLUEPRINT — locked token sheet.
+   Ported from lewislulu/html-ppt-skill assets/themes/blueprint.css
+   Blueprint-blue field, white drafting grid, dashed translucent
+   cards, white / ice-blue ink, amber annotations, all-mono type.
+   2px corners. No shadows. THEME IS LOCKED — do not restyle.
+   ============================================================ */
+:root{
+  --bg:#0b3a6f; --bg-soft:#0a3260; --surface:rgba(255,255,255,.06); --surface-2:rgba(255,255,255,.1);
+  --border:rgba(190,220,255,.3); --border-strong:rgba(190,220,255,.55);
+  --text-1:#e8f3ff; --text-2:#b8d4f0; --text-3:#7da8cf;
+  --accent:#ffffff; --accent-2:#aee1ff; --accent-3:#ffd27a;
+  --good:#8ef0a6; --warn:#ffd27a; --bad:#ff8a96;
+  --grad:linear-gradient(135deg,#ffffff,#aee1ff);
+  --grad-soft:linear-gradient(135deg,#0a3260,#0b3a6f);
+  --radius:2px; --radius-sm:2px; --radius-lg:4px;
+  --shadow:none; --shadow-lg:0 16px 40px rgba(0,0,0,.3);
+  --font-sans:'JetBrains Mono','IBM Plex Mono',Menlo,monospace;
+  --font-serif:'JetBrains Mono',Menlo,monospace;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --font-display:'JetBrains Mono',Menlo,monospace;
+  --letter-tight:-.02em; --letter-normal:0;
+  --ease:cubic-bezier(.4,0,.2,1);
+  --grid-line:rgba(255,255,255,.06);
+  --ink:rgba(190,220,255,.45);
+}
+</style>
+<style>
+/* ============================================================
+   BASE + SLIDE SYSTEM — horizontal scroll-snap deck.
+   One <section class="slide"> = exactly one viewport screen.
+   16:9 / 1280×720 baseline, fluid via clamp(). Keep verbatim.
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{color:var(--text-1);font-family:var(--font-sans);
+  font-weight:400;line-height:1.6;letter-spacing:var(--letter-normal);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow:hidden;
+  /* signature: 40px white drafting grid over blueprint blue */
+  background:
+    linear-gradient(var(--grid-line) 1px,transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px) 0 0/40px 40px,
+    var(--bg)}
+img,svg,video{max-width:100%;display:block}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+.deck{display:flex;width:100vw;height:100vh;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none}
+.deck::-webkit-scrollbar{display:none}
+.slide{position:relative;flex:0 0 100vw;height:100vh;scroll-snap-align:start;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;overflow:hidden}
+
+/* ============ DRAWING FRAME (signature chrome on every slide) ============ */
+.slide::before{content:"";position:absolute;inset:28px;border:1px solid var(--ink);
+  border-radius:var(--radius);pointer-events:none}
+.slide::after{content:"";position:absolute;inset:34px;border:1px dashed rgba(190,220,255,.18);
+  border-radius:var(--radius);pointer-events:none}
+
+/* ============ TYPOGRAPHY ============ */
+.eyebrow{font-size:12px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--text-3);margin:0}
+.kicker{font-size:13px;font-weight:700;color:var(--accent-2);letter-spacing:.18em;text-transform:uppercase;margin:0 0 12px}
+.h1{font-family:var(--font-display);font-size:clamp(40px,5vw,64px);line-height:1.08;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1);text-transform:uppercase}
+.h2{font-family:var(--font-display);font-size:clamp(30px,3.8vw,48px);line-height:1.12;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px;color:var(--text-1);text-transform:uppercase}
+.h3{font-size:clamp(20px,2.3vw,28px);line-height:1.2;font-weight:700;margin:0 0 10px}
+.h4{font-size:clamp(15px,1.55vw,19px);line-height:1.3;font-weight:700;margin:0 0 8px;letter-spacing:.04em;text-transform:uppercase}
+.lede{font-size:clamp(15px,1.55vw,19px);line-height:1.65;color:var(--text-2);font-weight:300;max-width:64ch;margin:0}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.annot{color:var(--accent-3)}
+
+/* ============ LAYOUT PRIMITIVES ============ */
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:20px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+
+/* ============ CARDS / PILLS (dashed translucent — blueprint signature) ============ */
+.card{background:rgba(255,255,255,.04);border:1px dashed var(--ink);border-radius:var(--radius);
+  padding:24px 26px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface)}
+.card-accent{border-top:2px solid var(--accent-3)}
+.pill{display:inline-block;padding:4px 14px;border-radius:var(--radius);font-size:12px;font-weight:500;
+  background:transparent;color:var(--text-2);border:1px dashed var(--ink);letter-spacing:.06em;text-transform:uppercase}
+.pill-accent{color:var(--accent-3);border-color:rgba(255,210,122,.55)}
+.divider-accent{height:2px;width:96px;background:var(--accent-2);border-radius:0;position:relative}
+.divider-accent::after{content:"";position:absolute;right:-14px;top:-3px;width:8px;height:8px;border:1px solid var(--accent-2);transform:rotate(45deg)}
+
+/* ============ DECK CHROME ============ */
+.deck-header{position:fixed;top:36px;left:48px;right:48px;display:flex;align-items:center;justify-content:space-between;
+  font-size:11px;color:var(--text-3);letter-spacing:.18em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:fixed;bottom:36px;left:48px;right:48px;display:flex;align-items:center;justify-content:space-between;
+  font-size:11px;color:var(--text-3);letter-spacing:.08em;z-index:10;pointer-events:none}
+.theme-chip{font-family:var(--font-mono);font-size:11px;letter-spacing:.04em;text-transform:none;color:var(--accent-2)}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:2px;z-index:20;pointer-events:none;background:rgba(255,255,255,.08)}
+.progress-bar>span{display:block;height:100%;width:0;background:var(--accent-2);transition:width .3s var(--ease)}
+
+/* ============ TITLE BLOCK (drawing-sheet cover signature) ============ */
+.title-block{display:grid;grid-template-columns:repeat(4,auto);gap:0;border:1px solid var(--border-strong);
+  border-radius:var(--radius);overflow:hidden;width:max-content;max-width:100%}
+.title-block div{padding:10px 22px;border-right:1px solid var(--border);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.title-block div:last-child{border-right:0}
+.title-block b{display:block;font-size:14px;font-weight:700;color:var(--text-1);letter-spacing:.04em;margin-top:2px}
+
+/* ============ SLIDE-LOCAL COMPONENTS ============ */
+.section-num{position:absolute;right:84px;bottom:64px;font-size:clamp(120px,16vw,210px);font-weight:800;line-height:.9;
+  color:transparent;-webkit-text-stroke:1.5px var(--ink);letter-spacing:-.04em;z-index:0;pointer-events:none}
+.slide>*{position:relative;z-index:1}
+.kpi .num{font-size:clamp(32px,3.8vw,50px);font-weight:800;letter-spacing:var(--letter-tight);line-height:1.1;color:var(--accent)}
+.kpi .lbl{font-size:12px;color:var(--text-2);margin-top:8px;letter-spacing:.06em;text-transform:uppercase;line-height:1.5}
+.stat-big{font-size:clamp(96px,13vw,180px);font-weight:800;line-height:1;letter-spacing:-.04em;margin:0}
+.bar-chart{display:flex;align-items:flex-end;gap:18px;height:230px;margin-top:44px;max-width:820px}
+.bar-chart .bar{flex:1;background:repeating-linear-gradient(45deg,rgba(174,225,255,.35) 0 6px,rgba(174,225,255,.12) 6px 12px);
+  border:1px solid var(--accent-2);border-bottom:2px solid var(--accent-2);border-radius:var(--radius) var(--radius) 0 0;position:relative;min-height:18px}
+.bar-chart .bar.hot{background:repeating-linear-gradient(45deg,rgba(255,210,122,.4) 0 6px,rgba(255,210,122,.14) 6px 12px);border-color:var(--accent-3)}
+.bar-chart .bar span{position:absolute;bottom:-32px;left:0;right:0;text-align:center;font-size:11px;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase}
+.bar-chart .bar em{position:absolute;top:-30px;left:0;right:0;text-align:center;font-size:14px;font-weight:700;font-style:normal;color:var(--text-1)}
+.steps{counter-reset:step}
+.steps .card{padding-top:36px}
+.steps .card::before{counter-increment:step;content:"[" counter(step,decimal-leading-zero) "]";
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent-3);
+  position:absolute;top:13px;left:26px;letter-spacing:.08em}
+.quote{font-family:var(--font-mono);font-size:clamp(26px,3.2vw,42px);line-height:1.4;font-weight:700;max-width:28ch;margin:0}
+.check{list-style:none;padding:0;margin:0;font-size:clamp(14px,1.4vw,17px)}
+.check li{padding:8px 0 8px 32px;position:relative;color:var(--text-2)}
+.check li::before{content:"";position:absolute;left:0;top:13px;width:16px;height:16px;border-radius:var(--radius);
+  border:1px dashed var(--accent-2)}
+.check li::after{content:"";position:absolute;left:4px;top:16px;width:8px;height:4px;
+  border-left:2px solid var(--accent-2);border-bottom:2px solid var(--accent-2);transform:rotate(-45deg)}
+.spec-table{width:100%;border-collapse:collapse;font-size:clamp(12px,1.2vw,14px)}
+.spec-table td{padding:9px 14px;border:1px dashed var(--ink);color:var(--text-2)}
+.spec-table td:first-child{color:var(--text-2);text-transform:uppercase;letter-spacing:.08em;font-size:11px;width:34%}
+.spec-table b{color:var(--text-1);font-weight:700}
+
+/* ============ SPEAKER NOTES (hidden from audience) ============ */
+.notes{display:none!important}
+
+/* ============ ANIMATIONS (entry effects, upstream subset) ============ */
+@keyframes kf-rise{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:none}}
+@keyframes kf-fade-up{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+.anim-rise-in{animation:kf-rise .8s var(--ease) both}
+.anim-fade-up{animation:kf-fade-up .7s var(--ease) both}
+.anim-stagger-list>*{opacity:0;animation:kf-rise .6s var(--ease) both}
+.anim-stagger-list>*:nth-child(1){animation-delay:.05s}
+.anim-stagger-list>*:nth-child(2){animation-delay:.15s}
+.anim-stagger-list>*:nth-child(3){animation-delay:.25s}
+.anim-stagger-list>*:nth-child(4){animation-delay:.35s}
+.anim-stagger-list>*:nth-child(5){animation-delay:.45s}
+.anim-stagger-list>*:nth-child(n+6){animation-delay:.55s}
+
+@media (prefers-reduced-motion: reduce){
+  .anim-rise-in,.anim-fade-up,.anim-stagger-list>*{animation:none;opacity:1;transform:none}
+  .progress-bar>span{transition:none}
+}
+
+/* ============ PRINT ============ */
+@media print{
+  body{overflow:visible}
+  .deck{display:block;width:auto;height:auto;overflow:visible}
+  .slide{width:100vw;height:100vh;page-break-after:always}
+  .deck-header,.deck-footer,.progress-bar{display:none!important}
+}
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div class="deck-header"><span>Open Design · Drawing Set OD-2026</span><span class="theme-chip">theme: true-blueprint [locked]</span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · layout: cover (drawing sheet with title block) -->
+  <section class="slide" data-title="Cover">
+    <p class="kicker">// Engineering review · Product management</p>
+    <h1 class="h1 anim-rise-in">Present an Engineering<br><span class="gradient-text">Blueprint like a Principal Architect</span></h1>
+    <p class="lede">Decision brief for the eng org: how the sandbox, the sidecar, and the daemon fit together, what the invariants are, and the one irreversible step we're asking every team to sign off on this sprint.</p>
+    <div class="title-block mt-l anim-fade-up">
+      <div>DWG NO.<b>OD-ARCH-014</b></div>
+      <div>DECISION<b class="annot">SIDECAR-ONLY IPC</b></div>
+      <div>OWNER<b>Platform</b></div>
+      <div>DATE<b>2026-07-09</b></div>
+    </div>
+    <div class="notes">Cover styled as a drawing sheet: title block bottom-left carries the drawing number, the decision under review, the owning team and the review date. The whole deck is one engineering document to be read before the review meeting.</div>
+  </section>
+
+  <!-- 2 · layout: toc (drawing index) -->
+  <section class="slide" data-title="Index">
+    <p class="kicker">// Sheet index</p>
+    <h2 class="h2">Three sheets before we vote</h2>
+    <div class="grid g3 mt-l anim-stagger-list">
+      <div class="card card-accent"><h4 class="h4">SHT 01 · The pain</h4><p class="dim">Why three plugin teams already asked for a back door around the daemon, and what that costs us.</p></div>
+      <div class="card card-accent"><h4 class="h4">SHT 02 · Tradeoffs</h4><p class="dim">Direct daemon access vs sidecar-only IPC, compared on latency, audit coverage, and blast radius.</p></div>
+      <div class="card card-accent"><h4 class="h4">SHT 03 · Recommendation</h4><p class="dim">The rollout, the CI gate that makes the rule self-enforcing, and how we measure it held.</p></div>
+    </div>
+    <div class="notes">Table of contents framed as a sheet index — each card is one section of the drawing set, ordered so the pain justifies the tradeoff analysis before the recommendation lands.</div>
+  </section>
+
+  <!-- 3 · layout: section-divider -->
+  <section class="slide" data-title="Sheet 01 · The pain">
+    <span class="section-num">01</span>
+    <p class="eyebrow">Sheet one</p>
+    <h2 class="h2">Agents keep finding<br>the back door</h2>
+    <div class="divider-accent mt-m"></div>
+    <div class="notes">Section divider: outline-stroked giant number bottom-right, drawn with text-stroke in the ink color so it reads as a construction line. Sets up the pain: exception requests are already happening.</div>
+  </section>
+
+  <!-- 4 · layout: arch-diagram (inline SVG schematic — no libraries) -->
+  <section class="slide" data-title="Architecture">
+    <p class="kicker">// SHT 01 · system schematic</p>
+    <h2 class="h2">One door in, three daemon surfaces</h2>
+    <svg class="mt-m" viewBox="0 0 980 330" width="100%" style="max-width:980px" role="img" aria-label="Open Design schematic: the agent sandbox reaching the sidecar broker, which fans out to the daemon's projects, artifacts, and skills APIs">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0L10 5L0 10z" fill="#aee1ff"/>
+        </marker>
+      </defs>
+      <g font-family="'JetBrains Mono',monospace" font-size="13" letter-spacing="1">
+        <!-- input -->
+        <rect x="20" y="125" width="170" height="80" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
+        <text x="105" y="160" fill="#e8f3ff" text-anchor="middle" font-weight="700">AGENT SANDBOX</text>
+        <text x="105" y="182" fill="#b8d4f0" text-anchor="middle" font-size="11">isolated · no fs, no db</text>
+        <!-- sidecar -->
+        <rect x="300" y="100" width="240" height="130" fill="rgba(255,255,255,.07)" stroke="#ffffff" stroke-width="2" rx="2"/>
+        <text x="420" y="145" fill="#ffffff" text-anchor="middle" font-weight="800" font-size="16">SIDECAR</text>
+        <text x="420" y="170" fill="#b8d4f0" text-anchor="middle" font-size="11">the only broker in or out</text>
+        <text x="420" y="192" fill="#ffd27a" text-anchor="middle" font-size="11">validates · forwards · logs</text>
+        <!-- domains -->
+        <rect x="700" y="20"  width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
+        <text x="790" y="50" fill="#e8f3ff" text-anchor="middle" font-weight="700">PROJECTS API</text>
+        <text x="790" y="72" fill="#b8d4f0" text-anchor="middle" font-size="11">RUNTIME_DATA_DIR owner</text>
+        <rect x="700" y="128" width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
+        <text x="790" y="158" fill="#e8f3ff" text-anchor="middle" font-weight="700">ARTIFACTS API</text>
+        <text x="790" y="180" fill="#b8d4f0" text-anchor="middle" font-size="11">daemon-owned storage</text>
+        <rect x="700" y="236" width="180" height="74" fill="rgba(255,255,255,.05)" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="6 4" rx="2"/>
+        <text x="790" y="266" fill="#e8f3ff" text-anchor="middle" font-weight="700">SKILLS &amp; PLUGINS</text>
+        <text x="790" y="288" fill="#b8d4f0" text-anchor="middle" font-size="11">registry · state</text>
+        <!-- connectors -->
+        <path d="M190 165 H292" stroke="#aee1ff" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+        <path d="M540 140 C620 130 630 70 692 60"  stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
+        <path d="M540 165 H692" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
+        <path d="M540 195 C620 205 630 263 692 272" stroke="#aee1ff" stroke-width="1.5" stroke-dasharray="2 5" fill="none" marker-end="url(#arr)"/>
+        <!-- annotation / dimension line (anchored to the sidecar box, label kept clear of the domain rects) -->
+        <path d="M420 230 V300 H290" stroke="#ffd27a" stroke-width="1" fill="none"/>
+        <text x="20" y="304" fill="#ffd27a" font-size="11">every request logged — one broker, one audit trail</text>
+      </g>
+    </svg>
+    <div class="notes">Architecture schematic drawn as pure inline SVG: dashed component boxes, ice-blue connector lines with arrowheads, one amber annotation as the dimension line. The point of the diagram: the sandbox has exactly one path to the daemon's three surfaces.</div>
+  </section>
+
+  <!-- 5 · layout: two-column + spec table -->
+  <section class="slide" data-title="Design rules">
+    <p class="kicker">// SHT 01 · invariants at risk</p>
+    <h2 class="h2">Four rules the exception would break</h2>
+    <div class="grid g2 mt-l">
+      <div>
+        <p class="lede">Every daemon-facing capability obeys four invariants today. A direct-access back door breaks all four at once, not just the one a team asks for.</p>
+        <ul class="check mt-m">
+          <li>Sidecar is the only broker in or out — no direct daemon socket from agent code</li>
+          <li>Every daemon data path derives from one resolved RUNTIME_DATA_DIR</li>
+          <li>Sidecar process stamps carry exactly five fields — app, mode, namespace, ipc, source</li>
+          <li>App business logic never imports another app's private internals directly</li>
+        </ul>
+      </div>
+      <div class="card card-soft">
+        <table class="spec-table">
+          <tr><td>Exceptions asked</td><td><b>3 plugin teams</b> — past two sprints</td></tr>
+          <tr><td>Latency claimed</td><td><b>~40ms/call</b> — never independently measured</td></tr>
+          <tr><td>Audit coverage if granted</td><td><b>0%</b> — direct calls bypass the sidecar log</td></tr>
+          <tr><td>Rollback cost</td><td><b>~3 weeks</b> — full IPC path rewrite per team</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="notes">Two-column layout: invariants as a checklist on the left, a dashed spec table on the right quantifying the cost of the requested exception — reads like a materials schedule on a real drawing.</div>
+  </section>
+
+  <!-- 6 · layout: section-divider -->
+  <section class="slide" data-title="Sheet 02 · Options">
+    <span class="section-num">02</span>
+    <p class="eyebrow">Sheet two</p>
+    <h2 class="h2">Two paths,<br>one clears the bar</h2>
+    <div class="divider-accent mt-m"></div>
+    <div class="notes">Second divider. Same construction-line number device — introduces the two options under review.</div>
+  </section>
+
+  <!-- 7 · layout: kpi-grid -->
+  <section class="slide" data-title="Sidecar-only, scored">
+    <p class="kicker">// SHT 02 · sidecar-only IPC, scored against the status quo</p>
+    <h2 class="h2">What sidecar-only actually costs us</h2>
+    <div class="grid g4 mt-l anim-stagger-list">
+      <div class="card kpi"><div class="num annot">+2ms</div><div class="lbl">added latency per call from sidecar validation</div></div>
+      <div class="card kpi"><div class="num">100%</div><div class="lbl">of daemon calls covered by one audit trail</div></div>
+      <div class="card kpi"><div class="num">1</div><div class="lbl">attack surface — one IPC socket, not N direct sockets</div></div>
+      <div class="card kpi"><div class="num">0</div><div class="lbl">daemon internals imported by app code today</div></div>
+    </div>
+    <div class="notes">KPI grid: four measured costs and benefits of enforcing sidecar-only IPC. The amber number is the true cost — 2ms — set against three near-total wins.</div>
+  </section>
+
+  <!-- 8 · layout: chart-bar (hatched CSS bars — no chart library) -->
+  <section class="slide" data-title="Risk of the exception">
+    <p class="kicker">// SHT 02 · cost of granting direct daemon access, scored 0-100</p>
+    <h2 class="h2">Where the risk concentrates</h2>
+    <div class="bar-chart">
+      <div class="bar hot" style="height:88%"><em>92</em><span>blast radius</span></div>
+      <div class="bar" style="height:74%"><em>78</em><span>audit gaps</span></div>
+      <div class="bar" style="height:58%"><em>61</em><span>rollback risk</span></div>
+      <div class="bar" style="height:14%"><em>12</em><span>latency saved</span></div>
+    </div>
+    <p class="dim mt-l" style="margin-top:60px">Direct access buys ~12 points of latency and costs 70+ points of <span class="annot">audit and blast-radius risk</span>. The exception doesn't clear the bar.</p>
+    <div class="notes">Bar chart rebuilt with hatched CSS bars. The amber hatched bar is the worst-scoring dimension — blast radius — set against the tiny latency win the exception would actually buy.</div>
+  </section>
+
+  <!-- 9 · layout: section-divider + process-steps combined sheet -->
+  <section class="slide" data-title="Sheet 03 · Rollout">
+    <p class="kicker">// SHT 03 · recommendation, rollout in four phases</p>
+    <h2 class="h2">Land the rule in one sprint</h2>
+    <div class="grid g4 mt-l steps anim-stagger-list">
+      <div class="card"><h4 class="h4">Freeze</h4><p class="dim">No new direct-daemon exceptions merge after this review. Existing three stay on notice.</p></div>
+      <div class="card"><h4 class="h4">Migrate</h4><p class="dim">Route all three exception requests through the sidecar broker within the sprint.</p></div>
+      <div class="card"><h4 class="h4">Enforce</h4><p class="dim">CI gate fails any PR that imports daemon internals outside the sidecar boundary.</p></div>
+      <div class="card"><h4 class="h4">Measure</h4><p class="dim">Audit-coverage dashboard tracked weekly for one quarter; report back at the next review.</p></div>
+    </div>
+    <div class="notes">Process steps with bracketed [01]–[04] counters, like detail callouts on a drawing. This is the recommendation: freeze, migrate, enforce via CI, then measure for a full quarter.</div>
+  </section>
+
+  <!-- 10 · layout: comparison -->
+  <section class="slide" data-title="Option comparison">
+    <p class="kicker">// SHT 03 · revision delta</p>
+    <h2 class="h2">Direct access vs sidecar-only IPC</h2>
+    <div class="grid g2 mt-l">
+      <div class="card card-soft">
+        <p class="eyebrow" style="color:var(--bad)">Option A — grant the exception</p>
+        <h3 class="h3">Direct daemon access</h3>
+        <ul class="check"><li>Bypasses the sidecar's single audit trail</li><li>Three separate sockets, three separate blast radii</li><li>~3 weeks to unwind per team if reverted</li></ul>
+      </div>
+      <div class="card card-accent">
+        <p class="eyebrow" style="color:var(--good)">Option B — this recommendation</p>
+        <h3 class="h3">Sidecar-only IPC</h3>
+        <ul class="check"><li>One broker, one audit trail, every call logged</li><li>+2ms measured cost, no team has hit a real ceiling</li><li>CI gate makes the rule self-enforcing going forward</li></ul>
+      </div>
+    </div>
+    <div class="notes">Comparison: the exception the three teams are asking for vs the standing rule. Semantic good/bad tokens stay within the locked palette — coral and mint read as redline annotations.</div>
+  </section>
+
+  <!-- 11 · layout: big-quote + thanks -->
+  <section class="slide center" data-title="Sign-off">
+    <p class="quote anim-fade-up">"One broker,<br>one audit trail, <span class="annot">no exceptions.</span>"</p>
+    <p class="eyebrow mt-l">— the irreversible step this review asks for</p>
+    <div class="row wrap mt-l" style="gap:8px;justify-content:center">
+      <span class="pill pill-accent">sign off: sidecar-only IPC, no exceptions</span>
+      <span class="pill">CI gate ships next sprint</span>
+      <span class="pill">audit-coverage review — quarterly</span>
+    </div>
+    <div class="notes">Closer doubles as the sign-off block: the invariant as a pull quote, the ask stamped as an amber pill. This is the one decision every function in the room needs to leave agreeing on.</div>
+  </section>
+
+</div>
+
+<div class="deck-footer"><span>hps-true-blueprint · MIT · after lewislulu/html-ppt-skill</span><span id="counter">1 / 11</span></div>
+<div class="progress-bar"><span id="bar"></span></div>
+
+<script>
+(function () {
+  var deck = document.getElementById('deck');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var counter = document.getElementById('counter');
+  var bar = document.getElementById('bar');
+  var active = 0;
+  var lastKeyEvent = null;
+
+  function clamp(i) { return Math.max(0, Math.min(slides.length - 1, i)); }
+
+  function paint(i) {
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    bar.style.width = (((i + 1) / slides.length) * 100) + '%';
+  }
+
+  // Hash routing: #/N (1-based). replaceState keeps back-button clean and
+  // never throws inside a srcdoc iframe thanks to the try/catch.
+  function setHash(i) {
+    try { history.replaceState(null, '', '#/' + (i + 1)); } catch (_) { /* sandboxed */ }
+  }
+  function fromHash() {
+    var m = (location.hash || '').match(/^#\/(\d+)/);
+    return m ? clamp(parseInt(m[1], 10) - 1) : 0;
+  }
+
+  function go(i, instant) {
+    active = clamp(i);
+    deck.scrollTo({ left: active * deck.clientWidth, behavior: instant ? 'auto' : 'smooth' });
+    paint(active);
+    setHash(active);
+  }
+
+  function syncFromScroll() {
+    var i = Math.round(deck.scrollLeft / deck.clientWidth);
+    if (i !== active && i >= 0 && i < slides.length) { active = i; paint(i); setHash(i); }
+  }
+
+  function onKey(e) {
+    if (e === lastKeyEvent) return; // dedupe: same Event passes both listeners
+    lastKeyEvent = e;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+  }
+
+  // Listen on both window and document in capture phase so keys work no
+  // matter which element holds focus inside a host iframe.
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+  deck.addEventListener('scroll', function () { window.requestAnimationFrame(syncFromScroll); }, { passive: true });
+  window.addEventListener('hashchange', function () { go(fromHash()); });
+  window.addEventListener('resize', function () { go(active, true); });
+
+  // Auto-focus so arrow keys work without a click.
+  document.body.setAttribute('tabindex', '-1');
+  document.body.style.outline = 'none';
+  function focusDeck() {
+    try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) { /* sandboxed */ }
+  }
+  document.addEventListener('mousedown', focusDeck);
+  window.addEventListener('load', focusDeck);
+
+  go(fromHash(), true);
+  paint(active);
+  focusDeck();
+})();
+</script>
+
+</body>
+</html>

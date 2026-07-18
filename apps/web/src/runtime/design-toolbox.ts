@@ -11,11 +11,20 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 
 export type DesignToolboxActionId =
   | 'auto-match'
+  | 'asset-search'
+  | 'icon-workflow'
+  | 'image-replace'
+  | 'reference-extract'
   | 'motion'
   | 'motion-polish'
+  | 'transition-motion'
+  | 'plan-outline'
+  | 'threejs-scene'
   | 'anti-ai-polish'
   | 'visual-polish'
   | 'image-gen'
+  | 'chart-gen'
+  | 'logo-gen'
   | 'video-gen';
 
 export interface DesignToolboxAction {
@@ -30,16 +39,44 @@ export const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
   {
     id: 'auto-match',
     icon: 'sparkles',
-    preferredSkillIds: ['creative-director', 'frontend-design', 'design-taste-frontend'],
+    preferredSkillIds: ['creative-director', 'frontend-design', 'design-taste-frontend', 'browser-use'],
+    categoryHints: ['creative-direction', 'web-artifacts', 'image-generation', 'animation-motion'],
+    searchTerms: ['match', 'recommend', 'next step', 'workflow', 'skills', 'mcp', 'plugins', 'connector', 'files', 'Magic UI', 'GSAP', 'Motion', 'Spline', 'Three.js', 'ECharts', 'React Flow', 'Rive', 'Lottie', 'Vanta.js', 'Mapbox', 'deck.gl', '匹配', '下一步', '推荐', '流程', '审美', '设计百宝箱'],
+  },
+  {
+    id: 'asset-search',
+    icon: 'search',
+    preferredSkillIds: ['browser-use', 'imagegen-frontend-web', 'creative-director', 'fal-generate', 'image-enhancer'],
+    categoryHints: ['image-generation', 'web-artifacts', 'creative-direction'],
+    searchTerms: ['find image', 'image search', 'asset search', 'stock photo', 'reference image', 'moodboard', 'unsplash', 'pexels', 'screenshot', '找图', '搜图', '图片素材', '参考图', '配图'],
+  },
+  {
+    id: 'icon-workflow',
+    icon: 'star',
+    preferredSkillIds: ['imagegen', 'imagegen-frontend-web', 'creative-director', 'frontend-design'],
+    categoryHints: ['image-generation', 'creative-direction', 'web-artifacts'],
+    searchTerms: ['icon', 'lucide', 'svg', 'symbol', 'icon set', 'replace icon', 'find icon', '图标', '找 icon', '替换 icon', 'svg 图标'],
+  },
+  {
+    id: 'image-replace',
+    icon: 'image',
+    preferredSkillIds: ['imagegen-frontend-web', 'image-enhancer', 'browser-use', 'fal-generate', 'imagen'],
+    categoryHints: ['image-generation', 'web-artifacts'],
+    searchTerms: ['replace image', 'swap image', 'asset replacement', 'hero image', 'section image', 'background image', '替换图', '换图', '替换图片', 'hero 图'],
+  },
+  {
+    id: 'reference-extract',
+    icon: 'eye',
+    preferredSkillIds: ['browser-use', 'creative-director', 'frontend-design', 'design-taste-frontend'],
     categoryHints: ['creative-direction', 'web-artifacts'],
-    searchTerms: ['match', 'recommend', 'next step', 'workflow', 'skills', 'mcp', 'plugins', 'connector', 'files', '匹配', '下一步', '推荐', '流程', '审美'],
+    searchTerms: ['reference', 'extract reference', 'style reference', 'screenshot analysis', 'visual analysis', 'palette', 'typography', '参考图获取', '参考提取', '风格提取', '截图分析'],
   },
   {
     id: 'motion',
     icon: 'play',
-    preferredSkillIds: ['emilkowalski-motion', 'gsap-react', 'gsap-scrolltrigger', 'gsap-timeline', 'gsap-core'],
+    preferredSkillIds: ['emilkowalski-motion', 'gsap-react', 'gsap-scrolltrigger', 'gsap-timeline', 'gsap-core', 'motion', 'rive', 'lottie'],
     categoryHints: ['animation-motion'],
-    searchTerms: ['animation', 'motion', 'gsap', 'micro interaction', 'scrolltrigger', '动效', '动画', '微交互'],
+    searchTerms: ['animation', 'motion', 'gsap', 'motion.dev', 'rive', 'lottie', 'micro interaction', 'scrolltrigger', '动效', '动画', '微交互', '动效设计'],
   },
   {
     id: 'motion-polish',
@@ -47,6 +84,27 @@ export const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
     preferredSkillIds: ['gsap-performance', 'emilkowalski-motion', 'gsap-timeline', 'gsap-core'],
     categoryHints: ['animation-motion'],
     searchTerms: ['motion polish', 'easing', 'performance', 'reduced motion', 'timeline', '动效润色', '缓动', '性能'],
+  },
+  {
+    id: 'transition-motion',
+    icon: 'reload',
+    preferredSkillIds: ['emilkowalski-motion', 'gsap-timeline', 'gsap-core', 'remotion', 'video-hyperframes'],
+    categoryHints: ['animation-motion', 'video-generation'],
+    searchTerms: ['transition', 'page transition', 'scene transition', 'loading transition', 'route transition', 'interstitial', '过场动画', '转场', '页面切换', '场景切换'],
+  },
+  {
+    id: 'plan-outline',
+    icon: 'file',
+    preferredSkillIds: ['creative-director', 'presentations', 'frontend-design', 'design-taste-frontend'],
+    categoryHints: ['creative-direction', 'web-artifacts'],
+    searchTerms: ['plan', 'outline', 'ppt outline', 'deck outline', 'slide outline', 'storyboard', 'prd', 'brief', '规划', '大纲', 'PPT 大纲', '文档', '策划', '提纲'],
+  },
+  {
+    id: 'threejs-scene',
+    icon: 'orbit',
+    preferredSkillIds: ['threejs', 'react-three-fiber', 'spline', 'vanta', 'deckgl', 'mapbox'],
+    categoryHints: ['web-artifacts', 'animation-motion'],
+    searchTerms: ['three.js', 'threejs', 'spline', '3d', 'webgl', 'particle', 'space', 'portal', 'vanta', 'mapbox', 'deck.gl', '3D', '三维', '粒子', '空间感', '科技战场'],
   },
   {
     id: 'anti-ai-polish',
@@ -68,6 +126,20 @@ export const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
     preferredSkillIds: ['imagegen-frontend-web', 'fal-generate', 'imagen', 'venice-image-generate', 'image-enhancer'],
     categoryHints: ['image-generation'],
     searchTerms: ['image', 'generate image', 'visual reference', 'moodboard', 'section image', '生图', '配图', '视觉参考'],
+  },
+  {
+    id: 'chart-gen',
+    icon: 'grid',
+    preferredSkillIds: ['echarts', 'data-viz', 'chart-design', 'react-flow', 'deckgl'],
+    categoryHints: ['web-artifacts', 'image-generation'],
+    searchTerms: ['chart', 'data visualization', 'echarts', 'react flow', 'diagram', 'flowchart', 'relationship graph', 'dashboard', '图表', '数据可视化', '关系图', '流程图', '雷达图'],
+  },
+  {
+    id: 'logo-gen',
+    icon: 'palette',
+    preferredSkillIds: ['logo-explorer', 'imagegen', 'imagegen-frontend-web', 'creative-director'],
+    categoryHints: ['image-generation', 'creative-direction'],
+    searchTerms: ['logo', 'wordmark', 'mark', 'brand identity', 'lockup', 'logo generation', 'logo design', '标志', 'logo 生成', '品牌标识', '字标'],
   },
   {
     id: 'video-gen',

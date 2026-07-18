@@ -1,0 +1,165 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hps-y2k-chrome",
+  "title": "Write a KPI Decision Brief like a CFO-Ready Analytics Lead",
+  "title_i18n": {
+    "en": "Write a KPI Decision Brief like a CFO-Ready Analytics Lead",
+    "zh-CN": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报",
+    "zh-TW": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.",
+  "description_i18n": {
+    "en": "Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.",
+    "zh-CN": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "lewislulu",
+    "url": "https://github.com/lewislulu"
+  },
+  "homepage": "https://github.com/lewislulu/html-ppt-skill",
+  "plugin": {
+    "repo": "https://github.com/lewislulu/html-ppt-skill"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "y2k",
+    "chrome",
+    "metallic",
+    "frosted-glass",
+    "retro-2000s",
+    "html-ppt",
+    "design",
+    "brand",
+    "visual-system",
+    "hps-y2k-chrome",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "finance",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a KPI Decision Brief like a CFO-Ready Analytics Lead\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Audience: CRO, RevOps, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报。像能让 CFO 读懂的分析负责人一样写 KPI 决策简报——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a KPI Decision Brief like a CFO-Ready Analytics Lead",
+          "title_i18n": {
+            "en": "Write a KPI Decision Brief like a CFO-Ready Analytics Lead",
+            "zh-CN": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报",
+            "zh-TW": "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product launch deck",
+          "consumer-app pitch",
+          "brand intro deck",
+          "creator/music deck",
+          "event recap",
+          "tech-sharing deck"
+        ],
+        "default": "product launch deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "What the deck is about",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Customers, VCs, community, teammates…",
+        "default": "a general audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8-10 pages",
+          "10-15 pages",
+          "15-20 pages"
+        ],
+        "default": "8-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "data-finance"
+  }
+}

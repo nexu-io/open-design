@@ -16,7 +16,7 @@ concurrency:
 jobs:
   baseline:
     name: Capture visual baselines
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
 
     steps:
@@ -25,12 +25,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare visual screenshot environment
-        uses: ./.github/actions/visual-screenshot
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
 
       - name: Capture baseline screenshots
         env:
           OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
+          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
           pnpm -C e2e exec playwright test -c playwright.visual.config.ts

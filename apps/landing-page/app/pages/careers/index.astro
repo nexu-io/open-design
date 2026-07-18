@@ -1,0 +1,511 @@
+---
+/*
+ * /careers/ — short, roles-led hiring page.
+ *
+ * Deliberately light (per "less is more"): a punchy intro, the apply email
+ * shown up front, then the open roles as a card grid, each summarised in one
+ * sentence. Applications go to join@open-design.ai — the address is shown as
+ * plain text (no mailto link / no form); applicants email it themselves.
+ * All 11 landing locales are authored: en is the source, the other 10 are
+ * Agent-translated (brand/technical terms — Open Design, Agent, SEM, QA,
+ * SRE… — kept verbatim). Localized routes are produced by `[locale]/careers/`.
+ * Reuses the /about/ page shell.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { localeFromPath } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+
+const APPLY_EMAIL = 'join@open-design.ai';
+
+type Role = { title: string; blurb: string };
+type CareersCopy = {
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  h1: string;
+  lead: string;
+  apply: string;
+  rolesHead: string;
+  location: string;
+  roles: Role[];
+  closing: string;
+};
+
+const COPY = {
+  en: {
+    metaTitle: 'Careers — Open Design',
+    metaDescription:
+      'Join Open Design — one of the fastest-growing open-source projects in the world. Open roles across product, engineering, growth, and design. Apply by email to join@open-design.ai.',
+    eyebrow: 'Careers',
+    h1: 'Join Open Design',
+    lead: 'Open Design is one of the fastest-growing open-source projects in the world — and we are just getting started. We are building the agent-native design platform: the coding agent already on your laptop, stepping out of the code window to actually design, produce, and ship. A small, senior team moving at a speed the industry rarely sees.',
+    apply: 'Email your resume and tell us which direction fits. Compensation is open for the right person.',
+    rolesHead: 'Open roles',
+    location: 'Based in Shanghai, China · on-site',
+    roles: [
+      { title: 'Product Manager (Growth × Agent Strategy)', blurb: 'Turn agent capability into growth and revenue — own the free-to-paid journey, pricing, and the roadmap for what the agent should do next.' },
+      { title: 'Growth Engineer', blurb: 'Engineer global organic growth — produce and distribute content at scale, and hit real volume with almost no paid spend.' },
+      { title: 'ML / Model Engineer', blurb: 'Drive our own models end-to-end — clean, fine-tune, and ship efficient models off real session data.' },
+      { title: 'QA Engineer', blurb: 'Keep code quality and merge speed high under a firehose of external PRs — treat QA as an engineering and data problem, not manual clicking.' },
+      { title: 'Agent SRE', blurb: 'Scale the infrastructure — support massive agent concurrency and keep it stable and compliant as we move to the cloud.' },
+      { title: 'Product Engineer', blurb: 'Ship product end-to-end with coding agents, from idea to launch, and own the growth and monetization outcome.' },
+      { title: 'Product-Growth Designer', blurb: 'Drive monetization through world-class design across the entire user journey — not just interfaces, but conversion.' },
+      { title: 'Performance & KOL Marketing', blurb: 'Build the paid-growth lever — performance ads, SEM, and a KOL/KOC network alongside our organic engine.' },
+      { title: 'And more', blurb: 'Full-stack engineers, PMs, and other roles — we are always hiring for the right fit.' },
+    ],
+    closing: 'Not sure which role fits? Email us anyway.',
+  },
+  zh: {
+    metaTitle: '招聘 — Open Design',
+    metaDescription:
+      'Open Design 正在招聘——全球增长最快的开源项目之一。产品、工程、增长、设计多个岗位开放，发邮件至 join@open-design.ai 投递简历。',
+    eyebrow: '招聘',
+    h1: '加入 Open Design',
+    lead: 'Open Design 是全球增长最快的开源项目之一——而我们才刚刚开始。我们在做 agent-native 的设计平台：让你电脑里已有的 coding agent 走出代码窗口，真正去做设计、做产品、做交付。我们是一支精干、资深的团队，正在以行业罕见的速度前进。',
+    apply: '把简历发邮件给我们，并说明你适合的方向。人选合适，薪资空间开放。',
+    rolesHead: '开放岗位',
+    location: '工作地点：中国 · 上海',
+    roles: [
+      { title: '产品经理（增长商业化 × Agent 策略）', blurb: '站在增长、商业化与 Agent 策略的交叉点，把 Agent 能力做成可增长、可变现的产品路径。' },
+      { title: '增长工程师', blurb: '以工程化方式做全球自然增长，批量生产分发内容，在低投放下做出量级。' },
+      { title: '算法 / 模型工程师', blurb: '端到端推进自有模型落地，用真实 session 数据完成清洗、微调、上线，驱动数据飞轮。' },
+      { title: 'QA 工程师', blurb: '在高频外部 PR 合并节奏下保障代码质量与合并效率，把 QA 当工程与数据问题来解，而非人工点测。' },
+      { title: 'Agent SRE 工程师', blurb: '支撑大规模 Agent 并发，保障产品上云后的基础设施稳定与运维。' },
+      { title: '产品工程师', blurb: '借助 Coding 工具端到端快速迭代产品，从想法到上线，并对增长与商业化负责。' },
+      { title: '产品增长设计师', blurb: '以世界一流的设计驱动整条用户旅程的商业化转化，不止界面，更对转化负责。' },
+      { title: '效果营销 · SEM · KOL 运营', blurb: '搭建付费投放、SEM 与 KOL/KOC 体系，作为自然增长之外的增长杠杆。' },
+      { title: '更多岗位', blurb: '全栈工程师、产品经理等岗位持续招聘，人选合适薪资均可开放沟通。' },
+    ],
+    closing: '还没想好投哪个岗位？直接发简历给我们也可以。',
+  },
+  'ja': {
+    metaTitle: "採用情報 — Open Design",
+    metaDescription:
+      "Open Design に参加しませんか。世界で最も急成長しているオープンソースプロジェクトのひとつです。プロダクト・エンジニアリング・グロース・デザインの各領域でポジションを募集中。ご応募は join@open-design.ai までメールでどうぞ。",
+    eyebrow: "採用情報",
+    h1: "Open Design に参加する",
+    lead: "Open Design は世界で最も急成長しているオープンソースプロジェクトのひとつ——そして、まだ始まったばかりです。私たちが築いているのは agent-native なデザインプラットフォーム。すでにあなたのノートPCにいる coding agent が、コードの枠を飛び出して、実際にデザインし、制作し、届けます。業界でも稀に見るスピードで動く、少数精鋭のシニアチームです。",
+    apply: "履歴書を添えて、どの方向性が合いそうかをお知らせください。ふさわしい方には報酬はオープンです。",
+    rolesHead: "募集中のポジション",
+    location: "勤務地：中国・上海 · オンサイト",
+    roles: [
+      { title: "プロダクトマネージャー（グロース × Agent 戦略）", blurb: "Agent の能力をグロースと収益につなげる——無料から有料への導線、価格設計、そして Agent が次に何をすべきかのロードマップをオーナーとして担います。" },
+      { title: "グロースエンジニア", blurb: "グローバルなオーガニックグロースを設計する——コンテンツを大規模に制作・配信し、ほぼ広告費ゼロで本物のボリュームを叩き出します。" },
+      { title: "ML / モデルエンジニア", blurb: "自社モデルをエンドツーエンドで牽引する——実際の session データから、効率的なモデルをクリーニング・ファインチューニングして ship します。" },
+      { title: "QA エンジニア", blurb: "外部からの PR が濁流のように押し寄せる中で、コード品質とマージ速度を高く保つ——QA を手作業のクリックではなく、エンジニアリングとデータの課題として捉えます。" },
+      { title: "Agent SRE", blurb: "インフラをスケールさせる——大規模な Agent の同時実行を支え、クラウド移行を進めながら安定性とコンプライアンスを維持します。" },
+      { title: "プロダクトエンジニア", blurb: "coding agent とともにプロダクトをエンドツーエンドで ship する——アイデアからローンチまで、そしてグロースとマネタイズの成果までをオーナーとして担います。" },
+      { title: "プロダクトグロースデザイナー", blurb: "ユーザージャーニー全体にわたる世界水準のデザインでマネタイズを牽引する——インターフェースだけでなく、コンバージョンまでを設計します。" },
+      { title: "パフォーマンス & KOL マーケティング", blurb: "有料グロースの梃子を築く——オーガニックのエンジンと並走する形で、運用型広告、SEM、そして KOL/KOC ネットワークを構築します。" },
+      { title: "その他のポジションも", blurb: "フルスタックエンジニア、PM、その他の職種——ふさわしい方であれば、いつでも採用しています。" },
+    ],
+    closing: "どのポジションが合うか迷っていますか。それでも、ぜひメールをください。",
+  },
+  'ko': {
+    metaTitle: "채용 — Open Design",
+    metaDescription:
+      "Open Design에 합류하세요 — 세계에서 가장 빠르게 성장하는 오픈소스 프로젝트 중 하나입니다. 프로덕트, 엔지니어링, 그로스, 디자인 전 분야에서 채용 중입니다. join@open-design.ai로 이메일 지원하세요.",
+    eyebrow: "채용",
+    h1: "Open Design에 합류하세요",
+    lead: "Open Design은 세계에서 가장 빠르게 성장하는 오픈소스 프로젝트 중 하나이며, 이제 막 시작했을 뿐입니다. 우리는 agent-native 디자인 플랫폼을 만들고 있습니다. 이미 여러분의 노트북에 있는 coding agent가 코드 창을 벗어나 실제로 디자인하고, 만들고, 출시합니다. 업계에서 좀처럼 보기 힘든 속도로 움직이는 소수 정예의 시니어 팀입니다.",
+    apply: "이력서를 이메일로 보내고 어떤 방향이 맞는지 알려주세요. 적임자에게는 보상 조건이 열려 있습니다.",
+    rolesHead: "채용 중인 포지션",
+    location: "중국 상하이 근무 · 온사이트",
+    roles: [
+      { title: "프로덕트 매니저 (Growth × Agent 전략)", blurb: "Agent 역량을 성장과 매출로 전환합니다 — 무료에서 유료로 이어지는 여정, 가격 정책, 그리고 Agent가 다음에 무엇을 해야 할지에 대한 로드맵을 책임집니다." },
+      { title: "그로스 엔지니어", blurb: "글로벌 오가닉 성장을 엔지니어링합니다 — 콘텐츠를 대규모로 생산·배포하고, 유료 지출 거의 없이 실질적인 볼륨을 달성합니다." },
+      { title: "ML / 모델 엔지니어", blurb: "우리만의 모델을 처음부터 끝까지 이끕니다 — 실제 session 데이터로 효율적인 모델을 정제하고, 파인튜닝하고, 출시합니다." },
+      { title: "QA 엔지니어", blurb: "쏟아지는 외부 PR 속에서도 코드 품질과 머지 속도를 높게 유지합니다 — QA를 수작업 클릭이 아니라 엔지니어링과 데이터 문제로 다룹니다." },
+      { title: "Agent SRE", blurb: "인프라를 확장합니다 — 대규모 Agent 동시성을 지원하고, 클라우드로 이전하는 과정에서도 안정성과 컴플라이언스를 유지합니다." },
+      { title: "프로덕트 엔지니어", blurb: "coding agent와 함께 아이디어부터 출시까지 프로덕트를 처음부터 끝까지 만들고, 성장과 수익화 성과를 책임집니다." },
+      { title: "프로덕트-그로스 디자이너", blurb: "전체 사용자 여정에 걸친 세계 최고 수준의 디자인으로 수익화를 이끕니다 — 인터페이스뿐 아니라 전환까지 책임집니다." },
+      { title: "퍼포먼스 & KOL 마케팅", blurb: "유료 성장 레버를 구축합니다 — 퍼포먼스 광고, SEM, 그리고 오가닉 엔진과 함께 작동하는 KOL/KOC 네트워크를 만듭니다." },
+      { title: "그 외 다수", blurb: "풀스택 엔지니어, PM, 그리고 다양한 포지션 — 적합한 인재라면 언제나 채용하고 있습니다." },
+    ],
+    closing: "어떤 포지션이 맞을지 잘 모르겠나요? 그래도 이메일을 보내주세요.",
+  },
+  'de': {
+    metaTitle: "Karriere — Open Design",
+    metaDescription:
+      "Werde Teil von Open Design — eines der am schnellsten wachsenden Open-Source-Projekte der Welt. Offene Stellen in Produkt, Engineering, Growth und Design. Bewirb dich per E-Mail an join@open-design.ai.",
+    eyebrow: "Karriere",
+    h1: "Werde Teil von Open Design",
+    lead: "Open Design ist eines der am schnellsten wachsenden Open-Source-Projekte der Welt — und wir fangen gerade erst an. Wir bauen die agent-native Design-Plattform: der coding agent, der bereits auf deinem Laptop läuft, tritt aus dem Code-Fenster heraus, um wirklich zu designen, zu produzieren und auszuliefern. Ein kleines, erfahrenes Team, das sich mit einem Tempo bewegt, das die Branche selten sieht.",
+    apply: "Schick uns deinen Lebenslauf und sag uns, welche Richtung zu dir passt. Die Vergütung ist für die richtige Person offen.",
+    rolesHead: "Offene Stellen",
+    location: "Standort Shanghai, China · vor Ort",
+    roles: [
+      { title: "Product Manager (Growth × Agent Strategy)", blurb: "Verwandle Agent-Fähigkeiten in Wachstum und Umsatz — verantworte die Free-to-Paid-Journey, das Pricing und die Roadmap dafür, was der Agent als Nächstes können soll." },
+      { title: "Growth Engineer", blurb: "Entwickle globales organisches Wachstum — produziere und verbreite Inhalte im großen Maßstab und erreiche echtes Volumen fast ganz ohne bezahlte Ausgaben." },
+      { title: "ML / Model Engineer", blurb: "Treibe unsere eigenen Modelle end-to-end voran — bereinige, feinjustiere und liefere effiziente Modelle aus echten session-Daten aus." },
+      { title: "QA Engineer", blurb: "Halte Codequalität und Merge-Geschwindigkeit hoch unter einem Dauerfeuer externer PRs — behandle QA als Engineering- und Datenproblem, nicht als manuelles Klicken." },
+      { title: "Agent SRE", blurb: "Skaliere die Infrastruktur — unterstütze massive Agent-Parallelität und halte sie stabil und konform, während wir in die Cloud gehen." },
+      { title: "Product Engineer", blurb: "Liefere Produkt end-to-end mit coding agents aus, von der Idee bis zum Launch, und verantworte das Ergebnis bei Wachstum und Monetarisierung." },
+      { title: "Product-Growth Designer", blurb: "Treibe Monetarisierung durch erstklassiges Design über die gesamte User Journey hinweg voran — nicht nur Oberflächen, sondern Conversion." },
+      { title: "Performance & KOL Marketing", blurb: "Baue den bezahlten Wachstumshebel auf — Performance-Ads, SEM und ein KOL/KOC-Netzwerk neben unserer organischen Maschine." },
+      { title: "Und mehr", blurb: "Full-Stack-Engineers, PMs und weitere Rollen — wir stellen immer für die richtige Passung ein." },
+    ],
+    closing: "Nicht sicher, welche Rolle passt? Schreib uns trotzdem.",
+  },
+  'fr': {
+    metaTitle: "Carrières — Open Design",
+    metaDescription:
+      "Rejoignez Open Design — l'un des projets open source à la croissance la plus rapide au monde. Postes ouverts en produit, ingénierie, growth et design. Postulez par e-mail à join@open-design.ai.",
+    eyebrow: "Carrières",
+    h1: "Rejoignez Open Design",
+    lead: "Open Design est l'un des projets open source à la croissance la plus rapide au monde — et nous ne faisons que commencer. Nous construisons la plateforme de design agent-native : le coding agent déjà présent sur votre ordinateur, qui sort de la fenêtre de code pour vraiment concevoir, produire et livrer. Une équipe réduite et senior, qui avance à une vitesse que l'industrie voit rarement.",
+    apply: "Envoyez votre CV et dites-nous quelle direction vous correspond. La rémunération est ouverte pour la bonne personne.",
+    rolesHead: "Postes ouverts",
+    location: "Basé à Shanghai, Chine · sur site",
+    roles: [
+      { title: "Product Manager (Growth × Stratégie Agent)", blurb: "Transformez la capacité de l'agent en croissance et en revenus — pilotez le parcours du gratuit au payant, la tarification et la roadmap de ce que l'agent doit faire ensuite." },
+      { title: "Growth Engineer", blurb: "Concevez la croissance organique mondiale — produisez et diffusez du contenu à grande échelle, et atteignez un volume réel avec quasiment aucune dépense payante." },
+      { title: "ML / Model Engineer", blurb: "Pilotez nos propres modèles de bout en bout — nettoyez, affinez et livrez des modèles efficaces à partir de véritables données de session." },
+      { title: "QA Engineer", blurb: "Maintenez une qualité de code et une vitesse de merge élevées sous un déluge de PR externes — traitez la QA comme un problème d'ingénierie et de données, pas comme du clic manuel." },
+      { title: "Agent SRE", blurb: "Scalez l'infrastructure — prenez en charge une concurrence massive d'agents et gardez-la stable et conforme à mesure que nous passons au cloud." },
+      { title: "Product Engineer", blurb: "Livrez le produit de bout en bout avec des coding agents, de l'idée au lancement, et assumez le résultat en matière de croissance et de monétisation." },
+      { title: "Product-Growth Designer", blurb: "Générez de la monétisation grâce à un design de classe mondiale sur tout le parcours utilisateur — pas seulement les interfaces, mais la conversion." },
+      { title: "Performance & KOL Marketing", blurb: "Construisez le levier de croissance payante — publicités à la performance, SEM et un réseau de KOL/KOC aux côtés de notre moteur organique." },
+      { title: "Et plus encore", blurb: "Ingénieurs full-stack, PM et autres profils — nous recrutons en permanence la bonne personne." },
+    ],
+    closing: "Vous ne savez pas quel poste vous correspond ? Écrivez-nous quand même.",
+  },
+  'ru': {
+    metaTitle: "Карьера — Open Design",
+    metaDescription:
+      "Присоединяйтесь к Open Design — одному из самых быстрорастущих open-source проектов в мире. Открытые вакансии в продукте, инженерии, росте и дизайне. Отправьте заявку на join@open-design.ai.",
+    eyebrow: "Карьера",
+    h1: "Присоединяйтесь к Open Design",
+    lead: "Open Design — один из самых быстрорастущих open-source проектов в мире, и мы только начинаем. Мы создаём agent-native платформу для дизайна: coding agent, который уже стоит на вашем ноутбуке, выходит из окна кода, чтобы по-настоящему проектировать, создавать и запускать. Небольшая команда сильных специалистов, работающая на скорости, которую индустрия видит редко.",
+    apply: "Пришлите резюме и напишите, какое направление вам ближе. Для подходящего человека вознаграждение обсуждается индивидуально.",
+    rolesHead: "Открытые вакансии",
+    location: "Шанхай, Китай · работа в офисе (on-site)",
+    roles: [
+      { title: "Product Manager (Growth × Agent Strategy)", blurb: "Превращайте возможности Agent в рост и выручку — отвечайте за путь от free к paid, ценообразование и дорожную карту того, что Agent должен уметь дальше." },
+      { title: "Growth Engineer", blurb: "Конструируйте глобальный органический рост — производите и распространяйте контент в масштабе и добивайтесь реальных объёмов почти без платного бюджета." },
+      { title: "ML / Model Engineer", blurb: "Ведите наши собственные модели от начала до конца — очищайте, дообучайте и выпускайте эффективные модели на реальных данных session." },
+      { title: "QA Engineer", blurb: "Держите высокими качество кода и скорость мержа под потоком внешних PR — относитесь к QA как к инженерной и аналитической задаче, а не к ручным кликам." },
+      { title: "Agent SRE", blurb: "Масштабируйте инфраструктуру — обеспечивайте огромную конкурентность Agent и держите её стабильной и соответствующей требованиям по мере перехода в облако." },
+      { title: "Product Engineer", blurb: "Выпускайте продукт от начала до конца с coding agent — от идеи до запуска — и отвечайте за результат в росте и монетизации." },
+      { title: "Product-Growth Designer", blurb: "Двигайте монетизацию через дизайн мирового уровня на всём пути пользователя — не только интерфейсы, но и конверсию." },
+      { title: "Performance & KOL Marketing", blurb: "Постройте рычаг платного роста — performance-реклама, SEM и сеть KOL/KOC рядом с нашим органическим движком." },
+      { title: "И другие", blurb: "Full-stack инженеры, PM и другие роли — мы всегда открыты подходящим кандидатам." },
+    ],
+    closing: "Не уверены, какая роль вам подходит? Напишите нам всё равно.",
+  },
+  'es': {
+    metaTitle: "Empleo — Open Design",
+    metaDescription:
+      "Únete a Open Design, uno de los proyectos de código abierto de más rápido crecimiento del mundo. Vacantes abiertas en producto, ingeniería, growth y diseño. Postúlate por correo en join@open-design.ai.",
+    eyebrow: "Empleo",
+    h1: "Únete a Open Design",
+    lead: "Open Design es uno de los proyectos de código abierto de más rápido crecimiento del mundo, y esto no ha hecho más que empezar. Estamos construyendo la plataforma de diseño agent-native: el coding agent que ya tienes en tu portátil, que sale de la ventana de código para diseñar, producir y lanzar de verdad. Un equipo pequeño y senior que avanza a una velocidad que la industria rara vez ve.",
+    apply: "Envíanos tu currículum por correo y dinos qué dirección encaja contigo. La compensación es abierta para la persona adecuada.",
+    rolesHead: "Vacantes abiertas",
+    location: "Con base en Shanghái, China · presencial",
+    roles: [
+      { title: "Product Manager (Growth × Estrategia de Agent)", blurb: "Convierte la capacidad del agent en crecimiento e ingresos: haz tuyo el recorrido de free a paid, el pricing y la hoja de ruta de lo que el agent debe hacer a continuación." },
+      { title: "Growth Engineer", blurb: "Diseña el crecimiento orgánico global: produce y distribuye contenido a escala y alcanza volumen real casi sin inversión pagada." },
+      { title: "ML / Model Engineer", blurb: "Impulsa nuestros propios modelos de principio a fin: limpia, haz fine-tuning y lanza modelos eficientes a partir de datos reales de session." },
+      { title: "QA Engineer", blurb: "Mantén alta la calidad del código y la velocidad de merge bajo una avalancha de PR externos: trata el QA como un problema de ingeniería y datos, no de clics manuales." },
+      { title: "Agent SRE", blurb: "Escala la infraestructura: soporta una concurrencia masiva de agent y mantenla estable y conforme a medida que migramos a la nube." },
+      { title: "Product Engineer", blurb: "Lanza producto de principio a fin con coding agents, de la idea al lanzamiento, y hazte responsable del resultado de crecimiento y monetización." },
+      { title: "Product-Growth Designer", blurb: "Impulsa la monetización con un diseño de primer nivel en todo el recorrido del usuario: no solo interfaces, sino conversión." },
+      { title: "Performance & KOL Marketing", blurb: "Construye la palanca de crecimiento pagado: anuncios de performance, SEM y una red de KOL/KOC junto a nuestro motor orgánico." },
+      { title: "Y más", blurb: "Ingenieros full-stack, PM y otros perfiles: siempre estamos contratando a la persona adecuada." },
+    ],
+    closing: "¿No sabes qué puesto encaja contigo? Escríbenos de todos modos.",
+  },
+  'pt-br': {
+    metaTitle: "Carreiras — Open Design",
+    metaDescription:
+      "Junte-se ao Open Design — um dos projetos open-source que mais crescem no mundo. Vagas abertas em produto, engenharia, growth e design. Candidate-se por e-mail em join@open-design.ai.",
+    eyebrow: "Carreiras",
+    h1: "Junte-se ao Open Design",
+    lead: "O Open Design é um dos projetos open-source que mais crescem no mundo — e estamos apenas começando. Estamos construindo a plataforma de design agent-native: o coding agent que já está no seu laptop, saindo da janela de código para de fato projetar, produzir e lançar. Um time pequeno e sênior, movendo-se a uma velocidade que a indústria raramente vê.",
+    apply: "Envie seu currículo por e-mail e conte qual direção combina com você. A remuneração é aberta para a pessoa certa.",
+    rolesHead: "Vagas abertas",
+    location: "Sediado em Xangai, China · presencial",
+    roles: [
+      { title: "Product Manager (Growth × Estratégia de Agent)", blurb: "Transforme a capacidade do Agent em growth e receita — seja dono da jornada free-to-paid, do pricing e do roadmap do que o Agent deve fazer a seguir." },
+      { title: "Growth Engineer", blurb: "Faça a engenharia do crescimento orgânico global — produza e distribua conteúdo em escala e atinja volume real com quase nenhum gasto pago." },
+      { title: "Engenheiro de ML / Modelos", blurb: "Conduza nossos próprios modelos de ponta a ponta — limpe, faça fine-tuning e entregue modelos eficientes a partir de dados reais de session." },
+      { title: "QA Engineer", blurb: "Mantenha a qualidade do código e a velocidade de merge altas sob uma enxurrada de PRs externos — trate o QA como um problema de engenharia e dados, não de cliques manuais." },
+      { title: "Agent SRE", blurb: "Escale a infraestrutura — dê suporte a uma concorrência massiva de Agents e mantenha tudo estável e em conformidade à medida que migramos para a nuvem." },
+      { title: "Product Engineer", blurb: "Entregue produto de ponta a ponta com coding agents, da ideia ao lançamento, e seja dono do resultado de growth e monetização." },
+      { title: "Product-Growth Designer", blurb: "Impulsione a monetização com um design de classe mundial em toda a jornada do usuário — não apenas interfaces, mas conversão." },
+      { title: "Performance & KOL Marketing", blurb: "Construa a alavanca de crescimento pago — anúncios de performance, SEM e uma rede de KOL/KOC ao lado do nosso motor orgânico." },
+      { title: "E muito mais", blurb: "Engenheiros full-stack, PMs e outras funções — estamos sempre contratando para o fit certo." },
+    ],
+    closing: "Não tem certeza de qual vaga combina com você? Escreva para nós mesmo assim.",
+  },
+  'it': {
+    metaTitle: "Lavora con noi — Open Design",
+    metaDescription:
+      "Entra in Open Design — uno dei progetti open-source in più rapida crescita al mondo. Posizioni aperte in prodotto, engineering, growth e design. Candidati via email a join@open-design.ai.",
+    eyebrow: "Lavora con noi",
+    h1: "Entra in Open Design",
+    lead: "Open Design è uno dei progetti open-source in più rapida crescita al mondo — e siamo solo all'inizio. Stiamo costruendo la piattaforma di design agent-native: il coding agent che hai già sul tuo laptop, che esce dalla finestra del codice per progettare, produrre e rilasciare davvero. Un team piccolo e senior che si muove a una velocità che il settore vede di rado.",
+    apply: "Inviaci il tuo curriculum e dicci quale direzione fa per te. La retribuzione è aperta per la persona giusta.",
+    rolesHead: "Posizioni aperte",
+    location: "Con sede a Shanghai, Cina · in sede",
+    roles: [
+      { title: "Product Manager (Growth × Agent Strategy)", blurb: "Trasforma le capacità dell'Agent in crescita e ricavi — gestisci il percorso da free a paid, il pricing e la roadmap di ciò che l'Agent dovrà fare in seguito." },
+      { title: "Growth Engineer", blurb: "Progetta la crescita organica globale — produci e distribuisci contenuti su larga scala e raggiungi volumi reali quasi senza spesa in advertising." },
+      { title: "ML / Model Engineer", blurb: "Guida i nostri modelli end-to-end — pulisci, fai fine-tuning e rilascia modelli efficienti a partire da dati reali di session." },
+      { title: "QA Engineer", blurb: "Mantieni alta la qualità del codice e la velocità di merge sotto una valanga di PR esterne — tratta il QA come un problema di engineering e di dati, non di click manuali." },
+      { title: "Agent SRE", blurb: "Scala l'infrastruttura — sostieni una concorrenza massiccia di Agent e mantienila stabile e conforme mentre passiamo al cloud." },
+      { title: "Product Engineer", blurb: "Rilascia prodotto end-to-end con i coding agent, dall'idea al lancio, e prendi in carico i risultati di crescita e monetizzazione." },
+      { title: "Product-Growth Designer", blurb: "Spingi la monetizzazione con un design di livello mondiale lungo l'intero percorso utente — non solo interfacce, ma conversione." },
+      { title: "Performance & KOL Marketing", blurb: "Costruisci la leva della crescita a pagamento — performance advertising, SEM e una rete di KOL/KOC accanto al nostro motore organico." },
+      { title: "E altro ancora", blurb: "Full-stack engineer, PM e altri ruoli — assumiamo sempre la persona giusta." },
+    ],
+    closing: "Non sai quale ruolo fa per te? Scrivici comunque.",
+  },
+  'tr': {
+    metaTitle: "Kariyer — Open Design",
+    metaDescription:
+      "Open Design'a katılın — dünyanın en hızlı büyüyen açık kaynak projelerinden biri. Ürün, mühendislik, büyüme ve tasarım alanlarında açık pozisyonlar. Başvurmak için join@open-design.ai adresine e-posta gönderin.",
+    eyebrow: "Kariyer",
+    h1: "Open Design'a Katılın",
+    lead: "Open Design, dünyanın en hızlı büyüyen açık kaynak projelerinden biri — ve daha yeni başlıyoruz. agent-native tasarım platformunu inşa ediyoruz: zaten dizüstü bilgisayarınızdaki coding agent, kod penceresinden çıkıp gerçekten tasarlamaya, üretmeye ve ürünü yayına almaya geçiyor. Sektörün nadiren gördüğü bir hızla ilerleyen, küçük ve kıdemli bir ekip.",
+    apply: "Özgeçmişinizi e-posta ile gönderin ve hangi yönün size uygun olduğunu belirtin. Doğru kişi için ücret esnektir.",
+    rolesHead: "Açık pozisyonlar",
+    location: "Şanghay, Çin merkezli · ofiste",
+    roles: [
+      { title: "Product Manager (Büyüme × Agent Stratejisi)", blurb: "Agent yeteneklerini büyümeye ve gelire dönüştürün — ücretsizden ücretliye geçiş yolculuğunu, fiyatlandırmayı ve agent'ın bir sonraki adımda ne yapması gerektiğine dair yol haritasını sahiplenin." },
+      { title: "Growth Engineer", blurb: "Küresel organik büyümeyi mühendislikle kurgulayın — içeriği ölçekte üretip dağıtın ve neredeyse hiç ücretli harcama olmadan gerçek hacme ulaşın." },
+      { title: "ML / Model Engineer", blurb: "Kendi modellerimizi baştan sona yönetin — gerçek session verilerinden verimli modelleri temizleyin, ince ayar yapın ve yayına alın." },
+      { title: "QA Engineer", blurb: "Dış kaynaklı PR yağmuru altında kod kalitesini ve merge hızını yüksek tutun — QA'yı manuel tıklama değil, bir mühendislik ve veri problemi olarak ele alın." },
+      { title: "Agent SRE", blurb: "Altyapıyı ölçeklendirin — devasa agent eşzamanlılığını destekleyin ve buluta geçerken sistemi kararlı ve uyumlu tutun." },
+      { title: "Product Engineer", blurb: "Ürünü coding agent'larla fikirden lansmana kadar baştan sona yayına alın ve büyüme ile gelir sonucunu sahiplenin." },
+      { title: "Product-Growth Designer", blurb: "Tüm kullanıcı yolculuğu boyunca dünya standartlarında tasarımla geliri artırın — yalnızca arayüzler değil, dönüşüm." },
+      { title: "Performance & KOL Marketing", blurb: "Ücretli büyüme kaldıracını kurun — performans reklamları, SEM ve organik motorumuzun yanında bir KOL/KOC ağı." },
+      { title: "Ve daha fazlası", blurb: "Full-stack mühendisler, PM'ler ve diğer roller — doğru kişi için her zaman işe alım yapıyoruz." },
+    ],
+    closing: "Hangi rolün size uygun olduğundan emin değil misiniz? Yine de bize e-posta gönderin.",
+  },
+} satisfies Record<string, CareersCopy>;
+
+const c = COPY[locale as keyof typeof COPY] ?? COPY.en;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: c.metaTitle,
+  description: c.metaDescription,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+  about: {
+    '@type': 'Organization',
+    name: 'Powerformer, Inc.',
+    brand: 'Open Design',
+    url: Astro.site?.toString(),
+  },
+};
+---
+
+<Layout title={c.metaTitle} description={c.metaDescription} jsonLd={jsonLd}>
+  <article class="careers-page">
+    <header class="careers-hero-banner">
+      <div class="careers-hero-inner">
+        <span class="careers-eyebrow">{c.eyebrow}</span>
+        <h1 class="careers-h1">{c.h1}<span class="careers-dot">.</span></h1>
+        <p class="careers-lead">{c.lead}</p>
+
+        <div class="careers-apply">
+          <p class="careers-apply-line">{c.apply}</p>
+          <div class="careers-actions">
+            <span class="careers-email">{APPLY_EMAIL}</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="careers-block">
+      <h2 class="careers-h2">{c.rolesHead}</h2>
+      <p class="careers-location">{c.location}</p>
+      <ul class="careers-roles">
+        {c.roles.map((r) => (
+          <li>
+            <div class="careers-role">
+              <span class="careers-role-title">{r.title}</span>
+              <span class="careers-role-blurb">{r.blurb}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div class="careers-closing">
+        <span class="careers-closing-text">{c.closing}</span>
+        <span class="careers-email">{APPLY_EMAIL}</span>
+      </div>
+    </section>
+  </article>
+
+  <style>
+    .careers-page {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    /* Hero mural banner — reuses the homepage CTA "dance" painting (cta-bg.webp),
+       white copy on top, so /careers/ opens with the same celebratory brand
+       visual instead of a plain text header. */
+    .careers-hero-banner {
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+      padding: clamp(32px, 5.2vw, 68px);
+      background-image:
+        linear-gradient(180deg, rgba(10, 12, 14, 0.28) 0%, rgba(10, 12, 14, 0.6) 100%),
+        url('/cta-bg.webp?v=3');
+      background-position: center;
+      background-size: cover;
+      background-repeat: no-repeat;
+      box-shadow: 0 30px 70px -34px rgba(20, 20, 20, 0.55);
+    }
+    .careers-hero-inner {
+      position: relative;
+      max-width: 640px;
+    }
+    .careers-hero-banner .careers-eyebrow {
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .careers-hero-banner .careers-h1 {
+      color: #ffffff;
+      font-size: clamp(34px, 4.4vw, 46px);
+      text-shadow: 0 2px 20px rgba(0, 0, 0, 0.28);
+    }
+    .careers-hero-banner .careers-lead {
+      color: rgba(255, 255, 255, 0.94);
+      max-width: 620px;
+      text-shadow: 0 1px 14px rgba(0, 0, 0, 0.3);
+    }
+    .careers-hero-banner .careers-apply-line {
+      color: rgba(255, 255, 255, 0.9);
+    }
+    .careers-hero-banner .careers-email {
+      color: #ffffff;
+    }
+    .careers-eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-mute, #595959);
+      margin-bottom: 18px;
+    }
+    .careers-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--ink, #262626);
+    }
+    .careers-dot {
+      color: var(--ui-brand, #63fe13);
+    }
+    .careers-lead {
+      max-width: 760px;
+      margin: 18px 0 0;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .careers-apply-line {
+      max-width: 760px;
+    }
+    .careers-apply {
+      margin-top: 28px;
+    }
+    .careers-apply-line {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .careers-actions {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    .careers-email {
+      font-size: clamp(20px, 2.6vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink, #262626);
+      user-select: all;
+    }
+    .careers-block {
+      margin-top: 48px;
+      padding-top: 36px;
+      border-top: 1px solid var(--line);
+    }
+    .careers-h2 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink, #262626);
+    }
+    .careers-location {
+      margin: 0 0 22px;
+      font-size: 14px;
+      color: var(--ink-mute, #8c8c8c);
+    }
+    .careers-roles {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .careers-roles > li {
+      display: flex;
+    }
+    .careers-role {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      padding: 24px 24px 20px;
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 16px;
+      background: #fff;
+    }
+    .careers-role-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--ink, #262626);
+    }
+    .careers-role-blurb {
+      flex: 1;
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--ink-soft, #595959);
+    }
+    .careers-closing {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-top: 36px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+      flex-wrap: wrap;
+    }
+    .careers-closing-text {
+      font-size: 15px;
+      color: var(--ink-mute, #595959);
+    }
+    @media (max-width: 680px) {
+      .careers-roles {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</Layout>

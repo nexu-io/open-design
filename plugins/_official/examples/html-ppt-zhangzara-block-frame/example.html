@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BlockFrame — Neobrutalist Presentation Template</title>
+  <title>Rescue a Messy Deck to Board-Grade like an Executive Design Director - Design craft</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
     :root {
       --pink: #FE90E8;
@@ -13,14 +13,17 @@
       --green: #99E885;
       --yellow: #F7CB46;
       --cream: #FFDC8B;
-      --black: #000000;
-      --white: #FFFFFF;
+      --black: #17150F; /* warm ink, reads black but not raw #000 */
+      --white: #FFFEF8;
       --offwhite: #FFFDF5;
       --border: 4px solid var(--black);
       --shadow: 8px 8px 0px var(--black);
       --shadow-sm: 4px 4px 0px var(--black);
-      --radius: 0px;
-      --radius-sm: 4px;
+    }
+
+    ::selection {
+      background: var(--yellow);
+      color: var(--black);
     }
 
     * {
@@ -32,7 +35,9 @@
     html, body {
       height: 100%;
       overflow: hidden;
-      font-family: 'Inter', sans-serif;
+      /* Space Grotesk carries running copy; Archivo 800/900 is reserved
+         for the display blocks so the two voices stay distinct. */
+      font-family: 'Space Grotesk', sans-serif;
       background: var(--offwhite);
       color: var(--black);
     }
@@ -59,10 +64,28 @@
       display: flex;
     }
 
-    /* Dot grid background pattern */
-    .dot-grid {
-      background-image: radial-gradient(circle, var(--black) 1.2px, transparent 1.2px);
-      background-size: 24px 24px;
+    /* Entrance: blocks land with a short staggered drop. Transform and
+       opacity only; restarts each time a slide becomes active. */
+    @keyframes block-in {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide.active > * {
+      animation: block-in 0.45s cubic-bezier(.16, 1, .3, 1) backwards;
+    }
+    .slide.active > *:nth-child(1) { animation-delay: 0.05s; }
+    .slide.active > *:nth-child(2) { animation-delay: 0.12s; }
+    .slide.active > *:nth-child(3) { animation-delay: 0.19s; }
+    .slide.active > *:nth-child(4) { animation-delay: 0.26s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide.active > * {
+        animation: none;
+      }
+      .nav-btn, .nb-btn, .close-btn {
+        transition: none;
+      }
     }
 
     /* Navigation */
@@ -81,13 +104,13 @@
       border: 3px solid var(--black);
       background: var(--white);
       cursor: pointer;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
       box-shadow: var(--shadow-sm);
     }
 
@@ -101,12 +124,19 @@
       box-shadow: 2px 2px 0px var(--black);
     }
 
+    .nav-btn:focus-visible,
+    .nb-btn:focus-visible,
+    .close-btn:focus-visible {
+      outline: 3px solid var(--black);
+      outline-offset: 3px;
+    }
+
     .slide-counter {
       position: fixed;
       bottom: 24px;
       left: 24px;
       z-index: 1000;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-weight: 700;
       font-size: 14px;
       letter-spacing: 0.1em;
@@ -119,22 +149,11 @@
 
     /* ============ UTILITY COMPONENTS ============ */
 
-    .nb-card {
-      border: var(--border);
-      background: var(--white);
-      box-shadow: var(--shadow);
-    }
-
-    .nb-card-flat {
-      border: var(--border);
-      background: var(--white);
-    }
-
     .nb-label {
       display: inline-block;
       border: 3px solid var(--black);
       padding: 6px 16px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.08em;
@@ -153,7 +172,7 @@
       display: inline-block;
       border: 3px solid var(--black);
       padding: 14px 32px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 16px;
       text-decoration: none;
@@ -161,7 +180,7 @@
       background: var(--yellow);
       box-shadow: var(--shadow-sm);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
     }
 
     .nb-btn:hover {
@@ -170,57 +189,43 @@
     }
 
     .nb-heading-xl {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(48px, 6vw, 96px);
       line-height: 0.95;
       letter-spacing: -0.03em;
       text-transform: uppercase;
+      text-wrap: balance;
     }
 
     .nb-heading-lg {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 800;
       font-size: clamp(32px, 4vw, 64px);
       line-height: 1.0;
       letter-spacing: -0.02em;
       text-transform: uppercase;
+      text-wrap: balance;
     }
 
     .nb-heading-md {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: clamp(24px, 2.5vw, 40px);
       line-height: 1.1;
       letter-spacing: -0.01em;
+      text-wrap: balance;
     }
 
+    /* Body copy runs on Space Grotesk (the deck's secondary face) so
+       paragraphs read distinctly from the all-Archivo display blocks. */
     .nb-body {
-      font-family: 'Inter', sans-serif;
-      font-size: clamp(16px, 1.2vw, 20px);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(16px, 1.2vw, 19px);
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
+      text-wrap: pretty;
     }
-
-    .nb-mono {
-      font-family: 'Space Grotesk', monospace;
-      font-weight: 500;
-      font-size: 15px;
-      letter-spacing: 0.02em;
-    }
-
-    /* Decorative elements */
-    .deco-circle {
-      border-radius: 50%;
-      border: var(--border);
-    }
-
-    .deco-square {
-      border: var(--border);
-    }
-
-    .tilt-left { transform: rotate(-8deg); }
-    .tilt-right { transform: rotate(8deg); }
 
     .corner-bracket {
       position: absolute;
@@ -261,7 +266,7 @@
     }
 
     .slide-1 .hero-subtitle {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 18px;
       font-weight: 500;
       max-width: 500px;
@@ -305,7 +310,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       z-index: 5;
@@ -352,7 +357,7 @@
     }
 
     .slide-2 .intro-card h3 {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       margin-bottom: 12px;
@@ -362,7 +367,7 @@
     .slide-2 .intro-card p {
       font-size: 15px;
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-2 .stat-pill {
@@ -372,7 +377,7 @@
       border: 3px solid var(--black);
       padding: 10px 20px;
       background: var(--yellow);
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 14px;
       font-weight: 600;
     }
@@ -420,7 +425,7 @@
     .slide-3 .icon-green { background: var(--green); }
 
     .slide-3 .feature-card h3 {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 22px;
       margin-bottom: 14px;
@@ -430,7 +435,7 @@
     .slide-3 .feature-card p {
       font-size: 15px;
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-3 .card-deco {
@@ -486,7 +491,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
     }
@@ -545,7 +550,7 @@
     }
 
     .slide-4 .data-box .data-num {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 36px;
       display: block;
@@ -553,7 +558,7 @@
     }
 
     .slide-4 .data-box .data-label {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
@@ -579,7 +584,7 @@
     }
 
     .slide-5 .quote-text {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(28px, 3.5vw, 52px);
       line-height: 1.15;
@@ -589,7 +594,7 @@
     }
 
     .slide-5 .quote-author {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 15px;
       font-weight: 600;
       letter-spacing: 0.05em;
@@ -677,7 +682,7 @@
       background: var(--green);
       color: var(--black);
       padding: 8px 16px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       transform: rotate(-4deg);
@@ -707,7 +712,7 @@
       gap: 14px;
       font-size: 16px;
       line-height: 1.5;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-6 .content-list .list-num {
@@ -719,7 +724,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-weight: 700;
       font-size: 14px;
     }
@@ -769,16 +774,19 @@
     }
 
     .slide-7 .step-num {
-      font-family: 'Inter', sans-serif;
+      /* Outlined numerals: family-consistent and avoids the washed-out
+         look of semi-transparent ink over the pastel step blocks. */
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 48px;
       line-height: 1;
       margin-bottom: 16px;
-      opacity: 0.6;
+      color: transparent;
+      -webkit-text-stroke: 2px var(--black);
     }
 
     .slide-7 .step-title {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       text-transform: uppercase;
@@ -788,7 +796,7 @@
     .slide-7 .step-desc {
       font-size: 14px;
       line-height: 1.5;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-7 .step-connector {
@@ -829,16 +837,15 @@
       position: relative;
     }
 
-    .slide-8 .stat-card:nth-child(odd) {
-      transform: rotate(-2deg);
-    }
-
-    .slide-8 .stat-card:nth-child(even) {
-      transform: rotate(2deg);
-    }
+    /* Hand-placed tilts: irregular angles instead of a mechanical
+       odd/even alternation, so the row reads pinned-up, not templated. */
+    .slide-8 .stat-card:nth-child(1) { transform: rotate(-1.3deg); }
+    .slide-8 .stat-card:nth-child(2) { transform: rotate(0.7deg); }
+    .slide-8 .stat-card:nth-child(3) { transform: rotate(-0.5deg); }
+    .slide-8 .stat-card:nth-child(4) { transform: rotate(1.4deg); }
 
     .slide-8 .stat-number {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(36px, 4vw, 64px);
       line-height: 1;
@@ -846,7 +853,7 @@
     }
 
     .slide-8 .stat-label {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
@@ -903,7 +910,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 28px;
       text-transform: uppercase;
@@ -916,14 +923,14 @@
     .slide-9 .team-card:nth-child(6) .team-avatar { background: var(--blue); }
 
     .slide-9 .team-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       text-transform: uppercase;
     }
 
     .slide-9 .team-role {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 14px;
       font-weight: 500;
       text-transform: uppercase;
@@ -933,7 +940,7 @@
     .slide-9 .team-bio {
       font-size: 13px;
       line-height: 1.45;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     /* ============ SLIDE 10: CLOSING ============ */
@@ -955,7 +962,7 @@
     }
 
     .slide-10 .close-title {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(40px, 5vw, 80px);
       line-height: 0.95;
@@ -966,7 +973,7 @@
     }
 
     .slide-10 .close-subtitle {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 18px;
       font-weight: 500;
       color: var(--cream);
@@ -977,7 +984,7 @@
       display: inline-block;
       border: 3px solid var(--white);
       padding: 16px 40px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 16px;
       text-decoration: none;
@@ -985,7 +992,7 @@
       background: var(--yellow);
       box-shadow: 6px 6px 0px var(--white);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
     }
 
     .slide-10 .close-btn:hover {
@@ -1086,38 +1093,38 @@
         <div class="corner-bracket tr"></div>
         <div class="corner-bracket bl"></div>
         <div class="corner-bracket br"></div>
-        <div class="nb-label hero-label">Presentation Template</div>
-        <h1 class="nb-heading-xl hero-title">NEO-<br>BRUTALISM<br>STYLE</h1>
-        <p class="hero-subtitle">A bold, high-contrast template designed for maximum visual impact and uncompromising clarity.</p>
+        <div class="nb-label hero-label">Design Craft · Board Rebuild Playbook</div>
+        <h1 class="nb-heading-xl hero-title">RESCUE<br>THE DECK</h1>
+        <p class="hero-subtitle">How a 47-slide seed deck becomes a 14-page board narrative in five working days — the diagnosis, the grammar, and the rebuilt proof.</p>
         <div class="deco-pink-rect"></div>
         <div class="deco-green-circle"></div>
-        <div class="deco-yellow-bar">Get Started</div>
+        <div class="deco-yellow-bar">5-Day Sprint</div>
       </div>
     </section>
 
     <!-- SLIDE 2: Two Column Intro -->
     <section class="slide slide-2">
       <div class="col-left">
-        <div class="nb-label nb-label-yellow">Overview</div>
-        <h2 class="nb-heading-lg">What We<br>Deliver</h2>
-        <p class="nb-body" style="max-width: 480px;">Every project follows a rigorous process that balances creative exploration with systematic execution. The result is work that stands out while remaining fully functional.</p>
+        <div class="nb-label nb-label-yellow">The Diagnosis</div>
+        <h2 class="nb-heading-lg">Why Boards<br>Stop Listening</h2>
+        <p class="nb-body" style="max-width: 480px;">We pulled the deck behind a lost $12M Series B. 47 slides, six fonts, and the ask buried on slide 41. The room stopped listening by slide 9 — before the traction chart even loaded.</p>
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <span class="stat-pill">12+ Years</span>
-          <span class="stat-pill">500+ Projects</span>
+          <span class="stat-pill">47 Slides</span>
+          <span class="stat-pill">Ask on Slide 41</span>
         </div>
       </div>
       <div class="col-right">
         <div class="intro-card">
-          <h3>Strategy First</h3>
-          <p>We begin with deep research and stakeholder alignment to ensure every decision is grounded in clear objectives.</p>
+          <h3>No Single Owner</h3>
+          <p>Marketing built slides 1–20, Finance built 21–35, and the founder bolted on 12 more the night before. Three visual languages, one deck.</p>
         </div>
         <div class="intro-card">
-          <h3>Design System</h3>
-          <p>A modular approach to visuals ensures consistency across all touchpoints while allowing room for expression.</p>
+          <h3>Buried Proof</h3>
+          <p>The one retention chart that mattered sat on slide 33, after two agenda slides and a team-bio wall investors had already stopped reading.</p>
         </div>
         <div class="intro-card">
-          <h3>Launch Ready</h3>
-          <p>Final deliverables are production-tested, documented, and handed off with a comprehensive usage guide.</p>
+          <h3>No Reading Order</h3>
+          <p>Headline, body copy, and chart were all sized the same on every page, so nothing led — the eye had nowhere to land first.</p>
         </div>
       </div>
     </section>
@@ -1125,26 +1132,26 @@
     <!-- SLIDE 3: Three Feature Cards -->
     <section class="slide slide-3">
       <div class="slide-header">
-        <div class="nb-label nb-label-pink">Core Features</div>
+        <div class="nb-label nb-label-pink">Rescue Principles</div>
       </div>
       <div class="cards-row">
         <div class="feature-card">
           <div class="card-deco"></div>
-          <div class="feature-icon icon-pink">A</div>
-          <h3>Modular Layouts</h3>
-          <p>Mix and match components to build unique presentations without starting from scratch each time.</p>
+          <div class="feature-icon icon-pink">1</div>
+          <h3>One Idea Per Slide</h3>
+          <p>If a slide needs a subtitle to explain what its headline means, the headline is wrong. Cut until one sentence carries the page.</p>
         </div>
         <div class="feature-card">
           <div class="card-deco"></div>
-          <div class="feature-icon icon-blue">B</div>
-          <h3>Responsive Ready</h3>
-          <p>Adapts seamlessly to different screen sizes while maintaining the bold visual character.</p>
+          <div class="feature-icon icon-blue">2</div>
+          <h3>State the Answer</h3>
+          <p>Titles stop describing topics and start declaring conclusions — "Retention Crossed 92%" beats "Retention Metrics."</p>
         </div>
         <div class="feature-card">
           <div class="card-deco"></div>
-          <div class="feature-icon icon-green">C</div>
-          <h3>Data Friendly</h3>
-          <p>Built-in styles for charts, statistics, and information-dense slides that remain readable.</p>
+          <div class="feature-icon icon-green">3</div>
+          <h3>Earn Every Slide</h3>
+          <p>Cap the deck at 14 pages before writing a word. A slide that isn't load-bearing for the ask gets deleted, not shrunk.</p>
         </div>
       </div>
     </section>
@@ -1152,74 +1159,74 @@
     <!-- SLIDE 4: Chart / Data -->
     <section class="slide slide-4">
       <div class="slide-header">
-        <div class="nb-label nb-label-blue">Performance Data</div>
+        <div class="nb-label nb-label-blue">The Attention Curve</div>
       </div>
       <div class="chart-frame">
         <div class="chart-header">
-          <h2 class="nb-heading-md">Quarterly Growth Metrics</h2>
+          <h2 class="nb-heading-md">Where the Room Checked Out</h2>
           <div class="chart-legend">
-            <div class="legend-item"><div class="legend-swatch" style="background: var(--pink);"></div>Revenue</div>
-            <div class="legend-item"><div class="legend-swatch" style="background: var(--blue);"></div>Users</div>
-            <div class="legend-item"><div class="legend-swatch" style="background: var(--green);"></div>Retention</div>
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--pink);"></div>Attention</div>
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--blue);"></div>Clarity</div>
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--green);"></div>Confidence</div>
           </div>
         </div>
         <div class="chart-body">
         <svg class="chart-svg" viewBox="0 0 800 360" xmlns="http://www.w3.org/2000/svg">
           <!-- Axes (baseline at y=280, leaving room for X labels at y=320) -->
-          <line x1="60" y1="20" x2="60" y2="280" stroke="#000" stroke-width="3"/>
-          <line x1="60" y1="280" x2="780" y2="280" stroke="#000" stroke-width="3"/>
+          <line x1="60" y1="20" x2="60" y2="280" stroke="#17150F" stroke-width="3"/>
+          <line x1="60" y1="280" x2="780" y2="280" stroke="#17150F" stroke-width="3"/>
 
           <!-- Horizontal grid (33 / 66 / 100) -->
-          <line x1="60" y1="80"  x2="780" y2="80"  stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
-          <line x1="60" y1="150" x2="780" y2="150" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
-          <line x1="60" y1="215" x2="780" y2="215" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="80"  x2="780" y2="80"  stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="150" x2="780" y2="150" stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="215" x2="780" y2="215" stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
 
           <!-- Y labels -->
-          <text x="48" y="285" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">0</text>
-          <text x="48" y="220" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">33</text>
-          <text x="48" y="155" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">66</text>
-          <text x="48" y="85"  text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">100</text>
+          <text x="48" y="285" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">0</text>
+          <text x="48" y="220" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">33</text>
+          <text x="48" y="155" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">66</text>
+          <text x="48" y="85"  text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">100</text>
 
-          <!-- Bars: Revenue (pink) — three series per quarter, 5 quarters -->
-          <rect x="80"  y="200" width="32" height="80"  fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="224" y="160" width="32" height="120" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="368" y="120" width="32" height="160" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="512" y="80"  width="32" height="200" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="656" y="60"  width="32" height="220" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <!-- Bars: Stars (pink) — indexed growth, demo data; three series per period, 5 periods -->
+          <rect x="80"  y="200" width="32" height="80"  fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="224" y="160" width="32" height="120" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="368" y="120" width="32" height="160" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="512" y="80"  width="32" height="200" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="656" y="60"  width="32" height="220" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
 
-          <!-- Bars: Users (blue) -->
-          <rect x="118" y="220" width="32" height="60"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="262" y="190" width="32" height="90"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="406" y="150" width="32" height="130" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="550" y="110" width="32" height="170" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="694" y="90"  width="32" height="190" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <!-- Bars: Contributors (blue) -->
+          <rect x="118" y="220" width="32" height="60"  fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="262" y="190" width="32" height="90"  fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="406" y="150" width="32" height="130" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="550" y="110" width="32" height="170" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="694" y="90"  width="32" height="190" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
 
-          <!-- Bars: Retention (green) -->
-          <rect x="156" y="180" width="32" height="100" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="300" y="160" width="32" height="120" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="444" y="130" width="32" height="150" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="588" y="110" width="32" height="170" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="732" y="92"  width="32" height="188" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <!-- Bars: Plugins (green) -->
+          <rect x="156" y="180" width="32" height="100" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="300" y="160" width="32" height="120" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="444" y="130" width="32" height="150" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="588" y="110" width="32" height="170" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="732" y="92"  width="32" height="188" fill="#99E885" stroke="#17150F" stroke-width="2"/>
 
           <!-- X labels — bigger, sit comfortably below the baseline -->
-          <text x="134" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q1</text>
-          <text x="278" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q2</text>
-          <text x="422" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q3</text>
-          <text x="566" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q4</text>
-          <text x="710" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q5</text>
+          <text x="134" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">S1</text>
+          <text x="278" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">S10</text>
+          <text x="422" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">S20</text>
+          <text x="566" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">S30</text>
+          <text x="710" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">S40</text>
         </svg>
         <div class="data-column">
           <div class="data-box">
-            <span class="data-num">+142%</span>
-            <span class="data-label">Revenue Growth</span>
+            <span class="data-num">9/47</span>
+            <span class="data-label">Slide Room Went Quiet</span>
           </div>
           <div class="data-box">
-            <span class="data-num">2.4M</span>
-            <span class="data-label">Active Users</span>
+            <span class="data-num">41</span>
+            <span class="data-label">Slide the Ask Appeared</span>
           </div>
           <div class="data-box">
-            <span class="data-num">94%</span>
-            <span class="data-label">Retention Rate</span>
+            <span class="data-num">3</span>
+            <span class="data-label">Competing Visual Systems</span>
           </div>
         </div>
         </div>
@@ -1234,8 +1241,8 @@
         <div class="corner-bracket tr"></div>
         <div class="corner-bracket bl"></div>
         <div class="corner-bracket br"></div>
-        <p class="quote-text">Design is not just what it looks like. Design is how it works, how it feels, and how it lasts.</p>
-        <p class="quote-author">— Core Principle, Version 4.0</p>
+        <p class="quote-text">A deck isn't a record of what you built. It's a case for what happens next.</p>
+        <p class="quote-author">— Maya Ostrander, Design Director, Rescue Engagement Lead</p>
       </div>
       <div class="deco-stripes"></div>
     </section>
@@ -1244,64 +1251,64 @@
     <section class="slide slide-6">
       <div class="split-visual">
         <div class="visual-box">
-          <span style="color: var(--black); font-family: Inter, sans-serif; font-weight: 700; font-size: 22px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 0 24px;">Image Placeholder</span>
+          <span style="color: var(--black); font-family: Archivo, sans-serif; font-weight: 800; font-size: 22px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 0 24px;">12-Col Grid, 3 Type Sizes</span>
         </div>
-        <div class="visual-label">Visual System</div>
+        <div class="visual-label">Fixed System</div>
       </div>
       <div class="split-content">
-        <div class="nb-label nb-label-green">Methodology</div>
-        <h2 class="nb-heading-md">How We Structure<br>Every Project</h2>
+        <div class="nb-label nb-label-green">Page System</div>
+        <h2 class="nb-heading-md">The Grammar<br>Every Slide Obeys</h2>
         <ul class="content-list">
           <li>
             <span class="list-num">01</span>
-            <span>Discovery phase to map stakeholder needs and technical constraints before any visual work begins.</span>
+            <span>A 12-column grid with one fixed margin — no slide invents its own layout mid-deck.</span>
           </li>
           <li>
             <span class="list-num">02</span>
-            <span>Iterative wireframing with rapid feedback loops to validate information architecture early.</span>
+            <span>Three type sizes only: headline, one support line, one data label. Nothing else earns a font size.</span>
           </li>
           <li>
             <span class="list-num">03</span>
-            <span>High-fidelity prototyping with real content to test readability and visual hierarchy.</span>
+            <span>One accent color per section — proof pages stay in the brand ink, never rainbow-coded by team.</span>
           </li>
           <li>
             <span class="list-num">04</span>
-            <span>Production handoff with annotated specifications and a living style guide.</span>
+            <span>Every chart carries a single takeaway in its title, not a caption explaining the axes.</span>
           </li>
         </ul>
-        <div><a class="nb-btn" href="#">View Process</a></div>
+        <div><a class="nb-btn" href="#">See the System</a></div>
       </div>
     </section>
 
     <!-- SLIDE 7: Timeline / Process -->
     <section class="slide slide-7">
       <div class="slide-header">
-        <div class="nb-label nb-label-cream">Roadmap</div>
-        <h2 class="nb-heading-lg" style="margin-top: 16px;">Project Timeline</h2>
+        <div class="nb-label nb-label-cream">The Rebuild</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Five Days,<br>Four Passes</h2>
       </div>
       <div class="timeline">
         <div class="timeline-step">
           <div class="step-connector"></div>
           <div class="step-num">01</div>
-          <div class="step-title">Research</div>
-          <div class="step-desc">Market analysis, user interviews, and competitive audits to establish a foundation.</div>
+          <div class="step-title">Audit</div>
+          <div class="step-desc">Read the old deck end to end, timestamp where attention drops, and list every claim without a source.</div>
         </div>
         <div class="timeline-step">
           <div class="step-connector"></div>
           <div class="step-num">02</div>
-          <div class="step-title">Concept</div>
-          <div class="step-desc">Mood boards, sketches, and directional explorations to define the visual language.</div>
+          <div class="step-title">Strip</div>
+          <div class="step-desc">Cut to the 14 slides that carry the ask. Every other slide becomes an appendix, not a casualty.</div>
         </div>
         <div class="timeline-step">
           <div class="step-connector"></div>
           <div class="step-num">03</div>
-          <div class="step-title">Build</div>
-          <div class="step-desc">Detailed execution with weekly reviews and continuous stakeholder alignment.</div>
+          <div class="step-title">Rebuild</div>
+          <div class="step-desc">Apply the fixed grid and one-idea-per-slide rule to every remaining page, proof pages first.</div>
         </div>
         <div class="timeline-step">
           <div class="step-num">04</div>
-          <div class="step-title">Launch</div>
-          <div class="step-desc">Deployment support, performance monitoring, and post-launch optimization.</div>
+          <div class="step-title">Rehearse</div>
+          <div class="step-desc">Present cold to a stand-in board twice; cut anything that needed a verbal footnote to land.</div>
         </div>
       </div>
     </section>
@@ -1309,29 +1316,29 @@
     <!-- SLIDE 8: Statistics / Numbers -->
     <section class="slide slide-8">
       <div class="slide-header">
-        <div class="nb-label nb-label-green">By The Numbers</div>
-        <h2 class="nb-heading-lg" style="margin-top: 16px;">Impact at a Glance</h2>
+        <div class="nb-label nb-label-green">The Rebuild, By the Numbers</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Board-Grade<br>in Five Days</h2>
       </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-deco" style="background: var(--pink);"></div>
-          <div class="stat-number">98%</div>
-          <div class="stat-label">Client Satisfaction</div>
+          <div class="stat-number">14</div>
+          <div class="stat-label">Slides, Down From 47</div>
         </div>
         <div class="stat-card">
           <div class="stat-deco" style="background: var(--blue);"></div>
-          <div class="stat-number">14</div>
-          <div class="stat-label">Industry Awards</div>
+          <div class="stat-number">6→1</div>
+          <div class="stat-label">Fonts Unified</div>
         </div>
         <div class="stat-card">
           <div class="stat-deco" style="background: var(--green);"></div>
-          <div class="stat-number">3.2x</div>
-          <div class="stat-label">Avg. ROI Increase</div>
+          <div class="stat-number">92%</div>
+          <div class="stat-label">Next-Day Investor Recall</div>
         </div>
         <div class="stat-card">
           <div class="stat-deco" style="background: var(--yellow);"></div>
-          <div class="stat-number">50+</div>
-          <div class="stat-label">Team Members</div>
+          <div class="stat-number">$18M</div>
+          <div class="stat-label">Series B Closed Two Weeks Later</div>
         </div>
       </div>
     </section>
@@ -1339,45 +1346,45 @@
     <!-- SLIDE 9: Team / Grid -->
     <section class="slide slide-9">
       <div class="slide-header">
-        <div class="nb-label nb-label-pink">The Team</div>
-        <h2 class="nb-heading-lg" style="margin-top: 16px;">Meet the Crew</h2>
+        <div class="nb-label nb-label-pink">The Six Pages That Carry the Ask</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Every Rebuild<br>Ships These</h2>
       </div>
       <div class="team-grid">
         <div class="team-card">
-          <div class="team-avatar">JD</div>
-          <div class="team-name">J. Doe</div>
-          <div class="team-role">Creative Lead</div>
-          <div class="team-bio">Oversees visual direction and ensures every project maintains a coherent narrative.</div>
+          <div class="team-avatar">CV</div>
+          <div class="team-name">Cover</div>
+          <div class="team-role">One Line, One Number</div>
+          <div class="team-bio">States the round, the ask, and the one metric that justifies both — nothing else on the page.</div>
         </div>
         <div class="team-card">
-          <div class="team-avatar">AS</div>
-          <div class="team-name">A. Smith</div>
-          <div class="team-role">Tech Director</div>
-          <div class="team-bio">Translates design systems into scalable technical architectures and workflows.</div>
+          <div class="team-avatar">PR</div>
+          <div class="team-name">Problem</div>
+          <div class="team-role">Named, Not Implied</div>
+          <div class="team-bio">One paragraph naming the cost of inaction in the customer's own words, not the founder's.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">TR</div>
+          <div class="team-name">Traction</div>
+          <div class="team-role">One Chart, One Line</div>
+          <div class="team-bio">The single chart the room needs to believe the model is working, annotated with the number that matters.</div>
         </div>
         <div class="team-card">
           <div class="team-avatar">MK</div>
-          <div class="team-name">M. Kim</div>
-          <div class="team-role">Strategist</div>
-          <div class="team-bio">Connects business objectives to user needs through research and analysis.</div>
+          <div class="team-name">Market</div>
+          <div class="team-role">Bottom-Up Only</div>
+          <div class="team-bio">A sized, named, bottom-up market — no top-down TAM slide survives the rebuild.</div>
         </div>
         <div class="team-card">
-          <div class="team-avatar">RL</div>
-          <div class="team-name">R. Lee</div>
-          <div class="team-role">Producer</div>
-          <div class="team-bio">Manages timelines, budgets, and cross-functional coordination for smooth delivery.</div>
+          <div class="team-avatar">TM</div>
+          <div class="team-name">Team</div>
+          <div class="team-role">Why Us, Specifically</div>
+          <div class="team-bio">Three people, three unfair advantages tied directly to this problem — not a logo wall of past employers.</div>
         </div>
         <div class="team-card">
-          <div class="team-avatar">TP</div>
-          <div class="team-name">T. Patel</div>
-          <div class="team-role">Designer</div>
-          <div class="team-bio">Crafts interfaces and interactions with obsessive attention to detail.</div>
-        </div>
-        <div class="team-card">
-          <div class="team-avatar">SC</div>
-          <div class="team-name">S. Chen</div>
-          <div class="team-role">Developer</div>
-          <div class="team-bio">Builds robust front-end systems that bring static designs to life.</div>
+          <div class="team-avatar">AS</div>
+          <div class="team-name">The Ask</div>
+          <div class="team-role">Slide Two, Not Forty-One</div>
+          <div class="team-bio">Round size, use of funds, and runway on the page investors actually remember — moved to the front.</div>
         </div>
       </div>
     </section>
@@ -1387,9 +1394,9 @@
       <div class="deco-dots-bottom"></div>
       <div class="close-frame">
         <div class="deco-star"></div>
-        <h2 class="close-title">Let's Build<br>Something Bold</h2>
-        <p class="close-subtitle">Ready to start your next project?</p>
-        <a class="close-btn" href="#">Get In Touch</a>
+        <h2 class="close-title">Before You Send<br>the Deck</h2>
+        <p class="close-subtitle">Grid checked · Ask on slide two · One idea per page · Every chart sourced</p>
+        <a class="close-btn" href="#">Book a Rescue Sprint</a>
       </div>
     </section>
 

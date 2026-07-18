@@ -1,116 +1,184 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HTML Anything · 产品介绍</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Present an Operating-Model Redesign like a Strategy Engagement Lead - Consulting</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,420;0,9..144,520;0,9..144,600;1,9..144,420;1,9..144,520&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  body { margin:0; background:#0a0a0a; font-family:'Inter Tight','Noto Sans SC',sans-serif; }
-  .deck { display:flex; flex-direction:column; align-items:center; gap:32px; padding:40px 0; }
-  .slide { position:relative; width:1280px; max-width:96vw; aspect-ratio:16/9; border-radius:18px; overflow:hidden; box-shadow:0 30px 80px -20px rgba(0,0,0,0.7); display:flex; flex-direction:column; padding:64px 80px; color:#0a0a0a; background:#fafaf7; }
-  .slide.dark { background:#15140f; color:#fafaf7; }
-  .slide.brand { background:linear-gradient(135deg,#c96442 0%,#e9b94a 100%); color:#fff; }
-  .slide .num { position:absolute; top:24px; right:32px; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.18em; opacity:0.55; }
-  .slide .eyebrow { font-size:12px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; opacity:0.65; margin-bottom:20px; }
-  .slide h1 { font-size:84px; font-weight:800; line-height:1.05; letter-spacing:-0.025em; margin:0; }
-  .slide h2 { font-size:64px; font-weight:700; line-height:1.1; letter-spacing:-0.02em; margin:0 0 24px; }
-  .slide p { font-size:24px; line-height:1.5; opacity:0.78; max-width:65ch; }
-  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin-top:auto; }
-  .card { padding:28px; border-radius:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); }
-  .card .k { font-size:48px; font-weight:700; letter-spacing:-0.02em; margin-bottom:8px; }
-  .card .l { font-size:14px; opacity:0.65; }
+  /* tokens: warm editorial keynote, single burnt-orange accent */
+  :root{
+    --paper:#f7f4ee;
+    --ink:#1c1916;
+    --ink-2:#55504a;
+    --ink-3:#6a645c;
+    --line:rgba(28,25,22,.14);
+    --line-strong:rgba(28,25,22,.32);
+    --accent:#b8431a;
+    --night:#171310;
+    --night-paper:#f3efe8;
+    --font-display:'Fraunces',Georgia,serif;
+    --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;background:#14110d;font-family:var(--font-body);-webkit-font-smoothing:antialiased}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:28px;padding:40px 0}
+  .slide{position:relative;width:1280px;max-width:96vw;aspect-ratio:16/9;border-radius:4px;overflow:hidden;
+    display:flex;flex-direction:column;padding:64px 84px 56px;
+    color:var(--ink);background:var(--paper);border:1px solid rgba(247,244,238,.08)}
+  .slide.night{background:var(--night);color:var(--night-paper)}
+
+  .slide .num{position:absolute;top:30px;right:84px;font-family:var(--font-mono);font-size:11px;letter-spacing:.18em;color:var(--ink-3)}
+  .slide.night .num{color:rgba(243,239,232,.58)}
+  .slide .eyebrow{font-family:var(--font-mono);font-size:11.5px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:22px}
+
+  .slide h1{font-family:var(--font-display);font-size:88px;font-weight:520;line-height:1.04;letter-spacing:-.015em;margin:0}
+  .slide h2{font-family:var(--font-display);font-size:58px;font-weight:520;line-height:1.14;letter-spacing:-.01em;margin:0 0 24px}
+  .slide h1 em,.slide h2 em{font-style:italic;font-weight:420}
+  .slide p{font-size:22px;line-height:1.6;color:var(--ink-2);max-width:65ch;margin:0}
+  .ac{color:var(--accent)}
+
+  /* entrance: transform+opacity only, staggered, reduced-motion safe */
+  @keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+  .slide>*{animation:rise .65s var(--ease) both}
+  .slide>*:nth-child(2){animation-delay:.06s}
+  .slide>*:nth-child(3){animation-delay:.12s}
+  .slide>*:nth-child(4){animation-delay:.18s}
+  .slide>*:nth-child(5){animation-delay:.24s}
+  @media (prefers-reduced-motion:reduce){.slide>*{animation:none}}
+
+  /* cover */
+  .cover .mark-row{margin-top:auto;display:flex;align-items:center;gap:16px;font-size:14px;color:var(--ink-2)}
+  .cover .mark{width:34px;height:34px;border-radius:999px;border:1px solid var(--line-strong);display:grid;place-items:center;
+    font-family:var(--font-display);font-style:italic;font-weight:520;font-size:17px;color:var(--accent)}
+  .cover .lede{font-size:26px;line-height:1.55;margin-top:28px;max-width:34em}
+
+  /* hairline list (problem slide) */
+  .hl-list{font-size:23px;line-height:1.6;color:var(--ink-2);list-style:none;padding:0;margin:36px 0 0;
+    border-top:1px solid var(--line-strong);max-width:62ch}
+  .hl-list li{padding:18px 0;border-bottom:1px solid var(--line)}
+
+  /* three columns separated by hairlines, no card chrome */
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);margin-top:auto;border-top:1px solid var(--line-strong)}
+  .cols3>div{padding:38px 32px 10px 0}
+  .cols3>div+div{border-left:1px solid var(--line);padding-left:32px}
+  .cols3 .o{font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;color:var(--accent);margin-bottom:18px}
+  .cols3 .t{font-family:var(--font-display);font-weight:600;font-size:25px;line-height:1.28;margin-bottom:12px}
+  .cols3 .d{font-size:16px;line-height:1.75;color:var(--ink-2)}
+
+  /* numbers board */
+  .board{display:grid;grid-template-columns:repeat(3,1fr);margin-top:auto;border-top:1px solid var(--line-strong)}
+  .board>div{padding:34px 32px 8px 0}
+  .board>div+div{border-left:1px solid var(--line);padding-left:32px}
+  .board .k{font-family:var(--font-display);font-size:72px;font-weight:520;letter-spacing:-.02em;line-height:1;color:var(--accent);margin-bottom:14px}
+  .board .k span{font-size:30px}
+  .board .l{font-size:15.5px;color:var(--ink-2);line-height:1.6}
+
+  /* statement slides */
+  .statement{margin-top:auto;margin-bottom:auto}
+
+  /* thanks: the single inverted page */
+  .night .foot{display:flex;align-items:flex-end;justify-content:space-between;font-size:17px;color:rgba(243,239,232,.78);
+    border-top:1px solid rgba(243,239,232,.18);padding-top:30px}
+  .night .foot .mono{font-family:var(--font-mono);font-size:15px;color:var(--night-paper)}
+
+  @media print{
+    body{background:#fff}
+    .deck{gap:0;padding:0}
+    .slide{page-break-after:always;border-radius:0;border:none;max-width:none}
+  }
 </style>
 </head>
 <body>
 <div class="deck">
 
-  <section class="slide brand">
+  <section class="slide cover">
     <span class="num">01 / 07</span>
-    <div class="eyebrow">Product · 2026</div>
-    <h1 style="margin-top:auto">HTML <em style="font-family:Georgia,serif;font-style:italic;font-weight:400">Anything</em></h1>
-    <p style="font-size:28px; opacity:0.95; margin-top:24px">把任何文档、数据, 用本地 AI agent, 一键转成世界级好看的 HTML。</p>
-    <div style="margin-top:auto; display:flex; align-items:center; gap:16px; font-size:14px; opacity:0.85">
-      <div style="width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,0.25);display:grid;place-items:center;font-family:Georgia,serif;font-style:italic;font-weight:600">H</div>
-      <span>Tom Pan · 5 月 11 日</span>
+    <div class="eyebrow">Consulting · Operating Model Redesign</div>
+    <h1 style="margin-top:auto">Meridian <em class="ac">Freight</em></h1>
+    <p class="lede">Rebuilding the operating model for scale: a diagnosis of where cost-to-serve broke down, the target model, and an 18-month transition roadmap.</p>
+    <div class="mark-row">
+      <div class="mark">M</div>
+      <span>Prepared for the CEO &amp; Executive Committee · Board review, July 2026</span>
     </div>
   </section>
 
   <section class="slide">
     <span class="num">02 / 07</span>
-    <div class="eyebrow" style="color:#c96442">问题</div>
-    <h2>Markdown 易写,<br/>但<span style="color:#c96442">发出去就丑</span>。</h2>
-    <ul style="font-size:24px; line-height:2; opacity:0.78; list-style:none; padding:0">
-      <li>· 截图发推, 默认是 14px 宋体压缩 jpg</li>
-      <li>· 复制到公众号, 排版被微信彻底重写</li>
-      <li>· 知乎、小红书、Notion 各家规则不一</li>
+    <div class="eyebrow">The Diagnosis</div>
+    <h2>Volume grew <em class="ac">9%</em>. Cost-to-serve grew <em class="ac">34%</em>. The model, not the market, is the problem.</h2>
+    <ul class="hl-list">
+      <li>· Regional hubs each built their own dispatch and pricing logic — 14 hubs, 14 different playbooks, zero shared standard</li>
+      <li>· Headcount in ops management grew 41% faster than shipment volume over three years</li>
+      <li>· Decisions that should take a day (route exceptions, carrier overrides) take 6-9 days because approval sits four layers up</li>
     </ul>
   </section>
 
-  <section class="slide dark">
+  <section class="slide">
     <span class="num">03 / 07</span>
-    <div class="eyebrow" style="color:#e9b94a">方案</div>
-    <h2 style="font-size:96px; margin-top:auto; margin-bottom:auto">
-      任何输入 →<br/>
-      <span style="font-family:Georgia,serif;font-style:italic;font-weight:600;color:#e9b94a">世界级 HTML</span>
+    <div class="eyebrow">The Governing Thought</div>
+    <h2 class="statement" style="font-size:78px;line-height:1.12;margin-bottom:0">
+      Stop scaling headcount with volume →<br/>
+      <em class="ac">centralize planning, regionalize execution</em>
     </h2>
-    <p style="font-size:22px;opacity:0.6">用你本地已经登录的 Claude / Cursor / Codex, 0 API Key 边际成本。</p>
+    <p style="font-size:21px;margin-top:34px">One national planning engine sets pricing, routing, and carrier policy. Regional teams keep full authority to execute against it — no more re-deciding the same policy 14 times.</p>
   </section>
 
   <section class="slide">
     <span class="num">04 / 07</span>
-    <div class="eyebrow">三个核心</div>
-    <h2>三件让它好用的事</h2>
-    <div class="grid3" style="grid-template-columns:repeat(3,1fr); gap:20px">
-      <div class="card" style="background:#f4f1ec; border-color:#e7e5e0; color:#15140f">
-        <div style="font-size:36px; margin-bottom:14px">🔌</div>
-        <div style="font-weight:600; font-size:18px; margin-bottom:6px">本地 Agent</div>
-        <div style="font-size:14px; opacity:0.7; line-height:1.6">复用你已经登录的 CLI session, 不要求 API Key</div>
+    <div class="eyebrow">Three Paths We Modeled</div>
+    <h2>Three ways to close the gap</h2>
+    <div class="cols3">
+      <div>
+        <div class="o">A</div>
+        <div class="t">Cut hub headcount</div>
+        <div class="d">Fastest, lowest cost to execute — but strips capacity before the process debt is fixed; service risk in peak season</div>
       </div>
-      <div class="card" style="background:#f4f1ec; border-color:#e7e5e0; color:#15140f">
-        <div style="font-size:36px; margin-bottom:14px">🎨</div>
-        <div style="font-weight:600; font-size:18px; margin-bottom:6px">9 套模板</div>
-        <div style="font-size:14px; opacity:0.7; line-height:1.6">PPT · 简历 · 海报 · 小红书 · 数据报告 ...</div>
+      <div>
+        <div class="o">B</div>
+        <div class="t">Full ERP replatform</div>
+        <div class="d">Addresses the root cause — but 30+ months and $40M before any hub sees a change; too slow for this board's mandate</div>
       </div>
-      <div class="card" style="background:#f4f1ec; border-color:#e7e5e0; color:#15140f">
-        <div style="font-size:36px; margin-bottom:14px">📋</div>
-        <div style="font-weight:600; font-size:18px; margin-bottom:6px">一键发布</div>
-        <div style="font-size:14px; opacity:0.7; line-height:1.6">公众号 / 推特 / 知乎 / PNG, 直接粘贴</div>
+      <div>
+        <div class="o">C</div>
+        <div class="t">Centralize planning, keep execution local</div>
+        <div class="d">Recommended: fixes the 14-playbook problem in 18 months, without a system replatform or frontline disruption</div>
       </div>
     </div>
   </section>
 
-  <section class="slide dark">
+  <section class="slide">
     <span class="num">05 / 07</span>
-    <div class="eyebrow" style="color:#e9b94a">数据</div>
-    <h2>已经在跑</h2>
-    <div class="grid3">
-      <div class="card"><div class="k" style="color:#e9b94a">80<span style="font-size:24px">s</span></div><div class="l">生成 31KB 可交付文章</div></div>
-      <div class="card"><div class="k" style="color:#e9b94a">9</div><div class="l">套世界级模板</div></div>
-      <div class="card"><div class="k" style="color:#e9b94a">8</div><div class="l">个本地 agent 适配</div></div>
+    <div class="eyebrow">Priorities &amp; Expected Impact</div>
+    <h2>What Option C is worth</h2>
+    <div class="board">
+      <div><div class="k">11<span>%</span></div><div class="l">Cost-to-serve reduction within 18 months, phased by hub cohort</div></div>
+      <div><div class="k">2.4<span>d</span></div><div class="l">Exception approval time, down from 6-9 days once planning is centralized</div></div>
+      <div><div class="k">7</div><div class="l">Month payback on the transition investment, funded from cohort-1 savings</div></div>
     </div>
   </section>
 
   <section class="slide">
     <span class="num">06 / 07</span>
-    <div class="eyebrow" style="color:#c96442">为什么是现在</div>
-    <h2 style="font-size:56px; margin-top:auto; margin-bottom:auto">
-      Claude 团队不再用 markdown,<br/>
-      <span style="font-family:Georgia,serif;font-style:italic;font-weight:600;color:#c96442">全换成了 HTML。</span>
+    <div class="eyebrow">The Roadmap</div>
+    <h2 class="statement" style="font-size:48px">
+      Three phases, 18 months:<br/>
+      <em class="ac">Stabilize (Q3) → Centralize (Q4-Q1) → Scale to all 14 hubs (Q2-Q4)</em>
     </h2>
-    <p>HTML 是面向读者的最终形态, AI 让"啰嗦"不再是问题。</p>
+    <p style="font-size:20px">Cohort 1 (Northeast + Gulf, 4 hubs) goes live in October; remaining 10 hubs migrate in two waves once cohort-1 savings are confirmed.</p>
   </section>
 
-  <section class="slide brand">
+  <section class="slide night">
     <span class="num">07 / 07</span>
-    <h1 style="margin:auto 0; font-size:120px">Thanks.</h1>
-    <div style="display:flex; align-items:flex-end; justify-content:space-between; font-size:18px">
+    <h1 style="margin:auto 0;font-size:104px">The <em class="ac">Ask</em>.</h1>
+    <div class="foot">
       <div>
-        <div style="font-family:'JetBrains Mono',monospace; font-size:16px; opacity:0.85">$ pnpm dev</div>
-        <div style="opacity:0.85; margin-top:6px">→ http://localhost:3000 → ⌘+Enter</div>
+        <div class="mono">Decision needed: by Friday's steering committee</div>
+        <div style="margin-top:8px">Approve Option C, name the cohort-1 hub GM as transition owner, and release the first $2.1M tranche to start Q3 stabilization</div>
       </div>
-      <div style="opacity:0.7">github.com/your-org/html-anything</div>
+      <div style="color:rgba(243,239,232,.6)">Prepared by the Engagement Team</div>
     </div>
   </section>
 
@@ -126,5 +194,6 @@
     slides[i].scrollIntoView({behavior:'smooth', block:'center'});
   });
 </script>
+
 </body>
 </html>

@@ -28,6 +28,17 @@ const baseSource = `<!doctype html>
   </body>
 </html>`;
 
+const brandKitSource = `<!doctype html>
+<html>
+  <head>
+    <script id="od-brand-payload" type="application/json">{"status":"ready","brand":{"name":"Acme","sourceUrl":"https://acme.test","colors":[{"hex":"#111111","name":"Ink","role":"foreground","usage":"body"}],"logo":{"primary":"logo.svg","alternates":["logo-alt.svg"],"notes":"Primary mark"},"voice":{"tone":"Direct","adjectives":["Useful"],"messagingPillars":["Ship fast"],"vocabulary":{"use":["clear"],"avoid":["vague"]}},"imagery":{"style":"Crisp UI","samples":[{"file":"imagery/a.png","caption":"Dashboard","kind":"product"}]}}}</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>document.getElementById('root').innerHTML = '<h1 data-od-id="brand-name" data-od-edit="text">Acme</h1>';</script>
+  </body>
+</html>`;
+
 describe('manual edit source patches', () => {
   beforeEach(() => {
     const dom = new JSDOM('');
@@ -197,6 +208,20 @@ describe('manual edit source patches', () => {
     expect(result.source).toContain('<h1 data-od-id="hero-title">Edited title</h1>');
   });
 
+  it('rejects removing the only rendered body element even when scripts remain', () => {
+    const source = [
+      '<!doctype html><html><body>',
+      '<main data-od-id="app-root">App</main>',
+      '<script>window.bootApp && window.bootApp();</script>',
+      '</body></html>',
+    ].join('');
+    const result = applyManualEditPatch(source, { kind: 'remove-element', id: 'app-root' });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Cannot remove the last rendered element in the document.');
+    expect(result.source).toContain('data-od-id="app-root"');
+  });
+
   it('addresses unannotated elements with generated DOM path ids', () => {
     const result = applyManualEditPatch(baseSource, { kind: 'set-text', id: 'path-0-7', value: 'Path target' });
 
@@ -210,4 +235,97 @@ describe('manual edit source patches', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('nested markup');
   });
+
+  it('writes dynamic brand-kit text targets back to the embedded payload', () => {
+    const result = applyManualEditPatch(brandKitSource, { kind: 'set-text', id: 'brand-name', value: 'Nexu' });
+
+    expect(result.ok).toBe(true);
+    const payload = readBrandPayload(result.source);
+    expect(payload.brand.name).toBe('Nexu');
+    expect(result.source).not.toContain('Target not found');
+  });
+
+  it('writes dynamic brand-kit palette and imagery fields back to the embedded payload', () => {
+    const color = applyManualEditPatch(brandKitSource, { kind: 'set-text', id: 'brand-color-hex-0', value: '#FF5500' });
+    expect(color.ok).toBe(true);
+    const [updatedColor] = readBrandPayload(color.source).brand.colors;
+    expect(updatedColor).toMatchObject({ hex: '#FF5500' });
+
+    const image = applyManualEditPatch(color.source, {
+      kind: 'set-image',
+      id: 'brand-image-img-0',
+      src: 'imagery/b.png',
+      alt: 'Updated dashboard',
+    });
+    expect(image.ok).toBe(true);
+    const [updatedImage] = readBrandPayload(image.source).brand.imagery.samples;
+    expect(updatedImage).toMatchObject({
+      file: 'imagery/b.png',
+      caption: 'Updated dashboard',
+    });
+  });
+
+  it('maps dynamic brand-kit logo thumbnails to primary and alternate logo slots', () => {
+    const primary = applyManualEditPatch(brandKitSource, {
+      kind: 'set-image',
+      id: 'brand-logo-thumb-0',
+      src: 'logos/primary-new.svg',
+      alt: 'Updated primary',
+    });
+    expect(primary.ok).toBe(true);
+    expect(readBrandPayload(primary.source).brand.logo).toMatchObject({
+      primary: 'logos/primary-new.svg',
+      notes: 'Updated primary',
+    });
+
+    const alternate = applyManualEditPatch(primary.source, {
+      kind: 'set-image',
+      id: 'brand-logo-thumb-1',
+      src: 'logos/alternate-new.svg',
+      alt: '',
+    });
+    expect(alternate.ok).toBe(true);
+    expect(readBrandPayload(alternate.source).brand.logo.alternates[0]).toBe('logos/alternate-new.svg');
+  });
+
+  it('persists dynamic brand-kit static copy through runtime overrides', () => {
+    const result = applyManualEditPatch(brandKitSource, {
+      kind: 'set-text',
+      id: 'brand-system-title',
+      value: 'Component library',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('id="od-manual-edit-runtime-overrides"');
+    expect(result.source).toContain('id="od-manual-edit-runtime-apply"');
+    expect(result.source).toContain('if (el && el.textContent !== value) el.textContent = value');
+    expect(readRuntimeOverrides(result.source).text?.['brand-system-title']).toBe('Component library');
+  });
+
+  it('hides dynamic brand-kit targets instead of reporting target not found on delete', () => {
+    const result = applyManualEditPatch(brandKitSource, { kind: 'remove-element', id: 'brand-system-section' });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('[data-od-id="brand-system-section"]');
+    expect(result.source).toContain('display: none !important');
+  });
 });
+
+function readBrandPayload(source: string): {
+  brand: {
+    name?: string;
+    colors: Array<{ hex?: string }>;
+    logo: { primary?: string; alternates: string[]; notes?: string };
+    imagery: { samples: Array<{ file?: string; caption?: string }> };
+  };
+} {
+  const dom = new JSDOM(source);
+  return JSON.parse(dom.window.document.getElementById('od-brand-payload')?.textContent || '{}');
+}
+
+function readRuntimeOverrides(source: string): {
+  text?: Record<string, string>;
+} {
+  const dom = new JSDOM(source);
+  return JSON.parse(dom.window.document.getElementById('od-manual-edit-runtime-overrides')?.textContent || '{}');
+}

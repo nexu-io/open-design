@@ -1,0 +1,197 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-frontend-slides",
+  "title": "Write an AI-Workflow 101 like a Top Technology Explainer",
+  "title_i18n": {
+    "en": "Write an AI-Workflow 101 like a Top Technology Explainer",
+    "zh-CN": "像顶级技术解释者一样写 AI 工作流 101",
+    "zh-TW": "像顶级技术解释者一样写 AI 工作流 101"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.",
+  "description_i18n": {
+    "en": "Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.",
+    "zh-CN": "像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "zarazhangrui",
+    "url": "https://github.com/zarazhangrui"
+  },
+  "homepage": "https://github.com/zarazhangrui/frontend-slides",
+  "plugin": {
+    "repo": "https://github.com/zarazhangrui/frontend-slides"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "presentation",
+    "animation",
+    "web",
+    "ppt",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "frontend-slides",
+    "consulting-delivery",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "ai",
+    "copilot",
+    "workflow",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "ai",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write an AI-Workflow 101 like a Top Technology Explainer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Audience: teams new to AI, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像顶级技术解释者一样写 AI 工作流 101。像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write an AI-Workflow 101 like a Top Technology Explainer",
+          "title_i18n": {
+            "en": "Write an AI-Workflow 101 like a Top Technology Explainer",
+            "zh-CN": "像顶级技术解释者一样写 AI 工作流 101",
+            "zh-TW": "像顶级技术解释者一样写 AI 工作流 101"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "conference talk",
+          "pitch deck",
+          "teaching / tutorial deck",
+          "internal presentation",
+          "product overview"
+        ],
+        "default": "conference talk"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "The craft of motion in interface design",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Design engineers at a frontend meetup",
+        "default": "a general professional audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Length",
+        "type": "select",
+        "required": true,
+        "options": [
+          "short 5-10 slides",
+          "medium 10-20 slides",
+          "long 20+ slides"
+        ],
+        "default": "short 5-10 slides"
+      },
+      {
+        "name": "density",
+        "label": "Density",
+        "type": "select",
+        "required": true,
+        "options": [
+          "low density / speaker-led",
+          "high density / reading-first"
+        ],
+        "default": "low density / speaker-led"
+      },
+      {
+        "name": "stylePreset",
+        "label": "Style direction",
+        "type": "select",
+        "options": [
+          "Bold Signal (seed default)",
+          "Electric Studio",
+          "Creative Voltage",
+          "Dark Botanical",
+          "Notebook Tabs",
+          "Pastel Geometry",
+          "Split Pastel",
+          "Vintage Editorial",
+          "Neon Cyber",
+          "Terminal Green",
+          "Swiss Modern",
+          "Paper & Ink",
+          "let the agent pick a distinctive custom design"
+        ],
+        "default": "Bold Signal (seed default)"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html",
+        "./references/STYLE_PRESETS.md",
+        "./references/viewport-base.css",
+        "./references/html-template.md",
+        "./references/animation-patterns.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "ai-literacy"
+  }
+}

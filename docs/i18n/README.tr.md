@@ -1,10 +1,10 @@
 <h1 align="center">Open Design: Açık kaynaklı Claude Design alternatifi</h1>
 
-> 🔥 **Open Design 0.10.0 burada: hepsi bir arada Agentic tasarım çalışma alanı.** Zanaatın tamamı artık tek pencerede — belirsiz bir fikirden referans keşfine, malzeme toplamaya, etkileşimli düzenlemeye, yorumları kuyruğa almaya, animasyonları cilalamaya ve sonucu bir editöre ya da Code Agent'a devretmeye kadar — uygulamadan hiç çıkmadan. Paralel oturumlarla artık tek bir asistan gibi değil, sizin için çalışan yerel bir tasarım ekibi gibi hissettiriyor. [0.10.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ burada.** Uzun tasarım oturumları eskiden her kesintide bozulurdu — bir çalıştırma yerini kaybederdi, model seçici tahmin yürütmenize yol açardı, bir dışa aktarma bir sapma daha gerektirirdi. 0.13.0 oturumu canlı tutar: Codex / OpenCode / Pi / Open Design Cloud çalıştırmalarını turlar boyunca sürdürün, doğru modeli daha hızlı seçin ve ekran görüntüsüyle desteklenen PPTX / PDF dosyalarını uygulamadan çıkmadan teslim edin. [0.13.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Sürüm notları](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [Open Design Cloud'yi dene](https://open-design.ai/cloud/)
 >
-> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -13,31 +13,30 @@
 <p align="center">
   <a href="https://open-design.ai/">Web Sitesi</a> ·
   <a href="https://open-design.ai/">İndir</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
-  <a href="https://x.com/nexudotio">@nexudotio'yu takip et</a>
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
+  <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ'yu takip et</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <b>Türkçe</b></p>
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <b>Türkçe</b> · <a href="README.th.md">ภาษาไทย</a></p>
 
 ---
 
 ## Open Design nedir
 
-🎨 **Yerel öncelikli, açık kaynaklı [Claude Design][cd] alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ beceri** · ✨ **150 marka düzeyinde `DESIGN.md` sistemi** · 📦 **261 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 21 yerel CLI üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
+🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ beceri** · ✨ **150 marka düzeyinde `DESIGN.md` sistemi** · 📦 **261 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 21 yerel CLI üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
 
 Open Design, Anthropic'in Claude Design ile birlikte sunduğu **ajan-yerel** döngünün — özeti keşfet, yönü kilitle, artifact'i akıt, eleştir, teslim et — kapalı olmaktan çıkıp, dizüstü bilgisayarınızda zaten bulunan kodlama ajanlarının okuyabileceği, yazabileceği ve yeniden harmanlayabileceği bir **beceriler, tasarım sistemleri ve eklentiler dosya sistemine** dönüştüğünde elde ettiğiniz şeydir. CLI'niz tasarım motoru, dizüstü bilgisayarınız stüdyo ve ekibinizin `DESIGN.md` dosyası marka sözleşmesi olur.
 
 Aynı zamanda **ajan çağı için Figma alternatifidir** — bir tuval üzerinde piksel itmek yerine, gerçek CSS, gerçek yazı tipleri, gerçek bileşenlerle tek sayfalık artifact'ler sunar, doğrudan HTML / PDF / PPTX / MP4 olarak dışa aktarılır — tasarım sisteminiz tarafından zaten şekillendirilmiş, her gün kullandığınız ajanın içinde zaten çalıştırılabilir halde.
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -116,6 +115,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Destekleniyor | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Destekleniyor | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Destekleniyor | `od mcp install reasonix` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
@@ -126,6 +126,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 | [Cline](https://github.com/cline/cline) | ✅ Destekleniyor | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Destekleniyor | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Destekleniyor | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Destekleniyor | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Destekleniyor | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Destekleniyor | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Destekleniyor | `od mcp install hermes` |
@@ -258,7 +259,7 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 
 ## Neden Open Design
 
-> **Nisan 2026'da Anthropic [Claude Design][cd]'ı yayınladı — bir LLM'in ilk kez düz metin yazmayı bırakıp doğrudan tasarım artifact'leri sunduğu an.** Viral oldu. Ama kapalı kaynaklı, yalnızca ücretli, yalnızca bulut tabanlı kaldı; Anthropic'in modeline, Anthropic'in becerilerine, Anthropic'in yüzeyine kilitliydi. Ödeme yok, kendi sunucunda barındırma yok, Vercel dağıtımı yok, kendi ajanını takma yok.
+> **Nisan 2026'da Anthropic Claude Design'ı yayınladı — bir LLM'in ilk kez düz metin yazmayı bırakıp doğrudan tasarım artifact'leri sunduğu an.** Viral oldu. Ama kapalı kaynaklı, yalnızca ücretli, yalnızca bulut tabanlı kaldı; Anthropic'in modeline, Anthropic'in becerilerine, Anthropic'in yüzeyine kilitliydi. Ödeme yok, kendi sunucunda barındırma yok, Vercel dağıtımı yok, kendi ajanını takma yok.
 
 Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
 
@@ -271,7 +272,7 @@ Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact �
 
 ### Karşılaştırma
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | Açık kaynak | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Kendi sunucunda barındırma / masaüstü | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -302,7 +303,7 @@ Open Design'ı GUI'yi hiç açmadan kullanabilirsiniz — Claude Code, Codex, Cu
 
 ```bash
 # One-line install into the agent you're using:
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
@@ -325,6 +326,12 @@ echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
 # open http://localhost:7456
 ```
+
+### 🚀 Sealos üzerinde dağıtın
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store şablonu, yayımlanmış Open Design Docker imajını kalıcı çalışma alanı depolaması ve herkese açık proxy üzerinde Basic Auth ile çalıştırır. Özel herkese açık veya paylaşılan Docker dağıtımları için [`deploy/README.md`](../../deploy/README.md#local-compose) içindeki ters proxy ve `OPEN_DESIGN_ALLOWED_ORIGINS` rehberini izleyin.
 
 ### 🧑‍💻 Kaynaktan çalıştırın
 
@@ -355,7 +362,7 @@ Open Design bir **stdio MCP sunucusu** ve ajan başına **kurulum betikleri** su
 
 ```bash
 # One-line install (16+ CLIs supported):
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 
 # Then the agent can:
 od search-files "primary button"      # search files across projects
@@ -571,7 +578,7 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 - [x] Sidecar protokolü + Electron masaüstü + IPC otomasyonu
 - [x] Artifact lint API'si + 5 boyutlu öz-eleştiri ön-yayın kapısı
 - [x] **0.8.0** — eklenti pazar yeri altyapısı (261 resmî eklenti, manifest spesifikasyonu, ajan başına kurulum betikleri)
-- [x] **0.9.0** — Open Design AMR (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
+- [x] **0.9.0** — Open Design Cloud (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
 - [x] Paketlenmiş Electron derlemeleri — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (isteğe bağlı hat)
 - [ ] Yorum modu cerrahi düzenlemeler — kısmen sunuldu; güvenilir hedefli yamalama devam ediyor
 - [ ] AI tarafından yayılan ayar paneli UX'i — henüz uygulanmadı
@@ -588,8 +595,8 @@ Aşamalı teslimat → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 Her kanalın arkasında gerçek insanlar var.
 
-- 💬 **Discord** — günlük sohbet, eklenti paylaşımı, sorular → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
-- 🐦 **X / Twitter** — sürüm notları, kilometre taşları, perde arkası → [**@nexudotio**](https://x.com/nexudotio)
+- 💬 **Discord** — günlük sohbet, eklenti paylaşımı, sorular → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
+- 🐦 **X / Twitter** — sürüm notları, kilometre taşları, perde arkası → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — derinlemesine soru-cevap, RFC'ler, "çalışmanı göster" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — hata raporları, özellik istekleri → [**Issues**](https://github.com/nexu-io/open-design/issues)
 
@@ -638,7 +645,7 @@ Tam ajan dostu katkı akışı, kod stili ve PR çıtası → [`CONTRIBUTING.md`
 
 ### 🏅 Open Design Fellow programı
 
-Dünya çapında **Open Design Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Open Design'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4) üzerindeki duyuru.
+Dünya çapında **Open Design Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Open Design'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/mHAjSMV6gz) üzerindeki duyuru.
 
 ---
 
@@ -672,7 +679,7 @@ Bakımcı kuralları, terfi kriterleri ve çıkış protokolü → [`MAINTAINERS
 Katılan herkese teşekkürler — kod, belge, geri bildirim, keskin bir issue, yeni bir beceri, yeni bir tasarım sistemi.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
 </a>
 
 ---
@@ -697,9 +704,9 @@ Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez —
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
   </picture>
 </a>
 
@@ -709,7 +716,7 @@ Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez —
 
 | Proje | Rol |
 |---|---|
-| [Claude Design][cd] | Bu deponun açık kaynaklı alternatifi olduğu kapalı kaynaklı ürün. |
+| Claude Design | Bu deponun açık kaynaklı alternatifi olduğu kapalı kaynaklı ürün. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | Tasarım felsefesi pusulası — junior-tasarımcı iş akışı, marka-varlığı protokolü, anti-AI-slop kontrol listesi, beş boyutlu eleştiri. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Dergi tarzı web PPT becerisi, [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) altında birebir paketlenmiştir. Deste modu için varsayılan. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio ailesi — 15 deste şablonu, 36 tema, 31 sayfa düzeni, animasyon çalışma zamanı, manyetik-kart sunucu modu. |

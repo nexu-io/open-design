@@ -25,6 +25,7 @@ import {
   localizeTemplateText,
 } from '../content-i18n';
 import { getBundledPlugins } from './bundled-plugins';
+import { SYSTEM_TAGLINE_L10N, SYSTEM_CATEGORY_L10N } from './system-l10n';
 import {
   bundledRecordOf,
   categorizePlugin,
@@ -432,17 +433,34 @@ export function shapeSystem(
     fallbackTagline: localized?.tagline ?? tagline,
     fallbackAtmosphere: localized?.atmosphere ?? atmosphere,
   });
+  // Prefer the curated, UNIQUE localized card tagline / category over the
+  // generic `systemTagline` template (and the CJK English-name fallback) when
+  // we have one for this system+locale. English uses the DESIGN.md source.
+  const taglineL10n = SYSTEM_TAGLINE_L10N[slug]?.[locale];
+  const categoryL10n = SYSTEM_CATEGORY_L10N[rawCategory]?.[locale];
   return {
     slug,
     name,
     category: rawCategory,
-    categoryLabel: localizedText.category,
-    tagline: localizedText.tagline,
+    categoryLabel: categoryL10n ?? localizedText.category,
+    tagline: taglineL10n ?? localizedText.tagline,
     atmosphere: localizedText.atmosphere,
     palette,
     source: `${REPO_TREE}/design-systems/${slug}`,
     body,
   };
+}
+
+/**
+ * True for the canonical English `DESIGN.md` entry (id `<slug>/DESIGN`), false
+ * for localized `DESIGN.<locale>.md` bodies (id `<slug>/DESIGN.<locale>`). The
+ * catalog/card grid must only see one record per system, so it filters to the
+ * English entries; the localized bodies are picked up only by the detail page.
+ */
+function isEnglishSystemEntry(id: string): boolean {
+  // Astro lowercases glob ids: `DESIGN.md` → `<slug>/design`, while a localized
+  // body `DESIGN-<locale>.md` → `<slug>/design-<locale>`.
+  return (id.split('/')[1] ?? '') === 'design';
 }
 
 export async function getSystemRecords(
@@ -451,6 +469,7 @@ export async function getSystemRecords(
   if (!SHOULD_CACHE_CATALOG) {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -463,6 +482,7 @@ export async function getSystemRecords(
   const promise = (async () => {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   })();

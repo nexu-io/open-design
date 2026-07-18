@@ -18,6 +18,14 @@ describe('summarizeProjectNameFromPrompt', () => {
     ).toBe('Settings Page Managing Desktop Pets');
   });
 
+  it('summarizes turn-this-into prompts by the requested artifact', () => {
+    expect(
+      summarizeProjectNameFromPrompt(
+        'Turn this into an infographic: "5 habits of effective code reviewers — read the PR description first, review tests before implementation"',
+      ),
+    ).toBe('Infographic 5 Habits Effective Code Reviewers');
+  });
+
   it('ignores code blocks and links before naming', () => {
     expect(
       summarizeProjectNameFromPrompt('Create a dashboard for https://example.com\n```ts\nconst x = 1\n```'),
@@ -27,14 +35,43 @@ describe('summarizeProjectNameFromPrompt', () => {
   it('only allows first-prompt renaming for generated project names', () => {
     expect(
       canAutoRenameProjectFromPrompt({
+        name: 'Prototype',
         metadata: { kind: 'prototype', nameSource: 'generated' },
       }),
     ).toBe(true);
     expect(
       canAutoRenameProjectFromPrompt({
+        name: 'Imported Client Folder',
         metadata: { kind: 'prototype', nameSource: 'user' },
       }),
     ).toBe(false);
-    expect(canAutoRenameProjectFromPrompt({ metadata: undefined })).toBe(false);
+    expect(
+      canAutoRenameProjectFromPrompt(
+        {
+          name: 'Turn this into an infographic: "5 habits of',
+          metadata: { kind: 'prototype', nameSource: 'prompt' },
+        },
+        'Turn this into an infographic: "5 habits of effective code reviewers"',
+      ),
+    ).toBe(true);
+    expect(
+      canAutoRenameProjectFromPrompt(
+        {
+          name: 'Infographic 5 Habits Effective Code Reviewers',
+          metadata: { kind: 'prototype', nameSource: 'prompt' },
+        },
+        'Turn this into an infographic: "5 habits of effective code reviewers"',
+      ),
+    ).toBe(true);
+    expect(
+      canAutoRenameProjectFromPrompt(
+        {
+          name: 'Design Router',
+          metadata: { kind: 'prototype', nameSource: 'prompt' },
+        },
+        'Turn this into an infographic: "5 habits of effective code reviewers"',
+      ),
+    ).toBe(false);
+    expect(canAutoRenameProjectFromPrompt({ name: 'Project', metadata: undefined })).toBe(false);
   });
 });

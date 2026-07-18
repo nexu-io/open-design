@@ -1,0 +1,17 @@
+---
+/*
+ * Locale variants of the customer-stories index (`/<locale>/stories/`).
+ * Re-renders the canonical index per non-default locale so the nav "Stories"
+ * link and the hreflang alternates resolve in every locale.
+ */
+import StoriesIndex from '../../stories/index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
+}
+---
+
+<StoriesIndex />

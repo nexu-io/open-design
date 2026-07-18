@@ -131,7 +131,7 @@
 | AMR-022 | Onboarding 未登录流 | AMR 可用但未登录 | 打开 onboarding，并保持选择 `AMR Cloud` | 用户会看到“需要登录后继续”的状态 |
 | AMR-023 | Onboarding 已登录流 | AMR 可用且已登录 | 打开 onboarding 并继续 | 用户可直接继续，不再被 AMR 登录阻塞 |
 | AMR-024 | Onboarding 登录完成 | AMR 可用，未登录 | 从 onboarding 发起登录，在 Vela 网页完成授权并返回 | 登录完成后 onboarding 自动进入下一步 |
-| AMR-025 | Onboarding 跳过 | AMR 可用，未登录 | 点击 Skip | onboarding 正常退出，不强制要求先登录 AMR |
+| AMR-025 | Onboarding 未登录不可跳过 | AMR 可用，未登录 | 打开 onboarding 并保持选择 `AMR Cloud` | 不展示 Skip；Continue 被登录授权拦截，不能进入后续步骤或主页 |
 | AMR-026 | Onboarding 回退 | AMR 不可用 | 打开 onboarding | 不应把 AMR Cloud 当作可用路径；Local CLI 仍可正常使用 |
 | AMR-027 | Local CLI 隔离 | AMR 可用 | 在 onboarding 切到 Local coding agent 视图 | AMR 不应出现在 Local CLI agent 列表中 |
 | AMR-028 | Inline Switcher 可见性 | AMR 可用 | 打开 inline model switcher | AMR 以 `AMR` 标签出现，而不是 `AMR (vela)` |
@@ -380,7 +380,7 @@
 
 - 重置配置，让 onboarding 可见
 - 确认 `AMR Cloud` 是默认推荐入口
-- 确认未登录时 Continue 受阻，但 Skip 可用
+- 确认未登录时 Continue 受登录授权拦截，且不存在 Skip 入口
 - 完成登录后确认 onboarding 可继续
 
 ### Smoke C：Chat Run

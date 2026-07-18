@@ -24,6 +24,7 @@
     "en": "Mistral AI"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Open-weight LLM provider. French-engineered minimalism, purple-toned.",
   "description_i18n": {
     "zh-CN": "开源权重大语言模型提供商。法式极简设计，紫色调。",

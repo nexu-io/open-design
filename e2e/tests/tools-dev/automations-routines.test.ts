@@ -8,7 +8,7 @@ import { describe, expect, test } from 'vitest';
 import { createFakeAgentRuntimes } from '@/fake-agents';
 import { listMessages } from '@/vitest/messages';
 import { createRoutine, deleteRoutine, listRoutines, runRoutine, updateRoutine } from '@/vitest/routines';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 import { requestJson } from '@/vitest/http';
 import { readRunEvents, waitForRunStatus, waitForRunTerminal } from '@/vitest/runs';
 

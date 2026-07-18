@@ -24,6 +24,7 @@
     "en": "Game Screenshot - Three Kingdoms ARPG: Lü Bu's Yuanmen Archery"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An in-game action-RPG screenshot of the famous Three Kingdoms scene where Lü Bu shoots down a distant halberd at the camp gate to stop a battle. Rendered in the cinematic photoreal style of Black Myth: Wukong, Unreal Engine 5 Nanite/Lumen, third-person over-the-shoulder gameplay camera. Full in-game HUD overlay (HP + qi bars, minimap, skill hotbar, lock-on target marker with distance readout to the far halberd) makes it read as a real next-gen ARPG capture rather than a cutscene. Tuned for gpt-image-2 at 16:9.",
   "description_i18n": {
     "zh-CN": "三国题材动作RPG游戏截图，呈现吕布辕门射戟止战的经典场景。采用Black Myth: Wukong式写实电影风格和Unreal Engine 5技术，第三人称越肩视角，包含完整游戏HUD界面（生命值和气条、小地图、技能栏、锁定目标标记及距离显示）。适配gpt-image-2的16:9比例。",

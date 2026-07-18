@@ -7,14 +7,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
-  fetchDesignSystemPreview: vi.fn(),
+  designSystemStaticUrl: (id: string, filePath: string) => `/design-systems/${id}/${filePath}`,
+  fetchDesignSystem: vi.fn(),
+  fetchProjectFileText: vi.fn(),
+  openExternalUrl: vi.fn(),
+  projectRawUrl: (projectId: string, filePath: string) => `/raw/${projectId}/${filePath}`,
 }));
 
 import { DesignSystemPicker } from '../../src/components/DesignSystemPicker';
 import { I18nProvider, type Locale } from '../../src/i18n';
-import { fetchDesignSystemPreview } from '../../src/providers/registry';
+import {
+  fetchDesignSystem,
+  fetchProjectFileText,
+} from '../../src/providers/registry';
 
-const fetchDesignSystemPreviewMock = vi.mocked(fetchDesignSystemPreview);
+const fetchDesignSystemMock = vi.mocked(fetchDesignSystem);
+const fetchProjectFileTextMock = vi.mocked(fetchProjectFileText);
 
 const designSystems: DesignSystemSummary[] = [
   {
@@ -34,7 +42,27 @@ const designSystems: DesignSystemSummary[] = [
 ];
 
 beforeEach(() => {
-  fetchDesignSystemPreviewMock.mockResolvedValue('<html><body><h1>Preview</h1></body></html>');
+  fetchDesignSystemMock.mockImplementation(async (id) => ({
+    id,
+    title: id === 'clay' ? 'Clay' : 'Editorial Noir',
+    summary: id === 'clay' ? 'Friendly tactile product UI.' : 'High-contrast editorial system.',
+    category: id === 'clay' ? 'Product' : 'Editorial',
+    body: [
+      `# ${id === 'clay' ? 'Clay' : 'Editorial Noir'}`,
+      '',
+      id === 'clay' ? 'Friendly tactile product UI.' : 'High-contrast editorial system.',
+      '',
+      '## Typography',
+      id === 'clay' ? '- Display: Fraunces' : '- Display: Playfair Display',
+      '- Body: Inter',
+      '',
+      '## Color Palette',
+      id === 'clay' ? '- Warm Paper #f4efe7' : '- Ink #111111',
+      id === 'clay' ? '- Charcoal #25211d' : '- Bone #f7f0e8',
+    ].join('\n'),
+    swatches: id === 'clay' ? ['#f4efe7', '#25211d'] : ['#111111', '#f7f0e8'],
+  }));
+  fetchProjectFileTextMock.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -69,27 +97,30 @@ describe('DesignSystemPicker', () => {
     expect(screen.getByTestId('project-ds-picker-option-noir-check')).toBeTruthy();
 
     await waitFor(() => {
-      expect(fetchDesignSystemPreviewMock).toHaveBeenCalledWith('noir');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir');
     });
-    expect(await screen.findByTestId('project-ds-picker-preview-frame')).toBeTruthy();
+    expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
+    expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
+    expect(screen.queryByTestId('project-ds-picker-preview-frame')).toBeNull();
   });
 
-  it('updates the preview target on hover and opens the fullscreen preview', async () => {
+  it('updates the preview target on hover and opens the expanded kit preview', async () => {
     renderPicker();
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
-    await screen.findByTestId('project-ds-picker-preview-frame');
+    await screen.findByTestId('project-ds-picker-preview-kit-view');
 
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
     await waitFor(() => {
-      expect(fetchDesignSystemPreviewMock).toHaveBeenCalledWith('clay');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay');
     });
+    expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
 
     fireEvent.click(await screen.findByTestId('project-ds-picker-preview-expand'));
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getAllByText('Clay').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByLabelText('关闭全屏预览'));
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

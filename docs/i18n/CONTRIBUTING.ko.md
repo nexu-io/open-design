@@ -4,7 +4,7 @@
 
 이 문서는 어떤 종류의 기여를 어디서 시작해야 하는지, 그리고 PR이 머지되려면 어떤 기준을 넘어야 하는지 정확히 알려줍니다.
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b></p>
+<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
 
 ---
 
@@ -88,7 +88,7 @@ docker compose up -d
 OPEN_DESIGN_PORT=7456
 OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 ```
 
 > 프로젝트와 데이터베이스 데이터는 Docker 볼륨에 자동으로 보존됩니다.
@@ -185,7 +185,7 @@ design-systems/your-brand/
 }
 ```
 
-이게 전부입니다. daemon이 `PATH`에서 감지하고, picker에 나타나며, 채팅 경로가 동작합니다. CLI가 (Claude Code의 `--output-format stream-json`처럼) **타입이 지정된 이벤트**를 내보낸다면 [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts)에 파서를 연결하고 `streamFormat: 'claude-stream-json'`으로 설정하세요.
+이게 전부입니다. daemon이 `PATH`에서 감지하고, picker에 나타나며, 채팅 경로가 동작합니다. CLI가 (Claude Code의 `--output-format stream-json`처럼) **타입이 지정된 이벤트**를 내보낸다면 [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts)에 파서를 연결하고 `streamFormat: 'claude-stream-json'`으로 설정하세요.
 
 머지 기준:
 
@@ -302,7 +302,7 @@ CLA는 요구하지 않습니다. Apache-2.0으로 충분하며, 당신의 기�
 요컨대 좋은 PR을 내고, 사려 깊게 리뷰하고, [Discussions][discussions]와 [Discord][discord]에서 어울리다 보면 나머지는 알아서 따라옵니다.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/qhbcCH8Am4
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

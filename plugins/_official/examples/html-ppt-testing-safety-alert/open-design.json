@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-testing-safety-alert",
-  "title": "Html Ppt Testing Safety Alert",
+  "title": "Brief a Health-System Board on Data Governance like a Chief Compliance Officer",
   "title_i18n": {
-    "zh-CN": "Html Ppt Testing Safety Alert",
-    "zh-TW": "Html Ppt Testing Safety Alert",
-    "ja": "Html Ppt Testing Safety Alert",
-    "ko": "Html Ppt Testing Safety Alert",
-    "de": "Html Ppt Testing Safety Alert",
-    "fr": "Html Ppt Testing Safety Alert",
-    "ru": "Html Ppt Testing Safety Alert",
-    "es": "Html Ppt Testing Safety Alert",
-    "pt-BR": "Html Ppt Testing Safety Alert",
-    "it": "Html Ppt Testing Safety Alert",
-    "vi": "Html Ppt Testing Safety Alert",
-    "pl": "Html Ppt Testing Safety Alert",
-    "id": "Html Ppt Testing Safety Alert",
-    "nl": "Html Ppt Testing Safety Alert",
-    "ar": "Html Ppt Testing Safety Alert",
-    "tr": "Html Ppt Testing Safety Alert",
-    "uk": "Html Ppt Testing Safety Alert",
-    "en": "Html Ppt Testing Safety Alert"
+    "en": "Brief a Health-System Board on Data Governance like a Chief Compliance Officer",
+    "zh-CN": "像首席合规官一样向医院董事会汇报数据治理",
+    "zh-TW": "像首席合规官一样向医院董事会汇报数据治理"
   },
   "version": "0.1.0",
-  "description": "红琥珀警示 deck — 顶/底 45° 红黑 hazard 条纹、红色删除线否定标题、L1/L2/L3 绿/琥珀/红 tier 卡片、圆点状态 alert box、policy-yaml 代码块（红左边框 + bad 关键词高亮）、红绿 checklist、Q1 事故堆叠柱状图。适合安全 / 风险 / 事故复盘 / 红队 / 上线前 AI 评审 / policy-as-code。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A hospital data-governance briefing: patient-data risk, the control framework, accountability, and the approval the board must give. Built as a decision-grade policy briefing deck for health-system board, regulators.",
   "description_i18n": {
-    "zh-CN": "红琥珀警示 deck — 顶/底 45° 红黑 hazard 条纹、红色删除线否定标题、L1/L2/L3 绿/琥珀/红 tier 卡片、圆点状态 alert box、policy-yaml 代码块（红左边框 + bad 关键词高亮）、红绿 checklist、Q1 事故堆叠柱状图。适合安全 / 风险 / 事故复盘 / 红队 / 上线前 AI 评审 / policy-as-code。",
-    "zh-TW": "紅琥珀警示簡報範本 — 頂/底 45° 紅黑危險條紋、紅色刪除線否定標題、L1/L2/L3 綠/琥珀/紅層級卡片、圓點狀態警示框、policy-yaml 程式碼區塊（紅色左邊框 + bad 關鍵字醒目標示）、紅綠檢查清單、Q1 事故堆疊長條圖。適用於安全/風險/事故覆盤/紅隊/上線前 AI 審查/policy-as-code。",
-    "ja": "安全・リスク・インシデント報告用のアラートデッキテンプレート。赤黄警告ストライプ、階層別カード、ステータスボックス、policy-yaml コードブロック、チェックリスト、事故統計グラフを収録。",
-    "ko": "안전 및 리스크 보고용 경고 덱 템플릿. 빨강-검정 위험 줄무늬, L1/L2/L3 등급 카드, 상태 알림 박스, policy-yaml 코드 블록, 체크리스트, Q1 사고 누적 차트 포함.",
-    "de": "Sicherheits- und Risikowarnungs-Deck-Vorlage mit Hazard-Streifen, Tier-Karten, Alert-Boxen, Policy-YAML-Codeblöcken, Checklisten und Incident-Diagrammen für Security Reviews und Post-Mortems.",
-    "fr": "Modèle de deck d'alerte sécurité avec bandes hazard rouge-noir, cartes par niveau, boîtes d'alerte, blocs de code policy-yaml, checklists et graphiques d'incidents pour revues de sécurité et post-mortems.",
-    "ru": "Шаблон презентации безопасности с красно-черными полосами опасности, многоуровневыми карточками, окнами оповещений, блоками policy-yaml, чеклистами и диаграммами инцидентов для анализа рисков.",
-    "es": "Plantilla de presentación de alertas de seguridad con franjas de peligro, tarjetas por niveles, cuadros de alerta, bloques de código policy-yaml, checklists y gráficos de incidentes para revisiones de seguridad.",
-    "pt-BR": "Template de deck de alerta de segurança com listras de perigo vermelho-preto, cards por nível, caixas de alerta, blocos de código policy-yaml, checklists e gráficos de incidentes para revisões de segurança.",
-    "it": "Template di presentazione per alert di sicurezza con strisce hazard rosso-nero, card a livelli, box di allerta, blocchi di codice policy-yaml, checklist e grafici degli incidenti per review di sicurezza.",
-    "vi": "Mẫu bộ trình chiếu cảnh báo an toàn với sọc nguy hiểm đỏ-đen, thẻ phân cấp, hộp cảnh báo, khối mã policy-yaml, danh sách kiểm tra và biểu đồ sự cố cho đánh giá bảo mật.",
-    "pl": "Szablon prezentacji alertów bezpieczeństwa z pasami ostrzegawczymi, kartami poziomów, polami alertów, blokami kodu policy-yaml, checklistami i wykresami incydentów do przeglądów bezpieczeństwa.",
-    "id": "Template deck peringatan keamanan dengan garis bahaya merah-hitam, kartu tier, kotak alert, blok kode policy-yaml, checklist, dan grafik insiden untuk tinjauan keamanan dan post-mortem.",
-    "nl": "Veiligheidsalarm deck-sjabloon met rood-zwarte hazard-strepen, tier-kaarten, alertboxen, policy-yaml codeblokken, checklists en incidentgrafieken voor beveiligingsreviews en post-mortems.",
-    "ar": "قالب عرض تنبيهات الأمان مع خطوط تحذير حمراء-سوداء وبطاقات متدرجة وصناديق تنبيه وكتل أكواد policy-yaml وقوائم مراجعة ورسوم بيانية للحوادث لمراجعات الأمان.",
-    "tr": "Kırmızı-siyah tehlike şeritleri, katmanlı kartlar, uyarı kutuları, policy-yaml kod blokları, kontrol listeleri ve olay grafikleriyle güvenlik uyarı sunum şablonu.",
-    "uk": "Шаблон презентації попереджень безпеки з червоно-чорними смугами небезпеки, багаторівневими картками, вікнами сповіщень, блоками коду policy-yaml, чеклістами та діаграмами інцидентів для огляду безпеки.",
-    "en": "红琥珀警示 deck — 顶/底 45° 红黑 hazard 条纹、红色删除线否定标题、L1/L2/L3 绿/琥珀/红 tier 卡片、圆点状态 alert box、policy-yaml 代码块（红左边框 + bad 关键词高亮）、红绿 checklist、Q1 事故堆叠柱状图。适合安全 / 风险 / 事故复盘 / 红队 / 上线前 AI 评审 / policy-as-code。"
+    "en": "A hospital data-governance briefing: patient-data risk, the control framework, accountability, and the approval the board must give. Built as a decision-grade policy briefing deck for health-system board, regulators.",
+    "zh-CN": "像首席合规官一样向医院董事会汇报数据治理——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像首席合规官一样向医院董事会汇报数据治理——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,18 @@
     "red-team",
     "risk-review",
     "untitled",
-    "policy-as-code"
+    "policy-as-code",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-testing-safety-alert",
+    "enterprise-ai-literacy",
+    "government-policy",
+    "policy-briefing-deck",
+    "policy",
+    "regulatory",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +57,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "policy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +65,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-testing-safety-alert template to create an incident review / safety review deck. Use red-black hazard stripes, red strikethroughs, L1/L2/L3 tier cards, and policy-yaml code blocks. First ask me for the incident timeline, root cause, and impact scope.",
-        "zh-CN": "用 html-ppt-testing-safety-alert 模板做一份事故复盘 / 安全评审 PPT。红黑 hazard 条 + 红色删除线 + L1/L2/L3 tier 卡片 + policy-yaml 代码块。先告诉我事件时间线、根因、影响范围。"
+        "en": "Create \"Brief a Health-System Board on Data Governance like a Chief Compliance Officer\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A hospital data-governance briefing: patient-data risk, the control framework, accountability, and the approval the board must give. Audience: health-system board, regulators. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat.",
+        "zh-CN": "像首席合规官一样向医院董事会汇报数据治理。像首席合规官一样向医院董事会汇报数据治理——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。 主题：A hospital data-governance briefing: patient-data risk, the control framework, accountability, and the approval the board must give. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Testing Safety Alert"
+          "title": "Brief a Health-System Board on Data Governance like a Chief Compliance Officer",
+          "title_i18n": {
+            "en": "Brief a Health-System Board on Data Governance like a Chief Compliance Officer",
+            "zh-CN": "像首席合规官一样向医院董事会汇报数据治理",
+            "zh-TW": "像首席合规官一样向医院董事会汇报数据治理"
+          }
         }
       ]
     },
@@ -117,6 +104,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "government-policy"
   }
 }

@@ -16,6 +16,7 @@ export interface AmrGuidanceProps {
   assistantMessageId: string;
   runId: string | null;
   sourceDetail: TrackingAmrEntrySource;
+  metricsConsent?: boolean;
   // Switch the run to AMR and retry. The `ui_click` analytics event is fired
   // here first; the host performs the switch + arms the auto-retry.
   onActivate: () => void;
@@ -35,6 +36,7 @@ export function AmrGuidance({
   assistantMessageId,
   runId,
   sourceDetail,
+  metricsConsent = false,
   onActivate,
 }: AmrGuidanceProps) {
   const t = useT();
@@ -88,7 +90,9 @@ export function AmrGuidance({
               area: 'chat_panel',
               element: 'go_amr',
             });
-            recordAmrEntry(analytics.track, sourceDetail);
+            recordAmrEntry(analytics.track, sourceDetail, new Date(), {
+              metricsConsent,
+            });
             onActivate();
           }}
         >

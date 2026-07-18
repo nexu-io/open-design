@@ -166,9 +166,10 @@ function createLocalAgentDef(
   const versionArgs = normalizeStringList(profile.versionArgs);
   const helpArgs = normalizeStringList(profile.helpArgs);
   const defaultModel = normalizeDefaultModel(profile.defaultModel);
+  const { authProbe: baseAuthProbe, ...baseWithoutAuthProbe } = base;
 
   return {
-    ...base,
+    ...baseWithoutAuthProbe,
     id,
     name,
     bin,
@@ -176,6 +177,11 @@ function createLocalAgentDef(
     ...(helpArgs.length > 0 ? { helpArgs } : {}),
     fallbackModels,
     env,
+    // Carry the base adapter's classifier identity so an inherited probe keeps
+    // its tailored auth parsing under the profile id (#4456).
+    ...(prefixArgs.length === 0 && baseAuthProbe
+      ? { authProbe: { ...baseAuthProbe, classifierAgentId: base.id } }
+      : {}),
     buildArgs: (prompt, imagePaths, extraAllowedDirs, options, runtimeContext) => [
       ...prefixArgs,
       ...base.buildArgs(

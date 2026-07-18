@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-obsidian-claude-gradient",
-  "title": "Html Ppt Obsidian Claude Gradient",
+  "title": "Write an Enterprise AI Adoption Brief like a Transformation Lead",
   "title_i18n": {
-    "zh-CN": "Html Ppt Obsidian Claude Gradient",
-    "zh-TW": "Html Ppt Obsidian Claude Gradient",
-    "ja": "Html Ppt Obsidian Claude Gradient",
-    "ko": "Html Ppt Obsidian Claude Gradient",
-    "de": "Html Ppt Obsidian Claude Gradient",
-    "fr": "Html Ppt Obsidian Claude Gradient",
-    "ru": "Html Ppt Obsidian Claude Gradient",
-    "es": "Html Ppt Obsidian Claude Gradient",
-    "pt-BR": "Html Ppt Obsidian Claude Gradient",
-    "it": "Html Ppt Obsidian Claude Gradient",
-    "vi": "Html Ppt Obsidian Claude Gradient",
-    "pl": "Html Ppt Obsidian Claude Gradient",
-    "id": "Html Ppt Obsidian Claude Gradient",
-    "nl": "Html Ppt Obsidian Claude Gradient",
-    "ar": "Html Ppt Obsidian Claude Gradient",
-    "tr": "Html Ppt Obsidian Claude Gradient",
-    "uk": "Html Ppt Obsidian Claude Gradient",
-    "en": "Html Ppt Obsidian Claude Gradient"
+    "en": "Write an Enterprise AI Adoption Brief like a Transformation Lead",
+    "zh-CN": "像企业 AI 转型负责人一样写落地简报",
+    "zh-TW": "像企业 AI 转型负责人一样写落地简报"
   },
   "version": "0.1.0",
-  "description": "GitHub 暗紫渐变 deck — GitHub-dark #0d1117 + 紫蓝 radial 环境光 + 60px 网格 mask、居中布局、紫色 pill 标签、三色渐变标题（#a855f7→#60a5fa→#34d399）、GitHub 风代码 palette、紫色左边框高亮块。适合开发者工作流 / MCP / Agent / dev tool 教程，类似 GitHub Blog / Linear Changelog。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Built as a decision-grade AI literacy deck for leadership, IT, security.",
   "description_i18n": {
-    "zh-CN": "GitHub 暗紫渐变幻灯片主题，采用 GitHub-dark #0d1117 背景、紫蓝径向环境光、60px 网格遮罩、居中布局、紫色药丸标签、三色渐变标题（#a855f7→#60a5fa→#34d399）、GitHub 风格代码配色和紫色左边框高亮块。适合开发者工作流、MCP、Agent 和开发工具教程。",
-    "zh-TW": "GitHub 暗紫漸層簡報主題，採用 GitHub-dark #0d1117 背景、紫藍徑向環境光、60px 網格遮罩、置中佈局、紫色藥丸標籤、三色漸層標題（#a855f7→#60a5fa→#34d399）、GitHub 風格程式碼配色及紫色左邊框醒目區塊。適合開發者工作流程、MCP、Agent 與開發工具教學。",
-    "ja": "GitHub ダークパープルグラデーションデッキテーマ。GitHub-dark #0d1117 背景、紫青の放射状アンビエントライト、60px グリッドマスク、中央揃えレイアウト、パープルピルタグ、3色グラデーション見出し（#a855f7→#60a5fa→#34d399）、GitHub スタイルコードパレット、紫の左ボーダーハイライトブロックを搭載。開発者ワークフロー、MCP、Agent、開発ツールチュートリアルに最適。",
-    "ko": "GitHub 다크 퍼플 그라데이션 덱 테마. GitHub-dark #0d1117 배경, 보라-파랑 방사형 앰비언트 라이트, 60px 그리드 마스크, 중앙 정렬 레이아웃, 보라색 필 태그, 3색 그라데이션 제목(#a855f7→#60a5fa→#34d399), GitHub 스타일 코드 팔레트, 보라색 왼쪽 테두리 하이라이트 블록 제공. 개발자 워크플로우, MCP, Agent, 개발 도구 튜토리얼에 적합.",
-    "de": "GitHub-dunkelviolettes Verlaufs-Deck-Theme mit GitHub-dark #0d1117 Hintergrund, lila-blauem radialem Umgebungslicht, 60px-Gittermaske, zentriertem Layout, violetten Pill-Tags, dreifarbigen Verlaufsüberschriften (#a855f7→#60a5fa→#34d399), GitHub-Code-Palette und violetten Links-Border-Highlight-Blöcken. Ideal für Developer-Workflows, MCP, Agent und Dev-Tool-Tutorials.",
-    "fr": "Thème de deck à dégradé violet foncé GitHub avec fond GitHub-dark #0d1117, lumière ambiante radiale bleu-violet, masque de grille 60px, mise en page centrée, tags pilule violets, titres à dégradé tricolore (#a855f7→#60a5fa→#34d399), palette de code style GitHub et blocs surlignés avec bordure gauche violette. Idéal pour workflows développeurs, MCP, Agent et tutoriels d'outils de dev.",
-    "ru": "Темная фиолетовая градиентная тема презентаций GitHub с фоном GitHub-dark #0d1117, радиальной фиолетово-синей подсветкой, сеткой 60px, центрированной версткой, фиолетовыми pill-тегами, трехцветными градиентными заголовками (#a855f7→#60a5fa→#34d399), кодовой палитрой в стиле GitHub и фиолетовой левой границей для выделения блоков. Подходит для dev-воркфлоу, MCP, Agent и туториалов по инструментам разработки.",
-    "es": "Tema de deck con degradado púrpura oscuro de GitHub con fondo GitHub-dark #0d1117, luz ambiental radial azul-púrpura, máscara de cuadrícula 60px, diseño centrado, etiquetas pill moradas, títulos con degradado tricolor (#a855f7→#60a5fa→#34d399), paleta de código estilo GitHub y bloques destacados con borde izquierdo morado. Ideal para flujos de trabajo de desarrolladores, MCP, Agent y tutoriales de herramientas de desarrollo.",
-    "pt-BR": "Tema de deck com gradiente roxo escuro do GitHub com fundo GitHub-dark #0d1117, luz ambiente radial azul-roxo, máscara de grade 60px, layout centralizado, tags pill roxas, títulos com gradiente tricolor (#a855f7→#60a5fa→#34d399), paleta de código estilo GitHub e blocos destacados com borda esquerda roxa. Ideal para workflows de desenvolvedores, MCP, Agent e tutoriais de ferramentas de dev.",
-    "it": "Tema deck a gradiente viola scuro GitHub con sfondo GitHub-dark #0d1117, luce ambientale radiale blu-viola, maschera griglia 60px, layout centrato, tag pill viola, titoli a gradiente tricolore (#a855f7→#60a5fa→#34d399), palette codice stile GitHub e blocchi evidenziati con bordo sinistro viola. Ideale per workflow sviluppatori, MCP, Agent e tutorial su strumenti di sviluppo.",
-    "vi": "Chủ đề deck gradient tím đậm GitHub với nền GitHub-dark #0d1117, ánh sáng xung quanh radial xanh-tím, mặt nạ lưới 60px, bố cục căn giữa, thẻ pill màu tím, tiêu đề gradient ba màu (#a855f7→#60a5fa→#34d399), bảng màu code phong cách GitHub và khối highlight viền trái màu tím. Phù hợp cho quy trình làm việc developer, MCP, Agent và hướng dẫn công cụ phát triển.",
-    "pl": "Ciemnofioletowy gradientowy motyw deck GitHub z tłem GitHub-dark #0d1117, radialnym niebiesko-fioletowym światłem otoczenia, maską siatki 60px, wycentrowanym układem, fioletowymi tagami pill, trójkolorowymi nagłówkami gradientowymi (#a855f7→#60a5fa→#34d399), paletą kodu w stylu GitHub i fioletową lewą ramką bloków podświetlających. Idealny do workflow deweloperów, MCP, Agent i tutoriali narzędzi dev.",
-    "id": "Tema deck gradien ungu gelap GitHub dengan latar belakang GitHub-dark #0d1117, cahaya ambient radial biru-ungu, mask grid 60px, layout terpusat, tag pill ungu, judul gradien tiga warna (#a855f7→#60a5fa→#34d399), palet kode gaya GitHub, dan blok highlight border kiri ungu. Cocok untuk workflow developer, MCP, Agent, dan tutorial tool pengembangan.",
-    "nl": "Donkerpaars verloop deck-thema in GitHub-stijl met GitHub-dark #0d1117 achtergrond, radiaal blauw-paars omgevingslicht, 60px rastermasker, gecentreerde lay-out, paarse pill-tags, driekleuren verlooptitels (#a855f7→#60a5fa→#34d399), GitHub-code pallet en paarse linkerrand highlight-blokken. Ideaal voor developer workflows, MCP, Agent en dev tool tutorials.",
-    "ar": "قالب عرض تقديمي بتدرج أرجواني داكن بأسلوب GitHub مع خلفية GitHub-dark #0d1117، إضاءة محيطية شعاعية أزرق-أرجواني، قناع شبكة 60px، تخطيط مركزي، علامات pill أرجوانية، عناوين بتدرج ثلاثي الألوان (#a855f7→#60a5fa→#34d399)، لوحة ألوان كود بأسلوب GitHub وكتل تمييز بحدود يسرى أرجوانية. مثالي لسير عمل المطورين وMCP وAgent ودروس أدوات التطوير.",
-    "tr": "GitHub tarzı koyu mor degradeli sunum teması. GitHub-dark #0d1117 arka plan, radyal mavi-mor ortam ışığı, 60px ızgara maskesi, ortalanmış düzen, mor pill etiketleri, üç renkli degrade başlıklar (#a855f7→#60a5fa→#34d399), GitHub tarzı kod paleti ve mor sol kenarlık vurgulu bloklar içerir. Geliştirici iş akışları, MCP, Agent ve geliştirme araçları eğitimleri için idealdir.",
-    "uk": "Темна фіолетова градієнтна тема презентацій GitHub із фоном GitHub-dark #0d1117, радіальним фіолетово-синім навколишнім освітленням, сіткою 60px, центрованим макетом, фіолетовими pill-тегами, триколірними градієнтними заголовками (#a855f7→#60a5fa→#34d399), кодовою палітрою в стилі GitHub та фіолетовою лівою рамкою для виділення блоків. Підходить для dev-воркфлоу, MCP, Agent та туторіалів інструментів розробки.",
-    "en": "GitHub 暗紫渐变 deck — GitHub-dark #0d1117 + 紫蓝 radial 环境光 + 60px 网格 mask、居中布局、紫色 pill 标签、三色渐变标题（#a855f7→#60a5fa→#34d399）、GitHub 风代码 palette、紫色左边框高亮块。适合开发者工作流 / MCP / Agent / dev tool 教程，类似 GitHub Blog / Linear Changelog。"
+    "en": "Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Built as a decision-grade AI literacy deck for leadership, IT, security.",
+    "zh-CN": "像企业 AI 转型负责人一样写落地简报——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像企业 AI 转型负责人一样写落地简报——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,16 @@
     "mcp-tutorial",
     "agent-tutorial",
     "dev-workflow",
-    "changelog-deck"
+    "changelog-deck",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-obsidian-claude-gradient",
+    "enterprise-ai-literacy",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "ai",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +63,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-obsidian-claude-gradient template to create a developer tutorial deck. Use a GitHub-style dark purple gradient, centered layout, purple pills, tri-color gradient headings, and configuration/step code blocks. First confirm what to teach, the target audience, and whether to include MCP or agent configuration examples.",
-        "zh-CN": "用 html-ppt-obsidian-claude-gradient 模板做一份开发者教程 PPT。GitHub 暗紫渐变 + 居中布局 + 紫色 pill + 三色渐变标题 + 配置/步骤代码块。先确认：教什么、目标受众、要不要 MCP/Agent 配置示例。"
+        "en": "Create \"Write an Enterprise AI Adoption Brief like a Transformation Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. Audience: leadership, IT, security. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像企业 AI 转型负责人一样写落地简报。像企业 AI 转型负责人一样写落地简报——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's enterprise AI-adoption brief: local-first agents at work, the risk controls, the ROI, and the rollout plan. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Obsidian Claude Gradient"
+          "title": "Write an Enterprise AI Adoption Brief like a Transformation Lead",
+          "title_i18n": {
+            "en": "Write an Enterprise AI Adoption Brief like a Transformation Lead",
+            "zh-CN": "像企业 AI 转型负责人一样写落地简报",
+            "zh-TW": "像企业 AI 转型负责人一样写落地简报"
+          }
         }
       ]
     },
@@ -117,6 +102,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "ai-literacy"
   }
 }

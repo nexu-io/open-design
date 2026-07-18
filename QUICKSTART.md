@@ -1,6 +1,6 @@
 # Quickstart
 
-<p align="center"><b>English</b> · <a href="docs/i18n/QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="docs/i18n/QUICKSTART.de.md">Deutsch</a> · <a href="docs/i18n/QUICKSTART.fr.md">Français</a> · <a href="docs/i18n/QUICKSTART.ja-JP.md">日本語</a> · <a href="docs/i18n/QUICKSTART.zh-CN.md">简体中文</a> · <a href="docs/i18n/QUICKSTART.zh-TW.md">繁體中文</a></p>
+<p align="center"><b>English</b> · <a href="docs/i18n/QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="docs/i18n/QUICKSTART.de.md">Deutsch</a> · <a href="docs/i18n/QUICKSTART.fr.md">Français</a> · <a href="docs/i18n/QUICKSTART.ja-JP.md">日本語</a> · <a href="docs/i18n/QUICKSTART.ko.md">한국어</a> · <a href="docs/i18n/QUICKSTART.zh-CN.md">简体中文</a> · <a href="docs/i18n/QUICKSTART.zh-TW.md">繁體中文</a> · <a href="docs/i18n/QUICKSTART.th.md">ภาษาไทย</a></p>
 
 Run the full product locally.
 
@@ -8,7 +8,7 @@ Run the full product locally.
 
 - **Node.js:** `~24` (Node 24.x). The repo enforces this through `package.json#engines`.
 - **pnpm:** `10.33.x`. The repo pins `pnpm@10.33.2` through `packageManager`; use Corepack so the pinned version is selected automatically.
-- **OS:** macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for common setup gotchas.
+- **OS:** macOS, Linux, and WSL2 are the primary paths. If your agent CLIs run inside WSL2, use the [`WSL2 setup guide`](docs/wsl-setup.md). Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for common PowerShell setup gotchas.
 - **Optional local agent CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI, etc. If none are installed, use the BYOK API mode from Settings.
 
 ### Local agent CLI and PATH
@@ -142,7 +142,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Docker image tag
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
 # Required API token for daemon security
 # Generate one with: openssl rand -hex 32
@@ -212,6 +212,8 @@ pnpm typecheck                 # workspace typecheck
 
 `pnpm tools-dev` is the only local lifecycle entry point. Do not use the removed legacy root aliases (`pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, `pnpm start`).
 
+`tools-dev` automatically loads workspace env files before resolving ports, namespaces, and child process environments. Default precedence is `.env.development.local`, then `.env.local`, then `.env.development`, then `.env`; env files override ambient shell exports so project-local config wins. Use `--no-env-file` to disable loading or repeat `--env-file <path>` to use explicit env files instead.
+
 During local development, `tools-dev` starts the daemon first, passes its port into `apps/web`, and `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to that daemon port so the App Router app can talk to the sibling Express process without CORS setup.
 
 ## Media generation / agent dispatcher checks
@@ -272,7 +274,7 @@ location /api/ {
 | Mode | Picker value | How a request flows |
 |---|---|---|
 | **Local CLI** (default when daemon detects an agent) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → artifact parser → preview |
-| **API mode** (fallback / no CLI) | "Anthropic API" / "OpenAI API" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized to `delta/end/error` → artifact parser → preview |
+| **API mode** (fallback / no CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → provider SSE normalized to `delta/end/error` → artifact parser → preview |
 
 Both modes feed the **same** `<artifact>` parser and the **same** sandboxed iframe. The only thing that differs is the transport and the system-prompt delivery (local CLIs have no separate system channel, so the composed prompt is folded into the user message).
 

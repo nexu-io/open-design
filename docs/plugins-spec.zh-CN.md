@@ -354,6 +354,7 @@ my-plugin/
 - `compat.*`：指向继承格式文件的相对路径。loader 会把它们的内容合并进 [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts) 组装出的 OD prompt stack。
 - `specVersion`：解释此 manifest 时使用的 Open Design 插件规范版本。它独立于插件 `version`，并会冻结到 apply snapshot，便于 replay。
 - `version`：插件包自身版本。只要行为、元数据、pipeline、inputs 或随包 assets 出现用户需要审计的变化，就应该 bump。
+- `publishedAt`：可选的 ISO 8601 时间戳，表示插件首次发布到所在目录（catalog）的时间。Community 画廊的"最新"排序对 bundled 目录记录以它为准，这样新装环境也能得到真实的时间序（本地安装时间戳在首次启动整批种子时会全部并列）；用户自行安装的插件不受该字段影响，仍按本地安装/更新时间排序。第一方 bundled 插件必填（由 `e2e/tests/plugin-published-at.test.ts` 保障）；写入创作时间，后续修改不要挪动它。
 - `title_i18n` / `description_i18n`：可选本地化展示元数据。`title` 和 `description` 保持英文 fallback；UI 会按请求 locale、基础语言、英文、首个可用值的顺序解析。
 - `od.kind`：registry 里的分类（`skill` / `scenario` / `atom` / `bundle`）。
 - `od.taskKind`：四类产品场景之一（`new-generation` / `code-migration` / `figma-migration` / `tune-collab`，§1「四类产品场景」）。决定 marketplace filter、初始 inputs 模板、推荐 pipeline 起点。
@@ -1603,7 +1604,7 @@ OD 以单个 multi-arch Docker image 发布，使完整 plugin/marketplace syste
 
 ### 15.1 Image shape
 
-- **Tag**：`ghcr.io/open-design/od:<version>`，以及 moving `:latest` 与 `:edge`。
+- **Tag**：`ghcr.io/nexu-io/od:<version>`，以及 moving `:latest`。
 - **Architectures**：`linux/amd64` 与 `linux/arm64`（single manifest list）。
 - **Contents**：
   - Node 24 runtime + daemon `dist/` bundle。
@@ -1646,7 +1647,7 @@ TAVILY_API_KEY=...
 本地 laptop：
 
 ```bash
-docker run --rm -p 17456:17456 ghcr.io/open-design/od:latest
+docker run --rm -p 17456:17456 ghcr.io/nexu-io/od:latest
 open http://localhost:17456
 ```
 
@@ -1837,7 +1838,7 @@ Validation：
 
 此 phase 独立于 Phases 1–4；Phase 1 落地后即可并行，因为 headless mode 与 daemon contract 从 Phase 1 起就稳定。
 
-- **Container image（第 1 周）：** multi-arch `linux/amd64` + `linux/arm64` Dockerfile，内容见 §15.1；CI 在每次 main commit 推 `:edge`，tag 时推 `:<version>`。
+- **Container image（第 1 周）：** multi-arch `linux/amd64` + `linux/arm64` Dockerfile，内容见 §15.1；release automation 发布 `:<version>` 与 `:latest`，tag push 发布对应 image。
 - **Reference manifests：** `tools/pack/docker-compose.yml` 与 `tools/pack/helm/`。compose file 展示 daemon + reverse proxy pattern；Helm chart 参数化任意云的 volume + secret patterns。
 - **Bound-API-token guard（Phase 5 新增能力）：** daemon 在没有 `OD_API_TOKEN` 时拒绝绑定 `OD_BIND_HOST=0.0.0.0`；`/api/*` 上 bearer-token middleware（仅 loopback host 跳过）。
 - **S3-compatible blob stores 的 `ProjectStorage` adapter**（适用于 AWS S3、GCS S3-compat、Azure Blob via shim、Aliyun OSS、Tencent COS、Huawei OBS）。

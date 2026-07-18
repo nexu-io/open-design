@@ -28,7 +28,9 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
+const publishDaemonRunFinishedEvent = vi.fn();
 const fetchVelaLoginStatus = vi.fn();
+const fetchAmrWalletSnapshot = vi.fn();
 const launchAntigravityOauth = vi.fn();
 const streamViaDaemon = vi.fn();
 const streamMessage = vi.fn();
@@ -54,11 +56,16 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
+  GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   fetchVelaLoginStatus: (...args: unknown[]) => fetchVelaLoginStatus(...args),
+  fetchAmrWalletSnapshot: (...args: unknown[]) => fetchAmrWalletSnapshot(...args),
+  formatVelaBalanceUsd: (raw: string | null | undefined) => (raw == null ? null : `$${raw}`),
   launchAntigravityOauth: (...args: unknown[]) => launchAntigravityOauth(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
+  publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -113,10 +120,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: ({
     streaming,
     messages,
-    onRetry,
     onAuthorizeAndRetry,
     onLaunchTerminalAuth,
     onSendBoardCommentAttachments,
@@ -125,7 +132,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   }: {
     streaming: boolean;
     messages?: ChatMessage[];
-    onRetry?: (message: ChatMessage) => void;
     onAuthorizeAndRetry?: (message: ChatMessage) => void;
     onLaunchTerminalAuth?: () => void;
     onSendBoardCommentAttachments: (attachments: unknown[]) => void;
@@ -135,7 +141,15 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     const failedAssistant =
       [...(messages ?? [])]
         .reverse()
-        .find((message) => message.role === 'assistant' && message.runStatus === 'failed') ?? null;
+        .find(
+          (message) =>
+            message.role === 'assistant' &&
+            (
+              message.runStatus === 'failed' ||
+              message.resultDeliveryState === 'no_result' ||
+              message.resultDeliveryState === 'delivery_failed'
+            ),
+        ) ?? null;
     const errorCode = failedAssistant?.events
       ?.filter((event) => event.kind === 'status' && event.label === 'error')
       .map((event) => (event as { code?: string }).code ?? null)
@@ -149,16 +163,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
       failedAssistant?.agentId !== 'amr'
       && failedAssistant?.agentId !== 'antigravity'
       && (errorCode === 'AGENT_AUTH_REQUIRED' || errorCode === 'UNAUTHORIZED' || errorCode === 'RATE_LIMITED');
-    const showRetryAction = Boolean(
-      failedAssistant && onRetry && (
-        errorCode == null
-        || errorCode === 'AMR_INSUFFICIENT_BALANCE'
-        || errorCode === 'UPSTREAM_UNAVAILABLE'
-        || showLaunchTerminalAction
-        || showSwitchToAmrPromotion
-        || (!showAuthorizeAction && !showLaunchTerminalAction)
-      ),
-    );
     return (
       <>
       <output data-testid="workspace-streaming-state">{streaming ? 'streaming' : 'idle'}</output>
@@ -183,17 +187,6 @@ vi.mock('../../src/components/FileWorkspace', () => ({
       >
         workspace send
       </button>
-      {showRetryAction ? (
-        <button
-          type="button"
-          data-testid="workspace-retry"
-          onClick={() => {
-            if (failedAssistant && onRetry) onRetry(failedAssistant);
-          }}
-        >
-          retry
-        </button>
-      ) : null}
       {showAuthorizeAction && onAuthorizeAndRetry ? (
         <button
           type="button"
@@ -250,12 +243,18 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow,
     onNewConversation,
     error,
+    onRetry,
   }: {
     activeConversationId: string | null;
     conversations: Conversation[];
     streaming: boolean;
     sendDisabled?: boolean;
-    queuedItems?: Array<{ id: string; prompt: string }>;
+    queuedItems?: Array<{
+      id: string;
+      prompt: string;
+      attachments?: unknown[];
+      commentAttachments?: unknown[];
+    }>;
     previewComments?: PreviewComment[];
     attachedComments?: PreviewComment[];
     messages?: ChatMessage[];
@@ -270,8 +269,20 @@ vi.mock('../../src/components/ChatPane', () => ({
     ) => void;
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
+    onRetry?: (message: ChatMessage) => void;
   }) => {
     const attached = attachedComments ?? [];
+    const retryTarget = [...(messages ?? [])]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === 'assistant'
+          && (
+            message.runStatus === 'failed'
+            || message.resultDeliveryState === 'no_result'
+            || message.resultDeliveryState === 'delivery_failed'
+          ),
+      );
     return (
       <section>
         <output data-testid="active-conversation">{activeConversationId}</output>
@@ -311,15 +322,27 @@ vi.mock('../../src/components/ChatPane', () => ({
             .join('\n')}
         </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
-        {queuedItems?.map((item, index) => (
-          <button
-            key={item.id}
-            type="button"
-            data-testid={`send-queued-${index}`}
-            onClick={() => onSendQueuedNow?.(item.id)}
-          >
-            {item.prompt}
+        {retryTarget && onRetry ? (
+          <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
+            retry
           </button>
+        ) : null}
+        {queuedItems?.map((item, index) => (
+          <div key={item.id}>
+            <button
+              type="button"
+              data-testid={`send-queued-${index}`}
+              onClick={() => onSendQueuedNow?.(item.id)}
+            >
+              {item.prompt}
+            </button>
+            <output data-testid={`queued-attachment-count-${index}`}>
+              {item.attachments?.length ?? 0}
+            </output>
+            <output data-testid={`queued-comment-count-${index}`}>
+              {item.commentAttachments?.length ?? 0}
+            </output>
+          </div>
         ))}
         {conversations.map((conversation) => (
           <button
@@ -571,6 +594,19 @@ describe('ProjectView conversation run isolation', () => {
     });
     reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
     fetchVelaLoginStatus.mockResolvedValue({ loggedIn: false });
+    // Positive wallet balance so the pre-run AMR balance gate lets sends
+    // through; the gate's own behavior is covered in
+    // tests/runtime/amr-balance-gate.test.ts.
+    fetchAmrWalletSnapshot.mockResolvedValue({
+      status: 'available',
+      profile: 'prod',
+      user: null,
+      balanceUsd: '10.00',
+      updatedAt: null,
+      fetchedAt: '2026-07-02T00:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    });
     launchAntigravityOauth.mockResolvedValue({ ok: true });
     streamViaDaemon.mockImplementation(async () => {});
   });
@@ -652,6 +688,196 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
+  it('hard-blocks the AMR send and shows the balance dialog when the wallet is empty', async () => {
+    conversationAMessages = [];
+    // Both the cached read and the refresh confirmation report an empty
+    // wallet, so the send must be hard-blocked before any run spawns.
+    fetchAmrWalletSnapshot.mockResolvedValue({
+      status: 'available',
+      profile: 'prod',
+      user: null,
+      balanceUsd: '0',
+      updatedAt: null,
+      fetchedAt: '2026-07-02T00:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    });
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it('soft-warns on a low AMR wallet and proceeds with the same send on confirmation', async () => {
+    conversationAMessages = [];
+    fetchAmrWalletSnapshot.mockResolvedValue({
+      status: 'available',
+      profile: 'prod',
+      user: { id: 'u-paid', plan: 'plus' },
+      balanceUsd: '1.20',
+      updatedAt: null,
+      fetchedAt: '2026-07-02T00:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    });
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    // The reminder holds the send: no run yet.
+    await waitFor(() => expect(screen.getByTestId('amr-low-balance-dialog')).toBeTruthy());
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+
+    // "Start anyway" resolves the pending send — the run starts without a re-submit.
+    fireEvent.click(screen.getByTestId('amr-low-balance-dialog-proceed'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'amr' }),
+    );
+  });
+
+  it('does not soft-block a Free user with a low AMR wallet', async () => {
+    conversationAMessages = [];
+    fetchAmrWalletSnapshot.mockResolvedValue({
+      status: 'available',
+      profile: 'prod',
+      user: { id: 'u-free', plan: 'free' },
+      balanceUsd: '1.20',
+      updatedAt: null,
+      fetchedAt: '2026-07-13T00:00:00.000Z',
+      stale: false,
+      source: 'vela_api',
+    });
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
+  });
+
+  it('keeps an AMR send queued when the user switches conversations during the gate check', async () => {
+    conversationAMessages = [];
+    fetchPreviewComments.mockResolvedValue([previewComment]);
+    let resolveWallet: (snapshot: unknown) => void = () => {};
+    fetchAmrWalletSnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWallet = resolve;
+        }),
+    );
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('attach-first-comment'));
+    await waitFor(() => expect(screen.getByTestId('attached-comment-count').textContent).toBe('1'));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(fetchAmrWalletSnapshot).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    await waitFor(() => {
+      if (!resolveConversationBMessages) throw new Error('Expected conv-b message load to be pending');
+    });
+    await act(async () => {
+      resolveConversationBMessages?.([]);
+    });
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    await act(async () => {
+      resolveWallet({
+        status: 'available',
+        profile: 'prod',
+        user: null,
+        balanceUsd: '10.00',
+        updatedAt: null,
+        fetchedAt: '2026-07-02T00:00:00.000Z',
+        stale: false,
+        source: 'vela_api',
+      });
+    });
+
+    await waitFor(() => {
+      const raw = window.localStorage.getItem('od:chat-queued-sends:project-1:v1');
+      expect(raw).toBeTruthy();
+      const queued = JSON.parse(raw ?? '[]') as Array<{
+        conversationId?: string;
+        prompt?: string;
+        commentAttachments?: Array<{ id?: string }>;
+      }>;
+      expect(queued).toEqual([
+        expect.objectContaining({
+          conversationId: 'conv-a',
+          prompt: 'hello from b',
+          commentAttachments: [expect.objectContaining({ id: previewComment.id })],
+        }),
+      ]);
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
   it('does not create duplicate empty conversations while a fresh conversation is loading', async () => {
     renderProjectView();
 
@@ -704,6 +930,111 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
     expect(showCompletionNotification).not.toHaveBeenCalled();
+  });
+
+  it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [
+          { kind: 'text', text: 'I finished the design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+        ],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((message) => message.id === succeededAssistant.id && message.resultDeliveryState === 'no_result');
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        resultDeliveryState: 'no_result',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'status',
+            label: 'error',
+            code: 'ARTIFACT_NOT_FOUND',
+          }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toMatch(
+      /finished without producing a deliverable project file/i,
+    );
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps a reloaded report-only Design run without file writes on the success path', async () => {
+    // Prose-only turns (image analysis, audits) are legitimate zero-file
+    // Design results (#5714, #5718); reload must not downgrade them.
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [{ kind: 'text', text: 'The hero image contrast is too low.' }],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id && message.producedFiles !== undefined,
+        );
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.resultDeliveryState).toBeUndefined();
+      expect(recoveredMessage?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
   it('does not reload or reattach when selecting the active streaming conversation', async () => {
@@ -1353,6 +1684,99 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
+  it('replaces a raw prompt-head project name with the first prompt summary', async () => {
+    const promptNamedProject: Project = {
+      ...project,
+      name: 'hello from b',
+      metadata: { kind: 'prototype', nameSource: 'prompt' },
+    };
+    const emptyConversation: Conversation = {
+      id: 'conv-empty',
+      projectId: promptNamedProject.id,
+      title: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView(config, promptNamedProject);
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() =>
+      expect(patchConversation).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        emptyConversation.id,
+        { title: 'Hello From B' },
+      ),
+    );
+    await waitFor(() =>
+      expect(patchProject).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        expect.objectContaining({
+          name: 'Hello From B',
+          metadata: expect.objectContaining({ nameSource: 'prompt' }),
+        }),
+      ),
+    );
+  });
+
+  it('replaces the first-turn fallback title with an agent-generated title', async () => {
+    const promptNamedProject: Project = {
+      ...project,
+      name: 'hello from b',
+      metadata: { kind: 'prototype', nameSource: 'prompt' },
+    };
+    const emptyConversation: Conversation = {
+      id: 'conv-empty',
+      projectId: promptNamedProject.id,
+      title: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(async (input: {
+      handlers: { onAgentEvent: (event: { kind: 'conversation_title'; title: string }) => void };
+    }) => {
+      input.handlers.onAgentEvent({ kind: 'conversation_title', title: 'Agent Title' });
+    });
+
+    renderProjectView(config, promptNamedProject);
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      titleGeneration: { enabled: true },
+    }));
+    await waitFor(() =>
+      expect(patchConversation).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        emptyConversation.id,
+        { title: 'Agent Title' },
+      ),
+    );
+    await waitFor(() =>
+      expect(patchProject).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        expect.objectContaining({
+          name: 'Agent Title',
+          metadata: expect.objectContaining({ nameSource: 'agent' }),
+        }),
+      ),
+    );
+  });
+
   it('forwards staged skill and external context selections into the next daemon run payload', async () => {
     renderProjectView();
 
@@ -1381,25 +1805,23 @@ describe('ProjectView conversation run isolation', () => {
     }));
   });
 
-  it('notifies when an API-mode chat completes without a daemon run status transition', async () => {
+  it('notifies when a BYOK OpenCode chat completes without a daemon run status transition', async () => {
+    listConversations.mockResolvedValue(
+      conversations.map((conversation) => ({ ...conversation, sessionMode: 'chat' as const })),
+    );
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
-    streamMessage.mockImplementation(
-      async (
-        _config: unknown,
-        _systemPrompt: unknown,
-        _history: unknown,
-        _signal: unknown,
-        handlers: { onDelta: (delta: string) => void; onDone: () => void },
-      ) => {
-        handlers.onDelta('api response');
-        handlers.onDone();
-      },
-    );
+    streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onDelta: (delta: string) => void; onDone: () => void };
+    }) => {
+      options.handlers.onDelta('api response');
+      options.handlers.onDone();
+    });
 
     renderProjectView({
       ...config,
       mode: 'api',
+      apiProtocol: 'openai',
       apiKey: 'test-key',
       model: 'api-model',
     });
@@ -1409,8 +1831,104 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(streamMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'test-key' }),
+      model: 'api-model',
+    }));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+  });
+
+  it('routes keyless local Ollama BYOK chats through OpenCode with provider metadata', async () => {
+    listMessages.mockResolvedValue([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: {
+        protocol: 'ollama',
+        apiKey: '',
+        baseUrl: 'http://localhost:11434',
+        requiresApiKey: false,
+        apiVersion: '',
+        model: 'llama3.2',
+      },
+      model: 'llama3.2',
+    }));
+  });
+
+  it('routes the keyless vLLM BYOK preset through OpenCode with provider metadata', async () => {
+    listMessages.mockResolvedValue([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      apiProviderBaseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'model',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: {
+        protocol: 'openai',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:8000/v1',
+        requiresApiKey: false,
+        apiVersion: '',
+        model: 'model',
+      },
+      model: 'model',
+    }));
+  });
+
+  it('keeps Bedrock BYOK chats on the client-side unsupported path', async () => {
+    listMessages.mockResolvedValue([]);
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      apiKey: '',
+      model: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-error').textContent).toBe(
+        'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.',
+      ),
+    );
+    expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('converges a daemon chat back to idle when the first AMR run fails authentication', async () => {
@@ -1449,7 +1967,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('keeps retry available after a structured AMR insufficient-balance error', async () => {
+  it('keeps Chat retry available after a structured AMR insufficient-balance error', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1480,10 +1998,10 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
@@ -1519,9 +2037,9 @@ describe('ProjectView conversation run isolation', () => {
     renderProjectView();
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
@@ -1538,6 +2056,54 @@ describe('ProjectView conversation run isolation', () => {
       expect(summary).toContain(`${retryCall.assistantMessageId}|running|`);
     });
   });
+
+  it.each(['no_result', 'delivery_failed'] as const)(
+    'starts a replacement run when retrying a %s delivery failure',
+    async (resultDeliveryState) => {
+      const userMessage: ChatMessage = {
+        id: `user-${resultDeliveryState}`,
+        role: 'user',
+        content: 'make an editorial landing page',
+        createdAt: 1,
+      };
+      const deliveryFailure: ChatMessage = {
+        id: `assistant-${resultDeliveryState}`,
+        role: 'assistant',
+        content: 'The design result was not delivered.',
+        createdAt: 2,
+        runStatus: 'succeeded',
+        resultDeliveryState,
+        sessionMode: 'design',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design result was not delivered.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+      };
+      conversationAMessages = [userMessage, deliveryFailure];
+      fetchChatRunStatus.mockResolvedValue(null);
+      streamViaDaemon.mockImplementation(async () => {});
+
+      renderProjectView();
+
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+      await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
+
+      fireEvent.click(screen.getByTestId('chat-retry'));
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
+        assistantMessageId?: string;
+        history?: ChatMessage[];
+      };
+      expect(retryCall.assistantMessageId).toBeTruthy();
+      expect(retryCall.assistantMessageId).not.toBe(deliveryFailure.id);
+      expect(retryCall.history).toEqual([userMessage]);
+    },
+  );
 
   it('routes workspace authorize recovery through AMR mode switching for structured auth failures', async () => {
     conversationAMessages = [];
@@ -1652,7 +2218,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('routes workspace retry and terminal launch recovery for antigravity auth failures', async () => {
+  it('routes Chat retry and terminal launch recovery for antigravity auth failures', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1694,16 +2260,16 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-launch-terminal')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('workspace-launch-terminal'));
     await waitFor(() => expect(launchAntigravityOauth).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('routes workspace retry and terminal launch recovery for antigravity rate limits', async () => {
+  it('routes Chat retry and terminal launch recovery for antigravity rate limits', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1745,12 +2311,12 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-launch-terminal')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('workspace-launch-terminal'));
     await waitFor(() => expect(launchAntigravityOauth).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('workspace-retry'));
+    fireEvent.click(screen.getByTestId('chat-retry'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
@@ -1795,7 +2361,7 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('chat-retry')).toBeTruthy());
     expect(screen.queryByTestId('workspace-switch-amr')).toBeNull();
     expect(screen.queryByTestId('workspace-authorize')).toBeNull();
     expect(screen.queryByTestId('workspace-launch-terminal')).toBeNull();
@@ -1807,6 +2373,7 @@ function renderProjectView(
   renderProject: Project = project,
   renderAgents: AgentInfo[] = [
     { id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] },
+    { id: 'byok-opencode', name: 'BYOK OpenCode', bin: 'opencode', available: true, models: [] },
   ],
   handlers: {
     onModeChange?: (mode: 'daemon' | 'api') => void;

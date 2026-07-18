@@ -1,4 +1,5 @@
 import { execAgentFile } from './invocation.js';
+import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -52,6 +53,9 @@ const ANTIGRAVITY_QUOTA_GUIDANCE =
 const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
+const CLAUDE_AUTH_GUIDANCE =
+  'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If Open Design was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
 }
@@ -70,6 +74,10 @@ export function antigravityQuotaGuidance(): string {
 
 export function reasonixAuthGuidance(): string {
   return REASONIX_AUTH_GUIDANCE;
+}
+
+export function claudeAuthGuidance(): string {
+  return CLAUDE_AUTH_GUIDANCE;
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -130,10 +138,40 @@ export function isReasonixAuthFailureText(text: string): boolean {
   );
 }
 
+export function isClaudeAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  try {
+    const parsed = JSON.parse(value) as { authenticated?: unknown; loggedIn?: unknown };
+    if (parsed.authenticated === true || parsed.loggedIn === true) return false;
+    if (parsed.authenticated === false || parsed.loggedIn === false) return true;
+  } catch {
+    // Fall through to text matching below.
+  }
+  if (/"authenticated"\s*:\s*true/i.test(value) || /"loggedIn"\s*:\s*true/i.test(value)) {
+    return false;
+  }
+  return (
+    /"authenticated"\s*:\s*false/i.test(value) ||
+    /"loggedIn"\s*:\s*false/i.test(value) ||
+    /not authenticated/i.test(value) ||
+    /not logged[ _-]?in/i.test(value) ||
+    /authentication required/i.test(value) ||
+    /please (?:sign|log)[ _-]?in/i.test(value)
+  );
+}
+
 export function classifyAgentAuthFailure(
   agentId: string,
   text: string,
 ): AgentAuthProbeResult | null {
+  if (agentId === 'claude') {
+    if (!isClaudeAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: claudeAuthGuidance(),
+    };
+  }
   if (agentId === 'cursor-agent') {
     if (!isCursorAuthFailureText(text)) return null;
     return {
@@ -268,11 +306,29 @@ function genericAuthGuidance(agentName: string): string {
 // ways the generic matcher would misread). The generic classifier is only a
 // fallback for adapters with no tailored classifier of their own.
 const TAILORED_AUTH_AGENTS = new Set([
+  'claude',
   'cursor-agent',
   'deepseek',
   'antigravity',
   'reasonix',
 ]);
+
+function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = env[key];
+    return typeof value === 'string' && value.trim().length > 0;
+  });
+}
+
+function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
+  if (agentId === 'codex') {
+    return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
+  }
+  if (agentId === 'claude') {
+    return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+  }
+  return false;
+}
 
 // Classify an auth-probe's combined output into a missing-auth result, or
 // null when the output does not look like an auth failure. Agents with a
@@ -281,14 +337,15 @@ const TAILORED_AUTH_AGENTS = new Set([
 // HTTP/text classifier so it still gets a usable signal without bespoke
 // regexes.
 function classifyProbedAuthFailure(
-  def: Pick<RuntimeAgentDef, 'id' | 'name'>,
+  classifierId: string,
+  agentName: string,
   text: string,
 ): AgentAuthProbeResult | null {
-  if (TAILORED_AUTH_AGENTS.has(def.id)) {
-    return classifyAgentAuthFailure(def.id, text);
+  if (TAILORED_AUTH_AGENTS.has(classifierId)) {
+    return classifyAgentAuthFailure(classifierId, text);
   }
   if (classifyAgentServiceFailure(text) === 'AGENT_AUTH_REQUIRED') {
-    return { status: 'missing', message: genericAuthGuidance(def.name || def.id) };
+    return { status: 'missing', message: genericAuthGuidance(agentName) };
   }
   return null;
 }
@@ -304,6 +361,23 @@ export async function probeAgentAuthStatus(
 ): Promise<AgentAuthProbeResult | null> {
   const probe = def.authProbe;
   if (!probe) return null;
+  // Local profiles inherit a base adapter's authProbe but run under the profile
+  // id; use the base adapter's classifier identity when present so its tailored
+  // auth parsing / API-key short-circuit is preserved instead of falling
+  // through to the generic classifier (#4456).
+  const classifierId = probe.classifierAgentId ?? def.id;
+  const agentName = def.name || def.id;
+  if (hasProbeSatisfyingApiKey(classifierId, env)) return { status: 'ok' };
+  // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
+  // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
+  // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a
+  // working custom-provider install isn't misreported as missing auth (#4456).
+  if (classifierId === 'codex') {
+    const providerEnvKey = await readCodexProviderEnvKey(env);
+    if (providerEnvKey && hasNonEmptyEnv(env, [providerEnvKey])) {
+      return { status: 'ok' };
+    }
+  }
   try {
     const { stdout, stderr } = await execAgentFile(resolvedBin, probe.args, {
       env,
@@ -313,7 +387,7 @@ export async function probeAgentAuthStatus(
     const stdoutText = typeof stdout === 'string' ? stdout : '';
     const stderrText = typeof stderr === 'string' ? stderr : '';
     const output = `${stdoutText}\n${stderrText}`;
-    const failure = classifyProbedAuthFailure(def, output);
+    const failure = classifyProbedAuthFailure(classifierId, agentName, output);
     if (failure) {
       return withProbeTails(
         { ...failure, exitCode: 0, signal: null },
@@ -338,7 +412,7 @@ export async function probeAgentAuthStatus(
     // is meaningful as an exit code.
     const numericExit = typeof err.code === 'number' ? err.code : null;
     const childSignal = typeof err.signal === 'string' ? err.signal : null;
-    const failure = classifyProbedAuthFailure(def, output);
+    const failure = classifyProbedAuthFailure(classifierId, agentName, output);
     if (failure) {
       return withProbeTails(
         { ...failure, exitCode: numericExit, signal: childSignal },

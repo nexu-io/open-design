@@ -3,15 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presentation Template</title>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Run a Sales-Floor Training like a Top Retail Coach - Professional training</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <style>
+        /* playful doodle family: peach paper + ink outlines + red marker accent */
         :root {
             --bg: #F0C8A0;
             --bg-alt: #E8B88E;
             --text: #1A1A1A;
-            --accent: #1A1A1A;
+            --soft: #473C2E;
+            --accent: #8E2B1A; /* darkened marker red for AA contrast on peach */
             --light: #F7DEC6;
+            --ease-out: cubic-bezier(.16, 1, .3, 1);
         }
 
         * {
@@ -55,6 +58,43 @@
             visibility: visible;
         }
 
+        /* Entrance motion: transform + opacity only, staggered ease-out */
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* from-only keyframe: animates back to the element's own opacity,
+           so translucent doodles (e.g. 0.12 blobs) keep their value */
+        @keyframes fade-in {
+            from { opacity: 0; }
+        }
+
+        .slide.active > * {
+            animation: rise 0.6s var(--ease-out) both;
+        }
+
+        .slide.active > :nth-child(2) { animation-delay: 0.07s; }
+        .slide.active > :nth-child(3) { animation-delay: 0.14s; }
+        .slide.active > :nth-child(4) { animation-delay: 0.21s; }
+
+        /* doodles and transformed elements: fade only, never touch their transforms */
+        .slide.active > .doodle,
+        .slide.active > svg,
+        .slide.active > .vertical-text {
+            animation: fade-in 0.8s var(--ease-out) both;
+            animation-delay: 0.3s;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active > *,
+            .slide.active > .doodle,
+            .slide.active > svg,
+            .slide.active > .vertical-text {
+                animation: none;
+            }
+        }
+
         /* Navigation */
         .nav-controls {
             position: fixed;
@@ -70,13 +110,14 @@
             width: 48px;
             height: 48px;
             border: 2px solid var(--text);
+            border-radius: 50% 45% 52% 48% / 48% 52% 45% 55%;
             background: transparent;
             color: var(--text);
             font-family: 'Space Grotesk', sans-serif;
             font-size: 1.2rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background 0.25s var(--ease-out), color 0.25s var(--ease-out), transform 0.25s var(--ease-out);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -85,6 +126,7 @@
         .nav-btn:hover {
             background: var(--text);
             color: var(--bg);
+            transform: rotate(-3deg);
         }
 
         .slide-counter {
@@ -99,9 +141,9 @@
             bottom: 0;
             left: 0;
             height: 4px;
-            background: var(--text);
+            background: var(--accent);
             z-index: 1000;
-            transition: width 0.4s ease;
+            transition: width 0.4s var(--ease-out);
         }
 
         /* Doodle SVGs */
@@ -190,15 +232,17 @@
             font-size: clamp(2.5rem, 6vw, 5rem);
             font-weight: 700;
             line-height: 1;
+            letter-spacing: -0.02em;
             margin-bottom: 2rem;
-            max-width: 70%;
+            max-width: 62%;
         }
 
         .slide-1 .subtitle {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 500;
-            max-width: 400px;
+            max-width: 440px;
             line-height: 1.6;
+            color: var(--soft);
         }
 
         .slide-1 .doodle-blob-1 {
@@ -217,7 +261,7 @@
             content: '';
             width: 180px;
             height: 200px;
-            background: var(--text);
+            background: var(--accent);
             border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
         }
 
@@ -233,13 +277,15 @@
 
         .slide-1 .vertical-text {
             position: absolute;
-            right: 2rem;
+            right: 1.25rem;
             top: 50%;
-            transform: translateY(-50%) rotate(90deg);
-            font-family: 'Syne', sans-serif;
-            font-size: 1.5rem;
-            font-weight: 700;
-            letter-spacing: 0.1em;
+            transform: translateY(-50%);
+            writing-mode: vertical-rl;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.25em;
+            color: var(--soft);
         }
 
         /* ========================================
@@ -250,12 +296,12 @@
         }
 
         .slide-2 .section-label {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            letter-spacing: 0.15em;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
             margin-bottom: 2rem;
-            opacity: 0.7;
+            color: var(--accent);
         }
 
         .slide-2 .toc-title {
@@ -297,6 +343,7 @@
             font-weight: 800;
             line-height: 1;
             margin-bottom: 0.5rem;
+            color: var(--accent);
         }
 
         .toc-item .label {
@@ -340,7 +387,7 @@
         .slide-3 .body-text {
             font-size: 1rem;
             line-height: 1.7;
-            opacity: 0.9;
+            color: var(--soft);
         }
 
         .slide-3 .doodle-frame {
@@ -361,7 +408,7 @@
             left: 15px;
             width: 190px;
             height: 250px;
-            background: var(--text);
+            background: var(--accent);
             border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
         }
 
@@ -404,44 +451,57 @@
         .chart-area {
             flex: 1;
             display: flex;
-            align-items: flex-end;
-            gap: 2rem;
+            align-items: stretch;
+            padding-left: 3rem;
             padding-bottom: 2rem;
             position: relative;
+            min-height: 0;
         }
 
         .chart-bars {
             display: flex;
-            align-items: flex-end;
+            align-items: stretch;
             gap: 1.5rem;
-            height: 100%;
             flex: 1;
-            padding-left: 3rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
             border-left: 3px solid var(--text);
             border-bottom: 3px solid var(--text);
             padding-bottom: 1rem;
             padding-top: 2rem;
         }
 
+        /* grid so the inline percentage heights resolve against a definite track */
         .bar-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: minmax(0, 1fr) auto;
+            align-items: end;
+            justify-items: center;
+            column-gap: 8px;
+            row-gap: 0.75rem;
             flex: 1;
-            gap: 0.5rem;
         }
 
         .bar {
             width: 100%;
-            max-width: 80px;
+            max-width: 56px;
             background: var(--text);
-            transition: height 0.8s ease;
             position: relative;
+        }
+
+        .bar-group .bar-label {
+            grid-column: 1 / -1;
         }
 
         .bar.alt {
             background: transparent;
             border: 3px solid var(--text);
+        }
+
+        /* marker highlight on the latest quarter */
+        .bar-group:last-child .bar:not(.alt) {
+            background: var(--accent);
         }
 
         .bar-label {
@@ -453,14 +513,17 @@
         .y-axis {
             position: absolute;
             left: 0;
-            top: 0;
-            bottom: 3rem;
+            width: 2.4rem;
+            top: 2rem;
+            bottom: 4.85rem;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            align-items: flex-end;
+            text-align: right;
             font-size: 0.75rem;
             font-weight: 500;
-            padding-right: 0.5rem;
+            color: var(--soft);
         }
 
         .slide-4 .doodle-star {
@@ -469,6 +532,10 @@
             top: 30%;
             width: 150px;
             height: 150px;
+        }
+
+        .slide-4 .doodle-star .scribble-line {
+            stroke: var(--accent);
         }
 
         /* ========================================
@@ -487,7 +554,7 @@
 
         .slide-5 .team-sub {
             font-size: 1rem;
-            opacity: 0.7;
+            color: var(--soft);
             margin-bottom: 3rem;
         }
 
@@ -522,8 +589,12 @@
             width: 60px;
             height: 60px;
             background: var(--text);
-            border-radius: 50%;
+            border-radius: 55% 45% 48% 52% / 50% 55% 45% 50%;
             margin-bottom: 1rem;
+        }
+
+        .team-card:nth-child(odd) .avatar-placeholder {
+            background: var(--accent);
         }
 
         .team-card .name {
@@ -535,7 +606,7 @@
 
         .team-card .role {
             font-size: 0.85rem;
-            opacity: 0.7;
+            color: var(--soft);
         }
 
         .slide-5 .doodle-squiggle {
@@ -596,6 +667,11 @@
             font-family: 'Syne', sans-serif;
             font-size: 2rem;
             font-weight: 800;
+            color: var(--accent);
+        }
+
+        .service-block.filled .block-num {
+            color: var(--bg);
         }
 
         .service-block .block-title {
@@ -608,7 +684,11 @@
         .service-block .block-desc {
             font-size: 0.9rem;
             line-height: 1.5;
-            opacity: 0.8;
+            color: var(--soft);
+        }
+
+        .service-block.filled .block-desc {
+            color: var(--light);
         }
 
         /* ========================================
@@ -674,8 +754,9 @@
         }
 
         .step-node.filled {
-            background: var(--text);
-            color: var(--bg);
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--light);
         }
 
         .step-title {
@@ -688,7 +769,7 @@
 
         .step-desc {
             font-size: 0.8rem;
-            opacity: 0.7;
+            color: var(--soft);
             max-width: 160px;
             line-height: 1.4;
         }
@@ -730,17 +811,18 @@
 
         .stat-num {
             font-family: 'Syne', sans-serif;
-            font-size: clamp(4rem, 8vw, 7rem);
+            font-size: clamp(3.2rem, 6.5vw, 5.5rem);
             font-weight: 800;
             line-height: 1;
+            letter-spacing: -0.02em;
             margin-bottom: 1rem;
         }
 
         .stat-label {
             font-size: 1rem;
             font-weight: 500;
-            opacity: 0.8;
-            max-width: 200px;
+            color: var(--soft);
+            max-width: 220px;
         }
 
         .stat-item:nth-child(1) .stat-num { transform: rotate(-1deg); }
@@ -753,9 +835,9 @@
             bottom: 10%;
             width: 250px;
             height: 250px;
-            background: var(--text);
+            background: var(--accent);
             border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-            opacity: 0.08;
+            opacity: 0.12;
         }
 
         /* ========================================
@@ -774,7 +856,7 @@
 
         .slide-9 .gallery-sub {
             font-size: 1rem;
-            opacity: 0.7;
+            color: var(--soft);
             margin-bottom: 2.5rem;
         }
 
@@ -822,18 +904,20 @@
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--text);
-            opacity: 0.5;
+            opacity: 0.65;
         }
 
         .gallery-tag {
             position: absolute;
             bottom: 1rem;
             left: 1rem;
-            background: var(--text);
-            color: var(--bg);
+            background: var(--accent);
+            color: var(--light);
             padding: 0.4rem 0.8rem;
             font-size: 0.75rem;
             font-weight: 600;
+            letter-spacing: 0.04em;
+            transform: rotate(-1deg);
         }
 
         /* ========================================
@@ -855,9 +939,12 @@
         }
 
         .slide-10 .closing-sub {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 500;
-            opacity: 0.8;
+            color: var(--soft);
+            max-width: 56ch;
+            margin-left: auto;
+            margin-right: auto;
             margin-bottom: 3rem;
         }
 
@@ -875,7 +962,7 @@
             left: 8px;
             right: -8px;
             bottom: -8px;
-            border: 3px solid var(--text);
+            border: 3px solid var(--accent);
             z-index: -1;
         }
 
@@ -965,15 +1052,15 @@
 
         <!-- ==================== SLIDE 1: TITLE ==================== -->
         <div class="slide slide-1 active" data-index="0">
-            <div class="date-large">02.05.26</div>
-            <div class="title-main">Creative Direction & Visual Systems</div>
-            <div class="subtitle">A template presentation for bold ideas, raw expression, and unfiltered storytelling. Built with expressive typography and organic forms.</div>
+            <div class="date-large">Floor Coach</div>
+            <div class="title-main">Run a Sales-Floor Training like a Top Retail Coach</div>
+            <div class="subtitle">Professional Training · Consultative Selling — the flow, the role-plays, and the daily habit that lifts conversion. Built for store associates and floor managers.</div>
 
             <div class="doodle-blob-1 doodle"></div>
             <div class="doodle-blob-2 doodle"></div>
             <div class="vertical-text">SCROLL DOWN &rarr;</div>
 
-            <svg class="doodle" style="position:absolute; bottom:15%; left:5%; width:120px; height:60px;" viewBox="0 0 120 60">
+            <svg class="doodle" style="position:absolute; bottom:8%; left:42%; width:120px; height:60px;" viewBox="0 0 120 60">
                 <path class="scribble-line" d="M5,30 Q20,5 35,30 T65,30 T95,30" />
                 <path class="scribble-line" d="M10,40 Q25,20 40,40 T70,40" />
             </svg>
@@ -987,27 +1074,27 @@
             <div class="toc-grid">
                 <div class="toc-item">
                     <div class="num">01</div>
-                    <div class="label">Vision & Mission Statement</div>
+                    <div class="label">Why Consultative Selling Wins</div>
                 </div>
                 <div class="toc-item">
                     <div class="num">02</div>
-                    <div class="label">Market Analysis & Data Insights</div>
+                    <div class="label">Conversion Since We Rolled This Out</div>
                 </div>
                 <div class="toc-item">
                     <div class="num">03</div>
-                    <div class="label">Team Structure & Leadership</div>
+                    <div class="label">Meet Your Coaching Team</div>
                 </div>
                 <div class="toc-item">
                     <div class="num">04</div>
-                    <div class="label">Core Services & Offerings</div>
+                    <div class="label">The 5-Step Approach Toolkit</div>
                 </div>
                 <div class="toc-item">
                     <div class="num">05</div>
-                    <div class="label">Process & Workflow Timeline</div>
+                    <div class="label">Demo: Greet to Close in 5 Moves</div>
                 </div>
                 <div class="toc-item">
                     <div class="num">06</div>
-                    <div class="label">Results, Metrics & Impact</div>
+                    <div class="label">Results &amp; the Habit That Sticks</div>
                 </div>
             </div>
 
@@ -1019,11 +1106,11 @@
 
         <!-- ==================== SLIDE 3: VISION ==================== -->
         <div class="slide slide-3" data-index="2">
-            <div class="big-statement">We believe in raw expression over polished perfection. Every project begins with a question and ends with a statement.</div>
+            <div class="big-statement">A shopper who feels heard buys more, returns less, and tells a friend. A shopper who feels sold to walks. The gap between those two outcomes is one conversation — and it's coachable.</div>
 
             <div class="body-columns">
-                <div class="body-text">Our approach combines strategic thinking with intuitive design. We build visual systems that adapt, evolve, and resonate with audiences across cultures and contexts.</div>
-                <div class="body-text">Founded in 2019, we have partnered with independent artists, cultural institutions, and forward-thinking brands to create work that challenges conventions.</div>
+                <div class="body-text">Across our stores, associates who ask three discovery questions before pitching close 34% more often than associates who lead with a feature. That is not a personality trait — it is a sequence anyone on the floor can learn this week.</div>
+                <div class="body-text">This session gives every associate the same four-step approach, a script to practice in pairs, and a five-minute daily habit their shift lead checks — so the whole floor sounds like your best seller, not just one.</div>
             </div>
 
             <div class="doodle-frame doodle"></div>
@@ -1037,10 +1124,10 @@
         <!-- ==================== SLIDE 4: CHART / DATA ==================== -->
         <div class="slide slide-4" data-index="3">
             <div class="chart-header">
-                <div class="chart-title">Growth Metrics Over Four Quarters</div>
+                <div class="chart-title">Conversion Rate Since Rollout, Store #114</div>
                 <div class="chart-legend">
-                    <span><span class="legend-dot" style="background:var(--text);"></span>Revenue</span>
-                    <span><span class="legend-dot" style="background:transparent; border:2px solid var(--text);"></span>Engagement</span>
+                    <span><span class="legend-dot" style="background:var(--text);"></span>Conversion Rate</span>
+                    <span><span class="legend-dot" style="background:transparent; border:2px solid var(--text);"></span>Attach Rate</span>
                 </div>
             </div>
 
@@ -1088,29 +1175,29 @@
 
         <!-- ==================== SLIDE 5: TEAM ==================== -->
         <div class="slide slide-5" data-index="4">
-            <div class="team-title">The Collective</div>
-            <div class="team-sub">Four perspectives, one shared obsession with craft.</div>
+            <div class="team-title">Meet Your Coaching Team</div>
+            <div class="team-sub">Four roles, one shift — everyone on the floor has someone to practice with.</div>
 
             <div class="team-grid">
                 <div class="team-card">
                     <div class="avatar-placeholder"></div>
-                    <div class="name">Alex Chen</div>
-                    <div class="role">Creative Director</div>
+                    <div class="name">Dana Reyes</div>
+                    <div class="role">Floor Coach</div>
                 </div>
                 <div class="team-card">
                     <div class="avatar-placeholder"></div>
-                    <div class="name">Mira Okafor</div>
-                    <div class="role">Strategy Lead</div>
+                    <div class="name">Marcus Cole</div>
+                    <div class="role">Shift Lead</div>
                 </div>
                 <div class="team-card">
                     <div class="avatar-placeholder"></div>
-                    <div class="name">Jonas Weber</div>
-                    <div class="role">Visual Designer</div>
+                    <div class="name">Priya Anand</div>
+                    <div class="role">Lead Trainer</div>
                 </div>
                 <div class="team-card">
                     <div class="avatar-placeholder"></div>
-                    <div class="name">Suki Tanaka</div>
-                    <div class="role">Motion Artist</div>
+                    <div class="name">Jules Ferro</div>
+                    <div class="role">Peer Mentor</div>
                 </div>
             </div>
 
@@ -1122,42 +1209,42 @@
 
         <!-- ==================== SLIDE 6: SERVICES ==================== -->
         <div class="slide slide-6" data-index="5">
-            <div class="services-title">What We Do Best</div>
+            <div class="services-title">The 5-Step Approach Toolkit</div>
 
             <div class="services-collage">
                 <div class="service-block">
                     <div class="block-num">01</div>
                     <div>
-                        <div class="block-title">Brand Identity</div>
-                        <div class="block-desc">Visual systems that capture essence and scale across every touchpoint.</div>
+                        <div class="block-title">Greet &amp; Read</div>
+                        <div class="block-desc">Open with a warm, non-transactional line within 30 seconds of entry.</div>
                     </div>
                 </div>
                 <div class="service-block filled">
                     <div class="block-num">02</div>
                     <div>
-                        <div class="block-title">Art Direction</div>
-                        <div class="block-desc">Creative vision for campaigns, editorial, and cultural projects.</div>
+                        <div class="block-title">Discover</div>
+                        <div class="block-desc">Ask three open questions before naming a single product.</div>
                     </div>
                 </div>
                 <div class="service-block">
                     <div class="block-num">03</div>
                     <div>
-                        <div class="block-title">Motion Design</div>
-                        <div class="block-desc">Animation and kinetic identity that brings static brands to life.</div>
+                        <div class="block-title">Demonstrate Fit</div>
+                        <div class="block-desc">Match one or two options directly to what they just told you.</div>
                     </div>
                 </div>
                 <div class="service-block">
                     <div class="block-num">04</div>
                     <div>
-                        <div class="block-title">Digital Experiences</div>
-                        <div class="block-desc">Websites and interactive platforms with personality and purpose.</div>
+                        <div class="block-title">Handle Objections</div>
+                        <div class="block-desc">Acknowledge, ask why, then answer — never argue the price first.</div>
                     </div>
                 </div>
                 <div class="service-block filled">
                     <div class="block-num">05</div>
                     <div>
-                        <div class="block-title">Typography</div>
-                        <div class="block-desc">Custom letterforms and type systems for distinctive voices.</div>
+                        <div class="block-title">Close &amp; Follow-Up</div>
+                        <div class="block-desc">Ask for the sale plainly, then offer one relevant add-on.</div>
                     </div>
                 </div>
             </div>
@@ -1165,33 +1252,33 @@
 
         <!-- ==================== SLIDE 7: TIMELINE ==================== -->
         <div class="slide slide-7" data-index="6">
-            <div class="timeline-title">Our Process in Five Steps</div>
+            <div class="timeline-title">Demo: Watch It Run, Greet to Close</div>
 
             <div class="timeline-track">
                 <div class="timeline-step">
                     <div class="step-node filled">1</div>
-                    <div class="step-title">Discover</div>
-                    <div class="step-desc">Research, interviews, and competitive landscape analysis</div>
+                    <div class="step-title">Greet</div>
+                    <div class="step-desc">"Welcome in — first time here, or topping something up?" No chasing.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-node">2</div>
-                    <div class="step-title">Define</div>
-                    <div class="step-desc">Strategic positioning and core narrative development</div>
+                    <div class="step-title">Discover</div>
+                    <div class="step-desc">"What's the trip for — everyday wear or something specific?" No product named yet.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-node filled">3</div>
-                    <div class="step-title">Design</div>
-                    <div class="step-desc">Visual exploration, prototyping, and iteration cycles</div>
+                    <div class="step-title">Demonstrate</div>
+                    <div class="step-desc">"Based on that, these two fit best." Tied to what they just said.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-node">4</div>
-                    <div class="step-title">Develop</div>
-                    <div class="step-desc">Production, asset creation, and implementation support</div>
+                    <div class="step-title">Handle Objection</div>
+                    <div class="step-desc">"Totally fair — what's the budget you had in mind?" Ask before you answer.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-node filled">5</div>
-                    <div class="step-title">Deploy</div>
-                    <div class="step-desc">Launch support and ongoing performance measurement</div>
+                    <div class="step-title">Close</div>
+                    <div class="step-desc">"Shall I ring this up, and add the care kit?" Plain ask, one add-on.</div>
                 </div>
             </div>
 
@@ -1202,20 +1289,20 @@
 
         <!-- ==================== SLIDE 8: BIG NUMBERS ==================== -->
         <div class="slide slide-8" data-index="7">
-            <div class="stats-title">Impact by the Numbers</div>
+            <div class="stats-title">Check: Did the Habit Stick?</div>
 
             <div class="stats-grid">
                 <div class="stat-item">
-                    <div class="stat-num">47</div>
-                    <div class="stat-label">Projects delivered across three continents in the last year</div>
+                    <div class="stat-num">34%</div>
+                    <div class="stat-label">Higher close rate for associates who ask 3 discovery questions first</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-num">12</div>
-                    <div class="stat-label">Industry awards and recognitions for creative excellence</div>
+                    <div class="stat-num">2/shift</div>
+                    <div class="stat-label">Role-plays logged per associate, checked at huddle by the shift lead</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-num">98%</div>
-                    <div class="stat-label">Client retention rate with ongoing partnerships</div>
+                    <div class="stat-num">$18</div>
+                    <div class="stat-label">Average ticket lift when the add-on offer is made plainly at close</div>
                 </div>
             </div>
 
@@ -1229,38 +1316,38 @@
 
         <!-- ==================== SLIDE 9: GALLERY ==================== -->
         <div class="slide slide-9" data-index="8">
-            <div class="gallery-title">Selected Works</div>
-            <div class="gallery-sub">A glimpse into recent collaborations and independent projects.</div>
+            <div class="gallery-title">Practice: Pair Up and Run These</div>
+            <div class="gallery-sub">Rotate partners every 5 minutes. One plays the shopper, one plays the associate.</div>
 
             <div class="gallery-collage">
                 <div class="gallery-item">
-                    <div class="gallery-placeholder">IMG 01</div>
-                    <div class="gallery-tag">Editorial</div>
+                    <div class="gallery-placeholder">Scenario 01</div>
+                    <div class="gallery-tag">The Impatient Shopper</div>
                 </div>
                 <div class="gallery-item">
-                    <div class="gallery-placeholder">IMG 02</div>
-                    <div class="gallery-tag">Identity</div>
+                    <div class="gallery-placeholder">Scenario 02</div>
+                    <div class="gallery-tag">The Price Objection</div>
                 </div>
                 <div class="gallery-item">
-                    <div class="gallery-placeholder">IMG 03</div>
-                    <div class="gallery-tag">Motion</div>
+                    <div class="gallery-placeholder">Scenario 03</div>
+                    <div class="gallery-tag">The Silent Browser</div>
                 </div>
                 <div class="gallery-item">
-                    <div class="gallery-placeholder">IMG 04</div>
-                    <div class="gallery-tag">Campaign</div>
+                    <div class="gallery-placeholder">Scenario 04</div>
+                    <div class="gallery-tag">The Add-On Moment</div>
                 </div>
             </div>
         </div>
 
         <!-- ==================== SLIDE 10: CLOSING ==================== -->
         <div class="slide slide-10" data-index="9">
-            <div class="closing-big">Thank You<br>Let Us Talk</div>
-            <div class="closing-sub">Questions, projects, or just a conversation about ideas.</div>
+            <div class="closing-big">One Rep,<br>Every Shift</div>
+            <div class="closing-sub">You don't need a bigger training budget — you need one role-play, logged and checked, every single shift. Start tomorrow's opening huddle with it.</div>
 
             <div class="contact-block">
-                <div class="contact-line">hello@example.studio</div>
-                <div class="contact-line">+1 (555) 000 1234</div>
-                <div class="contact-line">www.example.studio</div>
+                <div class="contact-line">Open shift: recap yesterday's best close</div>
+                <div class="contact-line">Mid-shift: run one 5-minute role-play</div>
+                <div class="contact-line">Close shift: log it on the coaching board</div>
             </div>
 
             <div class="doodle-circle doodle"></div>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ivory Ledger · User Research Synthesis</title>
+    <title>Write a Grant Committee Brief like a Funded Principal Investigator - Academic research</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,7 +16,7 @@
         Noto Sans SC  — CJK sans fallback
     -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@200;300;400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;1,400&family=Noto+Serif+SC:wght@400&family=Noto+Sans+SC:wght@200;300;400;500&display=swap"
       rel="stylesheet"
     />
 
@@ -31,27 +31,28 @@
    ╚══════════════════════════════════════════════════════════════════════╝ */
       :root {
         /* ── Palette ──────────────────────────────────────────────────────── */
-        --c-bg: #fafadf; /* cream background for every slide       */
-        --c-bg-alt: #f2f2d2; /* cream inset surface                   */
-        --c-bg-light: #fafadf; /* title-slide cream                     */
-        --c-bg-light-alt: #f0f0d4; /* slightly deeper cream for insets      */
-        --c-bg-cream: #f5f0e4; /* warm cream variant                    */
+        /* One warm ivory ramp; ink stays #1a1a16 (nav JS reuses rgba(26,26,22)) */
+        --c-bg: #f9f5e8; /* ivory background for every slide       */
+        --c-bg-alt: #f2eddb; /* ivory inset surface                   */
+        --c-bg-light: #f9f5e8; /* title-slide ivory                     */
+        --c-bg-light-alt: #efe9d4; /* slightly deeper ivory for insets      */
+        --c-bg-cream: #f4efde; /* warm cream variant                    */
 
         --c-fg: #1a1a16; /* black ink text                         */
-        --c-fg-2: #5e5e54; /* secondary graphite text                */
-        --c-fg-3: #8a8a80; /* tertiary graphite text                 */
+        --c-fg-2: #50503f; /* secondary graphite text                */
+        --c-fg-3: #5f5f50; /* tertiary graphite text (AA on ivory)   */
         --c-fg-light: #1a1a16; /* black ink on cream                    */
-        --c-fg-light-2: #5e5e54; /* secondary graphite on cream           */
-        --c-fg-light-3: #8a8a80; /* tertiary graphite on cream            */
+        --c-fg-light-2: #50503f; /* secondary graphite on cream           */
+        --c-fg-light-3: #5f5f50; /* tertiary graphite on cream            */
 
         --c-accent: #1a1a16; /* accent collapsed to black ink         */
-        --c-border: #1a1a16; /* black dividers                        */
-        --c-border-light: #1a1a16; /* black dividers on cream               */
+        --c-border: rgba(26, 26, 22, 0.85); /* strong ink rules (chrome)     */
+        --c-border-light: rgba(26, 26, 22, 0.32); /* quiet hairlines         */
 
         /* ── Insight cards: no accent colors, just cream paper surfaces ─── */
-        --c-card-a: #fafadf;
-        --c-card-b: #f5f0e4;
-        --c-card-c: #fafadf;
+        --c-card-a: #f9f5e8;
+        --c-card-b: #f4efde;
+        --c-card-c: #f9f5e8;
 
         /* ── Typography ──────────────────────────────────────────────────── */
         --f-display: "Jost", "Noto Sans SC", system-ui, sans-serif;
@@ -255,6 +256,19 @@
         }
       }
 
+      /* Reduced motion: skip entrances and slide travel, keep content visible */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
+      }
+
       /* ── Navigation dots ──────────────────────────────────────────────── */
       #nav-dots {
         position: fixed;
@@ -428,7 +442,7 @@
        * How to use:
        *   <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
        *     <span class="sidebar-label">Section Name</span>
-       *     <span class="sidebar-label">[Month, Year]</span>
+       *     <span class="sidebar-label">2026</span>
        *   </div>
        *
        * Two labels is the sweet spot. Three is the maximum.
@@ -438,48 +452,6 @@
          visual noise. Hidden across the deck. */
       .slide-sidebar {
         display: none !important;
-      }
-
-      .slide-sidebar:not(.deck-no-such-thing) {
-        position: absolute;
-        /* Positioned in the left gutter, between outer padding and content */
-        left: var(--pad-x);
-        top: var(--pad-y);
-        bottom: var(--pad-y);
-        width: 3vw;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: flex-start;
-      }
-      /* The thin vertical spine of the sidebar */
-      .slide-sidebar::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--c-border-light);
-      }
-      .dark .slide-sidebar::before {
-        background: var(--c-border);
-      }
-      /* Individual rotated label — reads bottom-to-top along the line */
-      .sidebar-label {
-        font-family: var(--f-mono);
-        font-size: 0.65vw;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--c-fg-light-3);
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-        white-space: nowrap;
-        /* Small gap between the spine and the text */
-        padding-left: 0.8vw;
-      }
-      .dark .sidebar-label {
-        color: var(--c-fg-3);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -603,7 +575,8 @@
         flex-direction: column;
         gap: var(--gap-sm);
         padding: var(--gap-md) var(--gap-md) var(--gap-md) 0;
-        border-top: 1px solid var(--c-border-light);
+        /* Strong ink rule on top: the ledger's ruled-paper signature */
+        border-top: 1px solid var(--c-border);
       }
       /* The big number: weight 200, maximum lightness */
       .stat-value {
@@ -687,11 +660,15 @@
         font-weight: 300;
         line-height: 1.5;
       }
-      /* Ivory Ledger bullet: em dash in muted tan — never a heavy accent dot */
+      /* Ivory Ledger bullet: a drawn hairline tick, never a heavy accent dot */
       .bullet-list li::before {
-        content: "—";
-        color: var(--c-fg-light-3);
-        font-family: var(--f-mono);
+        content: "";
+        width: 0.9em;
+        height: 1px;
+        background: var(--c-fg-light-3);
+        justify-self: start;
+        align-self: start;
+        transform: translateY(0.7em);
       }
       .light .bullet-list li {
         color: var(--c-fg-light);
@@ -763,7 +740,10 @@
         align-items: stretch;
       }
       .insight-card {
-        border-radius: 16px;
+        /* Ledger surfaces are ruled paper, not rounded app cards */
+        border-radius: 0;
+        border: 1px solid var(--c-border-light);
+        border-top: 1px solid var(--c-border);
         padding: 3vh 2.5vw;
         display: flex;
         flex-direction: column;
@@ -1025,12 +1005,19 @@
       }
       .bar-fill {
         width: 100%;
-        background: var(--c-fg-light-3);
-        opacity: 0.5;
+        /* Non-highlight bars: hatched ink, the print-ledger texture.
+           The highlighted value stays solid ink so it reads instantly. */
+        background: repeating-linear-gradient(
+          135deg,
+          var(--c-border) 0 1px,
+          transparent 1px 6px
+        );
+        border: 1px solid var(--c-border-light);
+        border-bottom: none;
       }
       .bar-fill.accent {
         background: var(--c-accent);
-        opacity: 1;
+        border-color: var(--c-accent);
       }
       .bar-x-label {
         font-family: var(--f-mono);
@@ -1131,6 +1118,8 @@
         width: min(26vw, 42vh);
         height: min(26vw, 42vh);
         border-radius: 50%;
+        /* Hairline ring so the lightest ivory segment stays delineated */
+        border: 1px solid var(--c-border-light);
         position: relative;
         flex-shrink: 0;
         justify-self: center;
@@ -1156,7 +1145,9 @@
       .pie-swatch {
         width: 0.8em;
         height: 0.8em;
-        border-radius: 2px;
+        /* Hairline keeps the lightest (near-ivory) segment swatch legible */
+        border: 1px solid var(--c-border-light);
+        border-radius: 0;
         flex-shrink: 0;
       }
       .pie-item-label {
@@ -1181,65 +1172,6 @@
         font-size: var(--sz-label);
         letter-spacing: 0.1em;
         color: var(--c-fg-light-3);
-      }
-
-      /* ── PYRAMID ─────────────────────────────────────────────────────────── */
-      .slide--pyramid .slide-body {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .pyramid {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-        align-items: center;
-      }
-      .pyr-level {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1.3vh 2.5vw;
-        border-left: 2px solid var(--c-border-light);
-        transition: width 0.3s;
-      }
-      .pyr-level:nth-child(1) {
-        background: color-mix(in srgb, var(--c-accent) 55%, var(--c-bg-light));
-        width: 36%;
-      }
-      .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 35%, var(--c-bg-light));
-        width: 52%;
-      }
-      .pyr-level:nth-child(3) {
-        background: color-mix(in srgb, var(--c-accent) 20%, var(--c-bg-light));
-        width: 68%;
-      }
-      .pyr-level:nth-child(4) {
-        background: color-mix(in srgb, var(--c-accent) 10%, var(--c-bg-light));
-        width: 84%;
-      }
-      .pyr-level:nth-child(5) {
-        background: color-mix(in srgb, var(--c-accent) 4%, var(--c-bg-light));
-        width: 100%;
-      }
-      .pyr-name {
-        font-family: var(--f-heading);
-        font-size: var(--sz-h3);
-        font-weight: 300;
-        line-height: 1.2;
-        color: var(--c-fg-light);
-      }
-      .pyr-desc {
-        font-family: var(--f-body);
-        font-size: var(--sz-body);
-        font-weight: 300;
-        color: var(--c-fg-light-2);
-        text-align: right;
-        max-width: 55%;
-        line-height: 1.4;
       }
 
       /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
@@ -1356,55 +1288,6 @@
         justify-content: center;
       }
 
-      /* ── PIE / DONUT CHART (v2 — legend variant) ───────────────────── */
-      /* Used by slide--pie v2: donut on left, legend items on right */
-      .slide--pie .slide-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .pie-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--gap-lg);
-        align-items: center;
-        flex: 1;
-        min-height: 0;
-      }
-      .pie-donut {
-        width: min(26vw, 40vh);
-        height: min(26vw, 40vh);
-        border-radius: 50%;
-        position: relative;
-        margin: 0 auto;
-      }
-      .pie-donut::after {
-        content: "";
-        position: absolute;
-        inset: 22%;
-        border-radius: 50%;
-        background: var(--c-bg-light);
-      }
-      .pie-legend {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-sm);
-      }
-      .pie-legend-item {
-        display: flex;
-        align-items: center;
-        gap: 1.2vw;
-        font-size: var(--sz-body);
-        color: var(--c-fg-light);
-      }
-      .pie-legend-dot {
-        width: 1vw;
-        height: 1vw;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-
       /* ── PYRAMID (v2 — centered stack variant) ─────────────────────── */
       /* Used by slide--pyramid v2: centered levels, solid fills */
       .slide--pyramid .slide-body {
@@ -1426,7 +1309,7 @@
         align-items: center;
         justify-content: center;
         padding: 1.4vh 2vw;
-        border-radius: 2px;
+        border-radius: 0; /* ledger: ruled blocks, no app-card rounding */
         font-family: var(--f-body);
         font-size: var(--sz-body);
         font-weight: 500;
@@ -1435,25 +1318,25 @@
         transition: width 0.4s ease;
       }
       .pyr-level:nth-child(1) {
-        background: color-mix(in srgb, var(--c-accent) 90%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 92%, transparent);
         color: var(--c-bg-light);
         width: 30%;
       }
       .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 68%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 72%, transparent);
         color: var(--c-bg-light);
         width: 48%;
       }
       .pyr-level:nth-child(3) {
-        background: color-mix(in srgb, var(--c-accent) 46%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 32%, transparent);
         width: 66%;
       }
       .pyr-level:nth-child(4) {
-        background: color-mix(in srgb, var(--c-accent) 28%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 18%, transparent);
         width: 83%;
       }
       .pyr-level:nth-child(5) {
-        background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 8%, transparent);
         width: 100%;
       }
 
@@ -1511,56 +1394,6 @@
         line-height: 1.5;
       }
 
-      /* ── CYCLE PROCESS (v2 — boxed cell variant) ───────────────────── */
-      /* Used by slide--cycle v2: 2×2 grid of bordered cells with center label */
-      .slide--cycle .slide-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .cycle-grid {
-        display: grid;
-        grid-template-columns: 1fr 3em 1fr;
-        grid-template-rows: 1fr 3em 1fr;
-        gap: 0;
-        flex: 1;
-        min-height: 0;
-      }
-      .cycle-cell {
-        display: flex;
-        flex-direction: column;
-        gap: 0.6vh;
-        padding: 1.8vh 2vw;
-        background: color-mix(in srgb, var(--c-accent) 8%, transparent);
-        border: 1px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
-        border-radius: 3px;
-      }
-      .cycle-num {
-        font-family: var(--f-mono);
-        font-size: var(--sz-label);
-        color: var(--c-accent);
-        font-weight: 500;
-      }
-      .cycle-cell p {
-        font-size: var(--sz-body);
-        color: var(--c-fg-light);
-        margin: 0;
-      }
-      .cycle-arrow {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.8vw;
-        color: var(--c-accent);
-        font-family: var(--f-mono);
-      }
-      .cycle-center {
-        display: block;
-        background: transparent;
-        border-radius: 0;
-        margin: 0;
-      }
     </style>
   </head>
   <body>
@@ -1577,8 +1410,8 @@
       <section class="slide slide--cover light">
         <!-- Sidebar: research context above, date below -->
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Research Synthesis</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Academic Research</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Top-right deck label: title and date -->
@@ -1593,14 +1426,14 @@
           data-delay="1"
         >
           <span class="label muted"
-            >User Research Synthesis / [Month, Year]</span
+            >Academic Research / R01 Renewal</span
           >
         </div>
 
         <div class="cover-body">
           <!-- Display headline: weight 200, two lines -->
           <h1 class="display" data-anim="fade-up" data-delay="2">
-            User Research<br />Synthesis
+            Base-Editing<br />Sickle Cell
           </h1>
 
           <!-- Thin rule between headline and lead -->
@@ -1618,27 +1451,28 @@
             data-delay="4"
             style="max-width: 55%"
           >
-            What we learned from 24 interviews and what it means for the
-            product.
+            A grant committee brief: reactivating fetal hemoglobin with an
+            adenine base editor to correct sickle-cell disease without a
+            double-strand break.
           </p>
         </div>
 
         <!-- Bottom meta bar: team left, round right -->
         <div class="cover-meta" data-anim="fade-in" data-delay="5">
-          <span class="label muted">Research Team · [Month, Year]</span>
-          <span class="label muted">Round [N] · Internal</span>
+          <span class="label muted">Dr. Amara Okonkwo · Children's Hospital of Philadelphia</span>
+          <span class="label muted">NIH NHLBI R01 · Renewal Year 1</span>
         </div>
       </section>
       <section class="slide slide--chapter dark">
         <!-- Sidebar on dark: adapts automatically via .dark .sidebar-label -->
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Context</span>
+          <span class="sidebar-label">Field Map</span>
           <span class="sidebar-label">Part One</span>
         </div>
 
         <!-- Chapter number: small mono, monochrome accent -->
         <div class="chapter-num" data-anim="fade-in" data-delay="1">
-          01 · Context
+          01 · Field Map
         </div>
 
         <!-- Thin accent rule -->
@@ -1646,7 +1480,7 @@
 
         <!-- Chapter headline: weight 200, very large -->
         <h2 class="h1" data-anim="fade-up" data-delay="3">
-          Why we went back<br />to users
+          Two therapies now treat<br />sickle-cell at the genome
         </h2>
 
         <!-- Short description: muted, capped at 50% width -->
@@ -1660,21 +1494,22 @@
           data-anim="fade-up"
           data-delay="4"
         >
-          Three months after launch, retention numbers told us something the
-          metrics couldn't.
+          Since 2023, Casgevy and Lyfgenia have shown ex vivo genome editing
+          can functionally cure sickle-cell disease — but both depend on a
+          double-strand break and myeloablative conditioning.
         </p>
       </section>
       <section class="slide slide--statement light">
         <!-- Sidebar: three contextual labels -->
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">[Month, Year]</span>
-          <span class="sidebar-label">Round [N]</span>
-          <span class="sidebar-label">Objective</span>
+          <span class="sidebar-label">2026</span>
+          <span class="sidebar-label">The Gap</span>
+          <span class="sidebar-label">Sickle-Cell</span>
         </div>
 
         <!-- Chrome header -->
         <header class="slide-chrome">
-          <span class="label muted">Key Finding</span>
+          <span class="label muted">The Gap</span>
           <span class="label muted">03</span>
         </header>
 
@@ -1682,7 +1517,7 @@
         <div class="statement-body">
           <!-- Objective label in mono muted at top of content area -->
           <p class="kicker" data-anim="fade-in" data-delay="1">
-            Primary objective · Round [N] synthesis
+            The gap · HbF reactivation
           </p>
 
           <!-- The big claim: weight 200, sentence case, max 65% width -->
@@ -1692,8 +1527,8 @@
             data-delay="2"
             style="max-width: 65%"
           >
-            Users don't leave because they lose interest. They leave because
-            they don't know what to do next.
+            Nuclease editing cures patients, but the double-strand break
+            itself is now the safety question the field cannot ignore.
           </h2>
 
           <!-- Thin rule as a visual pause below the headline -->
@@ -1707,19 +1542,19 @@
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--split light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">User Behavior</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Approach</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Chrome header -->
         <header class="slide-chrome">
-          <span class="label muted">User Behavior</span>
+          <span class="label muted">Approach</span>
           <span class="label muted">04</span>
         </header>
 
@@ -1727,13 +1562,15 @@
         <div class="slide-body">
           <!-- Left: text content -->
           <div class="split-text">
-            <p class="kicker" data-anim="fade-in" data-delay="1">The Pattern</p>
+            <p class="kicker" data-anim="fade-in" data-delay="1">The Approach</p>
             <h2 class="h2" data-anim="fade-up" data-delay="2">
-              The first 48 hours determine everything
+              An adenine base editor, not a nuclease
             </h2>
             <p class="lead muted" data-anim="fade-up" data-delay="3">
-              Users who complete three core actions in their first two days have
-              a 4× higher 90-day retention rate. Most never get there.
+              ABE8e installs a single A&gt;G edit at the HBG1/HBG2 −113
+              promoter site, recreating a naturally occurring hereditary
+              persistence of fetal hemoglobin (HPFH) variant — no
+              double-strand break, no cutting.
             </p>
             <!-- Small bullet list below the lead -->
             <ul
@@ -1742,9 +1579,9 @@
               data-anim="fade-up"
               data-delay="4"
             >
-              <li>Onboarding drop-off peaks at step 3</li>
-              <li>"What do I do next?" is the most common exit trigger</li>
-              <li>Users who invite a teammate retain at 2× the rate</li>
+              <li>Delivered as mRNA + sgRNA ribonucleoprotein via electroporation into autologous CD34+ HSPCs</li>
+              <li>No viral vector integration — edited cells re-infused after non-genotoxic conditioning</li>
+              <li>Mimics a benign HPFH allele already documented in three unaffected carrier families</li>
             </ul>
           </div>
 
@@ -1752,21 +1589,21 @@
           <div class="split-image" data-anim="fade-in" data-delay="3">
             <div class="img-placeholder">Image placeholder</div>
             <p class="img-caption">
-              Session recording review · [Month of study]
+              Base-editing schematic · HBG1/HBG2 promoter locus
             </p>
           </div>
         </div>
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--stats light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
           <span class="sidebar-label">By the Numbers</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Chrome header -->
@@ -1778,7 +1615,7 @@
         <!-- Stats body: headline + three-col stat grid -->
         <div class="slide-body">
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            What the data showed
+            What the preclinical data shows
           </h2>
 
           <div
@@ -1787,95 +1624,95 @@
             data-anim="fade-up"
             data-delay="2"
           >
-            <!-- Stat 1: churn rate -->
+            <!-- Stat 1: editing efficiency -->
             <div class="stat-card">
               <div class="stat-value">68%</div>
               <p class="stat-label muted">
-                of users churned within 14 days — up from 54% in cohort 2
+                Editing efficiency achieved in CD34+ HSPCs across three independent donor lots
               </p>
-              <p class="stat-note">[Analytics tool] · [Launch month]</p>
+              <p class="stat-note">Sanger + deep sequencing · n=3 donors</p>
             </div>
 
-            <!-- Stat 2: time to abandonment -->
+            <!-- Stat 2: HbF induction -->
             <div class="stat-card">
-              <div class="stat-value">3.2min</div>
+              <div class="stat-value">41%</div>
               <p class="stat-label muted">
-                Average time before abandonment on the setup flow
+                Fetal hemoglobin induced per edited allele, above the 20% threshold linked to clinical benefit
               </p>
-              <p class="stat-note">Session recordings · n=240</p>
+              <p class="stat-note">HPLC hemoglobin quantification</p>
             </div>
 
-            <!-- Stat 3: retention multiplier -->
+            <!-- Stat 3: off-target rate -->
             <div class="stat-card">
-              <div class="stat-value">4×</div>
+              <div class="stat-value">&lt;0.1%</div>
               <p class="stat-label muted">
-                Higher 90-day retention for users who complete onboarding fully
+                Off-target editing detected at the top 10 CIRCLE-seq nominated sites
               </p>
-              <p class="stat-note">Cohort analysis</p>
+              <p class="stat-note">Whole-genome + targeted amplicon sequencing</p>
             </div>
           </div>
         </div>
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--list light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Recommendations</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Study Design</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Chrome header -->
         <header class="slide-chrome">
-          <span class="label muted">Recommendations</span>
+          <span class="label muted">Study Design</span>
           <span class="label muted">06</span>
         </header>
 
         <!-- List body: left head + right bullets -->
         <div class="slide-body">
           <div class="list-head">
-            <p class="kicker" data-anim="fade-in" data-delay="1">What to fix</p>
+            <p class="kicker" data-anim="fade-in" data-delay="1">What's inside</p>
             <h2 class="h2" data-anim="fade-up" data-delay="2">
-              Five changes, ordered by impact
+              Four aims carry the proposal
             </h2>
             <p class="body muted" data-anim="fade-up" data-delay="3">
-              We recommend addressing these sequentially — later ones depend on
-              the first landing.
+              Each aim retires a specific risk before the next begins — the
+              design a study section expects to see.
             </p>
           </div>
 
           <!-- Five bullets: weight-300 lead size, em dash markers -->
           <ul class="bullet-list" data-anim="fade-up" data-delay="3">
-            <li>Redesign the setup flow to three steps maximum</li>
-            <li>Add a "start here" prompt on day one based on user type</li>
+            <li>Aim 1 — Optimize on-target editing and HbF induction across donor genotypes</li>
+            <li>Aim 2 — Xenograft safety: engraftment, off-target burden, clonal composition at 16 weeks</li>
             <li>
-              Surface the collaboration invite after first meaningful action
+              Aim 3 — GMP-compatible manufacturing and potency assay lock for IND filing
             </li>
-            <li>Replace feature tour with outcome demonstration</li>
+            <li>Aim 4 — First-in-human Phase 1 dose-and-safety trial design</li>
             <li>
-              Build a 7-day email sequence that mirrors in-product progress
+              Milestone-gated go/no-go criteria reviewed by an independent safety board at each transition
             </li>
           </ul>
         </div>
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--compare light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Current vs Proposed</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Standard vs Proposed</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Chrome header -->
         <header class="slide-chrome">
-          <span class="label muted">Current · Proposed</span>
+          <span class="label muted">Standard · Proposed</span>
           <span class="label muted">07</span>
         </header>
 
@@ -1883,50 +1720,53 @@
         <div class="slide-body">
           <!-- Left panel: current state -->
           <div class="compare-panel left" data-anim="fade-up" data-delay="1">
-            <div class="compare-label">Current Onboarding</div>
-            <h3 class="h3">9-step setup, any order</h3>
+            <div class="compare-label">Current Standard Care</div>
+            <h3 class="h3">Allogeneic transplant or nuclease editing</h3>
             <p class="lead muted">
-              Users choose their own path through setup. Most choose wrong.
+              Both cures that exist today carry real costs: a matched donor, or a permanent
+              double-strand break.
             </p>
             <ul class="bullet-list" style="font-size: var(--sz-body)">
-              <li>Average 3.2 minutes to first value</li>
-              <li>Step 6 is where 41% abandon</li>
-              <li>No adaptive logic based on user type</li>
+              <li>Allo-HSCT requires a matched sibling donor — available to under 15% of patients</li>
+              <li>Casgevy/Lyfgenia use Cas9 nuclease cuts, with documented large-deletion and mosaic-loss events</li>
+              <li>Both require myeloablative busulfan conditioning</li>
             </ul>
           </div>
 
           <!-- Right panel: proposed state -->
           <div class="compare-panel right" data-anim="fade-up" data-delay="2">
-            <div class="compare-label after">Proposed Flow</div>
-            <h3 class="h3">3-step guided path, adaptive</h3>
+            <div class="compare-label after">Proposed Base-Editing Approach</div>
+            <h3 class="h3">Autologous, cut-free, non-genotoxic</h3>
             <p class="lead muted">
-              User type detected at signup. Path adjusts. First value in under
-              90 seconds.
+              No donor search, no double-strand break, and a conditioning
+              regimen designed to spare marrow reserve.
             </p>
             <ul class="bullet-list" style="font-size: var(--sz-body)">
-              <li>Target: 90 seconds to first value</li>
-              <li>Eliminate decision paralysis at step entry</li>
-              <li>Inline help triggered at abandonment signals</li>
+              <li>Autologous cells — every patient is their own donor</li>
+              <li>Base editing installs the edit without cutting both DNA strands</li>
+              <li>Antibody-based conditioning under evaluation to avoid busulfan toxicity</li>
             </ul>
           </div>
         </div>
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--quote dark">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Participant Voice</span>
-          <span class="sidebar-label">[Month of study]</span>
+          <span class="sidebar-label">Investigator Voice</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Quote text: Lora italic, large, no decoration -->
         <p class="quote-text" data-anim="fade-up" data-delay="1">
-          "I kept opening the app and then closing it again. I didn't know what
-          I was supposed to do."
+          "The mutation we're installing already exists in nature, in people
+          who never developed sickle-cell symptoms. We're not engineering
+          something new — we're restoring a state biology already proved was
+          safe."
         </p>
 
         <!-- Attribution: two lines of small mono -->
@@ -1935,20 +1775,20 @@
             class="label"
             style="color: var(--c-fg-3); letter-spacing: 0.12em"
           >
-            Participant 14 · 28 years old, Product Designer
+            Dr. Amara Okonkwo · Principal Investigator
           </span>
           <span
             class="label"
             style="color: var(--c-fg-3); letter-spacing: 0.12em"
           >
-            Interview · [Month of study]
+            Children's Hospital of Philadelphia, Division of Hematology
           </span>
         </div>
       </section>
       <section class="slide slide--dense light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
           <span class="sidebar-label">Analysis</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Chrome header -->
@@ -1959,59 +1799,55 @@
 
         <!-- Dense headline -->
         <h2 class="dense-hl" data-anim="fade-up" data-delay="1">
-          Why onboarding problems compound over time
+          Why this proposal changes the risk calculus
         </h2>
 
         <!-- Two-column analysis body -->
         <div class="slide-body">
           <div class="dense-cols" data-anim="fade-up" data-delay="2">
-            <!-- Left column: The Activation Trap -->
+            <!-- Left column: Significance -->
             <div class="dense-col">
-              <h4>The Activation Trap</h4>
+              <h4>Significance</h4>
               <p>
-                Activation is the moment a user experiences the core value of a
-                product for the first time. When that moment is delayed or never
-                arrives, the user's mental model of the product never fully
-                forms. They carry a vague, unresolved impression into every
-                subsequent session.
+                Sickle-cell disease affects roughly 100,000 Americans and an
+                estimated 20 million people worldwide, disproportionately
+                Black and of African, Middle Eastern, and South Asian
+                descent — a population underserved by rare-disease research
+                investment.
               </p>
               <p>
-                Each session that ends without activation reinforces the exit
-                pattern. The user doesn't consciously decide to leave — they
-                simply stop opening the app because it hasn't yet earned a place
-                in their routine. The gap between download and habit is where
-                most products lose users permanently.
+                The two approved genome-editing therapies proved the concept
+                but priced it near $2.2 million per patient and paired it
+                with a genotoxic conditioning regimen many eligible patients
+                are too sick to tolerate.
               </p>
               <p>
-                Retention data confirms this: users who hit activation in
-                session one have a 3× higher probability of returning in week
-                two. The window is narrow. Products that front-load value
-                creation outperform those that distribute it across multiple
-                sessions.
+                A base-editing approach that avoids double-strand breaks
+                addresses the two objections raised most often in FDA and
+                NIH safety reviews of first-generation gene-editing
+                therapies: off-target genotoxicity and large structural
+                variants.
               </p>
             </div>
 
-            <!-- Right column: The Network Effect Delay -->
+            <!-- Right column: Innovation -->
             <div class="dense-col">
-              <h4>The Network Effect Delay</h4>
+              <h4>Innovation</h4>
               <p>
-                Collaboration products face a compounding problem: the value of
-                the product increases with each additional teammate, but users
-                must cross the value threshold alone before they think to invite
-                anyone. Most never reach the threshold.
+                This is the first R01-supported program to target the
+                HBG1/HBG2 promoter directly with a base editor rather than
+                editing BCL11A, the erythroid enhancer targeted by Casgevy.
               </p>
               <p>
-                Our data shows that the median user does not discover the
-                invitation flow until session four — by which point 60% have
-                already churned. The product's most powerful retention mechanism
-                is invisible during the critical first-session window where the
-                keep-or-leave decision is made.
+                Because the edit recreates a naturally occurring HPFH allele,
+                the safety argument rests on decades of clinical observation
+                of unaffected carriers, not solely on new animal data.
               </p>
               <p>
-                The solution is not to surface the invite prompt earlier in a
-                disruptive way, but to design the single-player experience as an
-                explicit bridge to the collaborative one. Every solo action
-                should feel like preparation for something that scales.
+                The proposal is scoped narrowly: four aims, one edit, one
+                delivery method — built to answer a reviewer's first question
+                ("why will this work when others have tried") rather than to
+                promise a platform.
               </p>
             </div>
           </div>
@@ -2019,13 +1855,13 @@
 
         <!-- Footer -->
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--chart light">
         <header class="slide-chrome">
-          <span class="label muted">Retention Analysis</span>
+          <span class="label muted">Preclinical Evidence</span>
           <span class="label muted">11</span>
         </header>
         <div class="slide-body">
@@ -2036,50 +1872,50 @@
               data-anim="fade-up"
               data-delay="0"
             >
-              90-day retention by onboarding cohort
+              Editing efficiency across three donor lots
             </h2>
             <span class="caption muted" data-anim="fade-in" data-delay="1"
-              >% retained · n=480 · [Q1 of study period]</span
+              >% alleles edited · CD34+ HSPCs · preclinical data</span
             >
           </div>
           <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
             <div class="bar-track">
               <div class="bar-col">
-                <span class="bar-val">34%</span>
-                <div class="bar-fill" style="height: 10vh"></div>
-                <span class="bar-x-label">Cohort 1</span>
+                <span class="bar-val">61%</span>
+                <div class="bar-fill" style="height: 14vh"></div>
+                <span class="bar-x-label">Donor A</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">41%</span>
-                <div class="bar-fill" style="height: 13vh"></div>
-                <span class="bar-x-label">Cohort 2</span>
+                <span class="bar-val">74%</span>
+                <div class="bar-fill" style="height: 17vh"></div>
+                <span class="bar-x-label">Donor B</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">48%</span>
-                <div class="bar-fill" style="height: 16vh"></div>
-                <span class="bar-x-label">Cohort 3</span>
+                <span class="bar-val">65%</span>
+                <div class="bar-fill" style="height: 15vh"></div>
+                <span class="bar-x-label">Donor C</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val hi">67%</span>
-                <div class="bar-fill accent" style="height: 22vh"></div>
-                <span class="bar-x-label">Proposed</span>
+                <span class="bar-val hi">80%</span>
+                <div class="bar-fill accent" style="height: 20vh"></div>
+                <span class="bar-x-label">Aim 1 Target</span>
               </div>
             </div>
             <div class="chart-baseline"></div>
           </div>
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: [Analytics tool] · Cohort analysis · Proposed target based
-            on redesigned onboarding flow
+            Preclinical data · n=3 independent CD34+ HSPC donor lots · Aim 1
+            target shown for reference
           </p>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">Research Team · [Month, Year]</span>
-          <span class="label muted">11 / 18</span>
+          <span class="label muted">Okonkwo Lab · 2026</span>
+          <span class="label muted">11 / 16</span>
         </footer>
       </section>
       <section class="slide slide--diagram light">
         <header class="slide-chrome">
-          <span class="label muted">Methodology</span>
+          <span class="label muted">Project Timeline</span>
           <span class="label muted">12</span>
         </header>
         <div class="slide-body">
@@ -2089,56 +1925,58 @@
             data-anim="fade-up"
             data-delay="0"
           >
-            How this research was conducted
+            From bench to IND filing
           </h2>
           <div class="flow" data-anim="fade-up" data-delay="1">
             <div class="flow-step">
               <div class="flow-num">01</div>
-              <div class="flow-title">Recruit</div>
+              <div class="flow-title">Optimize</div>
               <div class="flow-desc">
-                24 participants screened from the active user base. Mix of power
-                users, casual users, and churned users within 90 days.
+                Screen guide RNA and editor variants across three donor
+                genotypes to lock the lead construct (Aim 1, Months 1–12).
               </div>
             </div>
             <div class="flow-step">
               <div class="flow-num">02</div>
-              <div class="flow-title">Interview</div>
+              <div class="flow-title">Validate</div>
               <div class="flow-desc">
-                60-minute moderated sessions. Cognitive walkthrough of key
-                flows. Think-aloud protocol throughout.
+                Confirm safety and engraftment in NBSGW xenograft models at
+                16-week endpoints (Aim 2, Months 6–24).
               </div>
             </div>
             <div class="flow-step">
               <div class="flow-num">03</div>
-              <div class="flow-title">Analyse</div>
+              <div class="flow-title">Manufacture</div>
               <div class="flow-desc">
-                Affinity mapping across 340 observations. Pattern clustering by
-                behaviour type, not stated preference.
+                Transfer the locked protocol to GMP-compatible closed-system
+                manufacturing and finalize the potency assay (Aim 3, Months
+                18–36).
               </div>
             </div>
             <div class="flow-step">
               <div class="flow-num">04</div>
-              <div class="flow-title">Validate</div>
+              <div class="flow-title">File</div>
               <div class="flow-desc">
-                Key findings stress-tested against session recordings and
-                support ticket data before synthesis.
+                Compile the IND package and design the Phase 1
+                dose-escalation trial with the study section's guidance (Aim
+                4, Months 30–48).
               </div>
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">Research Team · [Month, Year]</span>
-          <span class="label muted">12 / 18</span>
+          <span class="label muted">Okonkwo Lab · 2026</span>
+          <span class="label muted">12 / 16</span>
         </footer>
       </section>
       <section class="slide slide--pie light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Participants</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Budget</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <header class="slide-chrome">
-          <span class="label muted">Participant Breakdown</span>
+          <span class="label muted">Budget Allocation</span>
           <span class="label muted">13</span>
         </header>
 
@@ -2149,7 +1987,7 @@
             data-anim="fade-up"
             data-delay="1"
           >
-            Who we spoke with
+            How the $2.98M direct budget breaks down
           </h2>
 
           <div class="pie-row" data-anim="fade-up" data-delay="2">
@@ -2172,7 +2010,7 @@
             <div class="pie-legend">
               <div class="pie-item">
                 <div class="pie-swatch" style="background: var(--c-accent)"></div>
-                <span class="pie-item-label">Power Users</span>
+                <span class="pie-item-label">Xenograft Safety Studies</span>
                 <span class="pie-item-val">38%</span>
               </div>
               <div class="pie-item">
@@ -2186,7 +2024,7 @@
                     );
                   "
                 ></div>
-                <span class="pie-item-label">Casual Users</span>
+                <span class="pie-item-label">GMP Manufacturing</span>
                 <span class="pie-item-val">25%</span>
               </div>
               <div class="pie-item">
@@ -2200,7 +2038,7 @@
                     );
                   "
                 ></div>
-                <span class="pie-item-label">Churned Users</span>
+                <span class="pie-item-label">Personnel &amp; Core Facility Fees</span>
                 <span class="pie-item-val">22%</span>
               </div>
               <div class="pie-item">
@@ -2208,95 +2046,95 @@
                   class="pie-swatch"
                   style="background: var(--c-bg-light-alt)"
                 ></div>
-                <span class="pie-item-label">Prospects</span>
+                <span class="pie-item-label">Sequencing &amp; Off-Target Assays</span>
                 <span class="pie-item-val">15%</span>
               </div>
-              <p class="pie-total">Total participants: [N] · [Study period]</p>
+              <p class="pie-total">Total direct costs · 4-year R01 budget</p>
             </div>
           </div>
 
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: Recruitment screener · [Study period]
+            Budget justification, Section 5.3 · figures rounded
           </p>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">[Research Team] · [Month, Year]</span>
+          <span class="label muted">Okonkwo Lab · 2026</span>
         </footer>
       </section>
       <section class="slide slide--vtimeline light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Process</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Milestones</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <header class="slide-chrome">
-          <span class="label muted">Process</span>
+          <span class="label muted">Milestones</span>
           <span class="label muted">14</span>
         </header>
 
         <h2 class="vt-hl" data-anim="fade-up" data-delay="1">
-          From research to recommendation
+          Four years, four go/no-go gates
         </h2>
 
         <div class="slide-body">
           <div class="vtimeline" data-anim="fade-up" data-delay="2">
             <!-- Row 1 -->
-            <div class="vt-date">[Week 1]</div>
+            <div class="vt-date">Year 1</div>
             <div class="vt-spine"></div>
             <div class="vt-content">
-              <div class="vt-title">Recruitment</div>
+              <div class="vt-title">Construct lock</div>
               <p class="vt-body">
-                Screened [N]+ applicants, selected [N] participants across user
-                segments.
+                Guide RNA and base-editor variant selected; ≥60% editing
+                efficiency confirmed across all three donor genotypes.
               </p>
             </div>
             <!-- Row 2 -->
-            <div class="vt-date">[Week 2–3]</div>
+            <div class="vt-date">Year 2</div>
             <div class="vt-spine"></div>
             <div class="vt-content">
-              <div class="vt-title">Fieldwork</div>
+              <div class="vt-title">Safety gate</div>
               <p class="vt-body">
-                [N] moderated sessions. Think-aloud protocol. All sessions
-                recorded and transcribed.
+                16-week xenograft engraftment and off-target sequencing
+                complete; independent safety board reviews go/no-go.
               </p>
             </div>
             <!-- Row 3 -->
-            <div class="vt-date">[Week 4]</div>
+            <div class="vt-date">Year 3</div>
             <div class="vt-spine"></div>
             <div class="vt-content">
-              <div class="vt-title">Synthesis</div>
+              <div class="vt-title">Manufacturing lock</div>
               <p class="vt-body">
-                Affinity mapping across [N]+ observations. Pattern clustering by
-                behaviour type.
+                GMP-compatible process transferred; potency assay validated
+                for IND-enabling studies.
               </p>
             </div>
             <!-- Row 4 -->
-            <div class="vt-date">[Week 5]</div>
+            <div class="vt-date">Year 4</div>
             <div class="vt-spine"></div>
             <div class="vt-content">
-              <div class="vt-title">Validation</div>
+              <div class="vt-title">IND submission</div>
               <p class="vt-body">
-                Findings stress-tested against [analytics tool] data and [N]
-                support ticket samples.
+                Pre-IND meeting held with FDA; Phase 1 protocol and consent
+                documents finalized for submission.
               </p>
             </div>
           </div>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">[Research Team] · [Month, Year]</span>
+          <span class="label muted">Okonkwo Lab · 2026</span>
           <span class="label muted">14</span>
         </footer>
       </section>
       <section class="slide slide--cycle light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Design Process</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Risk Review</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <header class="slide-chrome">
-          <span class="label muted">Design Process</span>
+          <span class="label muted">Risk Review</span>
           <span class="label muted">15</span>
         </header>
 
@@ -2307,17 +2145,17 @@
             data-anim="fade-up"
             data-delay="1"
           >
-            The design thinking cycle
+            How risk is reviewed, not just disclosed
           </h2>
 
           <div class="cycle-grid" data-anim="fade-up" data-delay="2">
             <!-- Step 01: top-left -->
             <div class="cycle-step">
               <div class="cycle-num">01</div>
-              <div class="cycle-title">Empathise</div>
+              <div class="cycle-title">Identify</div>
               <p class="cycle-desc">
-                Understand users in their own context. Suspend assumptions.
-                Observe before interpreting.
+                Off-target sites nominated by CIRCLE-seq and computational
+                prediction before any editing begins.
               </p>
             </div>
             <!-- Arrow right: top-center -->
@@ -2325,10 +2163,10 @@
             <!-- Step 02: top-right -->
             <div class="cycle-step">
               <div class="cycle-num">02</div>
-              <div class="cycle-title">Define</div>
+              <div class="cycle-title">Assess</div>
               <p class="cycle-desc">
-                Reframe the problem as a point of view. One sentence. Testable.
-                Grounded in observation.
+                Whole-genome and targeted amplicon sequencing quantify
+                editing at every nominated site per donor lot.
               </p>
             </div>
             <!-- Arrow down-left: mid-left -->
@@ -2340,10 +2178,10 @@
             <!-- Step 04: bottom-left -->
             <div class="cycle-step">
               <div class="cycle-num">04</div>
-              <div class="cycle-title">Test</div>
+              <div class="cycle-title">Monitor</div>
               <p class="cycle-desc">
-                Put prototypes in front of real users. Capture what they do, not
-                what they say.
+                An independent data and safety monitoring board reviews
+                cumulative findings at each aim's go/no-go gate.
               </p>
             </div>
             <!-- Arrow left: bottom-center -->
@@ -2351,67 +2189,67 @@
             <!-- Step 03: bottom-right -->
             <div class="cycle-step">
               <div class="cycle-num">03</div>
-              <div class="cycle-title">Prototype</div>
+              <div class="cycle-title">Mitigate</div>
               <p class="cycle-desc">
-                Build to think, not to ship. The lowest fidelity that answers
-                the question.
+                High-fidelity editor variants and dose titration substituted
+                wherever off-target signal exceeds 0.1%.
               </p>
             </div>
           </div>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">[Research Team] · [Month, Year]</span>
+          <span class="label muted">Okonkwo Lab · 2026</span>
           <span class="label muted">15</span>
         </footer>
       </section>
       <section class="slide slide--pyramid light" data-slide="17">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Research Framework</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Contribution</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <header class="slide-chrome">
-          <span class="label muted">Research Framework</span>
+          <span class="label muted">Contribution</span>
           <span class="label muted">17</span>
         </header>
 
         <div class="slide-body">
           <p class="kicker" data-anim="fade-in" data-delay="1">
-            Research Framework
+            Contribution
           </p>
 
           <h2 class="h2" data-anim="fade-up" data-delay="2">
-            Analysis Hierarchy
+            How this preliminary work adds up
           </h2>
 
           <p class="lead muted" data-anim="fade-up" data-delay="3">
-            From raw observations to strategic insight
+            From bench validation to a therapy request the committee can fund
           </p>
 
           <!-- Centered pyramid: narrowest at top, widest at bottom -->
           <div class="pyr-wrap" data-anim="fade-up" data-delay="4">
-            <div class="pyr-level">Strategic Insight</div>
-            <div class="pyr-level">Behavioral Patterns</div>
-            <div class="pyr-level">Synthesized Themes</div>
-            <div class="pyr-level">Coded Observations</div>
-            <div class="pyr-level">Raw Field Notes</div>
+            <div class="pyr-level">Phase 1 Trial Request</div>
+            <div class="pyr-level">IND-Ready Manufacturing</div>
+            <div class="pyr-level">Xenograft Safety Data</div>
+            <div class="pyr-level">Editing Efficiency Data</div>
+            <div class="pyr-level">Naturally Occurring HPFH Precedent</div>
           </div>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">User Research Synthesis</span>
-          <span class="label muted">Research Team</span>
+          <span class="label muted">Okonkwo Lab · CHOP</span>
+          <span class="label muted">R01 HL178453</span>
         </footer>
       </section>
       <section class="slide slide--end light">
         <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
-          <span class="sidebar-label">Research Team</span>
-          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Next Question</span>
+          <span class="sidebar-label">2026</span>
         </div>
 
         <!-- Kicker: team attribution in muted mono -->
-        <p class="kicker" data-anim="fade-in" data-delay="1">Research Team</p>
+        <p class="kicker" data-anim="fade-in" data-delay="1">Next Question</p>
 
         <!-- Thin rule -->
         <div
@@ -2428,7 +2266,7 @@
           data-delay="3"
           style="max-width: 55%"
         >
-          Questions, feedback, and next steps
+          What dose, in which patients, should the Phase 1 trial test first?
         </h2>
 
         <!-- Contact lead: muted, links styled as plain text -->
@@ -2438,7 +2276,10 @@
           data-delay="4"
           style="max-width: 42%; margin-top: var(--gap-md)"
         >
-          [research@org.com] · [Slack #research] · Full report at [link]
+          We are requesting a one-year no-cost extension supplement to fund a
+          natural-history cohort of 30 pediatric and adult sickle-cell
+          patients ahead of first-in-human dosing — a.okonkwo@chop.edu ·
+          Division of Hematology.
         </p>
       </section>
 
@@ -2592,5 +2433,7 @@
         goTo(0);
       })();
     </script>
-  </body>
+
+
+</body>
 </html>

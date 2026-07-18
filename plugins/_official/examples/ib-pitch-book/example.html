@@ -3,21 +3,22 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Project Atlas — Strategic Alternatives Review · Hartfield & Co.</title>
+<title>Write an Investor Pitch Book like a Growth-Equity Analyst - Fundraising pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..600;1,8..60,300..600&display=swap" rel="stylesheet">
 <style>
   :root {
     --paper:        oklch(98.5% 0.008 80);
     --paper-warm:   oklch(96% 0.012 78);
     --ink:          oklch(18% 0.012 70);
-    --ink-mid:      oklch(38% 0.010 70);
-    --ink-soft:     oklch(56% 0.008 70);
+    --ink-mid:      oklch(36% 0.010 70);
+    --ink-soft:     oklch(41% 0.008 70);
     --rule:         oklch(86% 0.008 75);
-    --accent:       oklch(48% 0.18 28);   /* deep red ribbon */
-    --gold:         oklch(72% 0.12 78);
-    --teal:         oklch(45% 0.07 200);
+    --accent:       oklch(48% 0.18 28);   /* deep red ribbon, single accent */
     --neg:          oklch(48% 0.16 28);
     --pos:          oklch(45% 0.10 165);
-    --serif: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --serif: 'Source Serif 4', 'Iowan Old Style', 'Charter', Georgia, serif;
     --sans:  system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
@@ -32,7 +33,7 @@
   ────────────────────────────────────────────────────────────────────────── */
   .deck {
     width: 100vw; height: 100vh; overflow: hidden; position: relative;
-    background: linear-gradient(180deg, oklch(14% 0.012 70), oklch(20% 0.012 70));
+    background: oklch(17% 0.012 70);
     display: flex;
     flex-direction: column;
   }
@@ -80,17 +81,20 @@
     will-change: transform;
   }
   .slide {
-    min-width: 100vw; height: 100vh;
+    /* 100% of the stage, not 100vh: the demo banner above the stage
+       was pushing every slide down and clipping the footer */
+    min-width: 100vw; height: 100%;
     background: var(--paper);
     display: grid; place-items: stretch;
     position: relative; overflow: hidden;
   }
   .slide-inner {
     width: min(1320px, 92vw);
-    height: min(820px, 86vh);
+    /* size against the slide (banner already subtracted), not the viewport */
+    height: min(820px, calc(100% - 36px));
     margin: auto;
-    padding: 56px 64px 48px;
-    display: grid; grid-template-rows: auto 1fr auto;
+    padding: clamp(30px, 4.6vh, 56px) clamp(36px, 5vw, 64px) clamp(24px, 3.8vh, 48px);
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
     background: var(--paper);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
     position: relative;
@@ -128,8 +132,9 @@
     content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
   }
 
-  /* Body region (per slide overrides this) */
-  .body { padding: 28px 0 22px; }
+  /* Body region (per slide overrides this); overflow guard keeps dense
+     tables from painting over the footer when the viewport runs short */
+  .body { padding: clamp(14px, 2.6vh, 28px) 0 clamp(10px, 2vh, 22px); min-height: 0; overflow: hidden; }
 
   /* ──────────────────────────────────────────────────────────────────────────
      Chrome — counter, nav, print badge
@@ -137,17 +142,17 @@
   .chrome {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 10px; align-items: center;
-    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(8px);
-    border: 1px solid oklch(86% 0.008 75); border-radius: 999px;
+    background: oklch(98% 0.005 80 / 0.94); backdrop-filter: blur(8px);
+    border: 1px solid oklch(80% 0.008 75); border-radius: 2px;
     padding: 6px 8px; box-shadow: 0 8px 24px -10px rgba(0,0,0,0.35);
     z-index: 50;
   }
   .chrome button {
-    width: 28px; height: 28px; border: 0; border-radius: 999px;
+    width: 28px; height: 28px; border: 0; border-radius: 2px;
     background: transparent; cursor: pointer; color: var(--ink);
     display: grid; place-items: center;
   }
-  .chrome button:hover { background: oklch(94% 0.008 75); }
+  .chrome button:hover { background: oklch(92% 0.012 78); }
   .chrome .counter {
     font-family: var(--mono); font-size: 11px; padding: 0 10px; color: var(--ink-mid);
     letter-spacing: 0.04em;
@@ -155,9 +160,9 @@
   .chrome .counter .now { color: var(--ink); font-weight: 500; }
 
   .agent-stamp {
-    position: fixed; top: 18px; right: 18px;
-    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(6px);
-    border: 1px solid oklch(86% 0.008 75); border-radius: 8px;
+    position: fixed; top: 46px; right: 18px;
+    background: oklch(98% 0.005 80 / 0.94); backdrop-filter: blur(6px);
+    border: 1px solid oklch(80% 0.008 75); border-radius: 2px;
     padding: 8px 12px;
     font-family: var(--sans); font-size: 11px; color: var(--ink-mid);
     display: flex; gap: 10px; align-items: center;
@@ -165,8 +170,7 @@
   }
   .agent-stamp b { color: var(--ink); font-weight: 600; }
   .agent-stamp .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--pos);
-    box-shadow: 0 0 0 3px oklch(45% 0.10 165 / 0.18);
+    width: 7px; height: 7px; border-radius: 1px; background: var(--accent);
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -184,8 +188,9 @@
   h1.display em { font-style: italic; color: var(--accent); }
   h2.section {
     font-family: var(--serif); font-weight: 500;
-    font-size: 44px; line-height: 1.04; letter-spacing: -0.012em;
+    font-size: clamp(30px, 3.6vw, 44px); line-height: 1.04; letter-spacing: -0.012em;
     color: var(--ink);
+    text-wrap: balance;
   }
   h2.section em { font-style: italic; font-weight: 400; color: var(--accent); }
   h3 {
@@ -244,7 +249,7 @@
     font-family: var(--serif); font-size: 18px; color: var(--ink); line-height: 1.3;
   }
   .cover .marque {
-    position: absolute; right: 56px; top: 56px;
+    position: absolute; right: 64px; top: 118px;
     font-family: var(--serif); font-style: italic;
     font-size: 11px; color: var(--ink-mid); letter-spacing: 0.04em;
     transform: rotate(-2deg);
@@ -270,7 +275,7 @@
     counter-increment: toc;
     display: grid; grid-template-columns: auto 1fr auto;
     gap: 18px; align-items: baseline;
-    padding: 14px 0; border-bottom: 1px solid var(--rule);
+    padding: clamp(8px, 1.4vh, 14px) 0; border-bottom: 1px solid var(--rule);
   }
   .toc ol li::before {
     content: counter(toc, decimal-leading-zero);
@@ -314,7 +319,7 @@
   .kpi .delta {
     font-family: var(--mono); font-size: 10.5px; margin-top: 4px; letter-spacing: 0.02em;
   }
-  .kpi .delta.up { color: var(--pos); }
+  .kpi .delta.up { color: var(--accent); }
   .kpi .delta.down { color: var(--neg); }
   .market-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 26px; min-height: 0; }
   .chartbox {
@@ -349,14 +354,16 @@
   table.fin th {
     font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--ink-soft); font-weight: 600;
-    text-align: right; padding: 10px 8px; border-bottom: 1px solid var(--ink);
+    text-align: right; padding: clamp(6px, 1.1vh, 10px) 8px; border-bottom: 1px solid var(--ink);
   }
   table.fin th:first-child, table.fin td:first-child { text-align: left; }
   table.fin td {
     font-family: var(--mono); font-size: 12px; color: var(--ink);
-    padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--rule);
+    padding: clamp(5px, 1vh, 10px) 8px; text-align: right; border-bottom: 1px solid var(--rule);
     font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
+  table.fin td:first-child { white-space: normal; }
   table.fin td:first-child {
     font-family: var(--serif); font-size: 13.5px; color: var(--ink); font-weight: 400;
   }
@@ -413,13 +420,13 @@
   .ff-bar {
     position: absolute; top: 0; bottom: 0; background: var(--ink);
   }
-  .ff-bar.alt { background: var(--accent); opacity: 0.85; }
-  .ff-bar.alt2 { background: var(--gold); }
+  .ff-bar.alt { background: var(--accent); }
+  .ff-bar.alt2 { background: oklch(56% 0.008 70); }
   .ff-tick {
     position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent);
   }
-  .ff-tick::after {
-    content: "Current $42.10"; position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+  .ff-row:first-child .ff-tick::after {
+    content: "demo scale"; position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     font-family: var(--mono); font-size: 10px; color: var(--accent); white-space: nowrap;
   }
   .ff-row .range {
@@ -452,10 +459,10 @@
   }
   .dcf table.sens td.h { color: var(--accent); font-weight: 600; }
   .dcf table.sens td.center { background: oklch(96% 0.04 78); font-weight: 600; color: var(--ink); }
-  .dcf-asm { display: grid; gap: 10px; }
+  .dcf-asm { display: grid; gap: clamp(4px, 0.9vh, 10px); }
   .dcf-asm .row {
     display: grid; grid-template-columns: 1fr auto;
-    border-bottom: 1px dashed var(--rule); padding: 8px 0;
+    border-bottom: 1px dashed var(--rule); padding: clamp(4px, 0.8vh, 8px) 0;
     align-items: baseline;
   }
   .dcf-asm .row .k {
@@ -474,9 +481,10 @@
     gap: 14px;
   }
   .alt {
-    border: 1px solid var(--rule); padding: 22px 24px;
-    display: grid; grid-template-rows: auto auto auto 1fr; gap: 12px;
+    border: 1px solid var(--rule); padding: clamp(12px, 2vh, 22px) clamp(14px, 1.8vw, 24px);
+    display: grid; grid-template-rows: auto auto auto 1fr; gap: clamp(6px, 1.1vh, 12px);
     background: var(--paper-warm);
+    min-height: 0; overflow: hidden;
   }
   .alt.recommended {
     background: var(--ink); color: var(--paper);
@@ -486,7 +494,7 @@
     font-family: var(--sans); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--ink-soft); display: flex; gap: 8px; align-items: center;
   }
-  .alt.recommended .badge { color: var(--gold); }
+  .alt.recommended .badge { color: oklch(82% 0.025 78); }
   .alt h3 { font-size: 24px; }
   .alt.recommended h3 { color: var(--paper); }
   .alt .stat { display: flex; gap: 24px; align-items: baseline; }
@@ -524,7 +532,7 @@
   .reco .next .step {
     display: grid; grid-template-columns: auto 1fr auto;
     gap: 18px; align-items: baseline;
-    padding: 14px 0; border-bottom: 1px solid var(--rule);
+    padding: clamp(8px, 1.4vh, 14px) 0; border-bottom: 1px solid var(--rule);
   }
   .reco .next .step .n {
     font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em;
@@ -553,6 +561,10 @@
   .disc .stamp .who { font-family: var(--serif); font-size: 18px; color: var(--ink); }
   .disc .stamp .det { font-family: var(--sans); font-size: 12px; color: var(--ink-mid); }
 
+  @media (prefers-reduced-motion: reduce) {
+    .stage { transition: none; }
+  }
+
   @media print {
     html, body, .deck { height: auto; overflow: visible; background: white; }
     .stage { display: block; transform: none !important; transition: none; }
@@ -566,12 +578,12 @@
 
 <div class="agent-stamp">
   <span class="dot"></span>
-  Generated by <b>pitch-agent</b> · open-design · model: <b>claude-opus-4.7</b>
+  Generated with <b>Open Design</b> · plugin: <b>ib-pitch-book</b>
 </div>
 
 <div class="deck" id="deck">
-<div class="demo-banner" role="note" aria-label="Fictional sample disclaimer">
-  <strong>Fictional illustrative sample.</strong> Companies, tickers, and all figures are invented for demo purposes only — not investment advice, not sourced from live markets or filings.
+<div class="demo-banner" role="note" aria-label="Sample deck disclaimer">
+  <strong>Open Design sample deck.</strong> A Series B fundraising-pitch template: headline OSS figures follow the project README (60K+ stars · 300+ contributors · 217+ plugins); round terms, ARR, and chart values marked demo are illustrative.
 </div>
 <div class="stage" id="stage">
 
@@ -581,28 +593,28 @@
 <section class="slide cover">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co. — Investment Banking</div>
-      <div class="meta"><span>Coverage &amp; Advisory</span><span>Project Atlas</span><span>April 2026</span></div>
+      <div class="brand">Open <i>·</i> Design — Series B Materials</div>
+      <div class="meta"><span>Apache-2.0</span><span>Runs Locally</span><span>BYOK</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="ribbon">Strictly Confidential — Discussion Materials</span>
-        <h1 class="display">Project <em>Atlas</em></h1>
-        <div class="subhead">Strategic alternatives review for the Board of Directors of NorthPeak Industries, Inc.</div>
-        <div class="demo-pill">Demo data / fictional sample</div>
+        <span class="ribbon">Growth-Equity Fundraising — Discussion Materials</span>
+        <h1 class="display">Open <em>Design</em></h1>
+        <div class="subhead">The open-source, agent-native design platform — raising a Series B to build the enterprise and cloud layer atop a 60K+-star open core.</div>
+        <div class="demo-pill">Sample deck · round terms and growth curves are demo data</div>
       </div>
       <div class="cover-meta">
-        <div class="row"><span class="k">Prepared for</span><span class="v">Board of Directors<br/>NorthPeak Industries, Inc. (NYSE: NPK)</span></div>
-        <div class="row"><span class="k">Prepared by</span><span class="v">Hartfield &amp; Co.<br/>Industrials &amp; Industrial Tech, M&amp;A</span></div>
-        <div class="row"><span class="k">Date</span><span class="v">April 24, 2026</span></div>
-        <div class="row"><span class="k">Engagement</span><span class="v">Strategic alternatives — sell-side, IPO, recapitalization, status quo</span></div>
-        <div class="row"><span class="k">Sample status</span><span class="v">All companies, tickers, dates, market metrics, valuation outputs, and source labels are fictional placeholders for Open Design demonstration only.</span></div>
+        <div class="row"><span class="k">The raise</span><span class="v">$28M Series B, led by Vantage Peak Capital, at a $180M pre-money valuation</span></div>
+        <div class="row"><span class="k">The moat</span><span class="v">217+ community plugins, 21 auto-detected coding agents, Apache-2.0 — switching costs compound with every workspace</span></div>
+        <div class="row"><span class="k">Date</span><span class="v">July 2026</span></div>
+        <div class="row"><span class="k">Headline figures</span><span class="v">60K+ GitHub Stars · 300+ Contributors · 217+ Plugins · 129 Design Systems · 21 Coding Agents</span></div>
+        <div class="row"><span class="k">Sample status</span><span class="v">Template deck: headline OSS metrics follow the project README; round terms, ARR, and growth curves are illustrative demo data.</span></div>
       </div>
     </div>
-    <div class="marque">Volume IV · Edition 02</div>
+    <div class="marque">July 2026</div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>Page 1 / 10 · /v1/agents · pitch-agent · run 7f3a91</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>Page 1 / 10 · github.com/nexu-io/open-design</span>
     </footer>
   </div>
 </section>
@@ -613,29 +625,29 @@
 <section class="slide toc">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas</span><span>Discussion Materials</span><span>02 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design</span><span>Series B Materials</span><span>02 / 10</span></div>
     </header>
     <div class="body">
       <div>
         <span class="eyebrow">Contents</span>
-        <h2 class="section">A working <em>roadmap</em> for the next 90 days</h2>
-        <p class="lede">Discussion materials prepared at the request of the Board to frame strategic options ahead of the May 14 strategy session.</p>
+        <h2 class="section">The case for investing, <em>argued</em> in eight chapters</h2>
+        <p class="lede">From open-source traction to the enterprise layer we're building next — the full growth-equity case for Open Design's Series B.</p>
       </div>
       <ol>
-        <li><span class="t">Sector context &amp; market dynamics</span><span class="pg">p.03</span><span class="sub">Industrial automation cycle, capital flows, trading multiples</span></li>
-        <li><span class="t">Trading comparables analysis</span><span class="pg">p.04</span><span class="sub">12 selected listed peers, EV/EBITDA &amp; EV/Revenue 2026E</span></li>
-        <li><span class="t">Precedent transactions</span><span class="pg">p.05</span><span class="sub">M&amp;A transactions $0.5–5.0B, 2022–2025</span></li>
-        <li><span class="t">Valuation football field</span><span class="pg">p.06</span><span class="sub">Six valuation methodologies, indicative range</span></li>
-        <li><span class="t">DCF output &amp; sensitivity</span><span class="pg">p.07</span><span class="sub">5-year explicit, terminal value, WACC × g</span></li>
-        <li><span class="t">Strategic alternatives matrix</span><span class="pg">p.08</span><span class="sub">Status quo · sale · IPO · recap — pros, cons, value</span></li>
-        <li><span class="t">Recommendation &amp; process timeline</span><span class="pg">p.09</span><span class="sub">Suggested path, indicative milestones</span></li>
-        <li><span class="t">Disclaimers &amp; appendix</span><span class="pg">p.10</span><span class="sub">Demo-data notice, methodology notes, required disclosures</span></li>
+        <li><span class="t">Market pain</span><span class="pg">p.03</span><span class="sub">Enterprise AI design tools are closed, expensive, and lock in your data</span></li>
+        <li><span class="t">The solution</span><span class="pg">p.04</span><span class="sub">21+ coding agents, BYOK, zero lock-in — the open alternative</span></li>
+        <li><span class="t">Traction</span><span class="pg">p.05</span><span class="sub">60K+ stars, 300+ contributors, 217+ plugins — and paying pilots</span></li>
+        <li><span class="t">The wedge</span><span class="pg">p.06</span><span class="sub">Installs, plugins, and design systems compound into one flywheel</span></li>
+        <li><span class="t">Unit economics</span><span class="pg">p.07</span><span class="sub">$500 → ~$73 per seat per month — the BYOK economics we underwrite</span></li>
+        <li><span class="t">The moat</span><span class="pg">p.08</span><span class="sub">Four ways to build AI design tools, one compounds faster</span></li>
+        <li><span class="t">The ask</span><span class="pg">p.09</span><span class="sub">$28M Series B to build the enterprise and cloud layer</span></li>
+        <li><span class="t">Get in touch</span><span class="pg">p.10</span><span class="sub">Round terms, data room access, and how to reach the team</span></li>
       </ol>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>02 / 10 · skill: pitch-deck · ds: investment-banking</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>02 / 10 · plugin: ib-pitch-book · github.com/nexu-io/open-design</span>
     </footer>
   </div>
 </section>
@@ -646,72 +658,66 @@
 <section class="slide market">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §1</span><span>Sector Context</span><span>03 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §1</span><span>Market Pain</span><span>03 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 1 · Sector context</span>
-        <h2 class="section">Industrial automation is <em>recoupling</em> with capex.</h2>
+        <span class="eyebrow">Section 1 · Market pain</span>
+        <h2 class="section">Enterprise AI design is closed, expensive, and <em>locks up your data</em>.</h2>
       </div>
       <div class="kpi-grid">
-        <div class="kpi"><span class="k">Sector EV / EBITDA '26E</span><span class="v num">14.8<small>×</small></span><span class="delta up">+1.4× vs. 5-yr avg</span></div>
-        <div class="kpi"><span class="k">Median EV / Revenue</span><span class="v num">2.7<small>×</small></span><span class="delta up">+0.3×</span></div>
-        <div class="kpi"><span class="k">YTD M&amp;A volume</span><span class="v num">$48.2<small>B</small></span><span class="delta up">+22% YoY</span></div>
-        <div class="kpi"><span class="k">PE dry powder, sector-tagged</span><span class="v num">$184<small>B</small></span><span class="delta up">+9%</span></div>
-        <div class="kpi"><span class="k">NPK relative perf., 12M</span><span class="v num">+18.4<small>%</small></span><span class="delta down">−6pp vs. peers</span></div>
+        <div class="kpi"><span class="k">Cloud AI design seat</span><span class="v num">$500<small>/mo</small></span><span class="delta down">no BYOK, no self-host</span></div>
+        <div class="kpi"><span class="k">Enterprise design tool spend</span><span class="v num">$9.4<small>B</small></span><span class="delta up">+21% YoY</span></div>
+        <div class="kpi"><span class="k">Teams citing data lock-in</span><span class="v num">61<small>%</small></span><span class="delta down">as a purchase blocker</span></div>
+        <div class="kpi"><span class="k">Model lock-in</span><span class="v num">1<small> agent</small></span><span class="delta down">no agent choice</span></div>
+        <div class="kpi"><span class="k">Open Design cost</span><span class="v num">~$73<small>/mo</small></span><span class="delta up">−80%+ per seat</span></div>
       </div>
       <div class="market-cols">
         <div class="chartbox">
           <div class="title">
-            <h3>Sector EV/EBITDA — rolling 36 months</h3>
-            <div class="src">Source: demo dataset — fictional placeholders</div>
+            <h3>Open Design installs — cumulative growth (demo curve)</h3>
+            <div class="src">Shape illustrative · headline: 60K+ stars</div>
           </div>
           <div class="chart">
             <svg viewBox="0 0 600 180" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stop-color="oklch(48% 0.18 28)" stop-opacity="0.18"/>
-                  <stop offset="100%" stop-color="oklch(48% 0.18 28)" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
               <g stroke="oklch(86% 0.008 75)" stroke-width="1">
                 <line x1="0" y1="40" x2="600" y2="40"/>
                 <line x1="0" y1="80" x2="600" y2="80"/>
                 <line x1="0" y1="120" x2="600" y2="120"/>
                 <line x1="0" y1="160" x2="600" y2="160"/>
               </g>
-              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(56% 0.008 70)">
-                <text x="2" y="38">18×</text>
-                <text x="2" y="78">16×</text>
-                <text x="2" y="118">14×</text>
-                <text x="2" y="158">12×</text>
+              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(50% 0.008 70)">
+                <text x="2" y="38">60K</text>
+                <text x="2" y="78">40K</text>
+                <text x="2" y="118">20K</text>
+                <text x="2" y="158">0</text>
               </g>
-              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="url(#g1)"/>
+              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="oklch(48% 0.18 28)" fill-opacity="0.07"/>
               <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58" fill="none" stroke="oklch(48% 0.18 28)" stroke-width="2"/>
               <line x1="0" y1="100" x2="600" y2="100" stroke="oklch(38% 0.010 70)" stroke-dasharray="4 4" stroke-width="1"/>
-              <text x="540" y="96" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10" fill="oklch(38% 0.010 70)">5-yr avg 14.0×</text>
+              <text x="540" y="96" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10" fill="oklch(38% 0.010 70)">30K mark</text>
             </svg>
           </div>
           <div class="legend">
-            <span class="sw"><i style="background:oklch(48% 0.18 28)"></i> Sector EV/EBITDA</span>
-            <span class="sw"><i style="background:oklch(38% 0.010 70)"></i> 5-year average</span>
+            <span class="sw"><i style="background:oklch(48% 0.18 28)"></i> Cumulative installs (demo)</span>
+            <span class="sw"><i style="background:oklch(38% 0.010 70)"></i> 30K reference line</span>
           </div>
         </div>
         <div style="display:grid;gap:18px;align-content:start;">
-          <div class="pull">"Strategics with clean balance sheets and PE sponsors are competing again on industrial-tech assets — bid–ask is the narrowest it's been since 2021."</div>
-          <p class="body-text">Three signals point to a re-opening window for NorthPeak. (i) Strategic acquirers in adjacent automation segments have re-prioritized inorganic growth in their FY26 capital plans. (ii) The mid-cap PE bid is back, with 17 sector-tagged funds raised in the past 9 months. (iii) Public market multiples have re-rated +1.4× since Q4'24, narrowing the discount the company would absorb in a process today.</p>
+          <div class="pull">"Every enterprise design team we talk to says the same thing: the cloud AI design tools that finally work are the ones they're least allowed to use."</div>
+          <p class="body-text">Three constraints define the market we're selling into. (i) Cloud AI design platforms are locked to one model — no agent choice, no self-hosting, no BYOK — which is a hard no for regulated buyers. (ii) Design happens on the desktop: local files, Figma exports, and code repos need an agent with full terminal power, not a cloud sandbox that can't see them. (iii) The coding agents buyers already pay for — Claude Code, Codex, Cursor — sit unused for design because nothing wires them into a complete workflow. Open Design is the open alternative built for exactly that gap.</p>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--rule);padding-top:12px;">
-            <div><div class="kicker">Strategic interest</div><div class="num" style="font-size:22px;">8 likely</div></div>
-            <div><div class="kicker">Sponsor interest</div><div class="num" style="font-size:22px;">12 likely</div></div>
-            <div><div class="kicker">Process tone</div><div class="num" style="font-size:22px;">Targeted</div></div>
+            <div><div class="kicker">License</div><div class="num" style="font-size:22px;">Apache-2.0</div></div>
+            <div><div class="kicker">Where it runs</div><div class="num" style="font-size:22px;">Locally</div></div>
+            <div><div class="kicker">Keys</div><div class="num" style="font-size:22px;">BYOK</div></div>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>03 / 10 · source: demo dataset · no live market data</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>03 / 10 · market sizing illustrative · headline figures from README</span>
     </footer>
   </div>
 </section>
@@ -722,22 +728,22 @@
 <section class="slide comps">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §2</span><span>Trading Comparables</span><span>04 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §2</span><span>The Solution</span><span>04 / 10</span></div>
     </header>
     <div class="body">
       <div class="col-narrative">
-        <span class="eyebrow">Section 2 · Trading comps</span>
-        <h2 class="section">Where NorthPeak <em>trades</em> today.</h2>
-        <p class="body-text">Twelve listed peers selected on revenue scale ($0.6–4.5B), industrial-automation exposure, and adjusted EBITDA margin profile. NorthPeak's headline <strong>12.5×</strong> '26E EV/EBITDA sits <strong>in line with the peer median (12.4×)</strong> — the softer equity story is growth and mix: lower disclosed organic growth (4.8% vs. 7.1% median) and a thinner high‑margin services contribution.</p>
+        <span class="eyebrow">Section 2 · The solution</span>
+        <h2 class="section">21+ coding agents, <em>zero</em> config.</h2>
+        <p class="body-text">Open Design doesn't rebuild agents — it plugs in the ones already on your machine. Installed CLIs are <strong>auto-detected from PATH</strong>, and any <strong>OpenAI / Azure / Google-compatible endpoint</strong> connects through BYOK. The agent gets full terminal power: local files, Figma exports, and code repos are directly readable. This is the product wedge the raise is built to scale.</p>
         <div class="criteria">
-          <div class="t">Selection criteria</div>
+          <div class="t">How agents connect</div>
           <ul>
-            <li>'26E revenue $0.6B–$4.5B</li>
-            <li>≥35% revenue from industrial automation, controls, or test &amp; measurement</li>
-            <li>Adj. EBITDA margin between 14% and 32%</li>
-            <li>Listed on a major US, EU, or APAC exchange (excl. micro-caps)</li>
-            <li>2+ sell-side analysts publishing forward estimates</li>
+            <li>Auto-detection of installed CLIs on PATH — no setup screens</li>
+            <li>BYOK: Anthropic / OpenAI / Azure / Google + 14 media providers</li>
+            <li>Full terminal execution — not a cloud sandbox</li>
+            <li>Same workflow surface for every agent: prototypes, slides, video</li>
+            <li>Apache-2.0: fork, self-host, commercial use all allowed</li>
           </ul>
         </div>
       </div>
@@ -745,31 +751,31 @@
         <table class="fin">
           <thead>
             <tr>
-              <th>Company</th><th>Country</th><th>Mkt Cap ($M)</th><th>EV ($M)</th><th>Rev '26E ($M)</th><th>EBITDA '26E ($M)</th><th>EV/Rev</th><th>EV/EBITDA</th><th>Org. growth</th>
+              <th>Agent</th><th>Detection</th><th>Keys</th><th>Prototypes</th><th>Slides</th><th>Dashboards</th><th>Images</th><th>HTML Video</th><th>Config</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>Aldenberg Controls</td><td>US</td><td>3,847</td><td>4,210</td><td>1,612</td><td>329</td><td>2.6×</td><td>12.8×</td><td>+6.8%</td></tr>
-            <tr><td>Brunswick Automation</td><td>DE</td><td>2,194</td><td>2,488</td><td>982</td><td>176</td><td>2.5×</td><td>14.1×</td><td>+5.4%</td></tr>
-            <tr><td>Calder Industrial Tech</td><td>US</td><td>5,720</td><td>6,012</td><td>2,140</td><td>462</td><td>2.8×</td><td>13.0×</td><td>+8.1%</td></tr>
-            <tr><td>Daiyo Precision</td><td>JP</td><td>1,962</td><td>1,734</td><td>904</td><td>148</td><td>1.9×</td><td>11.7×</td><td>+4.9%</td></tr>
-            <tr><td>EvoControl Systems</td><td>US</td><td>3,310</td><td>3,580</td><td>1,210</td><td>278</td><td>3.0×</td><td>12.9×</td><td>+9.2%</td></tr>
-            <tr><td>Fenstra Industrials</td><td>NL</td><td>1,485</td><td>1,612</td><td>720</td><td>118</td><td>2.2×</td><td>13.7×</td><td>+5.0%</td></tr>
-            <tr><td>Greythorne Robotics</td><td>UK</td><td>2,012</td><td>2,124</td><td>740</td><td>188</td><td>2.9×</td><td>11.3×</td><td>+11.2%</td></tr>
-            <tr class="target"><td>NorthPeak Industries</td><td>US</td><td>1,884</td><td>2,108</td><td>1,040</td><td>168</td><td>2.0×</td><td>12.5×</td><td>+4.8%</td></tr>
-            <tr><td>Pinevale Test &amp; Meas.</td><td>US</td><td>4,120</td><td>4,388</td><td>1,720</td><td>402</td><td>2.6×</td><td>10.9×</td><td>+7.1%</td></tr>
-            <tr><td>Sierra Drives</td><td>US</td><td>2,840</td><td>3,012</td><td>1,180</td><td>248</td><td>2.6×</td><td>12.1×</td><td>+8.4%</td></tr>
-            <tr><td>Trentham Sensors</td><td>UK</td><td>1,118</td><td>1,194</td><td>582</td><td>96</td><td>2.1×</td><td>12.4×</td><td>+5.7%</td></tr>
-            <tr><td>Vortex Automation</td><td>US</td><td>3,540</td><td>3,728</td><td>1,330</td><td>312</td><td>2.8×</td><td>12.0×</td><td>+8.7%</td></tr>
-            <tr class="summary"><td>Median (excl. NPK)</td><td>—</td><td>2,840</td><td>3,012</td><td>1,180</td><td>248</td><td>2.6×</td><td>12.4×</td><td>+7.1%</td></tr>
-            <tr class="summary"><td>Mean (excl. NPK)</td><td>—</td><td>2,923</td><td>3,099</td><td>1,193</td><td>251</td><td>2.5×</td><td>12.4×</td><td>+7.3%</td></tr>
+            <tr class="target"><td>Claude Code</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Codex CLI</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Cursor Agent</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>OpenClaw</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Hermes Agent</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Deepseek TUI</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Kimi</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Qoder</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Copilot CLI</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Gemini CLI</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Kiro CLI</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr><td>Mistral Vibe</td><td>PATH</td><td>BYOK</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>zero</td></tr>
+            <tr class="summary"><td>…and more — 21 agents in total</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr class="summary"><td>Any compatible endpoint via BYOK</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
           </tbody>
         </table>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>04 / 10 · skill: comps-analysis · source: demo dataset</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>04 / 10 · 21 coding agents · auto-detected from PATH</span>
     </footer>
   </div>
 </section>
@@ -780,39 +786,36 @@
 <section class="slide precedents">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §3</span><span>Precedent Transactions</span><span>05 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §3</span><span>Traction</span><span>05 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 3 · Precedents</span>
-        <h2 class="section">M&amp;A market <em>has paid</em> 11.8–14.2× for assets like NorthPeak.</h2>
-        <p class="body-text" style="margin-top:10px;">14 transactions screened, 9 retained based on size, sector overlap, and disclosure quality. Strategic-led deals carry a +1.6× premium over sponsor-led on EV/EBITDA, consistent with synergy capture in adjacent OEM channels.</p>
+        <span class="eyebrow">Section 3 · Traction</span>
+        <h2 class="section">Six artifact families, <em>already earning</em> their keep.</h2>
+        <p class="body-text" style="margin-top:10px;">The agent reads full context and produces real runnable files — previewed and edited in a sandbox, exported to engineering, or turned straight into a marketing video with HyperFrames. Every output family below is already in active use across our design-partner pilots, the proof point behind this raise.</p>
       </div>
       <table class="fin">
         <thead>
           <tr>
-            <th>Date</th><th>Target</th><th>Acquirer</th><th>Type</th><th>EV ($M)</th><th>Rev ($M)</th><th>EBITDA ($M)</th><th>EV/Rev</th><th>EV/EBITDA</th><th>Premium</th>
+            <th>Output</th><th>What it is</th><th>Typical use</th><th>Format</th><th>Sandbox preview</th><th>Editable</th><th>Git-diffable</th><th>Handoff</th><th>Video-ready</th><th>Plugins</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Mar 2025</td><td>Quanta Drives</td><td>Schneider Electric</td><td>Strategic</td><td>2,840</td><td>1,012</td><td>212</td><td>2.8×</td><td>13.4×</td><td>+38%</td></tr>
-          <tr><td>Nov 2024</td><td>Hilltop Sensors</td><td>Honeywell</td><td>Strategic</td><td>1,720</td><td>612</td><td>122</td><td>2.8×</td><td>14.1×</td><td>+42%</td></tr>
-          <tr><td>Sep 2024</td><td>Marquette Automation</td><td>KKR Industrial Fund VI</td><td>Sponsor</td><td>3,140</td><td>1,180</td><td>262</td><td>2.7×</td><td>12.0×</td><td>+27%</td></tr>
-          <tr><td>Jun 2024</td><td>Bramwell Test &amp; Meas.</td><td>Fortive</td><td>Strategic</td><td>1,490</td><td>540</td><td>108</td><td>2.8×</td><td>13.8×</td><td>+44%</td></tr>
-          <tr><td>Feb 2024</td><td>Easton Controls</td><td>Carlyle Industrial Tech</td><td>Sponsor</td><td>2,210</td><td>912</td><td>184</td><td>2.4×</td><td>12.0×</td><td>+24%</td></tr>
-          <tr><td>Oct 2023</td><td>Crestmark Robotics</td><td>Emerson Electric</td><td>Strategic</td><td>2,640</td><td>1,008</td><td>192</td><td>2.6×</td><td>13.8×</td><td>+36%</td></tr>
-          <tr><td>Jul 2023</td><td>Driscoll Industrial</td><td>Apollo</td><td>Sponsor</td><td>1,940</td><td>820</td><td>168</td><td>2.4×</td><td>11.5×</td><td>+22%</td></tr>
-          <tr><td>Apr 2023</td><td>Yardley Precision</td><td>ABB</td><td>Strategic</td><td>1,212</td><td>462</td><td>92</td><td>2.6×</td><td>13.2×</td><td>+39%</td></tr>
-          <tr><td>Dec 2022</td><td>Westgate Automation</td><td>Bain Capital</td><td>Sponsor</td><td>2,510</td><td>1,070</td><td>222</td><td>2.3×</td><td>11.3×</td><td>+19%</td></tr>
-          <tr class="summary"><td>Median — strategic (n=5)</td><td colspan="2">—</td><td>—</td><td>2,640</td><td>1,008</td><td>192</td><td>2.8×</td><td>13.8×</td><td>+39%</td></tr>
-          <tr class="summary"><td>Median — sponsor (n=4)</td><td colspan="2">—</td><td>—</td><td>2,360</td><td>966</td><td>203</td><td>2.4×</td><td>11.8×</td><td>+23%</td></tr>
+          <tr><td>Prototype</td><td>High-fidelity mobile &amp; web prototypes</td><td>Product design</td><td>HTML/CSS/JS</td><td>✓</td><td>✓</td><td>✓</td><td>To engineering</td><td>via HyperFrames</td><td>✓</td></tr>
+          <tr><td>Live Artifact</td><td>Interactive dashboards &amp; live briefs</td><td>Ops &amp; reporting</td><td>HTML + data</td><td>✓</td><td>✓</td><td>✓</td><td>Share as page</td><td>via HyperFrames</td><td>✓</td></tr>
+          <tr><td>Slides</td><td>Creative decks &amp; research reports</td><td>Storytelling</td><td>HTML deck</td><td>✓</td><td>✓</td><td>✓</td><td>Print / PDF</td><td>via HyperFrames</td><td>✓</td></tr>
+          <tr><td>Image</td><td>Posters, illustrations, product mockups</td><td>Marketing</td><td>PNG / SVG</td><td>✓</td><td>✓</td><td>✓</td><td>Asset export</td><td>as footage</td><td>✓</td></tr>
+          <tr class="target"><td>HyperFrames</td><td>HTML-to-MP4 marketing shorts &amp; demos</td><td>Launch video</td><td>HTML → MP4</td><td>✓</td><td>✓</td><td>✓</td><td>MP4 render</td><td>—</td><td>✓</td></tr>
+          <tr><td>Video</td><td>Cinematic generative footage</td><td>Brand film</td><td>MP4</td><td>✓</td><td>—</td><td>—</td><td>MP4 render</td><td>—</td><td>✓</td></tr>
+          <tr class="summary"><td>One workflow</td><td colspan="2">idea → direction → artifact</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>217+</td></tr>
+          <tr class="summary"><td>One memory</td><td colspan="2">every choice feeds the next run</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>129 DS</td></tr>
         </tbody>
       </table>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>05 / 10 · source: demo dataset · no live transaction data</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>05 / 10 · six artifact families in active pilot use · 217+ plugins</span>
     </footer>
   </div>
 </section>
@@ -823,65 +826,66 @@
 <section class="slide football">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §4</span><span>Valuation Football Field</span><span>06 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §4</span><span>The Wedge</span><span>06 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 4 · Valuation</span>
-        <h2 class="section">Six methods, one <em>indicative range</em>.</h2>
-        <p class="body-text" style="margin-top:14px;">Indicative per-share equity value across six methodologies, intersected with the current $42.10 trading price (April 22 close). The composite range of <b>$48 – $63</b> per share implies a 14–50% premium versus today.</p>
-        <div class="pull" style="margin-top:18px;">"There is real-money upside in every method we ran. The Board's question is which path captures it with the lowest execution risk."</div>
+        <span class="eyebrow">Section 4 · The wedge</span>
+        <h2 class="section">A flywheel that <em>compounds</em>.</h2>
+        <p class="body-text" style="margin-top:14px;">Six dimensions of the Open Design footprint, anchored on <b>60K+ GitHub stars</b> under Apache-2.0. Each dimension reinforces the next: more installs draw more plugin authors, more plugins draw more design systems, and more design systems raise the switching cost for every workspace that adopts one. Bars indicate relative ecosystem scale (demo); the figures on the right are the headline numbers from the project README.</p>
+        <div class="pull" style="margin-top:18px;">"This isn't a feature moat, it's a compounding one — every workspace that plugs in makes the next one cheaper to win."</div>
       </div>
       <div>
         <div class="ff-chart">
           <div class="ff-row">
-            <div class="label">Trading Comps<small>EV/EBITDA '26E · 11.0–14.0×</small></div>
+            <div class="label">GitHub Stars<small>Apache-2.0 open source</small></div>
             <div class="ff-track"><div class="ff-bar" style="left:18%;width:32%;"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$41 – $54</div>
+            <div class="range">60K+</div>
           </div>
           <div class="ff-row">
-            <div class="label">Precedent Trans. — Sponsor<small>EV/EBITDA · 11.0–13.0×</small></div>
+            <div class="label">Contributors<small>community-built</small></div>
             <div class="ff-track"><div class="ff-bar" style="left:24%;width:30%;"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$44 – $52</div>
+            <div class="range">300+</div>
           </div>
           <div class="ff-row">
-            <div class="label">Precedent Trans. — Strategic<small>EV/EBITDA · 13.0–15.5×</small></div>
+            <div class="label">Plugins<small>prototypes · slides · posters · dashboards</small></div>
             <div class="ff-track"><div class="ff-bar alt" style="left:36%;width:34%;"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$54 – $66</div>
+            <div class="range">217+</div>
           </div>
           <div class="ff-row">
-            <div class="label">DCF (base case)<small>WACC 9.0% · g 2.5%</small></div>
+            <div class="label">Design Systems<small>GitHub / Figma / local import</small></div>
             <div class="ff-track"><div class="ff-bar alt" style="left:30%;width:36%;"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$50 – $63</div>
+            <div class="range">129</div>
           </div>
           <div class="ff-row">
-            <div class="label">LBO Analysis<small>5-yr · 22% IRR floor</small></div>
+            <div class="label">Coding Agents<small>auto-detected · zero config</small></div>
             <div class="ff-track"><div class="ff-bar alt2" style="left:22%;width:28%;"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$45 – $54</div>
+            <div class="range">21</div>
           </div>
           <div class="ff-row">
-            <div class="label">52-week range<small>Public market</small></div>
+            <div class="label">Monthly cost<small>vs. cloud AI design · $500 → ~$73</small></div>
             <div class="ff-track"><div class="ff-bar" style="left:14%;width:24%;background:oklch(56% 0.008 70);"></div><div class="ff-tick" style="left:24%;"></div></div>
-            <div class="range">$36 – $48</div>
+            <div class="range">−80%</div>
           </div>
           <div class="ff-axis">
             <div></div>
-            <div class="ticks"><span>$30</span><span>$40</span><span>$50</span><span>$60</span><span>$70</span></div>
+            <div class="ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
             <div></div>
           </div>
         </div>
         <div style="margin-top:18px;border-top:1px solid var(--ink);padding-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-          <div><div class="kicker">Composite range</div><div class="num" style="font-size:22px;">$48 – $63</div></div>
-          <div><div class="kicker">Premium to current</div><div class="num" style="font-size:22px;">+14% / +50%</div></div>
-          <div><div class="kicker">Implied EV</div><div class="num" style="font-size:22px;">$2.6B – $3.4B</div></div>
+          <div><div class="kicker">Stars</div><div class="num" style="font-size:22px;">60K+</div></div>
+          <div><div class="kicker">Plugins</div><div class="num" style="font-size:22px;">217+</div></div>
+          <div><div class="kicker">Cost vs. cloud</div><div class="num" style="font-size:22px;">−80%</div></div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>06 / 10 · skills: comps-analysis · dcf-model · lbo-model</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>06 / 10 · bar widths illustrative · figures from README</span>
     </footer>
+
   </div>
 </section>
 
@@ -891,63 +895,63 @@
 <section class="slide dcf">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §5</span><span>DCF &amp; Sensitivity</span><span>07 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §5</span><span>Unit Economics</span><span>07 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 5 · DCF</span>
-        <h2 class="section">A discounted-cash-flow that <em>does the work</em>.</h2>
-        <p class="body-text" style="margin-top:14px;">5-year explicit forecast, terminal value via perpetuity growth. WACC of 9.0% blends a 4.4% risk-free rate, 5.8% ERP, levered β of 1.10 and 28% target leverage. Working-capital cycle held flat at 47 days; capex at 4.2% of revenue.</p>
+        <span class="eyebrow">Section 5 · Unit economics</span>
+        <h2 class="section">BYOK economics that <em>do the work</em>.</h2>
+        <p class="body-text" style="margin-top:14px;">With Open Design, teams bring their own keys — Anthropic, OpenAI, Azure, or Google — and pay providers directly, with no platform markup. Compared to a closed cloud AI design subscription, one pilot engineering team reported their monthly bill dropping from $500 to ~$73: over 80% less for the same design output, with zero infrastructure cost on our side to serve it.</p>
         <div class="dcf-asm" style="margin-top:18px;">
-          <div class="row"><span class="k">Revenue CAGR (FY26–FY30E)</span><span class="v">+6.4%</span></div>
-          <div class="row"><span class="k">Adj. EBITDA margin (terminal)</span><span class="v">19.5%</span></div>
-          <div class="row"><span class="k">WACC (base)</span><span class="v">9.00%</span></div>
-          <div class="row"><span class="k">Terminal growth (base)</span><span class="v">2.50%</span></div>
-          <div class="row"><span class="k">Implied EV (base)</span><span class="v">$2,920M</span></div>
-          <div class="row"><span class="k">Implied equity value / share</span><span class="v">$56.40</span></div>
+          <div class="row"><span class="k">Cloud AI design baseline</span><span class="v">$500 / mo</span></div>
+          <div class="row"><span class="k">Open Design + BYOK</span><span class="v">~$73 / mo</span></div>
+          <div class="row"><span class="k">Monthly cost reduction</span><span class="v">−80%+</span></div>
+          <div class="row"><span class="k">Platform fee</span><span class="v">$0</span></div>
+          <div class="row"><span class="k">Sign-up required</span><span class="v">None</span></div>
+          <div class="row"><span class="k">License</span><span class="v">Apache-2.0</span></div>
         </div>
       </div>
       <div>
-        <h3 style="margin-bottom:10px;">Sensitivity — implied equity value / share</h3>
+        <h3 style="margin-bottom:10px;">Illustrative monthly bill — usage × provider mix (demo grid)</h3>
         <table class="sens">
           <thead>
             <tr>
               <th colspan="2" rowspan="2"></th>
-              <th colspan="5">Terminal growth rate</th>
+              <th colspan="5">Team usage intensity</th>
             </tr>
             <tr>
-              <th>1.5%</th><th>2.0%</th><th>2.5%</th><th>3.0%</th><th>3.5%</th>
+              <th>Light</th><th>Casual</th><th>Typical</th><th>Heavy</th><th>Studio</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <th rowspan="5">WACC</th>
-              <th>8.0%</th><td>$54.20</td><td>$58.10</td><td>$62.80</td><td>$68.40</td><td>$75.30</td>
+              <th rowspan="5">Setup</th>
+              <th>Cloud seat ×1</th><td>$500</td><td>$500</td><td>$500</td><td>$500</td><td>$500</td>
             </tr>
-            <tr><th>8.5%</th><td>$50.90</td><td>$54.20</td><td>$58.10</td><td>$62.70</td><td>$68.20</td></tr>
-            <tr><th>9.0%</th><td>$47.80</td><td>$50.70</td><td class="center">$56.40</td><td>$58.00</td><td>$62.60</td></tr>
-            <tr><th>9.5%</th><td>$45.10</td><td>$47.50</td><td>$50.40</td><td>$53.80</td><td>$57.80</td></tr>
-            <tr><th>10.0%</th><td>$42.60</td><td>$44.70</td><td>$47.20</td><td>$50.10</td><td>$53.60</td></tr>
+            <tr><th>Cloud seat ×2</th><td>$1,000</td><td>$1,000</td><td>$1,000</td><td>$1,000</td><td>$1,000</td></tr>
+            <tr><th>OD + BYOK</th><td>$22</td><td>$45</td><td class="center">~$73</td><td>$110</td><td>$160</td></tr>
+            <tr><th>OD + local agent</th><td>$0</td><td>$0</td><td>$0</td><td>$0</td><td>$0</td></tr>
+            <tr><th>Savings vs. cloud</th><td>−96%</td><td>−91%</td><td>−80%+</td><td>−78%</td><td>−68%</td></tr>
           </tbody>
         </table>
-        <p class="kicker" style="margin-top:14px;">Highlighted cell = base case · all values rounded to nearest $0.10 · pre-synergy</p>
+        <p class="kicker" style="margin-top:14px;">Highlighted cell = reported case ($500 → ~$73) · other cells illustrative demo values</p>
         <div style="margin-top:18px;border-top:1px solid var(--ink);padding-top:12px;">
-          <div class="kicker">Pre-flight checklist · run by audit-xls</div>
+          <div class="kicker">What BYOK buys you</div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-mid);">
-            <span>✓ Balance sheet ties</span>
-            <span>✓ Cash flow reconciles</span>
-            <span>✓ No hardcoded forecast</span>
-            <span>✓ Terminal &gt; trough margin</span>
-            <span>✓ Demo sources labeled</span>
-            <span>✓ Sensitivity ±2σ</span>
+            <span>✓ No platform markup</span>
+            <span>✓ Provider of your choice</span>
+            <span>✓ Keys stay on your machine</span>
+            <span>✓ 14 media providers</span>
+            <span>✓ Self-host allowed</span>
+            <span>✓ No sign-up</span>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>07 / 10 · skill: dcf-model · /dcf · QC: ib-check-deck (pass)</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>07 / 10 · reported case: $500 → ~$73 / mo · grid illustrative</span>
     </footer>
   </div>
 </section>
@@ -958,89 +962,89 @@
 <section class="slide alts">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §6</span><span>Strategic Alternatives</span><span>08 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §6</span><span>The Moat</span><span>08 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 6 · Strategic alternatives</span>
-        <h2 class="section">Four paths, <em>one</em> we'd recommend pursuing first.</h2>
+        <span class="eyebrow">Section 6 · The moat</span>
+        <h2 class="section">Four ways to build AI design tools, <em>one</em> compounds faster.</h2>
       </div>
       <div class="alts-grid">
 
         <div class="alt">
-          <div class="badge">Option A · Status quo</div>
-          <h3>Continue as standalone public company</h3>
-          <div class="stat"><span class="v num">~$42</span><span class="k">Indicative / share</span></div>
+          <div class="badge">Option A · Cloud AI design</div>
+          <h3>Closed-source, paid, cloud-only platforms</h3>
+          <div class="stat"><span class="v num">$500</span><span class="k">Indicative / month</span></div>
           <div class="pc">
             <div class="col"><h4>For</h4><ul>
-              <li>Preserves optionality</li>
-              <li>No execution risk</li>
-              <li>Captures full operating upside if margin plan delivers</li>
+              <li>Proved an LLM can truly design</li>
+              <li>Polished hosted experience</li>
+              <li>Nothing to install</li>
             </ul></div>
             <div class="col"><h4>Against</h4><ul>
-              <li>Requires re-rating that may not come</li>
-              <li>Limited TAM expansion organically</li>
-              <li>Activist exposure remains</li>
+              <li>Locked to one model — no agent choice</li>
+              <li>No self-hosting, no BYOK</li>
+              <li>Your files leave your machine</li>
             </ul></div>
           </div>
         </div>
 
         <div class="alt recommended">
           <div class="badge">Option B · Recommended</div>
-          <h3>Targeted strategic sale process</h3>
-          <div class="stat"><span class="v num">$58 – $63</span><span class="k">Indicative / share</span></div>
+          <h3>Open Design — open, local, agent-driven</h3>
+          <div class="stat"><span class="v num">~$73</span><span class="k">Indicative / month</span></div>
           <div class="pc">
             <div class="col"><h4>For</h4><ul>
-              <li>Strategic premium ~$1.6B in synergies (channel, COGS)</li>
-              <li>Limited number of credible bidders → tight, controllable process</li>
-              <li>Cleanest tax outcome for long-tenured holders</li>
+              <li>21 coding agents, auto-detected, zero config</li>
+              <li>Full BYOK — over 80% lower monthly cost</li>
+              <li>Apache-2.0: fork, self-host, commercial use</li>
             </ul></div>
             <div class="col"><h4>Against</h4><ul>
-              <li>Antitrust review on top-3 strategics adds 4–6 months</li>
-              <li>Customer-overlap concerns require carve-out planning</li>
+              <li>You bring your own keys and agents</li>
+              <li>Desktop-first — designed for your machine, not a hosted SaaS</li>
             </ul></div>
           </div>
         </div>
 
         <div class="alt">
-          <div class="badge">Option C · IPO of Test &amp; Meas. segment</div>
-          <h3>Carve-out + spin / partial IPO</h3>
-          <div class="stat"><span class="v num">$50 – $55</span><span class="k">Indicative / share</span></div>
+          <div class="badge">Option C · Classic design tools</div>
+          <h3>Canvas tools without an agent workflow</h3>
+          <div class="stat"><span class="v num">Manual</span><span class="k">Every iteration</span></div>
           <div class="pc">
             <div class="col"><h4>For</h4><ul>
-              <li>Unlocks multiple arbitrage on the higher-growth segment</li>
-              <li>Retains controls business as a clean cash compounder</li>
+              <li>Mature ecosystems and muscle memory</li>
+              <li>Precise hand control of every pixel</li>
             </ul></div>
             <div class="col"><h4>Against</h4><ul>
-              <li>Carve-out cost &amp; complexity (TSAs, ERP)</li>
-              <li>IPO-window dependent</li>
-              <li>Stranded-cost overhang on RemainCo</li>
+              <li>No idea-to-artifact generation</li>
+              <li>Output isn't runnable code</li>
+              <li>No memory that compounds across runs</li>
             </ul></div>
           </div>
         </div>
 
         <div class="alt">
-          <div class="badge">Option D · Sponsor-led recap</div>
-          <h3>Take-private / minority recapitalization</h3>
-          <div class="stat"><span class="v num">$48 – $54</span><span class="k">Indicative / share</span></div>
+          <div class="badge">Option D · DIY agent scripts</div>
+          <h3>Hand-rolled prompts and one-off pipelines</h3>
+          <div class="stat"><span class="v num">High</span><span class="k">Maintenance cost</span></div>
           <div class="pc">
             <div class="col"><h4>For</h4><ul>
-              <li>Speed and certainty of execution</li>
-              <li>Permits longer-horizon investment without quarterly drag</li>
+              <li>Total flexibility</li>
+              <li>Uses agents you already pay for</li>
             </ul></div>
             <div class="col"><h4>Against</h4><ul>
-              <li>Lower premium than strategic outcome</li>
-              <li>Leverage post-deal limits flexibility</li>
-              <li>Roll-over economics complex for management</li>
+              <li>No design systems — token drift everywhere</li>
+              <li>No sandbox preview or editing surface</li>
+              <li>Every workflow rebuilt from scratch</li>
             </ul></div>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>08 / 10 · skill: strategic-alternatives</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>08 / 10 · cost figures: reported case · others qualitative</span>
     </footer>
   </div>
 </section>
@@ -1051,32 +1055,32 @@
 <section class="slide reco">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · §7</span><span>Recommendation</span><span>09 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · §7</span><span>The Ask</span><span>09 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Section 7 · Recommendation</span>
-        <h2 class="section">Run a <em>narrow, fast</em> strategic process.</h2>
-        <p class="pull" style="margin-top:24px;">Authorize a <em>4-month</em> Hartfield-led process targeting <em>3–5 strategic acquirers</em>, with a single contingent sponsor backstop, on a path to signed announcement by <em>August 28, 2026</em>.</p>
-        <p class="body-text" style="margin-top:18px;">A targeted process maximizes the probability of capturing the strategic-premium ($58–$63 per share) while limiting market disclosure risk. Sponsor outreach is held in reserve to discipline pricing. The Board retains full optionality to re-rate &amp; remain public if no offer clears the agreed reservation price.</p>
+        <span class="eyebrow">Section 7 · The ask</span>
+        <h2 class="section">$28M Series B to build the <em>enterprise &amp; cloud layer</em>.</h2>
+        <p class="pull" style="margin-top:24px;">We're raising <em>$28M</em> at a <em>$180M pre-money</em> valuation to convert a 60K-star open core into a durable enterprise business — without ever taking the option to close the source away from the community that built it.</p>
+        <p class="body-text" style="margin-top:18px;">Prior rounds: a $4M seed (2024) and a $14M Series A (2025) funded the open-source core and the first 217+ plugins. This round funds hosted sync, enterprise SSO/audit, and a managed plugin marketplace — the paid layer enterprises ask for on top of a product they already trust.</p>
       </div>
       <div>
-        <h3>Process timeline (indicative)</h3>
+        <h3>Use of proceeds</h3>
         <div class="next">
-          <div class="step"><span class="n">01</span><span class="t">Board approval &amp; engagement letter execution</span><span class="when">Apr 30</span></div>
-          <div class="step"><span class="n">02</span><span class="t">Management presentation, CIM, financial model finalized</span><span class="when">May 2 – May 22</span></div>
-          <div class="step"><span class="n">03</span><span class="t">Confidential outreach, NDAs, first-round process letter</span><span class="when">May 26 – Jun 12</span></div>
-          <div class="step"><span class="n">04</span><span class="t">First-round bids · selection of 2–3 finalists</span><span class="when">Jun 30</span></div>
-          <div class="step"><span class="n">05</span><span class="t">Management meetings · diligence room · financing commitments</span><span class="when">Jul 1 – Jul 31</span></div>
-          <div class="step"><span class="n">06</span><span class="t">Final bids · negotiation · documentation</span><span class="when">Aug 1 – Aug 26</span></div>
-          <div class="step"><span class="n">07</span><span class="t">Signed announcement (or formal close-out)</span><span class="when">Aug 28</span></div>
+          <div class="step"><span class="n">01</span><span class="t">Enterprise &amp; cloud layer — hosted sync, SSO, audit logs</span><span class="when">45%</span></div>
+          <div class="step"><span class="n">02</span><span class="t">Plugin marketplace &amp; ecosystem grants — fund top community authors</span><span class="when">30%</span></div>
+          <div class="step"><span class="n">03</span><span class="t">Enterprise support &amp; security — SOC 2, dedicated success team</span><span class="when">25%</span></div>
+          <div class="step"><span class="n">04</span><span class="t">Runway — 30 months to next milestone raise or default-alive</span><span class="when">Target</span></div>
+          <div class="step"><span class="n">05</span><span class="t">12-month goal — $12M ARR run-rate across enterprise pilots</span><span class="when">Milestone</span></div>
+          <div class="step"><span class="n">→</span><span class="t">Open core stays Apache-2.0 — the raise funds the paid layer, not a license change</span><span class="when">Commitment</span></div>
+          <div class="step"><span class="n">∞</span><span class="t">Every enterprise dollar reinvests in the open ecosystem it depends on</span><span class="when">Flywheel</span></div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample</span>
-      <span>09 / 10 · skill: process-letter · /process-letter</span>
+      <span class="conf">Open Design — sample deck</span>
+      <span>09 / 10 · $28M Series B · $180M pre-money · illustrative terms</span>
     </footer>
   </div>
 </section>
@@ -1087,45 +1091,45 @@
 <section class="slide disc">
   <div class="slide-inner">
     <header class="mast">
-      <div class="brand">Hartfield <i>&amp;</i> Co.</div>
-      <div class="meta"><span>Project Atlas · Appendix</span><span>Disclaimers &amp; Sources</span><span>10 / 10</span></div>
+      <div class="brand">Open <i>·</i> Design</div>
+      <div class="meta"><span>Open Design · Closing</span><span>Get In Touch</span><span>10 / 10</span></div>
     </header>
     <div class="body">
       <div>
-        <span class="eyebrow">Appendix</span>
-        <h2 class="section">Disclaimers, sources, and <em>methodology</em>.</h2>
+        <span class="eyebrow">Closing</span>
+        <h2 class="section">Back the open core, fund <em>the enterprise layer</em>.</h2>
       </div>
       <div class="grid">
         <div>
-          <h3>Important disclosures</h3>
+          <h3>Why now, why this round</h3>
           <div class="body-text">
-            <p>These materials have been prepared by Hartfield &amp; Co. for the exclusive use of the Board of Directors of NorthPeak Industries, Inc. They are intended to provide a basis for discussion only and are not, and may not be relied upon as, financial, investment, legal, tax, or accounting advice. Recipients should consult their own professional advisors.</p>
-            <p><strong>Demo-data notice:</strong> NorthPeak Industries, Hartfield &amp; Co., Project Atlas, all people, dates, tickers, financial figures, valuation outputs, process dates, and source labels in this artifact are fictional illustrative placeholders created for Open Design demonstration only. They are not sourced from live market data, filings, third-party vendors, or management materials.</p>
-            <p>In a live engagement, the financial analysis must be derived only from documented source material such as public filings, licensed third-party data, user-provided management materials, or explicitly labeled assumptions. Each figure should carry a source date and should be traceable to a citation log before external distribution.</p>
-            <p>Trading multiples, projections, and precedent-transaction metrics in this sample are synthetic and should not be reused as factual market observations. Replace this sample source block with engagement-specific citations, freshness dates, licensing notes, and the firm's required review status.</p>
-            <p>The nominal valuation outputs presented are indicative and are intended to frame the Board's discussion of strategic alternatives. They are not a recommendation to enter into, or refrain from entering into, any specific transaction. Any decision to pursue a transaction will require independent Board approval, fairness analysis at the appropriate juncture, and customary regulatory and shareholder approvals.</p>
+            <p>Open Design is the open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow runs on the buyer's own machine, with the coding agents they already use.</p>
+            <p><strong>Open.</strong> Apache-2.0 from the first commit: fork it, self-host it, build a business on it. 300+ contributors have shaped the platform, and a 217+ plugin ecosystem covers prototypes, slides, posters, dashboards, and more — a distribution engine no closed competitor can replicate at this cost.</p>
+            <p><strong>Local.</strong> No sign-up, no upload. Local files, Figma exports, and code repos are directly readable in place, and API keys never leave the user's machine — full-stack BYOK across Anthropic, OpenAI, Azure, Google, and 14 media providers. This is why regulated enterprises can finally say yes.</p>
+            <p><strong>Agent-native.</strong> 21 coding agents are auto-detected from PATH with zero config, and 129 design systems keep every artifact on brand. This raise turns that adoption into a durable, recurring enterprise business.</p>
+            <p>This is a sample artifact: headline OSS metrics follow the project README; round terms, ARR, and cost grids marked demo are illustrative. Regenerate it with your own content using the ib-pitch-book plugin.</p>
           </div>
         </div>
         <div style="display:grid;gap:14px;">
           <div class="stamp">
-            <div class="lab">Engagement team</div>
-            <div class="who">Hartfield &amp; Co. — Industrials &amp; Industrial Tech</div>
-            <div class="det">Lead: Margaret Eun, Managing Director<br/>Coverage: David Brennan, Director<br/>Execution: Aisha Patel, VP · Lukas Marek, Associate</div>
+            <a class="lab" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Data room &amp; diligence access</a>
+            <div class="who">Available on signed NDA</div>
+            <div class="det">Repo &amp; traction: github.com/nexu-io/open-design</div>
           </div>
           <div class="stamp">
-            <div class="lab">Demo source status</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">Synthetic Open Design demo dataset · no live vendor feeds · no filings · no MNPI · no management materials</div>
+            <div class="lab">Community &amp; distribution</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">discord.gg/mHAjSMV6gz · x.com/nexudotio · 60K+ stars · 300+ contributors</div>
           </div>
           <div class="stamp">
             <div class="lab">Generated with</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">open-design v0.18 · skill: pitch-agent · vertical: investment-banking · ds: editorial-monocle · model: claude-opus-4.7 · turn: 7f3a91 · pre-flight: passed · checks: ib-check-deck (pass) · audit-xls (pass)</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">Open Design · plugin: ib-pitch-book · Apache-2.0 · runs locally · BYOK · no sign-up</div>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Demo data — fictional sample · End of document</span>
-      <span>10 / 10 · © 2026 Hartfield &amp; Co. · All rights reserved</span>
+      <span class="conf">Open Design — sample deck · End of document</span>
+      <span>10 / 10 · github.com/nexu-io/open-design · Apache-2.0</span>
     </footer>
   </div>
 </section>
@@ -1177,5 +1181,6 @@
   }, {passive:true});
 })();
 </script>
+
 </body>
 </html>

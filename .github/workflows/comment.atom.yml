@@ -1,0 +1,148 @@
+name: comment.atom
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: comment-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Publish handoff comments
+    # merge_group is consumed alongside pull_request so the needs-validation gate can leave an
+    # ejection notice on the queued PR (the gate failure itself is invisible from the PR head).
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'merge_group') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check handoff helper
+        run: python3 .github/scripts/handoff.py self-check
+
+      - name: Resolve comment handoff artifacts
+        id: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern="$(python3 .github/scripts/handoff.py artifact-pattern comment)"
+          count="$(
+            gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[]? | select(.expired == false and (.name | startswith("handoff-comment-"))) | .name' \
+              | sed '/^$/d' \
+              | wc -l \
+              | tr -d ' '
+          )"
+          if [ "$count" = "0" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "pattern=$pattern"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download comment handoff artifacts
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ steps.artifacts.outputs.pattern }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/handoff-comment
+          merge-multiple: false
+          github-token: ${{ github.token }}
+
+      - name: Upsert handoff comments
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/handoff-comment"
+          helper=".github/scripts/handoff.py"
+
+          while IFS= read -r entry_json; do
+            id="$(jq -r '.id' <<< "$entry_json")"
+            pr_number="$(jq -r '.pr_number' <<< "$entry_json")"
+            head_sha="$(jq -r '.head_sha' <<< "$entry_json")"
+            base_sha="$(jq -r '.base_sha' <<< "$entry_json")"
+            marker="$(jq -r '.marker' <<< "$entry_json")"
+            body_path="$(jq -r '.body_path' <<< "$entry_json")"
+
+            if [ "$RUN_EVENT" = "merge_group" ]; then
+              # A merge_group run's head_sha is the queue's synthetic merge commit, never the PR
+              # head, so bind the artifact to its producing run by run_id instead; the live-PR
+              # head check below still carries the staleness guarantee.
+              artifact_run_id="$(jq -r '.run_id' <<< "$entry_json")"
+              if [ "$artifact_run_id" != "$RUN_ID" ]; then
+                echo "Skipping comment handoff $id because artifact run $artifact_run_id does not match workflow_run $RUN_ID."
+                continue
+              fi
+            elif [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
+              echo "Skipping comment handoff $id because artifact head $head_sha does not match workflow_run head $RUN_HEAD_SHA."
+              continue
+            fi
+
+            pr_json="$(gh api "repos/$REPO/pulls/$pr_number")"
+            pr_state="$(jq -r '.state' <<< "$pr_json")"
+            pr_draft="$(jq -r '.draft' <<< "$pr_json")"
+            current_head="$(jq -r '.head.sha' <<< "$pr_json")"
+            current_base="$(jq -r '.base.sha' <<< "$pr_json")"
+            if [ "$pr_state" != "open" ]; then
+              echo "Skipping comment handoff $id because PR $pr_number state is $pr_state."
+              continue
+            fi
+            if [ "$pr_draft" != "false" ]; then
+              echo "Skipping comment handoff $id because PR $pr_number is draft."
+              continue
+            fi
+            if [ "$current_head" != "$head_sha" ]; then
+              echo "Skipping stale comment handoff $id for $head_sha; current PR head is $current_head."
+              continue
+            fi
+            # Base freshness is meaningless for a merge-queue ejection notice: PRs ahead in the
+            # queue merge into the base branch while this run completes, so the base is EXPECTED
+            # to move; the notice stays valid as long as the PR head is unchanged (checked above).
+            if [ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]; then
+              echo "Skipping stale comment handoff $id for base $base_sha; current PR base is $current_base."
+              continue
+            fi
+
+            payload_file="$RUNNER_TEMP/comment-$id.json"
+            jq -n --rawfile body "$body_path" '{body: $body}' > "$payload_file"
+            comment_id="$(
+              gh api --paginate "repos/$REPO/issues/$pr_number/comments" \
+                | jq -r --arg marker "$marker" '.[] | select((.body // "") | contains($marker)) | .id' \
+                | tail -n 1 || true
+            )"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --input "$payload_file" >/dev/null
+              echo "Updated comment handoff $id on PR $pr_number."
+            else
+              gh api --method POST "repos/$REPO/issues/$pr_number/comments" --input "$payload_file" >/dev/null
+              echo "Created comment handoff $id on PR $pr_number."
+            fi
+          done < <(python3 "$helper" list comment "$root")

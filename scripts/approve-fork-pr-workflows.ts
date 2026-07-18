@@ -74,11 +74,7 @@ function pendingRunSetSignature(runs: WorkflowRun[]): string {
 // this set.
 const allowedWorkflowPaths = new Set([
   ".github/workflows/ci.yml",
-  ".github/workflows/visual-pr-capture.yml",
-  ".github/workflows/visual-pr-verify.yml",
 ]);
-
-const visualPrCaptureWorkflowPath = ".github/workflows/visual-pr-capture.yml";
 
 export function normalizeWorkflowPath(path: string): string {
   const suffixIndex = path.indexOf("@");
@@ -116,10 +112,6 @@ export function isAllowedChangedPath(path: string): boolean {
   );
 }
 
-export function isAllowedVisualCaptureChangedPath(path: string): boolean {
-  return /^apps\/web\/src\/.+\.(?:css|ts|tsx)$/.test(path);
-}
-
 export function isDeniedChangedPath(path: string): boolean {
   return (
     path.startsWith(".github/") ||
@@ -155,23 +147,14 @@ function changedPathSet(file: PullRequestFile): string[] {
   return [file.filename, file.previous_filename].filter((path): path is string => Boolean(path));
 }
 
-function allChangedPathsMatch(files: PullRequestFile[], predicate: (path: string) => boolean): boolean {
-  return files.every((file) => changedPathSet(file).every(predicate));
-}
-
-function workflowAllowsChangedFiles(workflowPath: string, files: PullRequestFile[] | undefined): boolean {
-  if (workflowPath !== visualPrCaptureWorkflowPath) return true;
-  return files != null && files.length > 0 && allChangedPathsMatch(files, isAllowedVisualCaptureChangedPath);
-}
-
 export function isPendingApprovalRun(run: WorkflowRun, pull: PullRequest, files?: PullRequestFile[]): boolean {
   const workflowPath = normalizeWorkflowPath(run.path);
+  void files;
   return (
     run.head_sha === pull.head.sha &&
     run.event === "pull_request" &&
     (run.status === "action_required" || run.conclusion === "action_required") &&
-    allowedWorkflowPaths.has(workflowPath) &&
-    workflowAllowsChangedFiles(workflowPath, files)
+    allowedWorkflowPaths.has(workflowPath)
   );
 }
 

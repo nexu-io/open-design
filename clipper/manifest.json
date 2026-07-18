@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "version": "0.2.0",
+  "default_locale": "en",
+  "description": "__MSG_extensionDescription__",
+  "permissions": ["scripting", "storage", "contextMenus", "tabs", "downloads"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "__MSG_extensionName__",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["i18n.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "web-clipper@open-design.ai",
+      "strict_min_version": "121.0"
+    }
+  }
+}

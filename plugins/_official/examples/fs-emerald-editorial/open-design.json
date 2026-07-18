@@ -1,0 +1,161 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-fs-emerald-editorial",
+  "title": "Write a Brand-Launch Narrative like a Growth Strategy Lead",
+  "title_i18n": {
+    "en": "Write a Brand-Launch Narrative like a Growth Strategy Lead",
+    "zh-CN": "像增长策略负责人一样写品牌发布叙事",
+    "zh-TW": "像增长策略负责人一样写品牌发布叙事"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.",
+  "description_i18n": {
+    "en": "Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.",
+    "zh-CN": "像增长策略负责人一样写品牌发布叙事——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像增长策略负责人一样写品牌发布叙事——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "zarazhangrui",
+    "url": "https://github.com/zarazhangrui"
+  },
+  "homepage": "https://github.com/zarazhangrui/beautiful-html-templates",
+  "plugin": {
+    "repo": "https://github.com/zarazhangrui/beautiful-html-templates"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "editorial",
+    "magazine",
+    "emerald",
+    "presentation",
+    "ppt",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "fs-emerald-editorial",
+    "marketing-and-gtm",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Brand-Launch Narrative like a Growth Strategy Lead\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Audience: marketing team, press. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像增长策略负责人一样写品牌发布叙事。像增长策略负责人一样写品牌发布叙事——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Brand-Launch Narrative like a Growth Strategy Lead",
+          "title_i18n": {
+            "en": "Write a Brand-Launch Narrative like a Growth Strategy Lead",
+            "zh-CN": "像增长策略负责人一样写品牌发布叙事",
+            "zh-TW": "像增长策略负责人一样写品牌发布叙事"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "leadership presentation",
+          "quarterly review",
+          "strategy readout",
+          "executive briefing",
+          "product launch readout",
+          "research recap"
+        ],
+        "default": "leadership presentation"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "The state of the work ahead",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "The leadership team",
+        "default": "a leadership audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Length",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 slides (seed rhythm)",
+          "9-12 slides (repeat section masters)",
+          "13+ slides (multi-section issue)"
+        ],
+        "default": "8 slides (seed rhythm)"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "marketing-gtm"
+  }
+}

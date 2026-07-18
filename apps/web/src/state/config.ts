@@ -3,6 +3,7 @@ import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
+  ApiProtocolConfig,
   AppConfig,
   MediaProviderCredentials,
   NotificationsConfig,
@@ -21,7 +22,7 @@ import {
 import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
-const CONFIG_MIGRATION_VERSION = 1;
+const CONFIG_MIGRATION_VERSION = 2;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -81,6 +82,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   composio: {},
   agentModels: {},
   agentCliEnv: {},
+  agentCliEnvIntent: {},
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
@@ -92,7 +94,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // remains the one-click opt-out. Without these defaults the gate at
   // `daemon/src/analytics.ts` (`if (telemetry?.metrics !== true) return`)
   // dropped every event fired during onboarding because no consent
-  // existed yet — observed live on the nightly.10 QA run, which left
+  // existed yet — observed live on the prerelease.10 QA run, which left
   // zero `page_view pn=onboarding` rows on PostHog despite the user
   // completing the flow.
   telemetry: { metrics: true, content: true },
@@ -103,10 +105,12 @@ export interface KnownProvider {
   label: string;
   protocol: ApiProtocol;
   baseUrl: string;
-  /** Default model to apply when the provider is selected. */
-  model: string;
-  /** Optional provider-specific model choices shown in Settings. */
-  models?: string[];
+  /** Ranked provider-owned preferences, matched against the live account catalogue. */
+  preferredModels: string[];
+  /** Model ids that Open Design previously preselected but the provider retired. */
+  retiredModels?: string[];
+  /** Optional provider-specific key console link shown in Settings. */
+  apiKeyConsoleLink?: { host: string; url: string };
   /** Some local/self-hosted endpoints do not require bearer credentials. */
   requiresApiKey?: boolean;
 }
@@ -117,36 +121,45 @@ export interface KnownProvider {
 // UI can scope quick-fill presets and model suggestions to the selected
 // protocol.
 //
-// Model lists are hand-curated from provider docs/current public presets rather
-// than fetched dynamically. To add a provider, include a user-facing label, the
-// protocol that determines request routing, the base URL, a default model, and
-// optional provider-specific model choices.
+// Preferred model lists are hand-curated from provider docs/current public
+// presets and are reconciled with the live account catalogue before automatic
+// selection. They are not a replacement for provider model discovery.
 export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'Anthropic (Claude)',
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-5',
-    models: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
+    preferredModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
   },
   {
     label: 'DeepSeek — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://api.deepseek.com/anthropic',
-    model: 'deepseek-chat',
-    models: [
-      'deepseek-chat',
-      'deepseek-reasoner',
+    preferredModels: [
       'deepseek-v4-flash',
       'deepseek-v4-pro',
     ],
+    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   {
     label: 'MiniMax — Anthropic',
     protocol: 'anthropic',
+    baseUrl: 'https://api.minimax.io/anthropic',
+    preferredModels: [
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.7',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M2.1-highspeed',
+      'MiniMax-M2.1',
+      'MiniMax-M2',
+    ],
+  },
+  {
+    label: 'MiniMax — Anthropic (CN)',
+    protocol: 'anthropic',
     baseUrl: 'https://api.minimaxi.com/anthropic',
-    model: 'MiniMax-M2.7-highspeed',
-    models: [
+    preferredModels: [
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -160,15 +173,30 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+    preferredModels: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  },
+  {
+    label: 'Atlas Cloud',
+    protocol: 'openai',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    preferredModels: [
+      'qwen/qwen3.5-flash',
+      'qwen/qwen3.5-plus',
+      'qwen/qwen3.7-plus',
+      'deepseek-ai/deepseek-v4-flash',
+      'deepseek-ai/deepseek-v4-pro',
+      'google/gemini-3.5-flash',
+    ],
+    apiKeyConsoleLink: {
+      host: 'atlascloud.ai',
+      url: 'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
+    },
   },
   {
     label: 'OpenRouter',
     protocol: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'anthropic/claude-3.7-sonnet',
-    models: [
+    preferredModels: [
       'anthropic/claude-3.7-sonnet',
       'anthropic/claude-3.5-sonnet',
       'google/gemini-2.5-flash',
@@ -183,15 +211,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',
-    model: '',
-    models: [],
+    preferredModels: [],
   },
   {
     label: 'Google Gemini',
     protocol: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-3.5-flash',
-    models: [
+    preferredModels: [
       'gemini-3.5-flash',
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
@@ -202,23 +228,119 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    label: 'SiliconFlow (CN)',
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    preferredModels: [
+      'deepseek-ai/DeepSeek-V3.1',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    ],
+  },
+  {
+    label: 'SiliconFlow (Global)',
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.com/v1',
+    preferredModels: [
+      'deepseek-ai/DeepSeek-V3.1',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    ],
+  },
+  {
+    label: 'PPIO',
+    protocol: 'openai',
+    baseUrl: 'https://api.ppinfra.com/v3/openai',
+    preferredModels: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
+  },
+  {
+    label: 'NVIDIA',
+    protocol: 'openai',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    preferredModels: [
+      'openai/gpt-oss-120b',
+      'meta/llama-3.1-405b-instruct',
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+    ],
+  },
+  {
+    label: 'StepFun',
+    protocol: 'openai',
+    baseUrl: 'https://api.stepfun.ai/v1',
+    preferredModels: ['step-2-mini', 'step-1-8k', 'step-1-32k'],
+  },
+  {
     label: 'DeepSeek — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
-    models: [
-      'deepseek-chat',
-      'deepseek-reasoner',
+    preferredModels: [
       'deepseek-v4-flash',
       'deepseek-v4-pro',
     ],
+    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
+  },
+  {
+    label: 'Mistral AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.mistral.ai/v1',
+    preferredModels: ['mistral-large-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+  },
+  {
+    label: 'xAI',
+    protocol: 'openai',
+    baseUrl: 'https://api.x.ai/v1',
+    preferredModels: ['grok-4', 'grok-3', 'grok-3-mini'],
+  },
+  {
+    label: 'Together AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.together.xyz/v1',
+    preferredModels: [
+      'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+      'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+      'Qwen/Qwen2.5-Coder-32B-Instruct',
+    ],
+  },
+  {
+    label: 'Hugging Face',
+    protocol: 'openai',
+    baseUrl: 'https://router.huggingface.co/v1',
+    preferredModels: [
+      'openai/gpt-oss-120b',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+      'meta-llama/Llama-3.1-8B-Instruct',
+    ],
+  },
+  {
+    label: 'Qwen',
+    protocol: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    preferredModels: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen3-coder-plus'],
+  },
+  {
+    label: 'Volcengine Ark',
+    protocol: 'openai',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    preferredModels: ['doubao-seed-1-6', 'doubao-seed-1-6-thinking', 'deepseek-v3'],
+  },
+  {
+    label: 'Baidu Qianfan',
+    protocol: 'openai',
+    baseUrl: 'https://qianfan.baidubce.com/v2',
+    preferredModels: ['ernie-4.5-turbo-128k', 'ernie-4.5-8k-preview'],
+  },
+  {
+    label: 'vLLM',
+    protocol: 'openai',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    preferredModels: ['model', 'llama3', 'qwen3'],
+    requiresApiKey: false,
   },
   {
     label: 'MiniMax — OpenAI',
     protocol: 'openai',
-    baseUrl: 'https://api.minimaxi.com/v1',
-    model: 'MiniMax-M2.7-highspeed',
-    models: [
+    baseUrl: 'https://api.minimax.io/v1',
+    preferredModels: [
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -232,15 +354,35 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'MiMo (Xiaomi) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
-    model: 'mimo-v2.5-pro',
-    models: ['mimo-v2.5-pro'],
+    preferredModels: ['mimo-v2.5-pro'],
+  },
+  {
+    label: 'Moonshot',
+    protocol: 'openai',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    preferredModels: [
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+      'kimi-k2.7-code-highspeed',
+      'kimi-k2.5',
+      'moonshot-v1-8k',
+      'moonshot-v1-32k',
+      'moonshot-v1-128k',
+    ],
+    retiredModels: ['kimi-k2-0711-preview'],
+  },
+  {
+    label: 'Zhipu',
+    protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    preferredModels: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
   },
   {
     label: 'Ollama Cloud (managed)',
     protocol: 'ollama',
     baseUrl: 'https://ollama.com',
-    model: 'gpt-oss:120b',
-    models: [
+    preferredModels: [
+      'gpt-oss:120b',
       'cogito-2.1:671b',
       'deepseek-v3.1:671b',
       'deepseek-v3.2',
@@ -257,22 +399,25 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'glm-4.7',
       'glm-5',
       'glm-5.1',
+      'glm-5.2',
       'gpt-oss:20b',
-      'gpt-oss:120b',
       'kimi-k2:1t',
       'kimi-k2-thinking',
       'kimi-k2.5',
       'kimi-k2.6',
+      'kimi-k2.7-code',
       'minimax-m2',
       'minimax-m2.1',
       'minimax-m2.5',
       'minimax-m2.7',
+      'minimax-m3',
       'ministral-3:3b',
       'ministral-3:8b',
       'ministral-3:14b',
       'mistral-large-3:675b',
       'nemotron-3-nano:30b',
       'nemotron-3-super',
+      'nemotron-3-ultra',
       'qwen3-coder:480b',
       'qwen3-coder-next',
       'qwen3-next:80b',
@@ -286,23 +431,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Ollama Self-hosted (local)',
     protocol: 'ollama',
     baseUrl: 'http://localhost:11434',
-    model: 'gemma3:4b',
-    models: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
+    preferredModels: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
     requiresApiKey: false,
   },
   {
     label: 'MiMo (Xiaomi) — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
-    model: 'mimo-v2.5-pro',
-    models: ['mimo-v2.5-pro'],
+    preferredModels: ['mimo-v2.5-pro'],
   },
   {
     label: 'SenseAudio',
     protocol: 'senseaudio',
     baseUrl: 'https://api.senseaudio.cn',
-    model: 'senseaudio-s2',
-    models: [
+    preferredModels: [
       'senseaudio-s2',
       'senseaudio-s2-flash',
       'deepseek-v4-flash',
@@ -317,8 +459,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'AIHubMix',
     protocol: 'aihubmix',
     baseUrl: 'https://aihubmix.com/v1',
-    model: 'gpt-5.5',
-    models: [
+    preferredModels: [
       'gpt-5.5',
       'gpt-4o',
       'gpt-4o-mini',
@@ -331,6 +472,67 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
 ];
+
+export function defaultKnownProviderModel(
+  provider: Pick<KnownProvider, 'preferredModels'> | null | undefined,
+): string {
+  return provider?.preferredModels[0]?.trim() ?? '';
+}
+
+export interface ByokProviderPresetConfig {
+  id: string;
+  title: string;
+  protocol: ApiProtocol;
+  baseUrl: string;
+  preferredModels: readonly string[];
+}
+
+const BYOK_PROVIDER_PRESET_SPECS = [
+  { id: 'anthropic', title: 'Anthropic', providerLabel: 'Anthropic (Claude)' },
+  { id: 'openai', title: 'OpenAI', providerLabel: 'OpenAI' },
+  { id: 'atlascloud', title: 'Atlas Cloud', providerLabel: 'Atlas Cloud' },
+  { id: 'google-ai-studio', title: 'Google Gemini', providerLabel: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud', providerLabel: 'Ollama Cloud (managed)' },
+  { id: 'azure', title: 'Azure OpenAI', providerLabel: 'Azure OpenAI' },
+  { id: 'siliconflow-cn', title: 'SiliconFlow (CN)', providerLabel: 'SiliconFlow (CN)' },
+  {
+    id: 'siliconflow-global',
+    title: 'SiliconFlow (Global)',
+    providerLabel: 'SiliconFlow (Global)',
+  },
+  { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
+  { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
+  { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
+  { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
+  { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
+  { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
+  { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
+  { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },
+  { id: 'huggingface', title: 'Hugging Face', providerLabel: 'Hugging Face' },
+  { id: 'qwen', title: '千问', providerLabel: 'Qwen' },
+  { id: 'volcengine', title: '火山引擎', providerLabel: 'Volcengine Ark' },
+  { id: 'qianfan', title: '百度千帆', providerLabel: 'Baidu Qianfan' },
+  { id: 'vllm', title: 'vLLM', providerLabel: 'vLLM' },
+  { id: 'mimo', title: '小米 MiMo', providerLabel: 'MiMo (Xiaomi) — OpenAI' },
+  { id: 'minimax', title: 'MiniMax', providerLabel: 'MiniMax — Anthropic (CN)' },
+  { id: 'moonshot', title: 'Moonshot', providerLabel: 'Moonshot' },
+  { id: 'zhipu', title: '智谱', providerLabel: 'Zhipu' },
+] as const;
+
+export const BYOK_PROVIDER_PRESETS: ReadonlyArray<ByokProviderPresetConfig> =
+  BYOK_PROVIDER_PRESET_SPECS.map(({ id, title, providerLabel }) => {
+    const provider = KNOWN_PROVIDERS.find((item) => item.label === providerLabel);
+    if (!provider) {
+      throw new Error(`Missing known provider for BYOK preset: ${providerLabel}`);
+    }
+    return {
+      id,
+      title,
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      preferredModels: provider.preferredModels,
+    };
+  });
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
   if (!input) return { ...DEFAULT_PET, custom: { ...DEFAULT_PET.custom } };
@@ -364,6 +566,36 @@ function isValidOrbitTime(time: string): boolean {
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
+function isBedrockRuntimeBaseUrl(baseUrl: string): boolean {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return (
+      /^bedrock-runtime(?:-fips)?[.-].*\.amazonaws\.com(?:\.cn)?$/.test(hostname)
+      || /^bedrock-runtime(?:-fips)?[.-].*\.api\.aws$/.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function downgradeUnsupportedChatProtocol(config: AppConfig): boolean {
+  if (
+    config.apiProtocol !== 'bedrock'
+    && !isBedrockRuntimeBaseUrl(config.baseUrl)
+  ) {
+    return false;
+  }
+
+  config.apiProtocol = DEFAULT_CONFIG.apiProtocol;
+  config.apiKey = DEFAULT_CONFIG.apiKey;
+  config.apiVersion = DEFAULT_CONFIG.apiVersion;
+  config.baseUrl = DEFAULT_CONFIG.baseUrl;
+  config.model = DEFAULT_CONFIG.model;
+  config.apiProviderBaseUrl = DEFAULT_CONFIG.apiProviderBaseUrl;
+  delete config.apiProtocolConfigs?.bedrock;
+  return true;
+}
+
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
     const normalized = (baseUrl || '').toLowerCase();
@@ -386,6 +618,27 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // because it matches the original built-in provider.
     return 'anthropic';
   }
+}
+
+function migrateRetiredKnownProviderModel(
+  protocol: ApiProtocol,
+  config: Pick<
+    ApiProtocolConfig,
+    'baseUrl' | 'model' | 'apiProviderBaseUrl'
+  >,
+): boolean {
+  const provider = KNOWN_PROVIDERS.find((candidate) =>
+    candidate.protocol === protocol &&
+    (
+      candidate.baseUrl === config.apiProviderBaseUrl ||
+      candidate.baseUrl === config.baseUrl
+    ),
+  );
+  if (!provider?.retiredModels?.includes(config.model)) return false;
+  const replacement = defaultKnownProviderModel(provider);
+  if (!replacement || replacement === config.model) return false;
+  config.model = replacement;
+  return true;
 }
 
 export function loadConfig(): AppConfig {
@@ -419,18 +672,24 @@ export function loadConfig(): AppConfig {
       composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
+      agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
 
-    if (parsed.configMigrationVersion !== CONFIG_MIGRATION_VERSION) {
+    let migratedConfig = false;
+    const parsedMigrationVersion =
+      typeof parsed.configMigrationVersion === 'number'
+        ? parsed.configMigrationVersion
+        : 0;
+    if (parsedMigrationVersion !== CONFIG_MIGRATION_VERSION) {
       // Migration v1: configs saved before apiProtocol existed need an explicit
       // protocol so old OpenAI-compatible endpoints keep routing correctly.
       // This is version-gated instead of only field-gated so a later imported
       // legacy config can be migrated when it is loaded.
-      if (!parsedHasApiProtocol) {
+      if (parsedMigrationVersion < 1 && !parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
         // Ollama Cloud legacy configs may carry a base URL that includes
         // /api or /api/ — normalize to the host root so the daemon's own
@@ -449,8 +708,42 @@ export function loadConfig(): AppConfig {
         );
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
+
+      // Migration v2: replace model ids that were previously shipped as
+      // provider defaults but have since been retired. Apply it to every saved
+      // BYOK slot so switching protocols/providers cannot restore a stale id.
+      if (parsedMigrationVersion < 2) {
+        const activeProtocol = merged.apiProtocol ?? inferApiProtocol(
+          merged.model,
+          merged.baseUrl,
+        );
+        migratedConfig = migrateRetiredKnownProviderModel(activeProtocol, merged)
+          || migratedConfig;
+        for (const [protocol, apiConfig] of Object.entries(
+          merged.apiProtocolConfigs ?? {},
+        )) {
+          if (!apiConfig) continue;
+          migratedConfig = migrateRetiredKnownProviderModel(
+            protocol as ApiProtocol,
+            apiConfig,
+          ) || migratedConfig;
+        }
+        for (const [draftKey, draft] of Object.entries(
+          merged.byokProviderConfigDrafts ?? {},
+        )) {
+          const separator = draftKey.indexOf(':');
+          if (separator <= 0) continue;
+          migratedConfig = migrateRetiredKnownProviderModel(
+            draftKey.slice(0, separator) as ApiProtocol,
+            draft.apiConfig,
+          ) || migratedConfig;
+        }
+      }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
+
+    const downgradedUnsupportedChatProtocol =
+      downgradeUnsupportedChatProtocol(merged);
 
     // Fixed-origin gateways (e.g. AIHubMix) hide the Base URL field, so a config
     // persisted before the origin was auto-resolved can carry an empty baseUrl.
@@ -459,6 +752,10 @@ export function loadConfig(): AppConfig {
     // model-list fetch and leaves only the static suggestion list.
     if (merged.apiProtocol) {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
+    }
+
+    if (migratedConfig || downgradedUnsupportedChatProtocol) {
+      saveConfig(merged);
     }
 
     return merged;
@@ -666,9 +963,15 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'installationId',
   'telemetry',
   'privacyDecisionAt',
+  'allowSilentUpdates',
 ]);
 
-const AGENT_CLI_SECRET_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'OPENAI_API_KEY']);
+const AGENT_CLI_SECRET_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+]);
 
 function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
   if (!agentCliEnv) return agentCliEnv;
@@ -716,6 +1019,7 @@ export function mergeDaemonConfig(
     };
   }
   next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
+  next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent ?? {};
   if (daemonConfig.disabledSkills !== undefined) {
     next.disabledSkills = daemonConfig.disabledSkills;
   }
@@ -752,8 +1056,9 @@ export function mergeDaemonConfig(
   // never mints an id), which the Settings → Privacy field rendered as
   // "Opted out" even though the user never declined. We mint the id and
   // keep the default channels on so the displayed state matches the product
-  // default — the same metrics+content surface the first-run banner's "I
-  // get it" opt-in enables (artifactManifest stays off, as it does there).
+  // default — the same metrics+content surface the first-run banner's
+  // "Share" choice enables (artifactManifest stays off, as it
+  // does there).
   // This does NOT override an explicit opt-out: metrics === false short-
   // circuits the whole block, and any channel the user already turned off
   // is preserved via the nullish-coalesce.
@@ -765,6 +1070,11 @@ export function mergeDaemonConfig(
       content: next.telemetry?.content ?? true,
       artifactManifest: next.telemetry?.artifactManifest ?? false,
     };
+  }
+  if (daemonConfig.allowSilentUpdates !== undefined) {
+    next.allowSilentUpdates = daemonConfig.allowSilentUpdates;
+  } else {
+    delete next.allowSilentUpdates;
   }
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
@@ -880,6 +1190,7 @@ export async function syncConfigToDaemon(
     agentId: config.agentId,
     agentModels: config.agentModels,
     agentCliEnv: config.agentCliEnv,
+    agentCliEnvIntent: config.agentCliEnvIntent,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,
@@ -888,6 +1199,7 @@ export async function syncConfigToDaemon(
     installationId: config.installationId,
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
+    allowSilentUpdates: config.allowSilentUpdates,
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',

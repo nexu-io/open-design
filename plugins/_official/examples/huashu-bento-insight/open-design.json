@@ -1,0 +1,166 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-bento-insight",
+  "title": "Write a Competitive Displacement Deck like a Top Sales Engineer",
+  "title_i18n": {
+    "en": "Write a Competitive Displacement Deck like a Top Sales Engineer",
+    "zh-CN": "像顶级售前一样写竞品替换方案",
+    "zh-TW": "像顶级售前一样写竞品替换方案"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.",
+  "description_i18n": {
+    "en": "Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.",
+    "zh-CN": "像顶级售前一样写竞品替换方案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级售前一样写竞品替换方案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "bento",
+    "keynote",
+    "qbr",
+    "data-report",
+    "minimal",
+    "huashu",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "huashu-bento-insight",
+    "marketing-and-gtm",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "sales",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Competitive Displacement Deck like a Top Sales Engineer\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Audience: evaluation committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像顶级售前一样写竞品替换方案。像顶级售前一样写竞品替换方案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Competitive Displacement Deck like a Top Sales Engineer",
+          "title_i18n": {
+            "en": "Write a Competitive Displacement Deck like a Top Sales Engineer",
+            "zh-CN": "像顶级售前一样写竞品替换方案",
+            "zh-TW": "像顶级售前一样写竞品替换方案"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "QBR / business review deck",
+          "product feature summary deck",
+          "sales results deck",
+          "town hall metrics deck",
+          "annual report deck"
+        ],
+        "default": "QBR / business review deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：2026 Q2 业务回顾",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "管理层 / 全员大会 / 客户高层",
+        "default": "leadership"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "b2b-sales"
+  }
+}

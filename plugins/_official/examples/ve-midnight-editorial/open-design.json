@@ -1,0 +1,166 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-ve-midnight-editorial",
+  "title": "Present a Financial Review like a Startup CFO",
+  "title_i18n": {
+    "en": "Present a Financial Review like a Startup CFO",
+    "zh-CN": "像创业公司 CFO 一样做财务复盘",
+    "zh-TW": "像创业公司 CFO 一样做财务复盘"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.",
+  "description_i18n": {
+    "en": "Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.",
+    "zh-CN": "像创业公司 CFO 一样做财务复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像创业公司 CFO 一样做财务复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "nicobailon",
+    "url": "https://github.com/nicobailon"
+  },
+  "homepage": "https://github.com/nicobailon/visual-explainer",
+  "plugin": {
+    "repo": "https://github.com/nicobailon/visual-explainer"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "editorial",
+    "cinematic",
+    "dark",
+    "serif",
+    "gold",
+    "dual-theme",
+    "visual-explainer",
+    "launch",
+    "campaign",
+    "pipeline",
+    "marketing",
+    "ve-midnight-editorial",
+    "marketing-and-gtm",
+    "data-finance",
+    "product-analytics-deck",
+    "finance",
+    "kpi",
+    "metrics",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "finance",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "scroll"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Present a Financial Review like a Startup CFO\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Audience: board, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像创业公司 CFO 一样做财务复盘。像创业公司 CFO 一样做财务复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Present a Financial Review like a Startup CFO",
+          "title_i18n": {
+            "en": "Present a Financial Review like a Startup CFO",
+            "zh-CN": "像创业公司 CFO 一样做财务复盘",
+            "zh-TW": "像创业公司 CFO 一样做财务复盘"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product keynote",
+          "engineering review",
+          "pitch deck",
+          "editorial launch deck",
+          "quarterly report"
+        ],
+        "default": "product keynote"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "What the deck is about",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Execs, engineers, editors, conference crowd…",
+        "default": "a general audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8-11 pages",
+          "10-15 pages"
+        ],
+        "default": "8-11 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "data-finance"
+  }
+}

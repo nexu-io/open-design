@@ -1,26 +1,43 @@
 ---
 name: weekly-update
+en_name: "Run a Metrics Standup like a Data-Driven Ops Lead"
+zh_name: "像数据驱动的运营负责人一样开指标站会"
 description: |
-  Single-file horizontal-swipe slide deck for a weekly team update —
-  shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the
-  brief mentions "weekly update", "team update slides", "weekly status",
-  "周报演示".
+  Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Built as a decision-grade data & finance deck for ops & growth team.
+en_description: |
+  Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Built as a decision-grade data & finance deck for ops & growth team.
+zh_description: |
+  像数据驱动的运营负责人一样开指标站会——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "data-finance"
+  - "product-analytics-deck"
+  - "finance"
+  - "kpi"
+  - "metrics"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "weekly-update"
 triggers:
-  - "weekly update"
-  - "team update slides"
-  - "weekly status"
-  - "weekly review"
-  - "周报演示"
+  - "product-analytics-deck"
+  - "data-finance"
+  - "Run a Metrics Standup like a Data-Driven Ops Lead"
+  - "像数据驱动的运营负责人一样开指标站会"
+  - "kpi"
+  - "finance"
+  - "metrics"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: operations
   preview:
     type: html
     entry: index.html
   design_system:
     requires: true
     sections: [color, typography, layout, components]
-  example_prompt: "Make a weekly update deck for the Growth squad — what shipped, in flight, blocked, metrics, asks for next week."
+  category: "data-finance"
+  scenario: "finance"
+  example_prompt: "Create \"Run a Metrics Standup like a Data-Driven Ops Lead\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly metrics standup: this week's numbers, the one anomaly, and the single decision it forces. Audience: ops & growth team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Weekly Update Deck Skill

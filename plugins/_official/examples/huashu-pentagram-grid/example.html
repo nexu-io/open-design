@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build a Positioning &amp; Messaging System like a Brand Strategist - Marketing &amp; GTM</title>
+<style>
+  /* ============================================================
+     Pentagram Info-Architecture · Red
+     Locked design tokens — re-theme by changing VALUES only.
+     One accent (#E63946). No second color. No external fonts.
+     Based on huashu-design ppt-pentagram by huashu (alchaincyf).
+     ============================================================ */
+  :root {
+    --paper:    #FFFFFF;   /* light page background          */
+    --night:    #111111;   /* dark page bg + chrome bars     */
+    --ink:      #111111;   /* primary text on light          */
+    --night-ink:#FFFFFF;   /* primary text on dark           */
+    --accent:   #E63946;   /* THE red — the only accent      */
+    --grid:     #E8E8E8;   /* hairline rules / column rules  */
+    --track:    #F5F5F5;   /* bar-chart track                */
+    --bar-base: #E0E0E0;   /* losing / baseline bar          */
+    --muted:    #999999;   /* secondary labels               */
+    --muted-2:  #666666;   /* body copy on light             */
+    --faint:    #BBBBBB;   /* tertiary captions              */
+    --night-line:#333333;  /* hairlines on dark pages        */
+    --night-mut: #888888;  /* secondary text on dark         */
+    --sans: 'Helvetica Neue', 'Helvetica', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: #050505;
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  /* ---- fixed 1920×1080 stage, letterboxed by fit() ---- */
+  #stage {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 1920px;
+    height: 1080px;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    background: var(--paper);
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .slide.active { display: block; animation: slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .slide.dark { background: var(--night); color: var(--night-ink); }
+
+  /* page entrance: opacity only - the stage scaler owns transform */
+  @keyframes slide-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .slide.active { animation: none; }
+  }
+
+  /* ---- chrome: 64px black top / bottom bars (light pages) ---- */
+  .top-bar, .bottom-bar {
+    position: absolute;
+    left: 0; right: 0;
+    height: 64px;
+    background: var(--night);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 80px;
+    z-index: 10;
+  }
+  .top-bar { top: 0; }
+  .bottom-bar { bottom: 0; }
+
+  .top-label {
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: #fff;
+  }
+  .top-label .red, .red { color: var(--accent); }
+  .top-right, .bottom-right-text {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .bottom-left { display: flex; align-items: center; gap: 24px; }
+  .bottom-logo { font-size: 14px; font-weight: 900; color: #fff; letter-spacing: 1px; }
+  .bottom-divider { width: 1px; height: 20px; background: #444; }
+  .bottom-note { font-size: 11px; font-weight: 400; color: var(--night-mut); }
+
+  /* dark pages swap solid bars for hairline strips */
+  .slide.dark .top-bar, .slide.dark .bottom-bar {
+    background: transparent;
+  }
+  .slide.dark .top-bar { border-bottom: 1px solid var(--night-line); }
+  .slide.dark .bottom-bar { border-top: 1px solid var(--night-line); }
+  .slide.dark .bottom-note { color: var(--night-mut); }
+
+  /* ---- swiss grid hairlines (5% black verticals/horizontals) ---- */
+  .grid-line-v {
+    position: absolute; top: 64px; bottom: 64px;
+    width: 1px; background: #000; opacity: 0.05;
+  }
+  .grid-line-h {
+    position: absolute; left: 80px; right: 80px;
+    height: 1px; background: #000; opacity: 0.05;
+  }
+  .slide.dark .grid-line-v, .slide.dark .grid-line-h {
+    background: #fff; opacity: 0.08;
+  }
+
+  /* ---- typographic atoms ---- */
+  .tag {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .kicker-num {
+    font-size: 13px; font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+  .hero-number {
+    font-size: 260px; font-weight: 900;
+    line-height: 0.85; letter-spacing: -13px;
+    color: var(--ink);
+  }
+  .hero-number .decimal { color: var(--accent); }
+  .hero-context {
+    font-size: 13px; font-weight: 500;
+    color: var(--muted); letter-spacing: 1px;
+    text-transform: uppercase; margin-top: 16px;
+  }
+  .key-message {
+    font-size: 17px; font-weight: 400; line-height: 1.7;
+    color: var(--muted-2); max-width: 420px;
+  }
+  .key-message strong { color: var(--ink); font-weight: 700; }
+
+  .open-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border: 2px solid var(--accent);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ---- bar chart system (red wins / dark second / grey base) ---- */
+  .bar-group { display: flex; flex-direction: column; gap: 24px; }
+  .bar-row { display: flex; align-items: center; gap: 16px; }
+  .bar-label {
+    font-size: 13px; font-weight: 600; color: var(--muted-2);
+    width: 90px; flex-shrink: 0; text-align: right;
+  }
+  .bar-label.highlight { color: var(--ink); font-weight: 700; }
+  .bar-track { flex: 1; height: 56px; background: var(--track); position: relative; }
+  .bar-fill {
+    height: 100%;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 14px;
+  }
+  .bar-fill.base   { background: var(--bar-base); }
+  .bar-fill.dark   { background: var(--night); }
+  .bar-fill.winner { background: var(--accent); }
+  .bar-value { font-size: 15px; font-weight: 700; color: #fff; }
+  .bar-fill.base .bar-value { color: var(--muted-2); }
+  .delta {
+    font-size: 12px; font-weight: 700; color: var(--accent);
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-top: 24px; padding-left: 106px;
+  }
+
+  /* ---- bench columns ---- */
+  .bench-col { flex: 1; padding: 0 32px; border-left: 1px solid var(--grid); display: flex; flex-direction: column; }
+  .bench-col:first-child { padding-left: 0; border-left: none; }
+  .bench-title {
+    font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--ink); margin-bottom: 4px;
+  }
+  .bench-type { font-size: 11px; font-weight: 400; color: var(--faint); margin-bottom: 56px; }
+  .bench-hero {
+    /* ink, not accent: the red bar is the page's one red device
+       (SKILL red budget: <= 4 touches per page) */
+    font-size: 80px; font-weight: 900; color: var(--ink);
+    letter-spacing: -3px; line-height: 1; margin-bottom: 56px;
+  }
+
+  /* ---- summary strip ---- */
+  .summary-row { display: flex; border-top: 1px solid var(--grid); padding-top: 24px; }
+  .summary-item { flex: 1; padding: 0 32px; }
+  .summary-item:first-child { padding-left: 0; }
+  .summary-num { font-size: 32px; font-weight: 900; color: var(--ink); letter-spacing: -1px; line-height: 1; }
+  .summary-desc {
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase; margin-top: 8px;
+  }
+
+  /* ---- runtime chrome ----
+     The 64px chrome bars carry text at their left and right edges but
+     leave the horizontal middle empty, so the runtime pills live there:
+     counter centered in the bottom bar, key hint centered in the top
+     bar. --fit mirrors the JS fit() scale so both stay locked to the
+     bar centerlines at any viewport size, never covering the bar's red
+     labels or the logotype. */
+  :root { --fit: min(100vw / 1920, 100vh / 1080); }
+  #counter {
+    position: fixed; left: 50%;
+    bottom: calc((100vh - 1080 * var(--fit)) / 2 + 32 * var(--fit));
+    transform: translate(-50%, 50%);
+    z-index: 99; color: #fff;
+    font-family: var(--sans); font-size: 12px; font-weight: 700;
+    letter-spacing: 2px;
+  }
+  #counter b { color: var(--accent); font-weight: 700; }
+  #hint {
+    position: fixed; left: 50%;
+    top: calc((100vh - 1080 * var(--fit)) / 2 + 32 * var(--fit));
+    transform: translate(-50%, -50%);
+    z-index: 99; color: var(--night-mut);
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div id="stage">
+
+  <!-- ============ 01 cover ============ -->
+  <section class="slide active" data-screen-label="01 Cover · Positioning & Messaging System">
+    <div class="top-bar">
+      <span class="top-label">Open Design <span class="red">/</span> Positioning & Messaging System</span>
+      <span class="top-right">Marketing &amp; GTM</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 960px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 200px;"></div>
+    <div class="grid-line-h" style="bottom: 200px;"></div>
+
+    <div style="position:absolute; left:80px; top:248px;">
+      <div class="tag">Build a Positioning & Messaging System like a Brand Strategist</div>
+      <div style="font-size:120px; font-weight:900; letter-spacing:-5px; line-height:1.04; margin-top:28px;">
+        One Promise<br>Every Channel<span class="red">.</span>
+      </div>
+      <div style="font-size:18px; color:var(--muted-2); line-height:1.7; margin-top:36px; max-width:560px;">
+        The source-of-truth playbook for Open Design's GTM voice — <strong style="color:var(--ink);">one line, three pillars, and the proof that turns copy into pipeline.</strong>
+      </div>
+      <div class="open-badge" style="margin-top:40px;">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="6" stroke="#E63946" stroke-width="1.5"/>
+          <circle cx="7" cy="7" r="2.5" fill="#E63946"/>
+        </svg>
+        Open-Source · Local-First · BYOK
+      </div>
+    </div>
+
+    <div style="position:absolute; right:80px; top:236px; text-align:right;">
+      <div class="hero-number">1</div>
+      <div class="hero-context" style="text-align:right;">One-Line Promise · Every Team Repeats It</div>
+      <div style="margin-top:64px; border-top:1px solid var(--grid); padding-top:24px; width:360px; margin-left:auto;">
+        <div class="summary-num"><span class="red">3</span></div>
+        <div class="summary-desc">Proof-Backed Pillars · Site, Deck, Sales</div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Brand & Marketing Team · Q3 2026 Messaging Refresh</span>
+      </div>
+      <span class="bottom-right-text">Positioning Playbook</span>
+    </div>
+  </section>
+
+  <!-- ============ 02 contents ============ -->
+  <section class="slide" data-screen-label="02 Contents">
+    <div class="top-bar">
+      <span class="top-label">Contents <span class="red">/</span> Playbook Structure</span>
+      <span class="top-right">06 Sections</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 640px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+
+    <div style="position:absolute; left:80px; top:160px; width:480px;">
+      <div class="tag">Table of Contents</div>
+      <div style="font-size:72px; font-weight:900; letter-spacing:-3px; line-height:1.05; margin-top:24px;">
+        Six moves<span class="red">,</span><br>one message<span class="red">.</span>
+      </div>
+      <div class="key-message" style="margin-top:32px;">
+        Each section answers a single question: <strong>how the one-line promise turns into pipeline.</strong>
+      </div>
+    </div>
+
+    <div style="position:absolute; left:700px; right:80px; top:160px; bottom:120px; display:flex; flex-direction:column; justify-content:space-between;">
+      <div style="display:flex; align-items:baseline; gap:32px; border-bottom:1px solid var(--grid); padding-bottom:22px;">
+        <span class="kicker-num">01</span>
+        <span style="font-size:28px; font-weight:700;">The market moment: why now</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Moment</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:32px; border-bottom:1px solid var(--grid); padding-bottom:22px;">
+        <span class="kicker-num">02</span>
+        <span style="font-size:28px; font-weight:700;">Three buyers, one promise</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Audience</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:32px; border-bottom:1px solid var(--grid); padding-bottom:22px;">
+        <span class="kicker-num">03</span>
+        <span style="font-size:28px; font-weight:700;">The offer: one line, three pillars</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Offer</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:32px; border-bottom:1px solid var(--grid); padding-bottom:22px;">
+        <span class="kicker-num">04</span>
+        <span style="font-size:28px; font-weight:700;">Channels: from promise to every asset</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Channels</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:32px; border-bottom:1px solid var(--grid); padding-bottom:22px;">
+        <span class="kicker-num">05</span>
+        <span style="font-size:28px; font-weight:700;">Proof: what buyers say and measure</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Proof</span>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:32px;">
+        <span class="kicker-num">06</span>
+        <span style="font-size:28px; font-weight:700;">The 4-week launch calendar</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--faint); letter-spacing:2px; text-transform:uppercase;">Launch</span>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">One promise · Three pillars · Measurable proof</span>
+      </div>
+      <span class="bottom-right-text">Contents</span>
+    </div>
+  </section>
+
+  <!-- ============ 03 big-number ============ -->
+  <section class="slide" data-screen-label="03 Market Moment">
+    <div class="top-bar">
+      <span class="top-label">Section 01 <span class="red">/</span> Market Moment</span>
+      <span class="top-right">Why Now</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 1100px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 160px;"></div>
+
+    <div style="position:absolute; left:80px; top:208px;">
+      <div class="tag">Search Demand · "AI design tool" YoY</div>
+      <div class="hero-number" style="margin-top:24px;">312<span class="decimal">%</span></div>
+      <div class="hero-context">YoY Growth · Google Trends, Jan–Jun 2026</div>
+      <div class="key-message" style="margin-top:40px;">
+        <strong>Buyers already trust AI to design — they just don't trust one vendor to hold the keys.</strong> Open, local, BYOK tooling is the wedge every closed-cloud competitor left open.
+      </div>
+    </div>
+
+    <div style="position:absolute; left:1140px; right:80px; top:208px; display:flex; flex-direction:column; gap:48px;">
+      <div>
+        <div class="summary-num" style="font-size:56px;"><span class="red">60K</span>+</div>
+        <div class="summary-desc">GitHub Stars · Organic Pull, No Ad Spend</div>
+      </div>
+      <div style="border-top:1px solid var(--grid); padding-top:32px;">
+        <div class="summary-num" style="font-size:56px;"><span class="red">300</span>+</div>
+        <div class="summary-desc">Contributors · Category Believers</div>
+      </div>
+      <div style="border-top:1px solid var(--grid); padding-top:32px;">
+        <div class="summary-num" style="font-size:56px;"><span class="red">129</span></div>
+        <div class="summary-desc">Design Systems · Proof the Message Lands</div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Source: Google Trends · GitHub · 60K+ Stars, 300+ Contributors</span>
+      </div>
+      <span class="bottom-right-text">Market Moment</span>
+    </div>
+  </section>
+
+  <!-- ============ 04 three-column data theater ============ -->
+  <section class="slide" data-screen-label="04 Audience · Three Buyers">
+    <div class="top-bar">
+      <span class="top-label">Section 02 <span class="red">/</span> Audience</span>
+      <span class="top-right">3 ICP Segments</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 620px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 104px;"></div>
+
+    <div style="position:absolute; left:80px; top:104px; width:480px;">
+      <div class="tag" style="margin-bottom:8px;">Who We're Positioning For</div>
+      <div style="font-size:48px; font-weight:900; line-height:1; letter-spacing:-2px;">Three buyers</div>
+      <div class="hero-number" style="font-size:200px; letter-spacing:-10px; margin-top:24px;">3<span class="decimal">.</span></div>
+      <div class="hero-context" style="margin-top:8px;">Core ICP Segments · Validated in 40 Interviews</div>
+      <div class="key-message" style="font-size:16px; margin-top:32px; max-width:400px;">
+        <strong>One promise, three doors in.</strong> The breakdown on the right is drawn from customer-interview data, showing what each buyer values most before they'll repeat our pitch.
+      </div>
+      <div class="open-badge" style="margin-top:24px;">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="6" stroke="#E63946" stroke-width="1.5"/>
+          <circle cx="7" cy="7" r="2.5" fill="#E63946"/>
+        </svg>
+        40 Customer Interviews
+      </div>
+    </div>
+
+    <div style="position:absolute; left:620px; top:104px; right:80px; bottom:160px; display:flex;">
+      <div class="bench-col">
+        <div class="bench-title">Indie Makers &amp; Solo Founders</div>
+        <div class="bench-type">Ship a landing page and pitch deck solo</div>
+        <div class="bench-hero">48%</div>
+        <div class="bar-group">
+          <div class="bar-row">
+            <span class="bar-label highlight">Speed to launch</span>
+            <div class="bar-track"><div class="bar-fill winner" style="width: 93%;"><span class="bar-value">Top priority</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Budget sensitivity</span>
+            <div class="bar-track"><div class="bar-fill dark" style="width: 43%;"><span class="bar-value">High</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Brand control</span>
+            <div class="bar-track"><div class="bar-fill base" style="width: 31%;"><span class="bar-value">Low</span></div></div>
+          </div>
+        </div>
+        <div class="delta">Largest segment by volume</div>
+      </div>
+      <div class="bench-col">
+        <div class="bench-title">Growth &amp; Marketing Teams</div>
+        <div class="bench-type">Series A–C · Own GTM messaging &amp; launch calendar</div>
+        <div class="bench-hero">34%</div>
+        <div class="bar-group">
+          <div class="bar-row">
+            <span class="bar-label highlight">Brand control</span>
+            <div class="bar-track"><div class="bar-fill winner" style="width: 93%;"><span class="bar-value">Top priority</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Speed to launch</span>
+            <div class="bar-track"><div class="bar-fill dark" style="width: 56%;"><span class="bar-value">High</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Budget sensitivity</span>
+            <div class="bar-track"><div class="bar-fill base" style="width: 24%;"><span class="bar-value">Moderate</span></div></div>
+          </div>
+        </div>
+        <div class="delta">Highest revenue per account</div>
+      </div>
+      <div class="bench-col">
+        <div class="bench-title">Agencies &amp; Consultancies</div>
+        <div class="bench-type">White-label decks and client positioning docs</div>
+        <div class="bench-hero">18%</div>
+        <div class="bar-group">
+          <div class="bar-row">
+            <span class="bar-label highlight">Data stays local</span>
+            <div class="bar-track"><div class="bar-fill winner" style="width: 93%;"><span class="bar-value">Top priority</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Brand control</span>
+            <div class="bar-track"><div class="bar-fill dark" style="width: 53%;"><span class="bar-value">High</span></div></div>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Budget sensitivity</span>
+            <div class="bar-track"><div class="bar-fill base" style="width: 31%;"><span class="bar-value">Low</span></div></div>
+          </div>
+        </div>
+        <div class="delta">Smallest, highest referral rate</div>
+      </div>
+    </div>
+
+    <div class="summary-row" style="position:absolute; bottom:96px; left:620px; right:80px;">
+      <div class="summary-item">
+        <div class="summary-num">1,240</div>
+        <div class="summary-desc">Buyers Surveyed</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-num"><span class="red">92</span>%</div>
+        <div class="summary-desc">Message-Market Fit Score</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-num">3</div>
+        <div class="summary-desc">Segments, One Promise</div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Source: 40 structured interviews · 1,240-response segmentation survey</span>
+      </div>
+      <span class="bottom-right-text">Audience</span>
+    </div>
+  </section>
+
+  <!-- ============ 05 dark divider ============ -->
+  <section class="slide dark" data-screen-label="05 Section · The Offer">
+    <div class="top-bar">
+      <span class="top-label">Section 03 <span class="red">/</span> The Offer</span>
+      <span class="top-right">One-Line Promise</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+
+    <div style="position:absolute; left:80px; top:50%; transform:translateY(-50%);">
+      <div style="font-size:260px; font-weight:900; line-height:0.85; letter-spacing:-13px; color:var(--accent);">03</div>
+      <div style="font-size:84px; font-weight:900; letter-spacing:-3px; margin-top:40px; color:var(--night-ink);">
+        One offer<span class="red">,</span> stated once<span class="red">.</span>
+      </div>
+      <div style="font-size:18px; color:var(--night-mut); line-height:1.7; margin-top:28px; max-width:760px;">
+        For marketing teams who need launch-ready decks and messaging fast: Open Design is the open, local-first design platform that turns a single brief into on-brand pages, decks, and video — proven by three pillars, backed by proof every reader can check themselves.
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo" style="color:var(--night-ink);">OPEN DESIGN</span>
+        <div class="bottom-divider" style="background:var(--night-line);"></div>
+        <span class="bottom-note">One promise · Three pillars · Proof every reader can check</span>
+      </div>
+      <span class="bottom-right-text">Section 03</span>
+    </div>
+  </section>
+
+  <!-- ============ 06 two-column comparison ============ -->
+  <section class="slide" data-screen-label="06 Before vs After Messaging">
+    <div class="top-bar">
+      <span class="top-label">Section 03 <span class="red">/</span> Before vs After Messaging</span>
+      <span class="top-right">Positioning System</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 960px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 160px;"></div>
+
+    <div style="position:absolute; left:80px; top:208px; width:800px;">
+      <div class="bench-title" style="color:var(--muted);">Before · Generic Pitch</div>
+      <div class="bench-type" style="margin-bottom:40px;">Feature-first copy · No pillar hierarchy</div>
+      <div class="bar-group">
+        <div class="bar-row">
+          <span class="bar-label" style="width:150px;">Message clarity</span>
+          <div class="bar-track"><div class="bar-fill base" style="width: 88%;"><span class="bar-value">3.1 / 10</span></div></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label" style="width:150px;">1-week recall</span>
+          <div class="bar-track"><div class="bar-fill base" style="width: 76%;"><span class="bar-value">12%</span></div></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label" style="width:150px;">Sales objections</span>
+          <div class="bar-track"><div class="bar-fill base" style="width: 64%;"><span class="bar-value">61%</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="position:absolute; left:1000px; right:80px; top:208px;">
+      <div class="bench-title">After · Positioning System</div>
+      <div class="bench-type" style="margin-bottom:40px;">One-line promise + 3 pillars + proof</div>
+      <div class="bar-group">
+        <div class="bar-row">
+          <span class="bar-label highlight" style="width:150px;">Message clarity</span>
+          <div class="bar-track"><div class="bar-fill winner" style="width: 11%;"><span class="bar-value"></span></div><span style="position:absolute; left:calc(11% + 12px); top:50%; transform:translateY(-50%); font-size:15px; font-weight:700; color:var(--ink);">9.4 / 10</span></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label highlight" style="width:150px;">1-week recall</span>
+          <div class="bar-track"><div class="bar-fill winner" style="width: 9%;"><span class="bar-value"></span></div><span style="position:absolute; left:calc(9% + 12px); top:50%; transform:translateY(-50%); font-size:15px; font-weight:700; color:var(--ink);">58%</span></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label highlight" style="width:150px;">Sales objections</span>
+          <div class="bar-track"><div class="bar-fill winner" style="width: 12%;"><span class="bar-value"></span></div><span style="position:absolute; left:calc(12% + 12px); top:50%; transform:translateY(-50%); font-size:15px; font-weight:700; color:var(--ink);">14%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary-row" style="position:absolute; bottom:120px; left:80px; right:80px;">
+      <div class="summary-item">
+        <div class="summary-num">+<span class="red">6.3</span>pts</div>
+        <div class="summary-desc">Message Clarity 3.1 → 9.4</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-num">−<span class="red">47</span>pts</div>
+        <div class="summary-desc">Sales Objection Rate 61% → 14%</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-num"><span class="red">3</span></div>
+        <div class="summary-desc">Pillars Backing the Promise</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-num"><span class="red">1</span></div>
+        <div class="summary-desc">Sentence, Every Channel Repeats It</div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Basis: 12-week message test, 1,240-respondent panel</span>
+      </div>
+      <span class="bottom-right-text">Before / After</span>
+    </div>
+  </section>
+
+  <!-- ============ 07 workflow timeline ============ -->
+  <section class="slide" data-screen-label="07 Channels">
+    <div class="top-bar">
+      <span class="top-label">Section 04 <span class="red">/</span> Channels</span>
+      <span class="top-right">Promise → Every Channel</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 300px;"></div>
+
+    <div style="position:absolute; left:80px; top:160px;">
+      <div class="tag">Channels</div>
+      <div style="font-size:64px; font-weight:900; letter-spacing:-2px; margin-top:16px;">From promise to every channel<span class="red">.</span></div>
+    </div>
+
+    <div style="position:absolute; left:80px; right:80px; top:380px; display:flex;">
+      <div class="bench-col" style="padding:0 40px;">
+        <div style="font-size:96px; font-weight:900; letter-spacing:-4px; color:var(--bar-base); line-height:1;">01</div>
+        <div class="bench-title" style="margin-top:32px;">Nail the one-liner</div>
+        <div style="font-size:15px; color:var(--muted-2); line-height:1.7; margin-top:12px;">Workshop the promise with sales and support, then test it live against real buyers before it ships anywhere.</div>
+        <div class="summary-num" style="margin-top:32px; font-size:28px;">1 <span style="font-size:14px; color:var(--muted);">sentence, tested with 40 buyers</span></div>
+      </div>
+      <div class="bench-col" style="padding:0 40px;">
+        <div style="font-size:96px; font-weight:900; letter-spacing:-4px; color:var(--night-mut); line-height:1;">02</div>
+        <div class="bench-title" style="margin-top:32px;">Build the three pillars</div>
+        <div style="font-size:15px; color:var(--muted-2); line-height:1.7; margin-top:12px;">Open, local, agent-native each get a proof point, a stat, and a quote before the pillar is allowed to ship.</div>
+        <div class="summary-num" style="margin-top:32px; font-size:28px;">3 <span style="font-size:14px; color:var(--muted);">pillars, each proof-backed</span></div>
+      </div>
+      <div class="bench-col" style="padding:0 40px;">
+        <div style="font-size:96px; font-weight:900; letter-spacing:-4px; color:var(--ink); line-height:1;">03</div>
+        <div class="bench-title" style="margin-top:32px;">Arm every channel</div>
+        <div style="font-size:15px; color:var(--muted-2); line-height:1.7; margin-top:12px;">Website, deck, ads, and sales enablement all pull from the same pillar doc, so no channel drifts off-message.</div>
+        <div class="summary-num" style="margin-top:32px; font-size:28px;">6 <span style="font-size:14px; color:var(--muted);">channels aligned same week</span></div>
+      </div>
+      <div class="bench-col" style="padding:0 40px;">
+        <div style="font-size:96px; font-weight:900; letter-spacing:-4px; color:var(--accent); line-height:1;">04</div>
+        <div class="bench-title" style="margin-top:32px;">Launch &amp; compound</div>
+        <div style="font-size:15px; color:var(--muted-2); line-height:1.7; margin-top:12px;">Ship the calendar, then track recall and objection rate weekly; every test sharpens the next round of copy.</div>
+        <div class="summary-num" style="margin-top:32px; font-size:28px;"><span class="red">Weekly</span> <span style="font-size:14px; color:var(--muted);">message-market fit tracking</span></div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Every channel pulls from the same pillar doc, no exceptions</span>
+      </div>
+      <span class="bottom-right-text">Promise → Every Channel</span>
+    </div>
+  </section>
+
+  <!-- ============ 08 quote ============ -->
+  <section class="slide" data-screen-label="08 Proof · Customer Voice">
+    <div class="top-bar">
+      <span class="top-label">Section 05 <span class="red">/</span> Proof</span>
+      <span class="top-right">Customer Voice</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:1280px; text-align:center;">
+      <svg width="72" height="56" viewBox="0 0 72 56" fill="none" aria-hidden="true" style="margin-bottom:48px;">
+        <path d="M0 56V32C0 14 10 3 30 0l4 10c-12 3-18 9-19 18h17v28H0Z" fill="#E63946"/>
+        <path d="M40 56V32C40 14 50 3 70 0l2 10c-12 3-18 9-19 18h19v28H40Z" fill="#E63946"/>
+      </svg>
+      <div style="font-size:54px; font-weight:900; letter-spacing:-1px; line-height:1.4;">
+        “The new one-liner cut our sales cycle by 18 days —<br>prospects finally <span class="red">repeat our pitch back to us</span>.”
+      </div>
+      <div style="margin-top:56px; display:inline-flex; align-items:center; gap:20px;">
+        <span style="width:48px; height:1px; background:var(--ink);"></span>
+        <span style="font-size:14px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">VP Marketing · Series B SaaS Customer</span>
+        <span style="font-size:12px; color:var(--faint); letter-spacing:2px;">Q2 2026 Case Study</span>
+        <span style="width:48px; height:1px; background:var(--ink);"></span>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Quote sourced from a Q2 2026 customer interview, shared with permission</span>
+      </div>
+      <span class="bottom-right-text">Proof</span>
+    </div>
+  </section>
+
+  <!-- ============ 09 stats grid ============ -->
+  <section class="slide" data-screen-label="09 Proof Scorecard">
+    <div class="top-bar">
+      <span class="top-label">Section 05 <span class="red">/</span> Proof Scorecard</span>
+      <span class="top-right">Measurable Growth</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="left: 960px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+    <div class="grid-line-h" style="top: 560px;"></div>
+
+    <div style="position:absolute; left:80px; right:80px; top:160px; bottom:120px; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr;">
+      <div style="padding:56px 64px 0 0;">
+        <div class="tag">Message Clarity Score</div>
+        <div style="font-size:128px; font-weight:900; letter-spacing:-6px; line-height:0.9; margin-top:20px;">9<span class="red">.4</span></div>
+        <div class="hero-context">Out of 10 · Up From 3.1 Pre-System</div>
+      </div>
+      <div style="padding:56px 0 0 64px;">
+        <div class="tag">1-Week Recall</div>
+        <div style="font-size:128px; font-weight:900; letter-spacing:-6px; line-height:0.9; margin-top:20px;">5<span class="red">8</span>%</div>
+        <div class="hero-context">Buyers Repeat the Promise Unprompted</div>
+      </div>
+      <div style="padding:56px 64px 0 0;">
+        <div class="tag">Sales Cycle</div>
+        <div style="font-size:128px; font-weight:900; letter-spacing:-6px; line-height:0.9; margin-top:20px;">−1<span class="red">8</span></div>
+        <div class="hero-context">Days Shorter · Series B Customer Cohort</div>
+      </div>
+      <div style="padding:56px 0 0 64px;">
+        <div class="tag">Demo-to-Close Rate</div>
+        <div style="font-size:128px; font-weight:900; letter-spacing:-6px; line-height:0.9; margin-top:20px;"><span class="red">3.2</span>x</div>
+        <div class="hero-context">Lift Since Positioning Refresh Shipped</div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo">OPEN DESIGN</span>
+        <div class="bottom-divider"></div>
+        <span class="bottom-note">Consistent figures · 12-week message test · Q2 2026 pipeline data</span>
+      </div>
+      <span class="bottom-right-text">Proof Scorecard</span>
+    </div>
+  </section>
+
+  <!-- ============ 10 closing ============ -->
+  <section class="slide dark" data-screen-label="10 Closing · Launch Calendar">
+    <div class="top-bar">
+      <span class="top-label">Closing <span class="red">/</span> Launch Calendar</span>
+      <span class="top-right">Get Started</span>
+    </div>
+    <div class="grid-line-v" style="left: 80px;"></div>
+    <div class="grid-line-v" style="right: 80px;"></div>
+
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; width:1400px;">
+      <div class="tag" style="color:var(--night-mut);">4-Week Launch Calendar</div>
+      <div style="font-size:120px; font-weight:900; letter-spacing:-5px; line-height:1.08; margin-top:32px; color:var(--night-ink);">
+        Ship the message<br>this quarter<span class="red">.</span>
+      </div>
+      <div style="font-size:18px; color:var(--night-mut); line-height:1.7; margin-top:36px;">
+        Week 1: lock the one-liner with sales and support. Week 2: brief every channel from the same pillar doc.<br>Week 3: launch website, deck, and ads together. Week 4: measure recall and objection rate, then iterate.
+      </div>
+      <div style="display:inline-flex; align-items:center; gap:18px; margin-top:64px; border:1px solid var(--night-line); padding:18px 44px; font-size:13px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--night-mut);">
+        <span>←</span><span>→</span><span>Space</span><span style="color:var(--accent);">Navigate</span><span>·</span><span>#/N</span><span style="color:var(--accent);">Jump</span>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <span class="bottom-logo" style="color:var(--night-ink);">OPEN DESIGN</span>
+        <div class="bottom-divider" style="background:var(--night-line);"></div>
+        <span class="bottom-note">Positioning & Messaging Playbook · Brand & Marketing Team</span>
+      </div>
+      <span class="bottom-right-text">Launch Calendar</span>
+    </div>
+  </section>
+
+</div>
+
+<div id="counter">01 <b>/</b> 10</div>
+<div id="hint">←/→ · Space</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var counter = document.getElementById('counter');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var current = 0;
+
+  // fit(): scale the fixed 1920×1080 canvas into the viewport (letterbox)
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // go(i): activate slide i, sync counter + hash (#/N, 1-indexed)
+  function go(i, skipHash) {
+    current = Math.max(0, Math.min(total - 1, i));
+    for (var k = 0; k < total; k++) {
+      slides[k].classList.toggle('active', k === current);
+    }
+    counter.innerHTML = pad(current + 1) + ' <b>/</b> ' + pad(total);
+    if (!skipHash) {
+      var target = '#/' + (current + 1);
+      if (location.hash !== target) {
+        try { history.replaceState(null, '', target); }
+        catch (err) { location.hash = target; }
+      }
+    }
+  }
+
+  function fromHash() {
+    var m = location.hash.match(/^#\/(\d+)$/);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n >= 1 && n <= total) { go(n - 1, true); return; }
+    }
+    go(0, true);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        go(current + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        go(current - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(total - 1);
+        break;
+    }
+  });
+
+  // click: left third of the window goes back, the rest goes forward
+  stage.addEventListener('click', function (e) {
+    if (e.clientX < window.innerWidth / 3) { go(current - 1); }
+    else { go(current + 1); }
+  });
+
+  window.addEventListener('hashchange', fromHash);
+  window.addEventListener('resize', fit);
+
+  fit();
+  fromHash();
+})();
+</script>
+
+</body>
+</html>

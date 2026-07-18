@@ -1,0 +1,164 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-takram-soft-tech",
+  "title": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+  "title_i18n": {
+    "en": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+    "zh-CN": "像企业销售负责人一样写买方委员会转发稿",
+    "zh-TW": "像企业销售负责人一样写买方委员会转发稿"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.",
+  "description_i18n": {
+    "en": "Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.",
+    "zh-CN": "像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "soft-tech",
+    "data-viz",
+    "nature",
+    "radar-chart",
+    "huashu",
+    "ai",
+    "copilot",
+    "workflow",
+    "huashu-takram-soft-tech",
+    "enterprise-ai-literacy",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "sales",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Audience: buying committee, security, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像企业销售负责人一样写买方委员会转发稿。像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+          "title_i18n": {
+            "en": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+            "zh-CN": "像企业销售负责人一样写买方委员会转发稿",
+            "zh-TW": "像企业销售负责人一样写买方委员会转发稿"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product briefing deck",
+          "benchmark / research report deck",
+          "brand story deck",
+          "sustainability / ESG report deck",
+          "lecture / studio share deck"
+        ],
+        "default": "product briefing deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：环境感知网络 2026 产品发布",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "客户 / 投资人 / 研究社区",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "b2b-sales"
+  }
+}

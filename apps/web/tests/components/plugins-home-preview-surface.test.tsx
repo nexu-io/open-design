@@ -21,8 +21,12 @@ vi.mock('../../src/components/plugins-home/cards/MediaSurface', () => ({
 }));
 
 vi.mock('../../src/components/plugins-home/cards/HtmlSurface', () => ({
-  HtmlSurface: ({ inView }: { inView: boolean }) => (
-    <div data-testid="html-surface" data-in-view={String(inView)} />
+  HtmlSurface: ({ eager, inView }: { eager?: boolean; inView: boolean }) => (
+    <div
+      data-testid="html-surface"
+      data-eager={String(Boolean(eager))}
+      data-in-view={String(inView)}
+    />
   ),
 }));
 
@@ -112,5 +116,18 @@ describe('PreviewSurface media visibility gates', () => {
       />,
     );
     expect(screen.getByTestId('design-surface').dataset.inView).toBe('false');
+  });
+
+  it('passes eager through to html surfaces', () => {
+    visibilityQueue.splice(0, visibilityQueue.length, true, true, true, true);
+    render(
+      <PreviewSurface
+        pluginId="sample"
+        pluginTitle="Sample"
+        preview={{ kind: 'html', src: '/preview', label: 'preview', source: 'preview' }}
+        eager
+      />,
+    );
+    expect(screen.getByTestId('html-surface').dataset.eager).toBe('true');
   });
 });

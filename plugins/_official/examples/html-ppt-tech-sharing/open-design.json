@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-tech-sharing",
-  "title": "Html Ppt Tech Sharing",
+  "title": "Give an Engineering Tech Talk like a Staff Developer-Advocate",
   "title_i18n": {
-    "zh-CN": "Html Ppt 技术分享",
-    "zh-TW": "Html Ppt 技術分享",
-    "ja": "Html Ppt Tech Sharing",
-    "ko": "Html Ppt Tech Sharing",
-    "de": "Html Ppt Tech Sharing",
-    "fr": "Html Ppt Tech Sharing",
-    "ru": "Html Ppt Tech Sharing",
-    "es": "Html Ppt Tech Sharing",
-    "pt-BR": "Html Ppt Tech Sharing",
-    "it": "Html Ppt Tech Sharing",
-    "vi": "Html Ppt Tech Sharing",
-    "pl": "Html Ppt Tech Sharing",
-    "id": "Html Ppt Tech Sharing",
-    "nl": "Html Ppt Tech Sharing",
-    "ar": "Html Ppt Tech Sharing",
-    "tr": "Html Ppt Tech Sharing",
-    "uk": "Html Ppt Tech Sharing",
-    "en": "Html Ppt Tech Sharing"
+    "en": "Give an Engineering Tech Talk like a Staff Developer-Advocate",
+    "zh-CN": "像 Staff DevRel 一样做工程分享",
+    "zh-TW": "像 Staff DevRel 一样做工程分享"
   },
   "version": "0.1.0",
-  "description": "Conference / internal tech-talk deck — GitHub-dark, JetBrains Mono, terminal code blocks, agenda + Q&A pages. Use for engineering presentations, internal sharing sessions, conference talks, and code-heavy walkthroughs.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.",
   "description_i18n": {
-    "zh-CN": "会议 / 内部技术分享演示文稿 — GitHub-dark 风格、JetBrains Mono 字体、终端代码块、议程 + 问答页面。适用于工程演示、内部分享会、技术会议演讲和代码详解。",
-    "zh-TW": "會議 / 內部技術分享簡報 — GitHub-dark 風格、JetBrains Mono 字型、終端程式碼區塊、議程 + 問答頁面。適用於工程簡報、內部分享會、技術研討會演講和程式碼詳解。",
-    "ja": "カンファレンス・社内技術共有用デッキ — GitHub-darkスタイル、JetBrains Monoフォント、ターミナルコードブロック、アジェンダ + Q&Aページ。エンジニアリングプレゼンテーション、社内共有会、カンファレンス講演、コード中心の解説に最適。",
-    "ko": "컨퍼런스 / 내부 기술 공유 발표 자료 — GitHub-dark 스타일, JetBrains Mono 폰트, 터미널 코드 블록, 안건 + Q&A 페이지. 엔지니어링 프레젠테이션, 내부 공유 세션, 컨퍼런스 발표, 코드 중심 설명에 적합합니다.",
-    "de": "Konferenz- / interne Tech-Talk-Präsentation — GitHub-dark, JetBrains Mono, Terminal-Codeblöcke, Agenda + Q&A-Seiten. Für Engineering-Präsentationen, interne Sharing-Sessions, Konferenzvorträge und code-lastige Walkthroughs.",
-    "fr": "Présentation de conférence / tech-talk interne — GitHub-dark, JetBrains Mono, blocs de code terminal, pages agenda + Q&R. Pour présentations d'ingénierie, sessions de partage internes, conférences et démonstrations axées sur le code.",
-    "ru": "Презентация для конференций / внутренних технических докладов — GitHub-dark, JetBrains Mono, блоки кода в стиле терминала, страницы с повесткой + Q&A. Для инженерных презентаций, внутренних сессий, конференций и разборов кода.",
-    "es": "Presentación de conferencia / charla técnica interna — GitHub-dark, JetBrains Mono, bloques de código de terminal, páginas de agenda + Q&A. Para presentaciones de ingeniería, sesiones de compartición internas, charlas de conferencias y tutoriales con mucho código.",
-    "pt-BR": "Apresentação de conferência / tech-talk interna — GitHub-dark, JetBrains Mono, blocos de código de terminal, páginas de agenda + perguntas. Para apresentações de engenharia, sessões de compartilhamento internas, palestras de conferências e tutoriais com muito código.",
-    "it": "Presentazione per conferenze / tech-talk interni — GitHub-dark, JetBrains Mono, blocchi di codice terminale, pagine agenda + Q&A. Per presentazioni ingegneristiche, sessioni di condivisione interne, conferenze e tutorial ricchi di codice.",
-    "vi": "Bộ slide hội thảo / chia sẻ kỹ thuật nội bộ — GitHub-dark, JetBrains Mono, khối mã terminal, trang chương trình + Q&A. Dùng cho bài thuyết trình kỹ thuật, buổi chia sẻ nội bộ, hội nghị và hướng dẫn nhiều code.",
-    "pl": "Prezentacja konferencyjna / wewnętrzny tech-talk — GitHub-dark, JetBrains Mono, bloki kodu terminalowego, strony z agendą + Q&A. Do prezentacji inżynierskich, wewnętrznych sesji, konferencji i szczegółowych omówień kodu.",
-    "id": "Deck konferensi / tech-talk internal — GitHub-dark, JetBrains Mono, blok kode terminal, halaman agenda + Q&A. Untuk presentasi engineering, sesi sharing internal, konferensi, dan walkthrough berisi banyak kode.",
-    "nl": "Conferentie- / interne tech-talk presentatie — GitHub-dark, JetBrains Mono, terminal codeblokken, agenda + Q&A pagina's. Voor engineeringpresentaties, interne sharesessies, conferentiegesprekken en code-intensieve walkthroughs.",
-    "ar": "عرض تقديمي للمؤتمرات / جلسات تقنية داخلية — نمط GitHub-dark، خط JetBrains Mono، كتل أكواد طرفية، صفحات جدول أعمال + أسئلة وأجوبة. للعروض الهندسية والجلسات الداخلية والمؤتمرات والشروحات الغنية بالأكواد.",
-    "tr": "Konferans / dahili teknik sunum dosyası — GitHub-dark, JetBrains Mono, terminal kod blokları, ajanda + soru-cevap sayfaları. Mühendislik sunumları, dahili paylaşım oturumları, konferans konuşmaları ve kod ağırlıklı anlatımlar için.",
-    "uk": "Презентація для конференцій / внутрішніх технічних доповідей — GitHub-dark, JetBrains Mono, блоки коду терміналу, сторінки з порядком денним + Q&A. Для інженерних презентацій, внутрішніх сесій, конференцій та розборів коду.",
-    "en": "Conference / internal tech-talk deck — GitHub-dark, JetBrains Mono, terminal code blocks, agenda + Q&A pages. Use for engineering presentations, internal sharing sessions, conference talks, and code-heavy walkthroughs."
+    "en": "Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Built as a decision-grade AI literacy deck for engineers, dev community.",
+    "zh-CN": "像 Staff DevRel 一样做工程分享——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像 Staff DevRel 一样做工程分享——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,16 @@
     "untitled",
     "engineering-talk",
     "conference-talk",
-    "dev-talk"
+    "dev-talk",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-tech-sharing",
+    "enterprise-ai-literacy",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +55,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "ai",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +63,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-tech-sharing template to create an 8-page technical sharing deck. First confirm the topic, target audience (coworkers, community, or customers), and whether to include code snippets and benchmarks. Use a GitHub dark theme with JetBrains Mono, and include agenda and Q&A slides.",
-        "zh-CN": "帮我用 html-ppt-tech-sharing 模板做一份 8 页的技术分享 PPT。先确认：分享主题、目标听众（同事 / 社区 / 客户）、要不要包含代码片段和 benchmark。GitHub 暗色主题 + JetBrains Mono，agenda + Q&A 页备好。"
+        "en": "Create \"Give an Engineering Tech Talk like a Staff Developer-Advocate\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. Audience: engineers, dev community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像 Staff DevRel 一样做工程分享。像 Staff DevRel 一样做工程分享——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design internals: how the agent stream, sandbox, and artifacts work — an engineering deep-dive talk. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Tech Sharing"
+          "title": "Give an Engineering Tech Talk like a Staff Developer-Advocate",
+          "title_i18n": {
+            "en": "Give an Engineering Tech Talk like a Staff Developer-Advocate",
+            "zh-CN": "像 Staff DevRel 一样做工程分享",
+            "zh-TW": "像 Staff DevRel 一样做工程分享"
+          }
         }
       ]
     },
@@ -117,6 +102,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "ai-literacy"
   }
 }

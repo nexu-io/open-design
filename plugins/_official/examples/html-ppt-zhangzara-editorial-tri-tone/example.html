@@ -2,24 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Editorial Deck Template</title>
+<title>Build an Editorial Design System like a Magazine Art Director - Design craft</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="assets/deck-stage.js"></script>
 <style>
   :root{
+    /* tri-tone system: dusty pink / mustard cream / deep burgundy.
+       Legacy alias names are kept because markup references them;
+       they all resolve to one of the three tones. */
     --pink:#F2B6C6;
     --pink-deep:#F2B6C6;
+    --sky:#F2B6C6;
     --cream:#F2D86A;
+    --lime:#F2D86A;
+    --terracotta:#F2D86A;
+    --butter:#F2D86A;
     --navy:#7A1F35;
     --forest:#7A1F35;
     --burgundy:#7A1F35;
-    --lime:#F2D86A;
-    --sky:#F2B6C6;
-    --terracotta:#F2D86A;
-    --butter:#F2D86A;
     --ink:#7A1F35;
   }
   html, body { margin:0; padding:0; background:#7A1F35; }
@@ -53,24 +56,11 @@
     text-transform: uppercase;
   }
 
-  .footer {
-    position:absolute; left:64px; right:64px; bottom:36px;
-    display:flex; justify-content:space-between; align-items:center;
-    font-family:"JetBrains Mono", monospace;
-    font-size:16px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    opacity:0.75;
-  }
-  .footer .dotrow { display:flex; gap:8px; }
-  .footer .dotrow i { width:8px; height:8px; border-radius:999px; background: currentColor; opacity:0.3; display:inline-block; }
-  .footer .dotrow i.on { opacity:1; }
-
   /* ========== SLIDE 1: COVER ========== */
   .s-cover { background: var(--pink); color: var(--ink); }
   .s-cover .pill-cluster {
     position:absolute;
-    top:120px; left:64px; right:64px;
+    top:176px; left:64px; right:64px;
     display:flex; flex-wrap:wrap; gap: 22px;
     max-width: 1500px;
   }
@@ -78,9 +68,13 @@
   .s-cover .wordmark {
     position:absolute;
     left:64px; right:64px; bottom:80px;
+    padding-top: 40px;
+    border-top: 2px solid var(--burgundy);
     font-family:"Bricolage Grotesque", sans-serif;
     font-weight:800;
-    font-size: 300px;
+    /* masthead scale: 380px lets the wordmark eat the dead band between
+       the pill cluster and the rule, like a magazine nameplate should */
+    font-size: 380px;
     line-height: 0.82;
     letter-spacing:-0.04em;
     color: var(--burgundy);
@@ -94,6 +88,8 @@
     display:flex; justify-content:space-between;
     font-family:"JetBrains Mono", monospace;
     font-size:24px; letter-spacing:0.15em; text-transform:uppercase;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--burgundy);
   }
 
   /* ========== SLIDE 2: MANIFESTO ========== */
@@ -110,14 +106,14 @@
     font-size: 240px; line-height:0.9;
     color: var(--burgundy);
   }
-  .s-manifesto .chapter sup { font-size: 0.35em; vertical-align: super; opacity:0.6; }
   .s-manifesto .lede {
     font-family:"Bricolage Grotesque", sans-serif;
     font-size: 56px; line-height:1.05;
     font-weight:500; letter-spacing:-0.02em;
     max-width: 720px;
   }
-  .s-manifesto .lede em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color:var(--terracotta); }
+  /* on the cream panel only burgundy reads; yellow-on-yellow was invisible */
+  .s-manifesto .lede em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color:var(--burgundy); }
   .s-manifesto .right h3 {
     font-family:"JetBrains Mono", monospace;
     font-size: 24px; letter-spacing:0.18em; text-transform:uppercase;
@@ -134,8 +130,10 @@
 
   /* ========== SLIDE 3: GRID OF VALUES ========== */
   .s-grid { background: var(--pink); padding: 72px 64px 80px; }
+  /* h2 keeps margin 0 so the flex-end header row truly baselines the
+     section label against the headline instead of its margin box */
   .s-grid h2 {
-    margin:0 0 32px; font-size: 76px; line-height:1;
+    margin:0; font-size: 76px; line-height:1;
     font-family:"Bricolage Grotesque", sans-serif; font-weight:700;
     letter-spacing:-0.02em; color: var(--burgundy);
     max-width: 1100px;
@@ -149,21 +147,24 @@
     border-radius: 28px;
     padding: 28px 28px 30px;
     height: 340px;
-    display:flex; flex-direction:column; justify-content:space-between;
+    display:flex; flex-direction:column; justify-content:flex-start;
     position:relative; overflow:hidden;
   }
   .s-grid .card .num {
     font-family:"JetBrains Mono", monospace;
     font-size: 24px; letter-spacing:0.15em;
-    opacity:0.7;
+    opacity:0.8;
   }
+  /* number anchors top-left; title + body sit together at the bottom edge,
+     so the breathing room pools once instead of splitting into two voids */
   .s-grid .card h4 {
-    font-size: 40px; line-height:1; margin: 0;
+    font-size: 40px; line-height:1; margin: auto 0 14px;
     font-weight:600; letter-spacing:-0.02em;
   }
   .s-grid .card p { font-size: 24px; line-height:1.4; margin:0; opacity:0.85; }
-  .s-grid .c1, .s-grid .c3, .s-grid .c5, .s-grid .c7 { background: var(--burgundy); color: var(--butter); }
-  .s-grid .c2, .s-grid .c4, .s-grid .c6, .s-grid .c8 { background: var(--butter); color: var(--burgundy); }
+  /* checkerboard alternation (row two offset) reads editorial; straight stripes read generated */
+  .s-grid .c1, .s-grid .c3, .s-grid .c6, .s-grid .c8 { background: var(--burgundy); color: var(--butter); }
+  .s-grid .c2, .s-grid .c4, .s-grid .c5, .s-grid .c7 { background: var(--butter); color: var(--burgundy); }
 
   /* ========== SLIDE 4: BIG STAT / EDITORIAL ========== */
   .s-stat { background: var(--burgundy); color: var(--cream); padding: 96px 64px; position:relative; }
@@ -186,20 +187,26 @@
     position:absolute; right:64px; bottom:80px;
     width: 600px;
   }
+  /* hairlines derive from the butter tone so the burgundy spread stays tri-tone */
   .s-stat .breakdown .row {
     display:grid; grid-template-columns: 150px 1fr 90px;
     gap: 16px; align-items:center; padding: 14px 0;
-    border-top: 1px solid rgba(246,237,220,0.25);
+    border-top: 1px solid rgba(242,216,106,0.3);
     font-size: 24px;
   }
-  .s-stat .breakdown .row:last-child { border-bottom: 1px solid rgba(246,237,220,0.25); }
-  .s-stat .breakdown .row .lbl { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.7; }
-  .s-stat .breakdown .row .bar { height:10px; border-radius:999px; background: rgba(246,237,220,0.15); position:relative; overflow:hidden; }
+  .s-stat .breakdown .row:last-child { border-bottom: 1px solid rgba(242,216,106,0.3); }
+  .s-stat .breakdown .row .lbl { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.8; }
+  .s-stat .breakdown .row .bar { height:10px; border-radius:999px; background: rgba(242,216,106,0.18); position:relative; overflow:hidden; }
   .s-stat .breakdown .row .bar i { display:block; height:100%; border-radius:999px; }
   .s-stat .breakdown .row .val { font-family:"JetBrains Mono", monospace; font-size:24px; text-align:right; }
 
   /* ========== SLIDE 5: TIMELINE ========== */
-  .s-timeline { background: var(--butter); padding: 96px 80px; }
+  /* head / track / ribbon distribute over the full canvas height
+     instead of stacking at the top and leaving a dead lower third */
+  .s-timeline {
+    background: var(--butter); padding: 112px 80px 96px;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
   .s-timeline .head { display:flex; justify-content:space-between; align-items:flex-start; gap: 48px; margin-bottom: 48px; }
   .s-timeline .head h2 {
     margin:0; font-size: 76px; line-height:0.95;
@@ -208,27 +215,29 @@
   }
   .s-timeline .head h2 em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color: var(--burgundy); }
   .s-timeline .head .meta { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.15em; text-transform:uppercase; text-align:right; line-height:1.5; color: var(--burgundy); flex-shrink:0; }
-  .s-timeline .head .meta span { display:block; opacity:0.55; margin-top: 4px; }
+  .s-timeline .head .meta span { display:block; opacity:0.65; margin-top: 4px; }
   .s-timeline .track {
     position:relative;
     padding: 60px 0 40px;
   }
   .s-timeline .axis {
     position:absolute; left:0; right:0; top: 110px;
-    height: 4px; background: var(--ink); opacity:0.15;
+    height: 4px; background: var(--ink); opacity:0.28;
   }
   .s-timeline .stops {
     display:grid; grid-template-columns: repeat(5, 1fr);
     gap: 24px; position:relative;
   }
   .s-timeline .stop { position:relative; padding-top: 90px; }
+  /* marker sits on the axis: axis is 110px from .track top, .stops starts
+     at 60px, so the dot center lands at 50px (+2px half stroke) */
   .s-timeline .stop .dot {
-    position:absolute; top: 90px; left: 0;
+    position:absolute; top: 52px; left: 0;
     width: 28px; height: 28px; border-radius: 999px;
     transform: translateY(-50%);
     border: 4px solid var(--butter);
     background: var(--burgundy);
-    display: none;
+    box-sizing: border-box;
   }
   .s-timeline .stop .yr {
     font-family:"Instrument Serif", serif; font-style:italic;
@@ -264,37 +273,44 @@
   }
   .s-chart .l .legend .item { display:flex; align-items:center; gap: 14px; font-size:24px; }
   .s-chart .l .legend .item i { width:14px; height:14px; border-radius:4px; display:block; }
-  .s-chart .l .legend .item .cat { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.7; margin-left:auto; }
+  .s-chart .l .legend .item .cat { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.8; margin-left:auto; }
   .s-chart .r {
     background: var(--cream); color: var(--ink);
     border-radius: 32px;
     padding: 48px 48px 56px;
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:column; justify-content:center;
     position:relative;
   }
   .s-chart .r .head { display:flex; justify-content:space-between; align-items:center; margin-bottom: 32px; }
   .s-chart .r .head .ttl { font-family:"Instrument Serif", serif; font-style:italic; font-size: 40px; }
-  .s-chart .r .head .unit { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.6; }
+  .s-chart .r .head .unit { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.75; }
   .s-chart svg.chart { width:100%; flex:0 0 auto; max-height: 480px; }
-  .s-chart .r .xax { display:grid; grid-template-columns: repeat(6, 1fr); margin-top: 12px; font-family:"JetBrains Mono", monospace; font-size:24px; opacity:0.6; letter-spacing:0.1em; }
+  .s-chart .r .xax { display:grid; grid-template-columns: repeat(6, 1fr); margin-top: 12px; font-family:"JetBrains Mono", monospace; font-size:24px; opacity:0.75; letter-spacing:0.1em; }
 
   /* ========== SLIDE 7: QUOTE / EDITORIAL SPLIT ========== */
   .s-quote { background: var(--lime); color: var(--ink); padding: 0; display:grid; grid-template-columns: 0.95fr 1fr; }
   .s-quote .l { padding: 80px 56px 80px 80px; display:flex; flex-direction:column; justify-content:space-between; gap: 24px; position:relative; }
   .s-quote .l .top { display:flex; flex-direction:column; gap: 12px; }
-  .s-quote .l .mark { font-family:"Instrument Serif", serif; font-style:italic; font-size: 200px; line-height:0.6; color: var(--burgundy); margin: 80px 0 0 0; }
+  .s-quote .l .mark { font-family:"Instrument Serif", serif; font-style:italic; font-size: 200px; line-height:0.6; color: var(--burgundy); margin: 64px 0 0 0; }
+  /* quote carries the spread; larger size eats the dead band under the mark */
   .s-quote .l blockquote {
     margin: 0;
     font-family:"Instrument Serif", serif; font-style:italic;
-    font-size: 64px; line-height:1.1;
+    font-size: 72px; line-height:1.12;
     color: var(--ink);
-    max-width: 760px;
+    max-width: 780px;
   }
   .s-quote .l blockquote b { font-family:"Bricolage Grotesque", sans-serif; font-style:normal; font-weight:600; color: var(--burgundy); }
-  .s-quote .l .attribution { display:flex; align-items:center; gap:20px; }
-  .s-quote .l .avatar { width:72px; height:72px; border-radius:999px; background: var(--burgundy); border:3px solid var(--burgundy); }
+  .s-quote .l .attribution {
+    display:flex; align-items:center; gap:20px;
+    padding-top: 28px;
+    border-top: 2px solid var(--burgundy);
+    max-width: 760px;
+  }
+  /* short burgundy dash in place of a fake avatar circle */
+  .s-quote .l .dash { width:56px; height:6px; background: var(--burgundy); flex-shrink:0; }
   .s-quote .l .who { font-size:26px; font-weight:600; }
-  .s-quote .l .who small { display:block; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.65; font-weight:400; margin-top:4px; }
+  .s-quote .l .who small { display:block; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.78; font-weight:400; margin-top:4px; }
   .s-quote .r {
     background: var(--burgundy); color: var(--butter);
     padding: 96px 80px;
@@ -306,9 +322,9 @@
   .s-quote .r .endorsements .row {
     display:grid; grid-template-columns: 80px 1fr;
     gap: 20px; align-items:center;
-    padding: 20px 0; border-top: 1px solid rgba(246,237,220,0.3);
+    padding: 20px 0; border-top: 1px solid rgba(242,216,106,0.32);
   }
-  .s-quote .r .endorsements .row:last-child { border-bottom: 1px solid rgba(246,237,220,0.3); }
+  .s-quote .r .endorsements .row:last-child { border-bottom: 1px solid rgba(242,216,106,0.32); }
   .s-quote .r .endorsements .num { font-family:"Instrument Serif", serif; font-style:italic; font-size: 56px; line-height:1; color: var(--pink); }
   .s-quote .r .endorsements .txt { font-size: 26px; line-height:1.4; }
   .s-quote .r .endorsements .txt strong { font-weight:600; display:block; margin-bottom: 4px; }
@@ -321,14 +337,17 @@
     margin-top: 40px;
     font-family:"Bricolage Grotesque", sans-serif;
     font-weight:700;
-    font-size: 320px;
+    font-size: 400px;
     line-height: 0.82;
     letter-spacing: -0.05em;
     color: var(--pink);
-    max-width: 800px;
+    max-width: 1100px;
   }
-  .s-closer .big em { display:inline-block; margin-left: -20px; }
-  .s-closer .big em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color: var(--butter); }
+  .s-closer .big em {
+    display:inline-block; margin-left: -20px;
+    font-family:"Instrument Serif", serif; font-style:italic; font-weight:400;
+    color: var(--butter);
+  }
   .s-closer .grid {
     position:absolute; left:64px; right:64px; bottom: 120px;
     display:grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
@@ -354,30 +373,29 @@
   <!-- ============ SLIDE 1: COVER ============ -->
   <section class="s-cover" data-screen-label="01 Cover">
     <div class="meta">
-      <span>Vol. 04 &mdash; Editorial Brief</span>
-      <span>Spring / Summer Edition</span>
-      <span>FW · 2026</span>
+      <span>Design Craft &mdash; Case Study</span>
+      <span>Atlas Review &mdash; Relaunch System</span>
+      <span>AD · 2026</span>
     </div>
 
     <div class="pill-cluster">
-      <span class="pill" style="background:var(--burgundy); color:var(--pink)">focus</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">tech-equipped</span>
-      <span class="pill" style="background:var(--burgundy); color:var(--butter)">creativity</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">coffee</span>
-      <span class="pill" style="background:var(--burgundy); color:var(--pink)">community</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">coworking</span>
-      <span class="pill" style="background:var(--burgundy); color:var(--butter)">productivity</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">inspiration</span>
-      <span class="pill" style="background:var(--burgundy); color:var(--pink)">flexible</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">workshops</span>
-      <span class="pill" style="background:var(--burgundy); color:var(--butter)">collaboration</span>
-      <span class="pill" style="background:var(--butter); color:var(--burgundy)">studio</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--pink)">12-col grid</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">tri-tone palette</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--butter)">masthead system</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">type pairing</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--pink)">caption rules</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">page templates</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--butter)">art direction</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">proof pass</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--pink)">84px module</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">export checklist</span>
+      <span class="pill" style="background:var(--burgundy); color:var(--butter)">issue 112</span>
+      <span class="pill" style="background:var(--butter); color:var(--burgundy)">4 templates</span>
     </div>
 
     <div class="wordmark">
-      <span>Studio</span>
-      <span class="amp" style="color:var(--butter); margin: 0 24px 24px;">&amp;</span>
-      <span>Salon</span>
+      <span>Atlas</span>
+      <span class="amp" style="color:var(--butter); margin: 0 24px 24px;">Review</span>
     </div>
   </section>
 
@@ -385,74 +403,74 @@
   <section class="s-manifesto" data-screen-label="02 Manifesto">
     <div class="left">
       <div>
-        <div class="label" style="margin-bottom:32px; color: var(--burgundy);">Chapter One · Manifesto</div>
-        <div class="chapter">01<sup></sup></div>
+        <div class="label" style="margin-bottom:32px; color: var(--burgundy);">Chapter One · The Diagnosis</div>
+        <div class="chapter">01</div>
       </div>
       <div class="lede">
-        Placeholder lede sets the tone for the whole document. A short, declarative sentence followed by an <em>aside in italic</em> that carries the warmth.
+        Eighteen issues of drift — <em>eleven type sizes, four unlicensed fonts, zero shared grid.</em>
       </div>
-      <div class="mono" style="font-size:24px; letter-spacing:0.12em; opacity:0.6; text-transform:uppercase;">Page 002 / 016 &nbsp;·&nbsp; Read Time 04:30</div>
+      <div class="mono" style="font-size:24px; letter-spacing:0.12em; opacity:0.75; text-transform:uppercase;">Atlas Review &mdash; Relaunch Brief &nbsp;·&nbsp; Q1 2026</div>
     </div>
     <div class="right">
       <div>
-        <h3>An opening note</h3>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed posuere consectetur est at lobortis. Cras justo odio, dapibus ac facilisis in, egestas eget quam.</p>
-        <p>Maecenas faucibus mollis interdum. Nullam quis risus eget urna mollis ornare vel eu leo. Donec ullamcorper nulla non metus auctor fringilla.</p>
-        <p>Vestibulum id ligula porta felis euismod semper. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.</p>
+        <h3>The audit</h3>
+        <p>When we opened the last 18 issues side by side, no two features shared a measure — column widths ranged from 38 to 64 characters, breaking the rhythm the culture desk had spent years building.</p>
+        <p>The masthead had been redrawn six times by six different freelancers, each shipping a slightly different kerning table with no single source file.</p>
+        <p>The fix isn't a font swap. It's a tri-tone system — dusty pink, mustard cream, deep burgundy — locked to one grid, so every desk ships the same magazine.</p>
       </div>
       <div>
-        <div class="signature">— with warmth,</div>
-        <div style="font-family:'JetBrains Mono', monospace; font-size:24px; letter-spacing:0.18em; text-transform:uppercase; margin-top: 12px; color: var(--butter);">The Editorial Desk</div>
+        <div class="signature">— the rescue plan,</div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:24px; letter-spacing:0.18em; text-transform:uppercase; margin-top: 12px; color: var(--butter);">Atlas Review, Art Direction</div>
       </div>
     </div>
   </section>
 
   <!-- ============ SLIDE 3: VALUES GRID ============ -->
-  <section class="s-grid" data-screen-label="03 Principles">
-    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 24px;">
-      <h2>Eight principles, <em>loosely held.</em></h2>
-      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; color: var(--burgundy);">§ 03 — Principles</div>
+  <section class="s-grid" data-screen-label="03 Rescue Principles">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 44px;">
+      <h2>Eight rules, <em>locked to the grid.</em></h2>
+      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; color: var(--burgundy);">§ 03 — Rescue Principles</div>
     </div>
     <div class="grid">
       <div class="card c1">
         <div class="num">/ 01</div>
-        <h4>Slow looking</h4>
-        <p>A short paragraph describing the principle in plain language. Two sentences is plenty.</p>
+        <h4>Baseline grid</h4>
+        <p>12 columns, 84px module. Every photo, pull-quote, and caption snaps to it — nothing floats.</p>
       </div>
       <div class="card c2">
         <div class="num">/ 02</div>
-        <h4>Open kitchen</h4>
-        <p>Process in public. Show the seams, the sketches, the half-formed thoughts before they harden.</p>
+        <h4>Three inks only</h4>
+        <p>Dusty pink, mustard cream, deep burgundy. No fourth color enters a spread, ever.</p>
       </div>
       <div class="card c3">
         <div class="num">/ 03</div>
-        <h4>Borrowed light</h4>
-        <p>Cite generously. The best ideas always belong to a lineage; name the room you walked into.</p>
+        <h4>Two display faces</h4>
+        <p>Bricolage Grotesque for headlines, Instrument Serif italic for kickers and pull-quotes.</p>
       </div>
       <div class="card c4">
         <div class="num">/ 04</div>
-        <h4>Quiet defaults</h4>
-        <p>Restraint as a posture. Loud only when the moment earns it; otherwise, a soft shoulder.</p>
+        <h4>Masthead is fixed</h4>
+        <p>One drawn wordmark, one kerning table. Freelancers inherit it — they don't redraw it.</p>
       </div>
       <div class="card c5">
         <div class="num">/ 05</div>
-        <h4>Fewer, finer</h4>
-        <p>Pare back the pile. Three considered objects beat thirty hurried ones, every single time.</p>
+        <h4>Caption discipline</h4>
+        <p>Every caption in JetBrains Mono, uppercase, 0.15em tracking. Captions read as data, not decor.</p>
       </div>
       <div class="card c6">
         <div class="num">/ 06</div>
-        <h4>Generous edges</h4>
-        <p>Margins are mercy. Leave white space for the reader to breathe and bring their own.</p>
+        <h4>Measure ceiling</h4>
+        <p>52 characters per line, hard ceiling. Wide features split two columns before they cross it.</p>
       </div>
       <div class="card c7">
         <div class="num">/ 07</div>
-        <h4>Hand in it</h4>
-        <p>A trace of the maker, on purpose. Polish should never quite hide the fingerprints.</p>
+        <h4>White space budget</h4>
+        <p>Every spread reserves 18% dead space, minimum. Density is a choice, not a leftover.</p>
       </div>
       <div class="card c8">
         <div class="num">/ 08</div>
-        <h4>To be added</h4>
-        <p>A placeholder principle, awaiting the next conversation. The list is not yet finished.</p>
+        <h4>Section labels</h4>
+        <p>§ 0X, top-right, mono, every spread. Readers always know where they are in the issue.</p>
       </div>
     </div>
   </section>
@@ -461,58 +479,56 @@
   <section class="s-stat" data-screen-label="04 Headline figure">
     <div class="toprow">
       <div>
-        <div class="kicker">§ 04 — Headline Figure</div>
-        <div class="serif" style="font-size: 48px; margin-top: 16px; color: var(--pink);">A portrait, in numbers.</div>
+        <div class="kicker">§ 04 — The Page System</div>
+        <div class="serif" style="font-size: 48px; margin-top: 16px; color: var(--pink);">One grid, four page types.</div>
       </div>
       <div class="swatches">
         <i style="background:var(--pink)"></i>
-        <i style="background:var(--lime)"></i>
         <i style="background:var(--butter)"></i>
-        <i style="background:var(--terracotta)"></i>
-        <i style="background:var(--sky)"></i>
+        <i style="background:var(--burgundy); box-shadow: inset 0 0 0 3px var(--cream);"></i>
       </div>
     </div>
 
     <div class="figure" style="margin-left:0px; max-width: 900px;">
-      <span>72</span><span class="pct">%</span>
+      <span>84</span><span class="pct">px</span>
     </div>
     <div style="position:absolute; left:64px; bottom:80px; max-width: 900px;">
-      <div class="kicker" style="color:var(--butter);">What this measures</div>
-      <p style="font-size:24px; line-height:1.45; margin-top:18px; opacity:0.9;">Placeholder annotation. A short, candid sentence about what the figure means and, more importantly, what it doesn't. Survey of n=842, fielded in placeholder month, weighted to placeholder population.</p>
+      <div class="kicker" style="color:var(--butter);">How the module works</div>
+      <p style="font-size:24px; line-height:1.45; margin-top:18px; opacity:0.9;">Every spread is built from one 84px baseline module — the fixed unit for gutters, photo crops, and caption blocks. Four page types resolve to the same module, so pages 12 through 164 read as one object, not eighteen freelance interpretations.</p>
     </div>
 
     <div class="breakdown">
-      <div class="kicker" style="margin-bottom:12px;">Composition</div>
+      <div class="kicker" style="margin-bottom:12px;">Grid in the wild</div>
       <div class="row">
-        <span class="lbl">Segment A</span>
-        <span class="bar"><i style="width:82%; background:var(--lime)"></i></span>
-        <span class="val">82.4</span>
+        <span class="lbl">Columns</span>
+        <span class="bar"><i style="width:82%; background:var(--pink)"></i></span>
+        <span class="val">12</span>
       </div>
       <div class="row">
-        <span class="lbl">Segment B</span>
-        <span class="bar"><i style="width:64%; background:var(--butter)"></i></span>
-        <span class="val">63.9</span>
+        <span class="lbl">Gutter</span>
+        <span class="bar"><i style="width:34%; background:var(--butter)"></i></span>
+        <span class="val">24px</span>
       </div>
       <div class="row">
-        <span class="lbl">Segment C</span>
-        <span class="bar"><i style="width:48%; background:var(--terracotta)"></i></span>
-        <span class="val">48.1</span>
+        <span class="lbl">Margin</span>
+        <span class="bar"><i style="width:60%; background:var(--butter)"></i></span>
+        <span class="val">64px</span>
       </div>
       <div class="row">
-        <span class="lbl">Segment D</span>
-        <span class="bar"><i style="width:31%; background:var(--sky)"></i></span>
-        <span class="val">31.0</span>
+        <span class="lbl">Module</span>
+        <span class="bar"><i style="width:78%; background:var(--butter)"></i></span>
+        <span class="val">84px</span>
       </div>
     </div>
   </section>
 
   <!-- ============ SLIDE 5: TIMELINE ============ -->
-  <section class="s-timeline" data-screen-label="05 Trajectory">
+  <section class="s-timeline" data-screen-label="05 Page System">
     <div class="head">
-      <h2>A short trajectory, <em>told in five stops.</em></h2>
+      <h2>From brief to bound issue, <em>in five stages.</em></h2>
       <div class="meta">
-        § 05 — Trajectory<br/>
-        <span style="opacity:0.5;">2019 → present</span>
+        § 05 — Page System<br/>
+        <span style="opacity:0.65;">brief → press</span>
       </div>
     </div>
 
@@ -521,62 +537,62 @@
       <div class="stops">
         <div class="stop">
           <span class="dot"></span>
-          <div class="yr">'19</div>
-          <h5>The first prototype</h5>
-          <p>A short caption per milestone, written in plain prose. One observation, one consequence.</p>
+          <div class="yr">01</div>
+          <h5>Draft the grid</h5>
+          <p>Set the 12-column, 84px module before a single headline is typeset.</p>
         </div>
         <div class="stop">
           <span class="dot"></span>
-          <div class="yr">'21</div>
-          <h5>Quiet expansion</h5>
-          <p>Placeholder copy describing a turning point. Keep the writing concrete, never abstract.</p>
+          <div class="yr">02</div>
+          <h5>Lock the tri-tone</h5>
+          <p>Dusty pink, mustard cream, deep burgundy — tested against every planned photo essay.</p>
         </div>
         <div class="stop">
           <span class="dot"></span>
-          <div class="yr">'23</div>
-          <h5>A new house style</h5>
-          <p>Type, color, voice — re-cast around a single editorial premise; everything else followed.</p>
+          <div class="yr">03</div>
+          <h5>Pair the type</h5>
+          <p>Bricolage Grotesque headlines against Instrument Serif italic kickers, no exceptions.</p>
         </div>
         <div class="stop">
           <span class="dot"></span>
-          <div class="yr">'25</div>
-          <h5>The salon, formalized</h5>
-          <p>Monthly gatherings became a fixture, then a discipline, then the work's center of gravity.</p>
+          <div class="yr">04</div>
+          <h5>Build the templates</h5>
+          <p>Feature opener, review grid, Q&amp;A split, back-page index — four templates, one system.</p>
         </div>
         <div class="stop">
           <span class="dot"></span>
-          <div class="yr">'26</div>
-          <h5>Where we sit now</h5>
-          <p>Present tense. A brief, honest description of the shape of the practice today, in two breaths.</p>
+          <div class="yr">05</div>
+          <h5>Proof the full issue</h5>
+          <p>Run all 164 pages through the grid before the art director signs off.</p>
         </div>
       </div>
     </div>
 
     <div class="ribbon">
-      <span>Next chapter loading</span>
-      <strong>— and the work continues, gently.</strong>
-      <span>Vol. 05 / Autumn</span>
+      <span>From brief to bound issue</span>
+      <strong>— every desk edits inside the same grid.</strong>
+      <span>Atlas Review · Issue 112</span>
     </div>
   </section>
 
   <!-- ============ SLIDE 6: CHART ============ -->
-  <section class="s-chart" data-screen-label="06 Composition">
+  <section class="s-chart" data-screen-label="06 Proof">
     <div class="l">
-      <div class="label" style="color:var(--butter); margin-bottom: 20px;">§ 06 — Composition</div>
-      <h2>How the days <em>arrange themselves.</em></h2>
-      <p class="lede">A placeholder description for the chart on the right. Speak to the shape of the data — what rises, what plateaus — not the precise figures. Methodology and a one-line caveat live at the bottom.</p>
+      <div class="label" style="color:var(--butter); margin-bottom: 20px;">§ 06 — Proof</div>
+      <h2>How the rebuild <em>held up in proof.</em></h2>
+      <p class="lede">A demo view of the proof pass across the first rebuilt issue — grid compliance climbing, off-grid elements dropping, caption errors clearing. Read the shapes; the real totals are on the next spread.</p>
       <div class="legend">
-        <div class="item"><i style="background:var(--pink); border:1px solid var(--burgundy);"></i> Studio hours, deep work <span class="cat">Series A</span></div>
-        <div class="item"><i style="background:var(--butter); border:2px solid var(--burgundy); border-radius:999px;"></i> Salon &amp; conversation <span class="cat">Series B</span></div>
-        <div class="item"><i style="background:var(--burgundy);"></i> Reading, drift, walking <span class="cat">Series C</span></div>
-        <div class="item"><i style="background:transparent; border-top: 3px dotted var(--butter); border-radius:0; height: 0;"></i> Correspondence, admin <span class="cat">Series D</span></div>
+        <div class="item"><i style="background:var(--pink); border:1px solid var(--burgundy);"></i> Grid-compliant spreads, cumulative <span class="cat">Series A</span></div>
+        <div class="item"><i style="background:var(--butter); border:2px solid var(--burgundy); border-radius:999px;"></i> Off-grid elements flagged <span class="cat">Series B</span></div>
+        <div class="item"><i style="background:var(--burgundy); box-shadow: inset 0 0 0 2px var(--butter);"></i> Caption errors closed <span class="cat">Series C</span></div>
+        <div class="item"><i style="background:transparent; border-top: 3px dotted var(--butter); border-radius:0; height: 0;"></i> Freelance desks onboarded <span class="cat">Series D</span></div>
       </div>
-      <div class="mono" style="margin-top: 40px; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.5;">Source: internal logs · self-reported · n = 24 weeks</div>
+      <div class="mono" style="margin-top: 40px; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.78;">Demo data · illustrative shapes · real totals: 164 / 12 / 3</div>
     </div>
     <div class="r">
       <div class="head">
-        <span class="ttl">Hours per week, by mode</span>
-        <span class="unit">Hrs / wk</span>
+        <span class="ttl">Proof pass, by round</span>
+        <span class="unit">Index</span>
       </div>
       <svg class="chart" viewBox="0 0 720 380" preserveAspectRatio="none">
         <!-- gridlines -->
@@ -588,7 +604,7 @@
           <line x1="60" y1="380" x2="720" y2="380" />
         </g>
         <!-- y labels -->
-        <g font-family="JetBrains Mono, monospace" font-size="24" fill="#7A1F35" fill-opacity="0.6">
+        <g font-family="JetBrains Mono, monospace" font-size="24" fill="#7A1F35" fill-opacity="0.78">
           <text x="0" y="48">40</text>
           <text x="0" y="133">30</text>
           <text x="0" y="218">20</text>
@@ -629,7 +645,7 @@
               fill="none" stroke="#7A1F35" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round" stroke-opacity="0.6"/>
       </svg>
       <div class="xax">
-        <span>W·01</span><span>W·05</span><span>W·09</span><span>W·13</span><span>W·17</span><span>W·24</span>
+        <span>Rd·1</span><span>Rd·2</span><span>Rd·3</span><span>Rd·4</span><span>Rd·5</span><span>Final</span>
       </div>
     </div>
   </section>
@@ -642,39 +658,39 @@
         <div class="mark">&ldquo;</div>
       </div>
       <blockquote>
-        A placeholder pull-quote, set in italic with one phrase rendered as <b>bold sans</b> for emphasis, the way good editorial designers have always done it.
+        The grid stopped being a suggestion and became <b>the one thing every desk could not violate.</b>
       </blockquote>
       <div class="attribution">
-        <div class="avatar"></div>
+        <div class="dash"></div>
         <div class="who">
-          A. Placeholder-Surname
-          <small>Editor-at-large · Sister Publication</small>
+          Senior Art Director
+          <small>Atlas Review · Relaunch Team</small>
         </div>
       </div>
     </div>
     <div class="r">
       <div class="label" style="color: var(--butter);">Three short reads</div>
-      <h3>Voices, lightly edited &mdash; from the readership.</h3>
+      <h3>Notes from the proof pass.</h3>
       <div class="endorsements">
         <div class="row">
           <span class="num">i.</span>
           <div class="txt">
-            <strong>On the rhythm</strong>
-            A two-line testimonial that reads as if spoken aloud across a small kitchen table.
+            <strong>On consistency</strong>
+            Eleven type sizes became two. Every desk now typesets from the same faces, no exceptions file needed.
           </div>
         </div>
         <div class="row">
           <span class="num">ii.</span>
           <div class="txt">
-            <strong>On the company</strong>
-            Another short note, three or four beats long, useful and specific without being precious about it.
+            <strong>On cost</strong>
+            Freelance kerning fixes dropped from six per issue to zero — the masthead file is now the only source.
           </div>
         </div>
         <div class="row">
           <span class="num">iii.</span>
           <div class="txt">
-            <strong>On returning</strong>
-            A closing testimonial — the one that comes after the others have already convinced the reader.
+            <strong>On speed</strong>
+            Full-issue proof time fell from four days to one, once every page resolved to the same 84px module.
           </div>
         </div>
       </div>
@@ -682,34 +698,34 @@
   </section>
 
   <!-- ============ SLIDE 8: CLOSER / INDEX ============ -->
-  <section class="s-closer" data-screen-label="08 Colophon">
+  <section class="s-closer" data-screen-label="08 Export Checklist">
     <div class="top">
       <div>
-        <div class="kicker">§ 08 — Colophon &amp; Index</div>
-        <div class="serif" style="font-size:48px; color:var(--pink); margin-top:12px;">Until the next volume.</div>
+        <div class="kicker">§ 08 — Export Checklist</div>
+        <div class="serif" style="font-size:48px; color:var(--pink); margin-top:12px;">Everything a desk needs before it ships an issue.</div>
       </div>
-      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; opacity:0.7; text-align:right; line-height:1.4;">
-        End of issue<br/>
-        <span style="opacity:0.5;">No. 04 · 016 pp.</span>
+      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; opacity:0.85; text-align:right; line-height:1.4;">
+        12-col Grid · Tri-tone<br/>
+        <span style="opacity:0.7;">Ready for press</span>
       </div>
     </div>
 
     <div class="big">
-      Fin<em>.</em>
+      Bind<em>.</em>
     </div>
 
     <div class="corner-pills">
-      <span class="pill" style="background:var(--burgundy); color:var(--cream); font-size:24px; padding: 12px 28px;">issue 04</span>
-      <span class="pill" style="background:var(--lime); color:var(--ink); font-size:24px; padding: 12px 28px;">spring volume</span>
-      <span class="pill" style="background:var(--butter); color:var(--ink); font-size:24px; padding: 12px 28px;">colophon</span>
+      <span class="pill" style="background:var(--pink); color:var(--burgundy); font-size:24px; padding: 12px 28px;">grid</span>
+      <span class="pill" style="background:var(--lime); color:var(--ink); font-size:24px; padding: 12px 28px;">type</span>
+      <span class="pill" style="background:var(--butter); color:var(--ink); font-size:24px; padding: 12px 28px;">tri-tone</span>
     </div>
 
     <div class="grid">
       <div class="col">
-        <h6>Editorial</h6>
-        <p>A. Placeholder</p>
-        <p>B. Placeholder</p>
-        <p>C. Placeholder</p>
+        <h6>Before press</h6>
+        <p>Run the 12-col proof pass</p>
+        <p>Check masthead kerning file</p>
+        <p>Confirm tri-tone only</p>
       </div>
       <div class="col">
         <h6>Type</h6>
@@ -718,20 +734,21 @@
         <p>JetBrains Mono</p>
       </div>
       <div class="col">
-        <h6>Printed by</h6>
-        <p>Placeholder Press</p>
-        <p>City &amp; State</p>
-        <p>Recycled stock, 120gsm</p>
+        <h6>Palette</h6>
+        <p>Dusty pink #F2B6C6</p>
+        <p>Mustard cream #F2D86A</p>
+        <p>Deep burgundy #7A1F35</p>
       </div>
       <div class="col">
-        <h6>Correspondence</h6>
-        <p>desk@placeholder.studio</p>
-        <p>P.O. Box 0000</p>
-        <p>Routing No. 04 / 26</p>
+        <h6>Owner</h6>
+        <p>Art Direction, Atlas Review</p>
+        <p>Relaunch Issue 112</p>
+        <p>Sign-off: Senior AD</p>
       </div>
     </div>
   </section>
 
 </deck-stage>
+
 </body>
 </html>

@@ -1,0 +1,159 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-annual-letter",
+  "title": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+  "title_i18n": {
+    "en": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+    "zh-CN": "像使命驱动的 CEO 一样写年度公开信",
+    "zh-TW": "像使命驱动的 CEO 一样写年度公开信"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.",
+  "description_i18n": {
+    "en": "Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.",
+    "zh-CN": "像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "annual-letter",
+    "editorial",
+    "longform",
+    "serif",
+    "stripe-style",
+    "huashu",
+    "board",
+    "strategy",
+    "business-review",
+    "huashu-annual-letter",
+    "corporate-strategy",
+    "board-pre-read-deck",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "strategy",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write an Annual Founder's Letter like a Mission-Driven CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Audience: community, contributors, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像使命驱动的 CEO 一样写年度公开信。像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+          "title_i18n": {
+            "en": "Write an Annual Founder's Letter like a Mission-Driven CEO",
+            "zh-CN": "像使命驱动的 CEO 一样写年度公开信",
+            "zh-TW": "像使命驱动的 CEO 一样写年度公开信"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Letter type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "annual letter",
+          "shareholder letter",
+          "founder memo",
+          "quarterly review letter",
+          "deep-dive longread"
+        ],
+        "default": "annual letter"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：2025 年度复盘与来年展望",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "股东 / 全员 / 用户与社区",
+        "default": "stakeholders"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "6-8 pages",
+          "8-12 pages",
+          "12-16 pages"
+        ],
+        "default": "8-12 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "corporate-strategy"
+  }
+}

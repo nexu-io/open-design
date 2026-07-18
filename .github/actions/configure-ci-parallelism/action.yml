@@ -1,0 +1,27 @@
+name: Configure CI parallelism
+description: Export CI worker counts derived from nproc/2
+
+runs:
+  using: composite
+  steps:
+    - name: Export worker counts
+      id: parallelism
+      shell: bash
+      run: |
+        set -euo pipefail
+        cpu_count="$(nproc)"
+        workers="$((cpu_count / 2))"
+        if [ "$workers" -lt 1 ]; then
+          workers=1
+        fi
+
+        {
+          echo "OPEN_DESIGN_POSTINSTALL_CONCURRENCY=$workers"
+          echo "OPEN_DESIGN_WORKSPACE_CONCURRENCY=$workers"
+          echo "OD_CI_DAEMON_MAX_WORKERS=$workers"
+          echo "OD_E2E_VITEST_MAX_WORKERS=$workers"
+          echo "OD_PLAYWRIGHT_WORKERS=$workers"
+        } >> "$GITHUB_ENV"
+
+        echo "workers=$workers" >> "$GITHUB_OUTPUT"
+        echo "nproc=$cpu_count workers=$workers"

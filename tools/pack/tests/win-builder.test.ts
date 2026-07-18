@@ -1,13 +1,18 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
 import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
+import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
 import type { WinPaths } from "../src/win/types.js";
 import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
+
+const execFileAsync = promisify(execFile);
 
 function createPaths(root: string): WinPaths {
   const namespaceRoot = join(root, "namespaces", "second");
@@ -113,6 +118,125 @@ describe("materializeCachedUnpackedForInstaller", () => {
           },
         ],
       });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("Windows pack artifact boundaries", () => {
+  it("does not build launcher payload artifacts for a pure dir target", async () => {
+    const source = await readFile(new URL("../src/win/build.ts", import.meta.url), "utf8");
+    expect(source).toContain("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget");
+    expect(source).toContain("if (hasLauncherPayloadTarget)");
+    expect(source.indexOf("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget")).toBeLessThan(
+      source.indexOf('runPhase("payload-artifact"'),
+    );
+  });
+
+  it("uses the electron-builder cache identity instead of hashing the unpacked tree when possible", async () => {
+    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("builtApp.cacheEntryPath == null");
+    expect(source).toContain("hashWinNsisBasePayloadInputs(builtApp)");
+    expect(source).toContain("cacheEntryPath: builtApp.cacheEntryPath");
+    expect(source.indexOf("builtApp.cacheEntryPath == null")).toBeLessThan(
+      source.indexOf("cacheEntryPath: builtApp.cacheEntryPath"),
+    );
+  });
+
+  it("keeps NSIS payload archives on the fast LZMA2 path", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain('"nsis:payload-base-7z"');
+    expect(source).toContain('"-m0=LZMA2"');
+    expect(source).toContain('"-mf=off"');
+    expect(source).not.toContain('"-ms=off"');
+  });
+
+  it("invalidates Windows payload caches when the archive method changes", async () => {
+    const builderSource = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    const payloadSource = await readFile(new URL("../src/win/payload.ts", import.meta.url), "utf8");
+    expect(builderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2");
+    expect(payloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 2");
+    expect(payloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_ARCHIVE_CACHE_VERSION = 2");
+  });
+
+  it("invalidates the NSIS installer cache when installer helper code changes", async () => {
+    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("hashWinNsisInstallerImplementation");
+    expect(source).toContain("nsisInstallerImplementation");
+    expect(source.indexOf("nsisInstallerImplementation")).toBeLessThan(source.indexOf('target: "nsis-installer"'));
+  });
+});
+
+describe("launcher runtime sync helper", () => {
+  it.runIf(process.platform === "win32")("writes cleanup.json for superseded launcher runtime pointers", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-launcher-sync-"));
+    const runtimePath = join(root, "runtime.json");
+    const attemptsPath = join(root, "state", "attempt.json");
+    const cleanupPath = join(root, "state", "cleanup.json");
+    const helperPath = join(root, "sync-launcher-runtime.ps1");
+
+    try {
+      await mkdir(join(root, "state"), { recursive: true });
+      await writeFile(helperPath, createLauncherRuntimeSyncPowerShellScript(), "utf8");
+      await writeFile(
+        runtimePath,
+        `${JSON.stringify({
+          active: { generation: 3, version: "0.10.2-beta.11" },
+          channel: "beta",
+          lastSuccessful: { generation: 3, version: "0.10.2-beta.11" },
+          namespace: "rr",
+          schemaVersion: 1,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }, null, 2)}\n`,
+        "utf8",
+      );
+
+      await execFileAsync("powershell.exe", [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        helperPath,
+        "-RuntimePath",
+        runtimePath,
+        "-AttemptsPath",
+        attemptsPath,
+        "-CleanupPath",
+        cleanupPath,
+        "-Channel",
+        "beta",
+        "-Namespace",
+        "rr",
+        "-Version",
+        "0.10.2-beta.12",
+      ]);
+
+      const runtime = JSON.parse(await readFile(runtimePath, "utf8")) as {
+        active: { version: string };
+        lastSuccessful: { version: string };
+      };
+      const cleanup = JSON.parse(await readFile(cleanupPath, "utf8")) as {
+        currentVersion: string;
+        versions: Array<{ reason: string; state: string; version: string }>;
+      };
+      expect(runtime.active.version).toBe("0.10.2-beta.12");
+      expect(runtime.lastSuccessful.version).toBe("0.10.2-beta.12");
+      expect(cleanup.currentVersion).toBe("0.10.2-beta.12");
+      expect(cleanup.versions).toEqual([
+        expect.objectContaining({
+          reason: "older-than-bound-package",
+          state: "deprecated",
+          version: "0.10.2-beta.11",
+        }),
+        expect.objectContaining({
+          reason: "current-bound-package",
+          state: "retained",
+          version: "0.10.2-beta.12",
+        }),
+      ]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

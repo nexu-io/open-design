@@ -1,0 +1,117 @@
+---
+/*
+ * /terms/ — Terms of Service.
+ *
+ * Unified terms for the open-design.ai site, Open Design software, and
+ * Open Design Cloud.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+
+const updated = 'July 6, 2026';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Terms of Service — Open Design',
+  url: new URL('/terms/', Astro.site).toString(),
+  isPartOf: { '@type': 'WebSite', name: 'Open Design', url: Astro.site?.toString() },
+};
+---
+
+<Layout
+  title="Terms of Service — Open Design"
+  description="The terms that govern use of the open-design.ai website, Open Design software, and Open Design Cloud."
+  jsonLd={jsonLd}
+>
+  <article class="legal">
+    <h1 class="legal-h1">Terms of Service</h1>
+    <p class="legal-meta">Last updated: {updated}</p>
+
+    <p>These Terms govern your use of the website <a href="https://open-design.ai">open-design.ai</a>, the Open Design software, and Open Design Cloud provided by <strong>Powerformer, Inc.</strong> (“Open Design”, “we”, “us”). Open Design Cloud includes account access, wallet credits, API key management, CLI authorization, model request routing, usage metering, and billing. By using the site, software, or Cloud services, you agree to these Terms.</p>
+
+    <h2>1. The software is open source</h2>
+    <p>The Open Design software is released under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>. Your use, modification, and distribution of the software are governed by that license. These Terms cover the website and hosted services; the Apache-2.0 license controls the software itself and prevails in any conflict regarding the code.</p>
+
+    <h2>2. Local-first BYOK and hosted Cloud services</h2>
+    <p>The local Open Design app is local-first and BYOK: you connect your own model-provider credentials, and your use of those providers is subject to their terms and pricing. You are responsible for the keys you configure and the costs they incur.</p>
+    <p>Open Design Cloud provides hosted model routing, wallet credits, usage metering, and billing. Open Design may route requests to different upstream model or infrastructure providers based on availability, cost, latency, compliance, and operational policies. Models, prices, credits, providers, routes, and features may change. We will explain material changes through reasonable channels such as the site, in-app notices, or email.</p>
+
+    <h2>3. Account and credential security</h2>
+    <p>You must provide accurate information and protect accounts, passwords, API keys, CLI authorization codes, and access tokens. Activity through your account or credentials is treated as authorized by you. If you discover leakage, abnormal usage, or unauthorized access, you should disable the affected credential and notify Open Design immediately.</p>
+
+    <h2>4. User content and compliance</h2>
+    <p>You are responsible for prompts, files, images, code, input data, API requests, and your use of model outputs submitted through Open Design. You represent that you have lawful rights to process and submit that content and will not submit illegal, infringing, confidential, unauthorized, malicious, or policy-violating content.</p>
+    <p>Without a separate written agreement, you must not submit specially regulated data such as health data, financial account data, identity documents, minors’ information, biometrics, precise location, full payment card data, or other sensitive personal information.</p>
+    <p>You retain ownership of what you create with Open Design. Contributions you submit to the open-source project are licensed under the project’s license as described in its CONTRIBUTING guide.</p>
+
+    <h2>5. Prohibited uses and high-risk contexts</h2>
+    <p>You must not use Open Design for illegal activity, fraud, phishing, spam, malware, attacks, security bypass, privacy violations, intellectual property infringement, unlawful content generation, circumvention of model provider policies, or violations of export control or sanctions rules. Community spaces such as GitHub and Discord are also governed by their respective codes of conduct.</p>
+    <p>Without Open Design’s written approval, Open Design must not be used for high-risk automated decision-making involving medical, legal, financial, employment, credit, insurance, law enforcement, critical infrastructure, or personal safety contexts.</p>
+
+    <h2>6. Model outputs</h2>
+    <p>Model outputs may be inaccurate, incomplete, or unsuitable for your purpose. You are responsible for reviewing outputs and actions taken based on them. Open Design does not provide medical, legal, financial, investment, or other professional advice.</p>
+
+    <h2>7. Wallet, recharge, and billing</h2>
+    <p>Wallet credits are only for Open Design-supported model calls and related services. They are not cash and, unless required by law or stated in page rules, cannot be withdrawn or transferred.</p>
+    <p>Recharge, discounts, invoices, refunds, taxes, and disputes are governed by checkout pages, order records, campaign rules, and applicable law. Open Design may calculate charges based on model, tokens, media tasks, route, success status, pricing tables, and provider cost.</p>
+
+    <h2>8. Limits, suspension, and termination</h2>
+    <p>Open Design may apply limits to accounts, API keys, request rates, balances, models, endpoints, or risk behavior. Open Design may suspend, restrict, or terminate service for non-payment, abuse, legal risk, provider failure, security incidents, breach of terms, or regulatory requirements.</p>
+
+    <h2>9. Third-party services</h2>
+    <p>Third-party login, payment, security verification, email, cloud, and model providers are governed by their own terms and privacy policies. Open Design does not guarantee continuous availability of third-party services or assume responsibility beyond legal requirements for third-party model policies, pricing, latency, failures, or outputs.</p>
+
+    <h2>10. Intellectual property and trademarks</h2>
+    <p>“Open Design”, “Powerformer”, related logos, the hosted interface, documentation, service design, and related intellectual property belong to Powerformer, Inc. or its licensors. Without authorization, you may not copy, modify, reverse engineer, resell, rent, sublicense, or use Open Design hosted services competitively, except to the extent permitted by the Apache-2.0 license for the open-source software.</p>
+    <p>Third-party names and brands referenced on the site, including for comparisons, belong to their respective owners and are used for identification only. You retain rights to your own content, but grant Open Design the processing rights necessary to provide, protect, bill, and improve the service.</p>
+
+    <h2>11. No warranty</h2>
+    <p>To the fullest extent permitted by law, Open Design is provided as-is and as-available. We do not guarantee uninterrupted, error-free service or that Open Design will meet every business objective.</p>
+
+    <h2>12. Limitation of liability</h2>
+    <p>To the maximum extent permitted by law, Powerformer, Inc. will not be liable for indirect damages, lost profits, data loss, business interruption, third-party service failures, or consequences of model outputs. This does not exclude or limit liability that cannot be excluded by law, including liability for intentional misconduct, gross negligence, personal injury where legally non-waivable, or mandatory consumer rights.</p>
+
+    <h2>13. Updates</h2>
+    <p>Open Design may update these Terms. Material changes will be communicated through the page, in-app notice, or email. Continued use after changes take effect means you accept the updated terms; if you do not agree, stop using the service.</p>
+
+    <h2>14. Contact</h2>
+    <p>Questions? Reach us via the <a href="https://github.com/nexu-io/open-design">Open Design GitHub repository</a> or the community <a href="https://discord.gg/mHAjSMV6gz">Discord</a>.</p>
+  </article>
+
+  <style>
+    .legal {
+      max-width: 720px;
+    }
+    .legal-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink, #262626);
+    }
+    .legal-meta {
+      margin: 10px 0 32px;
+      font-size: 14px;
+      color: var(--ink-mute, #595959);
+    }
+    .legal h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .legal p,
+    .legal li {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink-soft, #434343);
+    }
+    .legal p {
+      margin: 0 0 14px;
+    }
+    .legal a {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  </style>
+</Layout>

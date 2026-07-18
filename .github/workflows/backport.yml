@@ -1,0 +1,85 @@
+name: backport
+# When a PR merged into main carries a "backport release/vX.Y.Z" label, cherry-pick it onto
+# the matching release branch and open a PR. The App token (not GITHUB_TOKEN) opens the PR so
+# it triggers ci.yml. On conflict it opens a draft PR (conflict markers committed) so nothing
+# is silently lost and a human resolves it.
+
+on:
+  pull_request_target:
+    # closed: backport labels present at merge time.
+    # labeled: also catch a backport label added AFTER the PR was already merged (a common
+    #          slip — people forget to label before merging). The `if` below skips still-open
+    #          PRs, so labelling an open PR does nothing until it actually merges.
+    types: [closed, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  backport:
+    # Run on merge (closed), or on a backport-* label added afterwards. Ignore unrelated label
+    # adds so we don't spin up the release bot for every label on a merged PR.
+    if: >-
+      github.event.pull_request.merged == true
+      && github.repository == 'nexu-io/open-design'
+      && (github.event.action == 'closed' || startsWith(github.event.label.name, 'backport '))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Authorize the labeler (labeled events only)
+        id: authz
+        # For a backport label added AFTER merge, require the labeler to have write+ permission
+        # here — don't rely on backport-label-guard.yml winning the race to strip an unauthorized
+        # label before this job mints the App token and opens the PR. The merge (closed) path is
+        # already gated by the merger having had write access. Fail closed: any lookup miss skips.
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          ACTION: ${{ github.event.action }}
+          ACTOR: ${{ github.event.sender.login }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTION" != "labeled" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          perm="$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq '.permission' 2>/dev/null || echo none)"
+          case "$perm" in
+            admin|maintain|write)
+              echo "ok=true" >> "$GITHUB_OUTPUT"
+              echo "Authorized labeler: $ACTOR ($perm)";;
+            *)
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::$ACTOR ($perm) may not trigger a backport by label; skipping (backport-label-guard removes the label).";;
+          esac
+
+      - uses: actions/checkout@v4
+        if: steps.authz.outputs.ok == 'true'
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Backport
+        if: steps.authz.outputs.ok == 'true'
+        uses: korthout/backport-action@v3
+        with:
+          github_token: ${{ steps.app.outputs.token }}
+          # A label like "backport release/v0.12.0" -> captures release/v0.12.0 as the target branch.
+          # Constrained to the release/vX.Y.Z contract so a typo like "backport main" or
+          # "backport feat/foo" does not match and is ignored (never handed to the release bot).
+          label_pattern: '^backport (release/v[0-9]+\.[0-9]+\.[0-9]+)$'
+          merge_commits: skip
+          pull_title: '[backport ${target_branch}] ${pull_title}'
+          pull_description: 'Backport of #${pull_number} to `${target_branch}`.\n\n> Clean pick -> merge once CI is green. Conflict -> this is a draft, resolve conflicts then merge.'
+          # Do not give up on conflicts: commit the conflict markers into the backport branch
+          # and open a draft PR for a human to resolve.
+          experimental: '{ "conflict_resolution": "draft_commit_conflicts" }'
+          # Clean backports are auto-merged after CI passes by backport-automerge.yml
+          # (triggered by ci.yml completing on the backport-* branch). release/v* has no merge
+          # queue and no required status check, so GitHub auto-merge / enqueuePullRequest don't
+          # apply here; that workflow gates on ci.yml's own success instead.

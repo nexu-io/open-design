@@ -355,6 +355,7 @@ Rules of authorship:
 - `compat.*` — relative paths to inherited files. The loader concatenates their content into the OD prompt stack assembled by [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts).
 - `specVersion` — the Open Design plugin spec version used to interpret the manifest. This is distinct from plugin `version` and is frozen into apply snapshots for replay.
 - `version` — the plugin package version. Bump it whenever behavior, metadata, pipeline, inputs, or bundled assets change in a way users may need to audit.
+- `publishedAt` — optional ISO 8601 timestamp of when the plugin was first published to its catalog. The Community gallery's "Newest" sort ranks bundled catalog records by it, so recency survives fresh installs (local install timestamps tie across a whole first-boot seed); user-installed plugins keep ranking by local install/update recency regardless of this field. Required for bundled first-party plugins (enforced by `e2e/tests/plugin-published-at.test.ts`); stamp the authoring time and do not move it on later edits.
 - `title_i18n` / `description_i18n` — optional localized display metadata. Keep `title` and `description` as English fallbacks; UI surfaces resolve requested locale, base language, English, then the first available value.
 - `od.kind` — registry classification (`skill` / `scenario` / `atom` / `bundle`).
 - `od.taskKind` — one of the four product scenarios (`new-generation` / `code-migration` / `figma-migration` / `tune-collab`, see §1 "Four product scenarios"). Drives marketplace filters, default input templates, and the recommended pipeline starting point.
@@ -1608,7 +1609,7 @@ OD ships as a single multi-arch Docker image so the full plugin/marketplace syst
 
 ### 15.1 Image shape
 
-- **Tag**: `ghcr.io/open-design/od:<version>` plus moving `:latest` and `:edge`.
+- **Tag**: `ghcr.io/nexu-io/od:<version>` plus moving `:latest`.
 - **Architectures**: `linux/amd64` and `linux/arm64` (single manifest list).
 - **Contents**:
   - Node 24 runtime + the daemon `dist/` bundle.
@@ -1657,7 +1658,7 @@ Anything settable via the desktop UI is also settable via `docker exec od od con
 Local laptop:
 
 ```bash
-docker run --rm -p 17456:17456 ghcr.io/open-design/od:latest
+docker run --rm -p 17456:17456 ghcr.io/nexu-io/od:latest
 open http://localhost:17456
 ```
 
@@ -1849,7 +1850,7 @@ Validation: (a) install a published plugin → export from a real project that u
 
 This phase is independent of Phases 1–4 and can run in parallel as soon as Phase 1 lands (since the headless mode and the daemon contract are stable from Phase 1 on).
 
-- **Container image (week 1):** multi-arch `linux/amd64` + `linux/arm64` Dockerfile with the contents listed in §15.1; CI to push `:edge` on every main commit and `:<version>` on tag.
+- **Container image (week 1):** multi-arch `linux/amd64` + `linux/arm64` Dockerfile with the contents listed in §15.1; release automation publishes `:<version>` and `:latest`, and tag pushes publish matching images.
 - **Reference manifests:** `tools/pack/docker-compose.yml` and `tools/pack/helm/`. The compose file demonstrates the daemon + reverse proxy pattern; the Helm chart parameterizes volume + secret patterns for any cloud.
 - **Bound-API-token guard (new in Phase 5):** daemon refuses to bind `OD_BIND_HOST=0.0.0.0` without `OD_API_TOKEN`; bearer-token middleware on `/api/*` (skipped only when host is loopback).
 - **`ProjectStorage` adapter for S3-compatible blob stores** (works for AWS S3, GCS S3-compat, Azure Blob via shim, Aliyun OSS, Tencent COS, Huawei OBS).

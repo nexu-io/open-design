@@ -3,10 +3,9 @@ name: fork-pr-workflow-approval
 # This workflow runs in the trusted base-repository context. It never checks out
 # or executes the fork head; the TypeScript policy script only reads PR metadata
 # through the GitHub API and approves pending pull_request runs when the touched
-# paths are inside the low-risk source allowlist. It only approves low-privilege
-# pull_request workflows (`ci`, visual verify, and strict web-source visual
-# capture); privileged
-# workflow_run / release / deploy workflows stay on manual gates.
+# paths are inside the low-risk source allowlist. It only approves the unified
+# low-privilege pull_request `ci` workflow; privileged workflow_run / release /
+# deploy workflows stay on manual gates.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]

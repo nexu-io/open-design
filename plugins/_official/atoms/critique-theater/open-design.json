@@ -4,6 +4,7 @@
   "name": "critique-theater",
   "title": "Critique theater",
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T13:00:27Z",
   "description": "5-dimension critique panel; emits the critique.score signal that drives devloop convergence.",
   "license": "MIT",
   "author": {

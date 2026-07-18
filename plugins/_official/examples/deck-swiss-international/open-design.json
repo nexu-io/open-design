@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-deck-swiss-international",
-  "title": "Swiss International Deck",
+  "title": "Write a Board Pre-Read like a Fortune-500 Board Chair",
   "title_i18n": {
-    "en": "Swiss International Deck",
-    "zh-CN": "瑞士国际主义 Deck",
-    "zh-TW": "瑞士國際牌組",
-    "ja": "スイス・インターナショナル・デッキ",
-    "ko": "스위스 인터내셔널 덱",
-    "de": "Swiss International Deck",
-    "fr": "Swiss International Deck",
-    "ru": "Swiss International Deck",
-    "es": "Swiss International Deck",
-    "pt-BR": "Swiss International Deck",
-    "it": "Swiss International Deck",
-    "vi": "Swiss International Deck",
-    "pl": "Swiss International Deck",
-    "id": "Swiss International Deck",
-    "nl": "Swiss International Deck",
-    "ar": "Swiss International Deck",
-    "tr": "Swiss International Deck",
-    "uk": "Swiss International Deck"
+    "en": "Write a Board Pre-Read like a Fortune-500 Board Chair",
+    "zh-CN": "像财富 500 强董事长一样写董事会预读",
+    "zh-TW": "像财富 500 强董事长一样写董事会预读"
   },
   "version": "0.1.0",
-  "description": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+  "publishedAt": "2026-05-13T13:02:05Z",
+  "description": "Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.",
   "description_i18n": {
-    "en": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
-    "zh-CN": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)",
-    "zh-TW": "16欄網格系統，1種飽和強調色，22種鎖定版面（克萊因藍、檸檬黃、薄荷綠、安全橙）。",
-    "ja": "16カラムグリッド、1つの彩度の高いアクセントカラー、22種類の固定レイアウト（クラインブルー、レモン、ミント、セーフティオレンジ）。",
-    "ko": "16열 그리드, 1개의 채도 높은 강조색, 22개의 고정 레이아웃(클라인 블루, 레몬, 민트, 세이프티 오렌지).",
-    "de": "16-spaltiges Raster, eine gesättigte Akzentfarbe und 22 fixierte Layouts (Klein-Blau, Zitrone, Minze, Warnorange).",
-    "fr": "Grille à 16 colonnes, un accent saturé et 22 mises en page verrouillées (Bleu Klein, Citron, Menthe, Orange de sécurité).",
-    "ru": "16-колоночная сетка, один насыщенный акцент и 22 зафиксированных макета (синий Кляйн, лимонный, мятный, сигнальный оранжевый).",
-    "es": "Cuadrícula de 16 columnas, un acento saturado y 22 diseños bloqueados (Azul Klein, Limón, Menta, Naranja de seguridad).",
-    "pt-BR": "Grade de 16 colunas, um destaque saturado e 22 layouts travados (Azul Klein, Limão, Menta, Laranja de segurança).",
-    "it": "Griglia a 16 colonne, un accento saturo e 22 layout bloccati (Blu Klein, Limone, Menta, Arancione di sicurezza).",
-    "vi": "Lưới 16 cột, một màu nhấn bão hòa và 22 bố cục cố định (Xanh Klein, Chanh, Bạc hà, Cam an toàn).",
-    "pl": "Siatka 16-kolumnowa, jeden nasycony akcent i 22 zablokowane układy (błękit Kleina, cytrynowy, miętowy, pomarańczowy ostrzegawczy).",
-    "id": "Grid 16 kolom, satu aksen jenuh, dan 22 tata letak terkunci (Biru Klein, Lemon, Mint, Oranye Keselamatan).",
-    "nl": "16-koloms raster, één verzadigd accent en 22 vergrendelde lay-outs (Kleinblauw, Citroen, Munt, Veiligheidsoranje).",
-    "ar": "شبكة من 16 عمودًا، لون تمييز مشبع واحد، و22 تخطيطًا مقفلاً (أزرق كلاين، ليموني، نعناعي، برتقالي الأمان).",
-    "tr": "16 sütunlu ızgara, bir doygun vurgu rengi ve 22 kilitli düzen (Klein Mavisi, Limon, Nane, Güvenlik Turuncusu).",
-    "uk": "16-колонкова сітка, один насичений акцент і 22 зафіксовані макети (синій Кляйна, лимонний, м'ятний, сигнальний помаранчевий)."
+    "en": "Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.",
+    "zh-CN": "像财富 500 强董事长一样写董事会预读——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像财富 500 强董事长一样写董事会预读——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,18 @@
     "international",
     "ikb",
     "editorial",
-    "facts"
+    "facts",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "deck-swiss-international",
+    "consulting-delivery",
+    "corporate-strategy",
+    "board-pre-read-deck",
+    "board",
+    "business-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +57,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "strategy",
     "surface": "web",
     "featured": 0.001,
     "preview": {
@@ -84,16 +66,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the Swiss International Deck template to turn my content into a 16-column-grid deck with one saturated accent and 22 locked layouts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
-        "zh-CN": "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+        "en": "Create \"Write a Board Pre-Read like a Fortune-500 Board Chair\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Audience: board, CEO, CFO. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像财富 500 强董事长一样写董事会预读。像财富 500 强董事长一样写董事会预读——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Swiss International Deck",
+          "title": "Write a Board Pre-Read like a Fortune-500 Board Chair",
           "title_i18n": {
-            "en": "Swiss International Deck",
-            "zh-CN": "瑞士国际主义 Deck"
+            "en": "Write a Board Pre-Read like a Fortune-500 Board Chair",
+            "zh-CN": "像财富 500 强董事长一样写董事会预读",
+            "zh-TW": "像财富 500 强董事长一样写董事会预读"
           }
         }
       ]
@@ -122,6 +105,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "corporate-strategy"
   }
 }

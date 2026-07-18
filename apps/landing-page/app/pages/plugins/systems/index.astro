@@ -26,14 +26,38 @@ const systems = await getSystemRecords(locale);
 const title = pcopy.systemsMetaTitle(systems.length);
 const description = pcopy.systemsMetaDescription;
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'CollectionPage',
-  name: title,
-  description,
-  url: new URL('/plugins/systems/', Astro.site).toString(),
-  numberOfItems: systems.length,
-};
+const pageUrl = new URL('/plugins/systems/', Astro.site).toString();
+const systemsFaq = pcopy.systemsFaq(systems.length);
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    description,
+    url: pageUrl,
+    numberOfItems: systems.length,
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: systems.length,
+      itemListElement: systems.slice(0, 50).map((s, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: s.name,
+        url: new URL(s.source, Astro.site).toString(),
+      })),
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: systemsFaq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
@@ -70,6 +94,44 @@ const jsonLd = {
   <section class="systems-about" aria-labelledby="systems-about-head">
     <h2 id="systems-about-head">{pcopy.systemsAboutHead}</h2>
     <p>{pcopy.systemsAboutBody}</p>
+  </section>
+
+  <section class="systems-about systems-md" aria-labelledby="systems-md-head">
+    <h2 id="systems-md-head">{pcopy.systemsMdHead}</h2>
+    {pcopy.systemsMdBody.map((para) => <p>{para}</p>)}
+    <figure class="systems-md-snippet">
+      <pre class="code-block"><code>{pcopy.systemsMdSnippet}</code></pre>
+      <figcaption>{pcopy.systemsMdSnippetCaption}</figcaption>
+    </figure>
+    <ol class="systems-md-steps">
+      {pcopy.systemsMdSteps.map((step, idx) => (
+        <li>
+          <span class="systems-md-step-index">{String(idx + 1).padStart(2, '0')}</span>
+          <div>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+    <p class="systems-md-spec">{pcopy.systemsMdSpecNote}</p>
+  </section>
+
+  <section class="systems-about systems-faq" aria-labelledby="systems-faq-head">
+    <h2 id="systems-faq-head">{pcopy.systemsFaqHead}</h2>
+    <ul class="systems-faq-list">
+      {systemsFaq.map(({ q, a }) => (
+        <li>
+          <details>
+            <summary>
+              <span class="systems-faq-q">{q}</span>
+              <span class="systems-faq-toggle" aria-hidden="true">+</span>
+            </summary>
+            <p class="systems-faq-a">{a}</p>
+          </details>
+        </li>
+      ))}
+    </ul>
   </section>
 
   <style>
@@ -123,6 +185,88 @@ const jsonLd = {
     .catalog-no-results {
       margin: 24px 0;
       color: var(--ink-mute, #595959);
+    }
+    /* DESIGN.md explainer — inherits .systems-about width/rhythm. */
+    .systems-md p + p {
+      margin-top: 14px;
+    }
+    .systems-md-snippet {
+      margin: 24px 0 4px;
+    }
+    .systems-md-snippet figcaption {
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--ink-mute, #595959);
+    }
+    .systems-md-steps {
+      list-style: none;
+      margin: 24px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 18px;
+    }
+    .systems-md-steps li {
+      display: flex;
+      gap: 14px;
+      align-items: baseline;
+    }
+    .systems-md-step-index {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--coral);
+      flex: none;
+    }
+    .systems-md-steps h3 {
+      margin: 0 0 4px;
+      font-size: 1rem;
+    }
+    .systems-md-steps p {
+      margin: 0;
+    }
+    .systems-md-spec {
+      margin-top: 24px;
+      font-size: 0.88rem;
+    }
+    /* FAQ accordion — self-contained (the global .faq-list is solution-page
+       scoped), reusing the AGENTS.md disclosure easing. */
+    .systems-faq-list {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+    }
+    .systems-faq-list li {
+      border-bottom: 1px solid var(--line);
+    }
+    .systems-faq-list summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 0;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 500;
+      color: var(--ink, #262626);
+    }
+    .systems-faq-list summary::-webkit-details-marker {
+      display: none;
+    }
+    .systems-faq-toggle {
+      flex: none;
+      font-family: var(--mono);
+      color: var(--ink-mute, #595959);
+      transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .systems-faq-list details[open] .systems-faq-toggle {
+      transform: rotate(45deg);
+      color: var(--coral);
+    }
+    .systems-faq-a {
+      margin: 0;
+      padding: 0 0 18px;
+      color: var(--ink-soft, #434343);
+      line-height: 1.6;
     }
   </style>
 

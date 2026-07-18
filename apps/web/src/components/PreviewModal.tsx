@@ -54,11 +54,11 @@ export interface PreviewView {
 }
 
 export interface PreviewSidebar {
-  // Header label and toggle button label.
+  // Accessible label for the side pane and its stage-edge handles.
   label: string;
   // Side-pane content — caller renders whatever it likes (markdown source
-  // view, swatch grid, etc.). Always optional; when absent the toggle is
-  // not shown.
+  // view, swatch grid, etc.). When the sidebar prop is absent, its stage-edge
+  // handles are not shown.
   content: ReactNode;
   // Default open state on first mount. Defaults to false.
   defaultOpen?: boolean;
@@ -211,8 +211,8 @@ interface Props {
   // into a half-broken responsive breakpoint. Defaults to 1280 — wide
   // enough that desktop-shaped showcases keep their intended layout.
   designWidth?: number;
-  // Accent CTA rendered before the ghost actions (Sidebar / Fullscreen /
-  // Share / Close). Plugin detail wrappers use this to expose "Use plugin".
+  // Accent CTA rendered before the remaining header actions (Share / Close).
+  // Plugin detail wrappers use this to expose "Use plugin".
   primaryAction?: PreviewPrimaryAction;
   // Optional extra controls rendered after Share and before the Close
   // button — used by plugin detail wrappers to surface the
@@ -224,15 +224,11 @@ interface Props {
   // recipient-openable URL before the modal exposes copy/social actions.
   shareTarget?: PreviewShareTarget;
   // Optional analytics callbacks. Fires when the user clicks the
-  // chrome-level affordances (fullscreen, share trigger, sidebar
-  // toggle). Callers wire these to their surface's tracking helper.
+  // chrome-level affordances (fullscreen, share trigger, stage-edge sidebar
+  // handle). Callers wire these to their surface's tracking helper.
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
-  // Hide the header sidebar-toggle button (the plugin detail opens its
-  // collapsed info panel via the preview-edge handle instead). Other
-  // variants — design-system "DESIGN.md", media, scenario — keep it.
-  hideSidebarToggle?: boolean;
   // Fires when the user picks any share-popover item — social platforms,
   // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
   // "html" / "image" / "open_in_new_tab"). Used by callers that want to
@@ -257,7 +253,6 @@ export function PreviewModal({
   primaryAction,
   headerExtras,
   shareTarget,
-  hideSidebarToggle = false,
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -671,24 +666,6 @@ export function PreviewModal({
                   </button>
                 )
               ) : null}
-              {sidebar ? (
-                <button
-                  className={`ghost ${sidebarOpen ? 'is-active' : ''}${
-                    hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
-                  }`}
-                  onClick={() => {
-                    setSidebarOpen((v) => {
-                      const next = !v;
-                      onSidebarToggleClick?.(next);
-                      return next;
-                    });
-                  }}
-                  aria-pressed={sidebarOpen}
-                  title={sidebar.label}
-                >
-                  {sidebar.label}
-                </button>
-              ) : null}
               {showTemplateShareMenu ? (
                 <div className="share-menu template-share-menu" ref={templateShareRef}>
                   <button
@@ -992,7 +969,7 @@ export function PreviewModal({
             ) : null}
             {isCustomView ? (
               // Caller-rendered ReactNode (e.g. plugin media player).
-              // The modal still owns chrome (header, sidebar toggle,
+              // The modal still owns chrome (header, sidebar handles,
               // fullscreen, close) so every plugin variant shares the
               // same layout language.
               <div className="ds-modal-stage-custom">{activeCustom}</div>
@@ -1108,7 +1085,7 @@ export function PreviewModal({
               >
                 <span aria-hidden="true">›</span>
               </button>
-              {sidebar.content}
+              <div className="ds-modal-sidebar-body">{sidebar.content}</div>
             </aside>
           ) : null}
         </div>

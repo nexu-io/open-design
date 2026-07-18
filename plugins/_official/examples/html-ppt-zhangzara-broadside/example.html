@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Broadside Presentation</title>
+    <title>Write a Product-Launch Announcement like a PR &amp; Comms Director - Marketing &amp; GTM</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Broadside fonts: Barlow (the workhorse grotesque), IBM Plex Mono (chrome),
          Noto Sans SC (CJK fallback for all roles) -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700;800;900&family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700;800;900&family=IBM+Plex+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
       rel="stylesheet"
     />
 
@@ -37,8 +37,8 @@
         --c-bg-orange: #e85d26;
 
         --c-fg: #f0ece5; /* primary text on dark slides                 */
-        --c-fg-2: #888880; /* secondary / muted text on dark              */
-        --c-fg-3: #505048; /* tertiary / hint text on dark                */
+        --c-fg-2: #9c9c92; /* secondary / muted text on dark (AA on #111) */
+        --c-fg-3: #8b8b81; /* tertiary / hint text on dark (AA on #111)   */
 
         /* Text colours for orange slides — ink on fire */
         --c-fg-light: #111111; /* primary text on orange                */
@@ -47,7 +47,7 @@
           17,
           17,
           17,
-          0.55
+          0.78
         ); /* hint text on orange               */
 
         --c-accent: #e85d26; /* orange = accent everywhere on dark slides   */
@@ -256,6 +256,22 @@
         }
       }
 
+      /* Reduced motion: show everything immediately, no slide easing */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
+        .bar-fill {
+          transition: none;
+        }
+      }
+
       /* ── Navigation ───────────────────────────────────────────────────── */
       #nav-dots {
         position: fixed;
@@ -266,12 +282,13 @@
         gap: 7px;
         z-index: 100;
       }
+      /* Broadside chrome is angular — square markers, no circles */
       .nav-dot {
         width: 5px;
         height: 5px;
-        border-radius: 50%;
+        border-radius: 0;
         border: none;
-        background: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.25);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -279,7 +296,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.85);
         transform: scale(1.4);
       }
 
@@ -290,7 +307,7 @@
         font-family: var(--f-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 0.38);
         z-index: 100;
         user-select: none;
       }
@@ -329,8 +346,11 @@
       .h3 {
         font-family: var(--f-heading);
         font-size: var(--sz-h3);
-        font-weight: 600;
+        /* Barlow 600 is not loaded — 700 keeps the broadside weight honest
+           instead of letting the browser synthesize a fake 600 */
+        font-weight: 700;
         line-height: 1.2;
+        letter-spacing: -0.01em;
       }
       .lead {
         font-family: var(--f-body);
@@ -386,10 +406,10 @@
       }
       .orange .lead,
       .orange .body {
-        color: rgba(17, 17, 17, 0.75);
+        color: rgba(17, 17, 17, 0.82);
       }
       .orange .label {
-        color: rgba(17, 17, 17, 0.55);
+        color: rgba(17, 17, 17, 0.78);
       }
       /* On orange, .accent still means "the contrast pop" — use sparingly */
       .orange .accent {
@@ -459,7 +479,8 @@
         flex-direction: column;
         flex: 1;
         justify-content: flex-end;
-        gap: var(--gap-md);
+        /* extra room so the display descenders (g/y/p) clear the lead line */
+        gap: calc(var(--gap-lg) * 1.7);
       }
       .cover-meta {
         display: flex;
@@ -485,7 +506,7 @@
         letter-spacing: 0.2em;
         text-transform: uppercase;
         /* On orange: dark ink; on dark: orange accent */
-        color: rgba(17, 17, 17, 0.55);
+        color: rgba(17, 17, 17, 0.72);
         margin-bottom: var(--gap-md);
       }
       /* On dark chapter slides the number gets orange accent */
@@ -549,7 +570,7 @@
         justify-content: center;
         background: rgba(255, 255, 255, 0.04);
         border: 1px dashed var(--c-border);
-        font-family: var(--font-mono, "IBM Plex Mono", monospace);
+        font-family: var(--f-mono);
         font-size: 0.85rem;
         font-weight: 500;
         color: var(--c-fg-2, var(--c-fg));
@@ -752,7 +773,7 @@
         color: var(--c-accent);
       }
       .orange .kicker {
-        color: rgba(17, 17, 17, 0.55);
+        color: rgba(17, 17, 17, 0.78);
       }
 
       /* Bordered tag */
@@ -789,7 +810,7 @@
         font-size: 1.1vw;
         font-weight: 500;
         letter-spacing: 0.1em;
-        color: rgba(17, 17, 17, 0.45); /* dark ink on orange */
+        color: rgba(17, 17, 17, 0.72); /* dark ink on orange */
       }
       /* On dark slides the number uses muted fg */
       .dark .broadside-num {
@@ -802,7 +823,7 @@
         font-size: var(--sz-label);
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: rgba(17, 17, 17, 0.4);
+        color: rgba(17, 17, 17, 0.78);
       }
       .dark .corner-label {
         color: var(--c-fg-3);
@@ -864,10 +885,10 @@
         color: #111111;
       }
       .orange .stat-label {
-        color: rgba(17, 17, 17, 0.65);
+        color: rgba(17, 17, 17, 0.78);
       }
       .orange .stat-note {
-        color: rgba(17, 17, 17, 0.4);
+        color: rgba(17, 17, 17, 0.72);
       }
       .orange .stat-card {
         border-top-color: rgba(17, 17, 17, 0.22);
@@ -879,14 +900,14 @@
         background: var(--c-accent);
       }
       .compare-panel.panel-orange .compare-label {
-        color: rgba(17, 17, 17, 0.55);
-        border-color: rgba(17, 17, 17, 0.22);
+        color: rgba(17, 17, 17, 0.72);
+        border-color: rgba(17, 17, 17, 0.3);
       }
       .compare-panel.panel-orange .h3 {
         color: #111111;
       }
       .compare-panel.panel-orange .lead {
-        color: rgba(17, 17, 17, 0.7);
+        color: rgba(17, 17, 17, 0.8);
       }
       .compare-panel.panel-orange .bullet-list li {
         color: #111111;
@@ -958,7 +979,7 @@
         text-transform: uppercase;
       }
       .orange .bar-x-label {
-        color: rgba(17, 17, 17, 0.45);
+        color: rgba(17, 17, 17, 0.66);
       }
       .bar-val {
         font-family: var(--f-body);
@@ -970,7 +991,7 @@
         color: var(--c-accent);
       }
       .orange .bar-val {
-        color: rgba(17, 17, 17, 0.55);
+        color: rgba(17, 17, 17, 0.7);
       }
       .orange .bar-val.hi {
         color: #111111;
@@ -993,7 +1014,7 @@
         margin-top: var(--gap-sm);
       }
       .orange .chart-source {
-        color: rgba(17, 17, 17, 0.4);
+        color: rgba(17, 17, 17, 0.72);
       }
 
       /* ── DIAGRAM ────────────────────────────────────────────────────────── */
@@ -1045,7 +1066,7 @@
         font-weight: 400;
       }
       .orange .flow-desc {
-        color: rgba(17, 17, 17, 0.6);
+        color: rgba(17, 17, 17, 0.76);
       }
       .flow-arrow {
         display: flex;
@@ -1054,7 +1075,7 @@
         padding-right: calc(var(--pad-x) * 0.35);
         font-size: 2.2vw;
         color: var(--c-accent);
-        font-weight: 300;
+        font-weight: 400;
         flex-shrink: 0;
       }
       .orange .flow-arrow {
@@ -1107,7 +1128,7 @@
       .pie-swatch {
         width: 0.8em;
         height: 0.8em;
-        border-radius: 2px;
+        border-radius: 0; /* square — matches the broadside angular language */
         flex-shrink: 0;
       }
       .pie-item-label {
@@ -1196,6 +1217,11 @@
         max-width: 55%;
         line-height: 1.4;
         font-weight: 400;
+      }
+      /* Top three pyramid levels sit on orange-mix fills:
+         gray muted text is illegible there — use cream ink instead */
+      .pyr-level:nth-child(-n + 3) .pyr-desc {
+        color: rgba(240, 236, 229, 0.85);
       }
 
       /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
@@ -1331,7 +1357,7 @@
             >01</span
           >
           <span class="corner-label" data-anim="fade-in" data-delay="0"
-            >Broadside</span
+            >Marketing &amp; GTM</span
           >
         </div>
 
@@ -1343,23 +1369,24 @@
             data-delay="1"
             style="max-width: 95%"
           >
-            this is the broadside style
+            the announcement
           </h1>
           <p
             class="lead"
             data-anim="fade-up"
             data-delay="2"
-            style="opacity: 0.65; max-width: 55%"
+            style="max-width: 55%"
           >
-            Protest poster meets publication cover. Type so large it becomes
-            image.
+            How Open Design's launch story turns an open-source release into
+            a growth channel — headline, proof, and the ask, briefed to
+            press, community, and prospects.
           </p>
         </div>
 
         <!-- Bottom meta: author left, date right -->
         <div class="cover-meta" data-anim="fade-in" data-delay="3">
-          <span class="broadside-num">[[Author Name]]</span>
-          <span class="broadside-num">[Year] · Context</span>
+          <span class="broadside-num">PR &amp; Comms Playbook · Open Design</span>
+          <span class="broadside-num">Launch Deck · 2026</span>
         </div>
       </section>
       <section class="slide slide--chapter orange">
@@ -1370,30 +1397,32 @@
           data-delay="0"
           style="margin-bottom: var(--gap-lg)"
         >
-          02 / Chapter
+          02 / Market Moment
         </div>
 
         <h2 class="h1" data-anim="fade-up" data-delay="1">
-          the next chapter begins here
+          the window is open right now
         </h2>
 
         <p
           class="lead"
           data-anim="fade-up"
           data-delay="2"
-          style="max-width: 50%; margin-top: var(--gap-md); opacity: 0.65"
+          style="max-width: 50%; margin-top: var(--gap-md)"
         >
-          One optional sentence that frames what this section is about.
+          Claude Design just proved an LLM can design — cloud-only, closed,
+          and billed per seat. That gap is the story we're telling this
+          quarter.
         </p>
       </section>
       <section class="slide slide--statement dark">
         <header class="slide-chrome">
-          <span class="label muted">The Argument</span>
+          <span class="label muted">The Headline</span>
           <span class="label muted">03</span>
         </header>
 
         <div class="statement-body">
-          <p class="kicker" data-anim="fade-in" data-delay="0">Core Thesis</p>
+          <p class="kicker" data-anim="fade-in" data-delay="0">Lead Headline</p>
           <div
             class="rule"
             data-anim="reveal-right"
@@ -1407,24 +1436,24 @@
             data-delay="2"
             style="max-width: 75%"
           >
-            orange is not an accent. it is the room.
+            open design ships the ai design tool anthropic won't build.
           </h2>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">Broadside</span>
-          <span class="label muted">[Author Name]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--split dark">
         <header class="slide-chrome">
-          <span class="label muted">Details</span>
+          <span class="label muted">The Briefing List</span>
           <span class="label muted">04</span>
         </header>
 
         <div class="slide-body">
           <div class="split-text">
-            <p class="kicker" data-anim="fade-in" data-delay="0">Context</p>
+            <p class="kicker" data-anim="fade-in" data-delay="0">Audience</p>
             <div
               class="rule"
               data-anim="reveal-right"
@@ -1432,7 +1461,7 @@
               style="margin: 1.5vh 0"
             ></div>
             <h2 class="h2" data-anim="fade-up" data-delay="2">
-              when content needs image support
+              three readers, three leads
             </h2>
             <p
               class="lead muted"
@@ -1440,82 +1469,84 @@
               data-delay="3"
               style="max-width: 90%"
             >
-              One or two sentences of supporting context. Short. Dense. No
-              padding.
+              Same release, three angles — each pitched to what that reader
+              already cares about.
             </p>
             <!-- Broadside list: max 3 items, forward-slash bullet -->
             <ul class="bullet-list" data-anim="fade-up" data-delay="4">
-              <li>First key supporting point</li>
-              <li>Second point, equally direct</li>
-              <li>Third and final — end strong</li>
+              <li>Press: the open-source alternative to closed AI design tools</li>
+              <li>Community: local-first, BYOK, and Apache-2.0 from day one</li>
+              <li>Prospects: cut design-tool spend without losing the AI</li>
             </ul>
           </div>
 
           <div class="split-image" data-anim="reveal-right" data-delay="2">
             <div class="img-placeholder">Image Placeholder</div>
-            <p class="img-caption">Image caption or source · Year</p>
+            <p class="img-caption">Press kit — logo, screenshots, founder headshot</p>
           </div>
         </div>
 
         <footer class="slide-foot">
-          <span class="label muted">Broadside</span>
-          <span class="label muted">[Author Name]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--stats orange">
         <header class="slide-chrome">
           <span class="broadside-num">05</span>
-          <span class="corner-label">By the numbers</span>
+          <span class="corner-label">Credibility Snapshot</span>
         </header>
         <div class="slide-body">
           <div class="stats-grid" data-anim="fade-up" data-delay="1">
             <div class="stat-card">
               <div class="stat-value" data-anim="scale-in" data-delay="1">
-                $3.5B
+                60K+
               </div>
               <div class="stat-label body">
-                Series E closed at $61.5B valuation
+                GitHub stars — the fastest-growing open design repo of 2026
               </div>
-              <div class="stat-note">[Source] · [Year]</div>
+              <div class="stat-note">github.com/nexu-io/open-design</div>
             </div>
             <div class="stat-card">
               <div class="stat-value" data-anim="scale-in" data-delay="2">
-                3×
+                300+
               </div>
               <div class="stat-label body">
-                Enterprise deployments up quarter over quarter
+                Contributors shipping features in public — nothing under embargo
               </div>
-              <div class="stat-note">Primary research</div>
+              <div class="stat-note">Zero closed-door roadmap</div>
             </div>
             <div class="stat-card">
               <div class="stat-value" data-anim="scale-in" data-delay="3">
-                #1
+                217+
               </div>
               <div class="stat-label body">
-                App Store ranking · [Product Name] · [Date]
+                Plugins already working before the announcement drops
               </div>
-              <div class="stat-note">App Store Charts</div>
+              <div class="stat-note">Proof the offer isn't vaporware</div>
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="broadside-num" style="opacity: 0.4">Broadside</span>
-          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
+          <span class="broadside-num" style="opacity: 0.62">Open Design</span>
+          <span class="broadside-num" style="opacity: 0.62"
+            >github.com/nexu-io/open-design</span
+          >
         </footer>
       </section>
       <section class="slide slide--fadelist orange">
         <div class="fadelist-top">
           <span class="broadside-num" data-anim="fade-in" data-delay="0"
-            >01</span
+            >06</span
           >
           <div class="fadelist-items" data-anim="fade-up" data-delay="1">
-            <span class="fadelist-item">Before</span>
-            <span class="fadelist-item">During</span>
-            <span class="fadelist-item">After</span>
+            <span class="fadelist-item">Open</span>
+            <span class="fadelist-item">Local</span>
+            <span class="fadelist-item">Yours</span>
           </div>
         </div>
         <div class="fadelist-title" data-anim="fade-up" data-delay="2">
-          the<br />session
+          the<br />offer
         </div>
         <div
           style="
@@ -1526,40 +1557,42 @@
             border-top: 1px solid rgba(17, 17, 17, 0.15);
           "
         >
-          <span class="broadside-num" style="opacity: 0.4"
-            >[Studio X] Guidelines</span
+          <span class="broadside-num" style="opacity: 0.62"
+            >Open Design · Apache-2.0</span
           >
-          <span class="broadside-num" style="opacity: 0.4">06 / 10</span>
+          <span class="broadside-num" style="opacity: 0.62">06 / 16</span>
         </div>
       </section>
       <section class="slide slide--list dark">
         <header class="slide-chrome">
-          <span class="label muted">The Framework</span>
+          <span class="label muted">The Announcement</span>
           <span class="label muted">07</span>
         </header>
         <div class="slide-body">
           <div class="list-head">
-            <p class="kicker" data-anim="fade-in" data-delay="0">Four rules</p>
+            <p class="kicker" data-anim="fade-in" data-delay="0">Four claims in the release</p>
             <h2 class="h2" data-anim="fade-up" data-delay="1">
-              what separates<br />signal from noise
+              what the headline<br />promises
             </h2>
           </div>
           <ul class="bullet-list" data-anim="fade-up" data-delay="2">
-            <li>Ship before it's ready — learn faster than you plan</li>
             <li>
-              One metric that matters — ignore everything else this quarter
+              Every design file stays on your machine — no cloud lock-in
             </li>
             <li>
-              The customer is always wrong about solutions, never about problems
+              Bring your own model key — GPT, Claude, Gemini, or local
             </li>
             <li>
-              Speed is a feature — slow companies don't get a second chance
+              21 coding agents wired in at zero extra config
+            </li>
+            <li>
+              Apache-2.0, forever — fork it, sell it, ship it
             </li>
           </ul>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">Broadside</span>
-          <span class="label muted">[Author Name]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--quote dark">
@@ -1569,15 +1602,16 @@
           data-delay="0"
           style="margin-bottom: var(--gap-lg)"
         >
-          On speed
+          On the record
         </p>
         <div class="quote-text" data-anim="fade-up" data-delay="1">
-          "Move fast and you'll break things. Move slow and something else will
-          break you."
+          "Open Design is the first release that made me cancel a cloud
+          design subscription — not because it's cheaper, but because my
+          files are finally mine again."
         </div>
         <div class="quote-attr" data-anim="fade-up" data-delay="2">
-          <span class="label accent">[Industry Leader]</span>
-          <span class="label muted">[Source] · [Year]</span>
+          <span class="label accent">Early adopter, Discord community</span>
+          <span class="label muted">Verified user quote, launch week</span>
         </div>
       </section>
       <section class="slide slide--compare dark">
@@ -1591,11 +1625,11 @@
               Before
             </div>
             <h3 class="h3" data-anim="fade-up" data-delay="1">
-              six-month build cycles
+              one cloud, one bill
             </h3>
             <p class="lead muted" data-anim="fade-up" data-delay="2">
-              Teams planned for months before shipping anything. By launch, the
-              market had moved.
+              Design AI meant picking a single closed platform and paying for
+              every seat, every month.
             </p>
             <ul
               class="bullet-list"
@@ -1603,9 +1637,9 @@
               data-delay="3"
               style="--sz-lead: 1.2vw"
             >
-              <li>Waterfall planning, quarterly roadmaps</li>
-              <li>User testing at the end, not the start</li>
-              <li>Success measured by features shipped</li>
+              <li>Locked to one vendor's model</li>
+              <li>Design files live on their servers</li>
+              <li>No visibility into the roadmap</li>
             </ul>
           </div>
           <div class="compare-panel panel-orange">
@@ -1618,16 +1652,16 @@
               data-delay="1"
               style="color: #111"
             >
-              two-week iteration loops
+              open, local, yours
             </h3>
             <p
               class="lead"
               data-anim="fade-up"
               data-delay="2"
-              style="color: rgba(17, 17, 17, 0.65)"
+              style="color: rgba(17, 17, 17, 0.8)"
             >
-              Ship a rough version. Watch what users actually do. Rebuild. Ship
-              again.
+              Same AI-native workflow, none of the lock-in — running on
+              hardware you already own.
             </p>
             <ul
               class="bullet-list"
@@ -1635,69 +1669,69 @@
               data-delay="3"
               style="--sz-lead: 1.2vw"
             >
-              <li>Weekly user sessions, continuous discovery</li>
-              <li>Metrics reviewed daily, not quarterly</li>
-              <li>Success measured by behavior change</li>
+              <li>Any of 21 agents, any model key</li>
+              <li>Files never leave your machine</li>
+              <li>Roadmap and code are public</li>
             </ul>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">Broadside</span>
-          <span class="label muted">[Author Name]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--chart dark">
         <header class="slide-chrome">
-          <span class="label muted">Growth Metrics</span>
-          <span class="label muted">11</span>
+          <span class="label muted">Launch Channels</span>
+          <span class="label muted">10</span>
         </header>
         <div class="slide-body">
           <div class="chart-header">
             <h2 class="h2" data-anim="fade-up" data-delay="0">
-              revenue by quarter
+              where the story runs
             </h2>
             <span class="caption muted" data-anim="fade-in" data-delay="1"
-              >USD · Millions · FY 2025</span
+              >Projected reach · launch week</span
             >
           </div>
           <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
             <div class="bar-track">
               <div class="bar-col">
-                <span class="bar-val">$1.2M</span>
-                <div class="bar-fill" style="height: 12vh"></div>
-                <span class="bar-x-label">Q1</span>
+                <span class="bar-val">9K</span>
+                <div class="bar-fill" style="height: 10vh"></div>
+                <span class="bar-x-label">Newsletters</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">$1.7M</span>
-                <div class="bar-fill" style="height: 17vh"></div>
-                <span class="bar-x-label">Q2</span>
+                <span class="bar-val">18K</span>
+                <div class="bar-fill" style="height: 16vh"></div>
+                <span class="bar-x-label">Discord</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">$2.1M</span>
-                <div class="bar-fill" style="height: 21vh"></div>
-                <span class="bar-x-label">Q3</span>
+                <span class="bar-val">31K</span>
+                <div class="bar-fill" style="height: 22vh"></div>
+                <span class="bar-x-label">Hacker News</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val hi">$2.8M</span>
+                <span class="bar-val hi">42K</span>
                 <div class="bar-fill accent" style="height: 28vh"></div>
-                <span class="bar-x-label">Q4</span>
+                <span class="bar-x-label">GitHub Trending</span>
               </div>
             </div>
             <div class="chart-baseline"></div>
           </div>
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: Internal finance data · Q4 2025 Annual Report
+            Source: comparable reach from prior Open Design releases
           </p>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">Broadside</span>
-          <span class="label muted">[Author Name]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--diagram orange">
         <header class="slide-chrome">
-          <span class="broadside-num">12</span>
-          <span class="corner-label">The Process</span>
+          <span class="broadside-num">11</span>
+          <span class="corner-label">The Rollout</span>
         </header>
         <div class="slide-body">
           <h2
@@ -1706,55 +1740,57 @@
             data-anim="fade-up"
             data-delay="0"
           >
-            how it works
+            how the launch moves
           </h2>
           <div class="flow" data-anim="fade-up" data-delay="1">
             <div class="flow-step">
               <div class="flow-num">01</div>
-              <div class="flow-title">Discover</div>
+              <div class="flow-title">Embargo brief</div>
               <div class="flow-desc">
-                Talk to users. Read the data. Surface what's actually true vs.
-                what the team assumes.
+                Give five press contacts the release under embargo, with the
+                press kit and a working build.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">02</div>
-              <div class="flow-title">Define</div>
+              <div class="flow-title">Community preview</div>
               <div class="flow-desc">
-                Narrow to one problem worth solving. Write it as a testable
-                hypothesis, not a feature request.
+                Discord and GitHub Discussions get early access 48 hours before
+                the public post goes live.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">03</div>
-              <div class="flow-title">Design</div>
+              <div class="flow-title">Public launch</div>
               <div class="flow-desc">
-                Build the simplest thing that could prove or disprove the
-                hypothesis. Skip the polish.
+                Announcement goes live on GitHub, Product Hunt, and X at the
+                same 9am PT moment.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">04</div>
-              <div class="flow-title">Deploy</div>
+              <div class="flow-title">Amplify</div>
               <div class="flow-desc">
-                Ship to real users. Measure behavior, not opinions. Repeat from
-                step one with new data.
+                Reshare press coverage, community reactions, and the top
+                GitHub thread for a full week.
               </div>
             </div>
           </div>
         </div>
         <footer class="slide-foot" style="border-color: rgba(17, 17, 17, 0.15)">
-          <span class="broadside-num" style="opacity: 0.4">Broadside</span>
-          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
+          <span class="broadside-num" style="opacity: 0.62">Open Design</span>
+          <span class="broadside-num" style="opacity: 0.62"
+            >github.com/nexu-io/open-design</span
+          >
         </footer>
       </section>
       <section class="slide slide--pie dark">
         <header class="slide-chrome">
-          <span class="label muted">Market Share</span>
-          <span class="label muted">13</span>
+          <span class="label muted">Coverage Mix</span>
+          <span class="label muted">12</span>
         </header>
         <div class="slide-body">
           <h2
@@ -1763,7 +1799,7 @@
             data-delay="0"
             style="font-weight: 900"
           >
-            where the market sits
+            where coverage lands
           </h2>
           <div class="pie-row" data-anim="fade-up" data-delay="1">
             <!-- Donut: conic-gradient segments match legend order -->
@@ -1771,10 +1807,10 @@
               class="pie-donut"
               style="
                 background: conic-gradient(
-                  var(--c-accent) 0% 40%,
-                  #3a3a38 40% 68%,
-                  #555550 68% 88%,
-                  #282826 88% 100%
+                  var(--c-accent) 0% 35%,
+                  #6e6e63 35% 60%,
+                  #4a4a41 60% 85%,
+                  #30302a 85% 100%
                 );
               "
             ></div>
@@ -1784,40 +1820,40 @@
                   class="pie-swatch"
                   style="background: var(--c-accent)"
                 ></div>
-                <span class="pie-item-label">Leader</span>
-                <span class="pie-item-val">40%</span>
+                <span class="pie-item-label">Tech press</span>
+                <span class="pie-item-val">35%</span>
               </div>
               <div class="pie-item">
-                <div class="pie-swatch" style="background: #3a3a38"></div>
-                <span class="pie-item-label">Challenger</span>
-                <span class="pie-item-val">28%</span>
+                <div class="pie-swatch" style="background: #6e6e63"></div>
+                <span class="pie-item-label">Newsletters</span>
+                <span class="pie-item-val">25%</span>
               </div>
               <div class="pie-item">
-                <div class="pie-swatch" style="background: #555550"></div>
-                <span class="pie-item-label">Followers</span>
-                <span class="pie-item-val">20%</span>
+                <div class="pie-swatch" style="background: #4a4a41"></div>
+                <span class="pie-item-label">Social &amp; creator posts</span>
+                <span class="pie-item-val">25%</span>
               </div>
               <div class="pie-item">
-                <div class="pie-swatch" style="background: #282826"></div>
-                <span class="pie-item-label">Other</span>
-                <span class="pie-item-val">12%</span>
+                <div class="pie-swatch" style="background: #30302a"></div>
+                <span class="pie-item-label">Community forums</span>
+                <span class="pie-item-val">15%</span>
               </div>
-              <div class="pie-total">TOTAL MARKET: $[X]B · [Year] ESTIMATE</div>
+              <div class="pie-total">TARGET MIX · LAUNCH WEEK</div>
             </div>
           </div>
           <p class="chart-source" data-anim="fade-in" data-delay="2">
-            Source: [Industry report] · [Year] · Estimates only
+            Target based on prior open-source launch benchmarks
           </p>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Author]</span>
-          <span class="label muted">[Year]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--pyramid dark">
         <header class="slide-chrome">
-          <span class="label muted">The Hierarchy</span>
-          <span class="label muted">14</span>
+          <span class="label muted">The Proof Stack</span>
+          <span class="label muted">13</span>
         </header>
         <div class="slide-body">
           <h2
@@ -1826,91 +1862,95 @@
             data-delay="0"
             style="font-weight: 900"
           >
-            what actually matters
+            what backs the headline
           </h2>
           <div class="pyramid" data-anim="fade-up" data-delay="1">
             <div class="pyr-level">
-              <span class="pyr-name">mission</span>
-              <span class="pyr-desc">why this exists</span>
+              <span class="pyr-name">the headline</span>
+              <span class="pyr-desc">the open, local AI design tool</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">strategy</span>
-              <span class="pyr-desc">what we're betting on</span>
+              <span class="pyr-name">the numbers</span>
+              <span class="pyr-desc">60K+ stars, 300+ contributors, 217+ plugins</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">product</span>
-              <span class="pyr-desc">what we're building</span>
+              <span class="pyr-name">the quotes</span>
+              <span class="pyr-desc">community members already dropping cloud tools</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">growth</span>
-              <span class="pyr-desc">how we reach people</span>
+              <span class="pyr-name">the code</span>
+              <span class="pyr-desc">Apache-2.0 repo, public roadmap, open issues</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">operations</span>
-              <span class="pyr-desc">how we run the day-to-day</span>
+              <span class="pyr-name">the community</span>
+              <span class="pyr-desc">Discord and GitHub Discussions answering in real time</span>
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Author]</span>
-          <span class="label muted">[Year]</span>
+          <span class="label muted">Open Design</span>
+          <span class="label muted">github.com/nexu-io/open-design</span>
         </footer>
       </section>
       <section class="slide slide--vtimeline dark">
         <header class="slide-chrome">
-          <span class="label muted">The Story</span>
-          <span class="label muted">15</span>
+          <span class="label muted">The Calendar</span>
+          <span class="label muted">14</span>
         </header>
         <div class="vt-hl" data-anim="fade-up" data-delay="0">
-          how we got here
+          the 4-week countdown
         </div>
         <div class="vtimeline" data-anim="fade-up" data-delay="1">
           <!-- Event 1 -->
-          <div class="vt-date">[Year −3]</div>
+          <div class="vt-date">T-14</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">the idea</div>
+            <div class="vt-title">embargo brief</div>
             <div class="vt-body">
-              One slide. Three slides. Nineteen rejections. One yes.
+              Press kit and a working build go to five outlets under embargo,
+              no NDA required.
             </div>
           </div>
           <!-- Event 2 -->
-          <div class="vt-date">[Year −2]</div>
+          <div class="vt-date">T-7</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">first product</div>
+            <div class="vt-title">community preview</div>
             <div class="vt-body">
-              Launched to [N] users. [X]% used it daily after week one.
+              Discord and GitHub Discussions get early access — first quotes
+              collected here.
             </div>
           </div>
           <!-- Event 3 -->
-          <div class="vt-date">[Year −1]</div>
+          <div class="vt-date">Day 0</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">the pivot</div>
+            <div class="vt-title">public launch</div>
             <div class="vt-body">
-              Killed [X] features. Found the one thing that changed retention.
+              GitHub release, Product Hunt, and X post go live together; press
+              embargo lifts at 9am PT.
             </div>
           </div>
           <!-- Event 4 -->
-          <div class="vt-date">[Year 0]</div>
+          <div class="vt-date">T+7</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">now</div>
+            <div class="vt-title">follow-up story</div>
             <div class="vt-body">
-              [N]k users. $[X]M ARR. The hard part starts here.
+              Publish first-week adoption numbers and a second-wave coverage
+              roundup.
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Author] / [Year]</span>
-          <span class="label muted">15</span>
+          <span class="label muted">Open Design · Apache-2.0</span>
+          <span class="label muted">14</span>
         </footer>
       </section>
       <section class="slide slide--cycle dark">
         <header class="slide-chrome">
-          <span class="label muted">The Loop</span>
-          <span class="label muted">16</span>
+          <span class="label muted">The Growth Loop</span>
+          <span class="label muted">15</span>
         </header>
         <div class="slide-body">
           <h2
@@ -1919,23 +1959,25 @@
             data-delay="0"
             style="font-weight: 900"
           >
-            build · measure · learn
+            announce · measure · iterate
           </h2>
           <div class="cycle-grid" data-anim="fade-up" data-delay="1">
             <!-- Row 1 -->
             <div class="cycle-step">
               <div class="cycle-num">01</div>
-              <div class="cycle-title">build</div>
+              <div class="cycle-title">ship</div>
               <div class="cycle-desc">
-                Ship the smallest version that could prove the idea wrong.
+                Publish the headline, proof, and CTA across every channel at
+                the same moment.
               </div>
             </div>
             <div class="cycle-arrow">→</div>
             <div class="cycle-step">
               <div class="cycle-num">02</div>
-              <div class="cycle-title">measure</div>
+              <div class="cycle-title">track</div>
               <div class="cycle-desc">
-                What did users actually do? Not what they said — what they did.
+                Watch stars, installs, and press pickups hour by hour on
+                launch day.
               </div>
             </div>
             <!-- Row 2: arrows -->
@@ -1945,31 +1987,32 @@
             <!-- Row 3 (reversed: left=04, right=03 to form clockwise loop) -->
             <div class="cycle-step">
               <div class="cycle-num">04</div>
-              <div class="cycle-title">learn</div>
+              <div class="cycle-title">repeat</div>
               <div class="cycle-desc">
-                Update the hypothesis. Kill what didn't work. Double what did.
+                Roll the winning channel and headline into the next release
+                cycle.
               </div>
             </div>
             <div class="cycle-arrow">←</div>
             <div class="cycle-step">
               <div class="cycle-num">03</div>
-              <div class="cycle-title">decide</div>
+              <div class="cycle-title">double down</div>
               <div class="cycle-desc">
-                Ship to more users or go back to step one. There is no third
-                option.
+                Put follow-up pitches and budget behind whichever channel
+                converts best.
               </div>
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Author] / [Year]</span>
-          <span class="label muted">16</span>
+          <span class="label muted">Open Design · Apache-2.0</span>
+          <span class="label muted">15</span>
         </footer>
       </section>
       <section class="slide slide--end orange">
         <div class="broadside-top-chrome">
           <span class="broadside-num" data-anim="fade-in" data-delay="0"
-            >10</span
+            >16</span
           >
           <span class="corner-label" data-anim="fade-in" data-delay="0"
             >End</span
@@ -1986,15 +2029,16 @@
             letter-spacing: -0.04em;
           "
         >
-          let's<br />talk.
+          read the<br />release.
         </h1>
         <div
           style="display: flex; flex-direction: column; gap: var(--gap-sm)"
           data-anim="fade-up"
           data-delay="2"
         >
-          <p class="lead" style="color: rgba(17, 17, 17, 0.65); max-width: 45%">
-            [hello@company.com] · [@handle] · [company.com]
+          <p class="lead" style="color: rgba(17, 17, 17, 0.8); max-width: 45%">
+            github.com/nexu-io/open-design · discord.gg/mHAjSMV6gz ·
+            x.com/nexudotio
           </p>
         </div>
         <div
@@ -2007,8 +2051,12 @@
             border-top: 1px solid rgba(17, 17, 17, 0.15);
           "
         >
-          <span class="broadside-num" style="opacity: 0.4">[Author Name]</span>
-          <span class="broadside-num" style="opacity: 0.4">[Year]</span>
+          <span class="broadside-num" style="opacity: 0.62"
+            >Media kit &amp; assets available on request</span
+          >
+          <span class="broadside-num" style="opacity: 0.62"
+            >Star it. Ship it. Tell us what breaks.</span
+          >
         </div>
       </section>
     </div>
@@ -2140,5 +2188,7 @@
         goTo(0);
       })();
     </script>
-  </body>
+
+
+</body>
 </html>

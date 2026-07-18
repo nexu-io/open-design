@@ -1,0 +1,159 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hps-true-blueprint",
+  "title": "Present an Engineering Blueprint like a Principal Architect",
+  "title_i18n": {
+    "en": "Present an Engineering Blueprint like a Principal Architect",
+    "zh-CN": "像首席架构师一样讲工程蓝图",
+    "zh-TW": "像首席架构师一样讲工程蓝图"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.",
+  "description_i18n": {
+    "en": "Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.",
+    "zh-CN": "像首席架构师一样讲工程蓝图——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像首席架构师一样讲工程蓝图——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "lewislulu",
+    "url": "https://github.com/lewislulu"
+  },
+  "homepage": "https://github.com/lewislulu/html-ppt-skill",
+  "plugin": {
+    "repo": "https://github.com/lewislulu/html-ppt-skill"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "blueprint",
+    "engineering",
+    "architecture",
+    "mono",
+    "dark",
+    "html-ppt",
+    "ai",
+    "copilot",
+    "workflow",
+    "hps-true-blueprint",
+    "enterprise-ai-literacy",
+    "product-management",
+    "pm-feature-business-case-deck",
+    "product",
+    "roadmap",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Present an Engineering Blueprint like a Principal Architect\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Audience: engineering org. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step.",
+        "zh-CN": "像首席架构师一样讲工程蓝图。像首席架构师一样讲工程蓝图——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Present an Engineering Blueprint like a Principal Architect",
+          "title_i18n": {
+            "en": "Present an Engineering Blueprint like a Principal Architect",
+            "zh-CN": "像首席架构师一样讲工程蓝图",
+            "zh-TW": "像首席架构师一样讲工程蓝图"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "A system architecture, an infra migration, an engineering design review...",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Engineers, architects, a design-review board...",
+        "default": "an engineering audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Length",
+        "type": "select",
+        "required": true,
+        "options": [
+          "short 5-10 slides",
+          "medium 10-20 slides",
+          "long 20+ slides"
+        ],
+        "default": "short 5-10 slides"
+      },
+      {
+        "name": "density",
+        "label": "Density",
+        "type": "select",
+        "required": true,
+        "options": [
+          "low density / speaker-led",
+          "high density / reading-first"
+        ],
+        "default": "low density / speaker-led"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "product-management"
+  }
+}

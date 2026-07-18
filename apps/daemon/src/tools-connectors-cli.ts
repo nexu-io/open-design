@@ -1768,11 +1768,20 @@ export async function auditDesignSystemPackage(
   }
   requireFile('README.md', 'Claude Design-style packages need README.md so the system is reusable outside the current run.');
   requireFile('SKILL.md', 'Claude Design-style packages need SKILL.md with agent-facing usage instructions.');
-  requireFile('colors_and_type.css', 'Claude Design-style packages need colors_and_type.css for reusable color, type, spacing, radius, and state tokens.');
+  requireFile('colors_and_type.css', 'Claude Design-style packages need colors_and_type.css for reusable color and typography foundations; spacing and radius may live in tokens.css.');
+  const companionTokenCss = fileSet.has('tokens.css')
+    ? await readAuditText(projectPath, 'tokens.css')
+    : undefined;
   await requireContent('DESIGN.md', 800, 'thin_design_rules', 'DESIGN.md is too thin to be a reusable rules document; include source-backed context, foundations, tokens, components, motion, voice, and anti-patterns.', validateDesignRules);
   await requireContent('README.md', 600, 'thin_readme', 'README.md is too thin to explain the package, source evidence, generated files, and reuse workflow.', requireMarkdownHeading);
   await requireContent('SKILL.md', 500, 'thin_skill', 'SKILL.md is too thin to guide future agents on how to use this design system.', validateSkillInstructions);
-  await requireContent('colors_and_type.css', 500, 'thin_token_css', 'colors_and_type.css is too thin to carry reusable color, typography, spacing, radius, and state tokens.', validateTokenCss);
+  await requireContent(
+    'colors_and_type.css',
+    500,
+    'thin_token_css',
+    'colors_and_type.css is too thin to carry reusable color and typography foundations.',
+    (text) => validateTokenCss(text, companionTokenCss),
+  );
   if (fileSet.has('SKILL.md')) {
     const skillText = await readAuditText(projectPath, 'SKILL.md');
     if (skillText !== undefined && !skillHasAgentFrontmatter(skillText)) {
@@ -2239,7 +2248,11 @@ function skillHasAgentFrontmatter(text: string): boolean {
 
 function skillHasReusableSections(text: string): boolean {
   if (text.trim().length < 800) return false;
-  const hasInside = (/\*\*What's inside:\*\*/iu.test(text) || /^##\s+(?:What's inside|Contents)\s*$/imu.test(text))
+  // Accept "What's inside", the skill_missing_reuse_sections warning's own
+  // "What is inside" wording, and "Contents" — the validator must accept the
+  // headings the warning tells authors to write or --fail-on-warnings loops
+  // forever re-spelling them (#4435).
+  const hasInside = (/\*\*What(?:'s| is) inside:\*\*/iu.test(text) || /^##\s+(?:What(?:'s| is) inside|Contents)\s*$/imu.test(text))
     && /\b(tokens?|assets?|fonts?|preview|ui\s*kit|components?)\b/iu.test(text);
   const hasSourceContext = (/\*\*Source context:\*\*/iu.test(text) || /^##\s+(?:Source Context|Source)\s*$/imu.test(text))
     && /\b(source|repository|github|local|based on|evidence)\b/iu.test(text);
@@ -2247,7 +2260,9 @@ function skillHasReusableSections(text: string): boolean {
     && /\b(prototypes?|mockups?|interfaces?|artifacts?|production|design|build(?:ing)?)\b/iu.test(text);
   const hasHowToUse = (/\*\*How to use:\*\*/iu.test(text) || /^##\s+(?:How to use|Usage)\s*$/imu.test(text))
     && /\b(README\.md|DESIGN\.md|colors_and_type\.css|preview\/|assets\/|build\/|fonts\/|ui_kits\/app)\b/iu.test(text);
-  const hasHighlights = (/\*\*Design system highlights:\*\*/iu.test(text) || /^##\s+(?:(?:Design System|Design) )?Highlights\s*$/imu.test(text))
+  // Accept "Design system highlights", the warning's hyphenated "design-system
+  // highlights", and bare "Highlights" so following the warning text passes (#4435).
+  const hasHighlights = (/\*\*Design[ -]system highlights:\*\*/iu.test(text) || /^##\s+(?:(?:Design[ -]System|Design) )?Highlights\s*$/imu.test(text))
     && /\b(colors?|typography|spacing|radius|shadows?|icons?|layout|interaction)\b/iu.test(text);
   return hasInside && hasSourceContext && hasWhenToUse && hasHowToUse && hasHighlights;
 }
@@ -2330,14 +2345,15 @@ function validateDesignRules(text: string): string | undefined {
     : `DESIGN.md is missing source-backed sections for ${missing.map((group) => group[0]).join(', ')}.`;
 }
 
-function validateTokenCss(text: string): string | undefined {
+function validateTokenCss(text: string, companionText?: string): string | undefined {
   const variables = [...text.matchAll(/--[a-z0-9_-]+\s*:/giu)].length;
   if (variables < 12) return `Expected at least 12 CSS custom properties, found ${variables}.`;
   const colors = [...text.matchAll(/#[0-9a-f]{3,8}\b|rgb[a]?\(|hsl[a]?\(/giu)].length;
   if (colors < 4) return `Expected concrete color values in colors_and_type.css, found ${colors}.`;
   if (!/font(-family)?|--[^:]*font/iu.test(text)) return 'Expected font-family or font token declarations.';
-  if (!/radius|border-radius/iu.test(text)) return 'Expected radius token declarations.';
-  if (!/space|spacing|gap/iu.test(text)) return 'Expected spacing token declarations.';
+  const layoutTokens = companionText === undefined ? text : `${text}\n${companionText}`;
+  if (!/radius|border-radius/iu.test(layoutTokens)) return 'Expected radius token declarations in colors_and_type.css or tokens.css.';
+  if (!/space|spacing|gap/iu.test(layoutTokens)) return 'Expected spacing token declarations in colors_and_type.css or tokens.css.';
   return undefined;
 }
 

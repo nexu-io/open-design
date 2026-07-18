@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
-import { ensureRailOpen } from '@/playwright/rail';
+import { expect, test } from '@/playwright/suite';
+import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { expectAllProjectFilesActive, expectAllProjectFilesInactive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Response } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 
@@ -31,7 +32,7 @@ test('[P1] quick switcher opens from keyboard and activates the selected file', 
   await expect(quickSwitcherInput).toBeVisible();
 
   await quickSwitcherInput.fill('beta');
-  await expect(page.getByRole('option', { name: /beta-file\.png/i })).toBeVisible();
+  await expect(page.getByRole('option', { name: /beta-file\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -109,7 +110,13 @@ test('[P0] workspace tab launcher creates a Browser tab on the reference board h
   await page.getByTestId('workspace-add-tab').click();
   await expect(page.getByTestId('tab-launcher-menu')).toBeVisible();
   await expect(page.getByTestId('tab-launcher-search')).toBeFocused();
-  await page.getByRole('button', { name: /New Browser/i }).click();
+  // Scope to the launcher menu: the reference-board home now also renders a
+  // "New Browser" empty-state CTA (design-files-empty-open-browser), so an
+  // unscoped /New Browser/i matches two buttons.
+  await page
+    .getByTestId('tab-launcher-menu')
+    .getByRole('button', { name: /New Browser/i })
+    .click();
 
   const browserTab = page.getByTestId('file-workspace').getByRole('tab', { name: /^Browser\b/i });
   await expect(browserTab).toBeVisible();
@@ -130,8 +137,8 @@ test('[P1] workspace tab launcher searches files and opens the selected file pre
   await page.reload();
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   await page.getByTestId('workspace-add-tab').click();
   const launcher = page.getByTestId('tab-launcher-menu');
@@ -142,7 +149,7 @@ test('[P1] workspace tab launcher searches files and opens the selected file pre
   await result.click();
 
   await expect(launcher).toHaveCount(0);
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expect(tabBySuffix(page, 'launcher-beta.png')).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -327,8 +334,8 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await uploadTinyPng(page, 'design-files-alpha.png');
   await uploadTinyPng(page, 'design-files-beta.png');
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   const betaRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'design-files-beta.png',
@@ -348,7 +355,7 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expect(page.getByRole('tab', { name: /design-files-alpha\.png/i })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
 });
@@ -451,10 +458,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function expectProjectsView(page: Page) {

@@ -1,22 +1,30 @@
 name: PR author inactivity
 
-# Remind PR authors when reviewer / maintainer feedback has gone unanswered
-# for more than 3 days, and close after more than 5 days.
+# Remind PR authors only when the current blocker is clearly author-owned, then
+# close after the blocker has gone stale.
 #
 # Inactivity heuristic:
 # - We look for the PR author's latest response via:
 #   1) an issue comment,
 #   2) a submitted pull-request review,
 #   3) an inline review comment reply, or
-#   4) a commit / force-push timeline event.
+#   4) a PR commit / force-push timeline event.
 # - We then find the first trusted human reviewer / maintainer feedback that
 #   arrived after that author response via:
 #   1) issue comments,
 #   2) non-approval reviews, or
 #   3) inline review comments.
-# - Only author activity resets the clock. Later reviewer / maintainer bumps do
-#   not. If that feedback goes unanswered, we remind once after 72h and close
-#   after 120h.
+# - We also track the latest non-bot human activity on the PR. Reopens,
+#   comments, reviews, inline review comments, labels, assignments, review
+#   requests, and pushes all reset the inactivity window.
+# - PRs waiting on product direction, QA validation, a non-author assignee,
+#   requested reviewers, looper, or maintainer-assisted stale handling are not
+#   author-owned and are skipped by this workflow.
+# - Clear author-owned blockers include merge conflicts, failed CI, and
+#   outstanding trusted reviewer / maintainer feedback.
+# - If an author-owned blocker remains and the whole PR has no human activity
+#   for 72h, we remind once. If it has no human activity for 120h, we close it
+#   for queue management.
 #
 # Bot feedback note: trusted human reviewers / maintainers are the trigger for
 # this workflow. Bot-authored reviews and comments (e.g. CodeRabbit, Codex) are
@@ -36,8 +44,10 @@ on:
         type: boolean
 
 permissions:
+  checks: read
   issues: write
   pull-requests: write
+  statuses: read
 
 concurrency:
   group: pr-author-inactivity
@@ -56,6 +66,32 @@ jobs:
             const REMINDER_MS = 72 * 60 * 60 * 1000;
             const CLOSE_MS = 120 * 60 * 60 * 1000;
             const DRY_RUN = String(context.payload.inputs?.dry_run || 'false').toLowerCase() === 'true';
+            const NON_AUTHOR_BLOCKER_LABELS = new Set([
+              'exempt-from-stale',
+              'looper:worker-ready',
+              'needs-design-review',
+              'needs-maintainer-merge',
+              'needs-qa',
+              'needs-qa-validation',
+              'needs-product-direction',
+              'needs-validation',
+              'ready-to-merge',
+              'stale-pr/blocked',
+              'stale-pr/maintainer-assisted',
+            ]);
+            const FAILED_CHECK_CONCLUSIONS = new Set(['action_required', 'cancelled', 'failure', 'startup_failure', 'timed_out']);
+            const FAILED_STATUS_STATES = new Set(['error', 'failure']);
+            const HUMAN_ACTIVITY_EVENTS = new Set([
+              'assigned',
+              'committed',
+              'head_ref_force_pushed',
+              'labeled',
+              'ready_for_review',
+              'reopened',
+              'review_requested',
+              'unassigned',
+              'unlabeled',
+            ]);
 
             function ts(value) {
               return value ? new Date(value).getTime() : 0;
@@ -63,6 +99,22 @@ jobs:
 
             function isBot(login) {
               return Boolean(login && login.endsWith('[bot]'));
+            }
+
+            function labelNames(pr) {
+              return new Set((pr.labels || []).map((label) => label.name).filter(Boolean));
+            }
+
+            function userLogins(users) {
+              return (users || []).map((user) => user.login).filter(Boolean);
+            }
+
+            function commitTimestamp(commit) {
+              return ts(commit.commit?.committer?.date || commit.commit?.author?.date);
+            }
+
+            function commitLogins(commit) {
+              return [commit.author?.login, commit.committer?.login].filter(Boolean);
             }
 
             const TRUSTED_PERMISSIONS = new Set(['admin', 'maintain', 'write', 'triage']);
@@ -131,7 +183,7 @@ jobs:
                 continue;
               }
 
-              const [comments, reviews, reviewComments, timeline] = await Promise.all([
+              const [comments, reviews, reviewComments, timeline, prCommits, detailedPr, checkRuns, combinedStatus] = await Promise.all([
                 paginate(github.rest.issues.listComments, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -152,7 +204,54 @@ jobs:
                   repo: context.repo.repo,
                   issue_number: pr.number,
                 }),
+                paginate(github.rest.pulls.listCommits, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                }),
+                github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                }),
+                paginate(github.rest.checks.listForRef, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pr.head.sha,
+                }).catch(() => []),
+                github.rest.repos.getCombinedStatusForRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pr.head.sha,
+                }).catch(() => ({ data: { statuses: [] } })),
               ]);
+
+              const labels = labelNames(pr);
+              const nonAuthorLabels = [...labels].filter((label) => NON_AUTHOR_BLOCKER_LABELS.has(label));
+              if (nonAuthorLabels.length > 0) {
+                if (DRY_RUN) {
+                  diagnostics.push(`#${pr.number}: skipped (non-author blocker label: ${nonAuthorLabels.join(', ')})`);
+                }
+                continue;
+              }
+
+              const nonAuthorAssignees = userLogins(pr.assignees).filter((login) => login !== author && !isBot(login));
+              if (nonAuthorAssignees.length > 0) {
+                if (DRY_RUN) {
+                  diagnostics.push(`#${pr.number}: skipped (assigned to non-author: ${nonAuthorAssignees.join(', ')})`);
+                }
+                continue;
+              }
+
+              const requestedReviewers = userLogins(pr.requested_reviewers).filter((login) => login !== author && !isBot(login));
+              const requestedTeams = (pr.requested_teams || []).map((team) => team.name || team.slug).filter(Boolean);
+              if (requestedReviewers.length > 0 || requestedTeams.length > 0) {
+                if (DRY_RUN) {
+                  const reviewers = [...requestedReviewers, ...requestedTeams.map((team) => `team:${team}`)].join(', ');
+                  diagnostics.push(`#${pr.number}: skipped (waiting on requested reviewer: ${reviewers})`);
+                }
+                continue;
+              }
 
               const candidateTrustedLogins = new Set();
               for (const comment of comments) {
@@ -184,8 +283,17 @@ jobs:
               );
 
               let latestAuthorResponseAt = 0;
+              let latestHumanActivityAt = 0;
+
+              function recordHumanActivity(login, timestamp) {
+                if (!login || isBot(login)) {
+                  return;
+                }
+                latestHumanActivityAt = Math.max(latestHumanActivityAt, timestamp);
+              }
 
               for (const comment of comments) {
+                recordHumanActivity(comment.user?.login, ts(comment.created_at));
                 if (comment.user?.login !== author) {
                   continue;
                 }
@@ -193,6 +301,9 @@ jobs:
               }
 
               for (const review of reviews) {
+                if (review.state?.toUpperCase() !== 'PENDING') {
+                  recordHumanActivity(review.user?.login, ts(review.submitted_at || review.created_at));
+                }
                 if (review.user?.login !== author) {
                   continue;
                 }
@@ -203,21 +314,46 @@ jobs:
               }
 
               for (const reviewComment of reviewComments) {
+                recordHumanActivity(reviewComment.user?.login, ts(reviewComment.created_at));
                 if (reviewComment.user?.login !== author) {
                   continue;
                 }
                 latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(reviewComment.created_at));
               }
 
-              for (const event of timeline) {
-                if (event.actor?.login !== author) {
-                  continue;
+              for (const commit of prCommits) {
+                const commitAt = commitTimestamp(commit);
+                const logins = commitLogins(commit);
+                if (logins.length === 0 && commitAt) {
+                  latestHumanActivityAt = Math.max(latestHumanActivityAt, commitAt);
                 }
-                if (!['committed', 'head_ref_force_pushed'].includes(event.event)) {
-                  continue;
+                for (const login of logins) {
+                  recordHumanActivity(login, commitAt);
+                  if (login === author) {
+                    latestAuthorResponseAt = Math.max(latestAuthorResponseAt, commitAt);
+                  }
                 }
-                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(event.created_at));
               }
+
+              for (const event of timeline) {
+                const eventAt = ts(event.created_at);
+                if (HUMAN_ACTIVITY_EVENTS.has(event.event)) {
+                  recordHumanActivity(event.actor?.login, eventAt);
+                }
+                if (event.actor?.login === author && event.event === 'head_ref_force_pushed') {
+                  latestAuthorResponseAt = Math.max(latestAuthorResponseAt, eventAt);
+                }
+              }
+
+              const trustedApprovalAts = collectFeedbackAt(
+                author,
+                trustedLogins,
+                reviews,
+                (review) => review.user?.login,
+                (review) => ts(review.submitted_at || review.created_at),
+                (review) => review.state?.toUpperCase() === 'APPROVED',
+              ).filter((approvalAt) => approvalAt > latestAuthorResponseAt);
+              const latestTrustedApprovalAt = trustedApprovalAts.length > 0 ? Math.max(...trustedApprovalAts) : 0;
 
               const feedbackAts = [
                 ...collectFeedbackAt(author, trustedLogins, comments, (comment) => comment.user?.login, (comment) => ts(comment.created_at)),
@@ -233,35 +369,67 @@ jobs:
                   },
                 ),
                 ...collectFeedbackAt(author, trustedLogins, reviewComments, (reviewComment) => reviewComment.user?.login, (reviewComment) => ts(reviewComment.created_at)),
-              ].filter((feedbackAt) => feedbackAt > latestAuthorResponseAt);
+              ].filter((feedbackAt) => feedbackAt > Math.max(latestAuthorResponseAt, latestTrustedApprovalAt));
 
-              if (feedbackAts.length === 0) {
+              const authorActionReasons = [];
+              const authorActionAts = [];
+
+              if (feedbackAts.length > 0) {
+                authorActionReasons.push('outstanding trusted reviewer or maintainer feedback');
+                authorActionAts.push(Math.min(...feedbackAts));
+              }
+
+              const prDetails = detailedPr.data || {};
+              if (prDetails.mergeable === false && prDetails.mergeable_state === 'dirty') {
+                authorActionReasons.push('merge conflict');
+                authorActionAts.push(Math.max(latestAuthorResponseAt, ts(pr.updated_at || pr.created_at)));
+              }
+
+              const failingCheckAts = checkRuns
+                .filter((checkRun) => FAILED_CHECK_CONCLUSIONS.has(String(checkRun.conclusion || '').toLowerCase()))
+                .map((checkRun) => ts(checkRun.completed_at || checkRun.started_at))
+                .filter(Boolean);
+              const failingStatusAts = (combinedStatus.data?.statuses || [])
+                .filter((status) => FAILED_STATUS_STATES.has(String(status.state || '').toLowerCase()))
+                .map((status) => ts(status.updated_at || status.created_at))
+                .filter(Boolean);
+              const failingSignalAts = [...failingCheckAts, ...failingStatusAts];
+              if (failingSignalAts.length > 0) {
+                authorActionReasons.push('failing CI');
+                authorActionAts.push(Math.max(...failingSignalAts));
+              }
+
+              if (authorActionReasons.length === 0) {
                 if (DRY_RUN) {
                   diagnostics.push(
-                    `#${pr.number}: skipped (no outstanding trusted feedback after author response; latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'})`,
+                    `#${pr.number}: skipped (no current author-owned blocker; latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} latestTrustedApprovalAt=${latestTrustedApprovalAt ? new Date(latestTrustedApprovalAt).toISOString() : 'none'})`,
                   );
                 }
                 continue;
               }
 
-              const feedbackAt = Math.min(...feedbackAts);
+              const authorActionAt = Math.min(...authorActionAts);
+              const inactivityStartedAt = Math.max(authorActionAt, latestHumanActivityAt);
 
               const reminderSent = comments.some((comment) => {
-                return ts(comment.created_at) > feedbackAt && comment.body?.includes(REMINDER_MARKER);
+                return ts(comment.created_at) > inactivityStartedAt && comment.body?.includes(REMINDER_MARKER);
               });
 
-              const inactiveFor = now - feedbackAt;
+              const inactiveFor = now - inactivityStartedAt;
               const inactiveHours = Math.floor(inactiveFor / 3600000);
-              const feedbackAtIso = new Date(feedbackAt).toISOString();
+              const authorActionAtIso = new Date(authorActionAt).toISOString();
+              const latestHumanActivityAtIso = latestHumanActivityAt ? new Date(latestHumanActivityAt).toISOString() : 'none';
+              const inactivityStartedAtIso = new Date(inactivityStartedAt).toISOString();
+              const reasonText = authorActionReasons.join(', ');
 
               if (inactiveFor >= CLOSE_MS) {
                 const line = DRY_RUN
-                  ? `#${pr.number}: would close after ${inactiveHours}h of author inactivity`
-                  : `#${pr.number}: closed after ${inactiveHours}h of author inactivity`;
+                  ? `#${pr.number}: would close after ${inactiveHours}h of no human activity (${reasonText})`
+                  : `#${pr.number}: closed after ${inactiveHours}h of no human activity (${reasonText})`;
 
                 if (DRY_RUN) {
                   diagnostics.push(
-                    `#${pr.number}: action=would-close latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} reminderSent=${reminderSent}`,
+                    `#${pr.number}: action=would-close reason=${reasonText} latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} authorActionAt=${authorActionAtIso} latestHumanActivityAt=${latestHumanActivityAtIso} inactivityStartedAt=${inactivityStartedAtIso} reminderSent=${reminderSent}`,
                   );
                   summary.push(line);
                   continue;
@@ -272,7 +440,7 @@ jobs:
                   repo: context.repo.repo,
                   issue_number: pr.number,
                   body: [
-                    'Closing this PR for now because it has been waiting on an author response for more than 5 days after reviewer or maintainer feedback.',
+                    `Closing this PR for now because it appears to be waiting on author action (${reasonText}) and has had no human activity for more than 5 days.`,
                     '',
                     'This is only a queue-management step, not a rejection of the work. If you would like to continue, please leave a comment or push an update and reopen the PR when ready.',
                   ].join('\n'),
@@ -291,12 +459,12 @@ jobs:
 
               if (inactiveFor >= REMINDER_MS && !reminderSent) {
                 const line = DRY_RUN
-                  ? `#${pr.number}: would remind after ${inactiveHours}h of author inactivity`
-                  : `#${pr.number}: reminded after ${inactiveHours}h of author inactivity`;
+                  ? `#${pr.number}: would remind after ${inactiveHours}h of no human activity (${reasonText})`
+                  : `#${pr.number}: reminded after ${inactiveHours}h of no human activity (${reasonText})`;
 
                 if (DRY_RUN) {
                   diagnostics.push(
-                    `#${pr.number}: action=would-remind latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} reminderSent=${reminderSent}`,
+                    `#${pr.number}: action=would-remind reason=${reasonText} latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} authorActionAt=${authorActionAtIso} latestHumanActivityAt=${latestHumanActivityAtIso} inactivityStartedAt=${inactivityStartedAtIso} reminderSent=${reminderSent}`,
                   );
                   summary.push(line);
                   continue;
@@ -309,9 +477,9 @@ jobs:
                   body: [
                     REMINDER_MARKER,
                     '',
-                    `@${author} friendly reminder: this PR has been waiting on an author response for more than 3 days after reviewer or maintainer feedback.`,
+                    `@${author} friendly reminder: this PR appears to be waiting on author action (${reasonText}) and has had no human activity for more than 3 days.`,
                     '',
-                    'When you have a chance, please reply here or push an update. To keep the queue manageable, PRs with no author activity for more than 5 days after feedback may be closed automatically, but they can be reopened when work resumes.',
+                    'When you have a chance, please reply here or push an update. To keep the queue manageable, PRs with no human activity for more than 5 days may be closed automatically, but they can be reopened when work resumes.',
                   ].join('\n'),
                 });
 
@@ -321,7 +489,7 @@ jobs:
 
               if (DRY_RUN) {
                 diagnostics.push(
-                  `#${pr.number}: skipped (already-reminded-or-below-threshold) latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} inactiveHours=${inactiveHours} reminderSent=${reminderSent}`,
+                  `#${pr.number}: skipped (already-reminded-or-below-threshold) reason=${reasonText} latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} authorActionAt=${authorActionAtIso} latestHumanActivityAt=${latestHumanActivityAtIso} inactivityStartedAt=${inactivityStartedAtIso} inactiveHours=${inactiveHours} reminderSent=${reminderSent}`,
                 );
               }
             }

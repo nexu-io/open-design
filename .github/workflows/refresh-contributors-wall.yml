@@ -40,9 +40,9 @@ jobs:
 
       - name: Generate Open Design bot token
         id: open-design-bot-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3.2.0
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
           repositories: open-design

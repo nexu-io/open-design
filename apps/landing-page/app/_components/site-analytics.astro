@@ -1,0 +1,22 @@
+---
+/*
+ * Unified head analytics for every landing-page template.
+ *
+ * Bundles the three head-level trackers — Google Analytics, PostHog product
+ * analytics, and the first-touch attribution cookie — behind a single mount
+ * point. Templates include `<SiteAnalytics />` instead of wiring each tracker
+ * by hand, so a marketing entry point can no longer silently miss one. (Before
+ * this, every bespoke `<head>` wired GoogleAnalytics individually and several
+ * pages — blog / tutorials / stories — were missing PostHog and the attribution
+ * cookie entirely; arriving there with `?utm_source=` was attributed as direct.)
+ *
+ * Each child self-derives its context (PostHog reads the route for page_name;
+ * the attribution cookie reads utm/referrer from the URL), so no props needed.
+ */
+import GoogleAnalytics from './google-analytics.astro';
+import PostHogAnalytics from './posthog-analytics.astro';
+import AttributionCookie from './attribution-cookie.astro';
+---
+<GoogleAnalytics />
+<PostHogAnalytics />
+<AttributionCookie />

@@ -24,6 +24,7 @@
     "uk": "Типовий маршрутизатор дизайну"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T23:01:12Z",
   "description": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
   "description_i18n": {
     "en": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",

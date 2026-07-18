@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
+import { fetchDesignSystem, updateDesignSystemDraft } from '../../src/providers/registry';
+
+const exportMocks = vi.hoisted(() => ({
+  downloadDesignSystemArchive: vi.fn(async () => true),
+  downloadProjectArchive: vi.fn(async () => false),
+}));
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -12,32 +18,27 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
-    fetchDesignSystemShowcase: vi.fn(async () => null),
+    fetchDesignSystem: vi.fn(async (id: string) => ({
+      id,
+      title: id === 'linear' ? 'Linear' : 'Acme Design System',
+      summary: id === 'linear' ? 'Quiet issue-tracker system.' : 'Internal product system.',
+      category: id === 'linear' ? 'Productivity & SaaS' : 'Custom',
+      body: `# ${id}\n\n## Colors\n- Primary #111111`,
+    })),
     updateDesignSystemDraft: vi.fn(async () => null),
     deleteDesignSystemDraft: vi.fn(async () => true),
   };
 });
 
-// DesignSystemCard lazy-loads its showcase iframe through an
-// IntersectionObserver; an idle observer keeps thumbnails (and the registry
-// fetch) out of the way so the tests only exercise filtering.
-const originalIntersectionObserver = globalThis.IntersectionObserver;
-
-class IdleIntersectionObserver {
-  observe() {}
-  disconnect() {}
-  unobserve() {}
-}
-
-beforeEach(() => {
-  globalThis.IntersectionObserver =
-    IdleIntersectionObserver as unknown as typeof IntersectionObserver;
-});
+vi.mock('../../src/runtime/exports', () => exportMocks);
 
 afterEach(() => {
   cleanup();
+  exportMocks.downloadDesignSystemArchive.mockReset();
+  exportMocks.downloadDesignSystemArchive.mockResolvedValue(true);
+  exportMocks.downloadProjectArchive.mockReset();
+  exportMocks.downloadProjectArchive.mockResolvedValue(false);
   vi.restoreAllMocks();
-  globalThis.IntersectionObserver = originalIntersectionObserver;
 });
 
 const systems: DesignSystemSummary[] = [
@@ -64,28 +65,125 @@ const systems: DesignSystemSummary[] = [
   },
 ];
 
+// The active scope's first row auto-selects into the detail pane, so a title
+// can appear twice (row + detail). Scope row lookups to the sidebar list.
+function list() {
+  return within(screen.getByTestId('design-systems-list'));
+}
+
+function openOfficialPresets() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Official presets' }));
+}
+
 describe('DesignSystemsTab', () => {
-  it('surfaces user-created design systems in the gallery', () => {
-    render(
+  it('renders structured list and preview skeletons while design systems load', () => {
+    const { container } = render(
       <DesignSystemsTab
-        systems={systems}
-        selectedId="user:acme"
+        loading
+        systems={[]}
+        selectedId={null}
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={() => {}}
         onOpenSystem={() => {}}
       />,
     );
 
-    expect(screen.getByText('Create')).toBeTruthy();
-    expect(screen.getByText('Acme Design System')).toBeTruthy();
-    expect(screen.queryByText('Linear')).toBeNull();
-
-    openOfficialPresets();
-    expect(screen.getByText('Linear')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-sidebar-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-preview-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-loading-row-0')).toBeTruthy();
+    expect(screen.getByText('Loading design systems…')).toBeTruthy();
+    expect(container.querySelector('.loading-spinner')).toBeNull();
   });
 
-  it('routes create and open actions to the dedicated design-system flow', () => {
+  it('keeps the summary-derived kit visible while the selected system detail resolves', async () => {
+    let resolveDetail!: (value: Awaited<ReturnType<typeof fetchDesignSystem>>) => void;
+    vi.mocked(fetchDesignSystem).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDetail = resolve;
+      }),
+    );
+    const { container } = render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId('design-kit-view-user:acme')).toBeTruthy();
+    expect(screen.queryByTestId('design-system-detail-loading-user:acme')).toBeNull();
+    expect(container.querySelector('.loading-spinner')).toBeNull();
+
+    resolveDetail({
+      id: 'user:acme',
+      title: 'Acme Design System',
+      summary: 'Internal product system.',
+      category: 'Custom',
+      body: '# Acme\n\n## Colors\n- Primary #111111',
+    });
+    await screen.findByTestId('design-kit-view-user:acme');
+  });
+
+  it('uses design-system scopes directly instead of a design-system/template switcher', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole('tab', { name: 'Design system' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Template' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Your systems' }).textContent).toContain('1');
+    expect(screen.getByRole('tab', { name: 'Official presets' }).textContent).toContain('1');
+    expect(screen.getByRole('tab', { name: 'Enterprise' }).textContent).toContain('Coming soon');
+  });
+
+  it('separates user-created design systems from the official preset library', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    // "Your systems" is the default scope: Acme shows, Linear (a preset) does not.
+    expect(screen.getByTestId('design-systems-create').textContent).toContain('Create');
+    expect(screen.getByTestId('design-system-card-user:acme')).toBeTruthy();
+    expect(screen.queryByTestId('design-system-card-linear')).toBeNull();
+
+    openOfficialPresets();
+    expect(screen.getByTestId('design-system-card-linear')).toBeTruthy();
+    expect(list().queryByText('Acme Design System')).toBeNull();
+  });
+
+  it('shows the user system scenario (summary) as the row subtitle, not a generic placeholder', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    // The user row's subtitle now reads the scenario (summary) instead of the
+    // repeated "Design system" placeholder it used to show.
+    const row = within(screen.getByTestId('design-system-card-user:acme'));
+    expect(row.getByText('Internal product system.')).toBeTruthy();
+    expect(row.queryByText('Design system')).toBeNull();
+  });
+
+  it('routes create and edit actions to the dedicated design-system flow', async () => {
     const onCreate = vi.fn();
     const onOpenSystem = vi.fn();
     render(
@@ -93,40 +191,120 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId={null}
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={onCreate}
         onOpenSystem={onOpenSystem}
       />,
     );
 
-    fireEvent.click(screen.getByText('Create'));
+    fireEvent.click(screen.getByTestId('design-systems-create'));
     expect(onCreate).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByText('Edit'));
+    // Acme is the only user system, so it auto-selects into the detail pane,
+    // exposing the agent edit action that routes back into the authoring flow.
+    fireEvent.click(await screen.findByRole('button', { name: /Edit with agent/i }));
     expect(onOpenSystem).toHaveBeenCalledWith('user:acme');
   });
 
-  it('omits the built-in library Open button while keeping preview clicks', () => {
+  it('keeps built-in library systems read-only with the redundant cover removed', async () => {
     const onOpenSystem = vi.fn();
-    const onPreview = vi.fn();
     render(
       <DesignSystemsTab
         systems={systems}
         selectedId={null}
         onSelect={() => {}}
-        onPreview={onPreview}
         onCreate={() => {}}
         onOpenSystem={onOpenSystem}
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
+    openOfficialPresets();
+    // Linear auto-selects into the read-only detail pane.
+    await screen.findByTestId('design-kit-view-linear');
+    // A built-in preset is browse-only: no agent edit affordance, and the
+    // redundant top showcase cover (with its preview button) has been removed.
+    expect(screen.queryByRole('button', { name: /Edit with agent/i })).toBeNull();
+    expect(screen.queryByTestId('design-kit-cover-preview')).toBeNull();
+    expect(onOpenSystem).not.toHaveBeenCalled();
+  });
+
+  it('sets a system as the global default through the detail pane', async () => {
+    const onSelect = vi.fn();
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={onSelect}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
 
     openOfficialPresets();
-    fireEvent.click(screen.getByTestId('design-system-preview-linear'));
+    // "Make default" now lives in the detail's ⋯ overflow menu.
+    fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Default for new chats' }));
+    expect(onSelect).toHaveBeenCalledWith('linear');
+  });
 
-    expect(onPreview).toHaveBeenCalledWith('linear');
-    expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+  it('shows loading and result feedback when publishing a user system', async () => {
+    let resolveUpdate!: (value: Awaited<ReturnType<typeof updateDesignSystemDraft>>) => void;
+    vi.mocked(updateDesignSystemDraft).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveUpdate = resolve;
+      }),
+    );
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Draft' });
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('Loading…')).toBeTruthy();
+
+    resolveUpdate({
+      id: 'user:acme',
+      title: 'Acme Design System',
+      summary: 'Internal product system.',
+      category: 'Custom',
+      status: 'published',
+      body: '# Acme',
+    });
+
+    await waitFor(() => expect(screen.getByText('Done')).toBeTruthy());
+  });
+
+  it('shows loading and result feedback for detail overflow downloads', async () => {
+    let resolveDownload!: (value: boolean) => void;
+    exportMocks.downloadDesignSystemArchive.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Download design system (.zip + SKILLS.md)' }));
+
+    expect(screen.getByText('Download design system (.zip + SKILLS.md)')).toBeTruthy();
+    resolveDownload(true);
+
+    await waitFor(() => expect(screen.getByText('Done')).toBeTruthy());
   });
 });
 
@@ -162,13 +340,8 @@ function renderTab(items: DesignSystemSummary[] = librarySystems) {
       systems={items}
       selectedId={null}
       onSelect={vi.fn()}
-      onPreview={vi.fn()}
     />,
   );
-}
-
-function openOfficialPresets() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Official presets' }));
 }
 
 // The surface pill renders its label and a `.filter-pill-count` span; read
@@ -176,8 +349,9 @@ function openOfficialPresets() {
 function surfacePillCount(label: string): string | null {
   for (const pill of screen.getAllByRole('tab')) {
     const countEl = pill.querySelector('.filter-pill-count');
-    const labelText = (pill.textContent ?? '').replace(countEl?.textContent ?? '', '');
-    if (labelText === label) return countEl?.textContent ?? null;
+    if (!countEl) continue;
+    const labelText = (pill.textContent ?? '').replace(countEl.textContent ?? '', '');
+    if (labelText === label) return countEl.textContent ?? null;
   }
   return null;
 }
@@ -222,10 +396,10 @@ describe('DesignSystemsTab surface filtering', () => {
     expect(
       (screen.getByTestId('design-systems-category-select') as HTMLSelectElement).value,
     ).toBe('Retro');
-    expect(screen.getByText('Retro Web One')).toBeTruthy();
-    expect(screen.getByText('Retro Web Two')).toBeTruthy();
+    expect(list().getByText('Retro Web One')).toBeTruthy();
+    expect(list().getByText('Retro Web Two')).toBeTruthy();
     // A web system from a different category must not leak back in.
-    expect(screen.queryByText('Social Web One')).toBeNull();
+    expect(list().queryByText('Social Web One')).toBeNull();
   });
 
   it('hides a surface chip that has no systems in the selected style category', () => {
@@ -252,7 +426,7 @@ describe('DesignSystemsTab surface filtering', () => {
     // PR #2141 review (Looper): the scoped-count hide rule must never remove
     // the chip the user is currently on. Select Image, then search for text
     // only web systems match — the Image chip must stay, and stay selected,
-    // so the active filter is visible instead of an empty grid with no chip.
+    // so the active filter is visible instead of an empty list with no chip.
     renderTab();
     openOfficialPresets();
     fireEvent.click(screen.getByRole('tab', { name: /^Image/ }));

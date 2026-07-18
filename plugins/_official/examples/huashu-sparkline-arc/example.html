@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write a Revenue-Driver Story like a Board-Level Finance Partner - Data, KPI &amp; finance</title>
+<style>
+  /* ============================================================
+     Narrative Sparkline · narrative waveform (Duarte-style)
+     Locked design tokens — re-theme by changing VALUES only.
+     One accent (#FF6B2C). Grey ghost line for contrast. SVG paths.
+     Generated from huashu-design references/design-styles.md
+     (Neutral school · Sparkline narrative waveform · 91% fidelity) by Huashu (alchaincyf).
+     ============================================================ */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --paper:      #FFFFFF;   /* light page background            */
+    --night:      #0E0E0C;   /* dark pages (solo-line / closing) */
+    --ink:        #1A1814;   /* primary text on light            */
+    --night-ink:  #F5F3EE;   /* primary text on dark             */
+    --accent:     #FF6B2C;   /* THE brand orange — only accent   */
+    --accent-dim: rgba(255,107,44,.14); /* halo / soft fills     */
+    --ghost:      #C9C7C2;   /* greyed comparison waveform       */
+    --grid:       #ECEAE6;   /* hairline rules                   */
+    --muted:      #9A958C;   /* secondary labels                 */
+    --muted-2:    #5F5A52;   /* body copy on light               */
+    --night-line: #26241F;   /* hairlines on dark pages          */
+    --night-mut:  #8A857C;   /* secondary text on dark           */
+    --sans: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --mono: 'Geist Mono', 'SFMono-Regular', 'Menlo', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: #060605;
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  /* ---- fixed 1920×1080 stage, letterboxed by fit() ---- */
+  #stage {
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 1920px; height: 1080px;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    background: var(--paper);
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .slide.active { display: block; }
+  .slide.dark { background: var(--night); color: var(--night-ink); }
+
+  /* ---- chrome: mono hairline strips top / bottom ---- */
+  .chrome-top, .chrome-bottom {
+    position: absolute;
+    left: 0; right: 0;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 80px;
+    z-index: 10;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .chrome-top    { top: 0;    border-bottom: 1px solid var(--grid); }
+  .chrome-bottom { bottom: 0; border-top: 1px solid var(--grid); }
+  .slide.dark .chrome-top    { border-bottom-color: var(--night-line); color: var(--night-mut); }
+  .slide.dark .chrome-bottom { border-top-color: var(--night-line);    color: var(--night-mut); }
+  .chrome-top .org { color: var(--ink); font-weight: 600; }
+  .slide.dark .chrome-top .org { color: var(--night-ink); }
+  .orange { color: var(--accent); }
+
+  /* ---- sparkline svg, full-bleed band ---- */
+  .spark { position: absolute; left: 0; width: 1920px; overflow: visible; }
+  .spark path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .arc   { stroke: var(--accent); stroke-width: 5; }
+  .arc-thin { stroke: var(--accent); stroke-width: 3.5; }
+  .ghost-line { stroke: var(--ghost); stroke-width: 3; }
+  .ghost-dash { stroke: var(--ghost); stroke-width: 2.5; stroke-dasharray: 2 10; }
+
+  /* progressive reveal: pathLength=1 + stroke-dashoffset draw     */
+  .draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .slide.active .draw { animation: spark-draw 1.8s cubic-bezier(.45,0,.2,1) forwards; }
+  .slide.active .d1 { animation-delay: .15s; }
+  .slide.active .d2 { animation-delay: .65s; animation-duration: 1.4s; }
+  .slide.active .d3 { animation-delay: 1.35s; animation-duration: 1.4s; }
+  @keyframes spark-draw { to { stroke-dashoffset: 0; } }
+
+  /* annotation point: orange dot + halo + mono label              */
+  .pt circle.halo { fill: var(--accent-dim); }
+  .pt circle.dot  { fill: var(--accent); }
+  .pt circle.ring { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .pt-ghost circle.dot { fill: var(--ghost); }
+  .pt { opacity: 0; }
+  .slide.active .pt { animation: pt-in .5s ease-out forwards; }
+  .slide.active .p1 { animation-delay: .9s; }
+  .slide.active .p2 { animation-delay: 1.2s; }
+  .slide.active .p3 { animation-delay: 1.5s; }
+  .slide.active .p4 { animation-delay: 1.8s; }
+  .slide.active .p5 { animation-delay: 2.1s; }
+  @keyframes pt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* reduced-motion: show every line fully drawn, every annotation visible */
+  @media (prefers-reduced-motion: reduce) {
+    .draw, .slide.active .draw { animation: none; stroke-dashoffset: 0; }
+    .pt, .slide.active .pt { animation: none; opacity: 1; }
+  }
+
+  .pt text { font-family: var(--mono); }
+  .pt .lab { font-size: 12px; letter-spacing: 2px; fill: var(--muted); text-transform: uppercase; }
+  .pt .val { font-size: 20px; font-weight: 600; fill: var(--ink); }
+  .pt .val-orange { fill: var(--accent); }
+  .slide.dark .pt .lab { fill: var(--night-mut); }
+  .slide.dark .pt .val { fill: var(--night-ink); }
+
+  /* ---- typography ---- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 4px; text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 28px;
+  }
+  h1.hero {
+    font-size: 108px; font-weight: 900;
+    letter-spacing: -4px; line-height: 1.08;
+  }
+  h2.title {
+    font-size: 64px; font-weight: 800;
+    letter-spacing: -2px; line-height: 1.18;
+  }
+  .body {
+    font-size: 19px; line-height: 1.8;
+    color: var(--muted-2);
+    max-width: 620px;
+  }
+  .body strong { color: var(--ink); font-weight: 700; }
+  .slide.dark .body { color: var(--night-mut); }
+  .slide.dark .body strong { color: var(--night-ink); }
+  .mono-cap {
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted);
+  }
+
+  .giant {
+    font-family: var(--mono);
+    font-size: 220px; font-weight: 600;
+    letter-spacing: -10px; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .giant .orange { color: var(--accent); }
+
+  /* ---- stat strip ---- */
+  .stat-strip {
+    display: flex; gap: 72px;
+    border-top: 1px solid var(--grid);
+    padding-top: 32px;
+  }
+  .slide.dark .stat-strip { border-top-color: var(--night-line); }
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 44px; font-weight: 600;
+    letter-spacing: -1px; font-variant-numeric: tabular-nums;
+  }
+  .stat-cap { margin-top: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .slide.dark .stat-cap { color: var(--night-mut); }
+
+  /* ---- contents rows hung on the waveform ---- */
+  .toc-label { font-family: var(--mono); font-size: 13px; letter-spacing: 2px; fill: var(--muted); }
+  .toc-title { font-size: 26px; font-weight: 700; fill: var(--ink); letter-spacing: 0; font-family: var(--sans); }
+
+  /* ---- contrast page split ---- */
+  .half {
+    position: absolute; left: 0; right: 0; height: 460px;
+    padding: 0 80px;
+  }
+  .half .tag {
+    position: absolute; top: 36px; left: 80px;
+    font-family: var(--mono); font-size: 12px;
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+  .half .tag-num { position: absolute; top: 36px; right: 80px; font-family: var(--mono); font-size: 12px; letter-spacing: 2px; color: var(--muted); }
+
+  /* ---- quote ---- */
+  .quote-mark { width: 64px; height: 48px; margin-bottom: 40px; }
+  blockquote {
+    font-size: 56px; font-weight: 800;
+    letter-spacing: -1.5px; line-height: 1.4;
+    max-width: 1280px;
+  }
+  blockquote .orange { color: var(--accent); }
+  cite {
+    display: block; margin-top: 44px;
+    font-style: normal; font-family: var(--mono);
+    font-size: 14px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted);
+  }
+
+  /* ---- runtime chrome ---- */
+  #counter {
+    position: fixed;
+    right: 28px; bottom: 22px;
+    z-index: 99;
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: 2px;
+    color: #B8B4AC;
+    background: rgba(14,14,12,.78);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px;
+    padding: 8px 16px;
+    pointer-events: none;
+  }
+  #counter b { color: var(--accent); font-weight: 600; }
+  #keyhint {
+    position: fixed;
+    left: 28px; bottom: 22px;
+    z-index: 99;
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 1.5px;
+    color: #B8B4AC;
+    background: rgba(14,14,12,.78);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px;
+    padding: 8px 16px;
+    pointer-events: none;
+  }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- ======================= 01 · Cover ======================= -->
+  <section class="slide active" data-screen-label="01 Cover">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Board Pre-Read</span>
+      <span class="orange">DATA, KPI &amp; FINANCE · Q3 FY26</span>
+    </div>
+    <div style="position:absolute; top:200px; left:80px; right:80px;">
+      <div class="kicker">Revenue-Driver Story / Prepared for the board &amp; finance leadership</div>
+      <h1 class="hero">Ecosystem-attach<span class="orange">,</span><br>not seats, moves ARR<span class="orange">.</span></h1>
+      <p class="body" style="margin-top:40px;">A plugin-attached account expands 2.9x faster than a standalone seat. <strong>$22.6M ARR · 131% NRR · 84% gross margin · 4.3-month CAC payback</strong></p>
+    </div>
+    <svg class="spark" style="top:640px; height:340px;" viewBox="0 0 1920 340" preserveAspectRatio="none">
+      <path class="ghost-dash" d="M0,250 L1920,250"/>
+      <path class="arc draw d1" pathLength="1" d="M-20,268 C180,272 320,262 480,266 C660,270 760,180 920,196 C1080,212 1180,256 1340,216 C1500,176 1620,96 1780,64 C1840,52 1890,40 1930,30"/>
+    </svg>
+    <svg class="spark" style="top:640px; height:340px;" viewBox="0 0 1920 340">
+      <g class="pt p1"><circle class="halo" cx="480" cy="266" r="16"/><circle class="dot" cx="480" cy="266" r="7"/><text class="lab" x="480" y="312" text-anchor="middle">FY25 · $8.1M ARR BASE</text></g>
+      <g class="pt p2"><circle class="halo" cx="920" cy="196" r="16"/><circle class="dot" cx="920" cy="196" r="7"/><text class="lab" x="920" y="156" text-anchor="middle">ATTACH RATE INFLECTS</text></g>
+      <g class="pt p3"><circle class="halo" cx="1780" cy="64" r="16"/><circle class="dot" cx="1780" cy="64" r="7"/><text class="lab" x="1780" y="110" text-anchor="middle">FY26 RUN-RATE · $22.6M</text></g>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · FINANCE &amp; STRATEGY</span>
+      <span class="orange">P.01</span>
+    </div>
+  </section>
+
+  <!-- ======================= 02 · Contents ======================= -->
+  <section class="slide" data-screen-label="02 Contents">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Contents</span>
+      <span class="orange">CONTENTS</span>
+    </div>
+    <div style="position:absolute; top:150px; left:80px;">
+      <div class="kicker">The five annotated points of this narrative</div>
+      <h2 class="title">Five decisions, hung on the ARR curve<span class="orange">.</span></h2>
+    </div>
+    <svg class="spark" style="top:430px; height:480px;" viewBox="0 0 1920 480" preserveAspectRatio="none">
+      <path class="arc draw d1" pathLength="1" d="M-20,330 C160,338 280,320 420,326 C580,332 660,250 800,262 C940,274 1020,330 1160,296 C1300,262 1380,170 1520,150 C1660,130 1760,100 1930,76"/>
+    </svg>
+    <svg class="spark" style="top:430px; height:480px;" viewBox="0 0 1920 480">
+      <g class="pt p1">
+        <circle class="halo" cx="260" cy="330" r="15"/><circle class="dot" cx="260" cy="330" r="7"/>
+        <text class="toc-label" x="260" y="380" text-anchor="middle">01</text>
+        <text class="toc-title" x="260" y="416" text-anchor="middle">The headline answer</text>
+      </g>
+      <g class="pt p2">
+        <circle class="halo" cx="620" cy="298" r="15"/><circle class="dot" cx="620" cy="298" r="7"/>
+        <text class="toc-label" x="620" y="238" text-anchor="middle">02</text>
+        <text class="toc-title" x="620" y="274" text-anchor="middle">Metric proof</text>
+      </g>
+      <g class="pt p3">
+        <circle class="halo" cx="980" cy="296" r="15"/><circle class="dot" cx="980" cy="296" r="7"/>
+        <text class="toc-label" x="980" y="346" text-anchor="middle">03</text>
+        <text class="toc-title" x="980" y="382" text-anchor="middle">Driver tree</text>
+      </g>
+      <g class="pt p4">
+        <circle class="halo" cx="1340" cy="194" r="15"/><circle class="dot" cx="1340" cy="194" r="7"/>
+        <text class="toc-label" x="1340" y="134" text-anchor="middle">04</text>
+        <text class="toc-title" x="1340" y="170" text-anchor="middle">FY27 forecast</text>
+      </g>
+      <g class="pt p5">
+        <circle class="halo" cx="1700" cy="108" r="15"/><circle class="dot" cx="1700" cy="108" r="7"/>
+        <text class="toc-label" x="1700" y="158" text-anchor="middle">05</text>
+        <text class="toc-title" x="1700" y="194" text-anchor="middle">Recommended move</text>
+      </g>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · FINANCE &amp; STRATEGY</span>
+      <span class="orange">P.02</span>
+    </div>
+  </section>
+
+  <!-- ======================= 03 · Headline answer ======================= -->
+  <section class="slide" data-screen-label="03 Status Quo">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 1 · The Answer</span>
+      <span class="orange">HEADLINE ANSWER</span>
+    </div>
+    <div style="position:absolute; top:150px; left:80px; width:760px;">
+      <div class="kicker">Decision / Where should the board point next quarter's spend</div>
+      <h2 class="title">Fund ecosystem attach,<br>not paid-acquisition seats<span class="orange">.</span></h2>
+      <p class="body" style="margin-top:36px;">Every account that installs a plugin or a design system in its first 30 days expands 2.9x faster than one that doesn't. Seat-only accounts flatten by month four; <strong>attach-driven accounts keep compounding</strong>. Paid acquisition buys the seat — the ecosystem buys the expansion.</p>
+    </div>
+    <div style="position:absolute; bottom:120px; left:80px; width:680px;">
+      <div class="stat-strip">
+        <div><div class="stat-num">2.9x</div><div class="stat-cap">Expansion, attach vs. seat-only</div></div>
+        <div><div class="stat-num orange">42%</div><div class="stat-cap">New ARR from attached accounts</div></div>
+        <div><div class="stat-num">$0</div><div class="stat-cap">Inference COGS — BYOK by design</div></div>
+      </div>
+    </div>
+    <svg class="spark" style="top:200px; height:760px; left:760px; width:1160px;" viewBox="0 0 1160 760" preserveAspectRatio="none">
+      <path class="ghost-dash" d="M0,430 C200,420 420,414 620,410 C820,406 1000,398 1160,392"/>
+      <path class="ghost-line draw d1" pathLength="1" d="M0,600 C100,592 170,616 280,608 C390,600 460,636 570,628 C680,620 760,648 870,640 C980,632 1070,652 1160,646"/>
+    </svg>
+    <svg class="spark" style="top:200px; height:760px; left:760px; width:1160px;">
+      <g class="pt p1 pt-ghost"><circle class="dot" cx="280" cy="608" r="6"/><text class="lab" x="280" y="660" text-anchor="middle">Seat-only cohort, month 1-4</text></g>
+      <g class="pt p2 pt-ghost"><circle class="dot" cx="870" cy="640" r="6"/><text class="lab" x="870" y="692" text-anchor="middle">Expansion flattens, no attach</text></g>
+      <g class="pt p3"><text class="lab" x="1080" y="370" text-anchor="end">Attach-cohort trend (dashed)</text></g>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · COHORT DATA · FY26 Q1-Q3</span>
+      <span class="orange">P.03</span>
+    </div>
+  </section>
+
+  <!-- ======================= 04 · Metric proof ======================= -->
+  <section class="slide" data-screen-label="04 Turning Point">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 2 · Metric Proof</span>
+      <span class="orange">METRIC PROOF</span>
+    </div>
+    <div style="position:absolute; top:170px; left:80px;">
+      <div class="kicker">Decision / Is the attach-effect real or noise</div>
+      <div class="giant">131<span class="orange">%</span></div>
+      <div class="mono-cap" style="margin-top:24px; letter-spacing:3px;">Net revenue retention · attached cohort vs. 96% seat-only</div>
+    </div>
+    <div style="position:absolute; top:240px; right:80px; width:560px;">
+      <p class="body">Twelve months of billing data settle it: the two cohorts split the moment a plugin or design system installs, and the gap never closes. <strong>This is the point the finance model was built on</strong> — the one inflection marked in orange.</p>
+    </div>
+    <svg class="spark" style="top:600px; height:400px;" viewBox="0 0 1920 400" preserveAspectRatio="none">
+      <path class="arc draw d1" pathLength="1" d="M-20,140 C160,150 300,196 460,236 C620,276 760,318 920,322 C1080,326 1220,256 1380,196 C1540,136 1700,92 1930,56"/>
+    </svg>
+    <svg class="spark" style="top:600px; height:400px;" viewBox="0 0 1920 400">
+      <g class="pt p2">
+        <circle class="halo" cx="920" cy="322" r="22"/>
+        <circle class="ring" cx="920" cy="322" r="13"/>
+        <circle class="dot" cx="920" cy="322" r="7"/>
+        <text class="lab" x="920" y="372" text-anchor="middle">First plugin install · month 1</text>
+      </g>
+      <g class="pt p4"><text class="val val-orange" x="1690" y="60" text-anchor="middle">$28.9M</text><text class="lab" x="1690" y="92" text-anchor="middle">Trailing 12mo booked expansion</text></g>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · ONE INFLECTION, MARKED EXACTLY ONCE</span>
+      <span class="orange">P.04</span>
+    </div>
+  </section>
+
+  <!-- ======================= 05 · Driver tree contrast ======================= -->
+  <section class="slide" data-screen-label="05 Contrast">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 3 · Driver Tree</span>
+      <span class="orange">TWO LEVERS COMPARED</span>
+    </div>
+    <div class="half" style="top:56px;">
+      <span class="tag" style="color:var(--muted);">LEVER A · PAID ACQUISITION SPEND</span>
+      <span class="tag-num">$1.20 CAC / $1 ARR</span>
+      <svg class="spark" style="top:110px; height:320px;" viewBox="0 0 1920 320" preserveAspectRatio="none">
+        <path class="ghost-line draw d1" pathLength="1" d="M-20,140 C140,132 240,196 400,204 C560,212 660,150 820,172 C980,194 1080,250 1240,238 C1400,226 1500,272 1660,264 C1780,258 1860,276 1930,272"/>
+      </svg>
+      <svg class="spark" style="top:110px; height:320px;" viewBox="0 0 1920 320">
+        <g class="pt p1 pt-ghost"><circle class="dot" cx="1660" cy="264" r="6"/><text class="lab" x="1660" y="244" text-anchor="middle">Payback stalls at 11 months</text></g>
+      </svg>
+    </div>
+    <svg style="position:absolute; top:516px; left:80px; width:1760px; height:1px; overflow:visible;"><line x1="0" y1="0" x2="1760" y2="0" stroke="var(--grid)" stroke-width="1"/></svg>
+    <div class="half" style="top:516px;">
+      <span class="tag" style="color:var(--accent);">LEVER B · ECOSYSTEM ATTACH (PLUGINS + DESIGN SYSTEMS)</span>
+      <span class="tag-num">$0.28 CAC / $1 ARR</span>
+      <svg class="spark" style="top:110px; height:320px;" viewBox="0 0 1920 320" preserveAspectRatio="none">
+        <path class="arc draw d2" pathLength="1" d="M-20,260 C160,254 280,262 440,240 C600,218 700,168 860,150 C1020,132 1140,140 1300,108 C1460,76 1600,62 1930,30"/>
+      </svg>
+      <svg class="spark" style="top:110px; height:320px;" viewBox="0 0 1920 320">
+        <g class="pt p3"><circle class="halo" cx="860" cy="150" r="15"/><circle class="dot" cx="860" cy="150" r="7"/><text class="lab" x="860" y="200" text-anchor="middle">217+ plugins seed the install loop</text></g>
+        <g class="pt p4"><text class="val val-orange" x="1700" y="40" text-anchor="middle">4.3mo</text><text class="lab" x="1700" y="72" text-anchor="middle">CAC payback on this lever</text></g>
+      </svg>
+    </div>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · ONE DOLLAR, TWO RETURNS</span>
+      <span class="orange">P.05</span>
+    </div>
+  </section>
+
+  <!-- ======================= 06 · Forecast ======================= -->
+  <section class="slide dark" data-screen-label="06 Solo Line">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 4 · FY27 Forecast</span>
+      <span class="orange">FORECAST</span>
+    </div>
+    <div style="position:absolute; top:180px; left:80px;">
+      <div class="kicker">Decision / What we are underwriting for FY27</div>
+      <h2 class="title" style="color:var(--night-ink);">The base case, one line<span class="orange">.</span></h2>
+    </div>
+    <div style="position:absolute; top:200px; right:80px; text-align:right;">
+      <div class="giant" style="font-size:160px; letter-spacing:-6px; color:var(--night-ink);">$54<span class="orange">M</span></div>
+      <div class="mono-cap" style="margin-top:16px; color:var(--night-mut);">FY27 ARR, base case · 2.4x on FY26 run-rate</div>
+    </div>
+    <svg class="spark" style="top:560px; height:440px;" viewBox="0 0 1920 440" preserveAspectRatio="none">
+      <path class="arc draw d1" pathLength="1" d="M-20,330 C200,336 340,322 500,326 C700,330 820,300 980,244 C1140,188 1300,160 1460,128 C1640,92 1780,72 1930,52"/>
+    </svg>
+    <svg class="spark" style="top:560px; height:440px;" viewBox="0 0 1920 440">
+      <g class="pt p2">
+        <circle class="halo" cx="980" cy="244" r="20"/>
+        <circle class="dot" cx="980" cy="244" r="7"/>
+        <text class="lab" x="980" y="296" text-anchor="middle">Attach rate holds at 42% of new ARR</text>
+      </g>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · BASE CASE ASSUMES NO NEW LEVER, ONLY THIS ONE HOLDING</span>
+      <span class="orange">P.06</span>
+    </div>
+  </section>
+
+  <!-- ======================= 07 · Driver tree detail ======================= -->
+  <section class="slide" data-screen-label="07 Evidence">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 4 · Four Levers</span>
+      <span class="orange">DRIVER TREE, EXPANDED</span>
+    </div>
+    <div style="position:absolute; top:140px; left:80px;">
+      <div class="kicker">Decision / Which of the four sub-drivers to fund first</div>
+      <h2 class="title" style="font-size:54px;">Fund distribution before headcount<span class="orange">.</span></h2>
+    </div>
+    <svg class="spark" style="top:380px; height:380px;" viewBox="0 0 1920 380" preserveAspectRatio="none">
+      <path class="ghost-dash" d="M0,300 L1920,300"/>
+      <path class="arc-thin draw d1" pathLength="1" d="M-20,302 C140,300 260,288 420,272 C580,256 700,232 860,212 C1020,192 1160,168 1320,138 C1480,108 1640,84 1930,52"/>
+    </svg>
+    <svg class="spark" style="top:380px; height:380px;" viewBox="0 0 1920 380">
+      <g class="pt p1"><circle class="halo" cx="350" cy="280" r="14"/><circle class="dot" cx="350" cy="280" r="6"/><text class="val" x="350" y="240" text-anchor="middle">21</text><text class="lab" x="350" y="324" text-anchor="middle">Agent adapters · Zero-config reach</text></g>
+      <g class="pt p2"><circle class="halo" cx="790" cy="221" r="14"/><circle class="dot" cx="790" cy="221" r="6"/><text class="val" x="790" y="181" text-anchor="middle">129</text><text class="lab" x="790" y="265" text-anchor="middle">Design systems in the library</text></g>
+      <g class="pt p3"><circle class="halo" cx="1230" cy="155" r="14"/><circle class="dot" cx="1230" cy="155" r="6"/><text class="val" x="1230" y="115" text-anchor="middle">217+</text><text class="lab" x="1230" y="199" text-anchor="middle">Plugins · The attach surface</text></g>
+      <g class="pt p4"><circle class="halo" cx="1680" cy="78" r="14"/><circle class="dot" cx="1680" cy="78" r="6"/><text class="val val-orange" x="1680" y="38" text-anchor="middle">300+</text><text class="lab" x="1680" y="122" text-anchor="middle">Contributors compounding supply</text></g>
+    </svg>
+    <div style="position:absolute; bottom:110px; left:80px; right:80px;">
+      <div class="stat-strip" style="gap:0; justify-content:space-between;">
+        <div style="width:30%;">
+          <div class="mono-cap">Gross margin · % (BYOK, no inference COGS)</div>
+          <svg width="100%" height="56" viewBox="0 0 420 56" preserveAspectRatio="none" style="margin-top:12px; overflow:visible;"><path fill="none" stroke="var(--ghost)" stroke-width="2.5" d="M0,14 C60,16 120,22 180,28 C240,34 300,42 420,48"/><circle cx="420" cy="48" r="4" fill="var(--accent)"/></svg>
+          <div class="stat-num" style="font-size:30px; margin-top:8px;">71 → <span class="orange">84%</span></div>
+        </div>
+        <div style="width:30%;">
+          <div class="mono-cap">GitHub stars · top-of-funnel proxy</div>
+          <svg width="100%" height="56" viewBox="0 0 420 56" preserveAspectRatio="none" style="margin-top:12px; overflow:visible;"><path fill="none" stroke="var(--ghost)" stroke-width="2.5" d="M0,46 C70,42 140,36 210,28 C280,20 340,14 420,8"/><circle cx="420" cy="8" r="4" fill="var(--accent)"/></svg>
+          <div class="stat-num" style="font-size:30px; margin-top:8px;">76K<span class="orange">+</span></div>
+        </div>
+        <div style="width:30%;">
+          <div class="mono-cap">Plugins shipped · attach surface</div>
+          <svg width="100%" height="56" viewBox="0 0 420 56" preserveAspectRatio="none" style="margin-top:12px; overflow:visible;"><path fill="none" stroke="var(--ghost)" stroke-width="2.5" d="M0,46 C70,44 140,38 210,30 C280,22 350,14 420,8"/><circle cx="420" cy="8" r="4" fill="var(--accent)"/></svg>
+          <div class="stat-num" style="font-size:30px; margin-top:8px;">217<span class="orange">+</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · FY26 Q3 ACTUALS · CURVES ILLUSTRATIVE</span>
+      <span class="orange">P.07</span>
+    </div>
+  </section>
+
+  <!-- ======================= 08 · Recommended move ======================= -->
+  <section class="slide" data-screen-label="08 Workflow">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Chapter 5 · The Ask</span>
+      <span class="orange">RECOMMENDED MOVE</span>
+    </div>
+    <div style="position:absolute; top:140px; left:80px;">
+      <div class="kicker">Decision / Three moves for the next two quarters</div>
+      <h2 class="title" style="font-size:54px;">Reallocate $2.4M toward the attach engine<span class="orange">.</span></h2>
+    </div>
+    <svg class="spark" style="top:420px; height:420px;" viewBox="0 0 1920 420" preserveAspectRatio="none">
+      <path class="arc-thin draw d1" pathLength="1" d="M-20,330 C140,326 280,310 560,290"/>
+      <path class="arc-thin draw d2" pathLength="1" d="M560,290 C760,276 940,220 1180,178"/>
+      <path class="arc draw d3" pathLength="1" d="M1180,178 C1400,140 1620,90 1930,28"/>
+    </svg>
+    <svg class="spark" style="top:420px; height:420px;" viewBox="0 0 1920 420">
+      <g class="pt p2"><circle class="halo" cx="560" cy="290" r="14"/><circle class="dot" cx="560" cy="290" r="6"/></g>
+      <g class="pt p3"><circle class="halo" cx="1180" cy="178" r="14"/><circle class="dot" cx="1180" cy="178" r="6"/></g>
+      <g class="pt p4"><circle class="ring" cx="1828" cy="48" r="12"/><circle class="dot" cx="1828" cy="48" r="6"/></g>
+    </svg>
+    <div style="position:absolute; bottom:120px; left:80px; right:80px; display:flex; gap:48px;">
+      <div style="flex:1; border-top:1px solid var(--grid); padding-top:24px;">
+        <div class="mono-cap orange">MOVE 01 · CUT PAID SPEND 20%</div>
+        <div style="font-size:24px; font-weight:700; margin-top:12px;">Redirect $900K from ads</div>
+        <p class="body" style="font-size:16px; margin-top:10px;">Paid acquisition sits at 11-month payback; <strong>every dollar moved to attach clears in 4.3 months</strong>.</p>
+      </div>
+      <div style="flex:1; border-top:1px solid var(--grid); padding-top:24px;">
+        <div class="mono-cap orange">MOVE 02 · DOUBLE THE PLUGIN TEAM</div>
+        <div style="font-size:24px; font-weight:700; margin-top:12px;">6 to 12 engineers, this half</div>
+        <p class="body" style="font-size:16px; margin-top:10px;">217+ plugins already drive 42% of new ARR; <strong>the constraint is supply, not demand</strong>.</p>
+      </div>
+      <div style="flex:1; border-top:1px solid var(--grid); padding-top:24px;">
+        <div class="mono-cap orange">MOVE 03 · LAUNCH ENTERPRISE SUPPORT</div>
+        <div style="font-size:24px; font-weight:700; margin-top:12px;">Monetize the attach cohort directly</div>
+        <p class="body" style="font-size:16px; margin-top:10px;">A paid support tier on top of the free core; <strong>modeled at $6.8M incremental ARR by Q4</strong>.</p>
+      </div>
+    </div>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · EVERY DOLLAR FOLLOWS THE FASTER PAYBACK</span>
+      <span class="orange">P.08</span>
+    </div>
+  </section>
+
+  <!-- ======================= 09 · Quote ======================= -->
+  <section class="slide" data-screen-label="09 Quote">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> Voices from the Room</span>
+      <span class="orange">VALIDATION</span>
+    </div>
+    <div style="position:absolute; top:280px; left:80px;">
+      <svg class="quote-mark" viewBox="0 0 64 48"><path fill="var(--accent)" d="M0,48 L0,24 C0,10 9,1 26,0 L26,10 C17,12 13,17 13,24 L26,24 L26,48 Z M38,48 L38,24 C38,10 47,1 64,0 L64,10 C55,12 51,17 51,24 L64,24 L64,48 Z"/></svg>
+      <blockquote>We stopped asking how many seats we sold and started asking <span class="orange">how many accounts touched a plugin in week one</span> — that single question now runs the growth plan.</blockquote>
+      <cite>— Finance Partner, quarterly business review</cite>
+    </div>
+    <svg class="spark" style="top:880px; height:120px;" viewBox="0 0 1920 120" preserveAspectRatio="none">
+      <path class="ghost-line draw d1" pathLength="1" d="M-20,90 C200,94 320,60 540,66 C760,72 880,40 1100,46 C1320,52 1440,24 1660,28 C1780,30 1860,20 1930,16"/>
+    </svg>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · FINANCE &amp; STRATEGY</span>
+      <span class="orange">P.09</span>
+    </div>
+  </section>
+
+  <!-- ======================= 10 · Closing ======================= -->
+  <section class="slide dark" data-screen-label="10 Closing">
+    <div class="chrome-top">
+      <span class="org">Open Design<span class="orange"> /</span> The Ask</span>
+      <span class="orange">BOARD APPROVAL</span>
+    </div>
+    <svg class="spark" style="top:0; height:1080px;" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+      <path class="arc draw d1" pathLength="1" style="stroke-width:6;" d="M-20,900 C240,906 420,860 640,824 C860,788 980,690 1180,600 C1380,510 1520,380 1680,240 C1780,152 1850,60 1910,-40"/>
+    </svg>
+    <svg class="spark" style="top:0; height:1080px;" viewBox="0 0 1920 1080">
+      <g class="pt p3"><circle class="halo" cx="1180" cy="600" r="18"/><circle class="dot" cx="1180" cy="600" r="7"/><text class="lab" x="1180" y="652" text-anchor="middle">We are here · $22.6M ARR</text></g>
+    </svg>
+    <div style="position:absolute; top:300px; left:80px;">
+      <div class="kicker">Approve · $2.4M reallocation · FY27 base case $54M ARR</div>
+      <h1 class="hero" style="color:var(--night-ink); font-size:96px;">Fund the lever<br>that already works<span class="orange">.</span></h1>
+      <p class="body" style="margin-top:36px; color:var(--night-mut);">Ask: approve the reallocation, the plugin-team headcount, and the enterprise support launch this session — <strong style="color:var(--night-ink);">next review at Q1 FY27</strong>.</p>
+    </div>
+    <div class="chrome-bottom">
+      <span>OPEN DESIGN · REVENUE-DRIVER BOARD PRE-READ · FY26</span>
+      <span class="orange">FIN.</span>
+    </div>
+  </section>
+
+</div>
+
+<div id="counter">01 <b>/</b> 10</div>
+<div id="keyhint">←/→ · SPACE · #/N</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var counter = document.getElementById('counter');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var current = 0;
+
+  // fit(): scale the fixed 1920×1080 canvas into the viewport (letterbox)
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // go(i): activate slide i, sync counter + hash (#/N, 1-indexed)
+  function go(i, skipHash) {
+    current = Math.max(0, Math.min(total - 1, i));
+    for (var k = 0; k < total; k++) {
+      slides[k].classList.toggle('active', k === current);
+    }
+    counter.innerHTML = pad(current + 1) + ' <b>/</b> ' + pad(total);
+    if (!skipHash) {
+      var target = '#/' + (current + 1);
+      if (location.hash !== target) {
+        try { history.replaceState(null, '', target); }
+        catch (err) { location.hash = target; }
+      }
+    }
+  }
+
+  function fromHash() {
+    var m = location.hash.match(/^#\/(\d+)$/);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n >= 1 && n <= total) { go(n - 1, true); return; }
+    }
+    go(0, true);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        go(current + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        go(current - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(total - 1);
+        break;
+    }
+  });
+
+  // click: left third of the window goes back, the rest goes forward
+  stage.addEventListener('click', function (e) {
+    if (e.clientX < window.innerWidth / 3) { go(current - 1); }
+    else { go(current + 1); }
+  });
+
+  window.addEventListener('hashchange', fromHash);
+  window.addEventListener('resize', fit);
+
+  fit();
+  fromHash();
+})();
+</script>
+
+</body>
+</html>

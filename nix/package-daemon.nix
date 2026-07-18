@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  pnpmDepsSrc ? src,
   workspacePaths,
   makeWrapper,
   python3,
@@ -69,7 +70,8 @@ in
     # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
     # `pnpm_10` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
-      inherit (finalAttrs) pname version src;
+      inherit (finalAttrs) pname version;
+      src = pnpmDepsSrc;
       hash = pnpmDepsHash;
       pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
@@ -156,6 +158,26 @@ in
       # just apps/daemon.
       cp -r . $out/lib/open-design/
 
+      # Runtime package exports point at dist/. Keep workspace package
+      # manifests for Node resolution and prune source/test/build config files
+      # before Nix fixup scans the output tree.
+      for target in ${lib.escapeShellArgs workspacePaths}; do
+        if [ "$target" = "apps/daemon" ]; then
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name bin \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        else
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        fi
+      done
+
       # Root devDependencies expose non-daemon workspaces via pnpm symlinks,
       # but the daemon derivation intentionally filters those sources out
       # when they are not needed at runtime. Prune the dangling symlinks from
@@ -165,9 +187,11 @@ in
         $out/lib/open-design/node_modules/@open-design/components \
         $out/lib/open-design/node_modules/@open-design/tools-dev \
         $out/lib/open-design/node_modules/@open-design/tools-pack \
+        $out/lib/open-design/node_modules/@open-design/tools-release \
         $out/lib/open-design/node_modules/@open-design/tools-serve \
         $out/lib/open-design/node_modules/.bin/tools-dev \
         $out/lib/open-design/node_modules/.bin/tools-pack \
+        $out/lib/open-design/node_modules/.bin/tools-release \
         $out/lib/open-design/node_modules/.bin/tools-serve
 
       chmod +x $out/lib/open-design/apps/daemon/dist/cli.js

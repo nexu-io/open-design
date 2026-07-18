@@ -749,6 +749,26 @@ describe('deploy plan and analyzer', () => {
     expect(warnings.map((w: any) => w.code)).not.toContain('no-doctype');
   });
 
+  it('checks the doctype prolog without catastrophic backtracking on a comment-only entry', () => {
+    // Regression: the prolog check's comment-run group used a lazy `[\s\S]*?`
+    // body inside `(?:...)*`, so a comment-only entry with no doctype forced
+    // 2^n backtracking — a ~250-byte HTML could hang the single-threaded
+    // daemon for minutes (event-loop DoS on POST /deploy/preflight). The
+    // tempered comment body makes each comment match deterministically.
+    const html = '<!---->'.repeat(28) + '<html><body></body></html>';
+    const start = performance.now();
+    const { warnings } = analyzeDeployPlan({ entryPath: 'index.html', html, files: [] });
+    const elapsedMs = performance.now() - start;
+    // Correctness is preserved (no doctype -> still flagged) and the check is
+    // linear: the tempered regex handles this in well under 1ms, whereas the
+    // old lazy-body regex grew ~2x per added comment (seconds here, minutes
+    // with a few more). The 500ms budget sits far above the fixed path (~100x
+    // headroom, no false failures) yet well below the vulnerable time, so any
+    // regression blows it.
+    expect(warnings.map((w) => w.code)).toContain('no-doctype');
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
   it('flags external scripts and stylesheets', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',
@@ -2225,6 +2245,160 @@ describe('cloudflare pages deploys', () => {
         },
       },
     });
+  });
+
+  // --- target / branch derivation tests (issue #4483) ---
+
+  function makeMinimalCloudflareFetchMock(options: {
+    previewDeployUrl?: string;
+  } = {}) {
+    const previewDeployUrl = options.previewDeployUrl ?? 'https://abc123.demo-pages.pages.dev';
+    const capturedFormData: { branch: string | undefined } = { branch: undefined };
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello'),
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        const form = init?.body as FormData;
+        capturedFormData.branch = form?.get('branch') as string | undefined ?? undefined;
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_preview_1', url: previewDeployUrl },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // HEAD check — respond 200 for any URL so waitForReachableDeploymentUrl resolves
+      if (method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    return { fetchMock, capturedFormData, indexHash };
+  }
+
+  const minimalFiles = [
+    {
+      file: 'index.html',
+      data: Buffer.from('hello'),
+      contentType: 'text/html',
+      sourcePath: 'index.html',
+    },
+  ] as const;
+
+  const baseConfig = {
+    token: 'cloudflare-token-secret',
+    accountId: 'account_123',
+    projectName: 'demo-pages',
+  } as const;
+
+  it('sends branch=preview to Cloudflare when target is preview', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock({
+      previewDeployUrl: 'https://abc123.demo-pages.pages.dev',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'preview',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    // The deployment POST must carry branch='preview', not 'main'
+    expect(capturedFormData.branch).toBe('preview');
+  });
+
+  it('sends branch=main to Cloudflare when target is production', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'production',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    expect(capturedFormData.branch).toBe('main');
+  });
+
+  it('defaults to branch=main (production) when target is omitted', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+    });
+
+    expect(capturedFormData.branch).toBe('main');
+  });
+
+  it('returns the per-deploy preview URL (not the production root) for a preview deploy', async () => {
+    const distinctPreviewUrl = 'https://abc123.demo-pages.pages.dev';
+    const { fetchMock } = makeMinimalCloudflareFetchMock({ previewDeployUrl: distinctPreviewUrl });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'preview',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    // For a preview deploy the returned URL must be the per-deploy alias,
+    // not the production root https://demo-pages.pages.dev
+    expect(result.url).toBe(distinctPreviewUrl);
+    expect(result.url).not.toBe('https://demo-pages.pages.dev');
+  });
+
+  it('still returns the production root URL for a production deploy', async () => {
+    const { fetchMock } = makeMinimalCloudflareFetchMock({
+      previewDeployUrl: 'https://abc123.demo-pages.pages.dev',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'production',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    expect(result.url).toBe('https://demo-pages.pages.dev');
   });
 });
 

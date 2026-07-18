@@ -457,8 +457,36 @@ export function alternateLinks(pathname: string) {
  * locale stays at the unprefixed canonical to avoid duplicate
  * content between `/skills/` and `/en/skills/`.
  */
+// Locales retired 2026-06 (mirror of app/i18n.ts:RETIRED_LOCALE_CODES, in this
+// module's locale-code spelling). The catch-all catalog routes and the blog
+// RSS feeds consume PREFIXED_LOCALES, so excluding a code here stops those
+// pages from being generated; incoming URLs are 301'd in public/_redirects.
+//
+// Two groups are excluded:
+//  - Pruned marketing locales (id, zh-TW, ar, pl, uk) plus legacy-only codes
+//    never in the modern set (fa, hu, th).
+//  - BCP-47 aliases of KEPT locales (zh-CN -> zh, es-ES -> es, pt-BR -> pt-br).
+//    The canonical short-code pages are generated from LANDING_LOCALES, so the
+//    catch-all must NOT also emit the alias-prefixed duplicates (they only 301
+//    back to the short code via the migration rules in public/_redirects, but
+//    still count toward the Cloudflare Pages file-count cap). Excluding them
+//    keeps every generated route on the same 11 canonical short codes.
+const RETIRED_PREFIX_LOCALES = new Set<Locale>([
+  'id',
+  'zh-TW',
+  'fa',
+  'ar',
+  'pl',
+  'hu',
+  'uk',
+  'th',
+  'zh-CN',
+  'es-ES',
+  'pt-BR',
+]);
+
 export const PREFIXED_LOCALES: Locale[] = LOCALES.filter(
-  (locale) => locale !== DEFAULT_LOCALE,
+  (locale) => locale !== DEFAULT_LOCALE && !RETIRED_PREFIX_LOCALES.has(locale),
 );
 
 export function localizedDate(date: Date, locale: Locale): string {

@@ -1,10 +1,10 @@
 /*
  * Blog indexing — shared helpers.
  *
- * One-stop module for the post-deploy / cron indexing scripts. Keeps
+ * One-stop module for the post-deploy indexing scripts. Keeps
  * the surface tiny so each task script (detect-changed-urls,
  * verify-readiness, submit-sitemap, inspect-urls, render-status,
- * scheduled-window) stays focused.
+ * query-search-analytics) stays focused.
  *
  * Authoritative reference: ~/.codex/skills/blog-indexing-automation/SKILL.md.
  *
