@@ -448,8 +448,11 @@
 }
 .design-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .design-card-thumb {
-  flex: 1;
-  min-height: 100px;
+  /* Match Home page recent-projects__card-thumb: fixed 16:9 ratio so the
+   * thumbnail area fills the card the same way regardless of card content
+   * length, plus container-type: inline-size so the HTML iframe can scale
+   * to the card's own width via a container query (see .thumb-iframe). */
+  aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -457,6 +460,8 @@
   color: var(--text-faint);
   font-size: 38px;
   position: relative;
+  overflow: hidden;
+  container-type: inline-size;
 }
 .design-card-thumb::before {
   /* Folder-shape icon */
@@ -772,12 +777,18 @@
   display: block;
 }
 .design-card-thumb .thumb-iframe {
+  /* Render the page at a desktop design width, then scale it down to the
+   * card width via a container query so non-responsive galleries don't
+   * collapse at the narrow card size. Mirrors the Home page
+   * recent-projects__thumb-iframe treatment (1280x720 with
+   * transform: scale(calc(100cqw / 1280px))) so Projects and Home page
+   * thumbnails fill the card the same way. */
   position: absolute;
   top: 0;
   left: 0;
-  width: 250%;
-  height: 250%;
-  transform: scale(0.4);
+  width: 1280px;
+  height: 720px;
+  transform: scale(calc(100cqw / 1280px));
   transform-origin: top left;
   border: 0;
   background: var(--bg-panel);
