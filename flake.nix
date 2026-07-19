@@ -159,7 +159,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           nodejs
-          pnpm_10
+          pnpm
         ];
         shellHook = ''
           echo "🎨 Open Design dev shell loaded!"
