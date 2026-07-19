@@ -2,6 +2,15 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type Cl
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
+import { ViewportDimensionControls } from './ViewportDimensionControls';
+import {
+  DEFAULT_PREVIEW_VIEWPORT,
+  PREVIEW_VIEWPORT_PRESETS,
+  isFixedPreviewViewport,
+  previewViewportPreset,
+  type PreviewViewport,
+  type PreviewViewportPresetId,
+} from './preview-viewports';
 import {
   buildSocialSharePayload,
   OPEN_DESIGN_GITHUB_REPO_URL,
@@ -224,22 +233,14 @@ export type ManualEditPendingStyleSave = {
   label: string;
   version: number;
 };
-type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
 type PreviewCanvasSize = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type CommentPreviewCanvasOptions = {
   boardMode: boolean;
   sidePanelCollapsed: boolean;
-  viewport?: PreviewViewportId;
+  viewport?: PreviewViewport | PreviewViewportPresetId;
 };
 type PreviewScaleOptions = {
   canvasPadding?: number;
-};
-type PreviewViewportPreset = {
-  id: PreviewViewportId;
-  width: number | null;
-  height: number | null;
-  labelKey: keyof Dict;
-  titleKey: keyof Dict;
 };
 const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
   value: ImageExportFormat;
@@ -306,34 +307,37 @@ function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean
   );
 }
 
-const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
-  {
-    id: 'desktop',
-    width: null,
-    height: null,
-    labelKey: 'fileViewer.viewportDesktop',
-    titleKey: 'fileViewer.viewportDesktopTitle',
-  },
-  {
-    id: 'tablet',
-    width: 820,
-    height: 1180,
-    labelKey: 'fileViewer.viewportTablet',
-    titleKey: 'fileViewer.viewportTabletTitle',
-  },
-  {
-    id: 'mobile',
-    width: 390,
-    height: 844,
-    labelKey: 'fileViewer.viewportMobile',
-    titleKey: 'fileViewer.viewportMobileTitle',
-  },
-];
+function previewViewportDeviceLabel(t: TranslateFn, viewport: PreviewViewport): string {
+  if (viewport.device === 'tablet') return t('fileViewer.viewportTablet');
+  if (viewport.device === 'mobile') return t('fileViewer.viewportMobile');
+  if (viewport.device === 'custom') return t('fileViewer.viewportCustom');
+  return t('fileViewer.viewportDesktop');
+}
 
-function previewViewportIcon(viewport: PreviewViewportId): string {
-  if (viewport === 'tablet') return 'tablet-line';
-  if (viewport === 'mobile') return 'smartphone-line';
+function previewViewportLabel(t: TranslateFn, viewport: PreviewViewport): string {
+  const label = previewViewportDeviceLabel(t, viewport);
+  return isFixedPreviewViewport(viewport)
+    ? `${label} ${viewport.width} × ${viewport.height}`
+    : label;
+}
+
+function previewViewportTitle(t: TranslateFn, viewport: PreviewViewport): string {
+  return isFixedPreviewViewport(viewport)
+    ? previewViewportLabel(t, viewport)
+    : t('fileViewer.viewportDesktopTitle');
+}
+
+function previewViewportIcon(viewport: PreviewViewport): string {
+  if (viewport.device === 'tablet') return 'tablet-line';
+  if (viewport.device === 'mobile') return 'smartphone-line';
+  if (viewport.device === 'custom') return 'aspect-ratio-line';
   return 'computer-line';
+}
+
+function resolvePreviewViewport(
+  viewport: PreviewViewport | PreviewViewportPresetId,
+): PreviewViewport {
+  return typeof viewport === 'string' ? previewViewportPreset(viewport) : viewport;
 }
 
 const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
@@ -391,7 +395,7 @@ const MAX_CACHED_PREVIEW_VIEWPORTS = 128;
 // onto the card or hops back onto the element under it, short enough to read as
 // an immediate dismiss when the pointer really leaves.
 const HOVER_CARD_DISMISS_DELAY_MS = 80;
-const htmlPreviewViewportState = new Map<string, PreviewViewportId>();
+const htmlPreviewViewportState = new Map<string, PreviewViewport>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_CODE_LANGUAGE_ATTR = 'data-code-language';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
@@ -739,16 +743,14 @@ function PreviewViewportControls({
   t,
   tabIndex,
 }: {
-  viewport: PreviewViewportId;
-  onViewport: (viewport: PreviewViewportId) => void;
+  viewport: PreviewViewport;
+  onViewport: (viewport: PreviewViewport) => void;
   t: TranslateFn;
   tabIndex?: number;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
-  const activePreset =
-    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
 
   useEffect(() => {
     if (!open) return;
@@ -776,44 +778,47 @@ function PreviewViewportControls({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
-        title={t(activePreset.titleKey)}
-        data-tooltip={open ? undefined : t(activePreset.titleKey)}
+        title={previewViewportTitle(t, viewport)}
+        data-tooltip={open ? undefined : previewViewportTitle(t, viewport)}
         data-tooltip-placement="bottom"
         tabIndex={tabIndex}
         onClick={() => setOpen((value) => !value)}
       >
         <RemixIcon
-          name={previewViewportIcon(activePreset.id)}
+          name={previewViewportIcon(viewport)}
           size={14}
           className="viewer-viewport-icon"
         />
-        <span>{t(activePreset.labelKey)}</span>
+        <span>{previewViewportLabel(t, viewport)}</span>
       </button>
       {open ? (
-        <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
-          {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-            const selected = viewport === preset.id;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                className={`viewer-viewport-menu-item${selected ? ' active' : ''}`}
-                role="option"
-                aria-selected={selected}
-                title={t(preset.titleKey)}
-                onClick={() => {
-                  onViewport(preset.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="viewer-viewport-menu-label">
-                  <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
-                  <span>{t(preset.labelKey)}</span>
-                </span>
-                {selected ? <Icon name="check" size={13} /> : null}
-              </button>
-            );
-          })}
+        <div className="viewer-viewport-menu">
+          <div id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
+            {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
+              const selected = previewViewportMatches(viewport, preset);
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`viewer-viewport-menu-item${selected ? ' active' : ''}`}
+                  role="option"
+                  aria-selected={selected}
+                  title={previewViewportTitle(t, preset)}
+                  onClick={() => {
+                    onViewport(preset);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="viewer-viewport-menu-label">
+                    <RemixIcon name={previewViewportIcon(preset)} size={14} />
+                    <span>{previewViewportLabel(t, preset)}</span>
+                  </span>
+                  {selected ? <Icon name="check" size={13} /> : null}
+                </button>
+              );
+            })}
+          </div>
+          <ViewportDimensionControls viewport={viewport} onViewport={onViewport} />
         </div>
       ) : null}
     </div>
@@ -825,15 +830,15 @@ function FileVersionViewportControls({
   onViewport,
   t,
 }: {
-  viewport: PreviewViewportId;
-  onViewport: (viewport: PreviewViewportId) => void;
+  viewport: PreviewViewport;
+  onViewport: (viewport: PreviewViewport) => void;
   t: TranslateFn;
 }) {
   return (
     <div className="file-version-viewport-toggle" role="group" aria-label={t('fileViewer.viewportAria')}>
       {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-        const selected = viewport === preset.id;
-        const label = t(preset.titleKey);
+        const selected = previewViewportMatches(viewport, preset);
+        const label = previewViewportTitle(t, preset);
         return (
           <button
             key={preset.id}
@@ -844,9 +849,9 @@ function FileVersionViewportControls({
             title={label}
             data-tooltip={label}
             data-tooltip-placement="bottom"
-            onClick={() => onViewport(preset.id)}
+            onClick={() => onViewport(preset)}
           >
-            <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
+            <RemixIcon name={previewViewportIcon(preset)} size={14} />
           </button>
         );
       })}
@@ -855,17 +860,16 @@ function FileVersionViewportControls({
 }
 
 function previewViewportStyle(
-  viewport: PreviewViewportId,
+  viewport: PreviewViewport,
   previewScale = 1,
   canvasSize?: PreviewCanvasSize,
   options?: PreviewScaleOptions,
 ): CSSProperties & Record<string, string | number> {
-  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
-  if (!preset.width) return {};
+  if (!isFixedPreviewViewport(viewport)) return {};
   const effectiveScale = effectivePreviewScale(viewport, previewScale, canvasSize, options);
   return {
-    '--preview-viewport-width': `${preset.width}px`,
-    '--preview-viewport-height': `${preset.height}px`,
+    '--preview-viewport-width': `${viewport.width}px`,
+    '--preview-viewport-height': `${viewport.height}px`,
     '--preview-scale': effectiveScale,
     '--preview-user-scale': previewScale,
   };
@@ -876,7 +880,7 @@ export function commentPreviewCanvasSize(
   options: CommentPreviewCanvasOptions,
 ): PreviewCanvasSize | undefined {
   if (!canvasSize || !options.boardMode) return canvasSize;
-  const dockPadding = options.viewport && options.viewport !== 'desktop'
+  const dockPadding = options.viewport && isFixedPreviewViewport(resolvePreviewViewport(options.viewport))
     ? COMMENT_SIDE_DOCK_NON_DESKTOP_PADDING
     : COMMENT_SIDE_DOCK_PADDING;
   const sideDockWidth = options.sidePanelCollapsed ? COMMENT_SIDE_DOCK_RAIL_WIDTH : COMMENT_SIDE_DOCK_WIDTH;
@@ -901,7 +905,7 @@ function usesStackedCommentSideDock(
   options: CommentPreviewCanvasOptions,
 ) {
   if (!canvasSize || !options.boardMode) return false;
-  const dockPadding = options.viewport && options.viewport !== 'desktop'
+  const dockPadding = options.viewport && isFixedPreviewViewport(resolvePreviewViewport(options.viewport))
     ? COMMENT_SIDE_DOCK_NON_DESKTOP_PADDING
     : COMMENT_SIDE_DOCK_PADDING;
   const sideDockWidth = options.sidePanelCollapsed ? COMMENT_SIDE_DOCK_RAIL_WIDTH : COMMENT_SIDE_DOCK_WIDTH;
@@ -910,18 +914,18 @@ function usesStackedCommentSideDock(
 }
 
 export function effectivePreviewScale(
-  viewport: PreviewViewportId,
+  viewportInput: PreviewViewport | PreviewViewportPresetId,
   previewScale: number,
   canvasSize?: PreviewCanvasSize,
   options?: PreviewScaleOptions,
 ) {
-  if (viewport === 'desktop') return previewScale;
-  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
-  if (!preset?.width || !preset.height || !canvasSize?.width || !canvasSize.height) return previewScale;
+  const viewport = resolvePreviewViewport(viewportInput);
+  if (!isFixedPreviewViewport(viewport)) return previewScale;
+  if (!canvasSize?.width || !canvasSize.height) return previewScale;
   const canvasPadding = options?.canvasPadding ?? 48;
   const availableWidth = Math.max(1, canvasSize.width - canvasPadding);
   const availableHeight = Math.max(1, canvasSize.height - canvasPadding);
-  const fitScale = Math.min(1, availableWidth / preset.width, availableHeight / preset.height);
+  const fitScale = Math.min(1, availableWidth / viewport.width, availableHeight / viewport.height);
   return Math.min(previewScale, fitScale);
 }
 
@@ -956,17 +960,16 @@ function zoomPercentLabel(zoomPercent: number): string {
 type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
 
 export function previewOverlayTransform(
-  viewport: PreviewViewportId,
+  viewportInput: PreviewViewport | PreviewViewportPresetId,
   previewScale: number,
   canvasSize?: PreviewCanvasSize,
 ): PreviewOverlayTransform {
+  const viewport = resolvePreviewViewport(viewportInput);
   const scale = effectivePreviewScale(viewport, previewScale, canvasSize);
-  if (viewport === 'desktop') return { scale, offsetX: 0, offsetY: 0 };
-  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
+  if (!isFixedPreviewViewport(viewport)) return { scale, offsetX: 0, offsetY: 0 };
   const pad = 24;
-  if (!preset?.width || !preset.height) return { scale, offsetX: pad, offsetY: pad };
-  const availableWidth = Math.max(1, (canvasSize?.width ?? preset.width * scale + pad * 2) - pad * 2);
-  const scaledWidth = preset.width * scale;
+  const availableWidth = Math.max(1, (canvasSize?.width ?? viewport.width * scale + pad * 2) - pad * 2);
+  const scaledWidth = viewport.width * scale;
   return {
     scale,
     offsetX: pad + Math.max(0, (availableWidth - scaledWidth) / 2),
@@ -975,10 +978,10 @@ export function previewOverlayTransform(
 }
 
 function previewScaleShellStyle(
-  viewport: PreviewViewportId,
+  viewport: PreviewViewport,
   previewScale: number,
 ): CSSProperties & Record<string, string | number> {
-  if (viewport === 'desktop') {
+  if (!isFixedPreviewViewport(viewport)) {
     return {
       width: `${100 / previewScale}%`,
       height: `${100 / previewScale}%`,
@@ -995,11 +998,11 @@ function previewScaleShellStyle(
 }
 
 function manualEditPreviewShellStyle(
-  viewport: PreviewViewportId,
+  viewport: PreviewViewport,
   previewScale: number,
   frozenWidth: number | null,
 ): CSSProperties & Record<string, string | number> {
-  if (viewport === 'desktop' && frozenWidth) {
+  if (!isFixedPreviewViewport(viewport) && frozenWidth) {
     return {
       width: `${frozenWidth / previewScale}px`,
       height: `${100 / previewScale}%`,
@@ -1240,12 +1243,26 @@ function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'nam
   return `${projectId}:${file.path || file.name}`;
 }
 
-function setPreviewViewportCached(key: string, viewport: PreviewViewportId) {
+function setPreviewViewportCached(key: string, viewport: PreviewViewport) {
   htmlPreviewViewportState.set(key, viewport);
   if (htmlPreviewViewportState.size > MAX_CACHED_PREVIEW_VIEWPORTS) {
     const oldest = htmlPreviewViewportState.keys().next().value;
     if (oldest != null) htmlPreviewViewportState.delete(oldest);
   }
+}
+
+function previewViewportClassName(viewport: PreviewViewport): string {
+  const sizing = isFixedPreviewViewport(viewport) ? 'fixed' : 'fluid';
+  return `preview-viewport-${viewport.device} preview-viewport-${sizing}`;
+}
+
+function previewViewportMatches(
+  viewport: PreviewViewport,
+  preset: PreviewViewport,
+): boolean {
+  return viewport.id === preset.id
+    && viewport.width === preset.width
+    && viewport.height === preset.height;
 }
 
 interface Props {
@@ -1424,10 +1441,10 @@ export function LiveArtifactViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [zoom, setZoom] = useState(100);
   const liveArtifactViewportKey = `${projectId}:live-artifact:${liveArtifact.artifactId}`;
-  const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
-    () => htmlPreviewViewportState.get(liveArtifactViewportKey) ?? 'desktop',
+  const [previewViewport, setPreviewViewportState] = useState<PreviewViewport>(
+    () => htmlPreviewViewportState.get(liveArtifactViewportKey) ?? DEFAULT_PREVIEW_VIEWPORT,
   );
-  const setPreviewViewport = useCallback((viewport: PreviewViewportId) => {
+  const setPreviewViewport = useCallback((viewport: PreviewViewport) => {
     setPreviewViewportCached(liveArtifactViewportKey, viewport);
     setPreviewViewportState(viewport);
   }, [liveArtifactViewportKey]);
@@ -1474,7 +1491,7 @@ export function LiveArtifactViewer({
   }, [projectId, liveArtifact.artifactId]);
 
   useEffect(() => {
-    setPreviewViewportState(htmlPreviewViewportState.get(liveArtifactViewportKey) ?? 'desktop');
+    setPreviewViewportState(htmlPreviewViewportState.get(liveArtifactViewportKey) ?? DEFAULT_PREVIEW_VIEWPORT);
   }, [liveArtifactViewportKey]);
 
   useEffect(() => {
@@ -1865,7 +1882,7 @@ export function LiveArtifactViewer({
           />
         ) : null}
         <div
-          className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+          className={`live-artifact-preview-layer preview-viewport ${previewViewportClassName(previewViewport)}`}
           data-active={mode === 'preview' ? 'true' : 'false'}
           aria-hidden={mode === 'preview' ? undefined : true}
           style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
@@ -2759,7 +2776,7 @@ function FileVersionManagerModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewport>(DEFAULT_PREVIEW_VIEWPORT);
   const [search, setSearch] = useState('');
   const [promptOpen, setPromptOpen] = useState(false);
   const promptWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2803,7 +2820,7 @@ function FileVersionManagerModal({
     extra?: {
       version_source?: TrackingFileVersionSource;
       version_is_current?: boolean;
-      viewport?: PreviewViewportId;
+      viewport?: 'desktop' | 'tablet' | 'mobile';
     },
   ) => {
     trackFileVersionModalClick(analytics.track, {
@@ -3632,8 +3649,10 @@ function FileVersionManagerModal({
               <FileVersionViewportControls
                 viewport={previewViewport}
                 onViewport={(viewport) => {
-                  if (viewport !== previewViewport) {
-                    fireModalClick('viewport_toggle', { viewport });
+                  if (viewport.id !== previewViewport.id) {
+                    fireModalClick('viewport_toggle', {
+                      viewport: viewport.device === 'custom' ? undefined : viewport.device,
+                    });
                   }
                   setPreviewViewport(viewport);
                 }}
@@ -3671,7 +3690,7 @@ function FileVersionManagerModal({
               <>
                 {srcDoc ? (
                   <div
-                    className={`preview-viewport preview-viewport-${previewViewport}${isDeckPreview ? ' preview-viewport-deck' : ''}`}
+                    className={`preview-viewport ${previewViewportClassName(previewViewport)}${isDeckPreview ? ' preview-viewport-deck' : ''}`}
                     style={previewViewportStyle(previewViewport, 1, previewFrameSize, { canvasPadding: 24 })}
                   >
                     <div className="preview-frame-clip">
@@ -6214,10 +6233,10 @@ function HtmlViewer({
   const [zoom, setZoom] = useState(100);
   const [zoomMode, setZoomMode] = useState<'auto' | 'manual'>('auto');
   const fileViewportKey = previewViewportStateKey(projectId, file);
-  const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
-    () => htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop',
+  const [previewViewport, setPreviewViewportState] = useState<PreviewViewport>(
+    () => htmlPreviewViewportState.get(fileViewportKey) ?? DEFAULT_PREVIEW_VIEWPORT,
   );
-  const setPreviewViewport = useCallback((viewport: PreviewViewportId) => {
+  const setPreviewViewport = useCallback((viewport: PreviewViewport) => {
     setPreviewViewportCached(fileViewportKey, viewport);
     setPreviewViewportState(viewport);
   }, [fileViewportKey]);
@@ -6241,7 +6260,7 @@ function HtmlViewer({
   const [templateName, setTemplateName] = useState('');
 
   useEffect(() => {
-    setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
+    setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? DEFAULT_PREVIEW_VIEWPORT);
     setZoom(100);
     setZoomMode('auto');
   }, [fileViewportKey]);
@@ -6703,7 +6722,7 @@ function HtmlViewer({
     viewport: previewViewport,
   });
   useEffect(() => {
-    if (previewViewport !== 'desktop' || zoomMode !== 'auto') return;
+    if (isFixedPreviewViewport(previewViewport) || zoomMode !== 'auto') return;
     scheduleDesktopPreviewContentMeasure();
   }, [
     boardPreviewCanvasSize?.width,
@@ -6856,7 +6875,7 @@ function HtmlViewer({
   const [speakerNotesStatus, setSpeakerNotesStatus] = useState<'saved' | 'error' | null>(null);
   const speakerNotesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
-  const previewZoomPercent = zoomMode === 'auto' && previewViewport === 'desktop'
+  const previewZoomPercent = zoomMode === 'auto' && !isFixedPreviewViewport(previewViewport)
     ? desktopPreviewAutoFitZoomPercent(boardPreviewCanvasSize, desktopPreviewContentWidth)
     : zoom;
   const previewScale = previewZoomPercent / 100;
@@ -11582,25 +11601,32 @@ function HtmlViewer({
                   <>
                     <div className="viewer-toolbar-more-separator" role="separator" />
                     {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
-                      const selected = previewViewport === preset.id;
+                      const selected = previewViewportMatches(previewViewport, preset);
                       return (
                         <button
                           key={preset.id}
                           type="button"
                           className={`viewer-toolbar-more-item${selected ? ' active' : ''}`}
                           role="menuitem"
-                          title={t(preset.titleKey)}
+                          title={previewViewportTitle(t, preset)}
                           onClick={() => {
-                            setPreviewViewport(preset.id);
+                            setPreviewViewport(preset);
                             setToolbarMoreOpen(false);
                           }}
                         >
-                          <RemixIcon name={previewViewportIcon(preset.id)} size={15} />
-                          <span>{t(preset.labelKey)}</span>
+                          <RemixIcon name={previewViewportIcon(preset)} size={15} />
+                          <span>{previewViewportLabel(t, preset)}</span>
                           {selected ? <Icon name="check" size={13} /> : null}
                         </button>
                       );
                     })}
+                    <ViewportDimensionControls
+                      viewport={previewViewport}
+                      onViewport={(nextViewport) => {
+                        setPreviewViewport(nextViewport);
+                        setToolbarMoreOpen(false);
+                      }}
+                    />
                     {showDeckNavigation ? (
                       <>
                         <div className="viewer-toolbar-more-separator" role="separator" />
@@ -12084,7 +12110,7 @@ function HtmlViewer({
           )
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
+            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport ${previewViewportClassName(previewViewport)}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}

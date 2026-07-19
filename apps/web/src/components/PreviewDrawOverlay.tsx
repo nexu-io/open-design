@@ -34,6 +34,7 @@ interface PreviewSnapshot {
   h: number;
 }
 type CaptureFrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
+type DrawSurfaceRect = { left: number; top: number; width: number; height: number };
 
 export const ANNOTATION_EVENT = 'opendesign:annotation';
 export type AnnotationAction = 'draft' | 'queue' | 'send';
@@ -66,8 +67,10 @@ interface Props {
   captureViewport?: boolean;
   onActiveChange?: (active: boolean) => void;
   captureTarget?: CaptureTarget | null;
+  captureTargetDisplayPosition?: CaptureTarget['position'] | null;
   captureSnapshot?: () => Promise<PreviewSnapshot | null>;
   captureFrameRect?: () => CaptureFrameRect | null;
+  drawSurface?: DrawSurfaceRect;
   filePath?: string;
   hideChrome?: boolean;
   sendDisabled?: boolean;
@@ -126,8 +129,10 @@ export function PreviewDrawOverlay({
   captureViewport = false,
   onActiveChange,
   captureTarget = null,
+  captureTargetDisplayPosition = null,
   captureSnapshot,
   captureFrameRect,
+  drawSurface,
   filePath,
   hideChrome = false,
   sendDisabled = false,
@@ -278,15 +283,12 @@ export function PreviewDrawOverlay({
     const cvs = canvasRef.current;
     if (!wrap || !cvs) return;
     const resize = () => {
-      // Size the canvas from the frame's *layout* box (offsetWidth/Height), not
-      // getBoundingClientRect(). In a scaled tablet/phone device frame this wrap
-      // lives inside a `transform: scale()` shell, so getBoundingClientRect()
-      // returns the already-scaled width; feeding that back into the canvas'
-      // CSS width scales it a second time and it covers only the left slice of
-      // the frame — the right half became un-drawable. offsetWidth is the
-      // untransformed size, so the canvas fills the whole frame at any scale.
-      const width = wrap.offsetWidth;
-      const height = wrap.offsetHeight;
+      // A caller may provide the visible page surface when its exact-layout
+      // frame is scaled inside a larger host. Otherwise use the wrap's layout
+      // box: getBoundingClientRect() would already include ancestor transforms,
+      // and feeding that size back into the canvas would scale it twice.
+      const width = drawSurface?.width ?? wrap.offsetWidth;
+      const height = drawSurface?.height ?? wrap.offsetHeight;
       const dpr = window.devicePixelRatio || 1;
       cvs.width = Math.max(1, Math.floor(width * dpr));
       cvs.height = Math.max(1, Math.floor(height * dpr));
@@ -300,7 +302,7 @@ export function PreviewDrawOverlay({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [redraw, active, hasInk, hasBox, hasText]);
+  }, [redraw, active, hasInk, hasBox, hasText, drawSurface?.width, drawSurface?.height]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -860,14 +862,18 @@ export function PreviewDrawOverlay({
   }
 
   function anchorBounds(): Rect | null {
-    return lastBoxBounds() ?? lastStrokeBounds() ?? captureTarget?.position ?? null;
+    return lastBoxBounds()
+      ?? lastStrokeBounds()
+      ?? captureTargetDisplayPosition
+      ?? captureTarget?.position
+      ?? null;
   }
 
   function annotationBounds(): { x: number; y: number; width: number; height: number } | undefined {
     const box = boxBounds();
     const stroke = strokeBounds();
     const text = textBounds();
-    const target = captureTarget?.position ?? null;
+    const target = captureTargetDisplayPosition ?? captureTarget?.position ?? null;
     const bounds = [box, stroke, text, target].filter((item): item is { x: number; y: number; width: number; height: number } => Boolean(item));
     if (bounds.length === 0) return undefined;
     if (bounds.length === 1) return bounds[0];
@@ -1161,8 +1167,8 @@ export function PreviewDrawOverlay({
     }
 
     const anchorInHost: Rect = {
-      x: wrapRect.left - hostRect.left + anchor.x,
-      y: wrapRect.top - hostRect.top + anchor.y,
+      x: wrapRect.left - hostRect.left + (drawSurface?.left ?? 0) + anchor.x,
+      y: wrapRect.top - hostRect.top + (drawSurface?.top ?? 0) + anchor.y,
       width: anchor.width,
       height: anchor.height,
     };
@@ -1236,6 +1242,9 @@ export function PreviewDrawOverlay({
     active,
     resolvedToolbarHost,
     captureTarget,
+    captureTargetDisplayPosition,
+    drawSurface?.left,
+    drawSurface?.top,
     layoutRevision,
     imagePreviews.length,
     captureWarning?.message,
@@ -1256,6 +1265,14 @@ export function PreviewDrawOverlay({
   }, [active, resolvedToolbarHost]);
 
   const overlayPointer = active ? 'auto' : 'none';
+  const drawSurfaceStyle: CSSProperties = drawSurface
+    ? {
+        left: drawSurface.left,
+        top: drawSurface.top,
+        width: drawSurface.width,
+        height: drawSurface.height,
+      }
+    : { inset: 0 };
   const showCanvas = active || hasInk || hasBox || hasText;
   const textLayerVisible = active || hasText;
   const textFontPx = Math.max(TEXT_MIN_FONT_PX, TEXT_FONT_FRACTION * frameSize.h);
@@ -1337,7 +1354,7 @@ export function PreviewDrawOverlay({
           onWheel={onCanvasWheel}
           style={{
             position: 'absolute',
-            inset: 0,
+            ...drawSurfaceStyle,
             pointerEvents: overlayPointer,
             cursor: active ? (markTool === 'text' ? 'text' : 'crosshair') : 'default',
             visibility: chromeHidden ? 'hidden' : 'visible',
@@ -1354,7 +1371,7 @@ export function PreviewDrawOverlay({
           className="preview-draw-text-layer"
           style={{
             position: 'absolute',
-            inset: 0,
+            ...drawSurfaceStyle,
             // The layer itself passes pointers through to the canvas (so a press
             // on empty space still drops a new label); only the textareas and
             // their remove buttons opt back into pointer events, and only while

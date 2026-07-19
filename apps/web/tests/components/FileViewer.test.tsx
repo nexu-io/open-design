@@ -314,25 +314,25 @@ describe('FileViewer preview scale', () => {
     const css = readExpandedIndexCss();
 
     expect(css).toContain(
-      '.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail',
+      '.preview-viewport-fixed.comment-preview-layer-with-deck-rail',
     );
     expect(css).toContain('--deck-device-frame-radius: 18px;');
     expect(css).toContain('--deck-compact-rail-width: 56px;');
     expect(css).toContain('.preview-viewport-mobile.comment-preview-layer-with-deck-rail');
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-rail\s*\{[\s\S]*width: var\(--deck-compact-rail-width\);[\s\S]*height: calc\(var\(--preview-viewport-height\) \* var\(--preview-scale, 1\)\);[\s\S]*border-radius: var\(--deck-device-frame-radius\) 0 0 var\(--deck-device-frame-radius\);/,
+      /\.preview-viewport-fixed\.comment-preview-layer-with-deck-rail \.deck-thumbnail-rail\s*\{[\s\S]*width: var\(--deck-compact-rail-width\);[\s\S]*height: calc\(var\(--preview-viewport-height\) \* var\(--preview-scale, 1\)\);[\s\S]*border-radius: var\(--deck-device-frame-radius\) 0 0 var\(--deck-device-frame-radius\);/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-frame\s*\{[\s\S]*display: none;/,
+      /\.preview-viewport-fixed\.comment-preview-layer-with-deck-rail \.deck-thumbnail-frame\s*\{[\s\S]*display: none;/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-number\s*\{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*align-items: center;[\s\S]*justify-content: center;/,
+      /\.preview-viewport-fixed\.comment-preview-layer-with-deck-rail \.deck-thumbnail-number\s*\{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*align-items: center;[\s\S]*justify-content: center;/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-button\.active \.deck-thumbnail-number\s*\{[\s\S]*box-shadow: 0 0 0 2px/,
+      /\.preview-viewport-fixed\.comment-preview-layer-with-deck-rail \.deck-thumbnail-button\.active \.deck-thumbnail-number\s*\{[\s\S]*box-shadow: 0 0 0 2px/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail\.comment-preview-layer-deck-rail-collapsed \.comment-preview-canvas\s*\{[\s\S]*border-left: 1px solid var\(--border-strong\);[\s\S]*border-radius: var\(--deck-device-frame-radius\);/,
+      /\.preview-viewport-fixed\.comment-preview-layer-with-deck-rail\.comment-preview-layer-deck-rail-collapsed \.comment-preview-canvas\s*\{[\s\S]*border-left: 1px solid var\(--border-strong\);[\s\S]*border-radius: var\(--deck-device-frame-radius\);/,
     );
   });
 
@@ -347,13 +347,13 @@ describe('FileViewer preview scale', () => {
     const css = readExpandedIndexCss();
 
     expect(css).toContain(
-      '.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas',
+      '.preview-viewport-fixed.manual-edit-workspace .manual-edit-canvas',
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\):not\(\.comment-preview-layer-with-side-dock\) \.comment-preview-canvas,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*width: calc\(var\(--preview-viewport-width\) \* var\(--preview-scale, 1\)\);/,
+      /\.preview-viewport-fixed \.preview-frame-clip,\s*\n\.preview-viewport-fixed:not\(\.comment-preview-layer-with-side-dock\) \.comment-preview-canvas,\s*\n\.preview-viewport-fixed\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*width: calc\(var\(--preview-viewport-width\) \* var\(--preview-scale, 1\)\);/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
+      /\.preview-viewport-fixed \.preview-frame-clip,\s*\n\.preview-viewport-fixed\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
     );
   });
 
@@ -4575,6 +4575,61 @@ describe('FileViewer tweaks toolbar', () => {
     expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Tablet');
   });
 
+  it('supports fixed viewport presets, orientation swaps, and custom dimensions', () => {
+    const { container } = render(
+      <FileViewer
+        projectId="viewport-controls-project"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main>Responsive preview</main></body></html>'
+      />,
+    );
+
+    const viewportButton = screen.getByRole('button', { name: 'Preview viewport' });
+    fireEvent.click(viewportButton);
+    fireEvent.click(screen.getByRole('option', { name: 'Desktop 1440 × 900' }));
+
+    const preview = container.querySelector<HTMLElement>('.preview-viewport');
+    expect(preview?.style.getPropertyValue('--preview-viewport-width')).toBe('1440px');
+    expect(preview?.style.getPropertyValue('--preview-viewport-height')).toBe('900px');
+    expect(preview?.classList.contains('preview-viewport-fixed')).toBe(true);
+
+    fireEvent.click(viewportButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Swap viewport orientation' }));
+    expect(preview?.style.getPropertyValue('--preview-viewport-width')).toBe('900px');
+    expect(preview?.style.getPropertyValue('--preview-viewport-height')).toBe('1440px');
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport width' }), {
+      target: { value: '1024' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport height' }), {
+      target: { value: '768' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply custom viewport' }));
+
+    expect(preview?.style.getPropertyValue('--preview-viewport-width')).toBe('1024px');
+    expect(preview?.style.getPropertyValue('--preview-viewport-height')).toBe('768px');
+    expect(viewportButton.textContent).toContain('Custom');
+    expect(viewportButton.textContent).toContain('1024 × 768');
+
+    // The inline viewport switcher is hidden in narrow panes, so the compact
+    // overflow menu must keep both custom dimensions and orientation available.
+    fireEvent.click(viewportButton);
+    const moreButton = container.querySelector<HTMLButtonElement>('.viewer-toolbar-more > button');
+    expect(moreButton).toBeTruthy();
+    fireEvent.click(moreButton!);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport width' }), {
+      target: { value: '800' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport height' }), {
+      target: { value: '1280' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply custom viewport' }));
+
+    expect(preview?.style.getPropertyValue('--preview-viewport-width')).toBe('800px');
+    expect(preview?.style.getPropertyValue('--preview-viewport-height')).toBe('1280px');
+  });
+
   it('keeps the Draw bar open after queueing an annotation', () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
@@ -5262,7 +5317,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     fireEvent.click(screen.getByLabelText('Preview viewport'));
-    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Tablet 820 × 1180' }));
     clickAgentTool('board-mode-toggle');
 
     const layout = screen.getByTestId('comment-preview-layout');

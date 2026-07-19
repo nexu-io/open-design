@@ -1,0 +1,54 @@
+.controls {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.field {
+  position: relative;
+  min-width: 0;
+}
+
+.fieldLabel {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.input {
+  min-width: 0;
+  height: 30px;
+  padding: 5px 5px 5px 22px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.separator {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.swapButton {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.applyButton {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
